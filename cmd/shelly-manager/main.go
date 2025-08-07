@@ -157,7 +157,7 @@ func (sm *ShellyManager) DiscoverDevices(network string) ([]Device, error) {
 	// Use timeout from config or default
 	timeout := time.Duration(sm.Config.Discovery.Timeout) * time.Second
 	if timeout <= 0 {
-		timeout = 5 * time.Second
+		timeout = 2 * time.Second
 	}
 	
 	// Perform combined discovery (HTTP + mDNS)

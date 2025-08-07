@@ -41,3 +41,4 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+configs/shelly-manager.local.yaml

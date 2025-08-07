@@ -6,7 +6,8 @@
       "WebFetch(domain:shelly-api-docs.shelly.cloud)",
       "Bash(go get:*)",
       "Bash(make:*)",
-      "Bash(./bin/shelly-manager:*)"
+      "Bash(./bin/shelly-manager:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }

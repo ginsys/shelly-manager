@@ -134,7 +134,7 @@ func CombinedDiscovery(ctx context.Context, networks []string, timeout time.Dura
 	
 	// HTTP scanning for specified networks
 	if len(networks) > 0 {
-		scanner := NewScanner(timeout, 20)
+		scanner := NewScanner(timeout, 50)  // Increased concurrency for faster scanning
 		for _, network := range networks {
 			devices, err := scanner.ScanNetwork(ctx, network)
 			if err != nil {
