@@ -166,7 +166,7 @@ The application was generated with comprehensive architecture but mock implement
 
 ## Settings Management
 
-- Always save settings in `.claude/settings.json`
+- Always save settings in `.claude/settings.json` (never use `.claude/settings.local.json`)
 
 ## Development TODO List
 
