@@ -3,12 +3,23 @@ package api
 import (
 	"net/http"
 
+	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/gorilla/mux"
 )
 
 // SetupRoutes configures all API routes
 func SetupRoutes(handler *Handler) *mux.Router {
+	return SetupRoutesWithLogger(handler, logging.GetDefault())
+}
+
+// SetupRoutesWithLogger configures all API routes with logging middleware
+func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router {
 	r := mux.NewRouter()
+	
+	// Add logging middleware
+	r.Use(logging.HTTPMiddleware(logger))
+	r.Use(logging.RecoveryMiddleware(logger))
+	r.Use(logging.CORSMiddleware(logger))
 
 	// API routes
 	api := r.PathPrefix("/api/v1").Subrouter()
