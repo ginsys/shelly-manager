@@ -1,4 +1,4 @@
-module github.com/yourusername/shelly-manager
+module github.com/ginsys/shelly-manager
 
 go 1.21
 
