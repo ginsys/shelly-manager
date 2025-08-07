@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker-build docker-run dev-setup deps
+.PHONY: build run test test-unit test-integration test-coverage test-race clean docker-build docker-run dev-setup deps
 
 BINARY_NAME=shelly-manager
 BUILD_DIR=bin
@@ -12,14 +12,42 @@ build:
 run:
 	go run ./cmd/shelly-manager server
 
-# Run tests
+# Run all tests
 test:
-	go test -v ./...
+	CGO_ENABLED=1 go test -v ./...
+
+# Run unit tests only (exclude integration tests)
+test-unit:
+	CGO_ENABLED=1 go test -v -short ./internal/...
+
+# Run integration tests
+test-integration:
+	CGO_ENABLED=1 go test -v ./cmd/...
+
+# Run tests with coverage report
+test-coverage:
+	CGO_ENABLED=1 go test -v -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+# Run tests with race detection
+test-race:
+	CGO_ENABLED=1 go test -v -race ./...
+
+# Run benchmarks
+benchmark:
+	CGO_ENABLED=1 go test -v -bench=. ./...
+
+# Watch mode for tests (requires entr: brew install entr)
+test-watch:
+	find . -name "*.go" | entr -c make test-unit
 
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)/
 	rm -f *.db
+	rm -f coverage.out coverage.html
+	rm -rf tmp/
 
 # Build Docker image
 docker-build:

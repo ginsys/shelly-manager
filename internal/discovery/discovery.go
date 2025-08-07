@@ -272,11 +272,19 @@ func GetDeviceType(model string) string {
 		return "Plus Smart Home"
 	}
 	
-	// Fallback to pattern matching
+	// Fallback to pattern matching (order matters - more specific patterns first)
 	lowerModel := strings.ToLower(model)
 	switch {
 	case strings.Contains(lowerModel, "plug"):
 		return "Smart Plug"
+	case strings.Contains(lowerModel, "valve"):
+		return "Valve Controller"
+	case strings.Contains(lowerModel, "i3"):
+		return "3-Input Controller"
+	case strings.Contains(lowerModel, "uni"):
+		return "Universal Module"
+	case strings.Contains(lowerModel, "roller") || strings.Contains(lowerModel, "shutter"):
+		return "Roller Shutter"
 	case strings.Contains(lowerModel, "pm"):
 		return "Power Meter Device"
 	case strings.Contains(lowerModel, "dimmer"):
@@ -299,16 +307,8 @@ func GetDeviceType(model string) string {
 		return "Gas Detector"
 	case strings.Contains(lowerModel, "em"):
 		return "Energy Meter"
-	case strings.Contains(lowerModel, "roller") || strings.Contains(lowerModel, "shutter"):
-		return "Roller Shutter"
-	case strings.Contains(lowerModel, "valve"):
-		return "Valve Controller"
-	case strings.Contains(lowerModel, "i3"):
-		return "3-Input Controller"
 	case strings.Contains(lowerModel, "button"):
 		return "Button Controller"
-	case strings.Contains(lowerModel, "uni"):
-		return "Universal Module"
 	case strings.Contains(lowerModel, "plus"):
 		return "Plus Device"
 	case strings.Contains(lowerModel, "pro"):
