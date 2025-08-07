@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ginsys/shelly-manager/internal/discovery"
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -138,33 +139,52 @@ func (sm *ShellyManager) DeleteDevice(id uint) error {
 	return sm.DB.Delete(&Device{}, id).Error
 }
 
-// Mock discovery for demonstration
+// DiscoverDevices performs real Shelly device discovery using HTTP and mDNS
 func (sm *ShellyManager) DiscoverDevices(network string) ([]Device, error) {
-	mockDevices := []Device{
-		{
-			IP:       "192.168.1.100",
-			MAC:      "A4:CF:12:34:56:78",
-			Type:     "Shelly 1",
-			Name:     "Living Room Light",
-			Firmware: "20231219-134356",
-			Status:   "online",
-			LastSeen: time.Now(),
-			Settings: `{"led_status_disable":false,"button_type":"momentary","auto_on":false}`,
-		},
-		{
-			IP:       "192.168.1.101",
-			MAC:      "A4:CF:12:34:56:79",
-			Type:     "Shelly Plug S",
-			Name:     "Desk Lamp",
-			Firmware: "20231219-134356",
-			Status:   "online",
-			LastSeen: time.Now(),
-			Settings: `{"led_status_disable":true,"auto_on":false,"auto_off":true}`,
-		},
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	log.Printf("Starting device discovery on network: %s", network)
+	
+	// Determine networks to scan
+	var networks []string
+	if network != "" && network != "auto" {
+		networks = []string{network}
+	} else if len(sm.Config.Discovery.Networks) > 0 {
+		networks = sm.Config.Discovery.Networks
 	}
 	
-	time.Sleep(1 * time.Second) // Simulate scan time
-	return mockDevices, nil
+	// Use timeout from config or default
+	timeout := time.Duration(sm.Config.Discovery.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	
+	// Perform combined discovery (HTTP + mDNS)
+	shellyDevices, err := discovery.CombinedDiscovery(ctx, networks, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("discovery failed: %w", err)
+	}
+	
+	// Convert discovered Shelly devices to our Device model
+	var devices []Device
+	for _, sd := range shellyDevices {
+		device := Device{
+			IP:       sd.IP,
+			MAC:      sd.MAC,
+			Type:     discovery.GetDeviceType(sd.Model),
+			Name:     sd.ID, // Use ID as initial name, can be updated later
+			Firmware: sd.Version,
+			Status:   "online",
+			LastSeen: sd.Discovered,
+			Settings: fmt.Sprintf(`{"model":"%s","gen":%d,"auth_enabled":%v}`, 
+				sd.Model, sd.Generation, sd.AuthEn),
+		}
+		devices = append(devices, device)
+	}
+	
+	log.Printf("Discovery complete. Found %d devices", len(devices))
+	return devices, nil
 }
 
 // CLI Commands
@@ -204,19 +224,49 @@ var discoverCmd = &cobra.Command{
 			log.Fatal("Discovery failed:", err)
 		}
 		
-		fmt.Printf("Found %d devices:\n", len(devices))
+		fmt.Printf("\nFound %d devices:\n", len(devices))
+		fmt.Println(strings.Repeat("-", 80))
+		
 		for _, device := range devices {
-			fmt.Printf("- %s (%s) - %s\n", device.IP, device.Type, device.Name)
+			fmt.Printf("IP: %-15s  MAC: %s\n", device.IP, device.MAC)
+			fmt.Printf("Type: %-20s  Firmware: %s\n", device.Type, device.Firmware)
+			fmt.Printf("Name: %s\n", device.Name)
+			
+			// Parse settings to show more info
+			var settings map[string]interface{}
+			if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil {
+				if model, ok := settings["model"].(string); ok {
+					fmt.Printf("Model: %s", model)
+					if gen, ok := settings["gen"].(float64); ok {
+						fmt.Printf(" (Gen %d)", int(gen))
+					}
+					if auth, ok := settings["auth_enabled"].(bool); ok && auth {
+						fmt.Printf(" [Auth Required]")
+					}
+					fmt.Println()
+				}
+			}
 			
 			var existingDevice Device
-			result := manager.DB.Where("ip = ?", device.IP).First(&existingDevice)
+			result := manager.DB.Where("mac = ?", device.MAC).First(&existingDevice)
 			if result.Error != nil && result.Error == gorm.ErrRecordNotFound {
 				if err := manager.AddDevice(&device); err != nil {
 					log.Printf("Failed to add device %s: %v", device.IP, err)
 				} else {
-					fmt.Printf("  → Added to database\n")
+					fmt.Printf("✓ Added to database\n")
+				}
+			} else {
+				// Update existing device with new IP if changed
+				if existingDevice.IP != device.IP {
+					existingDevice.IP = device.IP
+					existingDevice.LastSeen = time.Now()
+					manager.UpdateDevice(&existingDevice)
+					fmt.Printf("✓ Updated IP address in database\n")
+				} else {
+					fmt.Printf("• Already in database\n")
 				}
 			}
+			fmt.Println(strings.Repeat("-", 80))
 		}
 	},
 }

@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(git commit:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebFetch(domain:shelly-api-docs.shelly.cloud)",
+      "Bash(go get:*)",
+      "Bash(make:*)",
+      "Bash(./bin/shelly-manager:*)"
     ],
     "deny": []
   }
