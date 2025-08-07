@@ -28,6 +28,11 @@ func TestCLICommands(t *testing.T) {
   host: "127.0.0.1"
   log_level: "error"
 
+logging:
+  level: "error"
+  format: "text"
+  output: "stderr"
+
 database:
   path: "` + dbPath + `"
 
@@ -54,7 +59,7 @@ discovery:
 			t.Errorf("Expected help text to contain 'comprehensive tool', got: %s", output)
 		}
 
-		expectedCommands := []string{"add", "discover", "list", "provision", "server"}
+		expectedCommands := []string{"add", "discover", "list", "provision", "scan-ap", "server"}
 		for _, cmd := range expectedCommands {
 			if !strings.Contains(output, cmd) {
 				t.Errorf("Expected help to contain command '%s'", cmd)
@@ -86,13 +91,27 @@ discovery:
 	})
 
 	t.Run("provision command", func(t *testing.T) {
+		// Test provision command without arguments (should show usage)
 		output, err := runCommand(t, binaryPath, "--config", configPath, "provision")
-		if err != nil {
-			t.Fatalf("Provision command failed: %v", err)
+		if err == nil {
+			t.Error("Expected error for provision command without arguments")
 		}
 
-		if !strings.Contains(output, "not yet implemented") {
-			t.Errorf("Expected provisioning message, got: %s", output)
+		// Should show usage information
+		if !strings.Contains(output, "accepts between 1 and 2 arg(s)") && !strings.Contains(output, "Usage:") {
+			t.Errorf("Expected usage error message, got: %s", output)
+		}
+	})
+
+	t.Run("scan-ap command", func(t *testing.T) {
+		output, err := runCommand(t, binaryPath, "--config", configPath, "scan-ap")
+		if err != nil {
+			t.Fatalf("Scan-AP command failed: %v", err)
+		}
+
+		// Should complete and show scanning message
+		if !strings.Contains(output, "Scanning for Shelly devices") && !strings.Contains(output, "No unprovisioned") {
+			t.Errorf("Expected scanning message, got: %s", output)
 		}
 	})
 
@@ -143,6 +162,11 @@ func TestServerCommand(t *testing.T) {
   port: 8082
   host: "127.0.0.1"
   log_level: "error"
+
+logging:
+  level: "error"
+  format: "text"
+  output: "stderr"
 
 database:
   path: "` + filepath.Join(tempDir, "server.db") + `"
@@ -267,6 +291,11 @@ func BenchmarkListCommand(b *testing.B) {
   port: 8083
   host: "127.0.0.1"
   log_level: "error"
+
+logging:
+  level: "error"
+  format: "text"
+  output: "stderr"
 
 database:
   path: "` + filepath.Join(tempDir, "bench.db") + `"

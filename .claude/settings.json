@@ -5,7 +5,19 @@
     "allow": [
       "Bash(find:*)",
       "Bash(go mod:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git commit:*)",
+      "Bash(git add:*)",
+      "WebFetch(domain:shelly-api-docs.shelly.cloud)",
+      "Bash(go get:*)",
+      "Bash(make:*)",
+      "Bash(./bin/shelly-manager:*)",
+      "Bash(curl:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(timeout:*)",
+      "Bash(true)",
+      "Bash(go test:*)"
     ],
     "deny": []
   }
