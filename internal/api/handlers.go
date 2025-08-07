@@ -6,18 +6,25 @@ import (
 	"strconv"
 
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
 
 // Handler contains dependencies for API handlers
 type Handler struct {
-	DB *database.Manager
+	DB     *database.Manager
+	logger *logging.Logger
 }
 
 // NewHandler creates a new API handler
 func NewHandler(db *database.Manager) *Handler {
-	return &Handler{DB: db}
+	return NewHandlerWithLogger(db, logging.GetDefault())
+}
+
+// NewHandlerWithLogger creates a new API handler with custom logger
+func NewHandlerWithLogger(db *database.Manager, logger *logging.Logger) *Handler {
+	return &Handler{DB: db, logger: logger}
 }
 
 // GetDevices handles GET /api/v1/devices

@@ -15,6 +15,11 @@ type Config struct {
 		Host     string `mapstructure:"host"`
 		LogLevel string `mapstructure:"log_level"`
 	} `mapstructure:"server"`
+	Logging struct {
+		Level  string `mapstructure:"level"`
+		Format string `mapstructure:"format"` // json, text
+		Output string `mapstructure:"output"` // stdout, stderr, or file path
+	} `mapstructure:"logging"`
 	Database struct {
 		Path string `mapstructure:"path"`
 	} `mapstructure:"database"`
@@ -101,6 +106,11 @@ func setDefaults() {
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("server.host", "0.0.0.0")
 	viper.SetDefault("server.log_level", "info")
+
+	// Logging defaults
+	viper.SetDefault("logging.level", "info")
+	viper.SetDefault("logging.format", "text")
+	viper.SetDefault("logging.output", "stdout")
 
 	// Database defaults
 	viper.SetDefault("database.path", "data/shelly.db")

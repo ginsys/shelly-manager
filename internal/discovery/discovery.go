@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // ShellyDevice represents a discovered Shelly device
@@ -41,10 +43,16 @@ type Scanner struct {
 	timeout         time.Duration
 	concurrentScans int
 	httpClient      *http.Client
+	logger          *logging.Logger
 }
 
 // NewScanner creates a new discovery scanner
 func NewScanner(timeout time.Duration, concurrentScans int) *Scanner {
+	return NewScannerWithLogger(timeout, concurrentScans, logging.GetDefault())
+}
+
+// NewScannerWithLogger creates a new discovery scanner with custom logger
+func NewScannerWithLogger(timeout time.Duration, concurrentScans int, logger *logging.Logger) *Scanner {
 	if concurrentScans <= 0 {
 		concurrentScans = 10
 	}
@@ -58,13 +66,21 @@ func NewScanner(timeout time.Duration, concurrentScans int) *Scanner {
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
+		logger: logger,
 	}
 }
 
 // ScanNetwork performs HTTP-based discovery on the specified network range
 func (s *Scanner) ScanNetwork(ctx context.Context, cidr string) ([]ShellyDevice, error) {
+	start := time.Now()
+	s.logger.WithFields(map[string]any{
+		"network":   cidr,
+		"component": "discovery",
+	}).Info("Starting network scan")
+
 	ip, ipnet, err := net.ParseCIDR(cidr)
 	if err != nil {
+		s.logger.LogDiscoveryOperation("network_scan", cidr, 0, time.Since(start).Milliseconds(), err)
 		return nil, fmt.Errorf("invalid CIDR: %w", err)
 	}
 
@@ -115,13 +131,28 @@ func (s *Scanner) ScanNetwork(ctx context.Context, cidr string) ([]ShellyDevice,
 	}()
 
 	wg.Wait()
+	duration := time.Since(start).Milliseconds()
+	s.logger.LogDiscoveryOperation("network_scan", cidr, int(found), duration, nil)
 	fmt.Printf("Scan complete: checked %d IPs, found %d devices\n", scanned, found)
 	return devices, nil
 }
 
 // ScanHost checks a specific host for Shelly device
 func (s *Scanner) ScanHost(ctx context.Context, host string) (*ShellyDevice, error) {
-	return s.checkDevice(ctx, host), nil
+	start := time.Now()
+	s.logger.WithFields(map[string]any{
+		"host":      host,
+		"component": "discovery",
+	}).Debug("Scanning host")
+
+	device := s.checkDevice(ctx, host)
+	duration := time.Since(start).Milliseconds()
+	devicesFound := 0
+	if device != nil {
+		devicesFound = 1
+	}
+	s.logger.LogDiscoveryOperation("host_scan", host, devicesFound, duration, nil)
+	return device, nil
 }
 
 // checkDevice attempts to identify a Shelly device at the given IP
@@ -130,11 +161,24 @@ func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 	
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		s.logger.WithFields(map[string]any{
+			"ip":        ip,
+			"error":     err.Error(),
+			"component": "discovery",
+		}).Debug("Failed to create request")
 		return nil
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		// Only log errors that aren't connection timeouts/refusals (too noisy)
+		if !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), "refused") {
+			s.logger.WithFields(map[string]any{
+				"ip":        ip,
+				"error":     err.Error(),
+				"component": "discovery",
+			}).Debug("HTTP request failed")
+		}
 		return nil
 	}
 	defer resp.Body.Close()
@@ -171,11 +215,20 @@ func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 	device.IP = ip
 	device.Discovered = time.Now()
 	
+	s.logger.LogDeviceOperation("discovered", ip, device.MAC, nil)
+	
 	return &device
 }
 
 // GetDeviceStatus retrieves the current status of a Shelly device
 func (s *Scanner) GetDeviceStatus(ctx context.Context, ip string, gen int) (map[string]interface{}, error) {
+	start := time.Now()
+	s.logger.WithFields(map[string]any{
+		"device_ip": ip,
+		"generation": gen,
+		"component": "discovery",
+	}).Debug("Getting device status")
+
 	var url string
 	if gen == 1 {
 		url = fmt.Sprintf("http://%s/status", ip)
@@ -186,23 +239,35 @@ func (s *Scanner) GetDeviceStatus(ctx context.Context, ip string, gen int) (map[
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		s.logger.LogDeviceOperation("get_status", ip, "", err)
 		return nil, err
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		s.logger.LogDeviceOperation("get_status", ip, "", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status code: %d", resp.StatusCode)
+		err := fmt.Errorf("status code: %d", resp.StatusCode)
+		s.logger.LogDeviceOperation("get_status", ip, "", err)
+		return nil, err
 	}
 
 	var status map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		s.logger.LogDeviceOperation("get_status", ip, "", err)
 		return nil, err
 	}
+
+	duration := time.Since(start).Milliseconds()
+	s.logger.WithFields(map[string]any{
+		"device_ip": ip,
+		"duration": duration,
+		"component": "discovery",
+	}).Debug("Device status retrieved successfully")
 
 	return status, nil
 }

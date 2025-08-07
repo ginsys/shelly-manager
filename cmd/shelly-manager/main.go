@@ -12,6 +12,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/api"
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/spf13/cobra"
 	"gorm.io/gorm"
@@ -22,6 +23,7 @@ var (
 	shellyService *service.ShellyService
 	dbManager     *database.Manager
 	cfg           *config.Config
+	logger        *logging.Logger
 	configFile    string
 )
 
@@ -175,19 +177,26 @@ var serverCmd = &cobra.Command{
 
 // startServer starts the HTTP API server
 func startServer() {
-	// Create API handler
-	apiHandler := api.NewHandler(dbManager)
+	// Create API handler with logger
+	apiHandler := api.NewHandlerWithLogger(dbManager, logger)
 	
-	// Setup routes
-	router := api.SetupRoutes(apiHandler)
+	// Setup routes with middleware
+	router := api.SetupRoutesWithLogger(apiHandler, logger)
 	
 	// Start server
 	address := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	logger.LogAppStart("1.0.0", address)
+	
 	fmt.Printf("Starting server on %s\n", address)
 	fmt.Printf("Web interface: http://%s\n", address)
 	fmt.Printf("API base URL: http://%s/api/v1\n", address)
 	
 	if err := http.ListenAndServe(address, router); err != nil {
+		logger.WithFields(map[string]any{
+			"address": address,
+			"error": err.Error(),
+			"component": "server",
+		}).Error("Server failed to start")
 		log.Fatal("Server failed to start:", err)
 	}
 }
@@ -202,14 +211,41 @@ func initApp() {
 		log.Fatal("Failed to load config:", err)
 	}
 	
-	// Initialize database
-	dbManager, err = database.NewManager(cfg.Database.Path)
+	// Initialize logger from config
+	logger, err = logging.New(logging.Config{
+		Level:  cfg.Logging.Level,
+		Format: cfg.Logging.Format,
+		Output: cfg.Logging.Output,
+	})
 	if err != nil {
+		log.Fatal("Failed to initialize logger:", err)
+	}
+	
+	// Set as default logger
+	logging.SetDefault(logger)
+	
+	// Log configuration load
+	logger.LogConfigLoad(configFile, nil)
+	
+	// Initialize database with logger
+	dbManager, err = database.NewManagerWithLogger(cfg.Database.Path, logger)
+	if err != nil {
+		logger.WithFields(map[string]any{
+			"db_path": cfg.Database.Path,
+			"error": err.Error(),
+			"component": "database",
+		}).Error("Failed to initialize database")
 		log.Fatal("Failed to initialize database:", err)
 	}
 	
-	// Initialize service
-	shellyService = service.NewService(dbManager, cfg)
+	// Initialize service with logger
+	shellyService = service.NewServiceWithLogger(dbManager, cfg, logger)
+	
+	logger.WithFields(map[string]any{
+		"db_path": cfg.Database.Path,
+		"networks": cfg.Discovery.Networks,
+		"component": "app",
+	}).Info("Shelly Manager initialized")
 	
 	fmt.Printf("Shelly Manager initialized\n")
 	fmt.Printf("Database: %s\n", cfg.Database.Path)
