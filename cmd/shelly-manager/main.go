@@ -213,12 +213,20 @@ var discoverCmd = &cobra.Command{
 	Short: "Discover devices on network",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		network := "192.168.1.0/24"
+		var network string
 		if len(args) > 0 {
 			network = args[0]
+		} else {
+			// Use "auto" to trigger config-based discovery
+			network = "auto"
 		}
 		
-		fmt.Printf("Discovering devices on network %s...\n", network)
+		if network == "auto" && len(manager.Config.Discovery.Networks) > 0 {
+			fmt.Printf("Discovering devices on configured networks: %v\n", manager.Config.Discovery.Networks)
+		} else if network != "auto" {
+			fmt.Printf("Discovering devices on network %s...\n", network)
+		}
+		
 		devices, err := manager.DiscoverDevices(network)
 		if err != nil {
 			log.Fatal("Discovery failed:", err)
