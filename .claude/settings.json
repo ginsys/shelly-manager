@@ -1,8 +1,11 @@
 {
+  "saveSettingsPath": ".claude/settings.json",
+  "useLocalSettings": false,
   "permissions": {
     "allow": [
       "Bash(find:*)",
-      "Bash(go mod:*)"
+      "Bash(go mod:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
