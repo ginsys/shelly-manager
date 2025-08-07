@@ -1,0 +1,48 @@
+server:
+  port: 8080
+  host: "0.0.0.0"
+  log_level: "info"
+
+database:
+  path: "data/shelly.db"
+
+discovery:
+  enabled: true
+  networks:
+    - "192.168.1.0/24"
+    - "192.168.0.0/24"
+  interval: 300
+  timeout: 5
+  enable_mdns: true
+  enable_ssdp: true
+  concurrent_scans: 50
+
+provisioning:
+  auth_enabled: true
+  auth_user: "admin"
+  auth_password: "your-secure-password"
+  cloud_enabled: false
+  mqtt_enabled: false
+  mqtt_server: ""
+  device_name_pattern: "shelly_{type}_{mac}"
+  auto_provision: false
+  provision_interval: 600
+
+dhcp:
+  network: "192.168.1.0/24"
+  start_ip: "192.168.1.100"
+  end_ip: "192.168.1.199"
+  auto_reserve: true
+
+opnsense:
+  enabled: false
+  host: "192.168.1.1"
+  port: 443
+  api_key: ""
+  api_secret: ""
+  auto_apply: true
+
+main_app:
+  url: "http://localhost:8080"
+  api_key: ""
+  enabled: true
