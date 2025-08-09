@@ -2,6 +2,8 @@ package database
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -22,7 +24,18 @@ func NewManager(dbPath string) (*Manager, error) {
 
 // NewManagerWithLogger creates a new database manager with custom logger
 func NewManagerWithLogger(dbPath string, logger *logging.Logger) (*Manager, error) {
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	// Ensure the directory exists
+	dir := filepath.Dir(dbPath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create database directory %s: %w", dir, err)
+		}
+	}
+	
+	// Open/create the database with proper config to suppress GORM's default logger
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: nil, // Disable GORM's default logger
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -31,6 +44,11 @@ func NewManagerWithLogger(dbPath string, logger *logging.Logger) (*Manager, erro
 	if err := db.AutoMigrate(&Device{}); err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
 	}
+	
+	logger.WithFields(map[string]any{
+		"path": dbPath,
+		"component": "database",
+	}).Info("Database initialized successfully")
 
 	return &Manager{DB: db, logger: logger}, nil
 }
