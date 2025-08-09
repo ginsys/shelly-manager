@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
-	"github.com/ginsys/shelly-manager/internal/shelly/gen1"
-	"github.com/ginsys/shelly-manager/internal/shelly/gen2"
 )
 
 // Factory creates appropriate Shelly clients based on device generation
@@ -146,56 +144,9 @@ func (f *factory) CreateClientWithDetection(ctx context.Context, ip string, opts
 
 // createClientForGeneration creates the appropriate client based on generation
 func (f *factory) createClientForGeneration(ip string, generation int, cfg *clientConfig) (Client, error) {
-	switch generation {
-	case 1:
-		return gen1.NewClient(ip, cfg.ToGen1Options()...), nil
-	case 2, 3: // Gen2 and Gen3 use the same RPC protocol
-		return gen2.NewClient(ip, cfg.ToGen2Options()...), nil
-	default:
-		return nil, fmt.Errorf("unsupported device generation: %d", generation)
-	}
-}
-
-// ToGen1Options converts generic options to Gen1-specific options
-func (c *clientConfig) ToGen1Options() []gen1.ClientOption {
-	var opts []gen1.ClientOption
-	
-	if c.username != "" && c.password != "" {
-		opts = append(opts, gen1.WithAuth(c.username, c.password))
-	}
-	
-	opts = append(opts, 
-		gen1.WithTimeout(c.timeout),
-		gen1.WithRetry(c.retryAttempts, c.retryDelay),
-		gen1.WithUserAgent(c.userAgent),
-	)
-	
-	if c.skipTLSVerify {
-		opts = append(opts, gen1.WithSkipTLSVerify(true))
-	}
-	
-	return opts
-}
-
-// ToGen2Options converts generic options to Gen2-specific options
-func (c *clientConfig) ToGen2Options() []gen2.ClientOption {
-	var opts []gen2.ClientOption
-	
-	if c.username != "" && c.password != "" {
-		opts = append(opts, gen2.WithAuth(c.username, c.password))
-	}
-	
-	opts = append(opts,
-		gen2.WithTimeout(c.timeout),
-		gen2.WithRetry(c.retryAttempts, c.retryDelay),
-		gen2.WithUserAgent(c.userAgent),
-	)
-	
-	if c.skipTLSVerify {
-		opts = append(opts, gen2.WithSkipTLSVerify(true))
-	}
-	
-	return opts
+	// This will be implemented in a separate factory package to avoid import cycles
+	// For now, return an error
+	return nil, fmt.Errorf("factory implementation moved to avoid import cycle - use NewGen1Client or NewGen2Client directly")
 }
 
 // DefaultFactory is the default factory instance
