@@ -495,3 +495,131 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 	
 	return lastErr
 }
+
+// SetBrightness sets the brightness of a light channel
+func (c *Client) SetBrightness(ctx context.Context, channel int, brightness int) error {
+	params := map[string]interface{}{
+		"id":         channel,
+		"brightness": brightness,
+	}
+	return c.rpcCall(ctx, "Light.Set", params, nil)
+}
+
+// SetColorRGB sets the RGB color of a light channel
+func (c *Client) SetColorRGB(ctx context.Context, channel int, r, g, b uint8) error {
+	params := map[string]interface{}{
+		"id": channel,
+		"rgb": []int{int(r), int(g), int(b)},
+	}
+	return c.rpcCall(ctx, "Light.Set", params, nil)
+}
+
+// SetColorTemp sets the color temperature of a light channel
+func (c *Client) SetColorTemp(ctx context.Context, channel int, temp int) error {
+	params := map[string]interface{}{
+		"id":    channel,
+		"temp": temp,
+	}
+	return c.rpcCall(ctx, "Light.Set", params, nil)
+}
+
+// Reboot restarts the device
+func (c *Client) Reboot(ctx context.Context) error {
+	return c.rpcCall(ctx, "Shelly.Reboot", nil, nil)
+}
+
+// FactoryReset resets the device to factory defaults
+func (c *Client) FactoryReset(ctx context.Context) error {
+	return c.rpcCall(ctx, "Shelly.FactoryReset", nil, nil)
+}
+
+// CheckUpdate checks for firmware updates
+func (c *Client) CheckUpdate(ctx context.Context) (*shelly.UpdateInfo, error) {
+	var result struct {
+		Stable struct {
+			Version string `json:"version"`
+			Build   string `json:"build_id"`
+		} `json:"stable"`
+		Beta struct {
+			Version string `json:"version"`
+			Build   string `json:"build_id"`
+		} `json:"beta"`
+	}
+	
+	if err := c.rpcCall(ctx, "Shelly.CheckForUpdate", nil, &result); err != nil {
+		return nil, err
+	}
+	
+	// Get current version from device info
+	info, err := c.GetInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	updateInfo := &shelly.UpdateInfo{
+		OldVersion: info.FW,
+		HasUpdate:  result.Stable.Version != "" && result.Stable.Version != info.FW,
+	}
+	
+	if updateInfo.HasUpdate {
+		updateInfo.NewVersion = result.Stable.Version
+		if result.Beta.Version != "" && result.Beta.Version != info.FW {
+			updateInfo.ReleaseNotes = fmt.Sprintf("Beta version %s also available", result.Beta.Version)
+		}
+	}
+	
+	return updateInfo, nil
+}
+
+// PerformUpdate initiates a firmware update
+func (c *Client) PerformUpdate(ctx context.Context) error {
+	params := map[string]interface{}{
+		"stage": "stable",
+	}
+	return c.rpcCall(ctx, "Shelly.Update", params, nil)
+}
+
+// GetMetrics retrieves device metrics
+func (c *Client) GetMetrics(ctx context.Context) (*shelly.DeviceMetrics, error) {
+	status, err := c.GetStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	metrics := &shelly.DeviceMetrics{
+		Timestamp:   time.Now(),
+		Temperature: status.Temperature,
+		Uptime:      status.Uptime,
+	}
+	
+	if status.WiFiStatus != nil {
+		metrics.WiFiRSSI = status.WiFiStatus.RSSI
+	}
+	
+	return metrics, nil
+}
+
+// GetEnergyData retrieves energy consumption data for a channel
+func (c *Client) GetEnergyData(ctx context.Context, channel int) (*shelly.EnergyData, error) {
+	var result struct {
+		Total   float64 `json:"total"`
+		Current float64 `json:"current"`
+		Voltage float64 `json:"voltage"`
+		Power   float64 `json:"apower"`
+	}
+	
+	params := map[string]interface{}{
+		"id": channel,
+	}
+	
+	if err := c.rpcCall(ctx, "Switch.GetStatus", params, &result); err != nil {
+		return nil, err
+	}
+	
+	return &shelly.EnergyData{
+		Power:   result.Power,
+		Total:   result.Total / 1000, // Convert Wh to kWh
+		Voltage: result.Voltage,
+		Current: result.Current,
+	}, nil
+}

@@ -7,24 +7,30 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
 
 // Handler contains dependencies for API handlers
 type Handler struct {
-	DB     *database.Manager
-	logger *logging.Logger
+	DB      *database.Manager
+	Service *service.ShellyService
+	logger  *logging.Logger
 }
 
 // NewHandler creates a new API handler
-func NewHandler(db *database.Manager) *Handler {
-	return NewHandlerWithLogger(db, logging.GetDefault())
+func NewHandler(db *database.Manager, svc *service.ShellyService) *Handler {
+	return NewHandlerWithLogger(db, svc, logging.GetDefault())
 }
 
 // NewHandlerWithLogger creates a new API handler with custom logger
-func NewHandlerWithLogger(db *database.Manager, logger *logging.Logger) *Handler {
-	return &Handler{DB: db, logger: logger}
+func NewHandlerWithLogger(db *database.Manager, svc *service.ShellyService, logger *logging.Logger) *Handler {
+	return &Handler{
+		DB:      db,
+		Service: svc,
+		logger:  logger,
+	}
 }
 
 // GetDevices handles GET /api/v1/devices
@@ -178,4 +184,107 @@ func (h *Handler) GetDHCPReservations(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reservations)
+}
+
+// ControlDevice handles POST /api/v1/devices/{id}/control
+func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Action string                 `json:"action"`
+		Params map[string]interface{} `json:"params"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Validate action
+	if req.Action == "" {
+		http.Error(w, "Action is required", http.StatusBadRequest)
+		return
+	}
+
+	// Execute control command
+	if err := h.Service.ControlDevice(uint(id), req.Action, req.Params); err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"action":    req.Action,
+			"error":     err.Error(),
+		}).Error("Device control failed")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":    "success",
+		"device_id": id,
+		"action":    req.Action,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetDeviceStatus handles GET /api/v1/devices/{id}/status
+func (h *Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get device status
+	status, err := h.Service.GetDeviceStatus(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to get device status")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
+// GetDeviceEnergy handles GET /api/v1/devices/{id}/energy
+func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get channel from query params (default to 0)
+	channel := 0
+	if ch := r.URL.Query().Get("channel"); ch != "" {
+		if c, err := strconv.Atoi(ch); err == nil {
+			channel = c
+		}
+	}
+
+	// Get energy data
+	energy, err := h.Service.GetDeviceEnergy(uint(id), channel)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"channel":   channel,
+			"error":     err.Error(),
+		}).Error("Failed to get energy data")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(energy)
 }

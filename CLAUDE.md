@@ -168,6 +168,11 @@ The application has been fully refactored with comprehensive architecture and re
 - [ ] Device authentication handling
 - [ ] Real-time status polling
 - [ ] Configuration management (3 levels: device, template, system)
+  - [ ] Import device configuration from physical devices to database
+  - [ ] Update device configuration from database to physical devices
+  - [ ] Verify/compare current device config against database stored config
+  - [ ] Configuration drift detection and reporting
+  - [ ] Bulk configuration sync operations
 - [ ] Firmware version tracking
 - [ ] Bulk device operations
 - [ ] Error recovery and retry logic
