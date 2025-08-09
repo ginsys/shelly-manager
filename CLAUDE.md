@@ -36,22 +36,36 @@ docker-compose logs -f  # View logs
 
 ## Architecture
 
-### Current State (as of 2025-08-07)
+### Current State (as of 2025-08-09)
 
 #### Project Status
 - **Type**: Shelly smart home device manager
-- **Stage**: Initial development with mock implementations
-- **Module Path**: `github.com/ginsys/shelly-manager` (fixed from generic path)
+- **Stage**: Refactored with comprehensive package structure and testing
+- **Module Path**: `github.com/ginsys/shelly-manager`
 - **Go Version**: 1.21
-- **Main File Size**: 585 lines (manageable monolithic structure)
+
+#### Recent Major Updates
+✅ **Comprehensive Testing Framework** - Full test coverage for all packages
+✅ **Structured Logging** - slog implementation throughout
+✅ **WiFi Provisioning System** - Complete platform-specific implementations
+✅ **Core Packages** - Fully tested internal packages with clear separation
 
 #### Code Organization
-The application is currently monolithic with all code in `cmd/shelly-manager/main.go`. This includes:
-- Cobra CLI commands with subcommands (list, discover, add, provision, server)
-- HTTP API server using Gorilla Mux (port 8080)
-- SQLite database via GORM (stored in `data/shelly.db`)
-- Device model and configuration structures
-- Mock implementations for device discovery and provisioning
+The application has been refactored from a monolithic structure into well-organized packages:
+
+```
+internal/
+├── api/          # HTTP handlers and REST API
+├── config/       # Configuration management with Viper
+├── database/     # Models and GORM operations
+├── dhcp/         # DHCP reservation management
+├── discovery/    # Device discovery (HTTP, mDNS, SSDP)
+├── logger/       # Structured logging with slog
+├── network/      # Network utilities and operations
+├── platform/     # Platform-specific WiFi implementations
+├── provisioning/ # WiFi provisioning system
+└── shelly/       # Shelly device client and API
+```
 
 #### Dependencies
 - **CLI Framework**: spf13/cobra v1.8.0
@@ -59,22 +73,12 @@ The application is currently monolithic with all code in `cmd/shelly-manager/mai
 - **HTTP Router**: gorilla/mux v1.8.0
 - **Database ORM**: gorm.io/gorm v1.25.5 with SQLite driver
 - **Database**: SQLite (requires CGO_ENABLED=1 for compilation)
-
-#### Package Structure (Empty, Ready for Refactoring)
-```
-internal/
-├── api/          # Reserved for HTTP handlers
-├── config/       # Reserved for configuration management
-├── database/     # Reserved for models & operations
-├── dhcp/         # Reserved for DHCP management
-├── discovery/    # Reserved for device discovery
-└── provisioning/ # Reserved for WiFi provisioning
-```
+- **Logging**: slog (Go 1.21+ standard library)
 
 #### Web Interface
 - **Location**: `web/static/index.html`
 - **Technology**: Vanilla JavaScript (no framework)
-- **Features**: Basic device listing and discovery UI
+- **Features**: Full device management UI
 - **Styling**: Modern gradient design with responsive layout
 
 #### Build & Deployment
@@ -82,15 +86,6 @@ internal/
 - **Docker**: Multi-stage Dockerfile for minimal image size
 - **Docker Compose**: Available for local development
 - **Binary Output**: `bin/shelly-manager`
-
-### Refactoring Target
-The code is ready to be split into packages:
-- `internal/api/` - HTTP handlers and routing
-- `internal/database/` - Models and database operations
-- `internal/discovery/` - Device discovery logic (HTTP scan, mDNS, SSDP)
-- `internal/provisioning/` - WiFi provisioning system
-- `internal/dhcp/` - DHCP reservation management
-- `internal/config/` - Configuration management
 
 ### Key Components
 
@@ -101,11 +96,16 @@ The code is ready to be split into packages:
 **API Endpoints**: RESTful API on port 8080:
 - `/api/v1/devices` - CRUD operations
 - `/api/v1/discover` - Trigger network discovery
+- `/api/v1/provisioning/*` - WiFi provisioning operations
+- `/api/v1/dhcp/*` - DHCP reservation management
 - Static web UI served from `/web/static/`
 
-**Mock Implementations**: Currently uses mock data for demonstration. Real Shelly API calls need implementation at:
-- Discovery: Replace mock device generation with actual HTTP/mDNS/SSDP scanning
-- Provisioning: Implement WiFi connection and configuration via Shelly AP mode
+**Logging System**: Structured logging with slog, context propagation, and configurable levels.
+
+**WiFi Provisioning**: Platform-specific implementations for:
+- Linux: NetworkManager/nmcli
+- macOS: CoreWLAN/networksetup
+- Windows: netsh/PowerShell
 
 ### Platform Considerations
 WiFi provisioning requires platform-specific network interface control:
@@ -121,23 +121,18 @@ This is a Shelly smart home device manager designed for:
 3. Managing DHCP reservations for stable IP assignments
 4. Integration with OPNSense firewall
 
-The application was generated with comprehensive architecture but mock implementations. All mock sections are clearly marked for replacement with real Shelly API integration.
+The application has been fully refactored with comprehensive architecture and real implementations. All major components have unit tests and integration tests.
 
 ## Development Notes
 
 ### Key Implementation Details
-- **Main Application**: All logic in `cmd/shelly-manager/main.go` (585 lines as of 2025-08-07)
-- **Database**: SQLite with GORM, stored in `data/shelly.db`
-- **Configuration**: YAML file at `configs/shelly-manager.yaml`
-- **Web Interface**: Static HTML at `web/static/index.html` (vanilla JS, no framework)
-- **Docker Support**: Multi-stage build for minimal image size
-
-### Functions in main.go
-- **Database Operations**: InitDB, AddDevice, GetDevices, GetDevice, UpdateDevice, DeleteDevice
-- **Discovery**: DiscoverDevices (currently mock implementation)
-- **HTTP Handlers**: 8 API endpoint handlers for CRUD + discovery + provisioning
-- **CLI Commands**: list, discover, add, provision, server
-- **Configuration**: initConfig using Viper
+- **Testing**: Comprehensive test coverage for all packages
+- **Logging**: Structured logging with slog throughout
+- **Error Handling**: Proper error wrapping and context
+- **Platform Support**: Abstracted platform-specific operations
+- **Database**: SQLite with GORM, migrations, and proper transactions
+- **Configuration**: YAML file with environment variable support
+- **Web Interface**: Feature-complete UI matching CLI functionality
 
 ### API Endpoints (Port 8080)
 - `GET /api/v1/devices` - List all devices
@@ -151,79 +146,191 @@ The application was generated with comprehensive architecture but mock implement
 - `GET /api/v1/dhcp/reservations` - Get DHCP reservations
 - Static files served from `/web/static/`
 
-### Mock Implementations Requiring Replacement
-1. **Device Discovery** (lines 142-299 in main.go)
-   - Currently generates random mock devices
-   - Needs: Real HTTP scanning, mDNS, SSDP protocols
-   
-2. **WiFi Provisioning**
-   - Currently returns mock status
-   - Needs: Platform-specific WiFi control implementation
-   
-3. **DHCP Reservations**
-   - Currently returns empty list
-   - Needs: Integration with DHCP server/OPNSense
-
 ## Settings Management
 
 - Always save settings in `.claude/settings.json` (never use `.claude/settings.local.json`)
 
-## Development TODO List
+## Development Priorities (Updated 2025-08-09)
 
-Priority tasks for improving the Shelly Manager application:
+### User Requirements & Constraints
+- **Primary Goal**: Fully working system with advanced features for managing ~20-100 Shelly devices
+- **Deployment**: Kubernetes-first with container architecture
+- **Architecture**: Dual-binary design (API server + provisioning agent)
+- **Security**: Basic authentication sufficient (home project)
+- **IPv6**: Code prepared but not required
+- **Integrations**: Export functionality first, OPNSense second
 
-### High Priority
-1. **Implement Real Shelly API Integration** - Replace mock implementations with actual Shelly HTTP API calls
-   - Device discovery via HTTP scan on ports 80/443
-   - mDNS/SSDP discovery protocols
-   - Real device status polling
-   - WiFi provisioning via Shelly AP mode
+### Implementation Roadmap
 
-2. **Refactor to Package Structure** - Split monolithic main.go into logical packages
-   - `internal/api/` → HTTP handlers (lines 301-455)
-   - `internal/database/` → Models & GORM operations (lines 25-141)
-   - `internal/discovery/` → Device discovery logic (lines 142-299)
-   - `internal/config/` → Configuration management (lines 39-87, 502-548)
-   - `internal/provisioning/` → WiFi provisioning system
+#### Phase 1: Core Shelly Device Management (PRIORITY 1)
+**Goal**: Real device communication and management
+- [ ] Shelly API client implementation (Gen1 & Gen2+)
+- [ ] Device authentication handling
+- [ ] Real-time status polling
+- [ ] Configuration management
+- [ ] Firmware version tracking
+- [ ] Bulk device operations
+- [ ] Error recovery and retry logic
 
-3. **Add Testing** - Ensure reliability
-   - Unit tests for business logic
-   - Integration tests for API endpoints
-   - Mock Shelly device responses for testing
+#### Phase 2: Dual-Binary Architecture (PRIORITY 2)
+**Goal**: Separate provisioning agent for WiFi operations
+- [ ] Create `cmd/shelly-provisioner/` binary
+- [ ] API communication protocol (REST + WebSocket)
+- [ ] Queue management system
+- [ ] Agent registration/heartbeat
+- [ ] Task distribution
+- [ ] Status reporting
+- [ ] Error handling between services
 
-### Medium Priority
-4. **Enhance Error Handling & Logging**
-   - Implement structured logging (consider `slog` or `zerolog`)
-   - Add proper error wrapping and context
-   - Implement retry logic for network operations
+#### Phase 3: WiFi Provisioning Implementation (PRIORITY 3)
+**Goal**: Complete device provisioning flow
+- [ ] Real AP connection logic
+- [ ] Shelly AP mode detection
+- [ ] Credential injection
+- [ ] Device configuration
+- [ ] Network verification
+- [ ] Provisioning state machine
+- [ ] Rollback on failure
 
-5. **Improve Configuration**
-   - Add environment variable support for sensitive data (API keys)
-   - Implement config validation
-   - Add config hot-reload capability
+#### Phase 4: Kubernetes Deployment (PRIORITY 4)
+**Goal**: Production-ready K8s deployment
+- [ ] Multi-stage Docker builds
+- [ ] Kubernetes manifests (Deployment, Service, ConfigMap, Secret)
+- [ ] Helm chart with values customization
+- [ ] Health/readiness probes
+- [ ] Resource limits and requests
+- [ ] Network policies
+- [ ] Persistent volume claims for database
 
-6. **Security Enhancements**
-   - Add authentication/authorization to API
-   - Implement rate limiting
-   - Use HTTPS for production
-   - Encrypt sensitive config values
+#### Phase 5: Export & Basic Integration (PRIORITY 5)
+**Goal**: Device data export in multiple formats
+- [ ] JSON export with full details
+- [ ] CSV export for spreadsheets
+- [ ] Hosts file format
+- [ ] DHCP reservation format
+- [ ] MAC address list
+- [ ] Bulk export API
+- [ ] Scheduled exports
 
-### Low Priority
-7. **Enhance Web Interface**
-   - Add real-time updates via WebSockets
-   - Implement device grouping/filtering
-   - Add dark mode toggle
-   - Consider React/Vue for complex interactions
+#### Phase 6: OPNSense Integration (PRIORITY 6)
+**Goal**: Automated DHCP management
+- [ ] OPNSense API client
+- [ ] DHCP reservation sync
+- [ ] Static mapping creation
+- [ ] Lease management
+- [ ] Firewall alias updates
+- [ ] Error handling and rollback
 
-8. **Performance Optimizations**
-   - Implement connection pooling for device checks
-   - Add caching layer for device status
-   - Use goroutine worker pools for concurrent operations
+#### Phase 7: Production Features (PRIORITY 7)
+**Goal**: Monitoring, backup, and automation
+- [ ] Prometheus metrics
+- [ ] Backup/restore functionality
+- [ ] Database migrations
+- [ ] Scheduled discovery
+- [ ] Device grouping
+- [ ] Rule-based automation
+- [ ] Event notifications
 
-9. **Documentation**
-   - API documentation (OpenAPI/Swagger)
-   - Device provisioning workflow docs
-   - Deployment guide for production
+#### Phase 8: Advanced Features (PRIORITY 8)
+**Goal**: Enhanced capabilities
+- [ ] WebSocket real-time updates
+- [ ] Advanced scheduling
+- [ ] Template-based configuration
+- [ ] Device profiles
+- [ ] Batch provisioning
+- [ ] Network topology visualization
 
-### Completed
-✓ **Fix Module Path** - Changed from `github.com/yourusername/shelly-manager` to `github.com/ginsys/shelly-manager`
+### Scaling Path (Current: 20 devices → Future: 1000+ devices)
+
+**At 100 devices (current target)**:
+- SQLite performs well
+- Single API instance sufficient
+- Simple polling adequate
+
+**At 1000 devices (future consideration)**:
+- PostgreSQL migration needed
+- Redis caching layer
+- Worker pool for discovery
+- Connection pooling
+- Batch API operations
+- Event-driven updates
+- Horizontal scaling with load balancer
+
+## Original Requirements & Context
+
+### Core Functionality
+The user requested a Golang application for managing Shelly smart home devices with:
+- **Headless operation** in containers
+- **CLI interface** for all functionality
+- **SQLite database** for persistence
+- **Configuration file** support (YAML)
+- **API server mode** for web frontend integration
+
+### Key Features
+
+#### Device Discovery & Management
+- HTTP scanning of network ranges for Shelly devices
+- mDNS/Bonjour discovery for advertised devices
+- SSDP/UPnP discovery for modern devices
+- Database persistence of device information
+- Real-time status monitoring
+
+#### WiFi Provisioning System
+Handle unconfigured devices that expose their own WiFi SSID:
+- Network interface control (requires host system access)
+- WiFi AP scanning for Shelly device patterns
+- Automated connection to device APs
+- Device configuration via HTTP API
+- Production WiFi setup and device reboot
+- Platform-specific implementations (Linux, macOS, Windows)
+
+#### DHCP Integration
+Generate DHCP reservations for OPNSense firewall:
+- MAC address extraction from provisioned devices
+- Hostname standardization for network management
+- IP pool management with automatic assignment
+- OPNSense API integration for automated reservation creation
+- Export capabilities (JSON, CSV, XML formats)
+
+### Deployment Architecture
+
+#### Container Requirements
+- **Privileged mode** required for WiFi operations
+- **Host network access** for network interface control
+- **Volume mounts** for data persistence
+- **Device access** (/dev/rfkill for WiFi)
+
+### Complete Device Lifecycle
+1. **Discovery**: Scan for unconfigured Shelly AP networks
+2. **Provisioning**: Connect to AP, configure WiFi credentials
+3. **Network Integration**: Device joins production network
+4. **DHCP Reservation**: Extract MAC/hostname, create reservation
+5. **Firewall Sync**: Push reservations to OPNSense
+6. **Device Management**: Configure settings via main application
+
+### Shelly Device Patterns
+- **AP Mode SSID**: `shelly1-XXXXXX`, `SHSW-1#XXXXXX`
+- **Default AP IP**: `192.168.33.1`
+- **API Endpoints**: `/shelly`, `/settings`, `/status`
+- **Configuration**: JSON payload via HTTP POST
+
+## Reference Information
+
+### Shelly API Documentation
+- Official Shelly API: https://shelly-api-docs.shelly.cloud/
+- Device discovery patterns and endpoints
+- Configuration payload formats
+
+### Network Integration
+- OPNSense API documentation
+- DHCP reservation XML format
+- NetworkManager/systemd-networkd integration
+
+### Container Deployment
+- Privileged container requirements
+- Host networking for WiFi access
+- Volume mapping for persistence
+- always keep README.md and other documentation up to date with any other changes
+- always create and update tests with any code change
+- when a piece of code is ready, always say so, and ask whether to commit, or to extend the work
+- always update project memory with changed insights, new analysis, updated to lists etc.
