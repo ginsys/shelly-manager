@@ -31,6 +31,11 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/devices/{id}", handler.UpdateDevice).Methods("PUT")
 	api.HandleFunc("/devices/{id}", handler.DeleteDevice).Methods("DELETE")
 	
+	// Device control routes
+	api.HandleFunc("/devices/{id}/control", handler.ControlDevice).Methods("POST")
+	api.HandleFunc("/devices/{id}/status", handler.GetDeviceStatus).Methods("GET")
+	api.HandleFunc("/devices/{id}/energy", handler.GetDeviceEnergy).Methods("GET")
+	
 	// Discovery route
 	api.HandleFunc("/discover", handler.DiscoverHandler).Methods("POST")
 	

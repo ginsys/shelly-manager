@@ -19,7 +19,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
@@ -67,12 +67,21 @@
             box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
         }
 
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .btn-success {
             background: linear-gradient(45deg, #27ae60, #229954);
         }
 
         .btn-danger {
             background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+
+        .btn-warning {
+            background: linear-gradient(45deg, #f39c12, #e67e22);
         }
 
         .status-bar {
@@ -87,7 +96,7 @@
 
         .device-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
             gap: 20px;
             margin-top: 20px;
         }
@@ -98,6 +107,7 @@
             border-radius: 15px;
             padding: 25px;
             transition: all 0.3s ease;
+            position: relative;
         }
 
         .device-card:hover {
@@ -105,11 +115,36 @@
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
         }
 
+        .device-status-indicator {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-online {
+            background: #27ae60;
+        }
+
+        .status-offline {
+            background: #e74c3c;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0); }
+        }
+
         .device-name {
             font-size: 1.4rem;
             font-weight: 600;
             color: #2c3e50;
             margin-bottom: 5px;
+            padding-right: 20px;
         }
 
         .device-type {
@@ -118,15 +153,79 @@
             margin-bottom: 15px;
         }
 
+        .device-info {
+            margin: 15px 0;
+        }
+
+        .device-info p {
+            margin: 5px 0;
+            color: #34495e;
+        }
+
+        .device-controls {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
         .device-actions {
             display: flex;
             gap: 10px;
-            margin-top: 20px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e1e8ed;
         }
 
         .btn-sm {
             padding: 8px 16px;
             font-size: 14px;
+        }
+
+        .switch-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            background: #f8f9fa;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .switch-on {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .switch-off {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .power-info {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        .power-stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .power-label {
+            color: #7f8c8d;
+            font-size: 12px;
+        }
+
+        .power-value {
+            font-weight: 600;
+            color: #2c3e50;
         }
 
         .modal {
@@ -146,7 +245,14 @@
             padding: 30px;
             border-radius: 20px;
             width: 90%;
-            max-width: 500px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #2c3e50;
         }
 
         .form-group {
@@ -195,13 +301,59 @@
             padding: 60px 20px;
             color: #7f8c8d;
         }
+
+        .status-details {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .status-details h4 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+
+        .status-label {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+
+        .status-value {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .auto-refresh input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>🏠 Shelly Device Manager</h1>
-            <p>Manage and configure your Shelly smart home devices</p>
+            <p>Manage and control your Shelly smart home devices</p>
         </div>
 
         <div class="main-content">
@@ -211,10 +363,15 @@
                 <button class="btn" onclick="showAddDeviceModal()">➕ Add Device</button>
                 <button class="btn" onclick="showProvisioningModal()">📡 Provision Devices</button>
                 <button class="btn" onclick="showDHCPModal()">📋 DHCP Reservations</button>
+                <div class="auto-refresh">
+                    <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
+                    <label for="autoRefresh">Auto-refresh (5s)</label>
+                </div>
             </div>
 
             <div class="status-bar">
                 <div><strong id="deviceCount">0</strong> devices found</div>
+                <div>Last updated: <span id="lastUpdate">Never</span></div>
                 <div>API: <span id="apiStatus">🟢 Connected</span></div>
             </div>
 
@@ -247,6 +404,19 @@
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
                 <button class="btn" onclick="closeModal('addDeviceModal')">Cancel</button>
                 <button class="btn btn-success" onclick="addDevice()">Add Device</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Status Modal -->
+    <div id="statusModal" class="modal">
+        <div class="modal-content">
+            <h2 id="statusModalTitle">Device Status</h2>
+            <div id="statusModalContent">
+                <p>Loading status...</p>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn" onclick="closeModal('statusModal')">Close</button>
             </div>
         </div>
     </div>
@@ -286,6 +456,8 @@
 
     <script>
         const API_BASE = '/api/v1';
+        let deviceStatuses = {};
+        let autoRefreshInterval = null;
 
         document.addEventListener('DOMContentLoaded', function() {
             loadDevices();
@@ -300,11 +472,152 @@
                 const devices = await response.json();
                 displayDevices(devices);
                 updateStatus('🟢 Connected', devices.length);
+                updateLastRefresh();
+                
+                // Load status for each device
+                devices.forEach(device => {
+                    loadDeviceStatus(device.id);
+                });
             } catch (error) {
                 console.error('Error loading devices:', error);
                 updateStatus('🔴 Connection Error', 0);
             } finally {
                 showLoading(false);
+            }
+        }
+
+        async function loadDeviceStatus(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/status`);
+                if (response.ok) {
+                    const status = await response.json();
+                    deviceStatuses[deviceId] = status;
+                    updateDeviceCard(deviceId, status);
+                }
+            } catch (error) {
+                console.error(`Failed to load status for device ${deviceId}:`, error);
+            }
+        }
+
+        function updateDeviceCard(deviceId, status) {
+            const statusElement = document.getElementById(`status-${deviceId}`);
+            const powerElement = document.getElementById(`power-${deviceId}`);
+            
+            if (statusElement && status.switches && status.switches.length > 0) {
+                const isOn = status.switches[0].output;
+                statusElement.className = isOn ? 'switch-status switch-on' : 'switch-status switch-off';
+                statusElement.innerHTML = `💡 ${isOn ? 'ON' : 'OFF'}`;
+            }
+            
+            if (powerElement && status.meters && status.meters.length > 0) {
+                const meter = status.meters[0];
+                powerElement.innerHTML = `
+                    <div class="power-stat">
+                        <span class="power-label">Power</span>
+                        <span class="power-value">${meter.power.toFixed(1)}W</span>
+                    </div>
+                    ${meter.total !== undefined ? `
+                    <div class="power-stat">
+                        <span class="power-label">Total</span>
+                        <span class="power-value">${(meter.total/1000).toFixed(2)}kWh</span>
+                    </div>` : ''}
+                `;
+                powerElement.style.display = 'flex';
+            }
+        }
+
+        async function controlDevice(deviceId, action) {
+            const button = event.target;
+            button.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/control`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Control failed');
+                }
+                
+                // Reload status after control action
+                setTimeout(() => loadDeviceStatus(deviceId), 500);
+            } catch (error) {
+                alert(`Failed to ${action} device: ${error.message}`);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function showDeviceStatus(deviceId, deviceName) {
+            showModal('statusModal');
+            document.getElementById('statusModalTitle').textContent = `${deviceName} - Detailed Status`;
+            document.getElementById('statusModalContent').innerHTML = '<p>Loading...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/status`);
+                if (!response.ok) throw new Error('Failed to fetch status');
+                
+                const status = await response.json();
+                
+                let html = '<div class="status-details">';
+                
+                // Basic info
+                html += '<h4>Device Information</h4>';
+                html += '<div class="status-grid">';
+                html += `<div class="status-item"><span class="status-label">IP Address:</span><span class="status-value">${status.ip}</span></div>`;
+                html += `<div class="status-item"><span class="status-label">Temperature:</span><span class="status-value">${status.temperature}°C</span></div>`;
+                html += `<div class="status-item"><span class="status-label">Uptime:</span><span class="status-value">${formatUptime(status.uptime)}</span></div>`;
+                if (status.wifi) {
+                    html += `<div class="status-item"><span class="status-label">WiFi SSID:</span><span class="status-value">${status.wifi.ssid}</span></div>`;
+                    html += `<div class="status-item"><span class="status-label">WiFi Signal:</span><span class="status-value">${status.wifi.rssi} dBm</span></div>`;
+                }
+                html += '</div>';
+                
+                // Switches
+                if (status.switches && status.switches.length > 0) {
+                    html += '<h4 style="margin-top: 20px;">Switches</h4>';
+                    status.switches.forEach((sw, index) => {
+                        html += `<div class="status-item">
+                            <span class="status-label">Switch ${index}:</span>
+                            <span class="status-value">${sw.output ? 'ON' : 'OFF'} (${sw.source})</span>
+                        </div>`;
+                    });
+                }
+                
+                // Power meters
+                if (status.meters && status.meters.length > 0) {
+                    html += '<h4 style="margin-top: 20px;">Power Consumption</h4>';
+                    status.meters.forEach((meter, index) => {
+                        html += '<div class="status-grid">';
+                        html += `<div class="status-item"><span class="status-label">Power:</span><span class="status-value">${meter.power.toFixed(2)}W</span></div>`;
+                        if (meter.total !== undefined) {
+                            html += `<div class="status-item"><span class="status-label">Total Energy:</span><span class="status-value">${(meter.total/1000).toFixed(3)}kWh</span></div>`;
+                        }
+                        html += '</div>';
+                    });
+                }
+                
+                html += '</div>';
+                document.getElementById('statusModalContent').innerHTML = html;
+            } catch (error) {
+                document.getElementById('statusModalContent').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) {
+                return `${days}d ${hours}h ${minutes}m`;
+            } else if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            } else {
+                return `${minutes}m`;
             }
         }
 
@@ -316,7 +629,7 @@
                 });
                 const result = await response.json();
                 setTimeout(() => loadDevices(), 1000);
-                alert(`Discovery completed! Found ${result.devices.length} devices`);
+                alert(`Discovery started! Check back in a moment.`);
             } catch (error) {
                 alert('Discovery failed');
             } finally {
@@ -337,7 +650,7 @@
                 const response = await fetch(`${API_BASE}/devices`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ip: ip, name: name || ip, status: 'unknown' })
+                    body: JSON.stringify({ ip: ip, name: name || ip, type: 'Unknown', status: 'unknown' })
                 });
 
                 if (!response.ok) throw new Error('Failed to add device');
@@ -360,10 +673,10 @@
             }
 
             try {
-                const response = await fetch(`${API_BASE}/provisioning/start`, {
+                const response = await fetch(`${API_BASE}/provisioning/provision`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ wifi_ssid: ssid, wifi_password: password })
+                    body: JSON.stringify({ ssid: ssid, password: password })
                 });
 
                 const result = await response.json();
@@ -381,15 +694,14 @@
                 const response = await fetch(`${API_BASE}/dhcp/reservations`);
                 const data = await response.json();
                 
-                let html = `<p><strong>${data.count}</strong> DHCP reservations:</p><ul>`;
-                data.reservations.forEach(res => {
-                    html += `<li><strong>${res.hostname}</strong> (${res.ip}) - ${res.mac}</li>`;
-                });
-                html += '</ul>';
-                
-                document.getElementById('dhcpContent').innerHTML = html;
+                if (Array.isArray(data) && data.length === 0) {
+                    document.getElementById('dhcpContent').innerHTML = '<p>No DHCP reservations configured</p>';
+                } else {
+                    let html = '<p>DHCP reservations will be listed here when configured</p>';
+                    document.getElementById('dhcpContent').innerHTML = html;
+                }
             } catch (error) {
-                document.getElementById('dhcpContent').innerHTML = '<p>Failed to load DHCP reservations</p>';
+                document.getElementById('dhcpContent').innerHTML = '<p>DHCP reservation feature not yet configured</p>';
             }
         }
 
@@ -406,18 +718,61 @@
             grid.style.display = 'grid';
             emptyState.style.display = 'none';
 
-            grid.innerHTML = devices.map(device => `
+            grid.innerHTML = devices.map(device => {
+                const settings = device.settings ? JSON.parse(device.settings) : {};
+                const hasAuth = settings.auth_enabled;
+                const isOnline = device.status === 'online';
+                
+                return `
                 <div class="device-card">
+                    <div class="device-status-indicator ${isOnline ? 'status-online' : 'status-offline'}"></div>
                     <div class="device-name">${device.name}</div>
-                    <div class="device-type">${device.type}</div>
-                    <p><strong>IP:</strong> ${device.ip}</p>
-                    <p><strong>Status:</strong> ${device.status}</p>
+                    <div class="device-type">${device.type} ${hasAuth ? '🔐' : ''}</div>
+                    
+                    <div class="device-info">
+                        <p><strong>IP:</strong> ${device.ip}</p>
+                        <p><strong>MAC:</strong> ${device.mac}</p>
+                        <p><strong>Model:</strong> ${settings.model || 'Unknown'}</p>
+                        <p><strong>Firmware:</strong> ${device.firmware || 'Unknown'}</p>
+                    </div>
+                    
+                    <div class="device-controls">
+                        <button class="btn btn-success btn-sm" onclick="controlDevice(${device.id}, 'on')">On</button>
+                        <button class="btn btn-danger btn-sm" onclick="controlDevice(${device.id}, 'off')">Off</button>
+                        <button class="btn btn-warning btn-sm" onclick="controlDevice(${device.id}, 'toggle')">Toggle</button>
+                        <button class="btn btn-sm" onclick="showDeviceStatus(${device.id}, '${device.name}')">📊 Status</button>
+                    </div>
+                    
+                    <div id="status-${device.id}" class="switch-status"></div>
+                    <div id="power-${device.id}" class="power-info" style="display: none;"></div>
+                    
                     <div class="device-actions">
                         <button class="btn btn-sm" onclick="editDevice(${device.id})">Edit</button>
+                        <button class="btn btn-sm" onclick="controlDevice(${device.id}, 'reboot')">Reboot</button>
                         <button class="btn btn-danger btn-sm" onclick="deleteDevice(${device.id})">Delete</button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
+        }
+
+        function toggleAutoRefresh() {
+            const checkbox = document.getElementById('autoRefresh');
+            if (checkbox.checked) {
+                autoRefreshInterval = setInterval(() => {
+                    loadDevices();
+                }, 5000);
+            } else {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+        }
+
+        function updateLastRefresh() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
         }
 
         function showLoading(show) {
@@ -451,7 +806,7 @@
         }
 
         async function deleteDevice(id) {
-            if (!confirm('Are you sure?')) return;
+            if (!confirm('Are you sure you want to delete this device?')) return;
             
             try {
                 await fetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });

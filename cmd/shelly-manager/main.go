@@ -295,8 +295,8 @@ var serverCmd = &cobra.Command{
 
 // startServer starts the HTTP API server
 func startServer() {
-	// Create API handler with logger
-	apiHandler := api.NewHandlerWithLogger(dbManager, logger)
+	// Create API handler with service and logger
+	apiHandler := api.NewHandlerWithLogger(dbManager, shellyService, logger)
 	
 	// Setup routes with middleware
 	router := api.SetupRoutesWithLogger(apiHandler, logger)
