@@ -167,10 +167,30 @@ The application has been fully refactored with comprehensive architecture and re
 - [ ] Shelly API client implementation (Gen1 & Gen2+)
 - [ ] Device authentication handling
 - [ ] Real-time status polling
-- [ ] Configuration management
+- [ ] Configuration management (3 levels: device, template, system)
 - [ ] Firmware version tracking
 - [ ] Bulk device operations
 - [ ] Error recovery and retry logic
+
+##### Configuration Management Approach
+1. **Device-Level**: Individual settings stored on each Shelly device
+2. **Template/Profile**: Reusable configurations for device groups (stored in DB)
+3. **System/Global**: Default settings for new devices (from config.yaml)
+
+##### Package Architecture
+```
+internal/shelly/
+├── client.go          # Main client interface
+├── gen1/              # Gen1-specific implementation
+├── gen2/              # Gen2+ RPC implementation
+├── models.go          # Common data models
+├── auth.go            # Authentication handling
+├── config/            # Configuration management
+│   ├── service.go     # Configuration service
+│   ├── templates.go   # Template system
+│   └── history.go     # Config history tracking
+└── factory.go         # Device client factory
+```
 
 #### Phase 2: Dual-Binary Architecture (PRIORITY 2)
 **Goal**: Separate provisioning agent for WiFi operations
@@ -313,6 +333,32 @@ Generate DHCP reservations for OPNSense firewall:
 - **Default AP IP**: `192.168.33.1`
 - **API Endpoints**: `/shelly`, `/settings`, `/status`
 - **Configuration**: JSON payload via HTTP POST
+
+### Shelly API Details (Phase 1 Implementation)
+
+#### Gen1 API Endpoints
+- `/shelly` - Device information
+- `/status` - Current status
+- `/settings` - Get/set configuration
+- `/settings/relay/{id}` - Relay control
+- `/settings/light/{id}` - Light control
+- `/settings/login` - Authentication setup
+- `/ota` - Firmware updates
+- `/reboot` - Device reboot
+
+#### Gen2+ RPC Methods
+- `/rpc/Shelly.GetDeviceInfo` - Device information
+- `/rpc/Shelly.GetStatus` - Current status
+- `/rpc/Shelly.GetConfig` - Get configuration
+- `/rpc/Switch.Set` - Switch control
+- `/rpc/Light.Set` - Light control
+- `/rpc/Sys.SetAuth` - Authentication setup
+- `/rpc/Shelly.Update` - Firmware updates
+- `/rpc/Shelly.Reboot` - Device reboot
+
+#### Authentication
+- **Gen1**: Basic HTTP authentication
+- **Gen2+**: Digest authentication (RFC 2617)
 
 ## Reference Information
 
