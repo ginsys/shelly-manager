@@ -10,7 +10,9 @@
       "Bash(make test:*)",
       "Bash(go test:*)",
       "Bash(go list:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(go mod:*)",
+      "Bash(mv:*)"
     ],
     "deny": []
   },
