@@ -3,7 +3,7 @@ module github.com/ginsys/shelly-manager
 go 1.21
 
 require (
-	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/mdns v1.0.6
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
