@@ -1,6 +1,7 @@
 package service
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -93,7 +94,7 @@ func TestShellyService_ConfigHandling(t *testing.T) {
 			setupConfig: func() *config.Config {
 				cfg := &config.Config{}
 				cfg.Discovery.Enabled = true
-				cfg.Discovery.Networks = []string{"192.168.1.0/30"}
+				cfg.Discovery.Networks = []string{"203.0.113.0/30"}
 				cfg.Discovery.Timeout = 0
 				return cfg
 			},
@@ -103,7 +104,7 @@ func TestShellyService_ConfigHandling(t *testing.T) {
 			setupConfig: func() *config.Config {
 				cfg := &config.Config{}
 				cfg.Discovery.Enabled = false
-				cfg.Discovery.Networks = []string{"192.168.1.0/24"}
+				cfg.Discovery.Networks = []string{"203.0.113.0/24"}
 				cfg.Discovery.Timeout = 5
 				return cfg
 			},
@@ -142,7 +143,7 @@ func TestShellyService_DatabaseIntegration(t *testing.T) {
 	// Add test devices to database
 	testDevices := []*database.Device{
 		{
-			IP:       "192.168.1.100",
+			IP:       "203.0.113.100",
 			MAC:      "AA:BB:CC:DD:EE:01",
 			Type:     "switch",
 			Name:     "Test Switch 1",
@@ -152,7 +153,7 @@ func TestShellyService_DatabaseIntegration(t *testing.T) {
 			Settings: `{"model":"SHSW-1","gen":1,"auth_enabled":false}`,
 		},
 		{
-			IP:       "192.168.1.101",
+			IP:       "203.0.113.101",
 			MAC:      "AA:BB:CC:DD:EE:02", 
 			Type:     "dimmer",
 			Name:     "Test Dimmer 1",
@@ -243,9 +244,16 @@ func TestShellyService_DatabaseIntegration(t *testing.T) {
 func TestShellyService_ErrorHandling(t *testing.T) {
 	logger := createTestLogger(t)
 	
-	// Test with invalid database path
+	// Test with invalid database path (use a file as directory to force error)
 	tempDir := t.TempDir()
-	invalidDBPath := filepath.Join(tempDir, "nonexistent", "path", "test.db")
+	// Create a file that we'll try to use as a directory
+	blockerFile := filepath.Join(tempDir, "blocker")
+	if err := os.WriteFile(blockerFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("Failed to create blocker file: %v", err)
+	}
+	
+	// Try to create database inside the file (should fail)
+	invalidDBPath := filepath.Join(blockerFile, "test.db")
 	
 	_, err := database.NewManagerWithLogger(invalidDBPath, logger)
 	if err == nil {
@@ -409,7 +417,7 @@ func TestShellyService_InitializationEdgeCases(t *testing.T) {
 	extremeConfig.Discovery.Enabled = true
 	extremeConfig.Discovery.Networks = make([]string, 1000) // Very large network list
 	for i := range extremeConfig.Discovery.Networks {
-		extremeConfig.Discovery.Networks[i] = "192.168.1.0/30"
+		extremeConfig.Discovery.Networks[i] = "203.0.113.0/30"
 	}
 	extremeConfig.Discovery.Timeout = -1 // Negative timeout
 	extremeConfig.Discovery.ConcurrentScans = -100 // Negative concurrency

@@ -139,11 +139,15 @@ func TestScanHost_Gen2Device(t *testing.T) {
 }
 
 func TestScanHost_NoDevice(t *testing.T) {
-	scanner := NewScanner(1*time.Second, 1)
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
+	scanner := NewScanner(100*time.Millisecond, 1) // Very short timeout
 	ctx := context.Background()
 
-	// Try to scan a non-existent host
-	device, err := scanner.ScanHost(ctx, "192.168.1.254")
+	// Try to scan a non-routable address (TEST-NET-1 range)
+	device, err := scanner.ScanHost(ctx, "192.0.2.1")
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -154,11 +158,15 @@ func TestScanHost_NoDevice(t *testing.T) {
 }
 
 func TestScanHost_Timeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	scanner := NewScanner(10*time.Millisecond, 1) // Very short timeout
 	ctx := context.Background()
 
-	// Try to scan a slow/non-responsive host
-	device, err := scanner.ScanHost(ctx, "192.168.1.1") // Assuming this will timeout
+	// Try to scan a non-routable address (TEST-NET-2 range) 
+	device, err := scanner.ScanHost(ctx, "198.51.100.1") // Will timeout
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -264,6 +272,10 @@ func TestScanNetwork_InvalidCIDR(t *testing.T) {
 }
 
 func TestScanNetwork_SmallRange(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	// Create mock server
 	server := testutil.MockShellyServer()
 	defer server.Close()
@@ -282,13 +294,13 @@ func TestScanNetwork_SmallRange(t *testing.T) {
 
 	// Create a CIDR that includes localhost with the server port
 	// This is a bit hacky but allows us to test the scanning logic
-	scanner := NewScanner(5*time.Second, 2)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	scanner := NewScanner(100*time.Millisecond, 2) // Short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	// Test with a small range that won't find our mock server
+	// Test with a small range in TEST-NET-3 that won't find anything
 	// (since our mock server is on localhost, not in a real network range)
-	devices, err := scanner.ScanNetwork(ctx, "192.168.255.0/30") // Only 4 IPs
+	devices, err := scanner.ScanNetwork(ctx, "203.0.113.0/30") // Only 4 IPs in TEST-NET-3
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
