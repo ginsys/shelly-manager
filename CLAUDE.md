@@ -150,7 +150,7 @@ The application has been fully refactored with comprehensive architecture and re
 
 - Always save settings in `.claude/settings.json` (never use `.claude/settings.local.json`)
 
-## Development Priorities (Updated 2025-08-09)
+## Development Priorities (Updated 2025-08-10)
 
 ### User Requirements & Constraints
 - **Primary Goal**: Fully working system with advanced features for managing ~20-100 Shelly devices
@@ -163,11 +163,13 @@ The application has been fully refactored with comprehensive architecture and re
 ### Implementation Roadmap
 
 #### Phase 1: Core Shelly Device Management (PRIORITY 1)
-**Goal**: Real device communication and management
+**Goal**: Real device communication and management with type-safe configuration
 - [ ] Shelly API client implementation (Gen1 & Gen2+)
 - [ ] Device authentication handling
 - [ ] Real-time status polling
-- [ ] Configuration management (3 levels: device, template, system)
+- [ ] **NEW: Composition-based configuration management**
+  - [ ] Implement capability-based configuration architecture
+  - [ ] Replace json.RawMessage with type-safe configuration blocks
   - [ ] Import device configuration from physical devices to database
   - [ ] Update device configuration from database to physical devices
   - [ ] Verify/compare current device config against database stored config
@@ -177,24 +179,47 @@ The application has been fully refactored with comprehensive architecture and re
 - [ ] Bulk device operations
 - [ ] Error recovery and retry logic
 
-##### Configuration Management Approach
-1. **Device-Level**: Individual settings stored on each Shelly device
-2. **Template/Profile**: Reusable configurations for device groups (stored in DB)
-3. **System/Global**: Default settings for new devices (from config.yaml)
+##### NEW: Composition-Based Configuration Architecture
+**Document**: `docs/DEVICE_CONFIGURATION_ARCHITECTURE.md`
+
+The configuration system now uses a composition-based approach where devices combine multiple capability "mixins":
+
+**Core Capabilities**:
+- `RelayConfig` - Switch/relay control settings
+- `PowerMeteringConfig` - Power monitoring and protection
+- `DimmingConfig` - Brightness control for dimmers/lights
+- `RollerConfig` - Roller shutter/motor control
+- `InputConfig` - Button and input configuration
+- `LEDConfig` - LED indicator settings
+- `ColorConfig` - RGB/color control
+
+**Device Examples**:
+- `SHSW-1` = RelayConfig + InputConfig
+- `SHSW-PM` = RelayConfig + PowerMeteringConfig + InputConfig + TempProtectionConfig  
+- `SHSW-25` = Mode-specific (Relay1+Relay2 OR RollerConfig) + PowerMeteringConfig
+
+**Template Benefits**:
+- Target by capability: "All devices with power metering"
+- Target by device type: "All SHPLG-S devices"
+- Type-safe configuration with compile-time checking
 
 ##### Package Architecture
 ```
-internal/shelly/
-├── client.go          # Main client interface
-├── gen1/              # Gen1-specific implementation
-├── gen2/              # Gen2+ RPC implementation
-├── models.go          # Common data models
-├── auth.go            # Authentication handling
-├── config/            # Configuration management
-│   ├── service.go     # Configuration service
-│   ├── templates.go   # Template system
-│   └── history.go     # Config history tracking
-└── factory.go         # Device client factory
+internal/
+├── configuration/           # Enhanced configuration system
+│   ├── capabilities.go      # Capability interfaces
+│   ├── configs.go           # Configuration block definitions
+│   ├── devices.go           # Device-specific compositions
+│   ├── templates.go         # Enhanced template system
+│   ├── service.go           # Configuration service
+│   └── models.go            # Updated database models
+├── shelly/
+│   ├── client.go            # Main client interface
+│   ├── gen1/                # Gen1-specific implementation
+│   ├── gen2/                # Gen2+ RPC implementation
+│   ├── models.go            # Common data models
+│   ├── auth.go              # Authentication handling
+│   └── factory.go           # Device client factory
 ```
 
 #### Phase 2: Dual-Binary Architecture (PRIORITY 2)
