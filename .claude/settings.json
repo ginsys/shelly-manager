@@ -5,7 +5,8 @@
       "WebFetch(*)",
       "Bash(grep:*)",
       "Bash(cat:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   },
