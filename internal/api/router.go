@@ -36,6 +36,23 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/devices/{id}/status", handler.GetDeviceStatus).Methods("GET")
 	api.HandleFunc("/devices/{id}/energy", handler.GetDeviceEnergy).Methods("GET")
 	
+	// Device configuration routes
+	api.HandleFunc("/devices/{id}/config", handler.GetDeviceConfig).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/import", handler.ImportDeviceConfig).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/export", handler.ExportDeviceConfig).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/drift", handler.DetectConfigDrift).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/apply-template", handler.ApplyConfigTemplate).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/history", handler.GetConfigHistory).Methods("GET")
+	
+	// Configuration template routes
+	api.HandleFunc("/config/templates", handler.GetConfigTemplates).Methods("GET")
+	api.HandleFunc("/config/templates", handler.CreateConfigTemplate).Methods("POST")
+	api.HandleFunc("/config/templates/{id}", handler.UpdateConfigTemplate).Methods("PUT")
+	api.HandleFunc("/config/templates/{id}", handler.DeleteConfigTemplate).Methods("DELETE")
+	
+	// Bulk configuration operations
+	api.HandleFunc("/config/bulk-import", handler.BulkImportConfigs).Methods("POST")
+	
 	// Discovery route
 	api.HandleFunc("/discover", handler.DiscoverHandler).Methods("POST")
 	
