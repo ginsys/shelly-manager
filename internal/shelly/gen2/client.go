@@ -389,6 +389,7 @@ func (c *Client) SetSwitch(ctx context.Context, channel int, on bool) error {
 
 // TestConnection tests the connection to the device
 func (c *Client) TestConnection(ctx context.Context) error {
+	// GetInfo is sufficient to test connection and returns auth errors
 	_, err := c.GetInfo(ctx)
 	return err
 }

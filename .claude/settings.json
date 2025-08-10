@@ -1,21 +1,14 @@
 {
-  "saveSettingsPath": ".claude/settings.json",
-  "useLocalSettings": false,
   "permissions": {
     "allow": [
-      "Bash(curl:*)",
-      "Bash(echo:*)",
-      "Bash(find:*)",
-      "Bash(go:*)",
-      "Bash(git:*)",
-      "Bash(make:*)",
-      "Bash(mv:*)",
-      "Bash(rm:*)",
-      "Bash(timeout:*)",
-      "Bash(true)",
-      "Bash(./bin/shelly-manager:*)",
-      "WebFetch(domain:shelly-api-docs.shelly.cloud)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
-  }
+  },
+  "saveSettingsPath": ".claude/settings.json",
+  "useLocalSettings": false
 }

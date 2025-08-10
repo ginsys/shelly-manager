@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/config"
+	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/discovery"
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -19,11 +20,12 @@ import (
 
 // ShellyService handles the core business logic
 type ShellyService struct {
-	DB     *database.Manager
-	Config *config.Config
-	logger *logging.Logger
-	ctx    context.Context
-	cancel context.CancelFunc
+	DB        *database.Manager
+	Config    *config.Config
+	ConfigSvc *configuration.Service
+	logger    *logging.Logger
+	ctx       context.Context
+	cancel    context.CancelFunc
 	
 	// Client cache for device connections
 	clientMu sync.RWMutex
@@ -39,13 +41,17 @@ func NewService(db *database.Manager, cfg *config.Config) *ShellyService {
 func NewServiceWithLogger(db *database.Manager, cfg *config.Config, logger *logging.Logger) *ShellyService {
 	ctx, cancel := context.WithCancel(context.Background())
 	
+	// Create configuration service
+	configSvc := configuration.NewService(db.DB, logger)
+	
 	return &ShellyService{
-		DB:      db,
-		Config:  cfg,
-		logger:  logger,
-		ctx:     ctx,
-		cancel:  cancel,
-		clients: make(map[string]shelly.Client),
+		DB:        db,
+		Config:    cfg,
+		ConfigSvc: configSvc,
+		logger:    logger,
+		ctx:       ctx,
+		cancel:    cancel,
+		clients:   make(map[string]shelly.Client),
 	}
 }
 
@@ -147,63 +153,118 @@ func (s *ShellyService) getClient(device *database.Device) (shelly.Client, error
 
 // getClientWithAuthRetry gets a client and retries with config credentials if auth fails
 func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.Client, error) {
-	client, err := s.getClient(device)
+	// First, try to get a client normally
+	client, err := s.getClientWithRetry(device, false) // Don't allow retry to prevent loops
 	if err != nil {
 		return nil, err
 	}
 	
-	// Quick test to see if auth works
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Quick test to see if auth works - use a simple endpoint
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	
+	// Try GetInfo first as it's faster and still returns auth errors
+	s.logger.WithFields(map[string]any{
+		"device_id":      device.ID,
+		"device_ip":      device.IP,
+		"testing_client": true,
+		"component":      "service",
+	}).Debug("Testing client authentication with GetInfo")
+	
 	_, testErr := client.GetInfo(ctx)
+	
 	if testErr != nil {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"device_ip": device.IP,
-			"error": testErr.Error(),
+			"error":     testErr.Error(),
 			"is_auth_error": shelly.IsAuthError(testErr),
 			"component": "service",
-		}).Debug("Client test result")
-		
-		if shelly.IsAuthError(testErr) {
-			// Auth failed, clear saved credentials and retry
-			var settings struct {
-				Model       string `json:"model"`
-				Gen         int    `json:"gen"`
-				AuthEnabled bool   `json:"auth_enabled"`
-				AuthUser    string `json:"auth_user,omitempty"`
-				AuthPass    string `json:"auth_pass,omitempty"`
-			}
-			
-			if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil {
-				if settings.AuthUser != "" || settings.AuthPass != "" {
-					s.logger.WithFields(map[string]any{
-						"device_id": device.ID,
-						"device_ip": device.IP,
-						"had_user": settings.AuthUser != "",
-						"had_pass": settings.AuthPass != "",
-						"component": "service",
-					}).Info("Clearing failed credentials and retrying with config")
-				
-				// Clear bad credentials
-				settings.AuthUser = ""
-				settings.AuthPass = ""
-				updatedSettings, _ := json.Marshal(settings)
-				device.Settings = string(updatedSettings)
-				s.DB.UpdateDevice(device)
-				
-				// Clear from cache
-				s.ClearClientCache(device.IP)
-				
-					// Retry
-					return s.getClient(device)
-				}
-			}
-		}
+		}).Warn("Client test failed")
+	} else {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"device_ip": device.IP,
+			"component": "service",
+		}).Debug("Client test successful")
 	}
 	
-	return client, nil
+	// If no error or non-auth error, return the client
+	if testErr == nil || !shelly.IsAuthError(testErr) {
+		return client, nil
+	}
+	
+	// Auth failed, try to recover
+	s.logger.WithFields(map[string]any{
+		"device_id": device.ID,
+		"device_ip": device.IP,
+		"component": "service",
+	}).Debug("Auth failed, attempting recovery")
+	
+	// Parse settings
+	var settings struct {
+		Model       string `json:"model"`
+		Gen         int    `json:"gen"`
+		AuthEnabled bool   `json:"auth_enabled"`
+		AuthUser    string `json:"auth_user,omitempty"`
+		AuthPass    string `json:"auth_pass,omitempty"`
+	}
+	
+	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+		return nil, fmt.Errorf("failed to parse settings: %w", err)
+	}
+	
+	// Only retry if we had saved credentials (to avoid infinite loop)
+	if settings.AuthUser != "" || settings.AuthPass != "" {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"device_ip": device.IP,
+			"component": "service",
+		}).Info("Clearing failed credentials and retrying with config")
+		
+		// Clear bad credentials
+		settings.AuthUser = ""
+		settings.AuthPass = ""
+		updatedSettings, _ := json.Marshal(settings)
+		device.Settings = string(updatedSettings)
+		s.DB.UpdateDevice(device)
+		
+		// Clear from cache
+		s.ClearClientCache(device.IP)
+		
+		// Retry with config credentials - use getClientWithRetry with false to prevent infinite recursion
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"device_ip": device.IP,
+			"component": "service",
+		}).Info("Retrying with config credentials after clearing bad saved credentials")
+		
+		retryClient, retryErr := s.getClientWithRetry(device, false)
+		if retryErr != nil {
+			s.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"device_ip": device.IP,
+				"error":     retryErr.Error(),
+				"component": "service",
+			}).Error("Retry with config credentials failed")
+		} else {
+			s.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"device_ip": device.IP,
+				"component": "service",
+			}).Info("Retry with config credentials successful")
+		}
+		return retryClient, retryErr
+	}
+	
+	// No saved credentials but auth required - config should have been tried already
+	s.logger.WithFields(map[string]any{
+		"device_id": device.ID,
+		"device_ip": device.IP,
+		"component": "service",
+	}).Warn("Device requires auth but no working credentials available")
+	
+	return client, testErr // Return the client anyway, let the caller handle the auth error
 }
 
 // getClientWithRetry returns a cached client or creates a new one with retry logic
@@ -271,8 +332,18 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 				"device_id": device.ID,
 				"device_ip": device.IP,
 				"using_config": true,
+				"config_user": authUser,
+				"has_password": authPass != "",
 				"component": "service",
 			}).Debug("Using config credentials")
+		} else {
+			s.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"device_ip": device.IP,
+				"auth_enabled": settings.AuthEnabled,
+				"config_auth_enabled": s.Config.Provisioning.AuthEnabled,
+				"component": "service",
+			}).Warn("Device requires auth but no credentials available")
 		}
 	}
 	
@@ -590,4 +661,81 @@ func (s *ShellyService) GetDeviceEnergy(deviceID uint, channel int) (*shelly.Ene
 	}
 	
 	return energy, nil
+}
+
+// ImportDeviceConfig imports configuration from a physical device
+func (s *ShellyService) ImportDeviceConfig(deviceID uint) (*configuration.DeviceConfig, error) {
+	// Get device from database
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+	
+	// Get or create client with auth retry
+	s.logger.WithFields(map[string]any{
+		"device_id": device.ID,
+		"device_ip": device.IP,
+		"component": "service",
+	}).Debug("ImportDeviceConfig: Getting client with auth retry")
+	
+	client, err := s.getClientWithAuthRetry(device)
+	if err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"device_ip": device.IP,
+			"error":     err.Error(),
+			"component": "service",
+		}).Error("ImportDeviceConfig: Failed to get client")
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	
+	s.logger.WithFields(map[string]any{
+		"device_id": device.ID,
+		"device_ip": device.IP,
+		"component": "service",
+	}).Debug("ImportDeviceConfig: Got client, proceeding to import")
+	
+	// Import configuration
+	return s.ConfigSvc.ImportFromDevice(deviceID, client)
+}
+
+// ExportDeviceConfig exports configuration to a physical device
+func (s *ShellyService) ExportDeviceConfig(deviceID uint) error {
+	// Get device from database
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return fmt.Errorf("device not found: %w", err)
+	}
+	
+	// Get or create client with auth retry
+	client, err := s.getClientWithAuthRetry(device)
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+	
+	// Export configuration
+	return s.ConfigSvc.ExportToDevice(deviceID, client)
+}
+
+// DetectConfigDrift checks for configuration drift on a device
+func (s *ShellyService) DetectConfigDrift(deviceID uint) (*configuration.ConfigDrift, error) {
+	// Get device from database
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+	
+	// Get or create client with auth retry
+	client, err := s.getClientWithAuthRetry(device)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	
+	// Detect drift
+	return s.ConfigSvc.DetectDrift(deviceID, client)
+}
+
+// ApplyConfigTemplate applies a configuration template to a device
+func (s *ShellyService) ApplyConfigTemplate(deviceID uint, templateID uint, variables map[string]interface{}) error {
+	return s.ConfigSvc.ApplyTemplate(deviceID, templateID, variables)
 }

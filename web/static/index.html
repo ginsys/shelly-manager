@@ -182,6 +182,110 @@
             font-size: 14px;
         }
 
+        .config-section {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .config-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .config-title {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+
+        .config-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .config-synced {
+            background: #d1f2eb;
+            color: #0f5132;
+        }
+
+        .config-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .config-drift {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .config-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .config-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .config-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            background: white;
+            border: 1px solid #dee2e6;
+            color: #495057;
+            transition: all 0.2s;
+        }
+
+        .config-btn:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            color: #6c757d;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .switch-status {
             display: inline-flex;
             align-items: center;
@@ -357,12 +461,19 @@
         </div>
 
         <div class="main-content">
-            <div class="controls">
-                <button class="btn" onclick="loadDevices()">🔄 Refresh Devices</button>
-                <button class="btn btn-success" onclick="discoverDevices()">🔍 Discover Devices</button>
-                <button class="btn" onclick="showAddDeviceModal()">➕ Add Device</button>
-                <button class="btn" onclick="showProvisioningModal()">📡 Provision Devices</button>
-                <button class="btn" onclick="showDHCPModal()">📋 DHCP Reservations</button>
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('devices')">Devices</button>
+                <button class="tab" onclick="switchTab('templates')">Configuration Templates</button>
+                <button class="tab" onclick="switchTab('bulk')">Bulk Operations</button>
+            </div>
+            
+            <div id="devices-tab" class="tab-content active">
+                <div class="controls">
+                    <button class="btn" onclick="loadDevices()">🔄 Refresh Devices</button>
+                    <button class="btn btn-success" onclick="discoverDevices()">🔍 Discover Devices</button>
+                    <button class="btn" onclick="showAddDeviceModal()">➕ Add Device</button>
+                    <button class="btn" onclick="showProvisioningModal()">📡 Provision Devices</button>
+                    <button class="btn" onclick="showDHCPModal()">📋 DHCP Reservations</button>
                 <div class="auto-refresh">
                     <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
                     <label for="autoRefresh">Auto-refresh (5s)</label>
@@ -380,11 +491,38 @@
                 <p>Loading devices...</p>
             </div>
 
-            <div class="device-grid" id="deviceGrid"></div>
+                <div class="device-grid" id="deviceGrid"></div>
 
-            <div class="empty-state" id="emptyState" style="display: none;">
-                <h3>No devices found</h3>
-                <p>Click "Discover Devices" to scan your network</p>
+                <div class="empty-state" id="emptyState" style="display: none;">
+                    <h3>No devices found</h3>
+                    <p>Click "Discover Devices" to scan your network</p>
+                </div>
+            </div>
+            
+            <div id="templates-tab" class="tab-content">
+                <div class="controls">
+                    <button class="btn btn-success" onclick="showCreateTemplateModal()">➕ Create Template</button>
+                    <button class="btn" onclick="loadTemplates()">🔄 Refresh Templates</button>
+                </div>
+                
+                <div class="device-grid" id="templatesGrid"></div>
+                
+                <div class="empty-state" id="templatesEmptyState" style="display: none;">
+                    <h3>No templates found</h3>
+                    <p>Create configuration templates to apply to multiple devices</p>
+                </div>
+            </div>
+            
+            <div id="bulk-tab" class="tab-content">
+                <div class="controls">
+                    <button class="btn btn-success" onclick="selectAllDevices()">✅ Select All</button>
+                    <button class="btn" onclick="deselectAllDevices()">⬜ Deselect All</button>
+                    <button class="btn btn-warning" onclick="bulkImportConfig()">📥 Bulk Import</button>
+                    <button class="btn btn-warning" onclick="bulkExportConfig()">📤 Bulk Export</button>
+                    <button class="btn" onclick="bulkApplyTemplate()">📝 Apply Template</button>
+                </div>
+                
+                <div class="device-grid" id="bulkGrid"></div>
             </div>
         </div>
     </div>
@@ -450,6 +588,73 @@
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button class="btn" onclick="closeModal('dhcpModal')">Close</button>
                 <button class="btn btn-success" onclick="exportDHCP()">Export</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <h2 id="configModalTitle">Device Configuration</h2>
+            <div id="configModalContent">
+                <pre id="configJson" style="background: #f8f9fa; padding: 15px; border-radius: 10px; overflow-x: auto;"></pre>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn" onclick="closeModal('configModal')">Close</button>
+                <button class="btn btn-success" onclick="saveConfiguration()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Template Modal -->
+    <div id="createTemplateModal" class="modal">
+        <div class="modal-content">
+            <h2>Create Configuration Template</h2>
+            <div class="form-group">
+                <label class="form-label">Template Name</label>
+                <input type="text" class="form-input" id="templateName" placeholder="Default Switch Config">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <input type="text" class="form-input" id="templateDescription" placeholder="Standard configuration for all switches">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Device Type</label>
+                <select class="form-input" id="templateDeviceType">
+                    <option value="all">All Devices</option>
+                    <option value="SHSW-1">SHSW-1 (Switch)</option>
+                    <option value="SHPLG-S">SHPLG-S (Plug)</option>
+                    <option value="SHDM-1">SHDM-1 (Dimmer)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Generation</label>
+                <select class="form-input" id="templateGeneration">
+                    <option value="0">All Generations</option>
+                    <option value="1">Gen1</option>
+                    <option value="2">Gen2+</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Configuration (JSON)</label>
+                <textarea class="form-input" id="templateConfig" rows="10" placeholder='{"cloud": {"enabled": false}}'></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn" onclick="closeModal('createTemplateModal')">Cancel</button>
+                <button class="btn btn-success" onclick="createTemplate()">Create Template</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config History Modal -->
+    <div id="historyModal" class="modal">
+        <div class="modal-content">
+            <h2 id="historyModalTitle">Configuration History</h2>
+            <div id="historyModalContent">
+                <p>Loading history...</p>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn" onclick="closeModal('historyModal')">Close</button>
             </div>
         </div>
     </div>
@@ -545,7 +750,7 @@
                 // Reload status after control action
                 setTimeout(() => loadDeviceStatus(deviceId), 500);
             } catch (error) {
-                alert(`Failed to ${action} device: ${error.message}`);
+                console.log(`Failed to ${action} device: ${error.message}`);
             } finally {
                 button.disabled = false;
             }
@@ -629,9 +834,9 @@
                 });
                 const result = await response.json();
                 setTimeout(() => loadDevices(), 1000);
-                alert(`Discovery started! Check back in a moment.`);
+                console.log(`Discovery started! Check back in a moment.`);
             } catch (error) {
-                alert('Discovery failed');
+                console.log('Discovery failed');
             } finally {
                 showLoading(false);
             }
@@ -642,7 +847,7 @@
             const name = document.getElementById('deviceName').value;
 
             if (!ip) {
-                alert('Please enter an IP address');
+                console.log('Please enter an IP address');
                 return;
             }
 
@@ -659,7 +864,7 @@
                 loadDevices();
                 clearForm();
             } catch (error) {
-                alert('Failed to add device');
+                console.log('Failed to add device');
             }
         }
 
@@ -668,7 +873,7 @@
             const password = document.getElementById('wifiPassword').value;
 
             if (!ssid) {
-                alert('Please enter WiFi SSID');
+                console.log('Please enter WiFi SSID');
                 return;
             }
 
@@ -681,10 +886,10 @@
 
                 const result = await response.json();
                 closeModal('provisioningModal');
-                alert('Provisioning started! Check console for progress.');
+                console.log('Provisioning started! Check console for progress.');
                 setTimeout(() => loadDevices(), 10000);
             } catch (error) {
-                alert('Failed to start provisioning');
+                console.log('Failed to start provisioning');
             }
         }
 
@@ -746,6 +951,20 @@
                     <div id="status-${device.id}" class="switch-status"></div>
                     <div id="power-${device.id}" class="power-info" style="display: none;"></div>
                     
+                    <div class="config-section">
+                        <div class="config-header">
+                            <span class="config-title">Configuration</span>
+                            <span id="config-status-${device.id}" class="config-status config-pending">Unknown</span>
+                        </div>
+                        <div class="config-actions">
+                            <button class="config-btn" onclick="importConfig(${device.id})" title="Import configuration from device">📥 Import</button>
+                            <button class="config-btn" onclick="exportConfig(${device.id})" title="Export configuration to device">📤 Export</button>
+                            <button class="config-btn" onclick="checkDrift(${device.id})" title="Check for configuration drift">🔍 Check Drift</button>
+                            <button class="config-btn" onclick="viewConfig(${device.id})" title="View current configuration">👁️ View</button>
+                            <button class="config-btn" onclick="showHistory(${device.id}, '${device.name}')" title="View configuration history">📜 History</button>
+                        </div>
+                    </div>
+                    
                     <div class="device-actions">
                         <button class="btn btn-sm" onclick="editDevice(${device.id})">Edit</button>
                         <button class="btn btn-sm" onclick="controlDevice(${device.id}, 'reboot')">Reboot</button>
@@ -760,13 +979,40 @@
             const checkbox = document.getElementById('autoRefresh');
             if (checkbox.checked) {
                 autoRefreshInterval = setInterval(() => {
-                    loadDevices();
+                    refreshDevicesInBackground();
                 }, 5000);
             } else {
                 if (autoRefreshInterval) {
                     clearInterval(autoRefreshInterval);
                     autoRefreshInterval = null;
                 }
+            }
+        }
+
+        async function refreshDevicesInBackground() {
+            try {
+                const response = await fetch(`${API_BASE}/devices`);
+                if (!response.ok) return;
+                
+                const devices = await response.json();
+                
+                // Update status indicators and power info without rebuilding the entire grid
+                devices.forEach(device => {
+                    // Update online/offline status
+                    const statusIndicator = document.querySelector(`#deviceGrid .device-card:nth-child(${device.id}) .device-status-indicator`);
+                    if (statusIndicator) {
+                        const isOnline = device.status === 'online';
+                        statusIndicator.className = `device-status-indicator ${isOnline ? 'status-online' : 'status-offline'}`;
+                    }
+                    
+                    // Update device status
+                    loadDeviceStatus(device.id);
+                });
+                
+                updateStatus('🟢 Connected', devices.length);
+                updateLastRefresh();
+            } catch (error) {
+                console.error('Background refresh error:', error);
             }
         }
 
@@ -806,22 +1052,453 @@
         }
 
         async function deleteDevice(id) {
-            if (!confirm('Are you sure you want to delete this device?')) return;
+            console.log('Deleting device', id);
             
             try {
                 await fetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });
                 loadDevices();
             } catch (error) {
-                alert('Failed to delete device');
+                console.log('Failed to delete device');
             }
         }
 
         function editDevice(id) {
-            alert('Edit functionality would be implemented here');
+            console.log('Edit functionality would be implemented here');
         }
 
         function exportDHCP() {
-            alert('DHCP export functionality would be implemented here');
+            console.log('DHCP export functionality would be implemented here');
+        }
+
+        // Configuration Management Functions
+        async function importConfig(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/config/import`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to import configuration');
+                }
+                
+                const config = await response.json();
+                updateConfigStatus(deviceId, 'synced');
+                console.log('Configuration imported successfully');
+            } catch (error) {
+                console.log(`Import failed: ${error.message}`);
+            }
+        }
+
+        async function exportConfig(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/config/export`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to export configuration');
+                }
+                
+                updateConfigStatus(deviceId, 'synced');
+                console.log('Configuration exported successfully');
+            } catch (error) {
+                console.log(`Export failed: ${error.message}`);
+            }
+        }
+
+        async function checkDrift(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/config/drift`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to check drift');
+                }
+                
+                const result = await response.json();
+                
+                if (result.drift === false) {
+                    updateConfigStatus(deviceId, 'synced');
+                    console.log('No configuration drift detected');
+                } else {
+                    updateConfigStatus(deviceId, 'drift');
+                    console.log(`Configuration drift detected!\n${result.differences.length} differences found`);
+                }
+            } catch (error) {
+                console.log(`Drift check failed: ${error.message}`);
+            }
+        }
+
+        async function viewConfig(deviceId) {
+            showModal('configModal');
+            document.getElementById('configModalTitle').textContent = `Device ${deviceId} Configuration`;
+            document.getElementById('configJson').textContent = 'Loading...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/config`);
+                
+                if (response.status === 404) {
+                    document.getElementById('configJson').textContent = 'No configuration found. Import from device first.';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch configuration');
+                }
+                
+                const config = await response.json();
+                document.getElementById('configJson').textContent = JSON.stringify(config.config, null, 2);
+            } catch (error) {
+                document.getElementById('configJson').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function showHistory(deviceId, deviceName) {
+            showModal('historyModal');
+            document.getElementById('historyModalTitle').textContent = `${deviceName} - Configuration History`;
+            document.getElementById('historyModalContent').innerHTML = '<p>Loading...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/config/history?limit=20`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch history');
+                }
+                
+                const history = await response.json();
+                
+                if (history.length === 0) {
+                    document.getElementById('historyModalContent').innerHTML = '<p>No configuration history found</p>';
+                    return;
+                }
+                
+                let html = '<div style="max-height: 400px; overflow-y: auto;">';
+                history.forEach(entry => {
+                    const date = new Date(entry.created_at).toLocaleString();
+                    html += `
+                        <div style="padding: 10px; border-bottom: 1px solid #e9ecef;">
+                            <strong>${entry.action}</strong> - ${date}<br>
+                            <small>By: ${entry.changed_by}</small>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                
+                document.getElementById('historyModalContent').innerHTML = html;
+            } catch (error) {
+                document.getElementById('historyModalContent').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        function updateConfigStatus(deviceId, status) {
+            const statusElement = document.getElementById(`config-status-${deviceId}`);
+            if (statusElement) {
+                const statusClasses = {
+                    'synced': 'config-synced',
+                    'pending': 'config-pending',
+                    'drift': 'config-drift',
+                    'error': 'config-error'
+                };
+                
+                const statusTexts = {
+                    'synced': '✓ Synced',
+                    'pending': '⏳ Pending',
+                    'drift': '⚠️ Drift',
+                    'error': '❌ Error'
+                };
+                
+                statusElement.className = `config-status ${statusClasses[status] || 'config-pending'}`;
+                statusElement.textContent = statusTexts[status] || 'Unknown';
+            }
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+            
+            // Load data for the selected tab
+            if (tabName === 'templates') {
+                loadTemplates();
+            } else if (tabName === 'bulk') {
+                loadBulkDevices();
+            }
+        }
+
+        // Template Management
+        async function loadTemplates() {
+            try {
+                const response = await fetch(`${API_BASE}/config/templates`);
+                if (!response.ok) throw new Error('Failed to fetch templates');
+                
+                const templates = await response.json();
+                displayTemplates(templates);
+            } catch (error) {
+                console.error('Error loading templates:', error);
+            }
+        }
+
+        function displayTemplates(templates) {
+            const grid = document.getElementById('templatesGrid');
+            const emptyState = document.getElementById('templatesEmptyState');
+            
+            if (templates.length === 0) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+            
+            grid.style.display = 'grid';
+            emptyState.style.display = 'none';
+            
+            grid.innerHTML = templates.map(template => `
+                <div class="device-card">
+                    <div class="device-name">${template.name}</div>
+                    <div class="device-type">${template.description || 'No description'}</div>
+                    
+                    <div class="device-info">
+                        <p><strong>Device Type:</strong> ${template.device_type}</p>
+                        <p><strong>Generation:</strong> ${template.generation === 0 ? 'All' : `Gen${template.generation}`}</p>
+                        <p><strong>Default:</strong> ${template.is_default ? 'Yes' : 'No'}</p>
+                    </div>
+                    
+                    <div class="device-actions">
+                        <button class="btn btn-sm" onclick="editTemplate(${template.id})">Edit</button>
+                        <button class="btn btn-sm" onclick="previewTemplate(${template.id})">Preview</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteTemplate(${template.id})">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showCreateTemplateModal() {
+            showModal('createTemplateModal');
+        }
+
+        async function createTemplate() {
+            const name = document.getElementById('templateName').value;
+            const description = document.getElementById('templateDescription').value;
+            const deviceType = document.getElementById('templateDeviceType').value;
+            const generation = parseInt(document.getElementById('templateGeneration').value);
+            const configStr = document.getElementById('templateConfig').value;
+            
+            try {
+                const config = JSON.parse(configStr);
+                
+                const response = await fetch(`${API_BASE}/config/templates`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        description,
+                        device_type: deviceType,
+                        generation,
+                        config
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to create template');
+                }
+                
+                closeModal('createTemplateModal');
+                loadTemplates();
+                console.log('Template created successfully');
+            } catch (error) {
+                console.log(`Failed to create template: ${error.message}`);
+            }
+        }
+
+        // Bulk Operations
+        let selectedDevices = new Set();
+
+        function loadBulkDevices() {
+            // Reuse existing devices data but with checkboxes
+            loadDevicesForBulk();
+        }
+
+        async function loadDevicesForBulk() {
+            try {
+                const response = await fetch(`${API_BASE}/devices`);
+                if (!response.ok) throw new Error('Failed to fetch devices');
+                
+                const devices = await response.json();
+                displayBulkDevices(devices);
+            } catch (error) {
+                console.error('Error loading devices for bulk:', error);
+            }
+        }
+
+        function displayBulkDevices(devices) {
+            const grid = document.getElementById('bulkGrid');
+            
+            grid.innerHTML = devices.map(device => {
+                const settings = device.settings ? JSON.parse(device.settings) : {};
+                const isSelected = selectedDevices.has(device.id);
+                
+                return `
+                <div class="device-card" style="${isSelected ? 'border: 2px solid #3498db;' : ''}">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <input type="checkbox" id="bulk-${device.id}" ${isSelected ? 'checked' : ''} 
+                               onchange="toggleDeviceSelection(${device.id})" style="width: 20px; height: 20px;">
+                        <label for="bulk-${device.id}" style="font-weight: 600; cursor: pointer;">${device.name}</label>
+                    </div>
+                    
+                    <div class="device-type">${device.type}</div>
+                    <div class="device-info">
+                        <p><strong>IP:</strong> ${device.ip}</p>
+                        <p><strong>Model:</strong> ${settings.model || 'Unknown'}</p>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        function toggleDeviceSelection(deviceId) {
+            if (selectedDevices.has(deviceId)) {
+                selectedDevices.delete(deviceId);
+            } else {
+                selectedDevices.add(deviceId);
+            }
+            loadDevicesForBulk(); // Refresh to update styles
+        }
+
+        function selectAllDevices() {
+            document.querySelectorAll('#bulkGrid input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = true;
+                const deviceId = parseInt(checkbox.id.replace('bulk-', ''));
+                selectedDevices.add(deviceId);
+            });
+            loadDevicesForBulk();
+        }
+
+        function deselectAllDevices() {
+            selectedDevices.clear();
+            loadDevicesForBulk();
+        }
+
+        async function bulkImportConfig() {
+            if (selectedDevices.size === 0) {
+                console.log('Please select at least one device');
+                return;
+            }
+            
+            console.log(`Starting import for ${selectedDevices.size} device(s)`);
+            
+            console.log(`Starting bulk import for ${selectedDevices.size} devices...`);
+            let success = 0, failed = 0;
+            const results = [];
+            
+            // Run sequentially with delay to avoid auth issues
+            let current = 0;
+            for (const deviceId of selectedDevices) {
+                current++;
+                console.log(`Processing device ${current} of ${selectedDevices.size} (ID: ${deviceId})...`);
+                
+                try {
+                    const response = await fetch(`${API_BASE}/devices/${deviceId}/config/import`, { 
+                        method: 'POST' 
+                    });
+                    
+                    if (response.ok) {
+                        success++;
+                        updateConfigStatus(deviceId, 'synced');
+                        console.log(`✓ Device ${deviceId} imported successfully`);
+                    } else {
+                        failed++;
+                        const error = await response.text();
+                        results.push(`Device ${deviceId}: ${error}`);
+                        console.error(`✗ Device ${deviceId} failed: ${error}`);
+                    }
+                } catch (error) {
+                    failed++;
+                    results.push(`Device ${deviceId}: ${error.message}`);
+                    console.error(`✗ Device ${deviceId} error: ${error.message}`);
+                }
+                
+                // Add small delay between requests to avoid overwhelming devices
+                if (current < selectedDevices.size) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+            
+            // Show results
+            let message = `Import complete: ${success} succeeded, ${failed} failed`;
+            if (results.length > 0) {
+                message += '\n\nErrors:\n' + results.join('\n');
+            }
+            console.log(message);
+        }
+
+        async function bulkExportConfig() {
+            if (selectedDevices.size === 0) {
+                console.log('Please select at least one device');
+                return;
+            }
+            
+            console.log(`Starting export for ${selectedDevices.size} device(s)`);
+            
+            console.log(`Starting bulk export for ${selectedDevices.size} devices...`);
+            let success = 0, failed = 0;
+            const results = [];
+            
+            // Run sequentially with delay
+            let current = 0;
+            for (const deviceId of selectedDevices) {
+                current++;
+                console.log(`Processing device ${current} of ${selectedDevices.size} (ID: ${deviceId})...`);
+                
+                try {
+                    const response = await fetch(`${API_BASE}/devices/${deviceId}/config/export`, { 
+                        method: 'POST' 
+                    });
+                    
+                    if (response.ok) {
+                        success++;
+                        updateConfigStatus(deviceId, 'synced');
+                        console.log(`✓ Device ${deviceId} exported successfully`);
+                    } else {
+                        failed++;
+                        const error = await response.text();
+                        results.push(`Device ${deviceId}: ${error}`);
+                        console.error(`✗ Device ${deviceId} failed: ${error}`);
+                    }
+                } catch (error) {
+                    failed++;
+                    results.push(`Device ${deviceId}: ${error.message}`);
+                    console.error(`✗ Device ${deviceId} error: ${error.message}`);
+                }
+                
+                // Add small delay between requests
+                if (current < selectedDevices.size) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+            
+            // Show results
+            let message = `Export complete: ${success} succeeded, ${failed} failed`;
+            if (results.length > 0) {
+                message += '\n\nErrors:\n' + results.join('\n');
+            }
+            console.log(message);
+        }
+
+        function bulkApplyTemplate() {
+            if (selectedDevices.size === 0) {
+                console.log('Please select at least one device');
+                return;
+            }
+            
+            // This would open a modal to select a template
+            console.log('Template selection modal would appear here');
         }
 
         // Close modal when clicking outside

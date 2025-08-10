@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/service"
@@ -143,10 +144,100 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 
 // DiscoverHandler handles POST /api/v1/discover
 func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
-	// This will be implemented when we integrate with the discovery service
+	// Parse optional network parameter
+	var req struct {
+		Network string `json:"network"`
+		ImportConfig bool `json:"import_config"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	
+	// Default to auto-import config for new devices
+	if req.ImportConfig == false {
+		req.ImportConfig = true
+	}
+	
+	// Run discovery in background
+	go func() {
+		network := req.Network
+		if network == "" {
+			network = "auto"
+		}
+		
+		h.logger.WithFields(map[string]any{
+			"network": network,
+			"import_config": req.ImportConfig,
+			"component": "api",
+		}).Info("Starting device discovery")
+		
+		// Discover devices
+		devices, err := h.Service.DiscoverDevices(network)
+		if err != nil {
+			h.logger.WithFields(map[string]any{
+				"error": err.Error(),
+				"component": "api",
+			}).Error("Discovery failed")
+			return
+		}
+		
+		h.logger.WithFields(map[string]any{
+			"devices_found": len(devices),
+			"component": "api",
+		}).Info("Discovery completed")
+		
+		// Save discovered devices and import their configurations
+		newDevices := 0
+		configsImported := 0
+		
+		for _, device := range devices {
+			// Check if device already exists by MAC
+			existing, err := h.DB.GetDeviceByMAC(device.MAC)
+			if err == nil && existing != nil {
+				// Update existing device
+				existing.IP = device.IP
+				existing.Status = device.Status
+				existing.LastSeen = device.LastSeen
+				existing.Firmware = device.Firmware
+				h.DB.UpdateDevice(existing)
+				
+				// Import config if requested
+				if req.ImportConfig {
+					if _, err := h.Service.ImportDeviceConfig(existing.ID); err == nil {
+						configsImported++
+					}
+				}
+			} else {
+				// Add new device
+				if err := h.DB.AddDevice(&device); err == nil {
+					newDevices++
+					
+					// Import config for new device if requested
+					if req.ImportConfig && device.ID > 0 {
+						if _, err := h.Service.ImportDeviceConfig(device.ID); err == nil {
+							configsImported++
+						} else {
+							h.logger.WithFields(map[string]any{
+								"device_id": device.ID,
+								"device_ip": device.IP,
+								"error": err.Error(),
+								"component": "api",
+							}).Warn("Failed to import config for new device")
+						}
+					}
+				}
+			}
+		}
+		
+		h.logger.WithFields(map[string]any{
+			"total_devices": len(devices),
+			"new_devices": newDevices,
+			"configs_imported": configsImported,
+			"component": "api",
+		}).Info("Discovery processing completed")
+	}()
+	
 	response := map[string]interface{}{
 		"status":  "discovery_started",
-		"message": "Device discovery has been initiated",
+		"message": "Device discovery has been initiated in background",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -287,4 +378,341 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(energy)
+}
+
+// ImportDeviceConfig handles POST /api/v1/devices/{id}/config/import
+func (h *Handler) ImportDeviceConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Import configuration from device
+	config, err := h.Service.ImportDeviceConfig(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to import device config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+// ExportDeviceConfig handles POST /api/v1/devices/{id}/config/export
+func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Export configuration to device
+	if err := h.Service.ExportDeviceConfig(uint(id)); err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to export device config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":    "success",
+		"device_id": id,
+		"message":   "Configuration exported to device",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// BulkImportConfigs handles POST /api/v1/config/bulk-import
+func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
+	// Get all devices
+	devices, err := h.Service.DB.GetDevices()
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Error("Failed to get devices")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type ImportResult struct {
+		DeviceID uint   `json:"device_id"`
+		IP       string `json:"ip"`
+		Status   string `json:"status"`
+		Error    string `json:"error,omitempty"`
+	}
+
+	results := make([]ImportResult, 0, len(devices))
+	successCount := 0
+	errorCount := 0
+
+	// Import configuration for each device
+	for _, device := range devices {
+		result := ImportResult{
+			DeviceID: device.ID,
+			IP:       device.IP,
+		}
+
+		// Attempt to import configuration
+		config, err := h.Service.ImportDeviceConfig(device.ID)
+		if err != nil {
+			result.Status = "error"
+			result.Error = err.Error()
+			errorCount++
+			h.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"device_ip": device.IP,
+				"error":     err.Error(),
+			}).Warn("Failed to import device config during bulk import")
+		} else {
+			result.Status = "success"
+			successCount++
+			h.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"device_ip": device.IP,
+				"config_id": config.ID,
+			}).Info("Successfully imported device config during bulk import")
+		}
+
+		results = append(results, result)
+	}
+
+	response := map[string]interface{}{
+		"total":    len(devices),
+		"success":  successCount,
+		"errors":   errorCount,
+		"results":  results,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetDeviceConfig handles GET /api/v1/devices/{id}/config
+func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get device configuration
+	config, err := h.Service.ConfigSvc.GetDeviceConfig(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Configuration not found", http.StatusNotFound)
+		} else {
+			h.logger.WithFields(map[string]any{
+				"device_id": id,
+				"error":     err.Error(),
+			}).Error("Failed to get device config")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+// DetectConfigDrift handles GET /api/v1/devices/{id}/config/drift
+func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Detect configuration drift
+	drift, err := h.Service.DetectConfigDrift(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to detect config drift")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if drift == nil {
+		response := map[string]interface{}{
+			"device_id": id,
+			"drift":     false,
+			"message":   "No configuration drift detected",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(drift)
+}
+
+// GetConfigTemplates handles GET /api/v1/config/templates
+func (h *Handler) GetConfigTemplates(w http.ResponseWriter, r *http.Request) {
+	templates, err := h.Service.ConfigSvc.GetTemplates()
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Error("Failed to get config templates")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(templates)
+}
+
+// CreateConfigTemplate handles POST /api/v1/config/templates
+func (h *Handler) CreateConfigTemplate(w http.ResponseWriter, r *http.Request) {
+	var template configuration.ConfigTemplate
+	if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Service.ConfigSvc.CreateTemplate(&template); err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Error("Failed to create config template")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(template)
+}
+
+// UpdateConfigTemplate handles PUT /api/v1/config/templates/{id}
+func (h *Handler) UpdateConfigTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	var template configuration.ConfigTemplate
+	if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	template.ID = uint(id)
+	if err := h.Service.ConfigSvc.UpdateTemplate(&template); err != nil {
+		h.logger.WithFields(map[string]any{
+			"template_id": id,
+			"error":       err.Error(),
+		}).Error("Failed to update config template")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(template)
+}
+
+// DeleteConfigTemplate handles DELETE /api/v1/config/templates/{id}
+func (h *Handler) DeleteConfigTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Service.ConfigSvc.DeleteTemplate(uint(id)); err != nil {
+		h.logger.WithFields(map[string]any{
+			"template_id": id,
+			"error":       err.Error(),
+		}).Error("Failed to delete config template")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ApplyConfigTemplate handles POST /api/v1/devices/{id}/config/apply-template
+func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		TemplateID uint                   `json:"template_id"`
+		Variables  map[string]interface{} `json:"variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Service.ApplyConfigTemplate(uint(id), req.TemplateID, req.Variables); err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id":   id,
+			"template_id": req.TemplateID,
+			"error":       err.Error(),
+		}).Error("Failed to apply config template")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":      "success",
+		"device_id":   id,
+		"template_id": req.TemplateID,
+		"message":     "Template applied to device",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetConfigHistory handles GET /api/v1/devices/{id}/config/history
+func (h *Handler) GetConfigHistory(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get limit from query params (default to 50)
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if lim, err := strconv.Atoi(l); err == nil && lim > 0 {
+			limit = lim
+		}
+	}
+
+	history, err := h.Service.ConfigSvc.GetConfigHistory(uint(id), limit)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to get config history")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(history)
 }

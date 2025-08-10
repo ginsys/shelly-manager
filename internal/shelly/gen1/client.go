@@ -511,6 +511,7 @@ func (c *Client) GetEnergyData(ctx context.Context, channel int) (*shelly.Energy
 
 // TestConnection tests the connection to the device
 func (c *Client) TestConnection(ctx context.Context) error {
+	// GetInfo is sufficient to test connection and returns auth errors
 	_, err := c.GetInfo(ctx)
 	return err
 }
