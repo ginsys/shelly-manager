@@ -222,6 +222,15 @@ This is a Shelly smart home device manager designed for:
 
 The application has been fully refactored with comprehensive architecture and real implementations. All major components have unit tests and integration tests.
 
+### Project Documentation
+- **Main README**: [`README.md`](README.md) - User-facing documentation and quick start
+- **Testing Guide**: [`TESTING.md`](TESTING.md) - Testing framework and commands
+- **Development TODO**: [`docs/DEVELOPMENT_TODO.md`](docs/DEVELOPMENT_TODO.md) - Complete numbered task list (57 tasks)
+- **Configuration Architecture**: [`docs/DEVICE_CONFIGURATION_ARCHITECTURE.md`](docs/DEVICE_CONFIGURATION_ARCHITECTURE.md) - Composition-based design
+- **Configuration Implementation**: [`internal/configuration/README.md`](internal/configuration/README.md) - 3-level hierarchy details
+- **Gen1 Device Specs**: [`internal/shelly/gen1/devices.md`](internal/shelly/gen1/devices.md) - Gen1 device capabilities and API endpoints
+- **Gen2+ Device Specs**: [`internal/shelly/gen2/devices.md`](internal/shelly/gen2/devices.md) - Gen2+ device capabilities and RPC methods
+
 ## Development Notes
 
 ### Key Implementation Details
@@ -249,7 +258,15 @@ The application has been fully refactored with comprehensive architecture and re
 
 - Always save settings in `.claude/settings.json` (never use `.claude/settings.local.json`)
 
-## Development Priorities (Updated 2025-08-10)
+## Development Status & Roadmap
+
+### Current Implementation Status
+- **Infrastructure**: ✅ Complete (packages, testing, API, web UI, Docker)
+- **Shelly Communication**: ⚠️ ~40% complete (interfaces exist, implementation needed)
+- **Configuration Management**: 📋 Designed but not implemented
+
+### Development TODO List
+**See**: [`docs/DEVELOPMENT_TODO.md`](docs/DEVELOPMENT_TODO.md) for the complete numbered task list (57 tasks across 8 phases)
 
 ### User Requirements & Constraints
 - **Primary Goal**: Fully working system with advanced features for managing ~20-100 Shelly devices
@@ -257,52 +274,18 @@ The application has been fully refactored with comprehensive architecture and re
 - **Architecture**: Dual-binary design (API server + provisioning agent)
 - **Security**: Basic authentication sufficient (home project)
 - **IPv6**: Code prepared but not required
-- **Integrations**: Export functionality first, OPNSense second
+- **Integrations**: Export/import functionality first (JSON + Git-friendly TOML), OPNSense second
 
-### Implementation Roadmap
+### Key Architecture Decisions
 
-#### Phase 1: Core Shelly Device Management (PRIORITY 1)
-**Goal**: Real device communication and management with type-safe configuration
-- [ ] Shelly API client implementation (Gen1 & Gen2+)
-- [ ] Device authentication handling
-- [ ] Real-time status polling
-- [ ] **NEW: Composition-based configuration management**
-  - [ ] Implement capability-based configuration architecture
-  - [ ] Replace json.RawMessage with type-safe configuration blocks
-  - [ ] Import device configuration from physical devices to database
-  - [ ] Update device configuration from database to physical devices
-  - [ ] Verify/compare current device config against database stored config
-  - [ ] Configuration drift detection and reporting
-  - [ ] Bulk configuration sync operations
-- [ ] Firmware version tracking
-- [ ] Bulk device operations
-- [ ] Error recovery and retry logic
+#### Composition-Based Configuration
+Devices combine capability "mixins" for flexible, type-safe configuration:
+- **Architecture Document**: [`docs/DEVICE_CONFIGURATION_ARCHITECTURE.md`](docs/DEVICE_CONFIGURATION_ARCHITECTURE.md)
+- **Implementation Details**: [`internal/configuration/README.md`](internal/configuration/README.md)
+- **Core Capabilities**: RelayConfig, PowerMeteringConfig, DimmingConfig, RollerConfig, InputConfig, LEDConfig, ColorConfig
+- **Template Benefits**: Target by capability or device type with compile-time checking
 
-##### NEW: Composition-Based Configuration Architecture
-**Document**: `docs/DEVICE_CONFIGURATION_ARCHITECTURE.md`
-
-The configuration system now uses a composition-based approach where devices combine multiple capability "mixins":
-
-**Core Capabilities**:
-- `RelayConfig` - Switch/relay control settings
-- `PowerMeteringConfig` - Power monitoring and protection
-- `DimmingConfig` - Brightness control for dimmers/lights
-- `RollerConfig` - Roller shutter/motor control
-- `InputConfig` - Button and input configuration
-- `LEDConfig` - LED indicator settings
-- `ColorConfig` - RGB/color control
-
-**Device Examples**:
-- `SHSW-1` = RelayConfig + InputConfig
-- `SHSW-PM` = RelayConfig + PowerMeteringConfig + InputConfig + TempProtectionConfig  
-- `SHSW-25` = Mode-specific (Relay1+Relay2 OR RollerConfig) + PowerMeteringConfig
-
-**Template Benefits**:
-- Target by capability: "All devices with power metering"
-- Target by device type: "All SHPLG-S devices"
-- Type-safe configuration with compile-time checking
-
-##### Package Architecture
+#### Package Architecture
 ```
 internal/
 ├── configuration/           # Enhanced configuration system
@@ -320,74 +303,6 @@ internal/
 │   ├── auth.go              # Authentication handling
 │   └── factory.go           # Device client factory
 ```
-
-#### Phase 2: Dual-Binary Architecture (PRIORITY 2)
-**Goal**: Separate provisioning agent for WiFi operations
-- [ ] Create `cmd/shelly-provisioner/` binary
-- [ ] API communication protocol (REST + WebSocket)
-- [ ] Queue management system
-- [ ] Agent registration/heartbeat
-- [ ] Task distribution
-- [ ] Status reporting
-- [ ] Error handling between services
-
-#### Phase 3: WiFi Provisioning Implementation (PRIORITY 3)
-**Goal**: Complete device provisioning flow
-- [ ] Real AP connection logic
-- [ ] Shelly AP mode detection
-- [ ] Credential injection
-- [ ] Device configuration
-- [ ] Network verification
-- [ ] Provisioning state machine
-- [ ] Rollback on failure
-
-#### Phase 4: Kubernetes Deployment (PRIORITY 4)
-**Goal**: Production-ready K8s deployment
-- [ ] Multi-stage Docker builds
-- [ ] Kubernetes manifests (Deployment, Service, ConfigMap, Secret)
-- [ ] Helm chart with values customization
-- [ ] Health/readiness probes
-- [ ] Resource limits and requests
-- [ ] Network policies
-- [ ] Persistent volume claims for database
-
-#### Phase 5: Export & Basic Integration (PRIORITY 5)
-**Goal**: Device data export in multiple formats
-- [ ] JSON export with full details
-- [ ] CSV export for spreadsheets
-- [ ] Hosts file format
-- [ ] DHCP reservation format
-- [ ] MAC address list
-- [ ] Bulk export API
-- [ ] Scheduled exports
-
-#### Phase 6: OPNSense Integration (PRIORITY 6)
-**Goal**: Automated DHCP management
-- [ ] OPNSense API client
-- [ ] DHCP reservation sync
-- [ ] Static mapping creation
-- [ ] Lease management
-- [ ] Firewall alias updates
-- [ ] Error handling and rollback
-
-#### Phase 7: Production Features (PRIORITY 7)
-**Goal**: Monitoring, backup, and automation
-- [ ] Prometheus metrics
-- [ ] Backup/restore functionality
-- [ ] Database migrations
-- [ ] Scheduled discovery
-- [ ] Device grouping
-- [ ] Rule-based automation
-- [ ] Event notifications
-
-#### Phase 8: Advanced Features (PRIORITY 8)
-**Goal**: Enhanced capabilities
-- [ ] WebSocket real-time updates
-- [ ] Advanced scheduling
-- [ ] Template-based configuration
-- [ ] Device profiles
-- [ ] Batch provisioning
-- [ ] Network topology visualization
 
 ### Scaling Path (Current: 20 devices → Future: 1000+ devices)
 
