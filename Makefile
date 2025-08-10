@@ -1,4 +1,4 @@
-.PHONY: build run test test-unit test-integration test-coverage test-race clean docker-build docker-run dev-setup deps
+.PHONY: build run test test-full test-unit test-integration test-coverage test-coverage-full test-race clean docker-build docker-run dev-setup deps
 
 BINARY_NAME=shelly-manager
 BUILD_DIR=bin
@@ -12,31 +12,41 @@ build:
 run:
 	go run ./cmd/shelly-manager server
 
-# Run all tests
+# Run tests (fast mode, skips network tests)
 test:
-	CGO_ENABLED=1 go test -v ./...
+	CGO_ENABLED=1 go test -v -short ./...
 
 # Run unit tests only (exclude integration tests)
 test-unit:
 	CGO_ENABLED=1 go test -v -short ./internal/...
 
+# Run full test suite including network tests (slower)
+test-full:
+	CGO_ENABLED=1 go test -v ./...
+
 # Run integration tests
 test-integration:
 	CGO_ENABLED=1 go test -v ./cmd/...
 
-# Run tests with coverage report
+# Run tests with coverage report (fast mode)
 test-coverage:
-	CGO_ENABLED=1 go test -v -coverprofile=coverage.out ./...
+	CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
-# Run tests with race detection
-test-race:
-	CGO_ENABLED=1 go test -v -race ./...
+# Run full coverage including network tests
+test-coverage-full:
+	CGO_ENABLED=1 go test -v -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Full coverage report generated: coverage.html"
 
-# Run benchmarks
+# Run tests with race detection (fast mode)
+test-race:
+	CGO_ENABLED=1 go test -v -short -race ./...
+
+# Run benchmarks (fast mode)
 benchmark:
-	CGO_ENABLED=1 go test -v -bench=. ./...
+	CGO_ENABLED=1 go test -v -short -bench=. ./...
 
 # Watch mode for tests (requires entr: brew install entr)
 test-watch:

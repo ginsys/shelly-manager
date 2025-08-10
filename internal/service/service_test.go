@@ -39,7 +39,7 @@ func createTestDB(t *testing.T) *database.Manager {
 func createTestConfig() *config.Config {
 	cfg := &config.Config{}
 	cfg.Discovery.Enabled = true
-	cfg.Discovery.Networks = []string{"192.168.1.0/30"} // Very small network for testing
+	cfg.Discovery.Networks = []string{"203.0.113.0/30"} // TEST-NET-3 range for testing
 	cfg.Discovery.Interval = 60
 	cfg.Discovery.Timeout = 1 // Short timeout for tests
 	cfg.Discovery.EnableMDNS = false
@@ -178,6 +178,10 @@ func TestShellyService_DiscoverDevices_InvalidNetwork(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_AutoNetwork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)
@@ -203,6 +207,10 @@ func TestShellyService_DiscoverDevices_AutoNetwork(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_EmptyNetwork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)
@@ -226,14 +234,18 @@ func TestShellyService_DiscoverDevices_EmptyNetwork(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_SpecificNetwork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)
 	
 	service := NewServiceWithLogger(db, cfg, logger)
 	
-	// Test with specific network parameter
-	testNetwork := "192.168.1.0/30"
+	// Test with specific network parameter (TEST-NET-3 range)
+	testNetwork := "203.0.113.0/30"
 	devices, err := service.DiscoverDevices(testNetwork)
 	
 	// Should complete without error
@@ -250,6 +262,10 @@ func TestShellyService_DiscoverDevices_SpecificNetwork(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_NoConfigNetworks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	
 	// Create config with no discovery networks
@@ -283,12 +299,16 @@ func TestShellyService_DiscoverDevices_NoConfigNetworks(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_ZeroTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	
 	// Create config with zero timeout (should use default)
 	cfg := &config.Config{}
 	cfg.Discovery.Enabled = true
-	cfg.Discovery.Networks = []string{"192.168.1.0/30"}
+	cfg.Discovery.Networks = []string{"203.0.113.0/30"} // TEST-NET-3
 	cfg.Discovery.Interval = 60
 	cfg.Discovery.Timeout = 0 // Zero timeout - should use default
 	cfg.Discovery.EnableMDNS = false
@@ -300,7 +320,7 @@ func TestShellyService_DiscoverDevices_ZeroTimeout(t *testing.T) {
 	service := NewServiceWithLogger(db, cfg, logger)
 	
 	// Test discovery with zero timeout
-	devices, err := service.DiscoverDevices("192.168.1.0/30")
+	devices, err := service.DiscoverDevices("203.0.113.0/30")
 	
 	// Should complete (should use default timeout of 2 seconds)
 	if err != nil {
@@ -316,6 +336,10 @@ func TestShellyService_DiscoverDevices_ZeroTimeout(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_CancelledContext(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)
@@ -328,7 +352,7 @@ func TestShellyService_DiscoverDevices_CancelledContext(t *testing.T) {
 	// Try discovery with cancelled context
 	// Note: DiscoverDevices creates its own context with timeout, so this test
 	// verifies that the service can still function even if the main context is cancelled
-	devices, err := service.DiscoverDevices("192.168.1.0/30")
+	devices, err := service.DiscoverDevices("203.0.113.0/30")
 	
 	// Should still work since DiscoverDevices uses its own context
 	if err != nil {
@@ -344,6 +368,10 @@ func TestShellyService_DiscoverDevices_CancelledContext(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_DeviceConversion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	// This test verifies the device conversion logic
 	// Since we can't reliably find real devices in tests, we'll test the structure
 	
@@ -354,7 +382,7 @@ func TestShellyService_DiscoverDevices_DeviceConversion(t *testing.T) {
 	service := NewServiceWithLogger(db, cfg, logger)
 	
 	// Run discovery
-	devices, err := service.DiscoverDevices("192.168.1.0/30")
+	devices, err := service.DiscoverDevices("203.0.113.0/30")
 	
 	if err != nil {
 		t.Logf("Discovery returned error: %v", err)
@@ -383,6 +411,10 @@ func TestShellyService_DiscoverDevices_DeviceConversion(t *testing.T) {
 }
 
 func TestShellyService_MultipleOperations(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)
@@ -391,7 +423,7 @@ func TestShellyService_MultipleOperations(t *testing.T) {
 	
 	// Test multiple discovery operations
 	for i := 0; i < 3; i++ {
-		devices, err := service.DiscoverDevices("192.168.1.0/30")
+		devices, err := service.DiscoverDevices("203.0.113.0/30")
 		
 		if err != nil {
 			t.Logf("Discovery iteration %d returned error: %v", i+1, err)
@@ -408,7 +440,7 @@ func TestShellyService_MultipleOperations(t *testing.T) {
 	service.Stop()
 	
 	// Verify service can still perform operations after stop
-	devices, err := service.DiscoverDevices("192.168.1.0/30")
+	devices, err := service.DiscoverDevices("203.0.113.0/30")
 	
 	if err != nil {
 		t.Logf("Discovery after stop returned error: %v", err)
@@ -421,6 +453,10 @@ func TestShellyService_MultipleOperations(t *testing.T) {
 
 // Integration test with database operations
 func TestShellyService_WithDatabaseIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)
@@ -429,7 +465,7 @@ func TestShellyService_WithDatabaseIntegration(t *testing.T) {
 	
 	// Add a test device to database first
 	testDevice := &database.Device{
-		IP:       "192.168.1.100",
+		IP:       "203.0.113.100",
 		MAC:      "AA:BB:CC:DD:EE:FF",
 		Type:     "switch",
 		Name:     "Test Device",
@@ -459,7 +495,7 @@ func TestShellyService_WithDatabaseIntegration(t *testing.T) {
 	}
 	
 	// Now run discovery (won't find the test device we added, but should work)
-	discoveredDevices, err := service.DiscoverDevices("192.168.1.0/30")
+	discoveredDevices, err := service.DiscoverDevices("203.0.113.0/30")
 	
 	if err != nil {
 		t.Logf("Discovery returned error: %v", err)
@@ -498,6 +534,10 @@ func BenchmarkShellyService_Creation(b *testing.B) {
 }
 
 func BenchmarkShellyService_DiscoverDevices(b *testing.B) {
+	if testing.Short() {
+		b.Skip("Skipping benchmark in short mode")
+	}
+	
 	db := createTestDB(&testing.T{}) // Use testing.T for helper
 	cfg := createTestConfig()
 	logger, _ := logging.New(logging.Config{
@@ -512,12 +552,16 @@ func BenchmarkShellyService_DiscoverDevices(b *testing.B) {
 	b.ResetTimer()
 	
 	for i := 0; i < b.N; i++ {
-		_, _ = service.DiscoverDevices("192.168.1.0/30")
+		_, _ = service.DiscoverDevices("203.0.113.0/30")
 	}
 }
 
 // Test edge cases and error conditions
 func TestShellyService_EdgeCases(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)
@@ -542,7 +586,7 @@ func TestShellyService_EdgeCases(t *testing.T) {
 	
 	// Test with very large timeout (should be handled gracefully)
 	cfg.Discovery.Timeout = 999999
-	devices, err = service.DiscoverDevices("192.168.1.0/30")
+	devices, err = service.DiscoverDevices("203.0.113.0/30")
 	if err != nil {
 		t.Logf("Discovery with large timeout returned error: %v", err)
 	}
@@ -555,7 +599,7 @@ func TestShellyService_EdgeCases(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
-			devices, err := service.DiscoverDevices("192.168.1.0/30")
+			devices, err := service.DiscoverDevices("203.0.113.0/30")
 			if err != nil {
 				t.Logf("Concurrent discovery %d returned error: %v", id, err)
 			}

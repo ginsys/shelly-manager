@@ -6,7 +6,11 @@
       "Bash(grep:*)",
       "Bash(cat:*)",
       "Bash(sed:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(make test:*)",
+      "Bash(go test:*)",
+      "Bash(go list:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   },

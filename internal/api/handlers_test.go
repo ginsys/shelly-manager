@@ -11,14 +11,23 @@ import (
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/testutil"
 	"github.com/gorilla/mux"
 )
 
+// testShellyService creates a test ShellyService for API handler tests
+func testShellyService(t *testing.T, db *database.Manager) *service.ShellyService {
+	t.Helper()
+	cfg := testutil.TestConfig()
+	return service.NewService(db, cfg)
+}
+
 func TestGetDevices(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	// Add test devices
 	testDevices := []*database.Device{
@@ -61,7 +70,8 @@ func TestGetDevices(t *testing.T) {
 func TestAddDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	device := testutil.TestDevice()
 	deviceJSON, err := json.Marshal(device)
@@ -94,7 +104,8 @@ func TestAddDevice(t *testing.T) {
 
 func TestAddDevice_InvalidJSON(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	// Create request with invalid JSON
 	req := httptest.NewRequest("POST", "/api/v1/devices", bytes.NewReader([]byte("invalid json")))
@@ -111,7 +122,8 @@ func TestAddDevice_InvalidJSON(t *testing.T) {
 func TestGetDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	device := testutil.TestDevice()
 	err := db.AddDevice(device)
@@ -139,7 +151,8 @@ func TestGetDevice(t *testing.T) {
 
 func TestGetDevice_NotFound(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	// Create request with non-existent device ID
 	req := httptest.NewRequest("GET", "/api/v1/devices/999", nil)
@@ -155,7 +168,8 @@ func TestGetDevice_NotFound(t *testing.T) {
 
 func TestGetDevice_InvalidID(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	// Create request with invalid device ID
 	req := httptest.NewRequest("GET", "/api/v1/devices/invalid", nil)
@@ -172,7 +186,8 @@ func TestGetDevice_InvalidID(t *testing.T) {
 func TestUpdateDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	device := testutil.TestDevice()
 	err := db.AddDevice(device)
@@ -213,7 +228,8 @@ func TestUpdateDevice(t *testing.T) {
 
 func TestUpdateDevice_NotFound(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	device := testutil.TestDevice()
 	deviceJSON, err := json.Marshal(device)
@@ -235,7 +251,8 @@ func TestUpdateDevice_NotFound(t *testing.T) {
 func TestDeleteDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	device := testutil.TestDevice()
 	err := db.AddDevice(device)
@@ -260,7 +277,8 @@ func TestDeleteDevice(t *testing.T) {
 
 func TestDeleteDevice_NotFound(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	// Create request with non-existent device ID
 	req := httptest.NewRequest("DELETE", "/api/v1/devices/999", nil)
@@ -276,7 +294,8 @@ func TestDeleteDevice_NotFound(t *testing.T) {
 
 func TestDiscoverHandler(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	req := httptest.NewRequest("POST", "/api/v1/discover", nil)
 	w := httptest.NewRecorder()
@@ -300,7 +319,8 @@ func TestDiscoverHandler(t *testing.T) {
 
 func TestGetProvisioningStatus(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	req := httptest.NewRequest("GET", "/api/v1/provisioning/status", nil)
 	w := httptest.NewRecorder()
@@ -324,7 +344,8 @@ func TestGetProvisioningStatus(t *testing.T) {
 
 func TestProvisionDevices(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	req := httptest.NewRequest("POST", "/api/v1/provisioning/provision", nil)
 	w := httptest.NewRecorder()
@@ -348,7 +369,8 @@ func TestProvisionDevices(t *testing.T) {
 
 func TestGetDHCPReservations(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 
 	req := httptest.NewRequest("GET", "/api/v1/dhcp/reservations", nil)
 	w := httptest.NewRecorder()
@@ -371,7 +393,8 @@ func TestGetDHCPReservations(t *testing.T) {
 // Integration test for the full API router
 func TestAPIRouter(t *testing.T) {
 	db := testutil.TestDatabase(t)
-	handler := NewHandler(db)
+	svc := testShellyService(t, db)
+	handler := NewHandler(db, svc)
 	router := SetupRoutes(handler)
 
 	// Add a test device
