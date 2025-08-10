@@ -434,13 +434,13 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", c.config.userAgent)
 		
-		// Add digest auth if configured (simplified - real implementation would need digest auth library)
+		var resp *http.Response
+		// Use digest auth if configured
 		if c.config.username != "" && c.config.password != "" {
-			// TODO: Implement proper digest authentication
-			req.SetBasicAuth(c.config.username, c.config.password)
+			resp, err = doRequestWithDigestAuth(c.httpClient, req, c.config.username, c.config.password)
+		} else {
+			resp, err = c.httpClient.Do(req)
 		}
-		
-		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = err
 			continue
@@ -623,4 +623,106 @@ func (c *Client) GetEnergyData(ctx context.Context, channel int) (*shelly.Energy
 		Voltage: result.Voltage,
 		Current: result.Current,
 	}, nil
+}
+
+// Roller Shutter Operations for Gen2+ devices
+
+// SetRollerPosition sets the roller/cover position
+func (c *Client) SetRollerPosition(ctx context.Context, channel int, position int) error {
+	if position < 0 {
+		position = 0
+	} else if position > 100 {
+		position = 100
+	}
+	
+	params := map[string]interface{}{
+		"id":  channel,
+		"pos": position,
+	}
+	return c.rpcCall(ctx, "Cover.GoToPosition", params, nil)
+}
+
+// OpenRoller opens the roller/cover
+func (c *Client) OpenRoller(ctx context.Context, channel int) error {
+	params := map[string]interface{}{
+		"id": channel,
+	}
+	return c.rpcCall(ctx, "Cover.Open", params, nil)
+}
+
+// CloseRoller closes the roller/cover
+func (c *Client) CloseRoller(ctx context.Context, channel int) error {
+	params := map[string]interface{}{
+		"id": channel,
+	}
+	return c.rpcCall(ctx, "Cover.Close", params, nil)
+}
+
+// StopRoller stops the roller/cover movement
+func (c *Client) StopRoller(ctx context.Context, channel int) error {
+	params := map[string]interface{}{
+		"id": channel,
+	}
+	return c.rpcCall(ctx, "Cover.Stop", params, nil)
+}
+
+// Advanced Settings Operations for Gen2+ devices
+
+// SetRelaySettings updates relay-specific settings
+func (c *Client) SetRelaySettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	params := map[string]interface{}{
+		"id":     channel,
+		"config": settings,
+	}
+	return c.rpcCall(ctx, "Switch.SetConfig", params, nil)
+}
+
+// SetLightSettings updates light-specific settings
+func (c *Client) SetLightSettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	params := map[string]interface{}{
+		"id":     channel,
+		"config": settings,
+	}
+	return c.rpcCall(ctx, "Light.SetConfig", params, nil)
+}
+
+// SetInputSettings configures input behavior
+func (c *Client) SetInputSettings(ctx context.Context, input int, settings map[string]interface{}) error {
+	params := map[string]interface{}{
+		"id":     input,
+		"config": settings,
+	}
+	return c.rpcCall(ctx, "Input.SetConfig", params, nil)
+}
+
+// SetLEDSettings configures LED indicator behavior (Gen2+ uses Sys.SetConfig)
+func (c *Client) SetLEDSettings(ctx context.Context, settings map[string]interface{}) error {
+	params := map[string]interface{}{
+		"config": map[string]interface{}{
+			"ui_data": settings,
+		},
+	}
+	return c.rpcCall(ctx, "Sys.SetConfig", params, nil)
+}
+
+// RGBW Operations for Gen2+ devices
+
+// SetWhiteChannel controls white channel for RGBW devices
+func (c *Client) SetWhiteChannel(ctx context.Context, channel int, brightness int, temp int) error {
+	params := map[string]interface{}{
+		"id":         channel,
+		"on":         true,
+		"brightness": brightness,
+	}
+	if temp > 0 {
+		params["temp"] = temp
+	}
+	return c.rpcCall(ctx, "Light.Set", params, nil)
+}
+
+// SetColorMode sets the mode for RGBW devices (not directly available in Gen2+, handled via Light.Set)
+func (c *Client) SetColorMode(ctx context.Context, mode string) error {
+	// Gen2+ handles this differently - the mode is implicit based on what parameters are set
+	// in Light.Set calls. This is a compatibility method.
+	return nil
 }

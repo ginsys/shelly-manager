@@ -12,8 +12,8 @@ import (
 
 // Factory creates appropriate Shelly clients based on device generation
 type Factory interface {
-	// CreateClient creates a client for the device at the given IP
-	CreateClient(ip string, opts ...ClientOption) (Client, error)
+	// CreateClient creates a client for the device at the given IP with specific generation
+	CreateClient(ip string, generation int, opts ...ClientOption) (Client, error)
 	
 	// DetectGeneration detects the generation of the device at the given IP
 	DetectGeneration(ctx context.Context, ip string) (int, error)
@@ -44,23 +44,12 @@ func NewFactoryWithLogger(logger *logging.Logger) Factory {
 }
 
 // CreateClient creates a client for the specified generation
-func (f *factory) CreateClient(ip string, opts ...ClientOption) (Client, error) {
-	// Apply options to get config
-	cfg := defaultConfig()
-	for _, opt := range opts {
-		opt(cfg)
-	}
-	
-	// Try to detect generation first
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
-	defer cancel()
-	
-	generation, err := f.DetectGeneration(ctx, ip)
-	if err != nil {
-		return nil, fmt.Errorf("failed to detect device generation: %w", err)
-	}
-	
-	return f.createClientForGeneration(ip, generation, cfg)
+// Note: Due to import cycles, this returns an error. Use gen1.NewClient or gen2.NewClient directly.
+func (f *factory) CreateClient(ip string, generation int, opts ...ClientOption) (Client, error) {
+	// This method exists for interface compatibility but cannot be implemented
+	// due to import cycles. Services should use DetectGeneration and then
+	// create the appropriate client directly.
+	return nil, fmt.Errorf("use DetectGeneration then gen1.NewClient or gen2.NewClient directly")
 }
 
 // DetectGeneration detects the device generation by probing its API
@@ -134,19 +123,7 @@ func (f *factory) CreateClientWithDetection(ctx context.Context, ip string, opts
 		return nil, err
 	}
 	
-	cfg := defaultConfig()
-	for _, opt := range opts {
-		opt(cfg)
-	}
-	
-	return f.createClientForGeneration(ip, generation, cfg)
-}
-
-// createClientForGeneration creates the appropriate client based on generation
-func (f *factory) createClientForGeneration(ip string, generation int, cfg *clientConfig) (Client, error) {
-	// This will be implemented in a separate factory package to avoid import cycles
-	// For now, return an error
-	return nil, fmt.Errorf("factory implementation moved to avoid import cycle - use NewGen1Client or NewGen2Client directly")
+	return f.CreateClient(ip, generation, opts...)
 }
 
 // DefaultFactory is the default factory instance

@@ -12,7 +12,12 @@
       "Bash(go list:*)",
       "Bash(mkdir:*)",
       "Bash(go mod:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(go build:*)",
+      "Bash(go build:*)",
+      "Bash(./bin/shelly-manager:*)",
+      "Bash(rm:*)",
+      "Bash(make:*)"
     ],
     "deny": []
   },

@@ -424,3 +424,6 @@ Generate DHCP reservations for OPNSense firewall:
 - always create and update tests with any code change
 - when a piece of code is ready, always say so, and ask whether to commit, or to extend the work
 - always update project memory with changed insights, new analysis, updated to lists etc.
+- always keep the progress, todo list etc up to date
+- always update project memory with changed / updated insights, new analysis, 
+keep the todo list updated when changes were implemented
