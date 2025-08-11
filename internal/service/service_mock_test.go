@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -300,24 +301,24 @@ func TestShellyService_ErrorHandling(t *testing.T) {
 
 // TestShellyService_ConcurrentOperations tests concurrent access
 func TestShellyService_ConcurrentOperations(t *testing.T) {
-	db := createTestDB(t)
 	cfg := createTestConfig()
-	logger := createTestLogger(t)
-	
-	service := NewServiceWithLogger(db, cfg, logger)
-	defer service.Stop()
 	
 	// Test concurrent service creation and destruction
 	done := make(chan bool, 5)
+	errors := make(chan error, 5)
 	
 	for i := 0; i < 5; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
 			
+			// Create separate database and logger instances to avoid data races
+			localDB := createTestDB(t)
+			localLogger := createTestLogger(t)
+			
 			// Create service
-			localService := NewServiceWithLogger(db, cfg, logger)
+			localService := NewServiceWithLogger(localDB, cfg, localLogger)
 			if localService == nil {
-				t.Errorf("Concurrent service creation %d failed", id)
+				errors <- fmt.Errorf("concurrent service creation %d failed", id)
 				return
 			}
 			
@@ -334,6 +335,8 @@ func TestShellyService_ConcurrentOperations(t *testing.T) {
 		select {
 		case <-done:
 			// Success
+		case err := <-errors:
+			t.Error(err)
 		case <-time.After(5 * time.Second):
 			t.Error("Concurrent operations timed out")
 			return

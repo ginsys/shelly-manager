@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -106,12 +107,13 @@ func (s *Scanner) ScanNetwork(ctx context.Context, cidr string) ([]ShellyDevice,
 						mu.Lock()
 						devices = append(devices, *device)
 						mu.Unlock()
-						found++
+						atomic.AddInt32(&found, 1)
 						fmt.Printf("Found Shelly device at %s: %s\n", device.IP, device.Model)
 					}
-					scanned++
-					if scanned%50 == 0 {
-						fmt.Printf("Scanned %d IPs, found %d devices...\n", scanned, found)
+					currentScanned := atomic.AddInt32(&scanned, 1)
+					if currentScanned%50 == 0 {
+						currentFound := atomic.LoadInt32(&found)
+						fmt.Printf("Scanned %d IPs, found %d devices...\n", currentScanned, currentFound)
 					}
 				}
 			}
@@ -132,8 +134,10 @@ func (s *Scanner) ScanNetwork(ctx context.Context, cidr string) ([]ShellyDevice,
 
 	wg.Wait()
 	duration := time.Since(start).Milliseconds()
-	s.logger.LogDiscoveryOperation("network_scan", cidr, int(found), duration, nil)
-	fmt.Printf("Scan complete: checked %d IPs, found %d devices\n", scanned, found)
+	finalFound := atomic.LoadInt32(&found)
+	finalScanned := atomic.LoadInt32(&scanned)
+	s.logger.LogDiscoveryOperation("network_scan", cidr, int(finalFound), duration, nil)
+	fmt.Printf("Scan complete: checked %d IPs, found %d devices\n", finalScanned, finalFound)
 	return devices, nil
 }
 

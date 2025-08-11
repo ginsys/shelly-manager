@@ -82,6 +82,59 @@ func (m *mockShellyClient) SetColorTemp(ctx context.Context, channel int, temp i
 	return args.Error(0)
 }
 
+// Roller Shutter Operations
+func (m *mockShellyClient) SetRollerPosition(ctx context.Context, channel int, position int) error {
+	args := m.Called(ctx, channel, position)
+	return args.Error(0)
+}
+
+func (m *mockShellyClient) OpenRoller(ctx context.Context, channel int) error {
+	args := m.Called(ctx, channel)
+	return args.Error(0)
+}
+
+func (m *mockShellyClient) CloseRoller(ctx context.Context, channel int) error {
+	args := m.Called(ctx, channel)
+	return args.Error(0)
+}
+
+func (m *mockShellyClient) StopRoller(ctx context.Context, channel int) error {
+	args := m.Called(ctx, channel)
+	return args.Error(0)
+}
+
+// Advanced Settings
+func (m *mockShellyClient) SetRelaySettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	args := m.Called(ctx, channel, settings)
+	return args.Error(0)
+}
+
+func (m *mockShellyClient) SetLightSettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	args := m.Called(ctx, channel, settings)
+	return args.Error(0)
+}
+
+func (m *mockShellyClient) SetInputSettings(ctx context.Context, input int, settings map[string]interface{}) error {
+	args := m.Called(ctx, input, settings)
+	return args.Error(0)
+}
+
+func (m *mockShellyClient) SetLEDSettings(ctx context.Context, settings map[string]interface{}) error {
+	args := m.Called(ctx, settings)
+	return args.Error(0)
+}
+
+// RGBW Operations
+func (m *mockShellyClient) SetWhiteChannel(ctx context.Context, channel int, brightness int, temp int) error {
+	args := m.Called(ctx, channel, brightness, temp)
+	return args.Error(0)
+}
+
+func (m *mockShellyClient) SetColorMode(ctx context.Context, mode string) error {
+	args := m.Called(ctx, mode)
+	return args.Error(0)
+}
+
 func (m *mockShellyClient) Reboot(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)

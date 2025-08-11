@@ -338,3 +338,5 @@ Generate DHCP reservations for OPNSense firewall:
 - always keep the progress, todo list etc up to date
 - always update project memory with changed / updated insights, new analysis,
 keep the todo list updated when changes were implemented
+
+- always add extensive tests for new code

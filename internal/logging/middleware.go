@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"math/rand"
 	"net/http"
 	"time"
 )
@@ -74,8 +75,9 @@ func generateRequestID() string {
 func randomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, length)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := range b {
-		b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
+		b[i] = charset[rng.Intn(len(charset))]
 	}
 	return string(b)
 }
