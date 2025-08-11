@@ -17,7 +17,13 @@
       "Bash(go build:*)",
       "Bash(./bin/shelly-manager:*)",
       "Bash(rm:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(go tool cover:*)",
+      "Bash(go:*)",
+      "Bash(CGO_ENABLED=1 go test -v -short ./...)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./...)",
+      "WebFetch(domain:productionresultssa3.blob.core.windows.net)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -race ./internal/logging ./internal/discovery ./internal/service)"
     ],
     "deny": []
   },
