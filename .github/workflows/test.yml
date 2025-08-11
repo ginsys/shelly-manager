@@ -93,6 +93,7 @@ jobs:
       run: go mod download
     
     - name: Run tests
+      shell: bash
       run: |
         # Use -short to skip network-dependent tests that can hang in CI
         CGO_ENABLED=1 go test -v -race -short ./...

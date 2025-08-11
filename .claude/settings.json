@@ -23,7 +23,10 @@
       "Bash(CGO_ENABLED=1 go test -v -short ./...)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./...)",
       "WebFetch(domain:productionresultssa3.blob.core.windows.net)",
-      "Bash(env CGO_ENABLED=1 go test -v -short -race ./internal/logging ./internal/discovery ./internal/service)"
+      "Bash(env CGO_ENABLED=1 go test -v -short -race ./internal/logging ./internal/discovery ./internal/service)",
+      "Bash(unzip:*)",
+      "Bash(CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager)",
+      "Bash(CGO_ENABLED=1 go test -v -race -short ./...)"
     ],
     "deny": []
   },

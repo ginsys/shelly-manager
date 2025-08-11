@@ -172,7 +172,9 @@ var scanAPCmd = &cobra.Command{
 		
 		devices, err := provisioningManager.DiscoverUnprovisionedDevices(ctx)
 		if err != nil {
-			log.Fatal("Failed to scan for unprovisioned devices:", err)
+			fmt.Printf("Warning: Failed to scan for unprovisioned devices: %v\n", err)
+			fmt.Println("No unprovisioned Shelly devices found in AP mode")
+			return
 		}
 		
 		if len(devices) == 0 {
@@ -211,7 +213,8 @@ var provisionCmd = &cobra.Command{
 		
 		devices, err := provisioningManager.DiscoverUnprovisionedDevices(ctx)
 		if err != nil {
-			log.Fatal("Failed to discover unprovisioned devices:", err)
+			fmt.Printf("Error: Failed to discover unprovisioned devices: %v\n", err)
+			return
 		}
 		
 		if len(devices) == 0 {
