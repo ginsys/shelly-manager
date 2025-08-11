@@ -6,6 +6,14 @@
 - **Module**: github.com/ginsys/shelly-manager
 - **Stage**: Active development - Phase 1 implementation
 
+## Documentation Reorganization (2025-08-11)
+- Moved Claude-specific docs to `.claude/` directory
+- Created `.claude/development-tasks.md` for task tracking
+- Created `.claude/web-ui-requirements.md` for UI requirements
+- Created `docs/ROADMAP.md` for user-facing roadmap
+- Moved `TESTING.md` to `docs/` directory
+- Updated all document references in CLAUDE.md and README.md
+
 ## Current Development Status (2025-08-10)
 
 ### ✅ Completed Tasks (4/13 Phase 1 tasks)

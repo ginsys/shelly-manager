@@ -11,6 +11,8 @@ A comprehensive Golang application for managing Shelly smart home devices with K
 
 ## 📊 Project Status
 
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the detailed development roadmap.
+
 ### ✅ Completed
 - Core package architecture with clear separation
 - SQLite database with GORM ORM  
