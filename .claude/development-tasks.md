@@ -1,21 +1,9 @@
-# Shelly Manager Development TODO List
+# Shelly Manager Development Tasks (Claude Memory)
 
-## Current Status Overview
-
-### ✅ Completed Infrastructure
-- **Package Organization**: Well-structured `/internal/` packages with clear separation
-- **Testing Infrastructure**: Comprehensive test files covering all major packages  
-- **CLI Interface**: Full Cobra-based CLI with all planned commands
-- **Database Layer**: GORM + SQLite with proper migrations
-- **Configuration System**: Viper-based YAML configuration
-- **Logging**: Structured logging with slog throughout
-- **API Server**: HTTP REST API with endpoints for all operations
-- **Web Interface**: Complete HTML/JavaScript UI
-- **Docker Support**: Multi-stage Dockerfile and docker-compose
-- **Build System**: Comprehensive Makefile
-
-### ⚠️ Main Implementation Gap
-**Phase 1 (~40% complete)**: Core Shelly device communication and configuration management need to be implemented. The interfaces exist but lack full device API coverage and type-safe configuration.
+## Current Implementation Status
+- **Infrastructure**: ✅ Complete (packages, testing, API, web UI, Docker)
+- **Shelly Communication**: ⚠️ ~40% complete (interfaces exist, implementation needed)
+- **Configuration Management**: 📋 Designed but not implemented
 
 ## Development Phases with Numbered Tasks
 
@@ -110,44 +98,18 @@
 56. **Add batch provisioning for multiple devices**
 57. **Create network topology visualization**
 
-## Implementation Timeline Estimates
+## Implementation Notes
 
-- **Phase 1**: 2-4 weeks (Critical - blocks all other work)
-- **Phase 2**: 1 week
-- **Phase 3**: 1-2 weeks  
-- **Phase 4**: 1 week
-- **Data Abstraction**: 2-3 days (can be done in parallel)
-- **Phase 5**: 1 week
-- **Phase 6**: 1 week
-- **Phase 7**: 1-2 weeks
-- **Phase 8**: 2-3 weeks
+### Current Priority
+**Immediate**: Begin Phase 1 implementation focusing on tasks 1-3 (API implementations and type-safe configuration). This unlocks all subsequent functionality.
 
-## Scaling Considerations
+### Key Files to Update
+- `internal/shelly/gen1/` - Gen1 API implementation
+- `internal/shelly/gen2/` - Gen2+ RPC implementation  
+- `internal/configuration/` - Capability-based configuration system
+- `internal/shelly/client.go` - Main client interface
 
-### Current Target: 20-100 devices
-- SQLite performs well
-- Single API instance sufficient
-- Simple polling adequate
-
-### Future: 1000+ devices
-- PostgreSQL migration (enabled by data abstraction layer)
-- Redis caching layer
-- Worker pool for discovery
-- Connection pooling
-- Batch API operations
-- Event-driven updates
-- Horizontal scaling with load balancer
-
-## Key Architecture Decisions
-
-1. **Composition-based Configuration**: Devices combine capability "mixins" (RelayConfig, PowerMeteringConfig, etc.) for flexible, type-safe configuration management
-
-2. **Dual-Binary Design**: Separate provisioner agent handles WiFi operations, enabling container deployment with appropriate permissions
-
-3. **Git-Friendly Export**: TOML format for device configurations enables version control and GitOps workflows
-
-4. **Database Abstraction**: Prepare for PostgreSQL migration while starting with SQLite
-
-## Next Steps
-
-**Immediate Priority**: Begin Phase 1 implementation focusing on tasks 1-3 (API implementations and type-safe configuration). This unlocks all subsequent functionality and provides immediate value with real device management.
+### Testing Requirements
+- Unit tests for all new API methods
+- Integration tests with mock Shelly responses
+- Real device testing suite (task 13)
