@@ -509,6 +509,158 @@ func (c *Client) GetEnergyData(ctx context.Context, channel int) (*shelly.Energy
 	}, nil
 }
 
+// SetRelaySettings updates relay-specific settings
+func (c *Client) SetRelaySettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/relay/%d", c.ip, channel)
+	return c.postForm(ctx, url, settings)
+}
+
+// SetMaxPower sets the maximum power limit for PM devices
+func (c *Client) SetMaxPower(ctx context.Context, maxPower float64) error {
+	url := fmt.Sprintf("http://%s/settings/max_power", c.ip)
+	params := map[string]interface{}{
+		"max_power": maxPower,
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// SetLightSettings updates light-specific settings for dimmers
+func (c *Client) SetLightSettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/light/%d", c.ip, channel)
+	return c.postForm(ctx, url, settings)
+}
+
+// GetLightStatus retrieves the status of a light channel
+func (c *Client) GetLightStatus(ctx context.Context, channel int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/light/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// CalibrateDimmer starts dimmer calibration
+func (c *Client) CalibrateDimmer(ctx context.Context, channel int) error {
+	url := fmt.Sprintf("http://%s/settings/light/%d/calibration", c.ip, channel)
+	params := map[string]interface{}{
+		"calibrate": true,
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// SetWhiteChannel controls white channel for RGBW devices
+func (c *Client) SetWhiteChannel(ctx context.Context, channel int, brightness int, temp int) error {
+	url := fmt.Sprintf("http://%s/white/%d", c.ip, channel)
+	params := map[string]interface{}{
+		"turn":       "on",
+		"brightness": brightness,
+	}
+	if temp > 0 {
+		params["temp"] = temp
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// SetColorMode sets the mode for RGBW2 devices (color/white)
+func (c *Client) SetColorMode(ctx context.Context, mode string) error {
+	url := fmt.Sprintf("http://%s/settings/mode", c.ip)
+	params := map[string]interface{}{
+		"mode": mode, // "color" or "white"
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// SetColorSettings updates color-specific settings
+func (c *Client) SetColorSettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/color/%d", c.ip, channel)
+	return c.postForm(ctx, url, settings)
+}
+
+// SetWhiteSettings updates white channel settings
+func (c *Client) SetWhiteSettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/white/%d", c.ip, channel)
+	return c.postForm(ctx, url, settings)
+}
+
+// SetInputSettings configures input behavior
+func (c *Client) SetInputSettings(ctx context.Context, input int, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/input/%d", c.ip, input)
+	return c.postForm(ctx, url, settings)
+}
+
+// GetInputStatus retrieves input status
+func (c *Client) GetInputStatus(ctx context.Context, input int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/input/%d", c.ip, input)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SetActions configures device actions and scenes
+func (c *Client) SetActions(ctx context.Context, actions map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/actions", c.ip)
+	return c.postForm(ctx, url, actions)
+}
+
+// SetLEDSettings configures LED indicator behavior
+func (c *Client) SetLEDSettings(ctx context.Context, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/led", c.ip)
+	return c.postForm(ctx, url, settings)
+}
+
+// SetNightMode configures night mode settings
+func (c *Client) SetNightMode(ctx context.Context, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/night_mode", c.ip)
+	return c.postForm(ctx, url, settings)
+}
+
+// SetSchedule configures scheduled operations
+func (c *Client) SetSchedule(ctx context.Context, schedule map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/schedules", c.ip)
+	return c.postForm(ctx, url, schedule)
+}
+
+// GetSchedules retrieves configured schedules
+func (c *Client) GetSchedules(ctx context.Context) ([]interface{}, error) {
+	url := fmt.Sprintf("http://%s/settings/schedules", c.ip)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	if schedules, ok := result["schedules"].([]interface{}); ok {
+		return schedules, nil
+	}
+	return nil, nil
+}
+
+// SetCoIoTSettings configures CoIoT (CoAP) settings
+func (c *Client) SetCoIoTSettings(ctx context.Context, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/coiot", c.ip)
+	return c.postForm(ctx, url, settings)
+}
+
+// SetMQTTSettings configures MQTT settings
+func (c *Client) SetMQTTSettings(ctx context.Context, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/mqtt", c.ip)
+	return c.postForm(ctx, url, settings)
+}
+
+// GetRelayPower retrieves power consumption for a relay (1PM devices)
+func (c *Client) GetRelayPower(ctx context.Context, channel int) (float64, error) {
+	url := fmt.Sprintf("http://%s/relay/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return 0, err
+	}
+	if power, ok := result["power"].(float64); ok {
+		return power, nil
+	}
+	return 0, nil
+}
+
 // TestConnection tests the connection to the device
 func (c *Client) TestConnection(ctx context.Context) error {
 	// GetInfo is sufficient to test connection and returns auth errors

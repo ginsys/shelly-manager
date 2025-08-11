@@ -23,6 +23,22 @@ type Client interface {
 	SetColorRGB(ctx context.Context, channel int, r, g, b uint8) error
 	SetColorTemp(ctx context.Context, channel int, temp int) error
 	
+	// Roller Shutter Operations
+	SetRollerPosition(ctx context.Context, channel int, position int) error
+	OpenRoller(ctx context.Context, channel int) error
+	CloseRoller(ctx context.Context, channel int) error
+	StopRoller(ctx context.Context, channel int) error
+	
+	// Advanced Settings
+	SetRelaySettings(ctx context.Context, channel int, settings map[string]interface{}) error
+	SetLightSettings(ctx context.Context, channel int, settings map[string]interface{}) error
+	SetInputSettings(ctx context.Context, input int, settings map[string]interface{}) error
+	SetLEDSettings(ctx context.Context, settings map[string]interface{}) error
+	
+	// RGBW Operations
+	SetWhiteChannel(ctx context.Context, channel int, brightness int, temp int) error
+	SetColorMode(ctx context.Context, mode string) error
+	
 	// System Operations
 	Reboot(ctx context.Context) error
 	FactoryReset(ctx context.Context) error

@@ -42,7 +42,7 @@ jobs:
         go tool cover -func=coverage.out | tail -1
     
     - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         file: ./coverage.out
         flags: unittests
@@ -109,7 +109,7 @@ jobs:
         cache: true
     
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v8
       with:
         version: latest
         args: --timeout=5m
