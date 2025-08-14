@@ -380,6 +380,30 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(energy)
 }
 
+// GetDeviceConfig handles GET /api/v1/devices/{id}/config
+func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get device configuration
+	config, err := h.Service.GetDeviceConfig(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to get device config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
 // ImportDeviceConfig handles POST /api/v1/devices/{id}/config/import
 func (h *Handler) ImportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -496,34 +520,6 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-}
-
-// GetDeviceConfig handles GET /api/v1/devices/{id}/config
-func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseUint(vars["id"], 10, 32)
-	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
-		return
-	}
-
-	// Get device configuration
-	config, err := h.Service.ConfigSvc.GetDeviceConfig(uint(id))
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Configuration not found", http.StatusNotFound)
-		} else {
-			h.logger.WithFields(map[string]any{
-				"device_id": id,
-				"error":     err.Error(),
-			}).Error("Failed to get device config")
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
 }
 
 // DetectConfigDrift handles GET /api/v1/devices/{id}/config/drift
@@ -715,4 +711,200 @@ func (h *Handler) GetConfigHistory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(history)
+}
+
+// UpdateDeviceConfig handles PUT /api/v1/devices/{id}/config
+func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse request body
+	var configUpdate map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&configUpdate); err != nil {
+		http.Error(w, "Invalid JSON in request body", http.StatusBadRequest)
+		return
+	}
+
+	// Update device configuration
+	err = h.Service.UpdateDeviceConfig(uint(id), configUpdate)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to update device config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return updated config
+	config, err := h.Service.GetDeviceConfig(uint(id))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+// UpdateRelayConfig handles PUT /api/v1/devices/{id}/config/relay
+func (h *Handler) UpdateRelayConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse relay configuration
+	var relayConfig configuration.RelayConfig
+	if err := json.NewDecoder(r.Body).Decode(&relayConfig); err != nil {
+		http.Error(w, "Invalid relay configuration JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Update relay configuration
+	err = h.Service.UpdateRelayConfig(uint(id), &relayConfig)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to update relay config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+// UpdateDimmingConfig handles PUT /api/v1/devices/{id}/config/dimming
+func (h *Handler) UpdateDimmingConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse dimming configuration
+	var dimmingConfig configuration.DimmingConfig
+	if err := json.NewDecoder(r.Body).Decode(&dimmingConfig); err != nil {
+		http.Error(w, "Invalid dimming configuration JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Update dimming configuration
+	err = h.Service.UpdateDimmingConfig(uint(id), &dimmingConfig)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to update dimming config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+// UpdateRollerConfig handles PUT /api/v1/devices/{id}/config/roller
+func (h *Handler) UpdateRollerConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse roller configuration
+	var rollerConfig configuration.RollerConfig
+	if err := json.NewDecoder(r.Body).Decode(&rollerConfig); err != nil {
+		http.Error(w, "Invalid roller configuration JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Update roller configuration
+	err = h.Service.UpdateRollerConfig(uint(id), &rollerConfig)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to update roller config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+// UpdatePowerMeteringConfig handles PUT /api/v1/devices/{id}/config/power-metering
+func (h *Handler) UpdatePowerMeteringConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse power metering configuration
+	var powerConfig configuration.PowerMeteringConfig
+	if err := json.NewDecoder(r.Body).Decode(&powerConfig); err != nil {
+		http.Error(w, "Invalid power metering configuration JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Update power metering configuration
+	err = h.Service.UpdatePowerMeteringConfig(uint(id), &powerConfig)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to update power metering config")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+// UpdateDeviceAuth handles PUT /api/v1/devices/{id}/config/auth
+func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse authentication configuration
+	var authConfig struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&authConfig); err != nil {
+		http.Error(w, "Invalid auth configuration JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Update device authentication
+	err = h.Service.UpdateDeviceAuth(uint(id), authConfig.Username, authConfig.Password)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to update device auth")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }

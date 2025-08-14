@@ -38,11 +38,19 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	
 	// Device configuration routes
 	api.HandleFunc("/devices/{id}/config", handler.GetDeviceConfig).Methods("GET")
+	api.HandleFunc("/devices/{id}/config", handler.UpdateDeviceConfig).Methods("PUT")
 	api.HandleFunc("/devices/{id}/config/import", handler.ImportDeviceConfig).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/export", handler.ExportDeviceConfig).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/drift", handler.DetectConfigDrift).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/apply-template", handler.ApplyConfigTemplate).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/history", handler.GetConfigHistory).Methods("GET")
+	
+	// Device capability-specific configuration routes
+	api.HandleFunc("/devices/{id}/config/relay", handler.UpdateRelayConfig).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/dimming", handler.UpdateDimmingConfig).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/roller", handler.UpdateRollerConfig).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/power-metering", handler.UpdatePowerMeteringConfig).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/auth", handler.UpdateDeviceAuth).Methods("PUT")
 	
 	// Configuration template routes
 	api.HandleFunc("/config/templates", handler.GetConfigTemplates).Methods("GET")
