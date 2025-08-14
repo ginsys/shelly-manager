@@ -736,6 +736,7 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 	return lastErr
 }
 
+
 func (c *Client) postForm(ctx context.Context, endpoint string, params map[string]interface{}) error {
 	// Convert params to URL-encoded form data
 	formData := make(url.Values)
@@ -816,4 +817,101 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 	}
 	
 	return lastErr
+}
+
+// GetRelayStatus gets specific relay status
+func (c *Client) GetRelayStatus(ctx context.Context, channel int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/relay/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SetMeterResetCounters resets energy counters for devices with metering
+func (c *Client) SetMeterResetCounters(ctx context.Context, channel int) error {
+	url := fmt.Sprintf("http://%s/meter/%d/reset", c.ip, channel)
+	return c.postForm(ctx, url, nil)
+}
+
+// GetWiFiNetworks scans for available WiFi networks
+func (c *Client) GetWiFiNetworks(ctx context.Context) ([]interface{}, error) {
+	url := fmt.Sprintf("http://%s/wifiscan", c.ip)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	if wifiList, ok := result["wifilist"].([]interface{}); ok {
+		return wifiList, nil
+	}
+	return nil, nil
+}
+
+// SetWiFiConfig configures WiFi settings
+func (c *Client) SetWiFiConfig(ctx context.Context, config map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/sta", c.ip)
+	return c.postForm(ctx, url, config)
+}
+
+// SetCloudConfig configures cloud connectivity
+func (c *Client) SetCloudConfig(ctx context.Context, enabled bool, server string) error {
+	url := fmt.Sprintf("http://%s/settings/cloud", c.ip)
+	params := map[string]interface{}{
+		"enabled": enabled,
+	}
+	if server != "" {
+		params["server"] = server
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// SetTimezone sets the device timezone
+func (c *Client) SetTimezone(ctx context.Context, timezone string) error {
+	url := fmt.Sprintf("http://%s/settings", c.ip)
+	params := map[string]interface{}{
+		"timezone": timezone,
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// SetLocation sets the device location coordinates
+func (c *Client) SetLocation(ctx context.Context, lat, lng float64) error {
+	url := fmt.Sprintf("http://%s/settings", c.ip)
+	params := map[string]interface{}{
+		"lat": lat,
+		"lng": lng,
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// SetDeviceName sets the device name
+func (c *Client) SetDeviceName(ctx context.Context, name string) error {
+	url := fmt.Sprintf("http://%s/settings", c.ip)
+	params := map[string]interface{}{
+		"name": name,
+	}
+	return c.postForm(ctx, url, params)
+}
+
+// StartOTAUpdate initiates OTA firmware update
+func (c *Client) StartOTAUpdate(ctx context.Context, url string) error {
+	updateURL := fmt.Sprintf("http://%s/ota", c.ip)
+	params := map[string]interface{}{
+		"update": true,
+	}
+	if url != "" {
+		params["url"] = url
+	}
+	return c.postForm(ctx, updateURL, params)
+}
+
+// GetSystemInfo gets extended system information
+func (c *Client) GetSystemInfo(ctx context.Context) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/status", c.ip)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
