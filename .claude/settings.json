@@ -26,9 +26,13 @@
       "Bash(env CGO_ENABLED=1 go test -v -short -race ./internal/logging ./internal/discovery ./internal/service)",
       "Bash(unzip:*)",
       "Bash(CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager)",
-      "Bash(CGO_ENABLED=1 go test -v -race -short ./...)"
+      "Bash(CGO_ENABLED=1 go test -v -race -short ./...)",
+      "WebFetch(domain:golangci-lint.run)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   },
   "saveSettingsPath": ".claude/settings.json",
   "useLocalSettings": false

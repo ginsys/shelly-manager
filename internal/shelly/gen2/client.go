@@ -726,3 +726,4 @@ func (c *Client) SetColorMode(ctx context.Context, mode string) error {
 	// in Light.Set calls. This is a compatibility method.
 	return nil
 }
+
