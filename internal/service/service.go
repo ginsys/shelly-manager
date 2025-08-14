@@ -699,6 +699,61 @@ func (s *ShellyService) ImportDeviceConfig(deviceID uint) (*configuration.Device
 	return s.ConfigSvc.ImportFromDevice(deviceID, client)
 }
 
+// GetDeviceConfig gets the stored configuration for a device
+func (s *ShellyService) GetDeviceConfig(deviceID uint) (*configuration.DeviceConfig, error) {
+	return s.ConfigSvc.GetDeviceConfig(deviceID)
+}
+
+// UpdateDeviceConfig updates the stored configuration for a device
+func (s *ShellyService) UpdateDeviceConfig(deviceID uint, configUpdate map[string]interface{}) error {
+	return s.ConfigSvc.UpdateDeviceConfig(deviceID, configUpdate)
+}
+
+// UpdateRelayConfig updates relay-specific configuration
+func (s *ShellyService) UpdateRelayConfig(deviceID uint, config *configuration.RelayConfig) error {
+	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "relay", config)
+}
+
+// UpdateDimmingConfig updates dimming-specific configuration
+func (s *ShellyService) UpdateDimmingConfig(deviceID uint, config *configuration.DimmingConfig) error {
+	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "dimming", config)
+}
+
+// UpdateRollerConfig updates roller-specific configuration
+func (s *ShellyService) UpdateRollerConfig(deviceID uint, config *configuration.RollerConfig) error {
+	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "roller", config)
+}
+
+// UpdatePowerMeteringConfig updates power metering configuration
+func (s *ShellyService) UpdatePowerMeteringConfig(deviceID uint, config *configuration.PowerMeteringConfig) error {
+	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "power_metering", config)
+}
+
+// UpdateDeviceAuth updates device authentication credentials
+func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password string) error {
+	// Get device
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return fmt.Errorf("device not found: %w", err)
+	}
+	
+	// Update device settings with auth info
+	settings := make(map[string]interface{})
+	if device.Settings != "" {
+		json.Unmarshal([]byte(device.Settings), &settings)
+	}
+	
+	settings["auth"] = map[string]string{
+		"username": username,
+		"password": password,
+	}
+	
+	settingsJSON, _ := json.Marshal(settings)
+	device.Settings = string(settingsJSON)
+	
+	return s.DB.UpdateDevice(device)
+}
+
 // ExportDeviceConfig exports configuration to a physical device
 func (s *ShellyService) ExportDeviceConfig(deviceID uint) error {
 	// Get device from database

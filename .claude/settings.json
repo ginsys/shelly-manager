@@ -29,7 +29,8 @@
       "Bash(CGO_ENABLED=1 go test -v -race -short ./...)",
       "WebFetch(domain:golangci-lint.run)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
