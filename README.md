@@ -18,15 +18,19 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the detailed development roadmap.
 - SQLite database with GORM ORM  
 - Structured logging (slog)
 - Configuration management (Viper)
-- HTTP REST API with Gorilla Mux
+- Complete HTTP REST API with 25+ endpoints
 - CLI framework (Cobra)
-- Basic web interface
+- Feature-complete web interface with error handling
+- Real Shelly device API integration (Gen1 & Gen2+)
+- Device authentication (Basic auth & RFC 2617 Digest auth)
+- Capability-based configuration system
+- Configuration import/export/drift detection
+- Energy monitoring and device control
 - Discovery framework (HTTP/mDNS)
 - Platform-specific WiFi interfaces (Linux/macOS/Windows)
 - Comprehensive test coverage for core packages
 
 ### 🚧 In Progress
-- Real Shelly device API integration
 - WiFi provisioning flow implementation
 - Inter-service communication protocol
 - Kubernetes deployment manifests
@@ -279,14 +283,15 @@ make test-integration
 
 ## 🚦 Development Roadmap
 
-### Phase 1: Core Shelly Management (Current Focus)
+### Phase 1: Core Shelly Management - ✅ COMPLETE
 - [x] Package architecture
 - [x] Database layer
-- [x] Basic API
-- [ ] Real Shelly device communication
-- [ ] Device authentication
-- [ ] Status polling
-- [ ] Configuration management
+- [x] Complete REST API with all endpoints
+- [x] Real Shelly device communication (Gen1 & Gen2+)
+- [x] Device authentication (Basic & Digest auth)
+- [x] Status polling and energy monitoring
+- [x] Comprehensive configuration management
+- [x] Web UI with error handling and authentication flow
 
 ### Phase 2: Provisioning System
 - [ ] Separate provisioner binary

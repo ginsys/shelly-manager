@@ -1072,59 +1072,164 @@
 
         // Configuration Management Functions
         async function importConfig(deviceId) {
+            const importButton = document.querySelector(`button[onclick="importConfig(${deviceId})"]`);
+            const originalText = importButton ? importButton.innerHTML : null;
+            
             try {
+                // Show loading state
+                if (importButton) {
+                    importButton.disabled = true;
+                    importButton.innerHTML = '⏳ Importing...';
+                }
+                
                 const response = await fetch(`${API_BASE}/devices/${deviceId}/config/import`, {
                     method: 'POST'
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Failed to import configuration');
+                    const errorText = await response.text();
+                    let errorMessage = 'Failed to import configuration';
+                    
+                    // Check for authentication errors
+                    if (errorText.includes('authentication required') || errorText.includes('auth') || response.status === 401) {
+                        errorMessage = 'Authentication required. Please set device credentials first.';
+                        showAuthPrompt(deviceId);
+                    } else if (response.status === 404) {
+                        errorMessage = 'Device not found or unreachable';
+                    } else if (response.status >= 500) {
+                        errorMessage = 'Server error occurred during import';
+                    } else {
+                        errorMessage = errorText || errorMessage;
+                    }
+                    
+                    throw new Error(errorMessage);
                 }
                 
                 const config = await response.json();
                 updateConfigStatus(deviceId, 'synced');
-                console.log('Configuration imported successfully');
+                showNotification('✅ Configuration imported successfully', 'success');
+                
+                // Refresh device data to show updated config
+                loadDevices();
+                
             } catch (error) {
-                console.log(`Import failed: ${error.message}`);
+                console.error(`Import failed for device ${deviceId}:`, error.message);
+                showNotification(`❌ Import failed: ${error.message}`, 'error');
+                updateConfigStatus(deviceId, 'error');
+            } finally {
+                // Reset button state
+                if (importButton) {
+                    importButton.disabled = false;
+                    importButton.innerHTML = originalText;
+                }
             }
         }
 
         async function exportConfig(deviceId) {
+            const exportButton = document.querySelector(`button[onclick="exportConfig(${deviceId})"]`);
+            const originalText = exportButton ? exportButton.innerHTML : null;
+            
             try {
+                // Show loading state
+                if (exportButton) {
+                    exportButton.disabled = true;
+                    exportButton.innerHTML = '⏳ Exporting...';
+                }
+                
                 const response = await fetch(`${API_BASE}/devices/${deviceId}/config/export`, {
                     method: 'POST'
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Failed to export configuration');
+                    const errorText = await response.text();
+                    let errorMessage = 'Failed to export configuration';
+                    
+                    // Check for authentication errors
+                    if (errorText.includes('authentication required') || errorText.includes('auth') || response.status === 401) {
+                        errorMessage = 'Authentication required. Please set device credentials first.';
+                        showAuthPrompt(deviceId);
+                    } else if (response.status === 404) {
+                        errorMessage = 'Device not found or unreachable';
+                    } else if (response.status >= 500) {
+                        errorMessage = 'Server error occurred during export';
+                    } else {
+                        errorMessage = errorText || errorMessage;
+                    }
+                    
+                    throw new Error(errorMessage);
                 }
                 
+                const result = await response.json();
                 updateConfigStatus(deviceId, 'synced');
-                console.log('Configuration exported successfully');
+                showNotification('✅ Configuration exported successfully', 'success');
+                
             } catch (error) {
-                console.log(`Export failed: ${error.message}`);
+                console.error(`Export failed for device ${deviceId}:`, error.message);
+                showNotification(`❌ Export failed: ${error.message}`, 'error');
+                updateConfigStatus(deviceId, 'error');
+            } finally {
+                // Reset button state
+                if (exportButton) {
+                    exportButton.disabled = false;
+                    exportButton.innerHTML = originalText;
+                }
             }
         }
 
         async function checkDrift(deviceId) {
+            const driftButton = document.querySelector(`button[onclick="checkDrift(${deviceId})"]`);
+            const originalText = driftButton ? driftButton.innerHTML : null;
+            
             try {
+                // Show loading state
+                if (driftButton) {
+                    driftButton.disabled = true;
+                    driftButton.innerHTML = '⏳ Checking...';
+                }
+                
                 const response = await fetch(`${API_BASE}/devices/${deviceId}/config/drift`);
                 
                 if (!response.ok) {
-                    throw new Error('Failed to check drift');
+                    const errorText = await response.text();
+                    let errorMessage = 'Failed to check configuration drift';
+                    
+                    // Check for authentication errors
+                    if (errorText.includes('authentication required') || errorText.includes('auth') || response.status === 401) {
+                        errorMessage = 'Authentication required to check drift. Please set device credentials first.';
+                        showAuthPrompt(deviceId);
+                    } else if (response.status === 404) {
+                        errorMessage = 'Device not found or unreachable';
+                    } else if (response.status >= 500) {
+                        errorMessage = 'Server error occurred during drift check';
+                    } else {
+                        errorMessage = errorText || errorMessage;
+                    }
+                    
+                    throw new Error(errorMessage);
                 }
                 
                 const result = await response.json();
                 
                 if (result.drift === false) {
                     updateConfigStatus(deviceId, 'synced');
+                    showNotification('✅ No configuration drift detected', 'success');
                     console.log('No configuration drift detected');
                 } else {
                     updateConfigStatus(deviceId, 'drift');
-                    console.log(`Configuration drift detected!\n${result.differences.length} differences found`);
+                    const diffCount = result.differences ? result.differences.length : 0;
+                    showNotification(`⚠️ Configuration drift detected (${diffCount} changes)`, 'warning');
+                    console.log(`Configuration drift detected!\n${diffCount} differences found`);
                 }
             } catch (error) {
-                console.log(`Drift check failed: ${error.message}`);
+                console.error(`Drift check failed for device ${deviceId}:`, error.message);
+                showNotification(`❌ Drift check failed: ${error.message}`, 'error');
+                updateConfigStatus(deviceId, 'error');
+            } finally {
+                // Reset button state
+                if (driftButton) {
+                    driftButton.disabled = false;
+                    driftButton.innerHTML = originalText;
+                }
             }
         }
 
@@ -1507,6 +1612,136 @@
                 event.target.style.display = 'none';
             }
         }
+        // Notification System
+        function showNotification(message, type = 'info') {
+            // Remove existing notifications
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(n => n.remove());
+
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.innerHTML = `
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()" style="background:none;border:none;color:inherit;font-size:16px;margin-left:10px;cursor:pointer;">&times;</button>
+            `;
+
+            // Add CSS for notifications if not already added
+            if (!document.querySelector('#notification-styles')) {
+                const style = document.createElement('style');
+                style.id = 'notification-styles';
+                style.textContent = `
+                    .notification {
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        padding: 15px 20px;
+                        border-radius: 8px;
+                        color: white;
+                        font-weight: 500;
+                        z-index: 1000;
+                        max-width: 400px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        animation: slideIn 0.3s ease-out;
+                    }
+                    .notification-success { background: #27ae60; }
+                    .notification-error { background: #e74c3c; }
+                    .notification-warning { background: #f39c12; }
+                    .notification-info { background: #3498db; }
+                    @keyframes slideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+
+        // Authentication Prompt
+        function showAuthPrompt(deviceId) {
+            const modal = document.createElement('div');
+            modal.id = `auth-modal-${deviceId}`;
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <h2>Device Authentication Required</h2>
+                    <p>This device requires authentication credentials to access its configuration.</p>
+                    <form id="auth-form-${deviceId}" onsubmit="submitAuth(event, ${deviceId})">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Username:</label>
+                            <input type="text" id="auth-username-${deviceId}" required 
+                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Password:</label>
+                            <input type="password" id="auth-password-${deviceId}" required 
+                                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        </div>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button type="button" class="btn" onclick="closeAuthModal(${deviceId})" 
+                                    style="background: #95a5a6;">Cancel</button>
+                            <button type="submit" class="btn" style="background: #27ae60;">Save & Retry</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function submitAuth(event, deviceId) {
+            event.preventDefault();
+            
+            const username = document.getElementById(`auth-username-${deviceId}`).value;
+            const password = document.getElementById(`auth-password-${deviceId}`).value;
+            const submitButton = event.target.querySelector('button[type="submit"]');
+            
+            try {
+                submitButton.disabled = true;
+                submitButton.textContent = 'Saving...';
+                
+                // Save authentication credentials
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/config/auth`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to save authentication credentials');
+                }
+                
+                closeAuthModal(deviceId);
+                showNotification('✅ Authentication credentials saved', 'success');
+                
+                // Retry the import after saving credentials
+                setTimeout(() => importConfig(deviceId), 1000);
+                
+            } catch (error) {
+                showNotification(`❌ Failed to save credentials: ${error.message}`, 'error');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Save & Retry';
+            }
+        }
+
+        function closeAuthModal(deviceId) {
+            const modal = document.getElementById(`auth-modal-${deviceId}`);
+            if (modal) {
+                modal.remove();
+            }
+        }
+
     </script>
 </body>
 </html>
