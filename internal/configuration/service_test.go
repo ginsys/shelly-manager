@@ -454,14 +454,26 @@ func TestImportFromDevice_Errors(t *testing.T) {
 	}
 }
 
-func TestExportToDevice(t *testing.T) {
+func TestExportToDevice_Gen1(t *testing.T) {
 	service, db := setupTestService(t)
 	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
 	
-	// Create config to export
+	// Create config to export with realistic structure
+	configData := map[string]interface{}{
+		"name": "TestDevice",
+		"wifi": map[string]interface{}{
+			"enable": true,
+			"ssid":   "TestNetwork",
+		},
+		"_metadata": map[string]interface{}{
+			"device_id": 1,
+		},
+	}
+	configJSON, _ := json.Marshal(configData)
+	
 	config := &DeviceConfig{
 		DeviceID:   1,
-		Config:     json.RawMessage(`{"name": "TestDevice", "wifi_sta": {"ssid": "Network"}}`),
+		Config:     configJSON,
 		SyncStatus: "pending",
 	}
 	err := db.Create(config).Error
@@ -473,8 +485,19 @@ func TestExportToDevice(t *testing.T) {
 	deviceInfo := &shelly.DeviceInfo{
 		ID:         "shelly1-123456",
 		Generation: 1,
+		Model:      "SHSW-1",
 	}
 	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
+	
+	// Expect SetConfig call with cleaned config (no metadata)
+	expectedConfig := map[string]interface{}{
+		"name": "TestDevice",
+		"wifi": map[string]interface{}{
+			"enable": true,
+			"ssid":   "TestNetwork",
+		},
+	}
+	mockClient.On("SetConfig", mock.Anything, expectedConfig).Return(nil)
 	
 	// Test export
 	err = service.ExportToDevice(1, mockClient)
@@ -506,6 +529,241 @@ func TestExportToDevice_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "configuration not found")
 	
 	mockClient.AssertNotCalled(t, "GetInfo")
+}
+
+func TestExportToDevice_Gen2(t *testing.T) {
+	service, db := setupTestService(t)
+	createTestDevice(t, db, 1, "Test Device", "SHSW-25")
+	
+	// Create Gen2+ config to export
+	configData := map[string]interface{}{
+		"sys": map[string]interface{}{
+			"device": map[string]interface{}{
+				"name": "TestDevice",
+			},
+		},
+		"wifi": map[string]interface{}{
+			"sta": map[string]interface{}{
+				"enable": true,
+				"ssid":   "TestNetwork2",
+			},
+		},
+		"_metadata": map[string]interface{}{
+			"device_id":  1,
+			"generation": 2,
+		},
+	}
+	configJSON, _ := json.Marshal(configData)
+	
+	config := &DeviceConfig{
+		DeviceID:   1,
+		Config:     configJSON,
+		SyncStatus: "pending",
+	}
+	err := db.Create(config).Error
+	require.NoError(t, err)
+	
+	mockClient := new(mockShellyClient)
+	
+	// Setup mock expectations for Gen2+
+	deviceInfo := &shelly.DeviceInfo{
+		ID:         "shellyplus1-123456",
+		Generation: 2,
+		Model:      "SHSW-25",
+	}
+	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
+	
+	// Expect SetConfig call with cleaned config
+	expectedConfig := map[string]interface{}{
+		"sys": map[string]interface{}{
+			"device": map[string]interface{}{
+				"name": "TestDevice",
+			},
+		},
+		"wifi": map[string]interface{}{
+			"sta": map[string]interface{}{
+				"enable": true,
+				"ssid":   "TestNetwork2",
+			},
+		},
+	}
+	mockClient.On("SetConfig", mock.Anything, expectedConfig).Return(nil)
+	
+	// Test export
+	err = service.ExportToDevice(1, mockClient)
+	
+	require.NoError(t, err)
+	
+	// Verify sync status was updated
+	var updatedConfig DeviceConfig
+	db.Where("device_id = ?", 1).First(&updatedConfig)
+	assert.Equal(t, "synced", updatedConfig.SyncStatus)
+	assert.NotNil(t, updatedConfig.LastSynced)
+	
+	mockClient.AssertExpectations(t)
+}
+
+func TestExportToDevice_ValidationFailures(t *testing.T) {
+	tests := []struct {
+		name          string
+		config        map[string]interface{}
+		generation    int
+		expectedError string
+	}{
+		{
+			name: "WiFi disabled",
+			config: map[string]interface{}{
+				"wifi": map[string]interface{}{
+					"enable": false,
+					"ssid":   "Network",
+				},
+			},
+			generation:    1,
+			expectedError: "cannot disable WiFi via configuration export",
+		},
+		{
+			name: "Empty WiFi SSID",
+			config: map[string]interface{}{
+				"wifi": map[string]interface{}{
+					"enable": true,
+					"ssid":   "",
+				},
+			},
+			generation:    1,
+			expectedError: "WiFi SSID cannot be empty",
+		},
+		{
+			name: "Gen1 auth without username",
+			config: map[string]interface{}{
+				"login": map[string]interface{}{
+					"enabled":  true,
+					"password": "secret",
+				},
+			},
+			generation:    1,
+			expectedError: "authentication username required",
+		},
+		{
+			name: "Gen2+ auth without password",
+			config: map[string]interface{}{
+				"sys": map[string]interface{}{
+					"auth": map[string]interface{}{
+						"enable": true,
+						"user":   "admin",
+					},
+				},
+			},
+			generation:    2,
+			expectedError: "authentication password required",
+		},
+		{
+			name: "Static IP without gateway",
+			config: map[string]interface{}{
+				"wifi_sta": map[string]interface{}{
+					"ipv4mode": "static",
+					"ip":       "192.168.1.100",
+					"netmask":  "255.255.255.0",
+				},
+			},
+			generation:    1,
+			expectedError: "static IP configuration requires gw field",
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service, db := setupTestService(t)
+			createTestDevice(t, db, 1, "Test Device", "SHSW-1")
+			
+			configJSON, _ := json.Marshal(tt.config)
+			config := &DeviceConfig{
+				DeviceID:   1,
+				Config:     configJSON,
+				SyncStatus: "pending",
+			}
+			err := db.Create(config).Error
+			require.NoError(t, err)
+			
+			mockClient := new(mockShellyClient)
+			
+			deviceInfo := &shelly.DeviceInfo{
+				ID:         "test-device",
+				Generation: tt.generation,
+				Model:      "SHSW-1",
+			}
+			mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
+			
+			// Test export - should fail validation
+			err = service.ExportToDevice(1, mockClient)
+			
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.expectedError)
+			
+			// Verify SetConfig was not called due to validation failure
+			mockClient.AssertNotCalled(t, "SetConfig")
+		})
+	}
+}
+
+func TestExportToDevice_SetConfigError(t *testing.T) {
+	service, db := setupTestService(t)
+	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
+	
+	config := &DeviceConfig{
+		DeviceID:   1,
+		Config:     json.RawMessage(`{"name": "TestDevice"}`),
+		SyncStatus: "pending",
+	}
+	err := db.Create(config).Error
+	require.NoError(t, err)
+	
+	mockClient := new(mockShellyClient)
+	
+	deviceInfo := &shelly.DeviceInfo{
+		ID:         "shelly1-123456",
+		Generation: 1,
+	}
+	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
+	mockClient.On("SetConfig", mock.Anything, mock.Anything).Return(fmt.Errorf("device connection failed"))
+	
+	// Test export
+	err = service.ExportToDevice(1, mockClient)
+	
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to apply Gen1 configuration")
+	assert.Contains(t, err.Error(), "device connection failed")
+	
+	mockClient.AssertExpectations(t)
+}
+
+func TestExportToDevice_EmptyConfig(t *testing.T) {
+	service, db := setupTestService(t)
+	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
+	
+	// Config with only metadata (no actual device config)
+	config := &DeviceConfig{
+		DeviceID:   1,
+		Config:     json.RawMessage(`{"_metadata": {"device_id": 1}}`),
+		SyncStatus: "pending",
+	}
+	err := db.Create(config).Error
+	require.NoError(t, err)
+	
+	mockClient := new(mockShellyClient)
+	
+	deviceInfo := &shelly.DeviceInfo{
+		ID:         "shelly1-123456",
+		Generation: 1,
+	}
+	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
+	
+	// Test export
+	err = service.ExportToDevice(1, mockClient)
+	
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no configuration data to export")
+	
+	mockClient.AssertNotCalled(t, "SetConfig")
 }
 
 func TestDetectDrift_MinimalDrift(t *testing.T) {

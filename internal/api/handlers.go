@@ -546,6 +546,70 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// BulkExportConfigs handles POST /api/v1/config/bulk-export
+func (h *Handler) BulkExportConfigs(w http.ResponseWriter, r *http.Request) {
+	// Get all devices
+	devices, err := h.Service.DB.GetDevices()
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Error("Failed to get devices")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type ExportResult struct {
+		DeviceID uint   `json:"device_id"`
+		IP       string `json:"ip"`
+		Status   string `json:"status"`
+		Error    string `json:"error,omitempty"`
+	}
+
+	results := make([]ExportResult, 0, len(devices))
+	successCount := 0
+	errorCount := 0
+
+	// Export configuration to each device
+	for _, device := range devices {
+		result := ExportResult{
+			DeviceID: device.ID,
+			IP:       device.IP,
+		}
+
+		// Attempt to export configuration
+		err := h.Service.ExportDeviceConfig(device.ID)
+		if err != nil {
+			result.Status = "error"
+			result.Error = err.Error()
+			errorCount++
+			h.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"device_ip": device.IP,
+				"error":     err.Error(),
+			}).Warn("Failed to export device config during bulk export")
+		} else {
+			result.Status = "success"
+			successCount++
+			h.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"device_ip": device.IP,
+			}).Info("Successfully exported device config during bulk export")
+		}
+
+		results = append(results, result)
+	}
+
+	response := map[string]interface{}{
+		"total":   len(devices),
+		"success": successCount,
+		"errors":  errorCount,
+		"results": results,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // DetectConfigDrift handles GET /api/v1/devices/{id}/config/drift
 func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
