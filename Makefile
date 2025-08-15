@@ -37,9 +37,9 @@ test-unit:
 test-integration:
 	CGO_ENABLED=1 go test -v -short ./cmd/...
 
-# Run full test suite including network tests (slower)
+# Run full test suite including network tests (slower, with timeout)
 test-full:
-	CGO_ENABLED=1 go test -v ./...
+	CGO_ENABLED=1 go test -v -timeout=5m ./...
 
 # ==============================================================================
 # RACE DETECTION TESTS
@@ -53,9 +53,9 @@ test-race:
 test-race-short:
 	CGO_ENABLED=1 go test -v -short -race ./...
 
-# Run full tests with race detection (including network tests)
+# Run full tests with race detection (including network tests, with timeout)
 test-race-full:
-	CGO_ENABLED=1 go test -v -race ./...
+	CGO_ENABLED=1 go test -v -race -timeout=10m ./...
 
 # ==============================================================================
 # COVERAGE TESTS
@@ -73,9 +73,9 @@ test-coverage-short:
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Short coverage report generated: coverage.html"
 
-# Run full coverage including network tests
+# Run full coverage including network tests (with timeout)
 test-coverage-full:
-	CGO_ENABLED=1 go test -v -coverprofile=coverage.out ./...
+	CGO_ENABLED=1 go test -v -timeout=5m -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Full coverage report generated: coverage.html"
 
