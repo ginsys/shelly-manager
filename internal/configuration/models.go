@@ -71,6 +71,32 @@ type ConfigDifference struct {
 	Type     string      `json:"type"`     // "added", "removed", "modified"
 }
 
+// ImportStatus represents the import status for a device
+type ImportStatus struct {
+	DeviceID   uint       `json:"device_id"`
+	ConfigID   uint       `json:"config_id,omitempty"`
+	Status     string     `json:"status"`      // "not_imported", "synced", "pending", "drift", "error"
+	Message    string     `json:"message"`     // Human-readable status message
+	LastSynced *time.Time `json:"last_synced,omitempty"`
+	UpdatedAt  time.Time  `json:"updated_at,omitempty"`
+}
+
+// ImportResult represents the result of importing a single device
+type ImportResult struct {
+	DeviceID uint   `json:"device_id"`
+	ConfigID uint   `json:"config_id,omitempty"`
+	Status   string `json:"status"` // "success" or "error"
+	Error    string `json:"error,omitempty"`
+}
+
+// BulkImportResult represents the result of a bulk import operation
+type BulkImportResult struct {
+	Total   int            `json:"total"`
+	Success int            `json:"success"`
+	Failed  int            `json:"failed"`
+	Results []ImportResult `json:"results"`
+}
+
 // Gen1Config represents Gen1 device configuration
 type Gen1Config struct {
 	// Network settings

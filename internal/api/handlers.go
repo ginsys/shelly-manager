@@ -428,6 +428,30 @@ func (h *Handler) ImportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(config)
 }
 
+// GetImportStatus handles GET /api/v1/devices/{id}/config/status
+func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+	
+	// Get import status for device
+	status, err := h.Service.GetImportStatus(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to get import status")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}
+
 // ExportDeviceConfig handles POST /api/v1/devices/{id}/config/export
 func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)

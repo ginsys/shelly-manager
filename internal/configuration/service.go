@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/database"
@@ -36,72 +37,88 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 
 // ImportFromDevice imports configuration from a physical device
 func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*DeviceConfig, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	
-	// Get device info to determine generation
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"component": "configuration",
+	}).Info("Starting configuration import from device")
+	
+	// Get device info to determine generation and basic info
 	info, err := client.GetInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device info: %w", err)
 	}
 	
-	// Get device configuration based on generation
-	var configData json.RawMessage
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"generation": info.Generation,
+		"model": info.Model,
+		"component": "configuration",
+	}).Debug("Device info retrieved, importing configuration")
 	
-	switch info.Generation {
-	case 1:
-		// For Gen1, get settings
-		status, err := client.GetStatus(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get Gen1 status: %w", err)
+	// Get comprehensive device configuration
+	deviceConfig, err := client.GetConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get device configuration: %w", err)
+	}
+	
+	// Use the raw configuration data from the device
+	configData := deviceConfig.Raw
+	
+	// Enhance with additional device metadata
+	enhancedConfig := map[string]interface{}{}
+	if err := json.Unmarshal(configData, &enhancedConfig); err != nil {
+		// If unmarshaling fails, create a basic structure
+		enhancedConfig = make(map[string]interface{})
+	}
+	
+	// Determine firmware version (Gen1 uses FW, Gen2+ uses Version)
+	firmware := info.Version
+	if firmware == "" && info.FW != "" {
+		firmware = info.FW
+	}
+	
+	// Determine auth status (Gen1 uses Auth, Gen2+ uses AuthEn)
+	authEnabled := info.AuthEn
+	if !authEnabled && info.Auth {
+		authEnabled = info.Auth
+	}
+	
+	// Add metadata for tracking and identification
+	enhancedConfig["_metadata"] = map[string]interface{}{
+		"device_id":      deviceID,
+		"generation":     info.Generation,
+		"model":          info.Model,
+		"firmware":       firmware,
+		"mac":            info.MAC,
+		"imported_at":    time.Now().Format(time.RFC3339),
+		"import_source":  "device",
+	}
+	
+	// Add device info if not present in config
+	if _, hasDeviceInfo := enhancedConfig["device_info"]; !hasDeviceInfo {
+		enhancedConfig["device_info"] = map[string]interface{}{
+			"id":         info.ID,
+			"model":      info.Model,
+			"generation": info.Generation,
+			"firmware":   firmware,
+			"mac":        info.MAC,
+			"auth_en":    authEnabled,
 		}
-		
-		// Build Gen1 config structure
-		gen1Config := Gen1Config{
-			Name: info.ID,  // Use ID as name for now
-		}
-		
-		// Add WiFi status if available
-		if status.WiFiStatus != nil {
-			gen1Config.WiFi.IP = status.WiFiStatus.IP
-			gen1Config.WiFi.SSID = status.WiFiStatus.SSID
-		}
-		
-		// Convert to JSON
-		configData, err = json.Marshal(gen1Config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal Gen1 config: %w", err)
-		}
-		
-	case 2, 3:
-		// For Gen2+, get full configuration
-		// This would require implementing GetConfig in the Gen2 client
-		// For now, we'll use status as a placeholder
-		status, err := client.GetStatus(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get Gen2+ status: %w", err)
-		}
-		
-		// Build Gen2 config structure
-		gen2Config := Gen2Config{}
-		gen2Config.Sys.Device.Name = info.ID  // Use ID as name for now
-		gen2Config.Sys.Device.MAC = info.MAC
-		
-		// Add WiFi status if available
-		if status.WiFiStatus != nil {
-			gen2Config.WiFi.STA.IP = status.WiFiStatus.IP
-			gen2Config.WiFi.STA.SSID = status.WiFiStatus.SSID
-			gen2Config.WiFi.STA.Enable = true
-		}
-		
-		// Convert to JSON
-		configData, err = json.Marshal(gen2Config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal Gen2+ config: %w", err)
-		}
-		
-	default:
-		return nil, fmt.Errorf("unsupported device generation: %d", info.Generation)
+	}
+	
+	// Re-marshal the enhanced configuration
+	configData, err = json.Marshal(enhancedConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal enhanced config: %w", err)
+	}
+	
+	// Validate and sanitize the configuration
+	configData, err = s.validateAndSanitizeConfig(configData, deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 	
 	// Check if config already exists
@@ -128,8 +145,10 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 		
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
+			"config_id": newConfig.ID,
+			"config_size": len(configData),
 			"component": "configuration",
-		}).Info("Imported configuration from device")
+		}).Info("Successfully imported configuration from device")
 		
 		return &newConfig, nil
 	}
@@ -138,7 +157,26 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 		return nil, fmt.Errorf("failed to query existing config: %w", err)
 	}
 	
-	// Update existing config
+	// Check if configuration has actually changed
+	if string(existingConfig.Config) == string(configData) {
+		// No changes, just update sync timestamp
+		existingConfig.LastSynced = &now
+		existingConfig.SyncStatus = "synced"
+		
+		if err := s.db.Save(&existingConfig).Error; err != nil {
+			return nil, fmt.Errorf("failed to update sync timestamp: %w", err)
+		}
+		
+		s.logger.WithFields(map[string]any{
+			"device_id": deviceID,
+			"config_id": existingConfig.ID,
+			"component": "configuration",
+		}).Debug("Configuration unchanged, updated sync timestamp only")
+		
+		return &existingConfig, nil
+	}
+	
+	// Configuration has changed, update it
 	oldConfig := existingConfig.Config
 	existingConfig.Config = configData
 	existingConfig.LastSynced = &now
@@ -153,10 +191,102 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 	
 	s.logger.WithFields(map[string]any{
 		"device_id": deviceID,
+		"config_id": existingConfig.ID,
+		"config_size": len(configData),
+		"changes_detected": true,
 		"component": "configuration",
-	}).Info("Updated configuration from device")
+	}).Info("Successfully updated configuration from device")
 	
 	return &existingConfig, nil
+}
+
+// GetImportStatus gets the import status for a device
+func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
+	var config DeviceConfig
+	err := s.db.Where("device_id = ?", deviceID).First(&config).Error
+	
+	if err == gorm.ErrRecordNotFound {
+		return &ImportStatus{
+			DeviceID: deviceID,
+			Status:   "not_imported",
+			Message:  "No configuration has been imported for this device",
+		}, nil
+	}
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to check import status: %w", err)
+	}
+	
+	status := &ImportStatus{
+		DeviceID:   deviceID,
+		ConfigID:   config.ID,
+		Status:     config.SyncStatus,
+		LastSynced: config.LastSynced,
+		UpdatedAt:  config.UpdatedAt,
+	}
+	
+	// Determine status message
+	switch config.SyncStatus {
+	case "synced":
+		status.Message = "Configuration successfully imported and synced"
+	case "pending":
+		status.Message = "Configuration imported but pending sync to device"
+	case "drift":
+		status.Message = "Configuration drift detected - device config differs from stored"
+	case "error":
+		status.Message = "Error occurred during last import/sync operation"
+	default:
+		status.Message = fmt.Sprintf("Unknown status: %s", config.SyncStatus)
+	}
+	
+	return status, nil
+}
+
+// BulkImportFromDevices imports configuration from multiple devices
+func (s *Service) BulkImportFromDevices(deviceIDs []uint, clientGetter func(uint) (shelly.Client, error)) (*BulkImportResult, error) {
+	result := &BulkImportResult{
+		Total:   len(deviceIDs),
+		Success: 0,
+		Failed:  0,
+		Results: make([]ImportResult, 0, len(deviceIDs)),
+	}
+	
+	for _, deviceID := range deviceIDs {
+		importResult := ImportResult{
+			DeviceID: deviceID,
+		}
+		
+		// Get client for this device
+		client, err := clientGetter(deviceID)
+		if err != nil {
+			importResult.Status = "error"
+			importResult.Error = fmt.Sprintf("Failed to create client: %v", err)
+			result.Failed++
+		} else {
+			// Import configuration
+			config, err := s.ImportFromDevice(deviceID, client)
+			if err != nil {
+				importResult.Status = "error"
+				importResult.Error = err.Error()
+				result.Failed++
+			} else {
+				importResult.Status = "success"
+				importResult.ConfigID = config.ID
+				result.Success++
+			}
+		}
+		
+		result.Results = append(result.Results, importResult)
+	}
+	
+	s.logger.WithFields(map[string]any{
+		"total_devices": result.Total,
+		"successful":    result.Success,
+		"failed":        result.Failed,
+		"component":     "configuration",
+	}).Info("Bulk configuration import completed")
+	
+	return result, nil
 }
 
 // ExportToDevice exports configuration to a physical device
@@ -562,6 +692,70 @@ func (s *Service) substituteVariables(config json.RawMessage, variables map[stri
 	// For now, just return the config as-is
 	// TODO: Implement proper variable substitution with text/template or similar
 	return config
+}
+
+// validateAndSanitizeConfig validates and sanitizes configuration data
+func (s *Service) validateAndSanitizeConfig(configData json.RawMessage, deviceID uint) (json.RawMessage, error) {
+	// Parse to validate JSON structure
+	var config map[string]interface{}
+	if err := json.Unmarshal(configData, &config); err != nil {
+		return nil, fmt.Errorf("invalid JSON configuration: %w", err)
+	}
+	
+	// Check for minimum required fields
+	if len(config) == 0 {
+		return nil, fmt.Errorf("configuration cannot be empty")
+	}
+	
+	// Sanitize sensitive data before logging (but keep in actual config)
+	sanitizedConfig := make(map[string]interface{})
+	for key, value := range config {
+		// Copy non-sensitive data for logging
+		if !isSensitiveField(key) {
+			sanitizedConfig[key] = value
+		} else {
+			sanitizedConfig[key] = "[REDACTED]"
+		}
+	}
+	
+	// Log sanitized config size and basic structure
+	sanitizedJSON, _ := json.Marshal(sanitizedConfig)
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"config_keys": len(config),
+		"config_size": len(configData),
+		"sample_structure": string(sanitizedJSON[:min(len(sanitizedJSON), 200)]) + "...",
+		"component": "configuration",
+	}).Debug("Configuration validation successful")
+	
+	return configData, nil
+}
+
+// isSensitiveField checks if a configuration field contains sensitive data
+func isSensitiveField(key string) bool {
+	sensitiveFields := []string{
+		"password", "passwd", "pass", "pwd",
+		"key", "secret", "token", "auth",
+		"wifi_password", "wifi_pass", "wifi_key",
+		"mqtt_password", "mqtt_pass",
+		"username", "user", // Some consider usernames sensitive too
+	}
+	
+	keyLower := strings.ToLower(key)
+	for _, sensitive := range sensitiveFields {
+		if strings.Contains(keyLower, sensitive) {
+			return true
+		}
+	}
+	return false
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // createHistory creates a configuration history entry
