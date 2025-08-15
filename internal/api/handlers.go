@@ -645,6 +645,22 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(drift)
 }
 
+// BulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect
+func (h *Handler) BulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) {
+	// Perform bulk drift detection across all devices
+	result, err := h.Service.BulkDetectConfigDrift()
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Error("Failed to perform bulk drift detection")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 // GetConfigTemplates handles GET /api/v1/config/templates
 func (h *Handler) GetConfigTemplates(w http.ResponseWriter, r *http.Request) {
 	templates, err := h.Service.ConfigSvc.GetTemplates()

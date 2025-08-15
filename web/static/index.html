@@ -519,6 +519,7 @@
                     <button class="btn" onclick="deselectAllDevices()">⬜ Deselect All</button>
                     <button class="btn btn-warning" onclick="bulkImportConfig()">📥 Bulk Import</button>
                     <button class="btn btn-warning" onclick="bulkExportConfig()">📤 Bulk Export</button>
+                    <button class="btn btn-info" onclick="bulkDetectDrift()">🔍 Bulk Drift Check</button>
                     <button class="btn" onclick="bulkApplyTemplate()">📝 Apply Template</button>
                 </div>
                 
@@ -1629,6 +1630,67 @@
             } catch (error) {
                 console.error('Bulk export failed:', error);
                 showNotification(`❌ Bulk export failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function bulkDetectDrift() {
+            console.log('Starting bulk drift detection for all devices...');
+            showNotification('🔍 Starting drift detection for all devices...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/config/bulk-drift-detect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                console.log('Bulk drift detection result:', result);
+                
+                // Update UI status for all checked devices
+                if (result.results) {
+                    result.results.forEach(deviceResult => {
+                        if (deviceResult.status === 'synced') {
+                            updateConfigStatus(deviceResult.device_id, 'synced');
+                        } else if (deviceResult.status === 'drift') {
+                            updateConfigStatus(deviceResult.device_id, 'drift');
+                        } else if (deviceResult.status === 'error') {
+                            updateConfigStatus(deviceResult.device_id, 'error');
+                        }
+                    });
+                }
+                
+                // Show summary notification
+                const message = `Drift check complete: ${result.in_sync} in sync, ${result.drifted} drifted, ${result.errors} errors`;
+                if (result.errors === 0 && result.drifted === 0) {
+                    showNotification(`✅ ${message}`, 'success');
+                } else if (result.errors > 0) {
+                    showNotification(`⚠️ ${message}`, 'warning');
+                } else {
+                    showNotification(`🔍 ${message}`, 'info');
+                }
+                
+                // Log detailed results
+                if (result.results) {
+                    result.results.forEach(deviceResult => {
+                        if (deviceResult.status === 'synced') {
+                            console.log(`✓ Device ${deviceResult.device_id} (${deviceResult.device_name}) is in sync`);
+                        } else if (deviceResult.status === 'drift') {
+                            console.log(`⚠ Device ${deviceResult.device_id} (${deviceResult.device_name}) has drift: ${deviceResult.drift_summary}`);
+                        } else {
+                            console.error(`✗ Device ${deviceResult.device_id} (${deviceResult.device_name}) check failed: ${deviceResult.error}`);
+                        }
+                    });
+                }
+                
+            } catch (error) {
+                console.error('Bulk drift detection failed:', error);
+                showNotification(`❌ Bulk drift detection failed: ${error.message}`, 'error');
             }
         }
 

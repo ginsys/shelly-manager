@@ -1369,6 +1369,217 @@ func TestConcurrentOperations(t *testing.T) {
 	assert.Equal(t, int64(5), count)
 }
 
+// TestBulkDetectDrift tests bulk drift detection functionality
+func TestBulkDetectDrift(t *testing.T) {
+	service, db := setupTestService(t)
+	
+	// Create test devices first with unique IPs
+	device1 := &database.Device{
+		ID:   1,
+		Name: "Device1",
+		Type: "SHSW-1",
+		IP:   "192.168.1.101",
+		MAC:  "AA:BB:CC:DD:EE:01",
+	}
+	device2 := &database.Device{
+		ID:   2,
+		Name: "Device2", 
+		Type: "SHSW-1",
+		IP:   "192.168.1.102",
+		MAC:  "AA:BB:CC:DD:EE:02",
+	}
+	require.NoError(t, db.Create(device1).Error)
+	require.NoError(t, db.Create(device2).Error)
+	
+	// Create test device configurations  
+	device1Config := DeviceConfig{
+		ID:         1,
+		DeviceID:   1,
+		Config:     []byte(`{"name": "Device1", "wifi": {"enable": true, "ssid": "TestNetwork"}}`),
+		SyncStatus: "synced",
+	}
+	device2Config := DeviceConfig{
+		ID:         2,
+		DeviceID:   2,
+		Config:     []byte(`{"name": "Device2", "relay": {"enabled": true}}`),
+		SyncStatus: "synced",
+	}
+	db.Create(&device1Config)
+	db.Create(&device2Config)
+	
+	// Create mock clients
+	mockClient1 := &mockShellyClient{}
+	mockClient2 := &mockShellyClient{}
+	
+	// Device 1: No drift (same config)
+	mockClient1.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
+		ID:         "device1",
+		Model:      "SHSW-1",
+		Generation: 1,
+		MAC:        "AABBCCDDEE01",
+		Version:    "20210101-000000",
+	}, nil)
+	mockClient1.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
+		Raw: []byte(`{"name": "Device1", "wifi": {"enable": true, "ssid": "TestNetwork"}}`),
+	}, nil)
+	
+	// Device 2: Drift detected (different relay state)
+	mockClient2.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
+		ID:         "device2",
+		Model:      "SHSW-1",
+		Generation: 1,
+		MAC:        "AABBCCDDEE02",
+		Version:    "20210101-000000",
+	}, nil)
+	mockClient2.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
+		Raw: []byte(`{"name": "Device2", "relay": {"enabled": false}}`), // Different state
+	}, nil)
+	
+	// Client getter function
+	clientGetter := func(deviceID uint) (shelly.Client, error) {
+		switch deviceID {
+		case 1:
+			return mockClient1, nil
+		case 2:
+			return mockClient2, nil
+		default:
+			return nil, fmt.Errorf("device not found")
+		}
+	}
+	
+	// Test bulk drift detection
+	result, err := service.BulkDetectDrift([]uint{1, 2}, clientGetter)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	
+	// Verify results
+	assert.Equal(t, 2, result.Total)
+	assert.Equal(t, 1, result.InSync)   // Device 1
+	assert.Equal(t, 1, result.Drifted)  // Device 2
+	assert.Equal(t, 0, result.Errors)
+	assert.Len(t, result.Results, 2)
+	
+	// Check device 1 result (in sync)
+	device1Result := result.Results[0]
+	assert.Equal(t, uint(1), device1Result.DeviceID)
+	assert.Equal(t, "synced", device1Result.Status)
+	assert.Equal(t, 0, device1Result.DifferenceCount)
+	assert.Nil(t, device1Result.Drift)
+	
+	// Check device 2 result (drift detected)
+	device2Result := result.Results[1]
+	assert.Equal(t, uint(2), device2Result.DeviceID)
+	assert.Equal(t, "drift", device2Result.Status)
+	assert.Greater(t, device2Result.DifferenceCount, 0)
+	assert.NotNil(t, device2Result.Drift)
+	assert.Contains(t, device2Result.DriftSummary, "configuration differences detected")
+	
+	// Verify timing information
+	assert.False(t, result.StartedAt.IsZero())
+	assert.False(t, result.CompletedAt.IsZero())
+	assert.True(t, result.CompletedAt.After(result.StartedAt))
+	assert.Greater(t, result.Duration, time.Duration(0))
+}
+
+func TestBulkDetectDrift_WithErrors(t *testing.T) {
+	service, db := setupTestService(t)
+	
+	// Create test device first with unique IP
+	device1 := &database.Device{
+		ID:   1,
+		Name: "Device1",
+		Type: "SHSW-1",
+		IP:   "192.168.1.103",
+		MAC:  "AA:BB:CC:DD:EE:03",
+	}
+	require.NoError(t, db.Create(device1).Error)
+	
+	// Create one valid device configuration
+	deviceConfig := DeviceConfig{
+		ID:         1,
+		DeviceID:   1,
+		Config:     []byte(`{"name": "Device1"}`),
+		SyncStatus: "synced",
+	}
+	db.Create(&deviceConfig)
+	
+	// Client getter that returns errors for some devices
+	clientGetter := func(deviceID uint) (shelly.Client, error) {
+		switch deviceID {
+		case 1:
+			// Valid client
+			mockClient := &mockShellyClient{}
+			mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
+				ID:         "device1",
+				Model:      "SHSW-1",
+				Generation: 1,
+				MAC:        "AABBCCDDEE01",
+			}, nil)
+			mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
+				Raw: []byte(`{"name": "Device1"}`),
+			}, nil)
+			return mockClient, nil
+		case 2:
+			// Client creation error
+			return nil, fmt.Errorf("client creation failed")
+		case 999:
+			// Device not found (will be handled by BulkDetectDrift)
+			return nil, fmt.Errorf("device not found")
+		default:
+			return nil, fmt.Errorf("unknown device")
+		}
+	}
+	
+	// Test with mixed success/error scenarios
+	result, err := service.BulkDetectDrift([]uint{1, 2, 999}, clientGetter)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	
+	// Verify error handling
+	assert.Equal(t, 3, result.Total)
+	assert.Equal(t, 1, result.InSync)  // Device 1 succeeded
+	assert.Equal(t, 0, result.Drifted)
+	assert.Equal(t, 2, result.Errors)  // Devices 2 and 999 failed
+	assert.Len(t, result.Results, 3)
+	
+	// Check successful device
+	successResult := result.Results[0]
+	assert.Equal(t, uint(1), successResult.DeviceID)
+	assert.Equal(t, "synced", successResult.Status)
+	assert.Empty(t, successResult.Error)
+	
+	// Check client error device
+	clientErrorResult := result.Results[1]
+	assert.Equal(t, uint(2), clientErrorResult.DeviceID)
+	assert.Equal(t, "error", clientErrorResult.Status)
+	assert.Contains(t, clientErrorResult.Error, "client creation failed")
+	
+	// Check device not found error
+	notFoundResult := result.Results[2]
+	assert.Equal(t, uint(999), notFoundResult.DeviceID)
+	assert.Equal(t, "error", notFoundResult.Status)
+	assert.Contains(t, notFoundResult.Error, "Device not found")
+}
+
+func TestBulkDetectDrift_EmptyDeviceList(t *testing.T) {
+	service, _ := setupTestService(t)
+	
+	clientGetter := func(deviceID uint) (shelly.Client, error) {
+		return nil, fmt.Errorf("should not be called")
+	}
+	
+	// Test with empty device list
+	result, err := service.BulkDetectDrift([]uint{}, clientGetter)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	
+	assert.Equal(t, 0, result.Total)
+	assert.Equal(t, 0, result.InSync)
+	assert.Equal(t, 0, result.Drifted)
+	assert.Equal(t, 0, result.Errors)
+	assert.Len(t, result.Results, 0)
+}
+
 func TestServiceWithNilDB(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "info", Format: "text"})
 	

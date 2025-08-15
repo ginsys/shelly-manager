@@ -62,6 +62,7 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	// Bulk configuration operations
 	api.HandleFunc("/config/bulk-import", handler.BulkImportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-export", handler.BulkExportConfigs).Methods("POST")
+	api.HandleFunc("/config/bulk-drift-detect", handler.BulkDetectConfigDrift).Methods("POST")
 	
 	// Discovery route
 	api.HandleFunc("/discover", handler.DiscoverHandler).Methods("POST")

@@ -437,6 +437,100 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 	return drift, nil
 }
 
+// BulkDetectDrift checks for configuration drift across multiple devices
+func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (shelly.Client, error)) (*BulkDriftResult, error) {
+	result := &BulkDriftResult{
+		Total:      len(deviceIDs),
+		InSync:     0,
+		Drifted:    0,
+		Errors:     0,
+		Results:    make([]DriftResult, 0, len(deviceIDs)),
+		StartedAt:  time.Now(),
+	}
+	
+	s.logger.WithFields(map[string]any{
+		"total_devices": len(deviceIDs),
+		"component":     "configuration",
+	}).Info("Starting bulk drift detection")
+	
+	for _, deviceID := range deviceIDs {
+		driftResult := DriftResult{
+			DeviceID: deviceID,
+		}
+		
+		// Get device info for result
+		var device database.Device
+		if err := s.db.First(&device, deviceID).Error; err != nil {
+			driftResult.Status = "error"
+			driftResult.Error = fmt.Sprintf("Device not found: %v", err)
+			result.Errors++
+		} else {
+			driftResult.DeviceName = device.Name
+			driftResult.DeviceIP = device.IP
+			
+			// Get client for this device
+			client, err := clientGetter(deviceID)
+			if err != nil {
+				driftResult.Status = "error"
+				driftResult.Error = fmt.Sprintf("Failed to create client: %v", err)
+				result.Errors++
+			} else {
+				// Perform drift detection
+				drift, err := s.DetectDrift(deviceID, client)
+				if err != nil {
+					driftResult.Status = "error"
+					driftResult.Error = err.Error()
+					result.Errors++
+					s.logger.WithFields(map[string]any{
+						"device_id": deviceID,
+						"device_ip": device.IP,
+						"error":     err.Error(),
+						"component": "configuration",
+					}).Warn("Failed to detect drift for device during bulk operation")
+				} else if drift == nil {
+					// No drift detected
+					driftResult.Status = "synced"
+					result.InSync++
+					s.logger.WithFields(map[string]any{
+						"device_id": deviceID,
+						"device_ip": device.IP,
+						"component": "configuration",
+					}).Debug("Device configuration in sync during bulk drift detection")
+				} else {
+					// Drift detected
+					driftResult.Status = "drift"
+					driftResult.DriftSummary = fmt.Sprintf("%d configuration differences detected", len(drift.Differences))
+					driftResult.DifferenceCount = len(drift.Differences)
+					driftResult.Drift = drift
+					result.Drifted++
+					s.logger.WithFields(map[string]any{
+						"device_id":     deviceID,
+						"device_ip":     device.IP,
+						"differences":   len(drift.Differences),
+						"component":     "configuration",
+					}).Info("Configuration drift detected during bulk operation")
+				}
+			}
+		}
+		
+		result.Results = append(result.Results, driftResult)
+	}
+	
+	result.CompletedAt = time.Now()
+	result.Duration = result.CompletedAt.Sub(result.StartedAt)
+	
+	s.logger.WithFields(map[string]any{
+		"total_devices":   result.Total,
+		"devices_in_sync": result.InSync,
+		"devices_drifted": result.Drifted,
+		"devices_errors":  result.Errors,
+		"duration_ms":     result.Duration.Milliseconds(),
+		"component":       "configuration",
+	}).Info("Bulk drift detection completed")
+	
+	return result, nil
+}
+
 // ApplyTemplate applies a configuration template to a device
 func (s *Service) ApplyTemplate(deviceID uint, templateID uint, variables map[string]interface{}) error {
 	// Get template
