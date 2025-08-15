@@ -45,12 +45,12 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 #### `make test-full`
 **Purpose**: Run complete test suite including network tests  
-**Command**: `CGO_ENABLED=1 go test -v ./...`  
+**Command**: `CGO_ENABLED=1 go test -v -timeout=5m ./...`  
 **When to use**:
 - Before committing major changes
 - When network-dependent functionality changes
 - Full validation before releases
-- **Warning**: Slower execution due to network tests
+- **Warning**: Slower execution due to network tests, includes 5-minute timeout
 
 ### 2. Race Detection Tests
 
@@ -71,12 +71,12 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 #### `make test-race-full`
 **Purpose**: Full race detection including network tests  
-**Command**: `CGO_ENABLED=1 go test -v -race ./...`  
+**Command**: `CGO_ENABLED=1 go test -v -race -timeout=10m ./...`  
 **When to use**:
 - Comprehensive race detection
 - Before releases
 - When debugging race conditions in network code
-- **Warning**: Slowest test execution
+- **Warning**: Slowest test execution, includes 10-minute timeout
 
 ### 3. Coverage Tests
 
@@ -97,11 +97,12 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 #### `make test-coverage-full`
 **Purpose**: Complete coverage including network tests  
-**Command**: `CGO_ENABLED=1 go test -v -coverprofile=coverage.out ./...`  
+**Command**: `CGO_ENABLED=1 go test -v -timeout=5m -coverprofile=coverage.out ./...`  
 **When to use**:
 - Comprehensive coverage analysis
 - Before releases
 - When you need complete coverage metrics
+- **Warning**: Includes 5-minute timeout for network tests
 
 #### `make test-coverage-ci`
 **Purpose**: Coverage testing optimized for CI/CD  
