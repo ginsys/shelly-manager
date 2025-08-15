@@ -1012,3 +1012,186 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
+
+// GetDriftSchedules handles GET /api/v1/config/drift-schedules
+func (h *Handler) GetDriftSchedules(w http.ResponseWriter, r *http.Request) {
+	schedules, err := h.Service.GetDriftSchedules()
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Error("Failed to get drift schedules")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(schedules)
+}
+
+// CreateDriftSchedule handles POST /api/v1/config/drift-schedules
+func (h *Handler) CreateDriftSchedule(w http.ResponseWriter, r *http.Request) {
+	var schedule configuration.DriftDetectionSchedule
+	if err := json.NewDecoder(r.Body).Decode(&schedule); err != nil {
+		http.Error(w, "Invalid schedule JSON", http.StatusBadRequest)
+		return
+	}
+
+	created, err := h.Service.CreateDriftSchedule(schedule)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"schedule_name": schedule.Name,
+			"error":         err.Error(),
+		}).Error("Failed to create drift schedule")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(created)
+}
+
+// GetDriftSchedule handles GET /api/v1/config/drift-schedules/{id}
+func (h *Handler) GetDriftSchedule(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	schedule, err := h.Service.GetDriftSchedule(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Schedule not found", http.StatusNotFound)
+			return
+		}
+		h.logger.WithFields(map[string]any{
+			"schedule_id": id,
+			"error":       err.Error(),
+		}).Error("Failed to get drift schedule")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(schedule)
+}
+
+// UpdateDriftSchedule handles PUT /api/v1/config/drift-schedules/{id}
+func (h *Handler) UpdateDriftSchedule(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	var updates configuration.DriftDetectionSchedule
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, "Invalid schedule JSON", http.StatusBadRequest)
+		return
+	}
+
+	updated, err := h.Service.UpdateDriftSchedule(uint(id), updates)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Schedule not found", http.StatusNotFound)
+			return
+		}
+		h.logger.WithFields(map[string]any{
+			"schedule_id": id,
+			"error":       err.Error(),
+		}).Error("Failed to update drift schedule")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updated)
+}
+
+// DeleteDriftSchedule handles DELETE /api/v1/config/drift-schedules/{id}
+func (h *Handler) DeleteDriftSchedule(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	err = h.Service.DeleteDriftSchedule(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Schedule not found", http.StatusNotFound)
+			return
+		}
+		h.logger.WithFields(map[string]any{
+			"schedule_id": id,
+			"error":       err.Error(),
+		}).Error("Failed to delete drift schedule")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+// ToggleDriftSchedule handles POST /api/v1/config/drift-schedules/{id}/toggle
+func (h *Handler) ToggleDriftSchedule(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	updated, err := h.Service.ToggleDriftSchedule(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Schedule not found", http.StatusNotFound)
+			return
+		}
+		h.logger.WithFields(map[string]any{
+			"schedule_id": id,
+			"error":       err.Error(),
+		}).Error("Failed to toggle drift schedule")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updated)
+}
+
+// GetDriftScheduleRuns handles GET /api/v1/config/drift-schedules/{id}/runs
+func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse optional limit parameter
+	limit := 50 // Default limit
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	runs, err := h.Service.GetDriftScheduleRuns(uint(id), limit)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"schedule_id": id,
+			"error":       err.Error(),
+		}).Error("Failed to get drift schedule runs")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(runs)
+}

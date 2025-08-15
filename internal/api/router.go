@@ -64,6 +64,15 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/config/bulk-export", handler.BulkExportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect", handler.BulkDetectConfigDrift).Methods("POST")
 	
+	// Drift detection schedule routes
+	api.HandleFunc("/config/drift-schedules", handler.GetDriftSchedules).Methods("GET")
+	api.HandleFunc("/config/drift-schedules", handler.CreateDriftSchedule).Methods("POST")
+	api.HandleFunc("/config/drift-schedules/{id}", handler.GetDriftSchedule).Methods("GET")
+	api.HandleFunc("/config/drift-schedules/{id}", handler.UpdateDriftSchedule).Methods("PUT")
+	api.HandleFunc("/config/drift-schedules/{id}", handler.DeleteDriftSchedule).Methods("DELETE")
+	api.HandleFunc("/config/drift-schedules/{id}/toggle", handler.ToggleDriftSchedule).Methods("POST")
+	api.HandleFunc("/config/drift-schedules/{id}/runs", handler.GetDriftScheduleRuns).Methods("GET")
+	
 	// Discovery route
 	api.HandleFunc("/discover", handler.DiscoverHandler).Methods("POST")
 	
