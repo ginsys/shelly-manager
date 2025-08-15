@@ -6,6 +6,12 @@ bin/
 *.so
 *.dylib
 
+# Build artifacts
+shelly-manager
+shelly-test
+cmd/shelly-manager/shelly-manager
+cmd/shelly-test/shelly-test
+
 # Test binary, built with `go test -c`
 *.test
 

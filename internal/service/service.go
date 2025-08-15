@@ -980,3 +980,40 @@ func (s *ShellyService) GetDriftScheduleRuns(scheduleID uint, limit int) ([]conf
 	
 	return runs, nil
 }
+
+// Comprehensive Drift Reporting Methods
+
+// GetDriftReports returns drift reports with optional filtering
+func (s *ShellyService) GetDriftReports(reportType string, deviceID *uint, limit int) ([]configuration.DriftReport, error) {
+	return s.ConfigSvc.GetDriftReports(reportType, deviceID, limit)
+}
+
+// GenerateDeviceDriftReport generates a comprehensive drift report for a single device
+func (s *ShellyService) GenerateDeviceDriftReport(deviceID uint) (*configuration.DriftReport, error) {
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+	
+	client, err := s.getClientWithAuthRetry(device)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+	
+	return s.ConfigSvc.GenerateDeviceDriftReport(deviceID, client)
+}
+
+// GetDriftTrends returns drift trends with optional filtering
+func (s *ShellyService) GetDriftTrends(deviceID *uint, resolved *bool, limit int) ([]configuration.DriftTrend, error) {
+	return s.ConfigSvc.GetDriftTrends(deviceID, resolved, limit)
+}
+
+// MarkTrendResolved marks a drift trend as resolved
+func (s *ShellyService) MarkTrendResolved(trendID uint) error {
+	return s.ConfigSvc.MarkTrendResolved(trendID)
+}
+
+// EnhanceBulkDriftResult adds comprehensive reporting to bulk drift results
+func (s *ShellyService) EnhanceBulkDriftResult(result *configuration.BulkDriftResult, scheduleID *uint) (*configuration.DriftReport, error) {
+	return s.ConfigSvc.EnhanceBulkDriftResult(result, scheduleID)
+}

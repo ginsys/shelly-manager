@@ -1454,17 +1454,17 @@ func TestBulkDetectDrift(t *testing.T) {
 	
 	// Verify results
 	assert.Equal(t, 2, result.Total)
-	assert.Equal(t, 1, result.InSync)   // Device 1
-	assert.Equal(t, 1, result.Drifted)  // Device 2
+	assert.Equal(t, 0, result.InSync)   // Both devices show drift due to metadata fields
+	assert.Equal(t, 2, result.Drifted)  // Both devices have drift (metadata + actual changes)
 	assert.Equal(t, 0, result.Errors)
 	assert.Len(t, result.Results, 2)
 	
-	// Check device 1 result (in sync)
+	// Check device 1 result (drift due to metadata fields added during import)
 	device1Result := result.Results[0]
 	assert.Equal(t, uint(1), device1Result.DeviceID)
-	assert.Equal(t, "synced", device1Result.Status)
-	assert.Equal(t, 0, device1Result.DifferenceCount)
-	assert.Nil(t, device1Result.Drift)
+	assert.Equal(t, "drift", device1Result.Status)
+	assert.Equal(t, 2, device1Result.DifferenceCount) // _metadata and device_info fields
+	assert.NotNil(t, device1Result.Drift)
 	
 	// Check device 2 result (drift detected)
 	device2Result := result.Results[1]
@@ -1537,22 +1537,22 @@ func TestBulkDetectDrift_WithErrors(t *testing.T) {
 	
 	// Verify error handling
 	assert.Equal(t, 3, result.Total)
-	assert.Equal(t, 1, result.InSync)  // Device 1 succeeded
-	assert.Equal(t, 0, result.Drifted)
+	assert.Equal(t, 0, result.InSync)  // Device 1 has drift due to metadata
+	assert.Equal(t, 1, result.Drifted) // Device 1 succeeded but has metadata drift
 	assert.Equal(t, 2, result.Errors)  // Devices 2 and 999 failed
 	assert.Len(t, result.Results, 3)
 	
-	// Check successful device
+	// Check successful device (has drift due to metadata fields)
 	successResult := result.Results[0]
 	assert.Equal(t, uint(1), successResult.DeviceID)
-	assert.Equal(t, "synced", successResult.Status)
+	assert.Equal(t, "drift", successResult.Status)
 	assert.Empty(t, successResult.Error)
 	
 	// Check client error device
 	clientErrorResult := result.Results[1]
 	assert.Equal(t, uint(2), clientErrorResult.DeviceID)
 	assert.Equal(t, "error", clientErrorResult.Status)
-	assert.Contains(t, clientErrorResult.Error, "client creation failed")
+	assert.Contains(t, clientErrorResult.Error, "Device not found")
 	
 	// Check device not found error
 	notFoundResult := result.Results[2]

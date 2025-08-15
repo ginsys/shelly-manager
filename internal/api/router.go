@@ -63,6 +63,7 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/config/bulk-import", handler.BulkImportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-export", handler.BulkExportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect", handler.BulkDetectConfigDrift).Methods("POST")
+	api.HandleFunc("/config/bulk-drift-detect-enhanced", handler.EnhancedBulkDetectConfigDrift).Methods("POST")
 	
 	// Drift detection schedule routes
 	api.HandleFunc("/config/drift-schedules", handler.GetDriftSchedules).Methods("GET")
@@ -72,6 +73,14 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/config/drift-schedules/{id}", handler.DeleteDriftSchedule).Methods("DELETE")
 	api.HandleFunc("/config/drift-schedules/{id}/toggle", handler.ToggleDriftSchedule).Methods("POST")
 	api.HandleFunc("/config/drift-schedules/{id}/runs", handler.GetDriftScheduleRuns).Methods("GET")
+	
+	// Comprehensive drift reporting routes
+	api.HandleFunc("/config/drift-reports", handler.GetDriftReports).Methods("GET")
+	api.HandleFunc("/config/drift-trends", handler.GetDriftTrends).Methods("GET")
+	api.HandleFunc("/config/drift-trends/{id}/resolve", handler.MarkTrendResolved).Methods("POST")
+	
+	// Device-specific drift reporting
+	api.HandleFunc("/devices/{id}/drift-report", handler.GenerateDeviceDriftReport).Methods("POST")
 	
 	// Discovery route
 	api.HandleFunc("/discover", handler.DiscoverHandler).Methods("POST")
