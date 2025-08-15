@@ -139,15 +139,16 @@ func TestScanHost_Gen2Device(t *testing.T) {
 }
 
 func TestScanHost_NoDevice(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
-	}
+	// Use improved network test strategy
+	config := testutil.DefaultNetworkConfig()
+	testutil.SkipNetworkTestIfNeeded(t, config)
 
-	scanner := NewScanner(100*time.Millisecond, 1) // Very short timeout
-	ctx := context.Background()
+	scanner := NewScanner(config.QuickTimeout, 1) // Very short timeout
+	ctx, cancel := testutil.CreateNetworkTestContext(config)
+	defer cancel()
 
 	// Try to scan a non-routable address (TEST-NET-1 range)
-	device, err := scanner.ScanHost(ctx, "192.0.2.1")
+	device, err := scanner.ScanHost(ctx, testutil.TestNetworkAddress())
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -158,9 +159,9 @@ func TestScanHost_NoDevice(t *testing.T) {
 }
 
 func TestScanHost_Timeout(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
-	}
+	// Use improved network test strategy
+	config := testutil.DefaultNetworkConfig()
+	testutil.SkipNetworkTestIfNeeded(t, config)
 
 	scanner := NewScanner(10*time.Millisecond, 1) // Very short timeout
 	ctx := context.Background()
@@ -272,9 +273,9 @@ func TestScanNetwork_InvalidCIDR(t *testing.T) {
 }
 
 func TestScanNetwork_SmallRange(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
-	}
+	// Use improved network test strategy
+	config := testutil.DefaultNetworkConfig()
+	testutil.SkipNetworkTestIfNeeded(t, config)
 
 	// Create mock server
 	server := testutil.MockShellyServer()

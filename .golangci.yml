@@ -3,14 +3,6 @@
 run:
   timeout: 5m
   tests: true
-  skip-dirs:
-    - vendor
-    - bin
-    - data
-    - web
-    - docs
-  skip-files:
-    - ".*_test.go"
 
 linters:
   enable:
@@ -32,8 +24,8 @@ linters:
     - gochecknoglobals
     - godot
     - godox
-    - goerr113
-    - gomnd
+    - err113
+    - mnd
     - nestif
     - testpackage
     - wsl
@@ -43,12 +35,21 @@ linters-settings:
     local-prefixes: github.com/ginsys/shelly-manager
   
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
   
   misspell:
     locale: US
 
 issues:
+  exclude-dirs:
+    - vendor
+    - bin
+    - data
+    - web
+    - docs
+  exclude-files:
+    - ".*_test.go"
   exclude-rules:
     - path: _test\.go
       linters:

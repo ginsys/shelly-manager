@@ -45,10 +45,12 @@ func (c *Collector) Start(ctx context.Context) error {
 	// Create new channels for this start cycle
 	c.stopCh = make(chan struct{})
 	c.doneCh = make(chan struct{})
+	// Read interval while holding lock
+	interval := c.interval
 	c.mu.Unlock()
 
 	c.logger.WithFields(map[string]any{
-		"interval":  c.interval,
+		"interval":  interval,
 		"component": "metrics_collector",
 	}).Info("Starting metrics collector")
 
@@ -134,7 +136,12 @@ func (c *Collector) collectLoop(ctx context.Context) {
 		}).Error("Initial metrics collection failed")
 	}
 
-	ticker := time.NewTicker(c.interval)
+	// Read initial interval safely
+	c.mu.RLock()
+	initialInterval := c.interval
+	c.mu.RUnlock()
+
+	ticker := time.NewTicker(initialInterval)
 	defer ticker.Stop()
 
 	for {
@@ -142,7 +149,7 @@ func (c *Collector) collectLoop(ctx context.Context) {
 		case <-ctx.Done():
 			c.logger.WithFields(map[string]any{
 				"component": "metrics_collector",
-			}).Info("Metrics collector context cancelled")
+			}).Info("Metrics collector context canceled")
 			return
 
 		case <-c.stopCh:
@@ -156,10 +163,11 @@ func (c *Collector) collectLoop(ctx context.Context) {
 			currentInterval := c.interval
 			c.mu.RUnlock()
 
-			// Update ticker if interval changed
-			if ticker.C == nil || currentInterval != c.interval {
+			// Update ticker if interval changed (compare with last known interval)
+			if currentInterval != initialInterval {
 				ticker.Stop()
 				ticker = time.NewTicker(currentInterval)
+				initialInterval = currentInterval // Update our cached value
 			}
 
 			// Collect metrics
