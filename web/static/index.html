@@ -1576,55 +1576,60 @@
 
         async function bulkExportConfig() {
             if (selectedDevices.size === 0) {
-                console.log('Please select at least one device');
+                showNotification('⚠️ Please select at least one device', 'warning');
                 return;
             }
             
-            console.log(`Starting export for ${selectedDevices.size} device(s)`);
-            
             console.log(`Starting bulk export for ${selectedDevices.size} devices...`);
-            let success = 0, failed = 0;
-            const results = [];
+            showNotification(`📤 Starting export for ${selectedDevices.size} device(s)...`, 'info');
             
-            // Run sequentially with delay
-            let current = 0;
-            for (const deviceId of selectedDevices) {
-                current++;
-                console.log(`Processing device ${current} of ${selectedDevices.size} (ID: ${deviceId})...`);
-                
-                try {
-                    const response = await fetch(`${API_BASE}/devices/${deviceId}/config/export`, { 
-                        method: 'POST' 
-                    });
-                    
-                    if (response.ok) {
-                        success++;
-                        updateConfigStatus(deviceId, 'synced');
-                        console.log(`✓ Device ${deviceId} exported successfully`);
-                    } else {
-                        failed++;
-                        const error = await response.text();
-                        results.push(`Device ${deviceId}: ${error}`);
-                        console.error(`✗ Device ${deviceId} failed: ${error}`);
+            try {
+                const response = await fetch(`${API_BASE}/config/bulk-export`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
                     }
-                } catch (error) {
-                    failed++;
-                    results.push(`Device ${deviceId}: ${error.message}`);
-                    console.error(`✗ Device ${deviceId} error: ${error.message}`);
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
-                // Add small delay between requests
-                if (current < selectedDevices.size) {
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                const result = await response.json();
+                console.log('Bulk export result:', result);
+                
+                // Update UI status for successful exports
+                if (result.results) {
+                    result.results.forEach(deviceResult => {
+                        if (deviceResult.status === 'success') {
+                            updateConfigStatus(deviceResult.device_id, 'synced');
+                        }
+                    });
                 }
+                
+                // Show summary notification
+                const message = `Export complete: ${result.success} succeeded, ${result.errors} failed`;
+                if (result.errors === 0) {
+                    showNotification(`✅ ${message}`, 'success');
+                } else {
+                    showNotification(`⚠️ ${message}`, 'warning');
+                }
+                
+                // Log detailed results
+                if (result.results) {
+                    result.results.forEach(deviceResult => {
+                        if (deviceResult.status === 'success') {
+                            console.log(`✓ Device ${deviceResult.device_id} (${deviceResult.ip}) exported successfully`);
+                        } else {
+                            console.error(`✗ Device ${deviceResult.device_id} (${deviceResult.ip}) failed: ${deviceResult.error}`);
+                        }
+                    });
+                }
+                
+            } catch (error) {
+                console.error('Bulk export failed:', error);
+                showNotification(`❌ Bulk export failed: ${error.message}`, 'error');
             }
-            
-            // Show results
-            let message = `Export complete: ${success} succeeded, ${failed} failed`;
-            if (results.length > 0) {
-                message += '\n\nErrors:\n' + results.join('\n');
-            }
-            console.log(message);
         }
 
         function bulkApplyTemplate() {

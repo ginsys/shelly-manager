@@ -306,35 +306,59 @@ func (s *Service) ExportToDevice(deviceID uint, client shelly.Client) error {
 		return fmt.Errorf("failed to get device info: %w", err)
 	}
 	
+	// Parse stored configuration data
+	var configData map[string]interface{}
+	if err := json.Unmarshal(config.Config, &configData); err != nil {
+		return fmt.Errorf("failed to parse stored configuration: %w", err)
+	}
+	
+	// Remove metadata before sending to device
+	exportConfig := make(map[string]interface{})
+	for key, value := range configData {
+		// Skip metadata fields that shouldn't be sent to device
+		if key != "_metadata" && key != "device_info" {
+			exportConfig[key] = value
+		}
+	}
+	
+	if len(exportConfig) == 0 {
+		return fmt.Errorf("no configuration data to export")
+	}
+	
+	// Validate configuration before export
+	if err := s.validateConfigForExport(exportConfig, info); err != nil {
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
+	
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"component": "configuration",
+		"config_size": len(exportConfig),
+	}).Info("Starting configuration export to device")
+	
 	// Apply configuration based on generation
 	switch info.Generation {
 	case 1:
-		// Parse Gen1 config
-		var gen1Config Gen1Config
-		if err := json.Unmarshal(config.Config, &gen1Config); err != nil {
-			return fmt.Errorf("failed to parse Gen1 config: %w", err)
+		// Gen1 devices use HTTP POST to /settings
+		if err := client.SetConfig(ctx, exportConfig); err != nil {
+			return fmt.Errorf("failed to apply Gen1 configuration: %w", err)
 		}
 		
-		// Apply settings (would need to implement SetSettings in Gen1 client)
-		// For now, we'll just update the sync status
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
 			"component": "configuration",
-		}).Warn("Gen1 configuration export not fully implemented")
+		}).Info("Successfully applied Gen1 configuration")
 		
 	case 2, 3:
-		// Parse Gen2 config
-		var gen2Config Gen2Config
-		if err := json.Unmarshal(config.Config, &gen2Config); err != nil {
-			return fmt.Errorf("failed to parse Gen2+ config: %w", err)
+		// Gen2+ devices use RPC calls
+		if err := client.SetConfig(ctx, exportConfig); err != nil {
+			return fmt.Errorf("failed to apply Gen2+ configuration: %w", err)
 		}
 		
-		// Apply settings (would need to implement SetConfig in Gen2 client)
-		// For now, we'll just update the sync status
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
 			"component": "configuration",
-		}).Warn("Gen2+ configuration export not fully implemented")
+		}).Info("Successfully applied Gen2+ configuration")
 		
 	default:
 		return fmt.Errorf("unsupported device generation: %d", info.Generation)
@@ -786,4 +810,82 @@ func (s *Service) createHistory(deviceID, configID uint, action string, oldConfi
 			"component": "configuration",
 		}).Error("Failed to create configuration history")
 	}
+}
+
+// validateConfigForExport performs safety checks on configuration before export
+func (s *Service) validateConfigForExport(config map[string]interface{}, deviceInfo *shelly.DeviceInfo) error {
+	// Check for critical WiFi configuration that could disconnect device
+	if wifi, ok := config["wifi"].(map[string]interface{}); ok {
+		// Ensure WiFi remains enabled to prevent device disconnection
+		if enable, exists := wifi["enable"]; exists {
+			if enableBool, ok := enable.(bool); ok && !enableBool {
+				return fmt.Errorf("cannot disable WiFi via configuration export - device would become unreachable")
+			}
+		}
+		
+		// Validate SSID is not empty if WiFi is being configured
+		if ssid, exists := wifi["ssid"]; exists {
+			if ssidStr, ok := ssid.(string); ok && ssidStr == "" {
+				return fmt.Errorf("WiFi SSID cannot be empty")
+			}
+		}
+	}
+	
+	// For Gen1 devices, check critical authentication settings
+	if deviceInfo.Generation == 1 {
+		if auth, ok := config["login"].(map[string]interface{}); ok {
+			// If auth is being enabled, ensure credentials are provided
+			if enabled, exists := auth["enabled"]; exists {
+				if enabledBool, ok := enabled.(bool); ok && enabledBool {
+					if username, hasUser := auth["username"]; !hasUser || username == "" {
+						return fmt.Errorf("authentication username required when enabling auth")
+					}
+					if password, hasPass := auth["password"]; !hasPass || password == "" {
+						return fmt.Errorf("authentication password required when enabling auth")
+					}
+				}
+			}
+		}
+	}
+	
+	// For Gen2+ devices, check authentication in sys.auth
+	if deviceInfo.Generation >= 2 {
+		if sys, ok := config["sys"].(map[string]interface{}); ok {
+			if auth, ok := sys["auth"].(map[string]interface{}); ok {
+				if enabled, exists := auth["enable"]; exists {
+					if enabledBool, ok := enabled.(bool); ok && enabledBool {
+						if user, hasUser := auth["user"]; !hasUser || user == "" {
+							return fmt.Errorf("authentication user required when enabling auth")
+						}
+						if pass, hasPass := auth["pass"]; !hasPass || pass == "" {
+							return fmt.Errorf("authentication password required when enabling auth")
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Validate network configuration doesn't create conflicts
+	if network, ok := config["wifi_sta"].(map[string]interface{}); ok {
+		// Check for static IP configuration validity
+		if ipv4mode, exists := network["ipv4mode"]; exists {
+			if mode, ok := ipv4mode.(string); ok && mode == "static" {
+				requiredFields := []string{"ip", "netmask", "gw"}
+				for _, field := range requiredFields {
+					if value, hasField := network[field]; !hasField || value == "" {
+						return fmt.Errorf("static IP configuration requires %s field", field)
+					}
+				}
+			}
+		}
+	}
+	
+	s.logger.WithFields(map[string]any{
+		"device_id":  deviceInfo.ID,
+		"generation": deviceInfo.Generation,
+		"component":  "configuration",
+	}).Debug("Configuration validation passed")
+	
+	return nil
 }
