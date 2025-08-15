@@ -11,6 +11,8 @@ import (
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/shelly"
+	"github.com/ginsys/shelly-manager/internal/shelly/gen1"
+	"github.com/ginsys/shelly-manager/internal/shelly/gen2"
 	"gorm.io/gorm"
 )
 
@@ -27,6 +29,8 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 		&ConfigTemplate{},
 		&DeviceConfig{},
 		&ConfigHistory{},
+		&DriftDetectionSchedule{},
+		&DriftDetectionRun{},
 	)
 	
 	return &Service{
@@ -982,4 +986,56 @@ func (s *Service) validateConfigForExport(config map[string]interface{}, deviceI
 	}).Debug("Configuration validation passed")
 	
 	return nil
+}
+
+// createClientForDevice creates a Shelly client for the specified device
+func (s *Service) createClientForDevice(deviceID uint) (shelly.Client, error) {
+	// Get device information from database
+	var device database.Device
+	if err := s.db.First(&device, deviceID).Error; err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+
+	// Parse device settings to get generation and auth info
+	var settings struct {
+		Gen      int    `json:"gen"`
+		AuthUser string `json:"auth_user"`
+		AuthPass string `json:"auth_pass"`
+	}
+	
+	if device.Settings != "" {
+		if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+			s.logger.WithFields(map[string]any{
+				"device_id": deviceID,
+				"error":     err.Error(),
+			}).Error("Failed to parse device settings")
+			// Default to Gen1 if parsing fails
+			settings.Gen = 1
+		}
+	} else {
+		// Default to Gen1 if no settings
+		settings.Gen = 1
+	}
+
+	// Create appropriate client based on generation
+	switch settings.Gen {
+	case 1:
+		// Gen1 device
+		var opts []gen1.ClientOption
+		if settings.AuthUser != "" && settings.AuthPass != "" {
+			opts = append(opts, gen1.WithAuth(settings.AuthUser, settings.AuthPass))
+		}
+		return gen1.NewClient(device.IP, opts...), nil
+		
+	case 2, 3:
+		// Gen2+ device
+		var opts []gen2.ClientOption
+		if settings.AuthUser != "" && settings.AuthPass != "" {
+			opts = append(opts, gen2.WithAuth(settings.AuthUser, settings.AuthPass))
+		}
+		return gen2.NewClient(device.IP, opts...), nil
+		
+	default:
+		return nil, fmt.Errorf("unsupported device generation: %d", settings.Gen)
+	}
 }

@@ -251,3 +251,32 @@ type DriftResult struct {
 	DifferenceCount int          `json:"difference_count,omitempty"`
 	Drift           *ConfigDrift `json:"drift,omitempty"`
 }
+
+// DriftDetectionSchedule represents an automated drift detection schedule
+type DriftDetectionSchedule struct {
+	ID          uint      `json:"id" gorm:"primaryKey"`
+	Name        string    `json:"name" gorm:"not null"`
+	Description string    `json:"description"`
+	Enabled     bool      `json:"enabled" gorm:"default:true"`
+	CronSpec    string    `json:"cron_spec" gorm:"not null"` // Cron expression (e.g., "0 */6 * * *" for every 6 hours)
+	DeviceIDs   []uint    `json:"device_ids" gorm:"-"`       // Device IDs to check (empty = all devices)
+	DeviceFilter json.RawMessage `json:"device_filter" gorm:"type:text"` // JSON filter criteria
+	LastRun     *time.Time `json:"last_run"`
+	NextRun     *time.Time `json:"next_run"`
+	RunCount    int       `json:"run_count" gorm:"default:0"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// DriftDetectionRun represents a single execution of a drift detection schedule
+type DriftDetectionRun struct {
+	ID         uint            `json:"id" gorm:"primaryKey"`
+	ScheduleID uint            `json:"schedule_id" gorm:"index;not null"`
+	Status     string          `json:"status"` // "running", "completed", "failed"
+	StartedAt  time.Time       `json:"started_at"`
+	CompletedAt *time.Time     `json:"completed_at"`
+	Duration   *time.Duration  `json:"duration"`
+	Results    json.RawMessage `json:"results" gorm:"type:text"` // BulkDriftResult JSON
+	Error      string          `json:"error,omitempty"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
