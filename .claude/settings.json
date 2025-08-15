@@ -34,7 +34,8 @@
       "Bash(curl:*)",
       "Bash(timeout 10s go test:*)",
       "Bash(CGO_ENABLED=1 go test:*)",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
