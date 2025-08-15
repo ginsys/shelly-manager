@@ -1,8 +1,10 @@
 package logging
 
 import (
+	"bufio"
 	"context"
 	"math/rand"
+	"net"
 	"net/http"
 	"time"
 )
@@ -26,6 +28,14 @@ func (rw *responseWriter) Write(data []byte) (int, error) {
 	n, err := rw.ResponseWriter.Write(data)
 	rw.size += n
 	return n, err
+}
+
+// Hijack implements http.Hijacker interface for WebSocket support
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+	return nil, nil, http.ErrNotSupported
 }
 
 // HTTPMiddleware returns a middleware that logs HTTP requests
