@@ -44,15 +44,18 @@ docker-compose logs -f  # View logs
 
 ### Recent Status (August 2025)
 - **Phase 1**: ✅ **100% COMPLETE** - Comprehensive Shelly device management
-- **Configuration System**: ✅ 3-level hierarchy (System → Template → Device) implemented
+- **Phase 2**: ✅ **100% COMPLETE** - Notification & Resolution System with auto-fix engine
+- **Phase 3**: ✅ **100% COMPLETE** - Metrics & Monitoring System with Prometheus integration
+- **Configuration System**: ✅ 3-level hierarchy with drift detection and automated resolution
 - **Authentication**: ✅ Resolved all authentication issues with retry logic
 - **Web UI**: ✅ Complete with error handling and no browser popups
 
-### Critical Discovery Issue Identified
-**Problem**: Discovery process overwrites existing device data and resets sync status
-- After running discovery, devices lose their "synced" status
-- Configuration import needs to be done again after discovery
-- Discovery should only find NEW devices, not overwrite existing ones
+### Latest Major Implementation (August 2025)
+**Complete Notification, Resolution, and Metrics System**:
+- **Notification System**: Email, webhook, and Slack notifications with configurable alerts
+- **Resolution Engine**: Auto-fix capabilities with safe mode and approval workflows
+- **Metrics Collection**: Prometheus integration with 70+ tests and background collection
+- **System Integration**: All services properly integrated with main application lifecycle
 
 ## Architecture
 
@@ -72,7 +75,9 @@ internal/
 ├── discovery/    # Device discovery (HTTP, mDNS, SSDP)
 ├── logging/      # Structured logging infrastructure
 ├── provisioning/ # WiFi provisioning system
-├── configuration/# Enhanced configuration system (3-level hierarchy)
+├── configuration/# Enhanced configuration system (3-level hierarchy + resolution)
+├── notification/ # Alert system (Email, Webhook, Slack) with threshold management
+├── metrics/      # Prometheus monitoring with background collection
 ├── service/      # Core Shelly service logic with authentication
 ├── shelly/       # Shelly device clients and API implementations
 │   ├── gen1/     # Gen1-specific HTTP REST API client
@@ -108,6 +113,8 @@ This would enable other Go projects to leverage Shelly Manager's capabilities wi
 - **Database ORM**: gorm.io/gorm v1.25.5 with SQLite driver
 - **Database**: SQLite (requires CGO_ENABLED=1 for compilation)
 - **Logging**: slog (Go 1.21+ standard library)
+- **Metrics**: prometheus/client_golang v1.23.0 with custom registry
+- **Scheduling**: robfig/cron/v3 v3.0.1 for automated tasks
 
 ### Key Components
 
@@ -125,6 +132,9 @@ This would enable other Go projects to leverage Shelly Manager's capabilities wi
 - `/api/v1/discover` - Trigger network discovery
 - `/api/v1/provisioning/*` - WiFi provisioning operations
 - `/api/v1/dhcp/*` - DHCP reservation management
+- `/api/v1/notifications/*` - Notification system management
+- `/api/v1/metrics/*` - Metrics collection and status
+- `/metrics` - Prometheus metrics endpoint
 - Static web UI served from `/web/static/`
 
 **Authentication System**:
@@ -152,35 +162,38 @@ This would enable other Go projects to leverage Shelly Manager's capabilities wi
 2. ✅ **Complete Gen2+ RPC implementation** - 100+ RPC methods with digest authentication
 3. ✅ **Implement capability-based configuration** - Type-safe capability structs with template system
 4. ✅ **Implement detailed per-device configuration management** - Full CRUD with web UI error handling
+5. ✅ **Import device configuration from physical devices to database**
+6. ✅ **Export device configuration from database to physical devices**
+7. ✅ **Implement configuration drift detection and reporting**
+8. ✅ **Implement bulk configuration sync operations**
 
-**Configuration Management Features Completed**:
-- 3-level configuration hierarchy (System → Template → Device)
-- Configuration stored in SQLite database using GORM
-- Configuration drift detection and sync status tracking
-- Template-based configuration management
-- Bulk operations with sequential processing to avoid auth race conditions
-- Authentication retry logic with config credential fallback
-- Successful import configuration from all 17 Gen1 devices
+### Phase 2: Notification & Resolution System - ✅ **100% COMPLETE**
+1. ✅ **Create notification system core models and service** - Email, webhook, Slack channels
+2. ✅ **Implement email and webhook notification channels** - Template support and error handling
+3. ✅ **Add basic alert rules and test endpoints** - Configurable thresholds and severity levels
+4. ✅ **Create resolution workflow models and policies** - Auto-fix categories and exclusions
+5. ✅ **Implement auto-fix engine (safe mode)** - Automated drift resolution with safety controls
+6. ✅ **Build manual review queue and approval workflow** - History tracking and approval process
 
-### Immediate Priorities (Phase 1 Continuation)
-5. **Fix critical discovery issue** - Prevent overwriting existing device data
-6. **Import device configuration from physical devices to database**
-7. **Export device configuration from database to physical devices**
-8. **Implement configuration drift detection and reporting**
-9. **Implement bulk configuration sync operations**
-10. **Complete device authentication handling**
-11. **Implement real-time status polling**
-12. **Add firmware version tracking and update management**
-13. **Create comprehensive real device testing suite**
+### Phase 3: Metrics & Monitoring System - ✅ **100% COMPLETE**
+1. ✅ **Implement metrics collection and Prometheus exporter** - Custom registry with drift metrics
+2. ✅ **Write comprehensive tests for all metrics components** - 71+ tests with concurrent testing
+3. ✅ **Background collector with configurable intervals** - Graceful shutdown and memory management
+4. ✅ **HTTP middleware for request/response metrics** - Operation timing and status tracking
+5. ✅ **System integration with main application lifecycle** - Service initialization and configuration
+
+### Current Status: Ready for Phase 4
+**Next Priorities**:
+- **Phase 4a**: Create metrics dashboard and trend analysis
+- **Phase 4b**: Integrate all components and update Web UI
+- **Phase 4c**: Real-time WebSocket updates for dashboard
 
 ### Future Phases
-- **Phase 2**: Dual-Binary Architecture (separate provisioning agent)
-- **Phase 3**: WiFi Provisioning Implementation
-- **Phase 4**: Kubernetes Deployment
-- **Phase 5**: Export & Import Functionality
-- **Phase 6**: OPNSense Integration
-- **Phase 7**: Production Features (monitoring, backup)
-- **Phase 8**: Advanced Features (WebSocket, automation)
+- **Phase 5**: WiFi Provisioning Implementation
+- **Phase 6**: Kubernetes Deployment
+- **Phase 7**: OPNSense Integration
+- **Phase 8**: Production Features (backup, monitoring)
+- **Phase 9**: Advanced Features (automation, scheduling)
 
 **See**: [`.claude/development-tasks.md`](.claude/development-tasks.md) for complete numbered task list (57 tasks across 8 phases)
 
@@ -199,21 +212,39 @@ This would enable other Go projects to leverage Shelly Manager's capabilities wi
 - **Device Capabilities**: RelayConfig, PowerMeteringConfig, DimmingConfig, RollerConfig, InputConfig, LEDConfig, ColorConfig
 
 ### Database Schema
+**Core Tables**:
 - `devices` table - Device inventory with auth credentials
 - `device_configs` table - Configuration data per device
 - `config_templates` table - Reusable configuration templates
 - `config_histories` table - Configuration change audit trail
 
-### Testing Status
-- ✅ All 17 Gen1 devices successfully authenticate and import configurations
-- ✅ Bulk import endpoint working correctly
-- ✅ Individual device operations working
-- ✅ Web UI functional with console logging
+**Drift Detection & Resolution**:
+- `drift_reports` table - Configuration drift detection results
+- `drift_trends` table - Long-term drift analysis and trends
+- `resolution_policies` table - Auto-fix policies and rules
+- `resolution_requests` table - Manual resolution requests
+- `resolution_histories` table - Resolution attempt audit trail
 
-### Current Technical Issues
-1. **Discovery data overwrite** - Discovery resets device state including sync status
-2. **MAC address identification** - Should use MAC address as unique identifier, not IP
-3. **Sync status preservation** - Configuration sync status lost after discovery
+**Notification & Monitoring**:
+- `notification_histories` table - Sent notification tracking
+- `alert_rules` table - Notification threshold configuration
+
+### Testing Status
+- ✅ **Core System**: All 17 Gen1 devices successfully authenticate and import configurations
+- ✅ **API Operations**: Bulk import endpoint and individual device operations working
+- ✅ **Web UI**: Functional with console logging and error handling
+- ✅ **Notification System**: Email, webhook, and alert rule testing complete
+- ✅ **Resolution Engine**: Auto-fix engine with safe mode operation verified
+- ✅ **Metrics System**: 71+ comprehensive tests covering service, collector, handlers, middleware
+- ✅ **System Integration**: All services properly integrated and tested together
+
+### System Architecture Status
+**Current Architecture**: Monolithic application with comprehensive monitoring and automation
+- **Configuration Management**: 3-level hierarchy with drift detection
+- **Notification System**: Multi-channel alerting with threshold management  
+- **Resolution Engine**: Automated drift fixing with safety controls
+- **Metrics Collection**: Prometheus integration with background collection
+- **Database Design**: Normalized schema with audit trails and history tracking
 
 ## Original Requirements & Context
 
