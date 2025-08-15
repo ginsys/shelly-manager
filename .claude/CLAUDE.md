@@ -38,24 +38,35 @@ docker-compose logs -f  # View logs
 
 ### Current Status
 **Type**: Shelly smart home device manager  
-**Language**: Go 1.21  
+**Language**: Go 1.23.0  
 **Module**: `github.com/ginsys/shelly-manager`  
-**Stage**: Phase 1 Complete - Ready for Phase 2 implementation
+**Stage**: Phase 4 Complete - Configuration System Implementation Required
 
 ### Recent Status (August 2025)
 - **Phase 1**: ✅ **100% COMPLETE** - Comprehensive Shelly device management
 - **Phase 2**: ✅ **100% COMPLETE** - Notification & Resolution System with auto-fix engine
 - **Phase 3**: ✅ **100% COMPLETE** - Metrics & Monitoring System with Prometheus integration
-- **Configuration System**: ✅ 3-level hierarchy with drift detection and automated resolution
+- **Phase 4**: ✅ **100% COMPLETE** - Real-time Metrics Dashboard with WebSocket integration
 - **Authentication**: ✅ Resolved all authentication issues with retry logic
 - **Web UI**: ✅ Complete with error handling and no browser popups
 
 ### Latest Major Implementation (August 2025)
-**Complete Notification, Resolution, and Metrics System**:
-- **Notification System**: Email, webhook, and Slack notifications with configurable alerts
-- **Resolution Engine**: Auto-fix capabilities with safe mode and approval workflows
-- **Metrics Collection**: Prometheus integration with 70+ tests and background collection
-- **System Integration**: All services properly integrated with main application lifecycle
+**Real-time Metrics Dashboard with WebSocket Integration** (Phase 4 - commit a6337a0):
+- **WebSocket Server**: Real-time metrics streaming with client management and broadcasting
+- **Dashboard UI**: 5 comprehensive tabs (Overview, Devices, Drift, Notifications, Resolutions)
+- **Chart.js Integration**: Interactive charts with device status and drift analysis
+- **WebSocket Fixes**: Resolved Hijacker interface issues in HTTP middleware
+- **Dependencies**: Added gorilla/websocket v1.5.3 for WebSocket support
+
+### **🚨 CRITICAL PRIORITY: Configuration System Architecture Gap**
+**Issue Identified**: Sophisticated capability-based configuration architecture exists in documentation but implementation uses generic JSON instead of typed structures.
+
+**Current Problems**:
+- MQTT/network settings exist in backend but not exposed in UI
+- Edit buttons are non-functional stubs (console.log only)
+- Templates use JSON textareas instead of typed forms  
+- No capability-based group management
+- Missing device-type specific configuration forms
 
 ## Architecture
 
@@ -107,14 +118,16 @@ This would enable other Go projects to leverage Shelly Manager's capabilities wi
 ### Code Organization
 
 ### Dependencies
-- **CLI Framework**: spf13/cobra v1.8.0
-- **Configuration**: spf13/viper v1.18.2
-- **HTTP Router**: gorilla/mux v1.8.0
-- **Database ORM**: gorm.io/gorm v1.25.5 with SQLite driver
+- **CLI Framework**: spf13/cobra v1.9.1
+- **Configuration**: spf13/viper v1.20.1
+- **HTTP Router**: gorilla/mux v1.8.1
+- **WebSocket**: gorilla/websocket v1.5.3 for real-time metrics
+- **Database ORM**: gorm.io/gorm v1.30.1 with SQLite driver
 - **Database**: SQLite (requires CGO_ENABLED=1 for compilation)
-- **Logging**: slog (Go 1.21+ standard library)
+- **Logging**: slog (Go 1.23+ standard library)
 - **Metrics**: prometheus/client_golang v1.23.0 with custom registry
 - **Scheduling**: robfig/cron/v3 v3.0.1 for automated tasks
+- **Testing**: stretchr/testify v1.10.0 for comprehensive test suite
 
 ### Key Components
 
@@ -182,13 +195,28 @@ This would enable other Go projects to leverage Shelly Manager's capabilities wi
 4. ✅ **HTTP middleware for request/response metrics** - Operation timing and status tracking
 5. ✅ **System integration with main application lifecycle** - Service initialization and configuration
 
-### Current Status: Ready for Phase 4
-**Next Priorities**:
-- **Phase 4a**: Create metrics dashboard and trend analysis
-- **Phase 4b**: Integrate all components and update Web UI
-- **Phase 4c**: Real-time WebSocket updates for dashboard
+### Phase 4: Real-time Metrics Dashboard - ✅ **100% COMPLETE**
+1. ✅ **WebSocket server implementation** - Real-time metrics streaming with client management
+2. ✅ **Comprehensive dashboard UI** - 5 tabs with device status, drift, notifications, resolutions
+3. ✅ **Chart.js integration** - Interactive charts for system status and drift analysis
+4. ✅ **WebSocket middleware fixes** - Resolved Hijacker interface compatibility issues
+5. ✅ **Real-time connection management** - Auto-reconnection and connection health monitoring
 
-### Future Phases
+### **🚨 CURRENT PRIORITY: Configuration System Implementation**
+**Critical Gap**: Sophisticated architecture exists but not fully implemented
+
+1. 🔄 **Fix non-functional editDevice() function** - Currently console.log stub
+2. 🔄 **Replace JSON textareas with typed forms** - Device-specific configuration interfaces
+3. 🔄 **Implement NetworkConfig capability** - MQTT/WiFi/Cloud settings in UI
+4. 🔄 **Replace json.RawMessage with typed structures** - Backend capability composition
+5. 🔄 **Create capability-based template targeting** - Templates by capability, not device type
+6. 🔄 **Add device capability detection/indicators** - Show device capabilities in UI
+7. 🔄 **Implement capability-specific API endpoints** - GET/PUT per capability
+8. 🔄 **Visual template builder** - Form-based configuration instead of JSON
+9. 🔄 **Group configuration management** - Apply settings to device groups by capability  
+10. 🔄 **Configuration hierarchy merging** - Proper system → template → device inheritance
+
+### Future Phases (After Configuration System)
 - **Phase 5**: WiFi Provisioning Implementation
 - **Phase 6**: Kubernetes Deployment
 - **Phase 7**: OPNSense Integration
@@ -236,7 +264,9 @@ This would enable other Go projects to leverage Shelly Manager's capabilities wi
 - ✅ **Notification System**: Email, webhook, and alert rule testing complete
 - ✅ **Resolution Engine**: Auto-fix engine with safe mode operation verified
 - ✅ **Metrics System**: 71+ comprehensive tests covering service, collector, handlers, middleware
+- ✅ **Dashboard & WebSocket**: Real-time metrics streaming with 17 devices, live updates every 5 seconds
 - ✅ **System Integration**: All services properly integrated and tested together
+- ❌ **Configuration UI**: Edit buttons non-functional, MQTT settings not exposed, needs typed forms
 
 ### System Architecture Status
 **Current Architecture**: Monolithic application with comprehensive monitoring and automation
