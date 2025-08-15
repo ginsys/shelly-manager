@@ -165,12 +165,49 @@ All test commands are organized into logical groups and defined in the `Makefile
 ### 6. Quality and Dependencies
 
 #### `make lint`
-**Purpose**: Run code linting with golangci-lint  
-**Command**: `golangci-lint run --timeout=5m`  
+**Purpose**: Run basic linting (go fmt + go vet)  
+**Command**: `go fmt ./... && go vet ./...`  
 **When to use**:
-- Code quality checking
+- Basic code quality checking
 - Before commits
-- Catching style and potential issues
+- Quick formatting and basic issue detection
+
+#### `make lint-fix`
+**Purpose**: Run golangci-lint with auto-fix  
+**Command**: `golangci-lint run --fix`  
+**When to use**:
+- Comprehensive linting with automatic fixes
+- Before major commits
+- Catching advanced style and potential issues
+- **Requires**: golangci-lint installed
+
+#### `make format`
+**Purpose**: Format code (gofmt + goimports)  
+**Command**: `go fmt ./... && goimports -w .`  
+**When to use**:
+- Manually format all Go code
+- Fix import organization
+- Standardize code formatting
+
+#### `make format-check`
+**Purpose**: Check if code is properly formatted  
+**When to use**:
+- CI/CD format validation
+- Verify code follows formatting standards
+- Pre-commit validation
+
+#### `make hooks-install`
+**Purpose**: Install git pre-commit hook for automatic formatting  
+**When to use**:
+- Initial development setup
+- Enable automatic code formatting before commits
+- Ensure consistent code quality
+
+#### `make hooks-uninstall`
+**Purpose**: Remove git pre-commit hook  
+**When to use**:
+- Disable automatic formatting
+- Troubleshooting commit issues
 
 #### `make deps`
 **Purpose**: Download and verify dependencies  

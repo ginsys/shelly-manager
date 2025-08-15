@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // digestAuth implements HTTP Digest Authentication (RFC 2617)
@@ -71,7 +72,10 @@ func (d *digestAuth) parseChallenge(challenge string) error {
 // generateCnonce generates a client nonce
 func (d *digestAuth) generateCnonce() string {
 	b := make([]byte, 16)
-	io.ReadFull(rand.Reader, b)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		// Fallback to time-based randomness if crypto/rand fails
+		return hex.EncodeToString([]byte(fmt.Sprintf("%x", time.Now().UnixNano())))
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -156,8 +160,8 @@ func doRequestWithDigestAuth(client *http.Client, req *http.Request, username, p
 
 	// Create digest auth and parse challenge
 	auth := newDigestAuth(username, password)
-	if err := auth.parseChallenge(challenge); err != nil {
-		return nil, fmt.Errorf("failed to parse auth challenge: %w", err)
+	if parseErr := auth.parseChallenge(challenge); parseErr != nil {
+		return nil, fmt.Errorf("failed to parse auth challenge: %w", parseErr)
 	}
 
 	// Clone the request for retry

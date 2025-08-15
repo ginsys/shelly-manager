@@ -123,11 +123,11 @@ func (s *Scanner) ScanNetwork(ctx context.Context, cidr string) ([]ShellyDevice,
 	// Generate IPs to scan
 	go func() {
 		defer close(ipChan)
-		for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
+		for currentIP := ip.Mask(ipnet.Mask); ipnet.Contains(currentIP); inc(currentIP) {
 			select {
 			case <-ctx.Done():
 				return
-			case ipChan <- ip.String():
+			case ipChan <- currentIP.String():
 			}
 		}
 	}()

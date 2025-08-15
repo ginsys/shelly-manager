@@ -23,6 +23,18 @@ func NewHandler(service *Service, logger *logging.Logger) *Handler {
 	}
 }
 
+// writeJSONResponse writes a JSON response and handles encoding errors
+func (h *Handler) writeJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		h.logger.WithFields(map[string]any{
+			"component": "notification",
+			"error":     err,
+		}).Error("Failed to encode JSON response")
+	}
+}
+
 // CreateChannel handles POST /api/v1/notifications/channels
 func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	var channel NotificationChannel
@@ -44,9 +56,7 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(channel)
+	h.writeJSONResponse(w, channel, http.StatusCreated)
 }
 
 // GetChannels handles GET /api/v1/notifications/channels
@@ -61,11 +71,10 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSONResponse(w, map[string]interface{}{
 		"channels": channels,
 		"total":    len(channels),
-	})
+	}, http.StatusOK)
 }
 
 // UpdateChannel handles PUT /api/v1/notifications/channels/{id}
@@ -97,8 +106,7 @@ func (h *Handler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+	h.writeJSONResponse(w, map[string]string{"status": "updated"}, http.StatusOK)
 }
 
 // DeleteChannel handles DELETE /api/v1/notifications/channels/{id}
@@ -120,8 +128,7 @@ func (h *Handler) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+	h.writeJSONResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
 }
 
 // CreateRule handles POST /api/v1/notifications/rules
@@ -145,9 +152,7 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(rule)
+	h.writeJSONResponse(w, rule, http.StatusCreated)
 }
 
 // GetRules handles GET /api/v1/notifications/rules
@@ -162,11 +167,10 @@ func (h *Handler) GetRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSONResponse(w, map[string]interface{}{
 		"rules": rules,
 		"total": len(rules),
-	})
+	}, http.StatusOK)
 }
 
 // TestChannel handles POST /api/v1/notifications/channels/{id}/test
@@ -188,11 +192,10 @@ func (h *Handler) TestChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	h.writeJSONResponse(w, map[string]string{
 		"status":  "sent",
 		"message": "Test notification sent successfully",
-	})
+	}, http.StatusOK)
 }
 
 // GetHistory handles GET /api/v1/notifications/history
@@ -236,13 +239,12 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSONResponse(w, map[string]interface{}{
 		"history": history,
 		"total":   total,
 		"limit":   limit,
 		"offset":  offset,
-	})
+	}, http.StatusOK)
 }
 
 // getNotificationHistory retrieves notification history with filters

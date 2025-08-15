@@ -213,7 +213,14 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 			if switchData, ok := value.(map[string]interface{}); ok {
 				sw := shelly.SwitchStatus{}
 				// Parse switch ID from key
-				fmt.Sscanf(key, "switch:%d", &sw.ID)
+				if _, err := fmt.Sscanf(key, "switch:%d", &sw.ID); err != nil {
+					c.logger.WithFields(map[string]any{
+						"component": "shelly_gen2",
+						"key":       key,
+						"error":     err,
+					}).Debug("Failed to parse switch ID from key")
+					continue
+				}
 
 				if output, ok := switchData["output"].(bool); ok {
 					sw.Output = output
@@ -329,7 +336,14 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 		if len(key) > 7 && key[:7] == "switch:" {
 			if switchData, ok := value.(map[string]interface{}); ok {
 				sw := shelly.SwitchConfig{}
-				fmt.Sscanf(key, "switch:%d", &sw.ID)
+				if _, err := fmt.Sscanf(key, "switch:%d", &sw.ID); err != nil {
+					c.logger.WithFields(map[string]any{
+						"component": "shelly_gen2",
+						"key":       key,
+						"error":     err,
+					}).Debug("Failed to parse switch ID from config key")
+					continue
+				}
 
 				if name, ok := switchData["name"].(string); ok {
 					sw.Name = name

@@ -95,7 +95,7 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 
 	// Enhance with additional device metadata
 	enhancedConfig := map[string]interface{}{}
-	if err := json.Unmarshal(configData, &enhancedConfig); err != nil {
+	if unmarshalErr := json.Unmarshal(configData, &enhancedConfig); unmarshalErr != nil {
 		// If unmarshaling fails, create a basic structure
 		enhancedConfig = make(map[string]interface{})
 	}
@@ -162,8 +162,8 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 			SyncStatus: "synced",
 		}
 
-		if err := s.db.Create(&newConfig).Error; err != nil {
-			return nil, fmt.Errorf("failed to create device config: %w", err)
+		if createErr := s.db.Create(&newConfig).Error; createErr != nil {
+			return nil, fmt.Errorf("failed to create device config: %w", createErr)
 		}
 
 		// Create history entry
@@ -595,13 +595,12 @@ func (s *Service) ApplyTemplate(deviceID uint, templateID uint, variables map[st
 			SyncStatus: "pending",
 		}
 
-		if err := s.db.Create(&config).Error; err != nil {
-			return fmt.Errorf("failed to create device config: %w", err)
+		if createErr := s.db.Create(&config).Error; createErr != nil {
+			return fmt.Errorf("failed to create device config: %w", createErr)
 		}
 
 		// Create history entry
 		s.createHistory(deviceID, config.ID, "template", nil, configData, "template")
-
 	} else if err != nil {
 		return fmt.Errorf("failed to query config: %w", err)
 	} else {
@@ -649,8 +648,8 @@ func (s *Service) UpdateDeviceConfig(deviceID uint, configUpdate map[string]inte
 
 	// Parse existing config
 	var existingConfigMap map[string]interface{}
-	if err := json.Unmarshal(config.Config, &existingConfigMap); err != nil {
-		return fmt.Errorf("failed to parse existing config: %w", err)
+	if unmarshalErr := json.Unmarshal(config.Config, &existingConfigMap); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse existing config: %w", unmarshalErr)
 	}
 
 	// Merge updates into existing config
@@ -688,8 +687,8 @@ func (s *Service) UpdateCapabilityConfig(deviceID uint, capability string, capab
 
 	// Parse existing config
 	var configMap map[string]interface{}
-	if err := json.Unmarshal(config.Config, &configMap); err != nil {
-		return fmt.Errorf("failed to parse existing config: %w", err)
+	if unmarshalErr := json.Unmarshal(config.Config, &configMap); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse existing config: %w", unmarshalErr)
 	}
 
 	// Update the specific capability
@@ -761,8 +760,12 @@ func (s *Service) compareConfigurations(stored, current json.RawMessage) []Confi
 	var differences []ConfigDifference
 
 	var storedMap, currentMap map[string]interface{}
-	json.Unmarshal(stored, &storedMap)
-	json.Unmarshal(current, &currentMap)
+	if err := json.Unmarshal(stored, &storedMap); err != nil {
+		storedMap = make(map[string]interface{})
+	}
+	if err := json.Unmarshal(current, &currentMap); err != nil {
+		currentMap = make(map[string]interface{})
+	}
 
 	// Compare maps recursively
 	s.compareMaps("", storedMap, currentMap, &differences)

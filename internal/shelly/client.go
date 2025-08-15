@@ -107,14 +107,3 @@ func WithUserAgent(userAgent string) ClientOption {
 		c.userAgent = userAgent
 	}
 }
-
-// defaultConfig returns the default client configuration
-func defaultConfig() *clientConfig {
-	return &clientConfig{
-		timeout:       10 * time.Second,
-		retryAttempts: 3,
-		retryDelay:    1 * time.Second,
-		skipTLSVerify: false,
-		userAgent:     "shelly-manager/1.0",
-	}
-}

@@ -437,11 +437,11 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			device.Settings = string(updatedSettings)
 
 			// Update database with working credentials
-			if err := s.DB.UpdateDevice(device); err != nil {
+			if updateErr := s.DB.UpdateDevice(device); updateErr != nil {
 				s.logger.WithFields(map[string]any{
 					"device_id": device.ID,
 					"device_ip": device.IP,
-					"error":     err.Error(),
+					"error":     updateErr.Error(),
 					"component": "service",
 				}).Warn("Failed to save device credentials")
 			} else {
@@ -536,15 +536,15 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 			channel = int(ch)
 		}
 		// Get current status
-		status, err := client.GetStatus(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get status: %w", err)
+		status, statusErr := client.GetStatus(ctx)
+		if statusErr != nil {
+			return fmt.Errorf("failed to get status: %w", statusErr)
 		}
 		if len(status.Switches) > channel {
 			newState := !status.Switches[channel].Output
 			err = client.SetSwitch(ctx, channel, newState)
 		} else {
-			return fmt.Errorf("channel %d not found", channel)
+			err = fmt.Errorf("channel %d not found", channel)
 		}
 
 	case "reboot":
@@ -797,7 +797,13 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 	// Update device settings with auth info
 	settings := make(map[string]interface{})
 	if device.Settings != "" {
-		json.Unmarshal([]byte(device.Settings), &settings)
+		if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+			s.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"error":     err,
+				"component": "service",
+			}).Warn("Failed to unmarshal device settings, using empty settings")
+		}
 	}
 
 	settings["auth"] = map[string]string{

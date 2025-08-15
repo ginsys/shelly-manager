@@ -9,6 +9,24 @@ import (
 	"time"
 )
 
+// contextKey is a type for context keys to avoid collisions
+type contextKey string
+
+const requestIDKey contextKey = "request_id"
+
+// GetRequestID extracts the request ID from a context
+func GetRequestID(ctx context.Context) string {
+	if requestID, ok := ctx.Value(requestIDKey).(string); ok {
+		return requestID
+	}
+	return ""
+}
+
+// WithRequestID adds a request ID to a context (useful for testing)
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, requestIDKey, requestID)
+}
+
 // responseWriter wraps http.ResponseWriter to capture status code
 type responseWriter struct {
 	http.ResponseWriter
@@ -52,9 +70,9 @@ func HTTPMiddleware(logger *Logger) func(http.Handler) http.Handler {
 
 			// Add request ID to context if not present
 			ctx := r.Context()
-			if ctx.Value("request_id") == nil {
+			if ctx.Value(requestIDKey) == nil {
 				requestID := generateRequestID()
-				ctx = context.WithValue(ctx, "request_id", requestID)
+				ctx = context.WithValue(ctx, requestIDKey, requestID)
 				r = r.WithContext(ctx)
 			}
 

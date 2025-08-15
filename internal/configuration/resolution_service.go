@@ -58,7 +58,13 @@ func (rs *ResolutionService) CreatePolicy(policy *ResolutionPolicy) error {
 	}).Info("Created resolution policy")
 
 	// Reload policies
-	rs.loadPolicies()
+	if err := rs.loadPolicies(); err != nil {
+		rs.logger.WithFields(map[string]any{
+			"component": "resolution",
+			"error":     err,
+		}).Error("Failed to reload policies after creation")
+		// Continue execution as the policy was still saved successfully
+	}
 
 	return nil
 }
@@ -73,16 +79,40 @@ func (rs *ResolutionService) GetPolicies() ([]ResolutionPolicy, error) {
 	// Deserialize JSON fields
 	for i := range policies {
 		if len(policies[i].CategoriesJSON) > 0 {
-			json.Unmarshal(policies[i].CategoriesJSON, &policies[i].Categories)
+			if err := json.Unmarshal(policies[i].CategoriesJSON, &policies[i].Categories); err != nil {
+				rs.logger.WithFields(map[string]any{
+					"component": "resolution",
+					"policy_id": policies[i].ID,
+					"error":     err,
+				}).Error("Failed to unmarshal policy categories")
+			}
 		}
 		if len(policies[i].SeveritiesJSON) > 0 {
-			json.Unmarshal(policies[i].SeveritiesJSON, &policies[i].Severities)
+			if err := json.Unmarshal(policies[i].SeveritiesJSON, &policies[i].Severities); err != nil {
+				rs.logger.WithFields(map[string]any{
+					"component": "resolution",
+					"policy_id": policies[i].ID,
+					"error":     err,
+				}).Error("Failed to unmarshal policy severities")
+			}
 		}
 		if len(policies[i].AutoFixCategoriesJSON) > 0 {
-			json.Unmarshal(policies[i].AutoFixCategoriesJSON, &policies[i].AutoFixCategories)
+			if err := json.Unmarshal(policies[i].AutoFixCategoriesJSON, &policies[i].AutoFixCategories); err != nil {
+				rs.logger.WithFields(map[string]any{
+					"component": "resolution",
+					"policy_id": policies[i].ID,
+					"error":     err,
+				}).Error("Failed to unmarshal policy auto-fix categories")
+			}
 		}
 		if len(policies[i].ExcludedPathsJSON) > 0 {
-			json.Unmarshal(policies[i].ExcludedPathsJSON, &policies[i].ExcludedPaths)
+			if err := json.Unmarshal(policies[i].ExcludedPathsJSON, &policies[i].ExcludedPaths); err != nil {
+				rs.logger.WithFields(map[string]any{
+					"component": "resolution",
+					"policy_id": policies[i].ID,
+					"error":     err,
+				}).Error("Failed to unmarshal policy excluded paths")
+			}
 		}
 	}
 

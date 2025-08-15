@@ -46,7 +46,14 @@ func (m *MDNSScanner) DiscoverDevices(ctx context.Context) ([]ShellyDevice, erro
 		if err := mdns.Query(params); err != nil {
 			// Try generic HTTP service as fallback
 			params.Service = "_http._tcp"
-			mdns.Query(params)
+			if fallbackErr := mdns.Query(params); fallbackErr != nil {
+				// Log the error but continue - mDNS discovery is best effort
+				m.scanner.logger.WithFields(map[string]any{
+					"component": "discovery",
+					"service":   params.Service,
+					"error":     fallbackErr,
+				}).Debug("mDNS fallback query failed")
+			}
 		}
 	}()
 

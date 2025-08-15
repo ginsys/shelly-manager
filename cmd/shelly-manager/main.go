@@ -115,8 +115,8 @@ var discoverCmd = &cobra.Command{
 			// Check if device already exists by MAC
 			_, err := dbManager.GetDeviceByMAC(device.MAC)
 			if err != nil && err == gorm.ErrRecordNotFound {
-				if err := dbManager.AddDevice(&device); err != nil {
-					log.Printf("Failed to add device %s: %v", device.IP, err)
+				if addErr := dbManager.AddDevice(&device); addErr != nil {
+					log.Printf("Failed to add device %s: %v", device.IP, addErr)
 				} else {
 					fmt.Printf("✓ Added to database\n")
 				}

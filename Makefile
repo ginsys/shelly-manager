@@ -1,4 +1,5 @@
-.PHONY: build run clean docker-build docker-run docker-stop docker-logs dev-setup deps deps-tidy lint \
+.PHONY: build run clean docker-build docker-run docker-stop docker-logs dev-setup deps deps-tidy \
+	lint lint-fix format format-check hooks-install hooks-uninstall \
 	test test-unit test-integration test-full \
 	test-race test-race-short test-race-full \
 	test-coverage test-coverage-short test-coverage-full test-coverage-ci test-coverage-check test-coverage-with-check \
@@ -123,6 +124,95 @@ lint:
 	@echo "Running go vet..."
 	go vet ./...
 
+# Run golangci-lint (requires golangci-lint to be installed)
+lint-fix:
+	@echo "Running golangci-lint with auto-fix..."
+	golangci-lint run --fix
+
+# Format code (gofmt + goimports)
+format:
+	@echo "Running go fmt..."
+	go fmt ./...
+	@echo "Running goimports..."
+	goimports -w .
+
+# Check if code is properly formatted
+format-check:
+	@echo "Checking if code is properly formatted..."
+	@UNFORMATTED=$$(gofmt -l .); \
+	if [ -n "$$UNFORMATTED" ]; then \
+		echo "The following files are not properly formatted:"; \
+		echo "$$UNFORMATTED"; \
+		echo "Please run 'make format' to fix them."; \
+		exit 1; \
+	fi
+	@echo "All files are properly formatted."
+
+# Install git pre-commit hook for automatic formatting
+hooks-install:
+	@echo "Installing git pre-commit hook..."
+	@echo '#!/bin/bash' > .git/hooks/pre-commit
+	@echo '#' >> .git/hooks/pre-commit
+	@echo '# Pre-commit hook for Go code formatting and basic linting' >> .git/hooks/pre-commit
+	@echo '#' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo '# Colors for output' >> .git/hooks/pre-commit
+	@echo "RED='\033[0;31m'" >> .git/hooks/pre-commit
+	@echo "GREEN='\033[0;32m'" >> .git/hooks/pre-commit
+	@echo "YELLOW='\033[1;33m'" >> .git/hooks/pre-commit
+	@echo "NC='\033[0m' # No Color" >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo 'echo -e "$${YELLOW}Running pre-commit checks...$${NC}"' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo '# Check if we have Go files in the commit' >> .git/hooks/pre-commit
+	@echo 'go_files=$$(git diff --cached --name-only --diff-filter=ACM | grep "\.go$$")' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo 'if [ -z "$$go_files" ]; then' >> .git/hooks/pre-commit
+	@echo '    echo -e "$${GREEN}No Go files to check.$${NC}"' >> .git/hooks/pre-commit
+	@echo '    exit 0' >> .git/hooks/pre-commit
+	@echo 'fi' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo 'echo -e "$${YELLOW}Checking Go files: $$go_files$${NC}"' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo '# Run go fmt and capture any files that need formatting' >> .git/hooks/pre-commit
+	@echo 'unformatted=$$(echo "$$go_files" | xargs gofmt -l)' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo 'if [ -n "$$unformatted" ]; then' >> .git/hooks/pre-commit
+	@echo '    echo -e "$${YELLOW}Auto-formatting Go files...$${NC}"' >> .git/hooks/pre-commit
+	@echo '    echo "$$unformatted" | xargs gofmt -w' >> .git/hooks/pre-commit
+	@echo '    ' >> .git/hooks/pre-commit
+	@echo '    # Run goimports if available' >> .git/hooks/pre-commit
+	@echo '    if command -v goimports >/dev/null 2>&1; then' >> .git/hooks/pre-commit
+	@echo '        echo -e "$${YELLOW}Auto-formatting imports...$${NC}"' >> .git/hooks/pre-commit
+	@echo '        echo "$$go_files" | xargs goimports -w' >> .git/hooks/pre-commit
+	@echo '    fi' >> .git/hooks/pre-commit
+	@echo '    ' >> .git/hooks/pre-commit
+	@echo '    # Add the formatted files back to the commit' >> .git/hooks/pre-commit
+	@echo '    echo "$$unformatted" | xargs git add' >> .git/hooks/pre-commit
+	@echo '    echo "$$go_files" | xargs git add' >> .git/hooks/pre-commit
+	@echo '    ' >> .git/hooks/pre-commit
+	@echo '    echo -e "$${GREEN}Code formatted and added to commit.$${NC}"' >> .git/hooks/pre-commit
+	@echo 'fi' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo '# Run go vet on the staged files' >> .git/hooks/pre-commit
+	@echo 'echo -e "$${YELLOW}Running go vet...$${NC}"' >> .git/hooks/pre-commit
+	@echo 'if ! go vet ./...; then' >> .git/hooks/pre-commit
+	@echo '    echo -e "$${RED}go vet found issues. Please fix them before committing.$${NC}"' >> .git/hooks/pre-commit
+	@echo '    exit 1' >> .git/hooks/pre-commit
+	@echo 'fi' >> .git/hooks/pre-commit
+	@echo '' >> .git/hooks/pre-commit
+	@echo 'echo -e "$${GREEN}Pre-commit checks passed!$${NC}"' >> .git/hooks/pre-commit
+	@echo 'exit 0' >> .git/hooks/pre-commit
+	@chmod +x .git/hooks/pre-commit
+	@echo "Pre-commit hook installed successfully!"
+	@echo "The hook will automatically format Go code and run go vet before each commit."
+
+# Uninstall git pre-commit hook
+hooks-uninstall:
+	@echo "Removing git pre-commit hook..."
+	@rm -f .git/hooks/pre-commit
+	@echo "Pre-commit hook removed."
+
 # ==============================================================================
 # BENCHMARK AND PERFORMANCE TESTS
 # ==============================================================================
@@ -177,6 +267,8 @@ docker-logs:
 dev-setup:
 	go mod tidy
 	mkdir -p $(BUILD_DIR) data
+	@echo "Installing git pre-commit hooks..."
+	$(MAKE) hooks-install
 
 # Clean build artifacts
 clean:

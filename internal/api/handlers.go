@@ -155,10 +155,19 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 		Network      string `json:"network"`
 		ImportConfig bool   `json:"import_config"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Continue with defaults if decode fails
+		req = struct {
+			Network      string `json:"network"`
+			ImportConfig bool   `json:"import_config"`
+		}{
+			Network:      "auto",
+			ImportConfig: true,
+		}
+	}
 
 	// Default to auto-import config for new devices
-	if req.ImportConfig == false {
+	if !req.ImportConfig {
 		req.ImportConfig = true
 	}
 
@@ -365,7 +374,7 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 	// Get channel from query params (default to 0)
 	channel := 0
 	if ch := r.URL.Query().Get("channel"); ch != "" {
-		if c, err := strconv.Atoi(ch); err == nil {
+		if c, parseErr := strconv.Atoi(ch); parseErr == nil {
 			channel = c
 		}
 	}
@@ -804,7 +813,7 @@ func (h *Handler) GetConfigHistory(w http.ResponseWriter, r *http.Request) {
 	// Get limit from query params (default to 50)
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {
-		if lim, err := strconv.Atoi(l); err == nil && lim > 0 {
+		if lim, parseErr := strconv.Atoi(l); parseErr == nil && lim > 0 {
 			limit = lim
 		}
 	}
@@ -834,7 +843,7 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Parse request body
 	var configUpdate map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&configUpdate); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&configUpdate); decodeErr != nil {
 		http.Error(w, "Invalid JSON in request body", http.StatusBadRequest)
 		return
 	}
@@ -872,7 +881,7 @@ func (h *Handler) UpdateRelayConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Parse relay configuration
 	var relayConfig configuration.RelayConfig
-	if err := json.NewDecoder(r.Body).Decode(&relayConfig); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&relayConfig); decodeErr != nil {
 		http.Error(w, "Invalid relay configuration JSON", http.StatusBadRequest)
 		return
 	}
@@ -903,7 +912,7 @@ func (h *Handler) UpdateDimmingConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Parse dimming configuration
 	var dimmingConfig configuration.DimmingConfig
-	if err := json.NewDecoder(r.Body).Decode(&dimmingConfig); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&dimmingConfig); decodeErr != nil {
 		http.Error(w, "Invalid dimming configuration JSON", http.StatusBadRequest)
 		return
 	}
@@ -934,7 +943,7 @@ func (h *Handler) UpdateRollerConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Parse roller configuration
 	var rollerConfig configuration.RollerConfig
-	if err := json.NewDecoder(r.Body).Decode(&rollerConfig); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&rollerConfig); decodeErr != nil {
 		http.Error(w, "Invalid roller configuration JSON", http.StatusBadRequest)
 		return
 	}
@@ -965,7 +974,7 @@ func (h *Handler) UpdatePowerMeteringConfig(w http.ResponseWriter, r *http.Reque
 
 	// Parse power metering configuration
 	var powerConfig configuration.PowerMeteringConfig
-	if err := json.NewDecoder(r.Body).Decode(&powerConfig); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&powerConfig); decodeErr != nil {
 		http.Error(w, "Invalid power metering configuration JSON", http.StatusBadRequest)
 		return
 	}
@@ -999,7 +1008,7 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&authConfig); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&authConfig); decodeErr != nil {
 		http.Error(w, "Invalid auth configuration JSON", http.StatusBadRequest)
 		return
 	}
@@ -1094,7 +1103,7 @@ func (h *Handler) UpdateDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updates configuration.DriftDetectionSchedule
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&updates); decodeErr != nil {
 		http.Error(w, "Invalid schedule JSON", http.StatusBadRequest)
 		return
 	}
@@ -1183,7 +1192,7 @@ func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
 	// Parse optional limit parameter
 	limit := 50 // Default limit
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+		if parsedLimit, parseErr := strconv.Atoi(limitStr); parseErr == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
@@ -1219,7 +1228,7 @@ func (h *Handler) GetDriftReports(w http.ResponseWriter, r *http.Request) {
 
 	limit := 50 // Default limit
 	if limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+		if parsedLimit, parseErr := strconv.Atoi(limitStr); parseErr == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
@@ -1287,7 +1296,7 @@ func (h *Handler) GetDriftTrends(w http.ResponseWriter, r *http.Request) {
 
 	limit := 100 // Default limit
 	if limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+		if parsedLimit, parseErr := strconv.Atoi(limitStr); parseErr == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
