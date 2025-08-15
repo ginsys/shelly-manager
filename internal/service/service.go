@@ -761,6 +761,11 @@ func (s *ShellyService) UpdateDeviceConfig(deviceID uint, configUpdate map[strin
 	return s.ConfigSvc.UpdateDeviceConfig(deviceID, configUpdate)
 }
 
+// GetImportStatus gets the import status for a device
+func (s *ShellyService) GetImportStatus(deviceID uint) (*configuration.ImportStatus, error) {
+	return s.ConfigSvc.GetImportStatus(deviceID)
+}
+
 // UpdateRelayConfig updates relay-specific configuration
 func (s *ShellyService) UpdateRelayConfig(deviceID uint, config *configuration.RelayConfig) error {
 	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "relay", config)

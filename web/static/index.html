@@ -679,9 +679,10 @@
                 updateStatus('🟢 Connected', devices.length);
                 updateLastRefresh();
                 
-                // Load status for each device
+                // Load status and config status for each device
                 devices.forEach(device => {
                     loadDeviceStatus(device.id);
+                    checkImportStatus(device.id);
                 });
             } catch (error) {
                 console.error('Error loading devices:', error);
@@ -1301,18 +1302,48 @@
                     'synced': 'config-synced',
                     'pending': 'config-pending',
                     'drift': 'config-drift',
-                    'error': 'config-error'
+                    'error': 'config-error',
+                    'not_imported': 'config-pending'
                 };
                 
                 const statusTexts = {
                     'synced': '✓ Synced',
                     'pending': '⏳ Pending',
                     'drift': '⚠️ Drift',
-                    'error': '❌ Error'
+                    'error': '❌ Error',
+                    'not_imported': '📥 Not Imported'
                 };
                 
                 statusElement.className = `config-status ${statusClasses[status] || 'config-pending'}`;
                 statusElement.textContent = statusTexts[status] || 'Unknown';
+            }
+        }
+
+        // Check the actual import status from the API
+        async function checkImportStatus(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/config/status`);
+                
+                if (response.ok) {
+                    const status = await response.json();
+                    updateConfigStatus(deviceId, status.status);
+                    
+                    // Update tooltip with last synced info
+                    const statusElement = document.getElementById(`config-status-${deviceId}`);
+                    if (statusElement && status.last_synced) {
+                        const lastSynced = new Date(status.last_synced).toLocaleString();
+                        statusElement.title = `${status.message}\nLast synced: ${lastSynced}`;
+                    } else if (statusElement) {
+                        statusElement.title = status.message || 'Configuration status unknown';
+                    }
+                } else {
+                    // If status endpoint fails, default to unknown
+                    updateConfigStatus(deviceId, 'error');
+                }
+            } catch (error) {
+                console.debug(`Failed to check import status for device ${deviceId}:`, error.message);
+                // Don't show notification for status check failures
+                updateConfigStatus(deviceId, 'error');
             }
         }
 
