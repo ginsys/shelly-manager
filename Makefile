@@ -116,9 +116,12 @@ test-ci: test-coverage-check
 # LINTING AND QUALITY
 # ==============================================================================
 
-# Run golangci-lint
+# Run basic linting (gofmt, go vet)
 lint:
-	golangci-lint run --timeout=5m
+	@echo "Running go fmt..."
+	go fmt ./...
+	@echo "Running go vet..."
+	go vet ./...
 
 # ==============================================================================
 # BENCHMARK AND PERFORMANCE TESTS

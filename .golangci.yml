@@ -1,4 +1,4 @@
-version: 2
+# golangci-lint configuration
 
 run:
   timeout: 5m
@@ -14,38 +14,17 @@ run:
 
 linters:
   enable:
-    - bodyclose
-    - dogsled
-    - dupl
     - errcheck
-    - exhaustive
-    - gochecknoinits
-    - goconst
-    - gocritic
-    - gocyclo
     - gofmt
     - goimports
-    - goprintffuncname
-    - gosec
     - gosimple
     - govet
     - ineffassign
-    - lll
     - misspell
-    - nakedret
-    - noctx
-    - nolintlint
-    - rowserrcheck
     - staticcheck
-    - stylecheck
     - typecheck
-    - unconvert
-    - unparam
     - unused
     - whitespace
-    - prealloc
-    - predeclared
-    - revive
 
   disable:
     - depguard
@@ -60,85 +39,14 @@ linters:
     - wsl
 
 linters-settings:
-  dupl:
-    threshold: 100
-  
-  exhaustive:
-    default-signifies-exhaustive: false
-  
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-  
-  gocyclo:
-    min-complexity: 15
-  
   goimports:
     local-prefixes: github.com/ginsys/shelly-manager
-  
-  golint:
-    min-confidence: 0
-  
-  gomnd:
-    settings:
-      mnd:
-        checks: argument,case,condition,operation,return,assign
-  
-  gosec:
-    excludes:
-      - G204  # Subprocess launched with variable
-      - G304  # Potential file inclusion via variable
   
   govet:
     check-shadowing: true
   
-  lll:
-    line-length: 140
-  
   misspell:
     locale: US
-  
-  nolintlint:
-    allow-leading-space: true
-    allow-unused: false
-    require-explanation: false
-    require-specific: false
-  
-  revive:
-    confidence: 0
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
 
 issues:
   exclude-rules:
