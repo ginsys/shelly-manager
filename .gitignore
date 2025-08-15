@@ -17,6 +17,7 @@ cmd/shelly-test/shelly-test
 
 # Output of the go coverage tool
 *.out
+coverage.html
 
 # Go workspace file
 go.work
