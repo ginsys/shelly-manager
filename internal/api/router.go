@@ -16,7 +16,12 @@ func SetupRoutes(handler *Handler) *mux.Router {
 func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router {
 	r := mux.NewRouter()
 
-	// Add logging middleware
+	// WebSocket endpoint FIRST, without any middleware to preserve Hijacker interface
+	if handler.MetricsHandler != nil {
+		r.HandleFunc("/metrics/ws", handler.MetricsHandler.HandleWebSocket).Methods("GET")
+	}
+
+	// Add logging middleware to all other routes
 	r.Use(logging.HTTPMiddleware(logger))
 	r.Use(logging.RecoveryMiddleware(logger))
 	r.Use(logging.CORSMiddleware(logger))
@@ -94,10 +99,9 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 		api.HandleFunc("/notifications/history", handler.NotificationHandler.GetHistory).Methods("GET")
 	}
 
-	// Metrics routes
+	// Metrics routes (non-WebSocket)
 	if handler.MetricsHandler != nil {
 		metricsAPI := r.PathPrefix("/metrics").Subrouter()
-		metricsAPI.Use(logging.HTTPMiddleware(logger))
 
 		// Prometheus metrics endpoint
 		metricsAPI.Handle("/prometheus", handler.MetricsHandler.PrometheusHandler()).Methods("GET")
@@ -107,6 +111,10 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 		metricsAPI.HandleFunc("/enable", handler.MetricsHandler.EnableMetrics).Methods("POST")
 		metricsAPI.HandleFunc("/disable", handler.MetricsHandler.DisableMetrics).Methods("POST")
 		metricsAPI.HandleFunc("/collect", handler.MetricsHandler.CollectMetrics).Methods("POST")
+
+		// Dashboard endpoints
+		metricsAPI.HandleFunc("/dashboard", handler.MetricsHandler.GetDashboardMetrics).Methods("GET")
+		metricsAPI.HandleFunc("/test-alert", handler.MetricsHandler.SendTestAlert).Methods("POST")
 	}
 
 	// Discovery route

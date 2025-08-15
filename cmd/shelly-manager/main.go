@@ -310,12 +310,29 @@ func startServer() {
 	// Setup routes with middleware
 	router := api.SetupRoutesWithLogger(apiHandler, logger)
 
+	// Start WebSocket hub if metrics are enabled
+	if metricsHandler != nil {
+		wsHub := metricsHandler.GetWebSocketHub()
+		if wsHub != nil {
+			logger.WithFields(map[string]any{
+				"component": "websocket",
+			}).Info("Starting WebSocket hub for real-time metrics")
+
+			// Start WebSocket hub in background
+			go func() {
+				ctx := context.Background()
+				wsHub.Run(ctx)
+			}()
+		}
+	}
+
 	// Start server
 	address := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	logger.LogAppStart("1.0.0", address)
 
 	fmt.Printf("Starting server on %s\n", address)
 	fmt.Printf("Web interface: http://%s\n", address)
+	fmt.Printf("Dashboard: http://%s/dashboard.html\n", address)
 	fmt.Printf("API base URL: http://%s/api/v1\n", address)
 
 	if err := http.ListenAndServe(address, router); err != nil {

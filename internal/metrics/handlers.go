@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -15,14 +16,22 @@ import (
 type Handler struct {
 	service *Service
 	logger  *logging.Logger
+	wsHub   *WebSocketHub
 }
 
 // NewHandler creates a new metrics handler
 func NewHandler(service *Service, logger *logging.Logger) *Handler {
+	hub := NewWebSocketHub(service, logger)
 	return &Handler{
 		service: service,
 		logger:  logger,
+		wsHub:   hub,
 	}
+}
+
+// GetWebSocketHub returns the WebSocket hub for external use
+func (h *Handler) GetWebSocketHub() *WebSocketHub {
+	return h.wsHub
 }
 
 // MetricsStatus represents the status of the metrics system
@@ -142,6 +151,80 @@ func (h *Handler) PrometheusHandler() http.Handler {
 	return promhttp.Handler()
 }
 
+// GetDashboardMetrics returns dashboard metrics for HTTP requests
+func (h *Handler) GetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics, err := h.wsHub.collectDashboardMetrics(r.Context())
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "metrics",
+		}).Error("Failed to collect dashboard metrics")
+		http.Error(w, "Failed to collect dashboard metrics", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(metrics); err != nil {
+		h.logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "metrics",
+		}).Error("Failed to encode dashboard metrics response")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.WithFields(map[string]any{
+		"component": "metrics",
+	}).Debug("Returned dashboard metrics")
+}
+
+// HandleWebSocket handles WebSocket connections for real-time metrics
+func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	h.wsHub.HandleWebSocket(w, r)
+}
+
+// SendTestAlert sends a test alert for dashboard testing
+func (h *Handler) SendTestAlert(w http.ResponseWriter, r *http.Request) {
+	// Get alert type and severity from query parameters
+	alertType := r.URL.Query().Get("type")
+	severity := r.URL.Query().Get("severity")
+
+	if alertType == "" {
+		alertType = "test"
+	}
+	if severity == "" {
+		severity = "info"
+	}
+
+	message := fmt.Sprintf("Test alert sent at %s", time.Now().Format("15:04:05"))
+
+	// Broadcast the test alert
+	h.wsHub.BroadcastAlert(alertType, message, severity)
+
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]string{
+		"status":     "sent",
+		"alert_type": alertType,
+		"message":    message,
+		"severity":   severity,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "metrics",
+		}).Error("Failed to encode test alert response")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.WithFields(map[string]any{
+		"alert_type": alertType,
+		"severity":   severity,
+		"component":  "metrics",
+	}).Info("Test alert sent to dashboard")
+}
+
 // SetupMetricsRoutes adds metrics routes to the router
 func SetupMetricsRoutes(router *mux.Router, handler *Handler) {
 	metrics := router.PathPrefix("/metrics").Subrouter()
@@ -154,4 +237,8 @@ func SetupMetricsRoutes(router *mux.Router, handler *Handler) {
 	metrics.HandleFunc("/enable", handler.EnableMetrics).Methods("POST")
 	metrics.HandleFunc("/disable", handler.DisableMetrics).Methods("POST")
 	metrics.HandleFunc("/collect", handler.CollectMetrics).Methods("POST")
+
+	// Dashboard endpoints
+	metrics.HandleFunc("/dashboard", handler.GetDashboardMetrics).Methods("GET")
+	metrics.HandleFunc("/ws", handler.HandleWebSocket).Methods("GET")
 }

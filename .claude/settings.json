@@ -35,7 +35,16 @@
       "Bash(timeout 10s go test:*)",
       "Bash(CGO_ENABLED=1 go test:*)",
       "Bash(go test:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git rm:*)",
+      "Bash(timeout 30s go test -v ./internal/service -run TestShellyService_DiscoverDevices_AutoNetwork)",
+      "Bash(timeout 30s go test -v ./internal/discovery -run TestScanHost_NoDevice)",
+      "Bash(timeout 2m make test-full)",
+      "Bash(timeout 30s make test-full)",
+      "Bash(timeout:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(git check-ignore:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
