@@ -227,3 +227,27 @@ type BulkConfigOperation struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
+
+// BulkDriftResult represents the results of bulk drift detection
+type BulkDriftResult struct {
+	Total       int           `json:"total"`
+	InSync      int           `json:"in_sync"`
+	Drifted     int           `json:"drifted"`
+	Errors      int           `json:"errors"`
+	Results     []DriftResult `json:"results"`
+	StartedAt   time.Time     `json:"started_at"`
+	CompletedAt time.Time     `json:"completed_at"`
+	Duration    time.Duration `json:"duration"`
+}
+
+// DriftResult represents the drift detection result for a single device
+type DriftResult struct {
+	DeviceID        uint         `json:"device_id"`
+	DeviceName      string       `json:"device_name"`
+	DeviceIP        string       `json:"device_ip"`
+	Status          string       `json:"status"` // "synced", "drift", "error"
+	Error           string       `json:"error,omitempty"`
+	DriftSummary    string       `json:"drift_summary,omitempty"`
+	DifferenceCount int          `json:"difference_count,omitempty"`
+	Drift           *ConfigDrift `json:"drift,omitempty"`
+}
