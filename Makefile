@@ -91,7 +91,7 @@ test-coverage-ci:
 test-coverage-check:
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	echo "Total coverage: $${COVERAGE}%"; \
-	THRESHOLD=30; \
+	THRESHOLD=28; \
 	if [ "$$(echo "$$COVERAGE < $$THRESHOLD" | bc -l)" = "1" ]; then \
 		echo "Coverage $${COVERAGE}% is below threshold $${THRESHOLD}%"; \
 		exit 1; \

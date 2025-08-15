@@ -309,9 +309,20 @@ func (c *WebSocketClient) readPump() {
 	}()
 
 	c.conn.SetReadLimit(512)
-	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	if err := c.conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+		c.hub.logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "websocket",
+		}).Error("Failed to set read deadline")
+		return
+	}
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		if err := c.conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
+			c.hub.logger.WithFields(map[string]any{
+				"error":     err.Error(),
+				"component": "websocket",
+			}).Error("Failed to set read deadline in pong handler")
+		}
 		return nil
 	})
 
@@ -340,9 +351,20 @@ func (c *WebSocketClient) writePump() {
 	for {
 		select {
 		case update, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				c.hub.logger.WithFields(map[string]any{
+					"error":     err.Error(),
+					"component": "websocket",
+				}).Error("Failed to set write deadline")
+				return
+			}
 			if !ok {
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := c.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					c.hub.logger.WithFields(map[string]any{
+						"error":     err.Error(),
+						"component": "websocket",
+					}).Error("Failed to write close message")
+				}
 				return
 			}
 
@@ -355,7 +377,13 @@ func (c *WebSocketClient) writePump() {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				c.hub.logger.WithFields(map[string]any{
+					"error":     err.Error(),
+					"component": "websocket",
+				}).Error("Failed to set write deadline for ping")
+				return
+			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}

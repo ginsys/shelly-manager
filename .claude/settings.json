@@ -44,10 +44,16 @@
       "Bash(timeout:*)",
       "Bash(pkill:*)",
       "Bash(lsof:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(export LC_NUMERIC=C)",
+      "Bash(export LANG=C)",
+      "Bash(SHELLY_FORCE_NETWORK_TESTS=1 go test -short -v ./internal/discovery -run TestScanHost_NoDevice)"
     ],
     "deny": [],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "acceptEdits",
+    "additionalDirectories": [
+      "/home/serge/scratch"
+    ]
   },
   "memory": ".claude/CLAUDE.md",
   "saveSettingsPath": ".claude/settings.json",

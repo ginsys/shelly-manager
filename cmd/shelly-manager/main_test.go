@@ -211,6 +211,157 @@ discovery:
 	}
 }
 
+func TestAddCommand(t *testing.T) {
+	binaryPath := buildTestBinary(t)
+	defer os.Remove(binaryPath)
+
+	tempDir := testutil.TempDir(t)
+	dbPath := filepath.Join(tempDir, "add-test.db")
+	configPath := filepath.Join(tempDir, "add-config.yaml")
+
+	configContent := `server:
+  port: 8083
+  host: "127.0.0.1"
+  log_level: "error"
+
+logging:
+  level: "error"
+  format: "text"
+  output: "stderr"
+
+database:
+  path: "` + dbPath + `"
+
+discovery:
+  enabled: true
+  timeout: 1
+`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	t.Run("add command without arguments", func(t *testing.T) {
+		_, err := runCommand(t, binaryPath, "--config", configPath, "add")
+		if err == nil {
+			t.Error("Expected error for add command without arguments")
+		}
+	})
+
+	t.Run("add command with invalid IP", func(t *testing.T) {
+		_, err := runCommand(t, binaryPath, "--config", configPath, "add", "invalid-ip")
+		if err == nil {
+			t.Error("Expected error for add command with invalid IP")
+		}
+	})
+
+	t.Run("add command with unreachable IP", func(t *testing.T) {
+		// Use a non-routable IP address that will timeout quickly
+		_, err := runCommandWithTimeout(t, 5*time.Second, binaryPath, "--config", configPath, "add", "10.255.255.254")
+		if err == nil {
+			t.Error("Expected error for add command with unreachable IP")
+		}
+	})
+}
+
+func TestCommandLineArguments(t *testing.T) {
+	binaryPath := buildTestBinary(t)
+	defer os.Remove(binaryPath)
+
+	t.Run("version information", func(t *testing.T) {
+		output, _ := runCommand(t, binaryPath, "--help")
+		// Should contain basic app information
+		if !strings.Contains(output, "shelly-manager") {
+			t.Errorf("Expected app name in help output, got: %s", output)
+		}
+	})
+
+	t.Run("config flag validation", func(t *testing.T) {
+		_, err := runCommand(t, binaryPath, "--config", "/nonexistent/file.yaml", "list")
+		if err == nil {
+			t.Error("Expected error for nonexistent config file")
+		}
+	})
+}
+
+func TestCommandExecution(t *testing.T) {
+	binaryPath := buildTestBinary(t)
+	defer os.Remove(binaryPath)
+
+	tempDir := testutil.TempDir(t)
+	configPath := filepath.Join(tempDir, "exec-config.yaml")
+
+	configContent := `server:
+  port: 8084
+  host: "127.0.0.1"
+  log_level: "error"
+
+logging:
+  level: "error"
+  format: "text"
+  output: "stderr"
+
+database:
+  path: "` + filepath.Join(tempDir, "exec.db") + `"
+
+discovery:
+  enabled: true
+  timeout: 1
+  networks:
+    - "192.168.1.0/30"
+`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	t.Run("discover with specific network", func(t *testing.T) {
+		output, err := runCommandWithTimeout(t, 10*time.Second, binaryPath, "--config", configPath, "discover", "192.168.1.0/30")
+		if err != nil {
+			t.Fatalf("Discover command with network failed: %v", err)
+		}
+
+		// Should show discovery process
+		if !strings.Contains(output, "Discovering") && !strings.Contains(output, "Discovery complete") && !strings.Contains(output, "Found 0 devices") {
+			t.Errorf("Expected discovery output, got: %s", output)
+		}
+	})
+
+	t.Run("list with devices", func(t *testing.T) {
+		// First run list to ensure table headers are shown
+		output, err := runCommand(t, binaryPath, "--config", configPath, "list")
+		if err != nil {
+			t.Fatalf("List command failed: %v", err)
+		}
+
+		// Should show table structure even if empty
+		if !strings.Contains(output, "ID") {
+			t.Errorf("Expected table headers in list output, got: %s", output)
+		}
+	})
+}
+
+func TestErrorHandling(t *testing.T) {
+	binaryPath := buildTestBinary(t)
+	defer os.Remove(binaryPath)
+
+	t.Run("unknown flag", func(t *testing.T) {
+		_, err := runCommand(t, binaryPath, "--unknown-flag")
+		if err == nil {
+			t.Error("Expected error for unknown flag")
+		}
+	})
+
+	t.Run("invalid command", func(t *testing.T) {
+		_, err := runCommand(t, binaryPath, "nonexistent-command")
+		if err == nil {
+			t.Error("Expected error for nonexistent command")
+		}
+	})
+}
+
 // Helper functions
 
 func buildTestBinary(t *testing.T) string {
