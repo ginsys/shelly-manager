@@ -26,21 +26,10 @@ jobs:
         cache: true
     
     - name: Install dependencies
-      run: |
-        go mod download
-        go mod verify
+      run: make deps
     
     - name: Run tests with coverage
-      run: |
-        # Use -short to skip network-dependent tests that can hang in CI
-        CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...
-    
-    - name: Generate coverage report
-      run: |
-        go tool cover -html=coverage.out -o coverage.html
-        echo "Coverage report generated at coverage.html"
-        echo "Coverage summary:"
-        go tool cover -func=coverage.out | tail -1
+      run: make test-coverage-ci
     
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
@@ -61,15 +50,7 @@ jobs:
           coverage.html
     
     - name: Check test coverage threshold
-      run: |
-        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-        echo "Total coverage: ${COVERAGE}%"
-        THRESHOLD=30
-        if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
-          echo "Coverage ${COVERAGE}% is below threshold ${THRESHOLD}%"
-          exit 1
-        fi
-        echo "Coverage ${COVERAGE}% meets threshold ${THRESHOLD}%"
+      run: make test-coverage-check
 
   test-matrix:
     name: Test on ${{ matrix.os }} with Go ${{ matrix.go-version }}
@@ -90,14 +71,10 @@ jobs:
         cache: true
     
     - name: Install dependencies
-      run: go mod download
+      run: make deps
     
     - name: Run tests
-      run: |
-        # Use -short to skip network-dependent tests that can hang in CI
-        go test -v -race -short ./...
-      env:
-        CGO_ENABLED: 1
+      run: make test-matrix
 
   lint:
     name: Lint Code
@@ -118,6 +95,10 @@ jobs:
       with:
         version: latest
         args: --timeout=5m
+    
+    # Alternative: use make command (requires golangci-lint to be installed)
+    # - name: Run linter
+    #   run: make lint
 
   build:
     name: Build Binary

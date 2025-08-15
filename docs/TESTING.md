@@ -1,6 +1,6 @@
-# Testing Framework Documentation
+# Testing Guide
 
-This document describes the comprehensive testing framework for the Shelly Manager project.
+This document describes the comprehensive testing framework for the Shelly Manager project, including all available test commands and when to use them.
 
 ## Test Structure
 
@@ -13,31 +13,246 @@ This document describes the comprehensive testing framework for the Shelly Manag
 └── cmd/shelly-manager/main_test.go    # Integration/CLI tests
 ```
 
-## Running Tests
+## Test Command Groups
 
-### Quick Commands
+All test commands are organized into logical groups and defined in the `Makefile`. The GitHub Actions workflows use these make commands for consistent testing across environments.
 
-```bash
-# Run all tests
-make test
+### 1. Basic Test Commands
 
-# Run only unit tests (fast)
-make test-unit
+#### `make test`
+**Purpose**: Run basic tests in fast mode, skipping network-dependent tests  
+**Command**: `CGO_ENABLED=1 go test -v -short ./...`  
+**When to use**: 
+- During development for quick feedback
+- Default test command for local development
+- When you want to run most tests but skip slow network tests
 
-# Run integration tests
-make test-integration  
+#### `make test-unit` 
+**Purpose**: Run only unit tests (internal packages)  
+**Command**: `CGO_ENABLED=1 go test -v -short ./internal/...`  
+**When to use**:
+- Testing business logic in isolation
+- Fastest test execution (11 seconds)
+- When working on internal package changes
 
-# Generate coverage report
-make test-coverage
+#### `make test-integration`
+**Purpose**: Run integration tests (cmd packages)  
+**Command**: `CGO_ENABLED=1 go test -v -short ./cmd/...`  
+**When to use**:
+- Testing CLI commands and their integration
+- After changes to command-line interfaces
+- Verifying end-to-end functionality
 
-# Run with race detection
-make test-race
+#### `make test-full`
+**Purpose**: Run complete test suite including network tests  
+**Command**: `CGO_ENABLED=1 go test -v ./...`  
+**When to use**:
+- Before committing major changes
+- When network-dependent functionality changes
+- Full validation before releases
+- **Warning**: Slower execution due to network tests
 
-# Run benchmarks
-make benchmark
-```
+### 2. Race Detection Tests
 
-### Coverage Results
+#### `make test-race` (default)
+**Purpose**: Run tests with race detection in fast mode  
+**Command**: `CGO_ENABLED=1 go test -v -short -race ./...`  
+**When to use**:
+- Detecting concurrency issues during development
+- Default race detection command
+- Before working with goroutines or shared data
+
+#### `make test-race-short`
+**Purpose**: Explicit short mode race detection  
+**Command**: `CGO_ENABLED=1 go test -v -short -race ./...`  
+**When to use**:
+- Same as `make test-race`
+- More explicit about running in short mode
+
+#### `make test-race-full`
+**Purpose**: Full race detection including network tests  
+**Command**: `CGO_ENABLED=1 go test -v -race ./...`  
+**When to use**:
+- Comprehensive race detection
+- Before releases
+- When debugging race conditions in network code
+- **Warning**: Slowest test execution
+
+### 3. Coverage Tests
+
+#### `make test-coverage`
+**Purpose**: Generate test coverage report in fast mode  
+**Command**: `CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...`  
+**When to use**:
+- Regular coverage checking during development
+- Quick coverage feedback
+- Generates `coverage.html` report
+
+#### `make test-coverage-short`
+**Purpose**: Explicit short mode coverage testing  
+**Command**: Same as `test-coverage`  
+**When to use**:
+- More explicit about running in short mode
+- Same use cases as `test-coverage`
+
+#### `make test-coverage-full`
+**Purpose**: Complete coverage including network tests  
+**Command**: `CGO_ENABLED=1 go test -v -coverprofile=coverage.out ./...`  
+**When to use**:
+- Comprehensive coverage analysis
+- Before releases
+- When you need complete coverage metrics
+
+#### `make test-coverage-ci`
+**Purpose**: Coverage testing optimized for CI/CD  
+**Command**: `CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...`  
+**When to use**:
+- CI/CD pipelines (used by GitHub Actions)
+- Combines race detection with coverage
+- Atomic coverage mode for better accuracy
+
+#### `make test-coverage-check`
+**Purpose**: Check if coverage meets minimum threshold (30%)  
+**When to use**:
+- Quality gates in CI/CD
+- Ensuring minimum test coverage
+- **Requires**: Existing `coverage.out` file
+
+#### `make test-coverage-with-check`
+**Purpose**: Generate coverage and check threshold in one step  
+**When to use**:
+- Complete coverage validation
+- CI/CD quality gates
+- Local validation before commits
+
+### 4. CI/Matrix Tests
+
+#### `make test-matrix`
+**Purpose**: Run tests suitable for matrix testing across different environments  
+**Command**: `CGO_ENABLED=1 go test -v -race -short ./...`  
+**When to use**:
+- GitHub Actions matrix testing (used automatically)
+- Testing across different Go versions and OS
+- Standardized test execution for CI
+
+#### `make test-ci`
+**Purpose**: Complete CI test suite with all validations  
+**Dependencies**: `test-coverage-with-check`  
+**When to use**:
+- Main CI/CD pipeline
+- Comprehensive validation
+- Quality gate enforcement
+
+### 5. Performance and Development Tests
+
+#### `make benchmark`
+**Purpose**: Run benchmark tests  
+**Command**: `CGO_ENABLED=1 go test -v -short -bench=. ./...`  
+**When to use**:
+- Performance regression testing
+- Optimizing critical code paths
+- Measuring performance improvements
+
+#### `make test-watch`
+**Purpose**: Watch for file changes and re-run unit tests  
+**Command**: `find . -name "*.go" | entr -c make test-unit`  
+**When to use**:
+- Active development with continuous feedback
+- TDD (Test-Driven Development)
+- **Requires**: `entr` tool installed
+
+### 6. Quality and Dependencies
+
+#### `make lint`
+**Purpose**: Run code linting with golangci-lint  
+**Command**: `golangci-lint run --timeout=5m`  
+**When to use**:
+- Code quality checking
+- Before commits
+- Catching style and potential issues
+
+#### `make deps`
+**Purpose**: Download and verify dependencies  
+**Command**: `go mod download && go mod verify`  
+**When to use**:
+- Initial project setup
+- CI/CD dependency installation
+- Verifying dependency integrity
+
+#### `make deps-tidy`
+**Purpose**: Download dependencies and clean up go.mod  
+**Command**: `go mod download && go mod tidy`  
+**When to use**:
+- After adding/removing dependencies
+- Cleaning up unused dependencies
+- Preparing for commits
+
+## GitHub Actions Integration
+
+The GitHub Actions workflows (`test.yml`) use the following make commands:
+
+### Main test job:
+1. `make deps` - Install and verify dependencies
+2. `make test-coverage-ci` - Run tests with coverage and race detection
+3. `make test-coverage-check` - Verify coverage meets 30% threshold
+
+### Matrix test job:
+1. `make deps` - Install dependencies  
+2. `make test-matrix` - Run tests across OS/Go version matrix
+
+### Lint job:
+- Uses golangci-lint action directly
+- Alternative: `make lint` (requires golangci-lint installed)
+
+### Build job:
+- `make build` - Build the binary
+
+## Command Selection Guide
+
+**For Development**:
+- Quick feedback: `make test`
+- Unit testing: `make test-unit`
+- Coverage checking: `make test-coverage`
+- Race detection: `make test-race`
+- Continuous testing: `make test-watch`
+
+**Before Commits**:
+- Full validation: `make test-coverage-with-check`
+- Race detection: `make test-race`
+- Code quality: `make lint`
+
+**Before Releases**:
+- Complete testing: `make test-full`
+- Full race detection: `make test-race-full`
+- Complete coverage: `make test-coverage-full`
+- Performance check: `make benchmark`
+
+**CI/CD Usage**:
+- Main pipeline: `make test-ci`
+- Matrix testing: `make test-matrix`
+- Coverage CI: `make test-coverage-ci`
+
+## Coverage Thresholds and Environment
+
+### Coverage Requirements
+- **Minimum coverage**: 30% (enforced in CI)
+- **Coverage check**: Automatically enforced with `make test-coverage-check`
+- **Files generated**: `coverage.out`, `coverage.html`
+
+### Environment Requirements
+- **CGO_ENABLED=1**: Required for most tests (SQLite database functionality)
+- **Go version**: 1.21+ (as specified in workflows)
+- **Optional tools**: 
+  - `entr` for watch mode (`brew install entr`)
+  - `golangci-lint` for linting
+  - `bc` for coverage calculations
+
+### Test Categories by Location
+- **Unit tests**: `./internal/...` - Business logic, isolated testing
+- **Integration tests**: `./cmd/...` - CLI commands, end-to-end functionality
+- **All tests**: `./...` - Complete test suite
+
+## Coverage Results
 
 Current test coverage by package:
 - **Database**: 94.4% - Excellent coverage of all CRUD operations
