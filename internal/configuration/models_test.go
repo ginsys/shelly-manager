@@ -75,7 +75,7 @@ func TestConfigTemplate_Marshaling(t *testing.T) {
 func TestDeviceConfig_Marshaling(t *testing.T) {
 	now := time.Now()
 	templateID := uint(1)
-	
+
 	config := &DeviceConfig{
 		ID:         1,
 		DeviceID:   100,
@@ -139,7 +139,7 @@ func TestConfigHistory_Marshaling(t *testing.T) {
 
 func TestConfigDrift(t *testing.T) {
 	now := time.Now()
-	
+
 	drift := &ConfigDrift{
 		DeviceID:       100,
 		DeviceName:     "Test Device",
@@ -183,7 +183,7 @@ func TestConfigDrift(t *testing.T) {
 	assert.WithinDuration(t, *drift.LastSynced, *decoded.LastSynced, time.Second)
 	assert.WithinDuration(t, drift.DriftDetected, decoded.DriftDetected, time.Second)
 	assert.Len(t, decoded.Differences, 3)
-	
+
 	// Check differences
 	for i, diff := range decoded.Differences {
 		assert.Equal(t, drift.Differences[i].Path, diff.Path)
@@ -196,7 +196,7 @@ func TestGen1Config_Marshaling(t *testing.T) {
 		Name:     "Test Device",
 		Timezone: "America/New_York",
 	}
-	
+
 	// Set WiFi config
 	config.WiFi.SSID = "TestNetwork"
 	config.WiFi.Password = "secret123"
@@ -204,16 +204,16 @@ func TestGen1Config_Marshaling(t *testing.T) {
 	config.WiFi.Netmask = "255.255.255.0"
 	config.WiFi.Gateway = "192.168.1.1"
 	config.WiFi.DNS = "8.8.8.8"
-	
+
 	// Set Auth config
 	config.Auth.Enabled = true
 	config.Auth.Username = "admin"
 	config.Auth.Password = "password"
-	
+
 	// Set Cloud config
 	config.Cloud.Enabled = true
 	config.Cloud.Server = "cloud.shelly.com"
-	
+
 	// Set MQTT config
 	config.MQTT.Enable = true
 	config.MQTT.Server = "mqtt.example.com:1883"
@@ -224,7 +224,7 @@ func TestGen1Config_Marshaling(t *testing.T) {
 	config.MQTT.RetainMessages = false
 	config.MQTT.QoS = 1
 	config.MQTT.KeepAlive = 60
-	
+
 	// Add device-specific settings
 	config.DeviceSettings = json.RawMessage(`{"relay": {"on": true}}`)
 
@@ -240,7 +240,7 @@ func TestGen1Config_Marshaling(t *testing.T) {
 	// Verify all fields
 	assert.Equal(t, config.Name, decoded.Name)
 	assert.Equal(t, config.Timezone, decoded.Timezone)
-	
+
 	// Verify WiFi settings
 	assert.Equal(t, config.WiFi.SSID, decoded.WiFi.SSID)
 	assert.Equal(t, config.WiFi.Password, decoded.WiFi.Password)
@@ -248,16 +248,16 @@ func TestGen1Config_Marshaling(t *testing.T) {
 	assert.Equal(t, config.WiFi.Netmask, decoded.WiFi.Netmask)
 	assert.Equal(t, config.WiFi.Gateway, decoded.WiFi.Gateway)
 	assert.Equal(t, config.WiFi.DNS, decoded.WiFi.DNS)
-	
+
 	// Verify Auth settings
 	assert.Equal(t, config.Auth.Enabled, decoded.Auth.Enabled)
 	assert.Equal(t, config.Auth.Username, decoded.Auth.Username)
 	assert.Equal(t, config.Auth.Password, decoded.Auth.Password)
-	
+
 	// Verify Cloud settings
 	assert.Equal(t, config.Cloud.Enabled, decoded.Cloud.Enabled)
 	assert.Equal(t, config.Cloud.Server, decoded.Cloud.Server)
-	
+
 	// Verify MQTT settings
 	assert.Equal(t, config.MQTT.Enable, decoded.MQTT.Enable)
 	assert.Equal(t, config.MQTT.Server, decoded.MQTT.Server)
@@ -268,14 +268,14 @@ func TestGen1Config_Marshaling(t *testing.T) {
 	assert.Equal(t, config.MQTT.RetainMessages, decoded.MQTT.RetainMessages)
 	assert.Equal(t, config.MQTT.QoS, decoded.MQTT.QoS)
 	assert.Equal(t, config.MQTT.KeepAlive, decoded.MQTT.KeepAlive)
-	
+
 	// Verify device settings
 	assert.JSONEq(t, string(config.DeviceSettings), string(decoded.DeviceSettings))
 }
 
 func TestGen2Config_Marshaling(t *testing.T) {
 	config := &Gen2Config{}
-	
+
 	// Set System config
 	config.Sys.Device.Name = "Test Device Gen2"
 	config.Sys.Device.MAC = "AA:BB:CC:DD:EE:FF"
@@ -284,12 +284,12 @@ func TestGen2Config_Marshaling(t *testing.T) {
 	config.Sys.Location.Lon = -0.1278
 	config.Sys.Debug.Level = "info"
 	config.Sys.Debug.FileLog = true
-	
+
 	// Set WiFi AP config
 	config.WiFi.AP.SSID = "ShellyAP"
 	config.WiFi.AP.Pass = "appassword"
 	config.WiFi.AP.Enable = false
-	
+
 	// Set WiFi STA config
 	config.WiFi.STA.SSID = "HomeNetwork"
 	config.WiFi.STA.Pass = "homepass"
@@ -298,11 +298,11 @@ func TestGen2Config_Marshaling(t *testing.T) {
 	config.WiFi.STA.Netmask = "255.255.255.0"
 	config.WiFi.STA.Gateway = "192.168.1.1"
 	config.WiFi.STA.NameServer = "1.1.1.1"
-	
+
 	// Set Cloud config
 	config.Cloud.Enable = true
 	config.Cloud.Server = "cloud-gen2.shelly.com"
-	
+
 	// Set MQTT config
 	config.MQTT.Enable = true
 	config.MQTT.Server = "mqtt-gen2.example.com:8883"
@@ -310,7 +310,7 @@ func TestGen2Config_Marshaling(t *testing.T) {
 	config.MQTT.Pass = "gen2pass"
 	config.MQTT.ClientID = "shelly-gen2-test"
 	config.MQTT.Topic = "shellies/gen2/test"
-	
+
 	// Add component configurations
 	config.Components = json.RawMessage(`{"switch:0": {"name": "Light", "in_mode": "momentary"}}`)
 
@@ -331,12 +331,12 @@ func TestGen2Config_Marshaling(t *testing.T) {
 	assert.Equal(t, config.Sys.Location.Lon, decoded.Sys.Location.Lon)
 	assert.Equal(t, config.Sys.Debug.Level, decoded.Sys.Debug.Level)
 	assert.Equal(t, config.Sys.Debug.FileLog, decoded.Sys.Debug.FileLog)
-	
+
 	// Verify WiFi AP settings
 	assert.Equal(t, config.WiFi.AP.SSID, decoded.WiFi.AP.SSID)
 	assert.Equal(t, config.WiFi.AP.Pass, decoded.WiFi.AP.Pass)
 	assert.Equal(t, config.WiFi.AP.Enable, decoded.WiFi.AP.Enable)
-	
+
 	// Verify WiFi STA settings
 	assert.Equal(t, config.WiFi.STA.SSID, decoded.WiFi.STA.SSID)
 	assert.Equal(t, config.WiFi.STA.Pass, decoded.WiFi.STA.Pass)
@@ -345,11 +345,11 @@ func TestGen2Config_Marshaling(t *testing.T) {
 	assert.Equal(t, config.WiFi.STA.Netmask, decoded.WiFi.STA.Netmask)
 	assert.Equal(t, config.WiFi.STA.Gateway, decoded.WiFi.STA.Gateway)
 	assert.Equal(t, config.WiFi.STA.NameServer, decoded.WiFi.STA.NameServer)
-	
+
 	// Verify Cloud settings
 	assert.Equal(t, config.Cloud.Enable, decoded.Cloud.Enable)
 	assert.Equal(t, config.Cloud.Server, decoded.Cloud.Server)
-	
+
 	// Verify MQTT settings
 	assert.Equal(t, config.MQTT.Enable, decoded.MQTT.Enable)
 	assert.Equal(t, config.MQTT.Server, decoded.MQTT.Server)
@@ -357,7 +357,7 @@ func TestGen2Config_Marshaling(t *testing.T) {
 	assert.Equal(t, config.MQTT.Pass, decoded.MQTT.Pass)
 	assert.Equal(t, config.MQTT.ClientID, decoded.MQTT.ClientID)
 	assert.Equal(t, config.MQTT.Topic, decoded.MQTT.Topic)
-	
+
 	// Verify components
 	assert.JSONEq(t, string(config.Components), string(decoded.Components))
 }
@@ -414,7 +414,7 @@ func TestTemplateVariable(t *testing.T) {
 			assert.Equal(t, tt.variable.Description, decoded.Description)
 			assert.Equal(t, tt.variable.Type, decoded.Type)
 			assert.Equal(t, tt.variable.Required, decoded.Required)
-			
+
 			// DefaultValue comparison depends on type
 			switch tt.variable.Type {
 			case "string":
@@ -433,7 +433,7 @@ func TestTemplateVariable(t *testing.T) {
 func TestBulkConfigOperation_Marshaling(t *testing.T) {
 	now := time.Now()
 	templateID := uint(1)
-	
+
 	operation := &BulkConfigOperation{
 		ID:          1,
 		Name:        "Bulk Update",
@@ -529,14 +529,14 @@ func TestConfigDifference_Types(t *testing.T) {
 
 			assert.Equal(t, tt.diff.Path, decoded.Path)
 			assert.Equal(t, tt.diff.Type, decoded.Type)
-			
+
 			// Compare Expected and Actual based on type
 			if tt.diff.Expected == nil {
 				assert.Nil(t, decoded.Expected)
 			} else {
 				assert.NotNil(t, decoded.Expected)
 			}
-			
+
 			if tt.diff.Actual == nil {
 				assert.Nil(t, decoded.Actual)
 			} else {
@@ -548,13 +548,13 @@ func TestConfigDifference_Types(t *testing.T) {
 
 func TestDeviceConfig_SyncStatuses(t *testing.T) {
 	validStatuses := []string{"synced", "pending", "error", "drift"}
-	
+
 	for _, status := range validStatuses {
 		t.Run(status, func(t *testing.T) {
 			config := DeviceConfig{
 				SyncStatus: status,
 			}
-			
+
 			// Verify the status is one of the valid values
 			assert.Contains(t, validStatuses, config.SyncStatus)
 		})
@@ -563,13 +563,13 @@ func TestDeviceConfig_SyncStatuses(t *testing.T) {
 
 func TestConfigHistory_Actions(t *testing.T) {
 	validActions := []string{"import", "export", "sync", "manual", "template"}
-	
+
 	for _, action := range validActions {
 		t.Run(action, func(t *testing.T) {
 			history := ConfigHistory{
 				Action: action,
 			}
-			
+
 			// Verify the action is valid
 			assert.Contains(t, []string{"import", "export", "sync", "manual", "template"}, history.Action)
 		})
@@ -578,13 +578,13 @@ func TestConfigHistory_Actions(t *testing.T) {
 
 func TestBulkConfigOperation_Statuses(t *testing.T) {
 	validStatuses := []string{"pending", "running", "completed", "failed"}
-	
+
 	for _, status := range validStatuses {
 		t.Run(status, func(t *testing.T) {
 			operation := BulkConfigOperation{
 				Status: status,
 			}
-			
+
 			// Verify the status is one of the valid values
 			assert.Contains(t, validStatuses, operation.Status)
 		})
@@ -630,7 +630,7 @@ func TestConfigTemplate_DeviceTypes(t *testing.T) {
 				DeviceType: tt.deviceType,
 				Generation: tt.generation,
 			}
-			
+
 			// Basic validation
 			assert.NotEmpty(t, template.DeviceType)
 			assert.GreaterOrEqual(t, template.Generation, 0)

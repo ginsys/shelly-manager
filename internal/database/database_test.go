@@ -14,7 +14,7 @@ func TestNewManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected no error creating manager, got: %v", err)
 	}
-	
+
 	if manager.DB == nil {
 		t.Fatal("Expected DB to be initialized")
 	}
@@ -176,7 +176,7 @@ func TestUpsertDeviceFromDiscovery(t *testing.T) {
 	}
 	settingsJSON, _ := json.Marshal(customSettings)
 	device.Settings = string(settingsJSON)
-	
+
 	err = manager.UpdateDevice(device)
 	if err != nil {
 		t.Fatalf("Failed to update device: %v", err)
@@ -184,8 +184,8 @@ func TestUpsertDeviceFromDiscovery(t *testing.T) {
 
 	// Test 2: Update existing device via discovery (should preserve user data)
 	updatedDiscovery := DiscoveryUpdate{
-		IP:       "192.168.1.101", // IP changed
-		Type:     "Smart Plug",     // Same type
+		IP:       "192.168.1.101",   // IP changed
+		Type:     "Smart Plug",      // Same type
 		Firmware: "20240101-145500", // Firmware updated
 		Status:   "online",
 		LastSeen: time.Now(),
@@ -235,7 +235,7 @@ func TestUpsertDeviceFromDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Upsert should not fail for existing MAC: %v", err)
 	}
-	
+
 	// Should return the same device (by ID) and preserve the custom name
 	if duplicateDevice.ID != updatedDevice.ID {
 		t.Errorf("Expected same device ID, got %d vs %d", duplicateDevice.ID, updatedDevice.ID)

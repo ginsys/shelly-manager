@@ -33,13 +33,13 @@ func HTTPMiddleware(logger *Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			
+
 			// Wrap the response writer
 			wrapped := &responseWriter{
 				ResponseWriter: w,
 				statusCode:     0,
 			}
-			
+
 			// Add request ID to context if not present
 			ctx := r.Context()
 			if ctx.Value("request_id") == nil {
@@ -47,13 +47,13 @@ func HTTPMiddleware(logger *Logger) func(http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, "request_id", requestID)
 				r = r.WithContext(ctx)
 			}
-			
+
 			// Call the next handler
 			next.ServeHTTP(wrapped, r)
-			
+
 			// Calculate duration
 			duration := time.Since(start).Milliseconds()
-			
+
 			// Log the request
 			logger.LogHTTPRequest(
 				r.Method,
@@ -89,17 +89,17 @@ func RecoveryMiddleware(logger *Logger) func(http.Handler) http.Handler {
 			defer func() {
 				if err := recover(); err != nil {
 					logger.WithFields(map[string]any{
-						"method":     r.Method,
-						"path":       r.URL.Path,
+						"method":      r.Method,
+						"path":        r.URL.Path,
 						"remote_addr": r.RemoteAddr,
-						"panic":      err,
-						"component":  "http",
+						"panic":       err,
+						"component":   "http",
 					}).Error("HTTP request panicked")
-					
+
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				}
 			}()
-			
+
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -110,12 +110,12 @@ func CORSMiddleware(logger *Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			
+
 			// Set CORS headers
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			
+
 			// Log CORS requests
 			if origin != "" {
 				logger.WithFields(map[string]any{
@@ -125,13 +125,13 @@ func CORSMiddleware(logger *Logger) func(http.Handler) http.Handler {
 					"component": "cors",
 				}).Debug("CORS request processed")
 			}
-			
+
 			// Handle preflight requests
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
-			
+
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -9,7 +9,7 @@ import (
 // ResetEnergyCounters resets energy counters for a switch
 func (c *Client) ResetEnergyCounters(ctx context.Context, channel int) error {
 	params := map[string]interface{}{
-		"id": channel,
+		"id":   channel,
 		"type": []string{"aenergy"},
 	}
 	return c.rpcCall(ctx, "Switch.ResetCounters", params, nil)

@@ -121,12 +121,12 @@ func TestProvisioningManager_ProvisionDevice(t *testing.T) {
 	// Test provisioning (this will use mock implementations)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	result, err := pm.ProvisionDevice(ctx, device, request)
 
 	// The provisioning will fail when trying to actually connect to the device,
 	// but we can verify the workflow structure was executed
-	
+
 	if result == nil {
 		t.Error("Result should not be nil even on failure")
 		return
@@ -136,7 +136,7 @@ func TestProvisioningManager_ProvisionDevice(t *testing.T) {
 	if result.DeviceMAC != device.MAC {
 		t.Errorf("Expected MAC %s, got %s", device.MAC, result.DeviceMAC)
 	}
-	
+
 	if result.DeviceName != request.DeviceName {
 		t.Errorf("Expected name %s, got %s", request.DeviceName, result.DeviceName)
 	}
@@ -158,7 +158,7 @@ func TestProvisioningManager_ProvisionDevice(t *testing.T) {
 		t.Log("Provisioning completed successfully (unexpected with mock)")
 	} else {
 		t.Logf("Provisioning failed as expected with mock devices: %v", err)
-		
+
 		// Check that we attempted some steps
 		if len(result.Steps) == 0 {
 			t.Error("Should have attempted at least some provisioning steps")
@@ -272,7 +272,7 @@ func TestShellyProvisioner_DiscoverUnprovisionedDevices(t *testing.T) {
 		if device.Generation == 0 {
 			t.Error("Device generation should be identified")
 		}
-		
+
 		if device.Model == "" {
 			t.Error("Device model should be identified")
 		}
@@ -344,7 +344,7 @@ func TestProvisioningRequest_Validation(t *testing.T) {
 			if tt.request.SSID == "" && tt.valid {
 				t.Error("Request should be invalid when SSID is missing")
 			}
-			
+
 			if tt.request.SSID != "" && !tt.valid && tt.name == "missing SSID" {
 				t.Error("Request should be valid when SSID is present")
 			}
@@ -368,7 +368,7 @@ func TestProvisioningStatus_Transitions(t *testing.T) {
 		if len(validNext) == 0 {
 			t.Errorf("Status %s should have valid next states", current)
 		}
-		
+
 		// Each final state should transition back to idle
 		for _, next := range validNext {
 			if next == StatusCompleted || next == StatusFailed || next == StatusTimeout {
@@ -452,18 +452,18 @@ func BenchmarkProvisioningDiscovery(b *testing.B) {
 		Format: "text",
 		Output: "stderr",
 	})
-	
+
 	cfg := &config.Config{}
 	pm := NewProvisioningManager(cfg, logger)
-	
+
 	mockIface := testMockInterface(logger)
 	pm.SetNetworkInterface(mockIface)
-	
+
 	mockProvisioner := NewShellyProvisioner(logger, mockIface)
 	pm.SetDeviceProvisioner(mockProvisioner)
-	
+
 	ctx := context.Background()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = pm.DiscoverUnprovisionedDevices(ctx)

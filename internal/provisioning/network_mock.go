@@ -13,8 +13,8 @@ import (
 // MockNetworkInterface provides a mock implementation for non-Linux platforms
 // This is useful for development and testing on macOS/Windows
 type MockNetworkInterface struct {
-	logger           *logging.Logger
-	currentNetwork   *WiFiNetwork
+	logger            *logging.Logger
+	currentNetwork    *WiFiNetwork
 	availableNetworks []WiFiNetwork
 }
 
@@ -58,7 +58,7 @@ func NewMockNetworkInterface(logger *logging.Logger) *MockNetworkInterface {
 			Frequency: 2462,
 		},
 	}
-	
+
 	return &MockNetworkInterface{
 		logger:            logger,
 		availableNetworks: mockNetworks,
@@ -69,17 +69,17 @@ func NewMockNetworkInterface(logger *logging.Logger) *MockNetworkInterface {
 func (ni *MockNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]WiFiNetwork, error) {
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"platform": "mock",
+		"platform":  "mock",
 	}).Debug("Scanning for available WiFi networks (mock)")
-	
+
 	// Simulate scan delay
 	time.Sleep(1 * time.Second)
-	
+
 	ni.logger.WithFields(map[string]any{
-		"component": "network_interface",
+		"component":      "network_interface",
 		"networks_found": len(ni.availableNetworks),
 	}).Debug("WiFi network scan completed (mock)")
-	
+
 	return ni.availableNetworks, nil
 }
 
@@ -87,10 +87,10 @@ func (ni *MockNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]WiF
 func (ni *MockNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, password string) error {
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"platform": "mock",
-		"ssid": ssid,
+		"platform":  "mock",
+		"ssid":      ssid,
 	}).Info("Connecting to WiFi network (mock)")
-	
+
 	// Find the network in our available list
 	var targetNetwork *WiFiNetwork
 	for _, network := range ni.availableNetworks {
@@ -99,32 +99,32 @@ func (ni *MockNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, pass
 			break
 		}
 	}
-	
+
 	if targetNetwork == nil {
 		return fmt.Errorf("network %s not found", ssid)
 	}
-	
+
 	// Simulate connection delay
 	time.Sleep(3 * time.Second)
-	
+
 	// Check if password is required
 	if targetNetwork.Security != "" && password == "" {
 		return fmt.Errorf("password required for secured network %s", ssid)
 	}
-	
+
 	// Simulate occasional connection failures for realism
 	if targetNetwork.Signal < 30 {
 		return fmt.Errorf("connection failed: weak signal")
 	}
-	
+
 	// Set as current network
 	ni.currentNetwork = targetNetwork
-	
+
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"ssid": ssid,
+		"ssid":      ssid,
 	}).Info("Successfully connected to WiFi network (mock)")
-	
+
 	return nil
 }
 
@@ -132,16 +132,16 @@ func (ni *MockNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, pass
 func (ni *MockNetworkInterface) DisconnectFromNetwork(ctx context.Context) error {
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"platform": "mock",
+		"platform":  "mock",
 	}).Info("Disconnecting from current WiFi network (mock)")
-	
+
 	if ni.currentNetwork != nil {
 		ni.logger.WithFields(map[string]any{
 			"component": "network_interface",
-			"ssid": ni.currentNetwork.SSID,
+			"ssid":      ni.currentNetwork.SSID,
 		}).Debug("Disconnected from network (mock)")
 	}
-	
+
 	ni.currentNetwork = nil
 	return nil
 }
@@ -151,7 +151,7 @@ func (ni *MockNetworkInterface) GetCurrentNetwork(ctx context.Context) (*WiFiNet
 	if ni.currentNetwork == nil {
 		return nil, fmt.Errorf("no active WiFi connection")
 	}
-	
+
 	return ni.currentNetwork, nil
 }
 
@@ -160,7 +160,7 @@ func (ni *MockNetworkInterface) IsConnected(ctx context.Context, ssid string) (b
 	if ni.currentNetwork == nil {
 		return false, nil
 	}
-	
+
 	return ni.currentNetwork.SSID == ssid, nil
 }
 
@@ -193,8 +193,8 @@ func (ni *MockNetworkInterface) SetMockSignalStrength(ssid string, signal int) {
 func CreateNetworkInterface(logger *logging.Logger) NetworkInterface {
 	logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"platform": "mock",
+		"platform":  "mock",
 	}).Warn("Using mock network interface - real WiFi provisioning not available on this platform")
-	
+
 	return NewMockNetworkInterface(logger)
 }

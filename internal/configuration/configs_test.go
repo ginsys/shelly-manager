@@ -11,7 +11,7 @@ func TestRelayConfig(t *testing.T) {
 	autoOn := 300
 	autoOff := 600
 	maxPower := 2300
-	
+
 	config := RelayConfig{
 		DefaultState:  "last",
 		ButtonType:    "toggle",
@@ -78,7 +78,7 @@ func TestPowerMeteringConfig(t *testing.T) {
 	maxCurrent := 10.0
 	costPerKWh := 0.25
 	resetTime := time.Now()
-	
+
 	config := PowerMeteringConfig{
 		MaxPower:          &maxPower,
 		MaxVoltage:        &maxVoltage,
@@ -185,7 +185,7 @@ func TestRollerConfig(t *testing.T) {
 	obstaclePower := 200
 	tiltPos := 45
 	maxTiltTime := 1500
-	
+
 	config := RollerConfig{
 		MotorDirection:     "normal",
 		MotorSpeed:         30,
@@ -243,16 +243,16 @@ func TestRollerConfig(t *testing.T) {
 // TestInputConfig tests input configuration
 func TestInputConfig(t *testing.T) {
 	config := InputConfig{
-		Type:              "button",
-		Mode:              "momentary",
-		Inverted:          false,
-		DebounceTime:      50,
-		LongPushTime:      1000,
-		MultiPushTime:     500,
-		SinglePushAction:  "toggle",
-		DoublePushAction:  "on",
-		TriplePushAction:  "off",
-		LongPushAction:    "dim",
+		Type:             "button",
+		Mode:             "momentary",
+		Inverted:         false,
+		DebounceTime:     50,
+		LongPushTime:     1000,
+		MultiPushTime:    500,
+		SinglePushAction: "toggle",
+		DoublePushAction: "on",
+		TriplePushAction: "off",
+		LongPushAction:   "dim",
 		Inputs: []SingleInputConfig{
 			{
 				ID:               0,
@@ -346,7 +346,7 @@ func TestLEDConfig(t *testing.T) {
 func TestColorConfig(t *testing.T) {
 	defaultWhite := 4000
 	activeEffect := 1
-	
+
 	config := ColorConfig{
 		Mode: "color_white",
 		DefaultColor: &Color{
@@ -498,7 +498,7 @@ func TestScheduleConfig(t *testing.T) {
 func TestEnergyMeterConfig(t *testing.T) {
 	dailyLimit := 10.5
 	monthlyLimit := 300.0
-	
+
 	config := EnergyMeterConfig{
 		ReportingInterval: 300,
 		RetentionDays:     365,
@@ -569,7 +569,7 @@ func TestSensorConfig(t *testing.T) {
 	humidityMax := 70.0
 	luxMin := 100.0
 	luxMax := 10000.0
-	
+
 	config := SensorConfig{
 		TempUnit:          "C",
 		TempOffset:        -0.5,

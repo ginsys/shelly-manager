@@ -376,40 +376,40 @@ type mockDevice struct {
 	power *PowerMeteringConfig
 }
 
-func (m *mockDevice) GetDeviceType() string { return m.DeviceType }
-func (m *mockDevice) GetGeneration() int { return m.Generation }
-func (m *mockDevice) GetModel() string { return m.DeviceType }
-func (m *mockDevice) HasRelayCapability() bool { return m.relay != nil }
-func (m *mockDevice) HasPowerMeteringCapability() bool { return m.power != nil }
-func (m *mockDevice) HasDimmingCapability() bool { return false }
-func (m *mockDevice) HasRollerCapability() bool { return false }
-func (m *mockDevice) HasInputCapability() bool { return false }
-func (m *mockDevice) HasLEDCapability() bool { return false }
-func (m *mockDevice) HasColorControlCapability() bool { return false }
+func (m *mockDevice) GetDeviceType() string                    { return m.DeviceType }
+func (m *mockDevice) GetGeneration() int                       { return m.Generation }
+func (m *mockDevice) GetModel() string                         { return m.DeviceType }
+func (m *mockDevice) HasRelayCapability() bool                 { return m.relay != nil }
+func (m *mockDevice) HasPowerMeteringCapability() bool         { return m.power != nil }
+func (m *mockDevice) HasDimmingCapability() bool               { return false }
+func (m *mockDevice) HasRollerCapability() bool                { return false }
+func (m *mockDevice) HasInputCapability() bool                 { return false }
+func (m *mockDevice) HasLEDCapability() bool                   { return false }
+func (m *mockDevice) HasColorControlCapability() bool          { return false }
 func (m *mockDevice) HasTemperatureProtectionCapability() bool { return false }
-func (m *mockDevice) HasScheduleCapability() bool { return false }
-func (m *mockDevice) HasCoIoTCapability() bool { return false }
-func (m *mockDevice) HasEnergyMeterCapability() bool { return false }
-func (m *mockDevice) HasMotionCapability() bool { return false }
-func (m *mockDevice) HasSensorCapability() bool { return false }
-func (m *mockDevice) GetRelayCount() int { 
+func (m *mockDevice) HasScheduleCapability() bool              { return false }
+func (m *mockDevice) HasCoIoTCapability() bool                 { return false }
+func (m *mockDevice) HasEnergyMeterCapability() bool           { return false }
+func (m *mockDevice) HasMotionCapability() bool                { return false }
+func (m *mockDevice) HasSensorCapability() bool                { return false }
+func (m *mockDevice) GetRelayCount() int {
 	if m.relay != nil {
 		return len(m.relay.Relays)
 	}
 	return 0
 }
-func (m *mockDevice) GetInputCount() int { return 0 }
-func (m *mockDevice) GetRollerCount() int { return 0 }
-func (m *mockDevice) GetRelayConfig() *RelayConfig { return m.relay }
-func (m *mockDevice) SetRelayConfig(c *RelayConfig) { m.relay = c }
-func (m *mockDevice) GetPowerMeteringConfig() *PowerMeteringConfig { return m.power }
+func (m *mockDevice) GetInputCount() int                            { return 0 }
+func (m *mockDevice) GetRollerCount() int                           { return 0 }
+func (m *mockDevice) GetRelayConfig() *RelayConfig                  { return m.relay }
+func (m *mockDevice) SetRelayConfig(c *RelayConfig)                 { m.relay = c }
+func (m *mockDevice) GetPowerMeteringConfig() *PowerMeteringConfig  { return m.power }
 func (m *mockDevice) SetPowerMeteringConfig(c *PowerMeteringConfig) { m.power = c }
 
 // TestDeviceCapabilities tests the DeviceCapabilities interface
 func TestDeviceCapabilities(t *testing.T) {
 	autoOn := 300
 	maxPower := 2300
-	
+
 	device := &mockDevice{
 		BaseDeviceConfig: BaseDeviceConfig{
 			DeviceID:   "shelly1pm-123456",
