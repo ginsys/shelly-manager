@@ -58,6 +58,40 @@ Successfully implemented comprehensive configuration management system with 3-le
 
 ## Architecture Overview
 
+### Package Organization & Code Visibility
+The project follows Go's standard convention for private vs. public packages:
+
+#### **Private (Internal) Code - `internal/` directory**
+All implementation details are kept private using Go's `internal/` package convention:
+- `internal/api/` - HTTP handlers and REST API implementation
+- `internal/config/` - Configuration management using Viper
+- `internal/configuration/` - Device configuration system (3-level hierarchy)
+- `internal/database/` - Database models and GORM operations
+- `internal/discovery/` - Device discovery logic (HTTP, mDNS, SSDP)
+- `internal/logging/` - Structured logging infrastructure
+- `internal/provisioning/` - WiFi provisioning system
+- `internal/service/` - Core Shelly service logic with authentication
+- `internal/shelly/` - Shelly device clients (Gen1/Gen2 APIs)
+- `internal/testutil/` - Testing utilities and mocks
+
+#### **Public Code - `pkg/` directory**
+Currently **empty** - no public APIs exposed for external consumption.
+
+#### **Design Philosophy**
+- **Application-first architecture**: Designed as standalone Kubernetes application
+- **Complete encapsulation**: All business logic kept internal and private
+- **Dual-binary design**: Main API server + provisioning agent (both use internal packages)
+- **No external library intent**: Not designed for import by other Go projects
+
+#### **Future Considerations**
+When the project matures, consider exposing select functionality in `pkg/` for:
+- **Device discovery libraries**: `pkg/discovery/` for network scanning capabilities
+- **Shelly client APIs**: `pkg/shelly/` for device communication protocols
+- **Configuration management**: `pkg/config/` for template and drift detection logic
+- **Provisioning utilities**: `pkg/provisioning/` for WiFi setup workflows
+
+This would enable other projects to leverage Shelly Manager's capabilities without duplicating implementation.
+
 ### Configuration System
 - **DeviceConfig**: Per-device configuration with sync tracking
 - **ConfigTemplate**: Reusable configuration templates

@@ -56,23 +56,50 @@ docker-compose logs -f  # View logs
 
 ## Architecture
 
-### Code Organization
+### Package Organization & Code Visibility
+
+The project follows **Go's standard convention** for package organization with a clear separation between private and public code:
+
+#### **Private (Internal) Packages - `internal/` directory**
+All business logic and implementation details are kept in the `internal/` directory, which in Go has special meaning - packages under `internal/` can only be imported by code within the same module:
+
 ```
 internal/
-├── api/          # HTTP handlers and REST API
+├── api/          # HTTP handlers and REST API implementation
 ├── config/       # Configuration management with Viper
-├── database/     # Models and GORM operations
+├── database/     # Database models and GORM operations
 ├── dhcp/         # DHCP reservation management
 ├── discovery/    # Device discovery (HTTP, mDNS, SSDP)
-├── logger/       # Structured logging with slog
-├── network/      # Network utilities and operations
-├── platform/     # Platform-specific WiFi implementations
+├── logging/      # Structured logging infrastructure
 ├── provisioning/ # WiFi provisioning system
 ├── configuration/# Enhanced configuration system (3-level hierarchy)
-└── shelly/       # Shelly device client and API
-    ├── gen1/     # Gen1-specific implementation
-    └── gen2/     # Gen2+ RPC implementation
+├── service/      # Core Shelly service logic with authentication
+├── shelly/       # Shelly device clients and API implementations
+│   ├── gen1/     # Gen1-specific HTTP REST API client
+│   └── gen2/     # Gen2+ RPC implementation with digest auth
+└── testutil/     # Testing utilities and mocks
 ```
+
+#### **Public Packages - `pkg/` directory**
+Currently **empty** - the project exposes no public API for external consumption. This indicates the project is designed as a **standalone application** rather than a reusable library.
+
+#### **Design Philosophy**
+- **Application-first architecture**: Built for deployment as Kubernetes services
+- **Complete encapsulation**: All implementation details kept internal and private
+- **Dual-binary design**: Main API server + provisioning agent (both using internal packages)
+- **No external library intent**: Not designed for import by other Go projects
+
+#### **Future Public API Considerations**
+When the project matures and there's demand for external integration, consider exposing select functionality in `pkg/` for:
+
+- **`pkg/discovery/`** - Network scanning and device discovery capabilities
+- **`pkg/shelly/`** - Shelly device communication protocols and client interfaces
+- **`pkg/config/`** - Configuration template system and drift detection logic
+- **`pkg/provisioning/`** - WiFi setup and device provisioning workflows
+
+This would enable other Go projects to leverage Shelly Manager's capabilities without duplicating the implementation, while maintaining the current application-focused design.
+
+### Code Organization
 
 ### Dependencies
 - **CLI Framework**: spf13/cobra v1.8.0
