@@ -177,10 +177,22 @@ func (s *Service) GetRules() ([]NotificationRule, error) {
 	// Deserialize JSON fields
 	for i := range rules {
 		if len(rules[i].CategoriesJSON) > 0 {
-			json.Unmarshal(rules[i].CategoriesJSON, &rules[i].Categories)
+			if err := json.Unmarshal(rules[i].CategoriesJSON, &rules[i].Categories); err != nil {
+				s.logger.WithFields(map[string]any{
+					"component": "notification",
+					"rule_id":   rules[i].ID,
+					"error":     err,
+				}).Error("Failed to unmarshal rule categories")
+			}
 		}
 		if len(rules[i].ScheduleDaysJSON) > 0 {
-			json.Unmarshal(rules[i].ScheduleDaysJSON, &rules[i].ScheduleDays)
+			if err := json.Unmarshal(rules[i].ScheduleDaysJSON, &rules[i].ScheduleDays); err != nil {
+				s.logger.WithFields(map[string]any{
+					"component": "notification",
+					"rule_id":   rules[i].ID,
+					"error":     err,
+				}).Error("Failed to unmarshal rule schedule days")
+			}
 		}
 	}
 

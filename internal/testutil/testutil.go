@@ -88,7 +88,9 @@ func MockShellyServer() *httptest.Server {
 			"num_outputs":  1,
 			"num_meters":   1,
 		}
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
 	})
 
 	// Mock status endpoint
@@ -152,7 +154,9 @@ func MockShellyServer() *httptest.Server {
 			"fs_free":   162648,
 			"uptime":    3600,
 		}
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
 	})
 
 	return httptest.NewServer(mux)
@@ -175,7 +179,9 @@ func MockShellyGen2Server() *httptest.Server {
 			"auth_en":     false,
 			"auth_domain": "shellyplusht-08b61fcb7f3c",
 		}
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
 	})
 
 	return httptest.NewServer(mux)

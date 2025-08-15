@@ -73,7 +73,7 @@ func (f *factory) DetectGeneration(ctx context.Context, ip string) (int, error) 
 			ID  string `json:"id"`
 			Gen int    `json:"gen"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&info); err == nil && info.Gen > 0 {
+		if decodeErr := json.NewDecoder(resp.Body).Decode(&info); decodeErr == nil && info.Gen > 0 {
 			f.logger.WithFields(map[string]any{
 				"ip":         ip,
 				"generation": info.Gen,

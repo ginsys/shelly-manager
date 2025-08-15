@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -151,9 +150,7 @@ func TestHTTPMiddleware_AddsRequestID(t *testing.T) {
 	// Create test handler that checks for request ID
 	var capturedRequestID string
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if requestID := r.Context().Value("request_id"); requestID != nil {
-			capturedRequestID = requestID.(string)
-		}
+		capturedRequestID = GetRequestID(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -187,9 +184,7 @@ func TestHTTPMiddleware_PreservesExistingRequestID(t *testing.T) {
 	// Create test handler that checks for request ID
 	var capturedRequestID string
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if requestID := r.Context().Value("request_id"); requestID != nil {
-			capturedRequestID = requestID.(string)
-		}
+		capturedRequestID = GetRequestID(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -199,7 +194,7 @@ func TestHTTPMiddleware_PreservesExistingRequestID(t *testing.T) {
 
 	// Create test request with existing request ID
 	req := httptest.NewRequest("GET", "/", nil)
-	ctx := context.WithValue(req.Context(), "request_id", existingRequestID)
+	ctx := WithRequestID(req.Context(), existingRequestID)
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()
@@ -646,7 +641,7 @@ func TestMultipleMiddleware(t *testing.T) {
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Access request ID from context
-		if requestID := r.Context().Value("request_id"); requestID == nil {
+		if GetRequestID(r.Context()) == "" {
 			t.Error("Request ID should be available in handler")
 		}
 
