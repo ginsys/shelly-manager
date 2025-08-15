@@ -65,10 +65,15 @@ type ConfigDrift struct {
 
 // ConfigDifference represents a single configuration difference
 type ConfigDifference struct {
-	Path     string      `json:"path"`     // JSON path to the difference
-	Expected interface{} `json:"expected"` // Value in database
-	Actual   interface{} `json:"actual"`   // Value on device
-	Type     string      `json:"type"`     // "added", "removed", "modified"
+	Path        string      `json:"path"`         // JSON path to the difference
+	Expected    interface{} `json:"expected"`     // Value in database
+	Actual      interface{} `json:"actual"`       // Value on device
+	Type        string      `json:"type"`         // "added", "removed", "modified"
+	Severity    string      `json:"severity"`     // "critical", "warning", "info"
+	Category    string      `json:"category"`     // "security", "network", "device", "system", "metadata"
+	Description string      `json:"description"`  // Human-readable description
+	Impact      string      `json:"impact"`       // Potential impact of this change
+	Suggestion  string      `json:"suggestion"`   // Recommended action
 }
 
 // ImportStatus represents the import status for a device
@@ -279,4 +284,102 @@ type DriftDetectionRun struct {
 	Results    json.RawMessage `json:"results" gorm:"type:text"` // BulkDriftResult JSON
 	Error      string          `json:"error,omitempty"`
 	CreatedAt  time.Time       `json:"created_at"`
+}
+
+// DriftReport represents a comprehensive drift analysis report
+type DriftReport struct {
+	ID              uint                    `json:"id" gorm:"primaryKey"`
+	ReportType      string                  `json:"report_type"` // "device", "bulk", "scheduled"
+	DeviceID        *uint                   `json:"device_id,omitempty" gorm:"index"`
+	ScheduleID      *uint                   `json:"schedule_id,omitempty" gorm:"index"`
+	Summary         DriftSummary            `json:"summary" gorm:"embedded"`
+	Devices         []DeviceDriftAnalysis   `json:"devices" gorm:"-"`
+	DevicesJSON     json.RawMessage         `json:"-" gorm:"column:devices;type:text"`
+	Recommendations []DriftRecommendation   `json:"recommendations" gorm:"-"`
+	RecommendationsJSON json.RawMessage     `json:"-" gorm:"column:recommendations;type:text"`
+	GeneratedAt     time.Time               `json:"generated_at"`
+	CreatedAt       time.Time               `json:"created_at"`
+}
+
+// DriftSummary provides high-level drift statistics
+type DriftSummary struct {
+	TotalDevices     int                 `json:"total_devices"`
+	DevicesInSync    int                 `json:"devices_in_sync"`
+	DevicesDrifted   int                 `json:"devices_drifted"`
+	DevicesErrored   int                 `json:"devices_errored"`
+	CriticalIssues   int                 `json:"critical_issues"`
+	WarningIssues    int                 `json:"warning_issues"`
+	InfoIssues       int                 `json:"info_issues"`
+	CategoriesAffected map[string]int    `json:"categories_affected" gorm:"-"`
+	CategoriesAffectedJSON json.RawMessage `json:"-" gorm:"column:categories_affected;type:text"`
+	MostCommonDrifts []CommonDrift       `json:"most_common_drifts" gorm:"-"`
+	MostCommonDriftsJSON json.RawMessage `json:"-" gorm:"column:most_common_drifts;type:text"`
+	SecurityConcerns int                 `json:"security_concerns"`
+	NetworkChanges   int                 `json:"network_changes"`
+}
+
+// DeviceDriftAnalysis provides detailed analysis for a single device
+type DeviceDriftAnalysis struct {
+	DeviceID          uint                `json:"device_id"`
+	DeviceName        string              `json:"device_name"`
+	DeviceIP          string              `json:"device_ip"`
+	DeviceType        string              `json:"device_type"`
+	Generation        int                 `json:"generation"`
+	Status            string              `json:"status"` // "synced", "drift", "error"
+	DriftSeverity     string              `json:"drift_severity"` // "none", "low", "medium", "high", "critical"
+	TotalDifferences  int                 `json:"total_differences"`
+	CriticalCount     int                 `json:"critical_count"`
+	WarningCount      int                 `json:"warning_count"`
+	InfoCount         int                 `json:"info_count"`
+	LastSyncTime      *time.Time          `json:"last_sync_time"`
+	DriftDetectedTime time.Time           `json:"drift_detected_time"`
+	Differences       []ConfigDifference  `json:"differences"`
+	HealthScore       float64             `json:"health_score"` // 0-100 based on drift severity
+	RiskLevel         string              `json:"risk_level"`   // "low", "medium", "high", "critical"
+	Error             string              `json:"error,omitempty"`
+}
+
+// CommonDrift represents frequently occurring drift patterns
+type CommonDrift struct {
+	Path        string  `json:"path"`
+	Count       int     `json:"count"`
+	Percentage  float64 `json:"percentage"`
+	Severity    string  `json:"severity"`
+	Category    string  `json:"category"`
+	Description string  `json:"description"`
+}
+
+// DriftRecommendation provides actionable recommendations
+type DriftRecommendation struct {
+	Priority    string   `json:"priority"`    // "high", "medium", "low"
+	Category    string   `json:"category"`    // "security", "network", "maintenance", "compliance"
+	Title       string   `json:"title"`       // Short recommendation title
+	Description string   `json:"description"` // Detailed recommendation
+	AffectedDevices []uint `json:"affected_devices"` // Device IDs affected
+	Actions     []RecommendedAction `json:"actions"` // Specific actions to take
+	Impact      string   `json:"impact"`      // Expected impact of following recommendation
+}
+
+// RecommendedAction represents a specific action to take
+type RecommendedAction struct {
+	Type        string `json:"type"`        // "auto-fix", "manual-review", "manual-action", "monitor"
+	Description string `json:"description"` // What to do
+	Command     string `json:"command,omitempty"` // Specific command/config to apply
+	Automated   bool   `json:"automated"`   // Whether this can be automated
+}
+
+// DriftTrend tracks drift patterns over time
+type DriftTrend struct {
+	ID           uint      `json:"id" gorm:"primaryKey"`
+	DeviceID     uint      `json:"device_id" gorm:"index"`
+	Path         string    `json:"path" gorm:"index"`
+	Category     string    `json:"category"`
+	Severity     string    `json:"severity"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
+	Occurrences  int       `json:"occurrences"`
+	Resolved     bool      `json:"resolved"`
+	ResolvedAt   *time.Time `json:"resolved_at,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }

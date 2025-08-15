@@ -1195,3 +1195,168 @@ func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(runs)
 }
+
+// GetDriftReports handles GET /api/v1/config/drift-reports
+func (h *Handler) GetDriftReports(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	reportType := r.URL.Query().Get("type")
+	deviceIDStr := r.URL.Query().Get("device_id")
+	limitStr := r.URL.Query().Get("limit")
+
+	var deviceID *uint
+	if deviceIDStr != "" {
+		if id, err := strconv.ParseUint(deviceIDStr, 10, 32); err == nil {
+			deviceIDUint := uint(id)
+			deviceID = &deviceIDUint
+		}
+	}
+
+	limit := 50 // Default limit
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	reports, err := h.Service.GetDriftReports(reportType, deviceID, limit)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"report_type": reportType,
+			"device_id":   deviceID,
+			"error":       err.Error(),
+		}).Error("Failed to get drift reports")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(reports)
+}
+
+// GenerateDeviceDriftReport handles POST /api/v1/devices/{id}/drift-report
+func (h *Handler) GenerateDeviceDriftReport(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	report, err := h.Service.GenerateDeviceDriftReport(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to generate device drift report")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(report)
+}
+
+// GetDriftTrends handles GET /api/v1/config/drift-trends
+func (h *Handler) GetDriftTrends(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	deviceIDStr := r.URL.Query().Get("device_id")
+	resolvedStr := r.URL.Query().Get("resolved")
+	limitStr := r.URL.Query().Get("limit")
+
+	var deviceID *uint
+	if deviceIDStr != "" {
+		if id, err := strconv.ParseUint(deviceIDStr, 10, 32); err == nil {
+			deviceIDUint := uint(id)
+			deviceID = &deviceIDUint
+		}
+	}
+
+	var resolved *bool
+	if resolvedStr != "" {
+		if resolvedBool, err := strconv.ParseBool(resolvedStr); err == nil {
+			resolved = &resolvedBool
+		}
+	}
+
+	limit := 100 // Default limit
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	trends, err := h.Service.GetDriftTrends(deviceID, resolved, limit)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": deviceID,
+			"resolved":  resolved,
+			"error":     err.Error(),
+		}).Error("Failed to get drift trends")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(trends)
+}
+
+// MarkTrendResolved handles POST /api/v1/config/drift-trends/{id}/resolve
+func (h *Handler) MarkTrendResolved(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid trend ID", http.StatusBadRequest)
+		return
+	}
+
+	err = h.Service.MarkTrendResolved(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"trend_id": id,
+			"error":    err.Error(),
+		}).Error("Failed to mark trend as resolved")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "resolved"})
+}
+
+// EnhancedBulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect-enhanced
+func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("Starting enhanced bulk drift detection with comprehensive reporting")
+
+	result, err := h.Service.BulkDetectConfigDrift()
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Error("Failed to perform bulk drift detection")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Generate comprehensive report
+	report, err := h.Service.EnhanceBulkDriftResult(result, nil)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Warn("Failed to generate comprehensive report, returning basic result")
+		
+		// Fall back to basic result if reporting fails
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+		return
+	}
+
+	h.logger.WithFields(map[string]any{
+		"report_id":       report.ID,
+		"devices_drifted": result.Drifted,
+		"critical_issues": report.Summary.CriticalIssues,
+		"recommendations": len(report.Recommendations),
+	}).Info("Enhanced bulk drift detection completed")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(report)
+}

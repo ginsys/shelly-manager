@@ -519,11 +519,77 @@
                     <button class="btn" onclick="deselectAllDevices()">⬜ Deselect All</button>
                     <button class="btn btn-warning" onclick="bulkImportConfig()">📥 Bulk Import</button>
                     <button class="btn btn-warning" onclick="bulkExportConfig()">📤 Bulk Export</button>
-                    <button class="btn btn-info" onclick="bulkDetectDrift()">🔍 Bulk Drift Check</button>
+                    <button class="btn btn-info" onclick="bulkDetectDrift()">🔍 Basic Drift Check</button>
+                    <button class="btn btn-info" onclick="enhancedBulkDetectDrift()">📊 Enhanced Drift Report</button>
                     <button class="btn" onclick="bulkApplyTemplate()">📝 Apply Template</button>
+                    <button class="btn" onclick="showDriftReports()">📈 View Reports</button>
+                    <button class="btn" onclick="showDriftTrends()">📉 View Trends</button>
                 </div>
                 
                 <div class="device-grid" id="bulkGrid"></div>
+                
+                <!-- Enhanced Drift Report Display -->
+                <div id="driftReportSection" style="display: none; margin-top: 20px;">
+                    <h3>📊 Comprehensive Drift Analysis</h3>
+                    <div id="driftReportContent"></div>
+                </div>
+                
+                <!-- Drift Reports Modal -->
+                <div id="driftReportsModal" class="modal" style="display: none;">
+                    <div class="modal-content" style="max-width: 900px;">
+                        <div class="modal-header">
+                            <h3>📈 Drift Reports</h3>
+                            <span class="close" onclick="closeDriftReportsModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <div class="controls" style="margin-bottom: 15px;">
+                                <label>Report Type:</label>
+                                <select id="reportTypeFilter" onchange="filterDriftReports()">
+                                    <option value="">All Reports</option>
+                                    <option value="device">Device Reports</option>
+                                    <option value="bulk">Bulk Reports</option>
+                                    <option value="scheduled">Scheduled Reports</option>
+                                </select>
+                                <label style="margin-left: 15px;">Limit:</label>
+                                <select id="reportLimitFilter" onchange="filterDriftReports()">
+                                    <option value="25">25</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                </select>
+                                <button class="btn" onclick="loadDriftReports()">🔄 Refresh</button>
+                            </div>
+                            <div id="driftReportsContent"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Drift Trends Modal -->
+                <div id="driftTrendsModal" class="modal" style="display: none;">
+                    <div class="modal-content" style="max-width: 900px;">
+                        <div class="modal-header">
+                            <h3>📉 Drift Trends</h3>
+                            <span class="close" onclick="closeDriftTrendsModal()">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <div class="controls" style="margin-bottom: 15px;">
+                                <label>Status:</label>
+                                <select id="trendsResolvedFilter" onchange="filterDriftTrends()">
+                                    <option value="">All Trends</option>
+                                    <option value="false" selected>Active</option>
+                                    <option value="true">Resolved</option>
+                                </select>
+                                <label style="margin-left: 15px;">Limit:</label>
+                                <select id="trendsLimitFilter" onchange="filterDriftTrends()">
+                                    <option value="50">50</option>
+                                    <option value="100" selected>100</option>
+                                    <option value="200">200</option>
+                                </select>
+                                <button class="btn" onclick="loadDriftTrends()">🔄 Refresh</button>
+                            </div>
+                            <div id="driftTrendsContent"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1837,6 +1903,314 @@
             const modal = document.getElementById(`auth-modal-${deviceId}`);
             if (modal) {
                 modal.remove();
+            }
+        }
+
+        // Enhanced Drift Reporting Functions
+        
+        async function enhancedBulkDetectDrift() {
+            console.log('Starting enhanced bulk drift detection with comprehensive reporting...');
+            showNotification('📊 Starting comprehensive drift analysis...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/config/bulk-drift-detect-enhanced`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const report = await response.json();
+                console.log('Enhanced drift report:', report);
+                
+                displayDriftReport(report);
+                showNotification(`📊 Analysis complete: ${report.summary.devices_drifted} devices with drift, ${report.summary.critical_issues} critical issues`, 'success');
+                
+            } catch (error) {
+                console.error('Enhanced drift detection failed:', error);
+                showNotification(`❌ Enhanced drift analysis failed: ${error.message}`, 'error');
+            }
+        }
+        
+        function displayDriftReport(report) {
+            const section = document.getElementById('driftReportSection');
+            const content = document.getElementById('driftReportContent');
+            
+            let html = `
+                <div class="drift-report-summary">
+                    <h4>📈 Summary</h4>
+                    <div class="summary-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">${report.summary.total_devices}</div>
+                            <div class="stat-label">Total Devices</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${report.summary.devices_in_sync}</div>
+                            <div class="stat-label">In Sync</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${report.summary.devices_drifted}</div>
+                            <div class="stat-label">Drifted</div>
+                        </div>
+                        <div class="stat-item critical">
+                            <div class="stat-value">${report.summary.critical_issues}</div>
+                            <div class="stat-label">Critical Issues</div>
+                        </div>
+                        <div class="stat-item warning">
+                            <div class="stat-value">${report.summary.warning_issues}</div>
+                            <div class="stat-label">Warnings</div>
+                        </div>
+                        <div class="stat-item info">
+                            <div class="stat-value">${report.summary.info_issues}</div>
+                            <div class="stat-label">Info</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Categories affected
+            if (report.summary.categories_affected) {
+                html += `
+                    <div class="categories-section">
+                        <h4>📋 Categories Affected</h4>
+                        <div class="categories-list">
+                `;
+                for (const [category, count] of Object.entries(report.summary.categories_affected)) {
+                    html += `<span class="category-tag ${category}">${category}: ${count}</span>`;
+                }
+                html += '</div></div>';
+            }
+            
+            // Recommendations
+            if (report.recommendations && report.recommendations.length > 0) {
+                html += `
+                    <div class="recommendations-section">
+                        <h4>💡 Recommendations</h4>
+                        <div class="recommendations-list">
+                `;
+                for (const rec of report.recommendations) {
+                    html += `
+                        <div class="recommendation ${rec.priority}">
+                            <div class="rec-header">
+                                <span class="rec-title">${rec.title}</span>
+                                <span class="rec-priority">${rec.priority}</span>
+                            </div>
+                            <div class="rec-description">${rec.description}</div>
+                            <div class="rec-impact"><strong>Impact:</strong> ${rec.impact}</div>
+                        </div>
+                    `;
+                }
+                html += '</div></div>';
+            }
+            
+            content.innerHTML = html;
+            section.style.display = 'block';
+        }
+        
+        async function generateDeviceReport(deviceId) {
+            console.log(`Generating comprehensive report for device ${deviceId}...`);
+            showNotification(`📊 Generating report for device ${deviceId}...`, 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/drift-report`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const report = await response.json();
+                console.log('Device report:', report);
+                
+                showNotification(`📊 Report generated for device ${deviceId}`, 'success');
+                
+            } catch (error) {
+                console.error(`Device report generation failed:`, error);
+                showNotification(`❌ Failed to generate report: ${error.message}`, 'error');
+            }
+        }
+        
+        async function showDriftReports() {
+            const modal = document.getElementById('driftReportsModal');
+            modal.style.display = 'block';
+            loadDriftReports();
+        }
+        
+        function closeDriftReportsModal() {
+            document.getElementById('driftReportsModal').style.display = 'none';
+        }
+        
+        async function loadDriftReports() {
+            const content = document.getElementById('driftReportsContent');
+            content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading reports...</p></div>';
+            
+            try {
+                const reportType = document.getElementById('reportTypeFilter').value;
+                const limit = document.getElementById('reportLimitFilter').value;
+                
+                let url = `${API_BASE}/config/drift-reports?limit=${limit}`;
+                if (reportType) {
+                    url += `&type=${reportType}`;
+                }
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const reports = await response.json();
+                displayDriftReportsList(reports);
+                
+            } catch (error) {
+                console.error('Failed to load drift reports:', error);
+                content.innerHTML = `<div class="error">Failed to load reports: ${error.message}</div>`;
+            }
+        }
+        
+        function displayDriftReportsList(reports) {
+            const content = document.getElementById('driftReportsContent');
+            
+            if (!reports || reports.length === 0) {
+                content.innerHTML = '<div class="empty-state"><h3>No reports found</h3><p>Run drift detection to generate reports</p></div>';
+                return;
+            }
+            
+            let html = '<div class="reports-list">';
+            for (const report of reports) {
+                html += `
+                    <div class="report-item">
+                        <div class="report-header">
+                            <span class="report-type">${report.report_type}</span>
+                            <span class="report-date">${new Date(report.created_at).toLocaleString()}</span>
+                        </div>
+                        <div class="report-summary">
+                            ${report.summary.total_devices} devices, ${report.summary.devices_drifted} with drift, 
+                            ${report.summary.critical_issues} critical issues
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            
+            content.innerHTML = html;
+        }
+        
+        function filterDriftReports() {
+            loadDriftReports();
+        }
+        
+        async function showDriftTrends() {
+            const modal = document.getElementById('driftTrendsModal');
+            modal.style.display = 'block';
+            loadDriftTrends();
+        }
+        
+        function closeDriftTrendsModal() {
+            document.getElementById('driftTrendsModal').style.display = 'none';
+        }
+        
+        async function loadDriftTrends() {
+            const content = document.getElementById('driftTrendsContent');
+            content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading trends...</p></div>';
+            
+            try {
+                const resolved = document.getElementById('trendsResolvedFilter').value;
+                const limit = document.getElementById('trendsLimitFilter').value;
+                
+                let url = `${API_BASE}/config/drift-trends?limit=${limit}`;
+                if (resolved !== '') {
+                    url += `&resolved=${resolved}`;
+                }
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const trends = await response.json();
+                displayDriftTrendsList(trends);
+                
+            } catch (error) {
+                console.error('Failed to load drift trends:', error);
+                content.innerHTML = `<div class="error">Failed to load trends: ${error.message}</div>`;
+            }
+        }
+        
+        function displayDriftTrendsList(trends) {
+            const content = document.getElementById('driftTrendsContent');
+            
+            if (!trends || trends.length === 0) {
+                content.innerHTML = '<div class="empty-state"><h3>No trends found</h3><p>Drift detection will track patterns over time</p></div>';
+                return;
+            }
+            
+            let html = `
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f5f5f5;">
+                            <th style="padding: 8px; border: 1px solid #ddd;">Path</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Category</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Severity</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Occurrences</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Status</th>
+                            <th style="padding: 8px; border: 1px solid #ddd;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            for (const trend of trends) {
+                html += `
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd;"><code>${trend.path}</code></td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">${trend.category}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">${trend.severity}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">${trend.occurrences}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">
+                            ${trend.resolved ? 'Resolved' : 'Active'}
+                        </td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">
+                            ${!trend.resolved ? `<button class="btn btn-sm" onclick="markTrendResolved(${trend.id})">✅ Resolve</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            html += '</tbody></table>';
+            content.innerHTML = html;
+        }
+        
+        function filterDriftTrends() {
+            loadDriftTrends();
+        }
+        
+        async function markTrendResolved(trendId) {
+            try {
+                const response = await fetch(`${API_BASE}/config/drift-trends/${trendId}/resolve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                showNotification(`✅ Trend marked as resolved`, 'success');
+                loadDriftTrends(); // Refresh the list
+                
+            } catch (error) {
+                console.error('Failed to mark trend as resolved:', error);
+                showNotification(`❌ Failed to resolve trend: ${error.message}`, 'error');
             }
         }
 

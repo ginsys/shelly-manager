@@ -18,8 +18,9 @@ import (
 
 // Service handles configuration management operations
 type Service struct {
-	db     *gorm.DB
-	logger *logging.Logger
+	db       *gorm.DB
+	logger   *logging.Logger
+	reporter *Reporter
 }
 
 // NewService creates a new configuration service
@@ -31,11 +32,17 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 		&ConfigHistory{},
 		&DriftDetectionSchedule{},
 		&DriftDetectionRun{},
+		&DriftReport{},
+		&DriftTrend{},
 	)
 	
+	// Create reporter
+	reporter := NewReporter(db, logger)
+	
 	return &Service{
-		db:     db,
-		logger: logger,
+		db:       db,
+		logger:   logger,
+		reporter: reporter,
 	}
 }
 
@@ -1038,4 +1045,74 @@ func (s *Service) createClientForDevice(deviceID uint) (shelly.Client, error) {
 	default:
 		return nil, fmt.Errorf("unsupported device generation: %d", settings.Gen)
 	}
+}
+
+// GenerateDriftReport creates a comprehensive drift analysis report
+func (s *Service) GenerateDriftReport(reportType string, deviceID *uint, scheduleID *uint, driftResults []DriftResult) (*DriftReport, error) {
+	return s.reporter.GenerateComprehensiveReport(reportType, deviceID, scheduleID, driftResults)
+}
+
+// GetDriftReports retrieves drift reports with optional filtering
+func (s *Service) GetDriftReports(reportType string, deviceID *uint, limit int) ([]DriftReport, error) {
+	return s.reporter.GetReports(reportType, deviceID, limit)
+}
+
+// GetDriftTrends retrieves drift trends with optional filtering
+func (s *Service) GetDriftTrends(deviceID *uint, resolved *bool, limit int) ([]DriftTrend, error) {
+	return s.reporter.GetDriftTrends(deviceID, resolved, limit)
+}
+
+// MarkTrendResolved marks a drift trend as resolved
+func (s *Service) MarkTrendResolved(trendID uint) error {
+	return s.reporter.MarkTrendResolved(trendID)
+}
+
+// GenerateDeviceDriftReport generates a comprehensive report for a single device
+func (s *Service) GenerateDeviceDriftReport(deviceID uint, client shelly.Client) (*DriftReport, error) {
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"component": "configuration",
+	}).Info("Generating comprehensive device drift report")
+
+	// Perform drift detection
+	drift, err := s.DetectDrift(deviceID, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect drift: %w", err)
+	}
+
+	// Convert to DriftResult format
+	driftResult := DriftResult{
+		DeviceID:   deviceID,
+		DeviceIP:   "", // Will be filled in by reporter
+		Status:     "synced",
+		Drift:      nil,
+	}
+
+	if drift != nil {
+		driftResult.Status = "drift"
+		driftResult.Drift = drift
+		driftResult.DifferenceCount = len(drift.Differences)
+		driftResult.DriftSummary = fmt.Sprintf("%d configuration differences detected", len(drift.Differences))
+	}
+
+	// Generate comprehensive report
+	return s.reporter.GenerateComprehensiveReport("device", &deviceID, nil, []DriftResult{driftResult})
+}
+
+// EnhanceBulkDriftResult adds comprehensive reporting to bulk drift results
+func (s *Service) EnhanceBulkDriftResult(result *BulkDriftResult, scheduleID *uint) (*DriftReport, error) {
+	s.logger.WithFields(map[string]any{
+		"total_devices": result.Total,
+		"devices_drifted": result.Drifted,
+		"schedule_id": scheduleID,
+		"component": "configuration",
+	}).Info("Enhancing bulk drift result with comprehensive reporting")
+
+	reportType := "bulk"
+	if scheduleID != nil {
+		reportType = "scheduled"
+	}
+
+	// Generate comprehensive report
+	return s.reporter.GenerateComprehensiveReport(reportType, nil, scheduleID, result.Results)
 }
