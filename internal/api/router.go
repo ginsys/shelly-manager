@@ -15,7 +15,7 @@ func SetupRoutes(handler *Handler) *mux.Router {
 // SetupRoutesWithLogger configures all API routes with logging middleware
 func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router {
 	r := mux.NewRouter()
-	
+
 	// Add logging middleware
 	r.Use(logging.HTTPMiddleware(logger))
 	r.Use(logging.RecoveryMiddleware(logger))
@@ -23,19 +23,19 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 
 	// API routes
 	api := r.PathPrefix("/api/v1").Subrouter()
-	
+
 	// Device routes
 	api.HandleFunc("/devices", handler.GetDevices).Methods("GET")
 	api.HandleFunc("/devices", handler.AddDevice).Methods("POST")
 	api.HandleFunc("/devices/{id}", handler.GetDevice).Methods("GET")
 	api.HandleFunc("/devices/{id}", handler.UpdateDevice).Methods("PUT")
 	api.HandleFunc("/devices/{id}", handler.DeleteDevice).Methods("DELETE")
-	
+
 	// Device control routes
 	api.HandleFunc("/devices/{id}/control", handler.ControlDevice).Methods("POST")
 	api.HandleFunc("/devices/{id}/status", handler.GetDeviceStatus).Methods("GET")
 	api.HandleFunc("/devices/{id}/energy", handler.GetDeviceEnergy).Methods("GET")
-	
+
 	// Device configuration routes
 	api.HandleFunc("/devices/{id}/config", handler.GetDeviceConfig).Methods("GET")
 	api.HandleFunc("/devices/{id}/config", handler.UpdateDeviceConfig).Methods("PUT")
@@ -45,26 +45,26 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/devices/{id}/config/drift", handler.DetectConfigDrift).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/apply-template", handler.ApplyConfigTemplate).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/history", handler.GetConfigHistory).Methods("GET")
-	
+
 	// Device capability-specific configuration routes
 	api.HandleFunc("/devices/{id}/config/relay", handler.UpdateRelayConfig).Methods("PUT")
 	api.HandleFunc("/devices/{id}/config/dimming", handler.UpdateDimmingConfig).Methods("PUT")
 	api.HandleFunc("/devices/{id}/config/roller", handler.UpdateRollerConfig).Methods("PUT")
 	api.HandleFunc("/devices/{id}/config/power-metering", handler.UpdatePowerMeteringConfig).Methods("PUT")
 	api.HandleFunc("/devices/{id}/config/auth", handler.UpdateDeviceAuth).Methods("PUT")
-	
+
 	// Configuration template routes
 	api.HandleFunc("/config/templates", handler.GetConfigTemplates).Methods("GET")
 	api.HandleFunc("/config/templates", handler.CreateConfigTemplate).Methods("POST")
 	api.HandleFunc("/config/templates/{id}", handler.UpdateConfigTemplate).Methods("PUT")
 	api.HandleFunc("/config/templates/{id}", handler.DeleteConfigTemplate).Methods("DELETE")
-	
+
 	// Bulk configuration operations
 	api.HandleFunc("/config/bulk-import", handler.BulkImportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-export", handler.BulkExportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect", handler.BulkDetectConfigDrift).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect-enhanced", handler.EnhancedBulkDetectConfigDrift).Methods("POST")
-	
+
 	// Drift detection schedule routes
 	api.HandleFunc("/config/drift-schedules", handler.GetDriftSchedules).Methods("GET")
 	api.HandleFunc("/config/drift-schedules", handler.CreateDriftSchedule).Methods("POST")
@@ -73,22 +73,49 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/config/drift-schedules/{id}", handler.DeleteDriftSchedule).Methods("DELETE")
 	api.HandleFunc("/config/drift-schedules/{id}/toggle", handler.ToggleDriftSchedule).Methods("POST")
 	api.HandleFunc("/config/drift-schedules/{id}/runs", handler.GetDriftScheduleRuns).Methods("GET")
-	
+
 	// Comprehensive drift reporting routes
 	api.HandleFunc("/config/drift-reports", handler.GetDriftReports).Methods("GET")
 	api.HandleFunc("/config/drift-trends", handler.GetDriftTrends).Methods("GET")
 	api.HandleFunc("/config/drift-trends/{id}/resolve", handler.MarkTrendResolved).Methods("POST")
-	
+
 	// Device-specific drift reporting
 	api.HandleFunc("/devices/{id}/drift-report", handler.GenerateDeviceDriftReport).Methods("POST")
-	
+
+	// Notification routes
+	if handler.NotificationHandler != nil {
+		api.HandleFunc("/notifications/channels", handler.NotificationHandler.CreateChannel).Methods("POST")
+		api.HandleFunc("/notifications/channels", handler.NotificationHandler.GetChannels).Methods("GET")
+		api.HandleFunc("/notifications/channels/{id}", handler.NotificationHandler.UpdateChannel).Methods("PUT")
+		api.HandleFunc("/notifications/channels/{id}", handler.NotificationHandler.DeleteChannel).Methods("DELETE")
+		api.HandleFunc("/notifications/channels/{id}/test", handler.NotificationHandler.TestChannel).Methods("POST")
+		api.HandleFunc("/notifications/rules", handler.NotificationHandler.CreateRule).Methods("POST")
+		api.HandleFunc("/notifications/rules", handler.NotificationHandler.GetRules).Methods("GET")
+		api.HandleFunc("/notifications/history", handler.NotificationHandler.GetHistory).Methods("GET")
+	}
+
+	// Metrics routes
+	if handler.MetricsHandler != nil {
+		metricsAPI := r.PathPrefix("/metrics").Subrouter()
+		metricsAPI.Use(logging.HTTPMiddleware(logger))
+
+		// Prometheus metrics endpoint
+		metricsAPI.Handle("/prometheus", handler.MetricsHandler.PrometheusHandler()).Methods("GET")
+
+		// Control endpoints
+		metricsAPI.HandleFunc("/status", handler.MetricsHandler.GetMetricsStatus).Methods("GET")
+		metricsAPI.HandleFunc("/enable", handler.MetricsHandler.EnableMetrics).Methods("POST")
+		metricsAPI.HandleFunc("/disable", handler.MetricsHandler.DisableMetrics).Methods("POST")
+		metricsAPI.HandleFunc("/collect", handler.MetricsHandler.CollectMetrics).Methods("POST")
+	}
+
 	// Discovery route
 	api.HandleFunc("/discover", handler.DiscoverHandler).Methods("POST")
-	
+
 	// Provisioning routes
 	api.HandleFunc("/provisioning/status", handler.GetProvisioningStatus).Methods("GET")
 	api.HandleFunc("/provisioning/provision", handler.ProvisionDevices).Methods("POST")
-	
+
 	// DHCP routes
 	api.HandleFunc("/dhcp/reservations", handler.GetDHCPReservations).Methods("GET")
 

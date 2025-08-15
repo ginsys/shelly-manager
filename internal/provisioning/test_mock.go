@@ -10,8 +10,8 @@ import (
 
 // TestMockNetworkInterface provides a test mock for any platform
 type TestMockNetworkInterface struct {
-	logger           *logging.Logger
-	currentNetwork   *WiFiNetwork
+	logger            *logging.Logger
+	currentNetwork    *WiFiNetwork
 	availableNetworks []WiFiNetwork
 }
 
@@ -47,7 +47,7 @@ func NewTestMockNetworkInterface(logger *logging.Logger) *TestMockNetworkInterfa
 			Frequency: 2437,
 		},
 	}
-	
+
 	return &TestMockNetworkInterface{
 		logger:            logger,
 		availableNetworks: mockNetworks,
@@ -58,12 +58,12 @@ func NewTestMockNetworkInterface(logger *logging.Logger) *TestMockNetworkInterfa
 func (ni *TestMockNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]WiFiNetwork, error) {
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"platform": "test_mock",
+		"platform":  "test_mock",
 	}).Debug("Scanning for available WiFi networks (test mock)")
-	
+
 	// Simulate scan delay
 	time.Sleep(100 * time.Millisecond)
-	
+
 	return ni.availableNetworks, nil
 }
 
@@ -71,10 +71,10 @@ func (ni *TestMockNetworkInterface) GetAvailableNetworks(ctx context.Context) ([
 func (ni *TestMockNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, password string) error {
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"platform": "test_mock",
-		"ssid": ssid,
+		"platform":  "test_mock",
+		"ssid":      ssid,
 	}).Debug("Connecting to WiFi network (test mock)")
-	
+
 	// Find the network in our available list
 	var targetNetwork *WiFiNetwork
 	for _, network := range ni.availableNetworks {
@@ -83,22 +83,22 @@ func (ni *TestMockNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, 
 			break
 		}
 	}
-	
+
 	if targetNetwork == nil {
 		return fmt.Errorf("network %s not found", ssid)
 	}
-	
+
 	// Simulate connection delay
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Check if password is required
 	if targetNetwork.Security != "" && password == "" {
 		return fmt.Errorf("password required for secured network %s", ssid)
 	}
-	
+
 	// Set as current network
 	ni.currentNetwork = targetNetwork
-	
+
 	return nil
 }
 
@@ -106,9 +106,9 @@ func (ni *TestMockNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, 
 func (ni *TestMockNetworkInterface) DisconnectFromNetwork(ctx context.Context) error {
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"platform": "test_mock",
+		"platform":  "test_mock",
 	}).Debug("Disconnecting from current WiFi network (test mock)")
-	
+
 	ni.currentNetwork = nil
 	return nil
 }
@@ -118,7 +118,7 @@ func (ni *TestMockNetworkInterface) GetCurrentNetwork(ctx context.Context) (*WiF
 	if ni.currentNetwork == nil {
 		return nil, fmt.Errorf("no active WiFi connection")
 	}
-	
+
 	return ni.currentNetwork, nil
 }
 
@@ -127,6 +127,6 @@ func (ni *TestMockNetworkInterface) IsConnected(ctx context.Context, ssid string
 	if ni.currentNetwork == nil {
 		return false, nil
 	}
-	
+
 	return ni.currentNetwork.SSID == ssid, nil
 }

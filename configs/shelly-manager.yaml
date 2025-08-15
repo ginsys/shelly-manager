@@ -46,3 +46,35 @@ main_app:
   url: "http://localhost:8080"
   api_key: ""
   enabled: true
+
+notifications:
+  enabled: false
+  email:
+    smtp_host: ""
+    smtp_port: 587
+    smtp_user: ""
+    smtp_password: ""
+    from_address: "shelly-manager@example.com"
+    tls: true
+  webhooks: []
+  thresholds:
+    critical_drift_count: 5
+    warning_drift_count: 2
+    max_per_hour: 10
+
+resolution:
+  auto_fix_enabled: false
+  safe_mode: true
+  approval_required: true
+  auto_fix_categories:
+    - metadata
+    - timestamps
+  excluded_paths:
+    - wifi.sta.pass
+    - auth.password
+    - login.password
+
+metrics:
+  prometheus_enabled: false
+  prometheus_port: 9090
+  retention_days: 30

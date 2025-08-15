@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/testutil"
 	"github.com/gorilla/mux"
@@ -23,11 +25,28 @@ func testShellyService(t *testing.T, db *database.Manager) *service.ShellyServic
 	return service.NewService(db, cfg)
 }
 
+// testNotificationHandler creates a test notification handler for API tests
+func testNotificationHandler(t *testing.T, db *database.Manager) *notification.Handler {
+	t.Helper()
+	logger := logging.GetDefault()
+	emailConfig := notification.EmailSMTPConfig{
+		Host:     "localhost",
+		Port:     587,
+		Username: "test",
+		Password: "test",
+		From:     "test@example.com",
+		TLS:      false,
+	}
+	notificationService := notification.NewService(db.DB, logger, emailConfig)
+	return notification.NewHandler(notificationService, logger)
+}
+
 func TestGetDevices(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	// Add test devices
 	testDevices := []*database.Device{
@@ -71,7 +90,8 @@ func TestAddDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	device := testutil.TestDevice()
 	deviceJSON, err := json.Marshal(device)
@@ -105,7 +125,8 @@ func TestAddDevice(t *testing.T) {
 func TestAddDevice_InvalidJSON(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	// Create request with invalid JSON
 	req := httptest.NewRequest("POST", "/api/v1/devices", bytes.NewReader([]byte("invalid json")))
@@ -123,7 +144,8 @@ func TestGetDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	device := testutil.TestDevice()
 	err := db.AddDevice(device)
@@ -152,7 +174,8 @@ func TestGetDevice(t *testing.T) {
 func TestGetDevice_NotFound(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	// Create request with non-existent device ID
 	req := httptest.NewRequest("GET", "/api/v1/devices/999", nil)
@@ -169,7 +192,8 @@ func TestGetDevice_NotFound(t *testing.T) {
 func TestGetDevice_InvalidID(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	// Create request with invalid device ID
 	req := httptest.NewRequest("GET", "/api/v1/devices/invalid", nil)
@@ -187,7 +211,8 @@ func TestUpdateDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	device := testutil.TestDevice()
 	err := db.AddDevice(device)
@@ -229,7 +254,8 @@ func TestUpdateDevice(t *testing.T) {
 func TestUpdateDevice_NotFound(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	device := testutil.TestDevice()
 	deviceJSON, err := json.Marshal(device)
@@ -252,7 +278,8 @@ func TestDeleteDevice(t *testing.T) {
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	device := testutil.TestDevice()
 	err := db.AddDevice(device)
@@ -278,7 +305,8 @@ func TestDeleteDevice(t *testing.T) {
 func TestDeleteDevice_NotFound(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	// Create request with non-existent device ID
 	req := httptest.NewRequest("DELETE", "/api/v1/devices/999", nil)
@@ -295,7 +323,8 @@ func TestDeleteDevice_NotFound(t *testing.T) {
 func TestDiscoverHandler(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	req := httptest.NewRequest("POST", "/api/v1/discover", nil)
 	w := httptest.NewRecorder()
@@ -320,7 +349,8 @@ func TestDiscoverHandler(t *testing.T) {
 func TestGetProvisioningStatus(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	req := httptest.NewRequest("GET", "/api/v1/provisioning/status", nil)
 	w := httptest.NewRecorder()
@@ -345,7 +375,8 @@ func TestGetProvisioningStatus(t *testing.T) {
 func TestProvisionDevices(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	req := httptest.NewRequest("POST", "/api/v1/provisioning/provision", nil)
 	w := httptest.NewRecorder()
@@ -370,7 +401,8 @@ func TestProvisionDevices(t *testing.T) {
 func TestGetDHCPReservations(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
 	req := httptest.NewRequest("GET", "/api/v1/dhcp/reservations", nil)
 	w := httptest.NewRecorder()
@@ -394,7 +426,8 @@ func TestGetDHCPReservations(t *testing.T) {
 func TestAPIRouter(t *testing.T) {
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
-	handler := NewHandler(db, svc)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 	router := SetupRoutes(handler)
 
 	// Add a test device

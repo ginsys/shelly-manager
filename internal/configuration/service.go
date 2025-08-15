@@ -8,13 +8,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/shelly"
 	"github.com/ginsys/shelly-manager/internal/shelly/gen1"
 	"github.com/ginsys/shelly-manager/internal/shelly/gen2"
 	"gorm.io/gorm"
 )
+
+// Device represents device information for configuration management
+type Device struct {
+	ID       uint      `json:"id"`
+	MAC      string    `json:"mac"`
+	IP       string    `json:"ip"`
+	Type     string    `json:"type"`
+	Name     string    `json:"name"`
+	Settings string    `json:"settings"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+// TableName returns the table name for GORM
+func (Device) TableName() string {
+	return "devices"
+}
 
 // Service handles configuration management operations
 type Service struct {
@@ -35,10 +50,10 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 		&DriftReport{},
 		&DriftTrend{},
 	)
-	
+
 	// Create reporter
 	reporter := NewReporter(db, logger)
-	
+
 	return &Service{
 		db:       db,
 		logger:   logger,
@@ -50,64 +65,64 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*DeviceConfig, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	
+
 	s.logger.WithFields(map[string]any{
 		"device_id": deviceID,
 		"component": "configuration",
 	}).Info("Starting configuration import from device")
-	
+
 	// Get device info to determine generation and basic info
 	info, err := client.GetInfo(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device info: %w", err)
 	}
-	
+
 	s.logger.WithFields(map[string]any{
-		"device_id": deviceID,
+		"device_id":  deviceID,
 		"generation": info.Generation,
-		"model": info.Model,
-		"component": "configuration",
+		"model":      info.Model,
+		"component":  "configuration",
 	}).Debug("Device info retrieved, importing configuration")
-	
+
 	// Get comprehensive device configuration
 	deviceConfig, err := client.GetConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device configuration: %w", err)
 	}
-	
+
 	// Use the raw configuration data from the device
 	configData := deviceConfig.Raw
-	
+
 	// Enhance with additional device metadata
 	enhancedConfig := map[string]interface{}{}
 	if err := json.Unmarshal(configData, &enhancedConfig); err != nil {
 		// If unmarshaling fails, create a basic structure
 		enhancedConfig = make(map[string]interface{})
 	}
-	
+
 	// Determine firmware version (Gen1 uses FW, Gen2+ uses Version)
 	firmware := info.Version
 	if firmware == "" && info.FW != "" {
 		firmware = info.FW
 	}
-	
+
 	// Determine auth status (Gen1 uses Auth, Gen2+ uses AuthEn)
 	authEnabled := info.AuthEn
 	if !authEnabled && info.Auth {
 		authEnabled = info.Auth
 	}
-	
+
 	// Add metadata for tracking and identification
 	enhancedConfig["_metadata"] = map[string]interface{}{
-		"device_id":      deviceID,
-		"generation":     info.Generation,
-		"model":          info.Model,
-		"firmware":       firmware,
-		"mac":            info.MAC,
-		"imported_at":    time.Now().Format(time.RFC3339),
-		"import_source":  "device",
+		"device_id":     deviceID,
+		"generation":    info.Generation,
+		"model":         info.Model,
+		"firmware":      firmware,
+		"mac":           info.MAC,
+		"imported_at":   time.Now().Format(time.RFC3339),
+		"import_source": "device",
 	}
-	
+
 	// Add device info if not present in config
 	if _, hasDeviceInfo := enhancedConfig["device_info"]; !hasDeviceInfo {
 		enhancedConfig["device_info"] = map[string]interface{}{
@@ -119,25 +134,25 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 			"auth_en":    authEnabled,
 		}
 	}
-	
+
 	// Re-marshal the enhanced configuration
 	configData, err = json.Marshal(enhancedConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal enhanced config: %w", err)
 	}
-	
+
 	// Validate and sanitize the configuration
 	configData, err = s.validateAndSanitizeConfig(configData, deviceID)
 	if err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
-	
+
 	// Check if config already exists
 	var existingConfig DeviceConfig
 	err = s.db.Where("device_id = ?", deviceID).First(&existingConfig).Error
-	
+
 	now := time.Now()
-	
+
 	if err == gorm.ErrRecordNotFound {
 		// Create new config
 		newConfig := DeviceConfig{
@@ -146,68 +161,68 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 			LastSynced: &now,
 			SyncStatus: "synced",
 		}
-		
+
 		if err := s.db.Create(&newConfig).Error; err != nil {
 			return nil, fmt.Errorf("failed to create device config: %w", err)
 		}
-		
+
 		// Create history entry
 		s.createHistory(deviceID, newConfig.ID, "import", nil, configData, "system")
-		
+
 		s.logger.WithFields(map[string]any{
-			"device_id": deviceID,
-			"config_id": newConfig.ID,
+			"device_id":   deviceID,
+			"config_id":   newConfig.ID,
 			"config_size": len(configData),
-			"component": "configuration",
+			"component":   "configuration",
 		}).Info("Successfully imported configuration from device")
-		
+
 		return &newConfig, nil
 	}
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to query existing config: %w", err)
 	}
-	
+
 	// Check if configuration has actually changed
 	if string(existingConfig.Config) == string(configData) {
 		// No changes, just update sync timestamp
 		existingConfig.LastSynced = &now
 		existingConfig.SyncStatus = "synced"
-		
+
 		if err := s.db.Save(&existingConfig).Error; err != nil {
 			return nil, fmt.Errorf("failed to update sync timestamp: %w", err)
 		}
-		
+
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
 			"config_id": existingConfig.ID,
 			"component": "configuration",
 		}).Debug("Configuration unchanged, updated sync timestamp only")
-		
+
 		return &existingConfig, nil
 	}
-	
+
 	// Configuration has changed, update it
 	oldConfig := existingConfig.Config
 	existingConfig.Config = configData
 	existingConfig.LastSynced = &now
 	existingConfig.SyncStatus = "synced"
-	
+
 	if err := s.db.Save(&existingConfig).Error; err != nil {
 		return nil, fmt.Errorf("failed to update device config: %w", err)
 	}
-	
+
 	// Create history entry
 	s.createHistory(deviceID, existingConfig.ID, "import", oldConfig, configData, "system")
-	
+
 	s.logger.WithFields(map[string]any{
-		"device_id": deviceID,
-		"config_id": existingConfig.ID,
-		"config_size": len(configData),
+		"device_id":        deviceID,
+		"config_id":        existingConfig.ID,
+		"config_size":      len(configData),
 		"changes_detected": true,
-		"component": "configuration",
+		"component":        "configuration",
 	}).Info("Successfully updated configuration from device")
-	
+
 	return &existingConfig, nil
 }
 
@@ -215,7 +230,7 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 	var config DeviceConfig
 	err := s.db.Where("device_id = ?", deviceID).First(&config).Error
-	
+
 	if err == gorm.ErrRecordNotFound {
 		return &ImportStatus{
 			DeviceID: deviceID,
@@ -223,11 +238,11 @@ func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 			Message:  "No configuration has been imported for this device",
 		}, nil
 	}
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to check import status: %w", err)
 	}
-	
+
 	status := &ImportStatus{
 		DeviceID:   deviceID,
 		ConfigID:   config.ID,
@@ -235,7 +250,7 @@ func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 		LastSynced: config.LastSynced,
 		UpdatedAt:  config.UpdatedAt,
 	}
-	
+
 	// Determine status message
 	switch config.SyncStatus {
 	case "synced":
@@ -249,7 +264,7 @@ func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 	default:
 		status.Message = fmt.Sprintf("Unknown status: %s", config.SyncStatus)
 	}
-	
+
 	return status, nil
 }
 
@@ -261,12 +276,12 @@ func (s *Service) BulkImportFromDevices(deviceIDs []uint, clientGetter func(uint
 		Failed:  0,
 		Results: make([]ImportResult, 0, len(deviceIDs)),
 	}
-	
+
 	for _, deviceID := range deviceIDs {
 		importResult := ImportResult{
 			DeviceID: deviceID,
 		}
-		
+
 		// Get client for this device
 		client, err := clientGetter(deviceID)
 		if err != nil {
@@ -286,17 +301,17 @@ func (s *Service) BulkImportFromDevices(deviceIDs []uint, clientGetter func(uint
 				result.Success++
 			}
 		}
-		
+
 		result.Results = append(result.Results, importResult)
 	}
-	
+
 	s.logger.WithFields(map[string]any{
 		"total_devices": result.Total,
 		"successful":    result.Success,
 		"failed":        result.Failed,
 		"component":     "configuration",
 	}).Info("Bulk configuration import completed")
-	
+
 	return result, nil
 }
 
@@ -307,22 +322,22 @@ func (s *Service) ExportToDevice(deviceID uint, client shelly.Client) error {
 	if err := s.db.Where("device_id = ?", deviceID).First(&config).Error; err != nil {
 		return fmt.Errorf("configuration not found: %w", err)
 	}
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// Get device info to determine generation
 	info, err := client.GetInfo(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get device info: %w", err)
 	}
-	
+
 	// Parse stored configuration data
 	var configData map[string]interface{}
 	if err := json.Unmarshal(config.Config, &configData); err != nil {
 		return fmt.Errorf("failed to parse stored configuration: %w", err)
 	}
-	
+
 	// Remove metadata before sending to device
 	exportConfig := make(map[string]interface{})
 	for key, value := range configData {
@@ -331,22 +346,22 @@ func (s *Service) ExportToDevice(deviceID uint, client shelly.Client) error {
 			exportConfig[key] = value
 		}
 	}
-	
+
 	if len(exportConfig) == 0 {
 		return fmt.Errorf("no configuration data to export")
 	}
-	
+
 	// Validate configuration before export
 	if err := s.validateConfigForExport(exportConfig, info); err != nil {
 		return fmt.Errorf("configuration validation failed: %w", err)
 	}
-	
+
 	s.logger.WithFields(map[string]any{
-		"device_id": deviceID,
-		"component": "configuration",
+		"device_id":   deviceID,
+		"component":   "configuration",
 		"config_size": len(exportConfig),
 	}).Info("Starting configuration export to device")
-	
+
 	// Apply configuration based on generation
 	switch info.Generation {
 	case 1:
@@ -354,44 +369,44 @@ func (s *Service) ExportToDevice(deviceID uint, client shelly.Client) error {
 		if err := client.SetConfig(ctx, exportConfig); err != nil {
 			return fmt.Errorf("failed to apply Gen1 configuration: %w", err)
 		}
-		
+
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
 			"component": "configuration",
 		}).Info("Successfully applied Gen1 configuration")
-		
+
 	case 2, 3:
 		// Gen2+ devices use RPC calls
 		if err := client.SetConfig(ctx, exportConfig); err != nil {
 			return fmt.Errorf("failed to apply Gen2+ configuration: %w", err)
 		}
-		
+
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
 			"component": "configuration",
 		}).Info("Successfully applied Gen2+ configuration")
-		
+
 	default:
 		return fmt.Errorf("unsupported device generation: %d", info.Generation)
 	}
-	
+
 	// Update sync status
 	now := time.Now()
 	config.LastSynced = &now
 	config.SyncStatus = "synced"
-	
+
 	if err := s.db.Save(&config).Error; err != nil {
 		return fmt.Errorf("failed to update sync status: %w", err)
 	}
-	
+
 	// Create history entry
 	s.createHistory(deviceID, config.ID, "export", nil, config.Config, "system")
-	
+
 	s.logger.WithFields(map[string]any{
 		"device_id": deviceID,
 		"component": "configuration",
 	}).Info("Exported configuration to device")
-	
+
 	return nil
 }
 
@@ -405,31 +420,31 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 		}
 		return nil, fmt.Errorf("failed to get stored config: %w", err)
 	}
-	
+
 	// Import current configuration from device
 	currentConfig, err := s.ImportFromDevice(deviceID, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import current config: %w", err)
 	}
-	
+
 	// Compare configurations
 	differences := s.compareConfigurations(storedConfig.Config, currentConfig.Config)
-	
+
 	if len(differences) == 0 {
 		// No drift detected
 		storedConfig.SyncStatus = "synced"
 		s.db.Save(&storedConfig)
 		return nil, nil
 	}
-	
+
 	// Drift detected
 	storedConfig.SyncStatus = "drift"
 	s.db.Save(&storedConfig)
-	
+
 	// Get device name
-	var device database.Device
+	var device Device
 	s.db.First(&device, deviceID)
-	
+
 	drift := &ConfigDrift{
 		DeviceID:       deviceID,
 		DeviceName:     device.Name,
@@ -438,39 +453,39 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 		Differences:    differences,
 		RequiresAction: true,
 	}
-	
+
 	s.logger.WithFields(map[string]any{
 		"device_id":   deviceID,
 		"differences": len(differences),
 		"component":   "configuration",
 	}).Warn("Configuration drift detected")
-	
+
 	return drift, nil
 }
 
 // BulkDetectDrift checks for configuration drift across multiple devices
 func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (shelly.Client, error)) (*BulkDriftResult, error) {
 	result := &BulkDriftResult{
-		Total:      len(deviceIDs),
-		InSync:     0,
-		Drifted:    0,
-		Errors:     0,
-		Results:    make([]DriftResult, 0, len(deviceIDs)),
-		StartedAt:  time.Now(),
+		Total:     len(deviceIDs),
+		InSync:    0,
+		Drifted:   0,
+		Errors:    0,
+		Results:   make([]DriftResult, 0, len(deviceIDs)),
+		StartedAt: time.Now(),
 	}
-	
+
 	s.logger.WithFields(map[string]any{
 		"total_devices": len(deviceIDs),
 		"component":     "configuration",
 	}).Info("Starting bulk drift detection")
-	
+
 	for _, deviceID := range deviceIDs {
 		driftResult := DriftResult{
 			DeviceID: deviceID,
 		}
-		
+
 		// Get device info for result
-		var device database.Device
+		var device Device
 		if err := s.db.First(&device, deviceID).Error; err != nil {
 			driftResult.Status = "error"
 			driftResult.Error = fmt.Sprintf("Device not found: %v", err)
@@ -478,7 +493,7 @@ func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (she
 		} else {
 			driftResult.DeviceName = device.Name
 			driftResult.DeviceIP = device.IP
-			
+
 			// Get client for this device
 			client, err := clientGetter(deviceID)
 			if err != nil {
@@ -515,21 +530,21 @@ func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (she
 					driftResult.Drift = drift
 					result.Drifted++
 					s.logger.WithFields(map[string]any{
-						"device_id":     deviceID,
-						"device_ip":     device.IP,
-						"differences":   len(drift.Differences),
-						"component":     "configuration",
+						"device_id":   deviceID,
+						"device_ip":   device.IP,
+						"differences": len(drift.Differences),
+						"component":   "configuration",
 					}).Info("Configuration drift detected during bulk operation")
 				}
 			}
 		}
-		
+
 		result.Results = append(result.Results, driftResult)
 	}
-	
+
 	result.CompletedAt = time.Now()
 	result.Duration = result.CompletedAt.Sub(result.StartedAt)
-	
+
 	s.logger.WithFields(map[string]any{
 		"total_devices":   result.Total,
 		"devices_in_sync": result.InSync,
@@ -538,7 +553,7 @@ func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (she
 		"duration_ms":     result.Duration.Milliseconds(),
 		"component":       "configuration",
 	}).Info("Bulk drift detection completed")
-	
+
 	return result, nil
 }
 
@@ -549,28 +564,28 @@ func (s *Service) ApplyTemplate(deviceID uint, templateID uint, variables map[st
 	if err := s.db.First(&template, templateID).Error; err != nil {
 		return fmt.Errorf("template not found: %w", err)
 	}
-	
+
 	// Get device to check compatibility
-	var device database.Device
+	var device Device
 	if err := s.db.First(&device, deviceID).Error; err != nil {
 		return fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Check device type compatibility
 	if template.DeviceType != "all" && template.DeviceType != device.Type {
 		return fmt.Errorf("template not compatible with device type %s", device.Type)
 	}
-	
+
 	// Apply variable substitution if needed
 	configData := template.Config
 	if len(variables) > 0 {
 		configData = s.substituteVariables(configData, variables)
 	}
-	
+
 	// Check if config exists
 	var config DeviceConfig
 	err := s.db.Where("device_id = ?", deviceID).First(&config).Error
-	
+
 	if err == gorm.ErrRecordNotFound {
 		// Create new config
 		config = DeviceConfig{
@@ -579,14 +594,14 @@ func (s *Service) ApplyTemplate(deviceID uint, templateID uint, variables map[st
 			Config:     configData,
 			SyncStatus: "pending",
 		}
-		
+
 		if err := s.db.Create(&config).Error; err != nil {
 			return fmt.Errorf("failed to create device config: %w", err)
 		}
-		
+
 		// Create history entry
 		s.createHistory(deviceID, config.ID, "template", nil, configData, "template")
-		
+
 	} else if err != nil {
 		return fmt.Errorf("failed to query config: %w", err)
 	} else {
@@ -595,21 +610,21 @@ func (s *Service) ApplyTemplate(deviceID uint, templateID uint, variables map[st
 		config.TemplateID = &templateID
 		config.Config = configData
 		config.SyncStatus = "pending"
-		
+
 		if err := s.db.Save(&config).Error; err != nil {
 			return fmt.Errorf("failed to update device config: %w", err)
 		}
-		
+
 		// Create history entry
 		s.createHistory(deviceID, config.ID, "template", oldConfig, configData, "template")
 	}
-	
+
 	s.logger.WithFields(map[string]any{
 		"device_id":   deviceID,
 		"template_id": templateID,
 		"component":   "configuration",
 	}).Info("Applied template to device")
-	
+
 	return nil
 }
 
@@ -732,11 +747,11 @@ func (s *Service) DeleteTemplate(templateID uint) error {
 func (s *Service) GetConfigHistory(deviceID uint, limit int) ([]ConfigHistory, error) {
 	var history []ConfigHistory
 	query := s.db.Where("device_id = ?", deviceID).Order("created_at DESC")
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	err := query.Find(&history).Error
 	return history, err
 }
@@ -744,14 +759,14 @@ func (s *Service) GetConfigHistory(deviceID uint, limit int) ([]ConfigHistory, e
 // compareConfigurations compares two JSON configurations and returns differences
 func (s *Service) compareConfigurations(stored, current json.RawMessage) []ConfigDifference {
 	var differences []ConfigDifference
-	
+
 	var storedMap, currentMap map[string]interface{}
 	json.Unmarshal(stored, &storedMap)
 	json.Unmarshal(current, &currentMap)
-	
+
 	// Compare maps recursively
 	s.compareMaps("", storedMap, currentMap, &differences)
-	
+
 	return differences
 }
 
@@ -764,7 +779,7 @@ func (s *Service) compareMaps(path string, expected, actual map[string]interface
 			currentPath += "."
 		}
 		currentPath += key
-		
+
 		actualValue, exists := actual[key]
 		if !exists {
 			*differences = append(*differences, ConfigDifference{
@@ -775,13 +790,13 @@ func (s *Service) compareMaps(path string, expected, actual map[string]interface
 			})
 			continue
 		}
-		
+
 		// Compare values
 		if !reflect.DeepEqual(expectedValue, actualValue) {
 			// Check if both are maps for recursive comparison
 			expectedMap, expectedIsMap := expectedValue.(map[string]interface{})
 			actualMap, actualIsMap := actualValue.(map[string]interface{})
-			
+
 			if expectedIsMap && actualIsMap {
 				s.compareMaps(currentPath, expectedMap, actualMap, differences)
 			} else {
@@ -794,7 +809,7 @@ func (s *Service) compareMaps(path string, expected, actual map[string]interface
 			}
 		}
 	}
-	
+
 	// Check for added keys
 	for key, actualValue := range actual {
 		currentPath := path
@@ -802,7 +817,7 @@ func (s *Service) compareMaps(path string, expected, actual map[string]interface
 			currentPath += "."
 		}
 		currentPath += key
-		
+
 		if _, exists := expected[key]; !exists {
 			*differences = append(*differences, ConfigDifference{
 				Path:     currentPath,
@@ -830,12 +845,12 @@ func (s *Service) validateAndSanitizeConfig(configData json.RawMessage, deviceID
 	if err := json.Unmarshal(configData, &config); err != nil {
 		return nil, fmt.Errorf("invalid JSON configuration: %w", err)
 	}
-	
+
 	// Check for minimum required fields
 	if len(config) == 0 {
 		return nil, fmt.Errorf("configuration cannot be empty")
 	}
-	
+
 	// Sanitize sensitive data before logging (but keep in actual config)
 	sanitizedConfig := make(map[string]interface{})
 	for key, value := range config {
@@ -846,17 +861,17 @@ func (s *Service) validateAndSanitizeConfig(configData json.RawMessage, deviceID
 			sanitizedConfig[key] = "[REDACTED]"
 		}
 	}
-	
+
 	// Log sanitized config size and basic structure
 	sanitizedJSON, _ := json.Marshal(sanitizedConfig)
 	s.logger.WithFields(map[string]any{
-		"device_id": deviceID,
-		"config_keys": len(config),
-		"config_size": len(configData),
+		"device_id":        deviceID,
+		"config_keys":      len(config),
+		"config_size":      len(configData),
 		"sample_structure": string(sanitizedJSON[:min(len(sanitizedJSON), 200)]) + "...",
-		"component": "configuration",
+		"component":        "configuration",
 	}).Debug("Configuration validation successful")
-	
+
 	return configData, nil
 }
 
@@ -869,7 +884,7 @@ func isSensitiveField(key string) bool {
 		"mqtt_password", "mqtt_pass",
 		"username", "user", // Some consider usernames sensitive too
 	}
-	
+
 	keyLower := strings.ToLower(key)
 	for _, sensitive := range sensitiveFields {
 		if strings.Contains(keyLower, sensitive) {
@@ -897,7 +912,7 @@ func (s *Service) createHistory(deviceID, configID uint, action string, oldConfi
 		NewConfig: newConfig,
 		ChangedBy: changedBy,
 	}
-	
+
 	// Calculate changes if both configs exist
 	if oldConfig != nil && newConfig != nil {
 		differences := s.compareConfigurations(oldConfig, newConfig)
@@ -906,7 +921,7 @@ func (s *Service) createHistory(deviceID, configID uint, action string, oldConfi
 			history.Changes = changes
 		}
 	}
-	
+
 	if err := s.db.Create(&history).Error; err != nil {
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
@@ -927,7 +942,7 @@ func (s *Service) validateConfigForExport(config map[string]interface{}, deviceI
 				return fmt.Errorf("cannot disable WiFi via configuration export - device would become unreachable")
 			}
 		}
-		
+
 		// Validate SSID is not empty if WiFi is being configured
 		if ssid, exists := wifi["ssid"]; exists {
 			if ssidStr, ok := ssid.(string); ok && ssidStr == "" {
@@ -935,7 +950,7 @@ func (s *Service) validateConfigForExport(config map[string]interface{}, deviceI
 			}
 		}
 	}
-	
+
 	// For Gen1 devices, check critical authentication settings
 	if deviceInfo.Generation == 1 {
 		if auth, ok := config["login"].(map[string]interface{}); ok {
@@ -952,7 +967,7 @@ func (s *Service) validateConfigForExport(config map[string]interface{}, deviceI
 			}
 		}
 	}
-	
+
 	// For Gen2+ devices, check authentication in sys.auth
 	if deviceInfo.Generation >= 2 {
 		if sys, ok := config["sys"].(map[string]interface{}); ok {
@@ -970,7 +985,7 @@ func (s *Service) validateConfigForExport(config map[string]interface{}, deviceI
 			}
 		}
 	}
-	
+
 	// Validate network configuration doesn't create conflicts
 	if network, ok := config["wifi_sta"].(map[string]interface{}); ok {
 		// Check for static IP configuration validity
@@ -985,20 +1000,20 @@ func (s *Service) validateConfigForExport(config map[string]interface{}, deviceI
 			}
 		}
 	}
-	
+
 	s.logger.WithFields(map[string]any{
 		"device_id":  deviceInfo.ID,
 		"generation": deviceInfo.Generation,
 		"component":  "configuration",
 	}).Debug("Configuration validation passed")
-	
+
 	return nil
 }
 
 // createClientForDevice creates a Shelly client for the specified device
 func (s *Service) createClientForDevice(deviceID uint) (shelly.Client, error) {
 	// Get device information from database
-	var device database.Device
+	var device Device
 	if err := s.db.First(&device, deviceID).Error; err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
@@ -1009,7 +1024,7 @@ func (s *Service) createClientForDevice(deviceID uint) (shelly.Client, error) {
 		AuthUser string `json:"auth_user"`
 		AuthPass string `json:"auth_pass"`
 	}
-	
+
 	if device.Settings != "" {
 		if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
 			s.logger.WithFields(map[string]any{
@@ -1033,7 +1048,7 @@ func (s *Service) createClientForDevice(deviceID uint) (shelly.Client, error) {
 			opts = append(opts, gen1.WithAuth(settings.AuthUser, settings.AuthPass))
 		}
 		return gen1.NewClient(device.IP, opts...), nil
-		
+
 	case 2, 3:
 		// Gen2+ device
 		var opts []gen2.ClientOption
@@ -1041,7 +1056,7 @@ func (s *Service) createClientForDevice(deviceID uint) (shelly.Client, error) {
 			opts = append(opts, gen2.WithAuth(settings.AuthUser, settings.AuthPass))
 		}
 		return gen2.NewClient(device.IP, opts...), nil
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported device generation: %d", settings.Gen)
 	}
@@ -1082,10 +1097,10 @@ func (s *Service) GenerateDeviceDriftReport(deviceID uint, client shelly.Client)
 
 	// Convert to DriftResult format
 	driftResult := DriftResult{
-		DeviceID:   deviceID,
-		DeviceIP:   "", // Will be filled in by reporter
-		Status:     "synced",
-		Drift:      nil,
+		DeviceID: deviceID,
+		DeviceIP: "", // Will be filled in by reporter
+		Status:   "synced",
+		Drift:    nil,
 	}
 
 	if drift != nil {
@@ -1102,10 +1117,10 @@ func (s *Service) GenerateDeviceDriftReport(deviceID uint, client shelly.Client)
 // EnhanceBulkDriftResult adds comprehensive reporting to bulk drift results
 func (s *Service) EnhanceBulkDriftResult(result *BulkDriftResult, scheduleID *uint) (*DriftReport, error) {
 	s.logger.WithFields(map[string]any{
-		"total_devices": result.Total,
+		"total_devices":   result.Total,
 		"devices_drifted": result.Drifted,
-		"schedule_id": scheduleID,
-		"component": "configuration",
+		"schedule_id":     scheduleID,
+		"component":       "configuration",
 	}).Info("Enhancing bulk drift result with comprehensive reporting")
 
 	reportType := "bulk"

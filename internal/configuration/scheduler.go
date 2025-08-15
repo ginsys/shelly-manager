@@ -15,24 +15,24 @@ import (
 
 // Scheduler manages automated drift detection schedules
 type Scheduler struct {
-	db          *gorm.DB
-	service     *Service
-	cron        *cron.Cron
-	logger      *logging.Logger
-	mu          sync.RWMutex
+	db           *gorm.DB
+	service      *Service
+	cron         *cron.Cron
+	logger       *logging.Logger
+	mu           sync.RWMutex
 	scheduleJobs map[uint]cron.EntryID // maps schedule ID to cron job ID
-	running     bool
+	running      bool
 }
 
 // NewScheduler creates a new drift detection scheduler
 func NewScheduler(db *gorm.DB, service *Service, logger *logging.Logger) *Scheduler {
 	return &Scheduler{
-		db:          db,
-		service:     service,
-		cron:        cron.New(cron.WithSeconds()),
-		logger:      logger,
+		db:           db,
+		service:      service,
+		cron:         cron.New(cron.WithSeconds()),
+		logger:       logger,
 		scheduleJobs: make(map[uint]cron.EntryID),
-		running:     false,
+		running:      false,
 	}
 }
 
@@ -80,7 +80,7 @@ func (s *Scheduler) Stop() error {
 
 	s.running = false
 	s.scheduleJobs = make(map[uint]cron.EntryID)
-	
+
 	s.logger.Info("Drift detection scheduler stopped")
 	return nil
 }
@@ -175,8 +175,8 @@ func (s *Scheduler) executeSchedule(scheduleID uint) {
 		if resultJSON, err := json.Marshal(result); err == nil {
 			run.Results = resultJSON
 		}
-		s.logger.Info("Drift detection completed", 
-			"schedule_id", scheduleID, 
+		s.logger.Info("Drift detection completed",
+			"schedule_id", scheduleID,
 			"run_id", run.ID,
 			"total", result.Total,
 			"drifted", result.Drifted,
@@ -413,15 +413,15 @@ func (s *Scheduler) GetSchedule(scheduleID uint) (*DriftDetectionSchedule, error
 func (s *Scheduler) GetScheduleRuns(scheduleID uint, limit int) ([]DriftDetectionRun, error) {
 	var runs []DriftDetectionRun
 	query := s.db.Where("schedule_id = ?", scheduleID).Order("created_at DESC")
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if err := query.Find(&runs).Error; err != nil {
 		return nil, fmt.Errorf("failed to get schedule runs: %w", err)
 	}
-	
+
 	return runs, nil
 }
 

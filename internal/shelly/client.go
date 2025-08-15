@@ -11,46 +11,46 @@ type Client interface {
 	GetInfo(ctx context.Context) (*DeviceInfo, error)
 	GetStatus(ctx context.Context) (*DeviceStatus, error)
 	GetConfig(ctx context.Context) (*DeviceConfig, error)
-	
+
 	// Configuration
 	SetConfig(ctx context.Context, config map[string]interface{}) error
 	SetAuth(ctx context.Context, username, password string) error
 	ResetAuth(ctx context.Context) error
-	
+
 	// Control Operations
 	SetSwitch(ctx context.Context, channel int, on bool) error
 	SetBrightness(ctx context.Context, channel int, brightness int) error
 	SetColorRGB(ctx context.Context, channel int, r, g, b uint8) error
 	SetColorTemp(ctx context.Context, channel int, temp int) error
-	
+
 	// Roller Shutter Operations
 	SetRollerPosition(ctx context.Context, channel int, position int) error
 	OpenRoller(ctx context.Context, channel int) error
 	CloseRoller(ctx context.Context, channel int) error
 	StopRoller(ctx context.Context, channel int) error
-	
+
 	// Advanced Settings
 	SetRelaySettings(ctx context.Context, channel int, settings map[string]interface{}) error
 	SetLightSettings(ctx context.Context, channel int, settings map[string]interface{}) error
 	SetInputSettings(ctx context.Context, input int, settings map[string]interface{}) error
 	SetLEDSettings(ctx context.Context, settings map[string]interface{}) error
-	
+
 	// RGBW Operations
 	SetWhiteChannel(ctx context.Context, channel int, brightness int, temp int) error
 	SetColorMode(ctx context.Context, mode string) error
-	
+
 	// System Operations
 	Reboot(ctx context.Context) error
 	FactoryReset(ctx context.Context) error
-	
+
 	// Firmware Management
 	CheckUpdate(ctx context.Context) (*UpdateInfo, error)
 	PerformUpdate(ctx context.Context) error
-	
+
 	// Metrics and Monitoring
 	GetMetrics(ctx context.Context) (*DeviceMetrics, error)
 	GetEnergyData(ctx context.Context, channel int) (*EnergyData, error)
-	
+
 	// Connection Management
 	TestConnection(ctx context.Context) error
 	GetGeneration() int
@@ -62,13 +62,13 @@ type ClientOption func(*clientConfig)
 
 // clientConfig holds the configuration for a Shelly client
 type clientConfig struct {
-	username       string
-	password       string
-	timeout        time.Duration
-	retryAttempts  int
-	retryDelay     time.Duration
-	skipTLSVerify  bool
-	userAgent      string
+	username      string
+	password      string
+	timeout       time.Duration
+	retryAttempts int
+	retryDelay    time.Duration
+	skipTLSVerify bool
+	userAgent     string
 }
 
 // WithAuth sets authentication credentials

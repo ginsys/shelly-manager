@@ -43,7 +43,7 @@ discovery:
   timeout: 1
   concurrent_scans: 2
 `
-	
+
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
@@ -54,7 +54,7 @@ discovery:
 		if err != nil {
 			t.Fatalf("Help command failed: %v", err)
 		}
-		
+
 		if !strings.Contains(output, "comprehensive tool") {
 			t.Errorf("Expected help text to contain 'comprehensive tool', got: %s", output)
 		}
@@ -137,7 +137,7 @@ func TestConfigFileHandling(t *testing.T) {
 	t.Run("invalid config file", func(t *testing.T) {
 		tempDir := testutil.TempDir(t)
 		invalidConfigPath := filepath.Join(tempDir, "invalid.yaml")
-		
+
 		err := os.WriteFile(invalidConfigPath, []byte("invalid: yaml: content: ["), 0644)
 		if err != nil {
 			t.Fatalf("Failed to write invalid config: %v", err)
@@ -182,7 +182,7 @@ discovery:
 
 	// Start server in background
 	cmd := exec.Command(binaryPath, "--config", configPath, "server")
-	
+
 	// Capture output
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -198,7 +198,7 @@ discovery:
 
 	// Test that server is running by trying to connect
 	// (We're not doing a full HTTP test here, just checking it starts)
-	
+
 	// Kill the server
 	if cmd.Process != nil {
 		cmd.Process.Kill()
@@ -222,7 +222,7 @@ func buildTestBinary(t *testing.T) string {
 	// Build the binary
 	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to build test binary: %v\nOutput: %s", err, output)
@@ -240,7 +240,7 @@ func runCommandWithTimeout(t *testing.T, timeout time.Duration, binary string, a
 	t.Helper()
 
 	cmd := exec.Command(binary, args...)
-	
+
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -249,7 +249,7 @@ func runCommandWithTimeout(t *testing.T, timeout time.Duration, binary string, a
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 
 	done := make(chan error, 1)
-	
+
 	err := cmd.Start()
 	if err != nil {
 		return "", err
@@ -286,7 +286,7 @@ func BenchmarkListCommand(b *testing.B) {
 
 	tempDir := testutil.TempDir(&testing.T{})
 	configPath := filepath.Join(tempDir, "bench-config.yaml")
-	
+
 	configContent := `server:
   port: 8083
   host: "127.0.0.1"

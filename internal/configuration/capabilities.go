@@ -88,7 +88,7 @@ type DeviceCapabilities interface {
 	GetDeviceType() string
 	GetGeneration() int
 	GetModel() string
-	
+
 	// Capability checks
 	HasRelayCapability() bool
 	HasPowerMeteringCapability() bool
@@ -103,7 +103,7 @@ type DeviceCapabilities interface {
 	HasEnergyMeterCapability() bool
 	HasMotionCapability() bool
 	HasSensorCapability() bool
-	
+
 	// Get number of components
 	GetRelayCount() int
 	GetInputCount() int
@@ -113,25 +113,25 @@ type DeviceCapabilities interface {
 // ConfigurationProvider provides access to all device configurations
 type ConfigurationProvider interface {
 	DeviceCapabilities
-	
+
 	// Get base configuration
 	GetBaseConfig() BaseDeviceConfig
-	
+
 	// Get all active capabilities as a list
 	GetActiveCapabilities() []string
-	
+
 	// Serialize to JSON for storage
 	MarshalConfig() ([]byte, error)
-	
+
 	// Deserialize from JSON
 	UnmarshalConfig([]byte) error
-	
+
 	// Apply template configuration
 	ApplyTemplate(template *ConfigTemplate) error
-	
+
 	// Calculate diff with another configuration
 	DiffWith(other ConfigurationProvider) ([]ConfigDifference, error)
-	
+
 	// Validate configuration
 	Validate() error
 }
@@ -139,27 +139,27 @@ type ConfigurationProvider interface {
 // BaseDeviceConfig contains common configuration for all devices
 type BaseDeviceConfig struct {
 	// Device identification
-	DeviceID   string    `json:"device_id"`
-	DeviceType string    `json:"device_type"`
-	Name       string    `json:"name"`
-	Generation int       `json:"generation"`
-	
+	DeviceID   string `json:"device_id"`
+	DeviceType string `json:"device_type"`
+	Name       string `json:"name"`
+	Generation int    `json:"generation"`
+
 	// Network configuration
 	WiFi WiFiConfig `json:"wifi"`
-	
+
 	// Authentication
 	Auth AuthConfig `json:"auth"`
-	
+
 	// Cloud connectivity
 	Cloud CloudConfig `json:"cloud"`
-	
+
 	// MQTT settings
 	MQTT MQTTConfig `json:"mqtt"`
-	
+
 	// System settings
-	Timezone   string    `json:"timezone"`
-	Location   *Location `json:"location,omitempty"`
-	
+	Timezone string    `json:"timezone"`
+	Location *Location `json:"location,omitempty"`
+
 	// Metadata
 	LastModified time.Time `json:"last_modified"`
 	Version      int       `json:"version"`

@@ -10,7 +10,7 @@ func TestLoad_ValidConfig(t *testing.T) {
 	// Create temporary config file
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test-config.yaml")
-	
+
 	configContent := `server:
   port: 9090
   host: "0.0.0.0"
@@ -65,18 +65,18 @@ main_app:
   api_key: "appkey"
   enabled: false
 `
-	
+
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
-	
+
 	// Load config
 	config, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	// Verify server config
 	if config.Server.Port != 9090 {
 		t.Errorf("Expected port 9090, got %d", config.Server.Port)
@@ -87,7 +87,7 @@ main_app:
 	if config.Server.LogLevel != "debug" {
 		t.Errorf("Expected log level debug, got %s", config.Server.LogLevel)
 	}
-	
+
 	// Verify logging config
 	if config.Logging.Level != "info" {
 		t.Errorf("Expected logging level info, got %s", config.Logging.Level)
@@ -98,12 +98,12 @@ main_app:
 	if config.Logging.Output != "stdout" {
 		t.Errorf("Expected logging output stdout, got %s", config.Logging.Output)
 	}
-	
+
 	// Verify database config
 	if config.Database.Path != "/tmp/test.db" {
 		t.Errorf("Expected database path /tmp/test.db, got %s", config.Database.Path)
 	}
-	
+
 	// Verify discovery config
 	if !config.Discovery.Enabled {
 		t.Error("Expected discovery to be enabled")
@@ -132,7 +132,7 @@ main_app:
 	if config.Discovery.ConcurrentScans != 50 {
 		t.Errorf("Expected concurrent scans 50, got %d", config.Discovery.ConcurrentScans)
 	}
-	
+
 	// Verify provisioning config
 	if !config.Provisioning.AuthEnabled {
 		t.Error("Expected provisioning auth to be enabled")
@@ -161,7 +161,7 @@ main_app:
 	if config.Provisioning.ProvisionInterval != 300 {
 		t.Errorf("Expected provision interval 300, got %d", config.Provisioning.ProvisionInterval)
 	}
-	
+
 	// Verify DHCP config
 	if config.DHCP.Network != "10.0.0.0/24" {
 		t.Errorf("Expected DHCP network 10.0.0.0/24, got %s", config.DHCP.Network)
@@ -175,7 +175,7 @@ main_app:
 	if !config.DHCP.AutoReserve {
 		t.Error("Expected DHCP auto reserve to be enabled")
 	}
-	
+
 	// Verify OPNSense config
 	if !config.OPNSense.Enabled {
 		t.Error("Expected OPNSense to be enabled")
@@ -195,7 +195,7 @@ main_app:
 	if !config.OPNSense.AutoApply {
 		t.Error("Expected OPNSense auto apply to be enabled")
 	}
-	
+
 	// Verify main app config
 	if config.MainApp.URL != "http://example.com:8080" {
 		t.Errorf("Expected main app URL http://example.com:8080, got %s", config.MainApp.URL)
@@ -212,23 +212,23 @@ func TestLoad_DefaultConfig(t *testing.T) {
 	// Create minimal config file
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "minimal-config.yaml")
-	
+
 	configContent := `# Minimal config file
 server:
   port: 8080
 `
-	
+
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
-	
+
 	// Load config
 	config, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	// Verify defaults are applied
 	if config.Server.Port != 8080 {
 		t.Errorf("Expected default port 8080, got %d", config.Server.Port)
@@ -239,7 +239,7 @@ server:
 	if config.Server.LogLevel != "info" {
 		t.Errorf("Expected default log level info, got %s", config.Server.LogLevel)
 	}
-	
+
 	// Verify logging defaults
 	if config.Logging.Level != "info" {
 		t.Errorf("Expected default logging level info, got %s", config.Logging.Level)
@@ -250,12 +250,12 @@ server:
 	if config.Logging.Output != "stdout" {
 		t.Errorf("Expected default logging output stdout, got %s", config.Logging.Output)
 	}
-	
+
 	// Verify database defaults
 	if config.Database.Path != "data/shelly.db" {
 		t.Errorf("Expected default database path data/shelly.db, got %s", config.Database.Path)
 	}
-	
+
 	// Verify discovery defaults
 	if !config.Discovery.Enabled {
 		t.Error("Expected discovery to be enabled by default")
@@ -288,7 +288,7 @@ func TestLoad_EmptyConfigPath(t *testing.T) {
 	// Test loading with empty config path (should use default search paths)
 	// This will likely fail since there's no default config file, but we're testing the behavior
 	_, err := Load("")
-	
+
 	// The behavior depends on whether a default config file exists
 	// In test environments, this usually fails, but it's valid behavior
 	if err != nil {
@@ -306,24 +306,24 @@ func TestLoad_InvalidConfigFile(t *testing.T) {
 	// Create invalid YAML file
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "invalid-config.yaml")
-	
+
 	invalidContent := `server:
   port: 8080
   invalid_yaml: [
     missing_closing_bracket
 `
-	
+
 	err := os.WriteFile(configPath, []byte(invalidContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write invalid config file: %v", err)
 	}
-	
+
 	// Load config
 	_, err = Load(configPath)
 	if err == nil {
 		t.Error("Expected error when loading invalid config file")
 	}
-	
+
 	// Error should mention config parsing failure
 	if err != nil && !contains(err.Error(), "config") {
 		t.Errorf("Expected error message to mention config, got: %s", err.Error())
@@ -336,7 +336,7 @@ func TestLoad_NonexistentConfigFile(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when loading nonexistent config file")
 	}
-	
+
 	// Error should mention file not found
 	if err != nil && !contains(err.Error(), "config") {
 		t.Errorf("Expected error message to mention config file, got: %s", err.Error())
@@ -347,18 +347,18 @@ func TestLoad_EmptyConfigFile(t *testing.T) {
 	// Create empty config file
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "empty-config.yaml")
-	
+
 	err := os.WriteFile(configPath, []byte(""), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write empty config file: %v", err)
 	}
-	
+
 	// Load config - should work with defaults
 	config, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Failed to load empty config: %v", err)
 	}
-	
+
 	// Verify defaults are applied
 	if config.Server.Port != 8080 {
 		t.Errorf("Expected default port 8080, got %d", config.Server.Port)
@@ -372,7 +372,7 @@ func TestLoad_PartialConfig(t *testing.T) {
 	// Create config with only some sections
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "partial-config.yaml")
-	
+
 	configContent := `database:
   path: "/custom/path.db"
 
@@ -382,23 +382,23 @@ discovery:
     - "10.10.10.0/24"
   timeout: 15
 `
-	
+
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write partial config file: %v", err)
 	}
-	
+
 	// Load config
 	config, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Failed to load partial config: %v", err)
 	}
-	
+
 	// Verify specified values
 	if config.Database.Path != "/custom/path.db" {
 		t.Errorf("Expected custom database path /custom/path.db, got %s", config.Database.Path)
 	}
-	
+
 	expectedNetworks := []string{"172.16.0.0/12", "10.10.10.0/24"}
 	if len(config.Discovery.Networks) != len(expectedNetworks) {
 		t.Errorf("Expected %d networks, got %d", len(expectedNetworks), len(config.Discovery.Networks))
@@ -408,11 +408,11 @@ discovery:
 			t.Errorf("Expected network %s, got %s", network, config.Discovery.Networks[i])
 		}
 	}
-	
+
 	if config.Discovery.Timeout != 15 {
 		t.Errorf("Expected custom discovery timeout 15, got %d", config.Discovery.Timeout)
 	}
-	
+
 	// Verify defaults for unspecified values
 	if config.Server.Port != 8080 {
 		t.Errorf("Expected default port 8080, got %d", config.Server.Port)
@@ -428,21 +428,21 @@ discovery:
 func TestSetDefaults(t *testing.T) {
 	// Test that setDefaults function sets expected values
 	// This is implicitly tested in other tests, but we can verify specific defaults
-	
+
 	// Create minimal config to trigger defaults
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test-defaults.yaml")
-	
+
 	err := os.WriteFile(configPath, []byte("{}"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write minimal config file: %v", err)
 	}
-	
+
 	config, err := Load(configPath)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	// Test all default values
 	tests := []struct {
 		name     string
@@ -479,7 +479,7 @@ func TestSetDefaults(t *testing.T) {
 		{"main_app.url", config.MainApp.URL, "http://localhost:8080"},
 		{"main_app.enabled", config.MainApp.Enabled, true},
 	}
-	
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if test.actual != test.expected {
@@ -487,7 +487,7 @@ func TestSetDefaults(t *testing.T) {
 			}
 		})
 	}
-	
+
 	// Test default networks array
 	expectedDefaultNetworks := []string{"192.168.1.0/24"}
 	if len(config.Discovery.Networks) != len(expectedDefaultNetworks) {
@@ -502,9 +502,9 @@ func TestSetDefaults(t *testing.T) {
 
 // Helper function to check if string contains substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) && 
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		 containsAt(s, substr))))
+	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			containsAt(s, substr))))
 }
 
 func containsAt(s, substr string) bool {

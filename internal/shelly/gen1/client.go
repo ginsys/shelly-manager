@@ -82,17 +82,17 @@ func NewClient(ip string, opts ...ClientOption) *Client {
 		retryDelay:    1 * time.Second,
 		userAgent:     "shelly-manager/1.0",
 	}
-	
+
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	
+
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: cfg.skipTLSVerify,
 		},
 	}
-	
+
 	return &Client{
 		ip: ip,
 		httpClient: &http.Client{
@@ -108,7 +108,7 @@ func NewClient(ip string, opts ...ClientOption) *Client {
 // GetInfo retrieves device information
 func (c *Client) GetInfo(ctx context.Context) (*shelly.DeviceInfo, error) {
 	url := fmt.Sprintf("http://%s/shelly", c.ip)
-	
+
 	var rawInfo struct {
 		Type       string `json:"type"`
 		MAC        string `json:"mac"`
@@ -119,11 +119,11 @@ func (c *Client) GetInfo(ctx context.Context) (*shelly.DeviceInfo, error) {
 		NumMeters  int    `json:"num_meters"`
 		NumRollers int    `json:"num_rollers"`
 	}
-	
+
 	if err := c.getJSON(ctx, url, &rawInfo); err != nil {
 		return nil, err
 	}
-	
+
 	info := &shelly.DeviceInfo{
 		ID:         fmt.Sprintf("shelly%s-%s", rawInfo.Type, rawInfo.MAC),
 		MAC:        rawInfo.MAC,
@@ -137,40 +137,40 @@ func (c *Client) GetInfo(ctx context.Context) (*shelly.DeviceInfo, error) {
 		IP:         c.ip,
 		Discovered: time.Now(),
 	}
-	
+
 	return info, nil
 }
 
 // GetStatus retrieves the current device status
 func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 	url := fmt.Sprintf("http://%s/status", c.ip)
-	
+
 	var rawStatus map[string]interface{}
 	if err := c.getJSON(ctx, url, &rawStatus); err != nil {
 		return nil, err
 	}
-	
+
 	status := &shelly.DeviceStatus{
 		Raw: rawStatus,
 	}
-	
+
 	// Parse common fields
 	if temp, ok := rawStatus["temperature"].(float64); ok {
 		status.Temperature = temp
 	}
-	
+
 	if overtemp, ok := rawStatus["overtemperature"].(bool); ok {
 		status.Overtemperature = overtemp
 	}
-	
+
 	if uptime, ok := rawStatus["uptime"].(float64); ok {
 		status.Uptime = int(uptime)
 	}
-	
+
 	if hasUpdate, ok := rawStatus["has_update"].(bool); ok {
 		status.HasUpdate = hasUpdate
 	}
-	
+
 	// Parse WiFi status
 	if wifiData, ok := rawStatus["wifi_sta"].(map[string]interface{}); ok {
 		status.WiFiStatus = &shelly.WiFiStatus{
@@ -186,7 +186,7 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 			status.WiFiStatus.RSSI = int(rssi)
 		}
 	}
-	
+
 	// Parse relays/switches
 	if relays, ok := rawStatus["relays"].([]interface{}); ok {
 		for i, relay := range relays {
@@ -204,7 +204,7 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 			}
 		}
 	}
-	
+
 	// Parse meters
 	if meters, ok := rawStatus["meters"].([]interface{}); ok {
 		for i, meter := range meters {
@@ -225,42 +225,42 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 			}
 		}
 	}
-	
+
 	return status, nil
 }
 
 // GetConfig retrieves device configuration
 func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 	url := fmt.Sprintf("http://%s/settings", c.ip)
-	
+
 	var rawConfig map[string]interface{}
 	if err := c.getJSON(ctx, url, &rawConfig); err != nil {
 		return nil, err
 	}
-	
+
 	rawJSON, _ := json.Marshal(rawConfig)
-	
+
 	config := &shelly.DeviceConfig{
 		Raw: rawJSON,
 	}
-	
+
 	// Parse basic settings
 	if name, ok := rawConfig["name"].(string); ok {
 		config.Name = name
 	}
-	
+
 	if tz, ok := rawConfig["timezone"].(string); ok {
 		config.Timezone = tz
 	}
-	
+
 	if lat, ok := rawConfig["lat"].(float64); ok {
 		config.Lat = lat
 	}
-	
+
 	if lng, ok := rawConfig["lng"].(float64); ok {
 		config.Lng = lng
 	}
-	
+
 	// Parse WiFi settings
 	if wifiData, ok := rawConfig["wifi_sta"].(map[string]interface{}); ok {
 		config.WiFi = &shelly.WiFiConfig{}
@@ -286,7 +286,7 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 			config.WiFi.DNS = dns
 		}
 	}
-	
+
 	// Parse cloud settings
 	if cloudData, ok := rawConfig["cloud"].(map[string]interface{}); ok {
 		config.Cloud = &shelly.CloudConfig{}
@@ -294,7 +294,7 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 			config.Cloud.Enable = enabled
 		}
 	}
-	
+
 	// Parse relay settings
 	if relays, ok := rawConfig["relays"].([]interface{}); ok {
 		for i, relay := range relays {
@@ -315,7 +315,7 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 			}
 		}
 	}
-	
+
 	return config, nil
 }
 
@@ -362,7 +362,7 @@ func (c *Client) SetBrightness(ctx context.Context, channel int, brightness int)
 	} else if brightness > 100 {
 		brightness = 100
 	}
-	
+
 	url := fmt.Sprintf("http://%s/light/%d", c.ip, channel)
 	params := map[string]interface{}{
 		"turn":       "on",
@@ -391,7 +391,7 @@ func (c *Client) SetColorTemp(ctx context.Context, channel int, temp int) error 
 	} else if temp > 6500 {
 		temp = 6500
 	}
-	
+
 	url := fmt.Sprintf("http://%s/light/%d", c.ip, channel)
 	params := map[string]interface{}{
 		"turn": "on",
@@ -415,18 +415,18 @@ func (c *Client) FactoryReset(ctx context.Context) error {
 // CheckUpdate checks for firmware updates
 func (c *Client) CheckUpdate(ctx context.Context) (*shelly.UpdateInfo, error) {
 	url := fmt.Sprintf("http://%s/ota", c.ip)
-	
+
 	var result struct {
-		HasUpdate bool   `json:"has_update"`
-		NewVersion string `json:"new_version"`
-		OldVersion string `json:"old_version"`
+		HasUpdate    bool   `json:"has_update"`
+		NewVersion   string `json:"new_version"`
+		OldVersion   string `json:"old_version"`
 		ReleaseNotes string `json:"release_notes"`
 	}
-	
+
 	if err := c.getJSON(ctx, url, &result); err != nil {
 		return nil, err
 	}
-	
+
 	return &shelly.UpdateInfo{
 		HasUpdate:    result.HasUpdate,
 		NewVersion:   result.NewVersion,
@@ -451,39 +451,39 @@ func (c *Client) GetMetrics(ctx context.Context) (*shelly.DeviceMetrics, error) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	metrics := &shelly.DeviceMetrics{
 		Timestamp: time.Now(),
 		Uptime:    status.Uptime,
 	}
-	
+
 	// Calculate RAM usage if available
 	if status.RAMTotal > 0 && status.RAMFree > 0 {
 		used := status.RAMTotal - status.RAMFree
 		metrics.RAMUsage = float64(used) / float64(status.RAMTotal) * 100
 	}
-	
+
 	// Calculate FS usage if available
 	if status.FSSize > 0 && status.FSFree > 0 {
 		used := status.FSSize - status.FSFree
 		metrics.FSUsage = float64(used) / float64(status.FSSize) * 100
 	}
-	
+
 	// Add temperature
 	metrics.Temperature = status.Temperature
-	
+
 	// Add WiFi RSSI
 	if status.WiFiStatus != nil {
 		metrics.WiFiRSSI = status.WiFiStatus.RSSI
 	}
-	
+
 	return metrics, nil
 }
 
 // GetEnergyData retrieves energy consumption data for a channel
 func (c *Client) GetEnergyData(ctx context.Context, channel int) (*shelly.EnergyData, error) {
 	url := fmt.Sprintf("http://%s/meter/%d", c.ip, channel)
-	
+
 	var result struct {
 		Power         float64 `json:"power"`
 		IsValid       bool    `json:"is_valid"`
@@ -493,11 +493,11 @@ func (c *Client) GetEnergyData(ctx context.Context, channel int) (*shelly.Energy
 		Current       float64 `json:"current"`
 		PF            float64 `json:"pf"`
 	}
-	
+
 	if err := c.getJSON(ctx, url, &result); err != nil {
 		return nil, err
 	}
-	
+
 	return &shelly.EnergyData{
 		Timestamp:     time.Now(),
 		Power:         result.Power,
@@ -685,32 +685,32 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 	if err != nil {
 		return err
 	}
-	
+
 	// Add authentication if configured
 	if c.config.username != "" && c.config.password != "" {
 		req.SetBasicAuth(c.config.username, c.config.password)
 	}
-	
+
 	req.Header.Set("User-Agent", c.config.userAgent)
-	
+
 	// Retry logic
 	var lastErr error
 	for attempt := 0; attempt <= c.config.retryAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(c.config.retryDelay)
 		}
-		
+
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode == http.StatusUnauthorized {
 			return shelly.ErrAuthRequired
 		}
-		
+
 		if resp.StatusCode != http.StatusOK {
 			lastErr = &shelly.DeviceError{
 				IP:         c.ip,
@@ -720,7 +720,7 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 			}
 			continue
 		}
-		
+
 		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
 			return &shelly.DeviceError{
 				IP:         c.ip,
@@ -729,13 +729,12 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 				Err:        err,
 			}
 		}
-		
+
 		return nil
 	}
-	
+
 	return lastErr
 }
-
 
 func (c *Client) postForm(ctx context.Context, endpoint string, params map[string]interface{}) error {
 	// Convert params to URL-encoded form data
@@ -754,38 +753,38 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 			formData.Set(key, fmt.Sprintf("%v", v))
 		}
 	}
-	
+
 	// Retry logic
 	var lastErr error
 	for attempt := 0; attempt <= c.config.retryAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(c.config.retryDelay)
 		}
-		
+
 		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(formData.Encode()))
 		if err != nil {
 			return err
 		}
-		
+
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("User-Agent", c.config.userAgent)
-		
+
 		// Add authentication if configured
 		if c.config.username != "" && c.config.password != "" {
 			req.SetBasicAuth(c.config.username, c.config.password)
 		}
-		
+
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode == http.StatusUnauthorized {
 			return shelly.ErrAuthRequired
 		}
-		
+
 		if resp.StatusCode != http.StatusOK {
 			lastErr = &shelly.DeviceError{
 				IP:         c.ip,
@@ -795,14 +794,14 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 			}
 			continue
 		}
-		
+
 		// Gen1 devices typically return a simple JSON response for POST
 		var result map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			// Some endpoints return plain text, that's OK
 			return nil
 		}
-		
+
 		// Check for error in response
 		if errMsg, ok := result["error"].(string); ok && errMsg != "" {
 			return &shelly.DeviceError{
@@ -812,10 +811,10 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 				Message:    errMsg,
 			}
 		}
-		
+
 		return nil
 	}
-	
+
 	return lastErr
 }
 

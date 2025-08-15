@@ -31,13 +31,13 @@ func TestConfig() *config.Config {
 			Path: ":memory:", // Use in-memory SQLite for tests
 		},
 		Discovery: struct {
-			Enabled          bool     `mapstructure:"enabled"`
-			Networks         []string `mapstructure:"networks"`
-			Interval         int      `mapstructure:"interval"`
-			Timeout          int      `mapstructure:"timeout"`
-			EnableMDNS       bool     `mapstructure:"enable_mdns"`
-			EnableSSDP       bool     `mapstructure:"enable_ssdp"`
-			ConcurrentScans  int      `mapstructure:"concurrent_scans"`
+			Enabled         bool     `mapstructure:"enabled"`
+			Networks        []string `mapstructure:"networks"`
+			Interval        int      `mapstructure:"interval"`
+			Timeout         int      `mapstructure:"timeout"`
+			EnableMDNS      bool     `mapstructure:"enable_mdns"`
+			EnableSSDP      bool     `mapstructure:"enable_ssdp"`
+			ConcurrentScans int      `mapstructure:"concurrent_scans"`
 		}{
 			Enabled:         true,
 			Networks:        []string{"192.168.1.0/24"},
@@ -76,7 +76,7 @@ func TestDevice() *database.Device {
 // MockShellyServer creates a mock HTTP server that simulates Shelly device responses
 func MockShellyServer() *httptest.Server {
 	mux := http.NewServeMux()
-	
+
 	// Mock Gen1 device responses
 	mux.HandleFunc("/shelly", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
@@ -90,7 +90,7 @@ func MockShellyServer() *httptest.Server {
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	
+
 	// Mock status endpoint
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
@@ -107,26 +107,26 @@ func MockShellyServer() *httptest.Server {
 			"mqtt": map[string]interface{}{
 				"connected": false,
 			},
-			"time":       time.Now().Format("15:04"),
-			"unixtime":   time.Now().Unix(),
-			"serial":     12345,
-			"has_update": false,
-			"mac":        "A4CF12345678",
+			"time":            time.Now().Format("15:04"),
+			"unixtime":        time.Now().Unix(),
+			"serial":          12345,
+			"has_update":      false,
+			"mac":             "A4CF12345678",
 			"cfg_changed_cnt": 2,
 			"actions_stats": map[string]interface{}{
 				"skipped": 0,
 			},
 			"relays": []map[string]interface{}{
 				{
-					"ison":           true,
-					"has_timer":      false,
-					"timer_started":  0,
-					"timer_duration": 0,
+					"ison":            true,
+					"has_timer":       false,
+					"timer_started":   0,
+					"timer_duration":  0,
 					"timer_remaining": 0,
-					"overpower":      false,
+					"overpower":       false,
 					"overtemperature": false,
-					"is_valid":       true,
-					"source":         "input",
+					"is_valid":        true,
+					"source":          "input",
 				},
 			},
 			"meters": []map[string]interface{}{
@@ -139,7 +139,7 @@ func MockShellyServer() *httptest.Server {
 					"total":     703.501,
 				},
 			},
-			"temperature": 45.2,
+			"temperature":     45.2,
 			"overtemperature": false,
 			"tmp": map[string]interface{}{
 				"tC":       45.2,
@@ -154,14 +154,14 @@ func MockShellyServer() *httptest.Server {
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	
+
 	return httptest.NewServer(mux)
 }
 
 // MockShellyGen2Server creates a mock server for Gen2+ devices
 func MockShellyGen2Server() *httptest.Server {
 	mux := http.NewServeMux()
-	
+
 	// Mock Gen2 device responses
 	mux.HandleFunc("/shelly", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]interface{}{
@@ -177,7 +177,7 @@ func MockShellyGen2Server() *httptest.Server {
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	
+
 	return httptest.NewServer(mux)
 }
 
@@ -187,11 +187,11 @@ func TempDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	
+
 	t.Cleanup(func() {
 		os.RemoveAll(dir)
 	})
-	
+
 	return dir
 }
 
@@ -199,7 +199,7 @@ func TempDir(t *testing.T) string {
 func CreateTestConfigFile(t *testing.T, cfg *config.Config) string {
 	dir := TempDir(t)
 	configFile := filepath.Join(dir, "test-config.yaml")
-	
+
 	content := `server:
   port: 8080
   host: "127.0.0.1"
@@ -218,11 +218,11 @@ discovery:
   enable_ssdp: true
   concurrent_scans: 10
 `
-	
+
 	if err := os.WriteFile(configFile, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to write test config file: %v", err)
 	}
-	
+
 	return configFile
 }
 
@@ -249,4 +249,3 @@ func AssertEqual[T comparable](t *testing.T, expected, actual T) {
 		t.Fatalf("Expected %v, got %v", expected, actual)
 	}
 }
-

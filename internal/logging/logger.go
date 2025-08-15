@@ -124,7 +124,7 @@ func (l *Logger) WithFields(fields map[string]any) *Logger {
 	for k, v := range fields {
 		args = append(args, k, v)
 	}
-	
+
 	return &Logger{
 		Logger: l.Logger.With(args...),
 		level:  l.level,
@@ -136,19 +136,19 @@ func (l *Logger) WithFields(fields map[string]any) *Logger {
 func (l *Logger) WithContext(ctx context.Context) *Logger {
 	// Extract common context values
 	fields := make(map[string]any)
-	
+
 	if requestID := ctx.Value("request_id"); requestID != nil {
 		fields["request_id"] = requestID
 	}
-	
+
 	if userID := ctx.Value("user_id"); userID != nil {
 		fields["user_id"] = userID
 	}
-	
+
 	if len(fields) == 0 {
 		return l
 	}
-	
+
 	return l.WithFields(fields)
 }
 
@@ -194,11 +194,11 @@ func (l *Logger) LogHTTPRequest(method, path, remoteAddr string, statusCode int,
 // Discovery operation logging helpers
 func (l *Logger) LogDiscoveryOperation(operation string, network string, devicesFound int, duration int64, err error) {
 	fields := map[string]any{
-		"operation":      operation,
-		"network":        network,
-		"devices_found":  devicesFound,
-		"duration":       duration, // milliseconds
-		"component":      "discovery",
+		"operation":     operation,
+		"network":       network,
+		"devices_found": devicesFound,
+		"duration":      duration, // milliseconds
+		"component":     "discovery",
 	}
 
 	if err != nil {

@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/notification"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -31,7 +33,7 @@ func NewManagerWithLogger(dbPath string, logger *logging.Logger) (*Manager, erro
 			return nil, fmt.Errorf("failed to create database directory %s: %w", dir, err)
 		}
 	}
-	
+
 	// Open/create the database with proper config to suppress GORM's default logger
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
 		Logger: nil, // Disable GORM's default logger
@@ -41,12 +43,22 @@ func NewManagerWithLogger(dbPath string, logger *logging.Logger) (*Manager, erro
 	}
 
 	// Auto-migrate the schema
-	if err := db.AutoMigrate(&Device{}); err != nil {
+	if err := db.AutoMigrate(&Device{},
+		&notification.NotificationChannel{},
+		&notification.NotificationRule{},
+		&notification.NotificationHistory{},
+		&notification.NotificationTemplate{},
+		&configuration.ResolutionPolicy{},
+		&configuration.ResolutionRequest{},
+		&configuration.ResolutionHistory{},
+		&configuration.ResolutionSchedule{},
+		&configuration.ResolutionMetrics{},
+	); err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
 	}
-	
+
 	logger.WithFields(map[string]any{
-		"path": dbPath,
+		"path":      dbPath,
 		"component": "database",
 	}).Info("Database initialized successfully")
 
@@ -124,11 +136,11 @@ type DiscoveryUpdate struct {
 // Updates: IP, type, firmware, status, last_seen
 func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, initialName string) (*Device, error) {
 	start := time.Now()
-	
+
 	// Try to find existing device by MAC
 	var device Device
 	err := m.DB.Where("mac = ?", mac).First(&device).Error
-	
+
 	if err == gorm.ErrRecordNotFound {
 		// Create new device
 		device = Device{
@@ -161,7 +173,7 @@ func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, 
 		device.Status = update.Status
 		device.LastSeen = update.LastSeen
 		// Note: Preserve Name, Settings, and other user-configured fields
-		
+
 		err = m.DB.Save(&device).Error
 		m.logger.WithFields(map[string]any{
 			"mac":       mac,
@@ -171,7 +183,7 @@ func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, 
 			"component": "database",
 		}).Info("Updated existing device from discovery")
 	}
-	
+
 	duration := time.Since(start).Microseconds()
 	m.logger.LogDBOperation("upsert", "devices", duration, err)
 	return &device, err

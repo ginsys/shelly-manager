@@ -14,10 +14,10 @@ import (
 type Factory interface {
 	// CreateClient creates a client for the device at the given IP with specific generation
 	CreateClient(ip string, generation int, opts ...ClientOption) (Client, error)
-	
+
 	// DetectGeneration detects the generation of the device at the given IP
 	DetectGeneration(ctx context.Context, ip string) (int, error)
-	
+
 	// CreateClientWithDetection creates a client after auto-detecting the generation
 	CreateClientWithDetection(ctx context.Context, ip string, opts ...ClientOption) (Client, error)
 }
@@ -58,14 +58,14 @@ func (f *factory) DetectGeneration(ctx context.Context, ip string) (int, error) 
 		"ip":        ip,
 		"component": "shelly_factory",
 	}).Debug("Detecting device generation")
-	
+
 	// Try Gen2+ RPC endpoint first
 	gen2URL := fmt.Sprintf("http://%s/rpc/Shelly.GetDeviceInfo", ip)
 	req, err := http.NewRequestWithContext(ctx, "GET", gen2URL, nil)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	resp, err := f.httpClient.Do(req)
 	if err == nil && resp.StatusCode == http.StatusOK {
 		defer resp.Body.Close()
@@ -82,20 +82,20 @@ func (f *factory) DetectGeneration(ctx context.Context, ip string) (int, error) 
 			return info.Gen, nil
 		}
 	}
-	
+
 	// Try Gen1 endpoint
 	gen1URL := fmt.Sprintf("http://%s/shelly", ip)
 	req, err = http.NewRequestWithContext(ctx, "GET", gen1URL, nil)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	resp, err = f.httpClient.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("device not reachable at %s: %w", ip, err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode == http.StatusOK {
 		var info struct {
 			Type string `json:"type"`
@@ -112,7 +112,7 @@ func (f *factory) DetectGeneration(ctx context.Context, ip string) (int, error) 
 			return 1, nil
 		}
 	}
-	
+
 	return 0, ErrInvalidGeneration
 }
 
@@ -122,7 +122,7 @@ func (f *factory) CreateClientWithDetection(ctx context.Context, ip string, opts
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return f.CreateClient(ip, generation, opts...)
 }
 

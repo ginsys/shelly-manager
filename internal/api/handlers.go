@@ -8,6 +8,8 @@ import (
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/metrics"
+	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
@@ -15,22 +17,26 @@ import (
 
 // Handler contains dependencies for API handlers
 type Handler struct {
-	DB      *database.Manager
-	Service *service.ShellyService
-	logger  *logging.Logger
+	DB                  *database.Manager
+	Service             *service.ShellyService
+	NotificationHandler *notification.Handler
+	MetricsHandler      *metrics.Handler
+	logger              *logging.Logger
 }
 
 // NewHandler creates a new API handler
-func NewHandler(db *database.Manager, svc *service.ShellyService) *Handler {
-	return NewHandlerWithLogger(db, svc, logging.GetDefault())
+func NewHandler(db *database.Manager, svc *service.ShellyService, notificationHandler *notification.Handler) *Handler {
+	return NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 }
 
 // NewHandlerWithLogger creates a new API handler with custom logger
-func NewHandlerWithLogger(db *database.Manager, svc *service.ShellyService, logger *logging.Logger) *Handler {
+func NewHandlerWithLogger(db *database.Manager, svc *service.ShellyService, notificationHandler *notification.Handler, metricsHandler *metrics.Handler, logger *logging.Logger) *Handler {
 	return &Handler{
-		DB:      db,
-		Service: svc,
-		logger:  logger,
+		DB:                  db,
+		Service:             svc,
+		NotificationHandler: notificationHandler,
+		MetricsHandler:      metricsHandler,
+		logger:              logger,
 	}
 }
 
@@ -146,48 +152,48 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse optional network parameter
 	var req struct {
-		Network string `json:"network"`
-		ImportConfig bool `json:"import_config"`
+		Network      string `json:"network"`
+		ImportConfig bool   `json:"import_config"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	
+
 	// Default to auto-import config for new devices
 	if req.ImportConfig == false {
 		req.ImportConfig = true
 	}
-	
+
 	// Run discovery in background
 	go func() {
 		network := req.Network
 		if network == "" {
 			network = "auto"
 		}
-		
+
 		h.logger.WithFields(map[string]any{
-			"network": network,
+			"network":       network,
 			"import_config": req.ImportConfig,
-			"component": "api",
+			"component":     "api",
 		}).Info("Starting device discovery")
-		
+
 		// Discover devices
 		devices, err := h.Service.DiscoverDevices(network)
 		if err != nil {
 			h.logger.WithFields(map[string]any{
-				"error": err.Error(),
+				"error":     err.Error(),
 				"component": "api",
 			}).Error("Discovery failed")
 			return
 		}
-		
+
 		h.logger.WithFields(map[string]any{
 			"devices_found": len(devices),
-			"component": "api",
+			"component":     "api",
 		}).Info("Discovery completed")
-		
+
 		// Save discovered devices and import their configurations
 		newDevices := 0
 		configsImported := 0
-		
+
 		for _, device := range devices {
 			// Check if device already exists by MAC
 			existing, err := h.DB.GetDeviceByMAC(device.MAC)
@@ -198,7 +204,7 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 				existing.LastSeen = device.LastSeen
 				existing.Firmware = device.Firmware
 				h.DB.UpdateDevice(existing)
-				
+
 				// Import config if requested
 				if req.ImportConfig {
 					if _, err := h.Service.ImportDeviceConfig(existing.ID); err == nil {
@@ -209,7 +215,7 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 				// Add new device
 				if err := h.DB.AddDevice(&device); err == nil {
 					newDevices++
-					
+
 					// Import config for new device if requested
 					if req.ImportConfig && device.ID > 0 {
 						if _, err := h.Service.ImportDeviceConfig(device.ID); err == nil {
@@ -218,7 +224,7 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 							h.logger.WithFields(map[string]any{
 								"device_id": device.ID,
 								"device_ip": device.IP,
-								"error": err.Error(),
+								"error":     err.Error(),
 								"component": "api",
 							}).Warn("Failed to import config for new device")
 						}
@@ -226,15 +232,15 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		
+
 		h.logger.WithFields(map[string]any{
-			"total_devices": len(devices),
-			"new_devices": newDevices,
+			"total_devices":    len(devices),
+			"new_devices":      newDevices,
 			"configs_imported": configsImported,
-			"component": "api",
+			"component":        "api",
 		}).Info("Discovery processing completed")
 	}()
-	
+
 	response := map[string]interface{}{
 		"status":  "discovery_started",
 		"message": "Device discovery has been initiated in background",
@@ -247,10 +253,10 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 // GetProvisioningStatus handles GET /api/v1/provisioning/status
 func (h *Handler) GetProvisioningStatus(w http.ResponseWriter, r *http.Request) {
 	status := map[string]interface{}{
-		"status":      "idle",
-		"devices":     []string{},
-		"last_run":    nil,
-		"next_run":    nil,
+		"status":         "idle",
+		"devices":        []string{},
+		"last_run":       nil,
+		"next_run":       nil,
 		"auto_provision": false,
 	}
 
@@ -436,7 +442,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid device ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Get import status for device
 	status, err := h.Service.GetImportStatus(uint(id))
 	if err != nil {
@@ -447,7 +453,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
@@ -536,10 +542,10 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"total":    len(devices),
-		"success":  successCount,
-		"errors":   errorCount,
-		"results":  results,
+		"total":   len(devices),
+		"success": successCount,
+		"errors":  errorCount,
+		"results": results,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1343,7 +1349,7 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Warn("Failed to generate comprehensive report, returning basic result")
-		
+
 		// Fall back to basic result if reporting fails
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)

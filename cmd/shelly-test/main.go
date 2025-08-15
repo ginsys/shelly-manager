@@ -34,7 +34,7 @@ func main() {
 		opts = append(opts, gen1.WithAuth(*username, *password))
 		fmt.Printf("Using authentication as user: %s\n", *username)
 	}
-	
+
 	client := gen1.NewClient(*ip, opts...)
 	ctx := context.Background()
 
@@ -45,7 +45,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to get device info: %v", err)
 		}
-		
+
 		fmt.Println("\n=== Device Information ===")
 		fmt.Printf("Model: %s\n", info.Model)
 		fmt.Printf("MAC: %s\n", info.MAC)
@@ -59,17 +59,17 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to get device status: %v", err)
 		}
-		
+
 		fmt.Println("\n=== Device Status ===")
 		fmt.Printf("Temperature: %.1f°C\n", status.Temperature)
 		fmt.Printf("Uptime: %d seconds\n", status.Uptime)
-		
+
 		if status.WiFiStatus != nil {
 			fmt.Printf("WiFi Connected: %v\n", status.WiFiStatus.Connected)
 			fmt.Printf("WiFi SSID: %s\n", status.WiFiStatus.SSID)
 			fmt.Printf("WiFi RSSI: %d dBm\n", status.WiFiStatus.RSSI)
 		}
-		
+
 		// Show relay/switch status
 		for i, sw := range status.Switches {
 			fmt.Printf("\nSwitch %d:\n", i)
@@ -77,7 +77,7 @@ func main() {
 			fmt.Printf("  Power: %.2f W\n", sw.APower)
 			fmt.Printf("  Source: %s\n", sw.Source)
 		}
-		
+
 		// Show power meters
 		for i, meter := range status.Meters {
 			fmt.Printf("\nMeter %d:\n", i)
@@ -111,14 +111,14 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to get device status: %v", err)
 		}
-		
+
 		if len(status.Switches) == 0 {
 			log.Fatal("No switches found on device")
 		}
-		
+
 		currentState := status.Switches[0].Output
 		newState := !currentState
-		
+
 		fmt.Printf("Current state: %v, switching to: %v\n", currentState, newState)
 		err = client.SetSwitch(ctx, 0, newState)
 		if err != nil {
@@ -135,7 +135,7 @@ func main() {
 			if err2 != nil {
 				log.Fatalf("Failed to get power data: %v", err)
 			}
-			
+
 			if len(status.Meters) > 0 {
 				fmt.Println("\n=== Power Consumption ===")
 				fmt.Printf("Current Power: %.2f W\n", status.Meters[0].Power)
@@ -160,15 +160,15 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to get device config: %v", err)
 		}
-		
+
 		fmt.Println("\n=== Device Configuration ===")
 		fmt.Printf("Name: %s\n", config.Name)
 		fmt.Printf("Timezone: %s\n", config.Timezone)
-		
+
 		if config.Cloud != nil {
 			fmt.Printf("Cloud Enabled: %v\n", config.Cloud.Enable)
 		}
-		
+
 		// Pretty print full config
 		configJSON, _ := json.MarshalIndent(config, "", "  ")
 		fmt.Println("\nFull Configuration:")

@@ -26,7 +26,7 @@ type ShellyService struct {
 	logger    *logging.Logger
 	ctx       context.Context
 	cancel    context.CancelFunc
-	
+
 	// Client cache for device connections
 	clientMu sync.RWMutex
 	clients  map[string]shelly.Client
@@ -40,10 +40,10 @@ func NewService(db *database.Manager, cfg *config.Config) *ShellyService {
 // NewServiceWithLogger creates a new Shelly service with custom logger
 func NewServiceWithLogger(db *database.Manager, cfg *config.Config, logger *logging.Logger) *ShellyService {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Create configuration service
 	configSvc := configuration.NewService(db.DB, logger)
-	
+
 	return &ShellyService{
 		DB:        db,
 		Config:    cfg,
@@ -61,10 +61,10 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 	defer cancel()
 
 	s.logger.WithFields(map[string]any{
-		"network": network,
+		"network":   network,
 		"component": "service",
 	}).Info("Starting device discovery")
-	
+
 	// Determine networks to scan
 	var networks []string
 	if network != "" && network != "auto" {
@@ -72,25 +72,25 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 	} else if len(s.Config.Discovery.Networks) > 0 {
 		networks = s.Config.Discovery.Networks
 	}
-	
+
 	s.logger.WithFields(map[string]any{
-		"networks": networks,
-		"timeout": s.Config.Discovery.Timeout,
+		"networks":  networks,
+		"timeout":   s.Config.Discovery.Timeout,
 		"component": "service",
 	}).Debug("Discovery configuration")
-	
+
 	// Use timeout from config or default
 	timeout := time.Duration(s.Config.Discovery.Timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 2 * time.Second
 	}
-	
+
 	// Perform combined discovery (HTTP + mDNS)
 	shellyDevices, err := discovery.CombinedDiscovery(ctx, networks, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("discovery failed: %w", err)
 	}
-	
+
 	// Upsert discovered devices to preserve existing data
 	var devices []database.Device
 	for _, sd := range shellyDevices {
@@ -103,7 +103,7 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 			}).Warn("Skipping device with empty MAC address")
 			continue
 		}
-		
+
 		// Prepare discovery update data
 		update := database.DiscoveryUpdate{
 			IP:       sd.IP,
@@ -112,7 +112,7 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 			Status:   "online",
 			LastSeen: sd.Discovered,
 		}
-		
+
 		// Use UpsertDeviceFromDiscovery to preserve existing data
 		device, err := s.DB.UpsertDeviceFromDiscovery(sd.MAC, update, sd.ID)
 		if err != nil {
@@ -124,19 +124,19 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 			}).Error("Failed to upsert device from discovery")
 			continue
 		}
-		
+
 		// Update device settings with latest discovery info (preserve existing settings)
 		var existingSettings map[string]interface{}
 		if err := json.Unmarshal([]byte(device.Settings), &existingSettings); err != nil {
 			// If parsing fails, create new settings
 			existingSettings = make(map[string]interface{})
 		}
-		
+
 		// Update discovery-related settings only
 		existingSettings["model"] = sd.Model
 		existingSettings["gen"] = sd.Generation
 		existingSettings["auth_enabled"] = sd.AuthEn
-		
+
 		// Preserve existing auth credentials if they exist
 		if _, hasUser := existingSettings["auth_user"]; !hasUser {
 			existingSettings["auth_user"] = ""
@@ -144,10 +144,10 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 		if _, hasPass := existingSettings["auth_pass"]; !hasPass {
 			existingSettings["auth_pass"] = ""
 		}
-		
+
 		updatedSettings, _ := json.Marshal(existingSettings)
 		device.Settings = string(updatedSettings)
-		
+
 		// Save updated settings
 		if err := s.DB.UpdateDevice(device); err != nil {
 			s.logger.WithFields(map[string]any{
@@ -156,15 +156,15 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 				"component": "service",
 			}).Error("Failed to update device settings")
 		}
-		
+
 		devices = append(devices, *device)
 	}
-	
+
 	s.logger.WithFields(map[string]any{
 		"devices_found": len(devices),
-		"component": "service",
+		"component":     "service",
 	}).Info("Discovery complete")
-	
+
 	log.Printf("Discovery complete. Found %d devices", len(devices))
 	return devices, nil
 }
@@ -181,7 +181,7 @@ func (s *ShellyService) Stop() {
 func (s *ShellyService) ClearClientCache(deviceIP string) {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
-	
+
 	if deviceIP == "" {
 		// Clear all cached clients
 		s.clients = make(map[string]shelly.Client)
@@ -210,11 +210,11 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Quick test to see if auth works - use a simple endpoint
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	
+
 	// Try GetInfo first as it's faster and still returns auth errors
 	s.logger.WithFields(map[string]any{
 		"device_id":      device.ID,
@@ -222,16 +222,16 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		"testing_client": true,
 		"component":      "service",
 	}).Debug("Testing client authentication with GetInfo")
-	
+
 	_, testErr := client.GetInfo(ctx)
-	
+
 	if testErr != nil {
 		s.logger.WithFields(map[string]any{
-			"device_id": device.ID,
-			"device_ip": device.IP,
-			"error":     testErr.Error(),
+			"device_id":     device.ID,
+			"device_ip":     device.IP,
+			"error":         testErr.Error(),
 			"is_auth_error": shelly.IsAuthError(testErr),
-			"component": "service",
+			"component":     "service",
 		}).Warn("Client test failed")
 	} else {
 		s.logger.WithFields(map[string]any{
@@ -240,19 +240,19 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 			"component": "service",
 		}).Debug("Client test successful")
 	}
-	
+
 	// If no error or non-auth error, return the client
 	if testErr == nil || !shelly.IsAuthError(testErr) {
 		return client, nil
 	}
-	
+
 	// Auth failed, try to recover
 	s.logger.WithFields(map[string]any{
 		"device_id": device.ID,
 		"device_ip": device.IP,
 		"component": "service",
 	}).Debug("Auth failed, attempting recovery")
-	
+
 	// Parse settings
 	var settings struct {
 		Model       string `json:"model"`
@@ -261,11 +261,11 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		AuthUser    string `json:"auth_user,omitempty"`
 		AuthPass    string `json:"auth_pass,omitempty"`
 	}
-	
+
 	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
 		return nil, fmt.Errorf("failed to parse settings: %w", err)
 	}
-	
+
 	// Only retry if we had saved credentials (to avoid infinite loop)
 	if settings.AuthUser != "" || settings.AuthPass != "" {
 		s.logger.WithFields(map[string]any{
@@ -273,24 +273,24 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 			"device_ip": device.IP,
 			"component": "service",
 		}).Info("Clearing failed credentials and retrying with config")
-		
+
 		// Clear bad credentials
 		settings.AuthUser = ""
 		settings.AuthPass = ""
 		updatedSettings, _ := json.Marshal(settings)
 		device.Settings = string(updatedSettings)
 		s.DB.UpdateDevice(device)
-		
+
 		// Clear from cache
 		s.ClearClientCache(device.IP)
-		
+
 		// Retry with config credentials - use getClientWithRetry with false to prevent infinite recursion
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"device_ip": device.IP,
 			"component": "service",
 		}).Info("Retrying with config credentials after clearing bad saved credentials")
-		
+
 		retryClient, retryErr := s.getClientWithRetry(device, false)
 		if retryErr != nil {
 			s.logger.WithFields(map[string]any{
@@ -308,14 +308,14 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		}
 		return retryClient, retryErr
 	}
-	
+
 	// No saved credentials but auth required - config should have been tried already
 	s.logger.WithFields(map[string]any{
 		"device_id": device.ID,
 		"device_ip": device.IP,
 		"component": "service",
 	}).Warn("Device requires auth but no working credentials available")
-	
+
 	return client, testErr // Return the client anyway, let the caller handle the auth error
 }
 
@@ -324,7 +324,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	s.clientMu.RLock()
 	client, exists := s.clients[device.IP]
 	s.clientMu.RUnlock()
-	
+
 	if exists {
 		// Test if existing client still works
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -337,7 +337,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		delete(s.clients, device.IP)
 		s.clientMu.Unlock()
 	}
-	
+
 	// Parse device settings to get generation and auth info
 	var settings struct {
 		Model       string `json:"model"`
@@ -346,34 +346,34 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		AuthUser    string `json:"auth_user,omitempty"`
 		AuthPass    string `json:"auth_pass,omitempty"`
 	}
-	
+
 	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
 		return nil, fmt.Errorf("failed to parse device settings: %w", err)
 	}
-	
+
 	// Create new client based on generation
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
-	
+
 	// Check again in case another goroutine created it
 	if client, exists = s.clients[device.IP]; exists {
 		return client, nil
 	}
-	
+
 	// Determine auth credentials to use
 	var authUser, authPass string
 	var saveCredentials bool
-	
+
 	if settings.AuthEnabled {
 		// First try device-specific credentials if available
 		if settings.AuthUser != "" && settings.AuthPass != "" {
 			authUser = settings.AuthUser
 			authPass = settings.AuthPass
 			s.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"device_ip": device.IP,
+				"device_id":       device.ID,
+				"device_ip":       device.IP,
 				"has_saved_creds": true,
-				"component": "service",
+				"component":       "service",
 			}).Debug("Using saved device credentials")
 		} else if s.Config.Provisioning.AuthEnabled {
 			// Fall back to global config credentials
@@ -381,24 +381,24 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			authPass = s.Config.Provisioning.AuthPassword
 			saveCredentials = true // Mark to save if they work
 			s.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"device_ip": device.IP,
+				"device_id":    device.ID,
+				"device_ip":    device.IP,
 				"using_config": true,
-				"config_user": authUser,
+				"config_user":  authUser,
 				"has_password": authPass != "",
-				"component": "service",
+				"component":    "service",
 			}).Debug("Using config credentials")
 		} else {
 			s.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"device_ip": device.IP,
-				"auth_enabled": settings.AuthEnabled,
+				"device_id":           device.ID,
+				"device_ip":           device.IP,
+				"auth_enabled":        settings.AuthEnabled,
 				"config_auth_enabled": s.Config.Provisioning.AuthEnabled,
-				"component": "service",
+				"component":           "service",
 			}).Warn("Device requires auth but no credentials available")
 		}
 	}
-	
+
 	// Create appropriate client based on generation
 	switch settings.Gen {
 	case 1:
@@ -408,7 +408,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			opts = append(opts, gen1.WithAuth(authUser, authPass))
 		}
 		client = gen1.NewClient(device.IP, opts...)
-		
+
 	case 2, 3:
 		// Gen2+ device
 		var opts []gen2.ClientOption
@@ -416,26 +416,26 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			opts = append(opts, gen2.WithAuth(authUser, authPass))
 		}
 		client = gen2.NewClient(device.IP, opts...)
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported device generation: %d", settings.Gen)
 	}
-	
+
 	// Test the connection to verify credentials work
 	if saveCredentials && authUser != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		
+
 		// Try to get status to really verify credentials work
 		_, err := client.GetStatus(ctx)
 		if err == nil {
 			// Credentials work, save them to device settings
 			settings.AuthUser = authUser
 			settings.AuthPass = authPass
-			
+
 			updatedSettings, _ := json.Marshal(settings)
 			device.Settings = string(updatedSettings)
-			
+
 			// Update database with working credentials
 			if err := s.DB.UpdateDevice(device); err != nil {
 				s.logger.WithFields(map[string]any{
@@ -459,14 +459,14 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			}).Debug("Config credentials did not work for device")
 		}
 	}
-	
+
 	// Cache the client
 	s.clients[device.IP] = client
-	
+
 	// Test the client works
 	testCtx, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer testCancel()
-	
+
 	if err := client.TestConnection(testCtx); err != nil && shelly.IsAuthError(err) && allowRetry {
 		// If auth failed with saved credentials, clear them and try with config credentials
 		if settings.AuthUser != "" && settings.AuthPass != "" {
@@ -475,24 +475,24 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 				"device_ip": device.IP,
 				"component": "service",
 			}).Info("Saved credentials failed, retrying with config credentials")
-			
+
 			// Clear the bad saved credentials
 			settings.AuthUser = ""
 			settings.AuthPass = ""
 			updatedSettings, _ := json.Marshal(settings)
 			device.Settings = string(updatedSettings)
 			s.DB.UpdateDevice(device)
-			
+
 			// Clear from cache
 			s.clientMu.Lock()
 			delete(s.clients, device.IP)
 			s.clientMu.Unlock()
-			
+
 			// Retry with config credentials
 			return s.getClientWithRetry(device, false)
 		}
 	}
-	
+
 	return client, nil
 }
 
@@ -503,16 +503,16 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 	if err != nil {
 		return fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Get or create client
 	client, err := s.getClient(device)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
-	
+
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
 	defer cancel()
-	
+
 	// Execute action with auth retry
 	var actionErr error
 	switch action {
@@ -522,14 +522,14 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 			channel = int(ch)
 		}
 		err = client.SetSwitch(ctx, channel, true)
-		
+
 	case "off":
 		channel := 0
 		if ch, ok := params["channel"].(float64); ok {
 			channel = int(ch)
 		}
 		err = client.SetSwitch(ctx, channel, false)
-		
+
 	case "toggle":
 		channel := 0
 		if ch, ok := params["channel"].(float64); ok {
@@ -546,25 +546,25 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 		} else {
 			return fmt.Errorf("channel %d not found", channel)
 		}
-		
+
 	case "reboot":
 		err = client.Reboot(ctx)
-		
+
 	default:
 		return fmt.Errorf("unknown action: %s", action)
 	}
-	
+
 	actionErr = err
-	
+
 	// If auth failed, retry with cleared credentials
 	if actionErr != nil && shelly.IsAuthError(actionErr) {
 		s.logger.WithFields(map[string]any{
 			"device_id": deviceID,
 			"device_ip": device.IP,
-			"action": action,
+			"action":    action,
 			"component": "service",
 		}).Info("Auth failed, clearing credentials and retrying")
-		
+
 		// Parse and clear credentials
 		var settings map[string]interface{}
 		if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil {
@@ -575,10 +575,10 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 				updatedSettings, _ := json.Marshal(settings)
 				device.Settings = string(updatedSettings)
 				s.DB.UpdateDevice(device)
-				
+
 				// Clear from cache
 				s.ClearClientCache(device.IP)
-				
+
 				// Get new client and retry
 				client, err = s.getClient(device)
 				if err == nil {
@@ -590,14 +590,14 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 							channel = int(ch)
 						}
 						actionErr = client.SetSwitch(ctx, channel, true)
-						
+
 					case "off":
 						channel := 0
 						if ch, ok := params["channel"].(float64); ok {
 							channel = int(ch)
 						}
 						actionErr = client.SetSwitch(ctx, channel, false)
-						
+
 					case "toggle":
 						channel := 0
 						if ch, ok := params["channel"].(float64); ok {
@@ -610,16 +610,16 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 						} else {
 							actionErr = err
 						}
-						
+
 					case "reboot":
 						actionErr = client.Reboot(ctx)
 					}
-					
+
 					if actionErr == nil {
 						s.logger.WithFields(map[string]any{
 							"device_id": deviceID,
 							"device_ip": device.IP,
-							"action": action,
+							"action":    action,
 							"component": "service",
 						}).Info("Action succeeded after auth retry")
 					}
@@ -627,23 +627,23 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 			}
 		}
 	}
-	
+
 	if actionErr != nil {
 		return fmt.Errorf("action failed: %w", actionErr)
 	}
-	
+
 	// Update device status in database
 	device.Status = "online"
 	device.LastSeen = time.Now()
 	s.DB.UpdateDevice(device)
-	
+
 	s.logger.WithFields(map[string]any{
 		"device_id": deviceID,
 		"device_ip": device.IP,
 		"action":    action,
 		"component": "service",
 	}).Info("Device control executed")
-	
+
 	return nil
 }
 
@@ -654,25 +654,25 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 	if err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Get or create client
 	client, err := s.getClient(device)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
-	
+
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
-	
+
 	// Get status from device
 	status, err := client.GetStatus(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
-	
+
 	// Convert to map for JSON response
 	result := map[string]interface{}{
-		"device_id":    deviceID,
+		"device_id":   deviceID,
 		"ip":          device.IP,
 		"temperature": status.Temperature,
 		"uptime":      status.Uptime,
@@ -680,12 +680,12 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 		"switches":    status.Switches,
 		"meters":      status.Meters,
 	}
-	
+
 	// Update device in database
 	device.Status = "online"
 	device.LastSeen = time.Now()
 	s.DB.UpdateDevice(device)
-	
+
 	return result, nil
 }
 
@@ -696,22 +696,22 @@ func (s *ShellyService) GetDeviceEnergy(deviceID uint, channel int) (*shelly.Ene
 	if err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Get or create client
 	client, err := s.getClient(device)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
-	
+
 	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	defer cancel()
-	
+
 	// Get energy data
 	energy, err := client.GetEnergyData(ctx, channel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get energy data: %w", err)
 	}
-	
+
 	return energy, nil
 }
 
@@ -722,14 +722,14 @@ func (s *ShellyService) ImportDeviceConfig(deviceID uint) (*configuration.Device
 	if err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Get or create client with auth retry
 	s.logger.WithFields(map[string]any{
 		"device_id": device.ID,
 		"device_ip": device.IP,
 		"component": "service",
 	}).Debug("ImportDeviceConfig: Getting client with auth retry")
-	
+
 	client, err := s.getClientWithAuthRetry(device)
 	if err != nil {
 		s.logger.WithFields(map[string]any{
@@ -740,13 +740,13 @@ func (s *ShellyService) ImportDeviceConfig(deviceID uint) (*configuration.Device
 		}).Error("ImportDeviceConfig: Failed to get client")
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
-	
+
 	s.logger.WithFields(map[string]any{
 		"device_id": device.ID,
 		"device_ip": device.IP,
 		"component": "service",
 	}).Debug("ImportDeviceConfig: Got client, proceeding to import")
-	
+
 	// Import configuration
 	return s.ConfigSvc.ImportFromDevice(deviceID, client)
 }
@@ -793,21 +793,21 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 	if err != nil {
 		return fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Update device settings with auth info
 	settings := make(map[string]interface{})
 	if device.Settings != "" {
 		json.Unmarshal([]byte(device.Settings), &settings)
 	}
-	
+
 	settings["auth"] = map[string]string{
 		"username": username,
 		"password": password,
 	}
-	
+
 	settingsJSON, _ := json.Marshal(settings)
 	device.Settings = string(settingsJSON)
-	
+
 	return s.DB.UpdateDevice(device)
 }
 
@@ -818,13 +818,13 @@ func (s *ShellyService) ExportDeviceConfig(deviceID uint) error {
 	if err != nil {
 		return fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Get or create client with auth retry
 	client, err := s.getClientWithAuthRetry(device)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
-	
+
 	// Export configuration
 	return s.ConfigSvc.ExportToDevice(deviceID, client)
 }
@@ -836,13 +836,13 @@ func (s *ShellyService) DetectConfigDrift(deviceID uint) (*configuration.ConfigD
 	if err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	// Get or create client with auth retry
 	client, err := s.getClientWithAuthRetry(device)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
-	
+
 	// Detect drift
 	return s.ConfigSvc.DetectDrift(deviceID, client)
 }
@@ -854,7 +854,7 @@ func (s *ShellyService) BulkDetectConfigDrift() (*configuration.BulkDriftResult,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get devices: %w", err)
 	}
-	
+
 	if len(devices) == 0 {
 		return &configuration.BulkDriftResult{
 			Total:       0,
@@ -867,23 +867,23 @@ func (s *ShellyService) BulkDetectConfigDrift() (*configuration.BulkDriftResult,
 			Duration:    0,
 		}, nil
 	}
-	
+
 	// Extract device IDs
 	deviceIDs := make([]uint, len(devices))
 	for i, device := range devices {
 		deviceIDs[i] = device.ID
 	}
-	
+
 	// Create client getter function that uses our auth retry logic
 	clientGetter := func(deviceID uint) (shelly.Client, error) {
 		device, err := s.DB.GetDevice(deviceID)
 		if err != nil {
 			return nil, fmt.Errorf("device not found: %w", err)
 		}
-		
+
 		return s.getClientWithAuthRetry(device)
 	}
-	
+
 	// Perform bulk drift detection
 	return s.ConfigSvc.BulkDetectDrift(deviceIDs, clientGetter)
 }
@@ -957,7 +957,7 @@ func (s *ShellyService) ToggleDriftSchedule(scheduleID uint) (*configuration.Dri
 
 	// Toggle the enabled status
 	schedule.Enabled = !schedule.Enabled
-	
+
 	if err := s.DB.DB.Save(&schedule).Error; err != nil {
 		return nil, fmt.Errorf("failed to toggle drift schedule: %w", err)
 	}
@@ -969,15 +969,15 @@ func (s *ShellyService) ToggleDriftSchedule(scheduleID uint) (*configuration.Dri
 func (s *ShellyService) GetDriftScheduleRuns(scheduleID uint, limit int) ([]configuration.DriftDetectionRun, error) {
 	var runs []configuration.DriftDetectionRun
 	query := s.DB.DB.Where("schedule_id = ?", scheduleID).Order("created_at DESC")
-	
+
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
-	
+
 	if err := query.Find(&runs).Error; err != nil {
 		return nil, fmt.Errorf("failed to get drift schedule runs: %w", err)
 	}
-	
+
 	return runs, nil
 }
 
@@ -994,12 +994,12 @@ func (s *ShellyService) GenerateDeviceDriftReport(deviceID uint) (*configuration
 	if err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
-	
+
 	client, err := s.getClientWithAuthRetry(device)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
-	
+
 	return s.ConfigSvc.GenerateDeviceDriftReport(deviceID, client)
 }
 

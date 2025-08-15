@@ -81,17 +81,17 @@ func NewClient(ip string, opts ...ClientOption) *Client {
 		retryDelay:    1 * time.Second,
 		userAgent:     "shelly-manager/1.0",
 	}
-	
+
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	
+
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: cfg.skipTLSVerify,
 		},
 	}
-	
+
 	return &Client{
 		ip: ip,
 		httpClient: &http.Client{
@@ -113,8 +113,8 @@ type RPCRequest struct {
 
 // RPCResponse represents a JSON-RPC response
 type RPCResponse struct {
-	ID     int             `json:"id"`
-	Result json.RawMessage `json:"result,omitempty"`
+	ID     int              `json:"id"`
+	Result json.RawMessage  `json:"result,omitempty"`
 	Error  *shelly.RPCError `json:"error,omitempty"`
 }
 
@@ -131,16 +131,16 @@ func (c *Client) GetInfo(ctx context.Context) (*shelly.DeviceInfo, error) {
 		AuthEn     bool   `json:"auth_en"`
 		AuthDomain string `json:"auth_domain"`
 	}
-	
+
 	if err := c.rpcCall(ctx, "Shelly.GetDeviceInfo", nil, &result); err != nil {
 		return nil, err
 	}
-	
+
 	// Update our generation if it's Gen3
 	if result.Generation > 2 {
 		c.generation = result.Generation
 	}
-	
+
 	return &shelly.DeviceInfo{
 		ID:         result.ID,
 		MAC:        result.MAC,
@@ -162,11 +162,11 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 	if err := c.rpcCall(ctx, "Shelly.GetStatus", nil, &rawStatus); err != nil {
 		return nil, err
 	}
-	
+
 	status := &shelly.DeviceStatus{
 		Raw: rawStatus,
 	}
-	
+
 	// Parse system status
 	if sys, ok := rawStatus["sys"].(map[string]interface{}); ok {
 		if temp, ok := sys["temp"].(float64); ok {
@@ -191,7 +191,7 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 			status.FSFree = int(fsFree)
 		}
 	}
-	
+
 	// Parse WiFi status
 	if wifi, ok := rawStatus["wifi"].(map[string]interface{}); ok {
 		status.WiFiStatus = &shelly.WiFiStatus{}
@@ -206,7 +206,7 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 			status.WiFiStatus.RSSI = int(rssi)
 		}
 	}
-	
+
 	// Parse switch status (switch:0, switch:1, etc.)
 	for key, value := range rawStatus {
 		if len(key) > 7 && key[:7] == "switch:" {
@@ -214,7 +214,7 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 				sw := shelly.SwitchStatus{}
 				// Parse switch ID from key
 				fmt.Sscanf(key, "switch:%d", &sw.ID)
-				
+
 				if output, ok := switchData["output"].(bool); ok {
 					sw.Output = output
 				}
@@ -235,12 +235,12 @@ func (c *Client) GetStatus(ctx context.Context) (*shelly.DeviceStatus, error) {
 				if source, ok := switchData["source"].(string); ok {
 					sw.Source = source
 				}
-				
+
 				status.Switches = append(status.Switches, sw)
 			}
 		}
 	}
-	
+
 	return status, nil
 }
 
@@ -250,13 +250,13 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 	if err := c.rpcCall(ctx, "Shelly.GetConfig", nil, &rawConfig); err != nil {
 		return nil, err
 	}
-	
+
 	rawJSON, _ := json.Marshal(rawConfig)
-	
+
 	config := &shelly.DeviceConfig{
 		Raw: rawJSON,
 	}
-	
+
 	// Parse system config
 	if sys, ok := rawConfig["sys"].(map[string]interface{}); ok {
 		if device, ok := sys["device"].(map[string]interface{}); ok {
@@ -281,7 +281,7 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 			}
 		}
 	}
-	
+
 	// Parse WiFi config
 	if wifi, ok := rawConfig["wifi"].(map[string]interface{}); ok {
 		if sta, ok := wifi["sta"].(map[string]interface{}); ok {
@@ -312,7 +312,7 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 			}
 		}
 	}
-	
+
 	// Parse cloud config
 	if cloud, ok := rawConfig["cloud"].(map[string]interface{}); ok {
 		config.Cloud = &shelly.CloudConfig{}
@@ -323,14 +323,14 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 			config.Cloud.Server = server
 		}
 	}
-	
+
 	// Parse switch configs
 	for key, value := range rawConfig {
 		if len(key) > 7 && key[:7] == "switch:" {
 			if switchData, ok := value.(map[string]interface{}); ok {
 				sw := shelly.SwitchConfig{}
 				fmt.Sscanf(key, "switch:%d", &sw.ID)
-				
+
 				if name, ok := switchData["name"].(string); ok {
 					sw.Name = name
 				}
@@ -346,12 +346,12 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 				if autoOff, ok := switchData["auto_off"].(float64); ok {
 					sw.AutoOff = int(autoOff)
 				}
-				
+
 				config.Switches = append(config.Switches, sw)
 			}
 		}
 	}
-	
+
 	return config, nil
 }
 
@@ -407,33 +407,33 @@ func (c *Client) GetIP() string {
 // rpcCall performs a JSON-RPC call to the device
 func (c *Client) rpcCall(ctx context.Context, method string, params interface{}, result interface{}) error {
 	url := fmt.Sprintf("http://%s/rpc", c.ip)
-	
+
 	request := RPCRequest{
 		ID:     1,
 		Method: method,
 		Params: params,
 	}
-	
+
 	reqBody, err := json.Marshal(request)
 	if err != nil {
 		return err
 	}
-	
+
 	// Retry logic
 	var lastErr error
 	for attempt := 0; attempt <= c.config.retryAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(c.config.retryDelay)
 		}
-		
+
 		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqBody))
 		if err != nil {
 			return err
 		}
-		
+
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", c.config.userAgent)
-		
+
 		var resp *http.Response
 		// Use digest auth if configured
 		if c.config.username != "" && c.config.password != "" {
@@ -446,11 +446,11 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 			continue
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode == http.StatusUnauthorized {
 			return shelly.ErrAuthRequired
 		}
-		
+
 		if resp.StatusCode != http.StatusOK {
 			lastErr = &shelly.DeviceError{
 				IP:         c.ip,
@@ -460,7 +460,7 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 			}
 			continue
 		}
-		
+
 		var rpcResp RPCResponse
 		if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
 			return &shelly.DeviceError{
@@ -470,7 +470,7 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 				Err:        err,
 			}
 		}
-		
+
 		if rpcResp.Error != nil {
 			return &shelly.DeviceError{
 				IP:         c.ip,
@@ -479,7 +479,7 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 				Message:    rpcResp.Error.Message,
 			}
 		}
-		
+
 		if result != nil && rpcResp.Result != nil {
 			if err := json.Unmarshal(rpcResp.Result, result); err != nil {
 				return &shelly.DeviceError{
@@ -490,10 +490,10 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 				}
 			}
 		}
-		
+
 		return nil
 	}
-	
+
 	return lastErr
 }
 
@@ -509,7 +509,7 @@ func (c *Client) SetBrightness(ctx context.Context, channel int, brightness int)
 // SetColorRGB sets the RGB color of a light channel
 func (c *Client) SetColorRGB(ctx context.Context, channel int, r, g, b uint8) error {
 	params := map[string]interface{}{
-		"id": channel,
+		"id":  channel,
 		"rgb": []int{int(r), int(g), int(b)},
 	}
 	return c.rpcCall(ctx, "Light.Set", params, nil)
@@ -518,7 +518,7 @@ func (c *Client) SetColorRGB(ctx context.Context, channel int, r, g, b uint8) er
 // SetColorTemp sets the color temperature of a light channel
 func (c *Client) SetColorTemp(ctx context.Context, channel int, temp int) error {
 	params := map[string]interface{}{
-		"id":    channel,
+		"id":   channel,
 		"temp": temp,
 	}
 	return c.rpcCall(ctx, "Light.Set", params, nil)
@@ -546,29 +546,29 @@ func (c *Client) CheckUpdate(ctx context.Context) (*shelly.UpdateInfo, error) {
 			Build   string `json:"build_id"`
 		} `json:"beta"`
 	}
-	
+
 	if err := c.rpcCall(ctx, "Shelly.CheckForUpdate", nil, &result); err != nil {
 		return nil, err
 	}
-	
+
 	// Get current version from device info
 	info, err := c.GetInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	updateInfo := &shelly.UpdateInfo{
 		OldVersion: info.FW,
 		HasUpdate:  result.Stable.Version != "" && result.Stable.Version != info.FW,
 	}
-	
+
 	if updateInfo.HasUpdate {
 		updateInfo.NewVersion = result.Stable.Version
 		if result.Beta.Version != "" && result.Beta.Version != info.FW {
 			updateInfo.ReleaseNotes = fmt.Sprintf("Beta version %s also available", result.Beta.Version)
 		}
 	}
-	
+
 	return updateInfo, nil
 }
 
@@ -586,17 +586,17 @@ func (c *Client) GetMetrics(ctx context.Context) (*shelly.DeviceMetrics, error) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	metrics := &shelly.DeviceMetrics{
 		Timestamp:   time.Now(),
 		Temperature: status.Temperature,
 		Uptime:      status.Uptime,
 	}
-	
+
 	if status.WiFiStatus != nil {
 		metrics.WiFiRSSI = status.WiFiStatus.RSSI
 	}
-	
+
 	return metrics, nil
 }
 
@@ -608,15 +608,15 @@ func (c *Client) GetEnergyData(ctx context.Context, channel int) (*shelly.Energy
 		Voltage float64 `json:"voltage"`
 		Power   float64 `json:"apower"`
 	}
-	
+
 	params := map[string]interface{}{
 		"id": channel,
 	}
-	
+
 	if err := c.rpcCall(ctx, "Switch.GetStatus", params, &result); err != nil {
 		return nil, err
 	}
-	
+
 	return &shelly.EnergyData{
 		Power:   result.Power,
 		Total:   result.Total / 1000, // Convert Wh to kWh
@@ -634,7 +634,7 @@ func (c *Client) SetRollerPosition(ctx context.Context, channel int, position in
 	} else if position > 100 {
 		position = 100
 	}
-	
+
 	params := map[string]interface{}{
 		"id":  channel,
 		"pos": position,
@@ -726,4 +726,3 @@ func (c *Client) SetColorMode(ctx context.Context, mode string) error {
 	// in Light.Set calls. This is a compatibility method.
 	return nil
 }
-

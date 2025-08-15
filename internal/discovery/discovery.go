@@ -24,18 +24,18 @@ type ShellyDevice struct {
 	Version    string `json:"ver"`
 	App        string `json:"app"`
 	AuthDomain string `json:"auth_domain"`
-	
+
 	// Gen1 fields
-	Type       string `json:"type"`
-	FW         string `json:"fw"`
-	Auth       bool   `json:"auth"`
-	
+	Type string `json:"type"`
+	FW   string `json:"fw"`
+	Auth bool   `json:"auth"`
+
 	// Common fields
-	MAC        string `json:"mac"`
-	AuthEn     bool   `json:"auth_en"`
-	
+	MAC    string `json:"mac"`
+	AuthEn bool   `json:"auth_en"`
+
 	// Internal fields
-	IP         string `json:"-"`
+	IP         string    `json:"-"`
 	Discovered time.Time `json:"-"`
 }
 
@@ -58,7 +58,7 @@ func NewScannerWithLogger(timeout time.Duration, concurrentScans int, logger *lo
 		concurrentScans = 10
 	}
 	if timeout <= 0 {
-		timeout = 1 * time.Second  // Reduced timeout for faster scanning
+		timeout = 1 * time.Second // Reduced timeout for faster scanning
 	}
 
 	return &Scanner{
@@ -92,7 +92,7 @@ func (s *Scanner) ScanNetwork(ctx context.Context, cidr string) ([]ShellyDevice,
 
 	// Create a channel for IPs to scan
 	ipChan := make(chan string, 100)
-	
+
 	// Start worker goroutines
 	for i := 0; i < s.concurrentScans; i++ {
 		wg.Add(1)
@@ -162,7 +162,7 @@ func (s *Scanner) ScanHost(ctx context.Context, host string) (*ShellyDevice, err
 // checkDevice attempts to identify a Shelly device at the given IP
 func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 	url := fmt.Sprintf("http://%s/shelly", ip)
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		s.logger.WithFields(map[string]any{
@@ -200,7 +200,7 @@ func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 	if device.Type == "" && device.ID == "" {
 		return nil
 	}
-	
+
 	// Normalize fields for Gen1 devices
 	if device.Type != "" && device.ID == "" {
 		// Gen1 device
@@ -210,7 +210,7 @@ func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 		device.Version = device.FW
 		device.AuthEn = device.Auth
 	}
-	
+
 	// Ensure we have a model field
 	if device.Model == "" && device.Type != "" {
 		device.Model = device.Type
@@ -218,9 +218,9 @@ func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 
 	device.IP = ip
 	device.Discovered = time.Now()
-	
+
 	s.logger.LogDeviceOperation("discovered", ip, device.MAC, nil)
-	
+
 	return &device
 }
 
@@ -228,9 +228,9 @@ func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 func (s *Scanner) GetDeviceStatus(ctx context.Context, ip string, gen int) (map[string]interface{}, error) {
 	start := time.Now()
 	s.logger.WithFields(map[string]any{
-		"device_ip": ip,
+		"device_ip":  ip,
 		"generation": gen,
-		"component": "discovery",
+		"component":  "discovery",
 	}).Debug("Getting device status")
 
 	var url string
@@ -269,7 +269,7 @@ func (s *Scanner) GetDeviceStatus(ctx context.Context, ip string, gen int) (map[
 	duration := time.Since(start).Milliseconds()
 	s.logger.WithFields(map[string]any{
 		"device_ip": ip,
-		"duration": duration,
+		"duration":  duration,
 		"component": "discovery",
 	}).Debug("Device status retrieved successfully")
 
@@ -289,7 +289,7 @@ func inc(ip net.IP) {
 // GetDeviceType returns a human-readable device type based on the model
 func GetDeviceType(model string) string {
 	model = strings.ToUpper(model)
-	
+
 	// Exact model matches for Gen1 devices
 	switch model {
 	case "SHPLG-S", "SHPLG-1":
@@ -329,7 +329,7 @@ func GetDeviceType(model string) string {
 	case "SHTRV-01":
 		return "TRV Controller"
 	}
-	
+
 	// Check for Gen2+ models (contain pattern like SNSN-, SPSW-, etc.)
 	if strings.HasPrefix(model, "SNSN-") {
 		return "Plus Sensor"
@@ -340,7 +340,7 @@ func GetDeviceType(model string) string {
 	if strings.HasPrefix(model, "SPSH-") {
 		return "Plus Smart Home"
 	}
-	
+
 	// Fallback to pattern matching (order matters - more specific patterns first)
 	lowerModel := strings.ToLower(model)
 	switch {

@@ -24,40 +24,40 @@ const (
 
 // ProvisioningRequest contains WiFi credentials and device configuration
 type ProvisioningRequest struct {
-	SSID           string `json:"ssid" validate:"required"`
-	Password       string `json:"password"`
-	DeviceName     string `json:"device_name"`
-	EnableAuth     bool   `json:"enable_auth"`
-	AuthUser       string `json:"auth_user"`
-	AuthPassword   string `json:"auth_password"`
-	EnableCloud    bool   `json:"enable_cloud"`
-	EnableMQTT     bool   `json:"enable_mqtt"`
-	MQTTServer     string `json:"mqtt_server"`
-	Timeout        int    `json:"timeout"` // seconds
+	SSID         string `json:"ssid" validate:"required"`
+	Password     string `json:"password"`
+	DeviceName   string `json:"device_name"`
+	EnableAuth   bool   `json:"enable_auth"`
+	AuthUser     string `json:"auth_user"`
+	AuthPassword string `json:"auth_password"`
+	EnableCloud  bool   `json:"enable_cloud"`
+	EnableMQTT   bool   `json:"enable_mqtt"`
+	MQTTServer   string `json:"mqtt_server"`
+	Timeout      int    `json:"timeout"` // seconds
 }
 
 // ProvisioningResult contains the outcome of a provisioning operation
 type ProvisioningResult struct {
-	DeviceMAC    string             `json:"device_mac"`
-	DeviceIP     string             `json:"device_ip"`
-	DeviceName   string             `json:"device_name"`
-	Status       ProvisioningStatus `json:"status"`
-	Error        string             `json:"error,omitempty"`
-	StartTime    time.Time          `json:"start_time"`
-	EndTime      time.Time          `json:"end_time"`
-	Duration     time.Duration      `json:"duration"`
-	Steps        []ProvisioningStep `json:"steps"`
+	DeviceMAC  string             `json:"device_mac"`
+	DeviceIP   string             `json:"device_ip"`
+	DeviceName string             `json:"device_name"`
+	Status     ProvisioningStatus `json:"status"`
+	Error      string             `json:"error,omitempty"`
+	StartTime  time.Time          `json:"start_time"`
+	EndTime    time.Time          `json:"end_time"`
+	Duration   time.Duration      `json:"duration"`
+	Steps      []ProvisioningStep `json:"steps"`
 }
 
 // ProvisioningStep represents a single step in the provisioning process
 type ProvisioningStep struct {
-	Name        string    `json:"name"`
-	Status      string    `json:"status"` // success, failed, in_progress
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
+	Name        string        `json:"name"`
+	Status      string        `json:"status"` // success, failed, in_progress
+	StartTime   time.Time     `json:"start_time"`
+	EndTime     time.Time     `json:"end_time"`
 	Duration    time.Duration `json:"duration"`
-	Error       string    `json:"error,omitempty"`
-	Description string    `json:"description"`
+	Error       string        `json:"error,omitempty"`
+	Description string        `json:"description"`
 }
 
 // UnprovisionedDevice represents a Shelly device in AP mode waiting for configuration
@@ -74,27 +74,27 @@ type UnprovisionedDevice struct {
 
 // WiFiNetwork represents an available WiFi network
 type WiFiNetwork struct {
-	SSID       string `json:"ssid"`
-	Security   string `json:"security"`   // WPA2, WPA3, Open, etc.
-	Signal     int    `json:"signal"`     // Signal strength (0-100)
-	Channel    int    `json:"channel"`
-	Frequency  int    `json:"frequency"`  // MHz
+	SSID      string `json:"ssid"`
+	Security  string `json:"security"` // WPA2, WPA3, Open, etc.
+	Signal    int    `json:"signal"`   // Signal strength (0-100)
+	Channel   int    `json:"channel"`
+	Frequency int    `json:"frequency"` // MHz
 }
 
 // NetworkInterface represents a system network interface abstraction
 type NetworkInterface interface {
 	// GetAvailableNetworks scans for available WiFi networks
 	GetAvailableNetworks(ctx context.Context) ([]WiFiNetwork, error)
-	
+
 	// ConnectToNetwork connects to a WiFi network with credentials
 	ConnectToNetwork(ctx context.Context, ssid, password string) error
-	
+
 	// DisconnectFromNetwork disconnects from current WiFi network
 	DisconnectFromNetwork(ctx context.Context) error
-	
+
 	// GetCurrentNetwork returns the currently connected network info
 	GetCurrentNetwork(ctx context.Context) (*WiFiNetwork, error)
-	
+
 	// IsConnected checks if connected to a specific network
 	IsConnected(ctx context.Context, ssid string) (bool, error)
 }
@@ -103,19 +103,19 @@ type NetworkInterface interface {
 type DeviceProvisioner interface {
 	// DiscoverUnprovisionedDevices scans for Shelly devices in AP mode
 	DiscoverUnprovisionedDevices(ctx context.Context) ([]UnprovisionedDevice, error)
-	
+
 	// ConnectToDeviceAP connects to a Shelly device's AP
 	ConnectToDeviceAP(ctx context.Context, device UnprovisionedDevice) error
-	
+
 	// ConfigureWiFi configures the device's WiFi settings
 	ConfigureWiFi(ctx context.Context, device UnprovisionedDevice, request ProvisioningRequest) error
-	
+
 	// ConfigureDevice applies additional device settings (auth, MQTT, etc.)
 	ConfigureDevice(ctx context.Context, device UnprovisionedDevice, request ProvisioningRequest) error
-	
+
 	// RebootDevice reboots the device to apply new configuration
 	RebootDevice(ctx context.Context, device UnprovisionedDevice) error
-	
+
 	// VerifyProvisioning verifies the device is accessible on the target network
 	VerifyProvisioning(ctx context.Context, device UnprovisionedDevice, targetSSID string, timeout time.Duration) (*ProvisioningResult, error)
 }
@@ -126,13 +126,13 @@ type ProvisioningManager struct {
 	logger      *logging.Logger
 	netIface    NetworkInterface
 	provisioner DeviceProvisioner
-	
+
 	// Current operation state
-	currentStatus   ProvisioningStatus
-	currentDevice   *UnprovisionedDevice
-	currentRequest  *ProvisioningRequest
-	currentResult   *ProvisioningResult
-	
+	currentStatus  ProvisioningStatus
+	currentDevice  *UnprovisionedDevice
+	currentRequest *ProvisioningRequest
+	currentResult  *ProvisioningResult
+
 	// Callbacks for status updates
 	statusCallback func(status ProvisioningStatus, result *ProvisioningResult)
 }
@@ -176,25 +176,25 @@ func (pm *ProvisioningManager) DiscoverUnprovisionedDevices(ctx context.Context)
 	if pm.provisioner == nil {
 		return nil, fmt.Errorf("device provisioner not set")
 	}
-	
+
 	pm.logger.WithFields(map[string]any{
 		"component": "provisioning",
 	}).Info("Starting discovery of unprovisioned devices")
-	
+
 	devices, err := pm.provisioner.DiscoverUnprovisionedDevices(ctx)
 	if err != nil {
 		pm.logger.WithFields(map[string]any{
 			"component": "provisioning",
-			"error": err.Error(),
+			"error":     err.Error(),
 		}).Error("Failed to discover unprovisioned devices")
 		return nil, err
 	}
-	
+
 	pm.logger.WithFields(map[string]any{
-		"component": "provisioning",
+		"component":     "provisioning",
 		"devices_found": len(devices),
 	}).Info("Discovery of unprovisioned devices completed")
-	
+
 	return devices, nil
 }
 
@@ -206,7 +206,7 @@ func (pm *ProvisioningManager) ProvisionDevice(ctx context.Context, device Unpro
 	if pm.provisioner == nil {
 		return nil, fmt.Errorf("device provisioner not set")
 	}
-	
+
 	// Initialize result tracking
 	result := &ProvisioningResult{
 		DeviceMAC:  device.MAC,
@@ -215,59 +215,59 @@ func (pm *ProvisioningManager) ProvisionDevice(ctx context.Context, device Unpro
 		Status:     StatusIdle,
 		Steps:      make([]ProvisioningStep, 0),
 	}
-	
+
 	pm.currentDevice = &device
 	pm.currentRequest = &request
 	pm.currentResult = result
-	
+
 	// Set timeout
 	timeout := time.Duration(request.Timeout) * time.Second
 	if timeout <= 0 {
 		timeout = 5 * time.Minute // Default timeout
 	}
-	
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	
+
 	pm.logger.WithFields(map[string]any{
-		"component": "provisioning",
-		"device_mac": device.MAC,
+		"component":   "provisioning",
+		"device_mac":  device.MAC,
 		"device_ssid": device.SSID,
 		"target_ssid": request.SSID,
-		"timeout": timeout,
+		"timeout":     timeout,
 	}).Info("Starting device provisioning")
-	
+
 	// Execute provisioning steps
 	err := pm.executeProvisioningWorkflow(ctx, device, request, result)
-	
+
 	// Finalize result
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
-	
+
 	if err != nil {
 		result.Status = StatusFailed
 		result.Error = err.Error()
 		pm.logger.WithFields(map[string]any{
-			"component": "provisioning",
+			"component":  "provisioning",
 			"device_mac": device.MAC,
-			"error": err.Error(),
-			"duration": result.Duration,
+			"error":      err.Error(),
+			"duration":   result.Duration,
 		}).Error("Device provisioning failed")
 	} else {
 		result.Status = StatusCompleted
 		pm.logger.WithFields(map[string]any{
-			"component": "provisioning",
+			"component":  "provisioning",
 			"device_mac": device.MAC,
-			"duration": result.Duration,
+			"duration":   result.Duration,
 		}).Info("Device provisioning completed successfully")
 	}
-	
+
 	// Update status
 	pm.currentStatus = result.Status
 	if pm.statusCallback != nil {
 		pm.statusCallback(result.Status, result)
 	}
-	
+
 	return result, err
 }
 
@@ -320,7 +320,7 @@ func (pm *ProvisioningManager) executeProvisioningWorkflow(ctx context.Context, 
 			},
 		},
 	}
-	
+
 	// Execute each step
 	for _, step := range steps {
 		stepResult := ProvisioningStep{
@@ -329,45 +329,45 @@ func (pm *ProvisioningManager) executeProvisioningWorkflow(ctx context.Context, 
 			StartTime:   time.Now(),
 			Status:      "in_progress",
 		}
-		
+
 		pm.logger.WithFields(map[string]any{
-			"component": "provisioning",
+			"component":  "provisioning",
 			"device_mac": device.MAC,
-			"step": step.name,
+			"step":       step.name,
 		}).Debug("Executing provisioning step")
-		
+
 		err := step.execute()
-		
+
 		stepResult.EndTime = time.Now()
 		stepResult.Duration = stepResult.EndTime.Sub(stepResult.StartTime)
-		
+
 		if err != nil {
 			stepResult.Status = "failed"
 			stepResult.Error = err.Error()
 			result.Steps = append(result.Steps, stepResult)
-			
+
 			pm.logger.WithFields(map[string]any{
-				"component": "provisioning",
+				"component":  "provisioning",
 				"device_mac": device.MAC,
-				"step": step.name,
-				"error": err.Error(),
-				"duration": stepResult.Duration,
+				"step":       step.name,
+				"error":      err.Error(),
+				"duration":   stepResult.Duration,
 			}).Error("Provisioning step failed")
-			
+
 			return fmt.Errorf("step %s failed: %w", step.name, err)
 		}
-		
+
 		stepResult.Status = "success"
 		result.Steps = append(result.Steps, stepResult)
-		
+
 		pm.logger.WithFields(map[string]any{
-			"component": "provisioning",
+			"component":  "provisioning",
 			"device_mac": device.MAC,
-			"step": step.name,
-			"duration": stepResult.Duration,
+			"step":       step.name,
+			"duration":   stepResult.Duration,
 		}).Debug("Provisioning step completed successfully")
 	}
-	
+
 	return nil
 }
 
@@ -375,7 +375,7 @@ func (pm *ProvisioningManager) executeProvisioningWorkflow(ctx context.Context, 
 func (pm *ProvisioningManager) updateStatus(status ProvisioningStatus, result *ProvisioningResult) {
 	pm.currentStatus = status
 	result.Status = status
-	
+
 	if pm.statusCallback != nil {
 		pm.statusCallback(status, result)
 	}
@@ -386,7 +386,7 @@ func (pm *ProvisioningManager) Stop() {
 	pm.logger.WithFields(map[string]any{
 		"component": "provisioning",
 	}).Info("Stopping provisioning manager")
-	
+
 	pm.currentStatus = StatusIdle
 	pm.currentDevice = nil
 	pm.currentRequest = nil

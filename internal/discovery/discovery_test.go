@@ -37,15 +37,15 @@ func TestNewScanner(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scanner := NewScanner(tt.timeout, tt.concurrentScans)
-			
+
 			if scanner.timeout != tt.expectedTimeout {
 				t.Errorf("Expected timeout %v, got %v", tt.expectedTimeout, scanner.timeout)
 			}
-			
+
 			if scanner.concurrentScans != tt.expectedConc {
 				t.Errorf("Expected concurrent scans %d, got %d", tt.expectedConc, scanner.concurrentScans)
 			}
-			
+
 			if scanner.httpClient.Timeout != tt.expectedTimeout {
 				t.Errorf("Expected HTTP client timeout %v, got %v", tt.expectedTimeout, scanner.httpClient.Timeout)
 			}
@@ -142,7 +142,7 @@ func TestScanHost_NoDevice(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping network test in short mode")
 	}
-	
+
 	scanner := NewScanner(100*time.Millisecond, 1) // Very short timeout
 	ctx := context.Background()
 
@@ -161,11 +161,11 @@ func TestScanHost_Timeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping network test in short mode")
 	}
-	
+
 	scanner := NewScanner(10*time.Millisecond, 1) // Very short timeout
 	ctx := context.Background()
 
-	// Try to scan a non-routable address (TEST-NET-2 range) 
+	// Try to scan a non-routable address (TEST-NET-2 range)
 	device, err := scanner.ScanHost(ctx, "198.51.100.1") // Will timeout
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -192,11 +192,11 @@ func TestGetDeviceType(t *testing.T) {
 		{"SHEM", "Energy Meter"},
 		{"SHUNI-1", "Universal Module"},
 		{"SHHT-1", "Humidity/Temperature"},
-		
+
 		// Gen2+ patterns
 		{"SNSN-0013A", "Plus Sensor"},
 		{"SPSW-004PE16EU", "Plus Switch"},
-		
+
 		// Pattern matching
 		{"SomePlug", "Smart Plug"},
 		{"DeviceWithPM", "Power Meter Device"},
@@ -219,7 +219,7 @@ func TestGetDeviceType(t *testing.T) {
 		{"UniController", "Universal Module"},
 		{"PlusDevice", "Plus Device"},
 		{"ProDevice", "Pro Device"},
-		
+
 		// Unknown device
 		{"UnknownDevice", "Shelly Device"},
 		{"", "Shelly Device"},
@@ -275,7 +275,7 @@ func TestScanNetwork_SmallRange(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping network test in short mode")
 	}
-	
+
 	// Create mock server
 	server := testutil.MockShellyServer()
 	defer server.Close()
@@ -312,7 +312,7 @@ func TestScanNetwork_SmallRange(t *testing.T) {
 
 	// Verify the function completes without hanging
 	t.Log("Network scan completed successfully")
-	
+
 	// Suppress unused variable warning
 	_ = port
 }
@@ -381,9 +381,9 @@ func TestInc(t *testing.T) {
 			// Create a copy to avoid modifying the test data
 			ip := make([]byte, len(tt.input))
 			copy(ip, tt.input)
-			
+
 			inc(ip)
-			
+
 			for i, expected := range tt.expected {
 				if ip[i] != expected {
 					t.Errorf("Expected byte %d to be %d, got %d", i, expected, ip[i])
