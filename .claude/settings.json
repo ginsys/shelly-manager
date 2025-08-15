@@ -36,6 +36,7 @@
     "deny": [],
     "defaultMode": "acceptEdits"
   },
+  "memory": ".claude/CLAUDE.md",
   "saveSettingsPath": ".claude/settings.json",
   "useLocalSettings": false
 }
