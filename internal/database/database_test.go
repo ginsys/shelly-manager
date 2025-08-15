@@ -1,6 +1,7 @@
 package database
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -127,7 +128,120 @@ func TestGetDevice_NotFound(t *testing.T) {
 
 	_, err = manager.GetDevice(999)
 	if err != gorm.ErrRecordNotFound {
-		t.Errorf("Expected ErrRecordNotFound, got: %v", err)
+		t.Errorf("Expected ErrRecordNotFound for non-existent device, got: %v", err)
+	}
+}
+
+func TestUpsertDeviceFromDiscovery(t *testing.T) {
+	manager, err := NewManager(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create manager: %v", err)
+	}
+
+	mac := "A4:CF:12:34:56:78"
+	initialUpdate := DiscoveryUpdate{
+		IP:       "192.168.1.100",
+		Type:     "Smart Plug",
+		Firmware: "20231219-134356",
+		Status:   "online",
+		LastSeen: time.Now(),
+	}
+
+	// Test 1: Create new device via discovery
+	device, err := manager.UpsertDeviceFromDiscovery(mac, initialUpdate, "shelly1-123456")
+	if err != nil {
+		t.Fatalf("Failed to create device from discovery: %v", err)
+	}
+
+	if device.MAC != mac {
+		t.Errorf("Expected MAC %s, got %s", mac, device.MAC)
+	}
+	if device.Name != "shelly1-123456" {
+		t.Errorf("Expected name 'shelly1-123456', got %s", device.Name)
+	}
+	if device.IP != initialUpdate.IP {
+		t.Errorf("Expected IP %s, got %s", initialUpdate.IP, device.IP)
+	}
+
+	// Manually update the device to simulate user configuration
+	device.Name = "Living Room Plug"
+	customSettings := map[string]interface{}{
+		"model":        "SHPLG-S",
+		"gen":          1,
+		"auth_enabled": true,
+		"auth_user":    "admin",
+		"auth_pass":    "password123",
+		"sync_status":  "synced",
+		"custom_field": "user_data",
+	}
+	settingsJSON, _ := json.Marshal(customSettings)
+	device.Settings = string(settingsJSON)
+	
+	err = manager.UpdateDevice(device)
+	if err != nil {
+		t.Fatalf("Failed to update device: %v", err)
+	}
+
+	// Test 2: Update existing device via discovery (should preserve user data)
+	updatedDiscovery := DiscoveryUpdate{
+		IP:       "192.168.1.101", // IP changed
+		Type:     "Smart Plug",     // Same type
+		Firmware: "20240101-145500", // Firmware updated
+		Status:   "online",
+		LastSeen: time.Now(),
+	}
+
+	updatedDevice, err := manager.UpsertDeviceFromDiscovery(mac, updatedDiscovery, "ignored-name")
+	if err != nil {
+		t.Fatalf("Failed to update device from discovery: %v", err)
+	}
+
+	// Verify discovery fields were updated
+	if updatedDevice.IP != "192.168.1.101" {
+		t.Errorf("Expected IP to be updated to 192.168.1.101, got %s", updatedDevice.IP)
+	}
+	if updatedDevice.Firmware != "20240101-145500" {
+		t.Errorf("Expected firmware to be updated to 20240101-145500, got %s", updatedDevice.Firmware)
+	}
+
+	// Verify user-configured fields were preserved
+	if updatedDevice.Name != "Living Room Plug" {
+		t.Errorf("Expected name to be preserved as 'Living Room Plug', got %s", updatedDevice.Name)
+	}
+
+	// Parse and verify settings were preserved
+	var preservedSettings map[string]interface{}
+	err = json.Unmarshal([]byte(updatedDevice.Settings), &preservedSettings)
+	if err != nil {
+		t.Fatalf("Failed to parse preserved settings: %v", err)
+	}
+
+	// Check that custom user data was preserved
+	if preservedSettings["custom_field"] != "user_data" {
+		t.Errorf("Expected custom_field to be preserved as 'user_data', got %v", preservedSettings["custom_field"])
+	}
+	if preservedSettings["sync_status"] != "synced" {
+		t.Errorf("Expected sync_status to be preserved as 'synced', got %v", preservedSettings["sync_status"])
+	}
+	if preservedSettings["auth_user"] != "admin" {
+		t.Errorf("Expected auth_user to be preserved as 'admin', got %v", preservedSettings["auth_user"])
+	}
+	if preservedSettings["auth_pass"] != "password123" {
+		t.Errorf("Expected auth_pass to be preserved as 'password123', got %v", preservedSettings["auth_pass"])
+	}
+
+	// Test 3: Verify we can't create duplicate devices with same MAC
+	duplicateDevice, err := manager.UpsertDeviceFromDiscovery(mac, initialUpdate, "different-name")
+	if err != nil {
+		t.Fatalf("Upsert should not fail for existing MAC: %v", err)
+	}
+	
+	// Should return the same device (by ID) and preserve the custom name
+	if duplicateDevice.ID != updatedDevice.ID {
+		t.Errorf("Expected same device ID, got %d vs %d", duplicateDevice.ID, updatedDevice.ID)
+	}
+	if duplicateDevice.Name != "Living Room Plug" {
+		t.Errorf("Expected existing name to be preserved, got %s", duplicateDevice.Name)
 	}
 }
 

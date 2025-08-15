@@ -91,21 +91,73 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 		return nil, fmt.Errorf("discovery failed: %w", err)
 	}
 	
-	// Convert discovered Shelly devices to our Device model
+	// Upsert discovered devices to preserve existing data
 	var devices []database.Device
 	for _, sd := range shellyDevices {
-		device := database.Device{
+		// Skip devices without MAC address (can't use as unique identifier)
+		if sd.MAC == "" {
+			s.logger.WithFields(map[string]any{
+				"device_ip": sd.IP,
+				"device_id": sd.ID,
+				"component": "service",
+			}).Warn("Skipping device with empty MAC address")
+			continue
+		}
+		
+		// Prepare discovery update data
+		update := database.DiscoveryUpdate{
 			IP:       sd.IP,
-			MAC:      sd.MAC,
 			Type:     discovery.GetDeviceType(sd.Model),
-			Name:     sd.ID, // Use ID as initial name, can be updated later
 			Firmware: sd.Version,
 			Status:   "online",
 			LastSeen: sd.Discovered,
-			Settings: fmt.Sprintf(`{"model":"%s","gen":%d,"auth_enabled":%v}`, 
-				sd.Model, sd.Generation, sd.AuthEn),
 		}
-		devices = append(devices, device)
+		
+		// Use UpsertDeviceFromDiscovery to preserve existing data
+		device, err := s.DB.UpsertDeviceFromDiscovery(sd.MAC, update, sd.ID)
+		if err != nil {
+			s.logger.WithFields(map[string]any{
+				"mac":       sd.MAC,
+				"ip":        sd.IP,
+				"error":     err.Error(),
+				"component": "service",
+			}).Error("Failed to upsert device from discovery")
+			continue
+		}
+		
+		// Update device settings with latest discovery info (preserve existing settings)
+		var existingSettings map[string]interface{}
+		if err := json.Unmarshal([]byte(device.Settings), &existingSettings); err != nil {
+			// If parsing fails, create new settings
+			existingSettings = make(map[string]interface{})
+		}
+		
+		// Update discovery-related settings only
+		existingSettings["model"] = sd.Model
+		existingSettings["gen"] = sd.Generation
+		existingSettings["auth_enabled"] = sd.AuthEn
+		
+		// Preserve existing auth credentials if they exist
+		if _, hasUser := existingSettings["auth_user"]; !hasUser {
+			existingSettings["auth_user"] = ""
+		}
+		if _, hasPass := existingSettings["auth_pass"]; !hasPass {
+			existingSettings["auth_pass"] = ""
+		}
+		
+		updatedSettings, _ := json.Marshal(existingSettings)
+		device.Settings = string(updatedSettings)
+		
+		// Save updated settings
+		if err := s.DB.UpdateDevice(device); err != nil {
+			s.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"error":     err.Error(),
+				"component": "service",
+			}).Error("Failed to update device settings")
+		}
+		
+		devices = append(devices, *device)
 	}
 	
 	s.logger.WithFields(map[string]any{
