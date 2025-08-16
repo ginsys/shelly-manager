@@ -9,8 +9,8 @@ database:
 discovery:
   enabled: true
   networks:
-    - "192.168.1.0/24"
-    - "192.168.0.0/24"
+    - 192.168.1.0/24
+    - 192.168.0.0/24
   interval: 300
   timeout: 5
   enable_mdns: true
@@ -29,14 +29,14 @@ provisioning:
   provision_interval: 600
 
 dhcp:
-  network: "192.168.1.0/24"
-  start_ip: "192.168.1.100"
-  end_ip: "192.168.1.199"
+  network: 192.168.1.0/24
+  start_ip: 192.168.1.100
+  end_ip: 192.168.1.199
   auto_reserve: true
 
 opnsense:
   enabled: false
-  host: "192.168.1.1"
+  host: 192.168.1.1
   port: 443
   api_key: ""
   api_secret: ""
