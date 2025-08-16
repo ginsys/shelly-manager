@@ -6,10 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // Handler handles HTTP requests for metrics operations

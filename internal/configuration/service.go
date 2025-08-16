@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/shelly"
 	"github.com/ginsys/shelly-manager/internal/shelly/gen1"
 	"github.com/ginsys/shelly-manager/internal/shelly/gen2"
-	"gorm.io/gorm"
 )
 
 // Device represents device information for configuration management

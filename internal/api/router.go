@@ -3,8 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/gorilla/mux"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // SetupRoutes configures all API routes

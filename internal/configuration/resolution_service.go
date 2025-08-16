@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // ResolutionService handles drift resolution workflows

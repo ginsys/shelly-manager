@@ -5,14 +5,15 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gorilla/mux"
+	"gorm.io/gorm"
+
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/metrics"
 	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/service"
-	"github.com/gorilla/mux"
-	"gorm.io/gorm"
 )
 
 // Handler contains dependencies for API handlers

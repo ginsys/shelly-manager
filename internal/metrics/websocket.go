@@ -7,8 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/gorilla/websocket"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // WebSocketHub manages WebSocket connections for real-time metrics

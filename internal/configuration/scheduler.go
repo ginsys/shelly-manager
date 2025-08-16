@@ -7,10 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
-	"github.com/ginsys/shelly-manager/internal/shelly"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // Scheduler manages automated drift detection schedules

@@ -6,10 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // Service handles metrics collection and export

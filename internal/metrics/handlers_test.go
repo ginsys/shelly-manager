@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 func setupTestHandler(t *testing.T) (*Handler, *Service) {
