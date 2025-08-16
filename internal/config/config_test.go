@@ -13,7 +13,7 @@ func TestLoad_ValidConfig(t *testing.T) {
 
 	configContent := `server:
   port: 9090
-  host: "0.0.0.0"
+  host: 0.0.0.0
   log_level: "debug"
 
 logging:
