@@ -208,7 +208,7 @@ func CreateTestConfigFile(t *testing.T, cfg *config.Config) string {
 
 	content := `server:
   port: 8080
-  host: "127.0.0.1"
+  host: 127.0.0.1
   log_level: "debug"
 
 database:
