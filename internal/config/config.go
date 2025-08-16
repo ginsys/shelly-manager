@@ -103,6 +103,9 @@ type Config struct {
 
 // Load loads configuration from file
 func Load(configFile string) (*Config, error) {
+	// Reset viper state to prevent interference between config loads
+	viper.Reset()
+	
 	if configFile != "" {
 		viper.SetConfigFile(configFile)
 	} else {
