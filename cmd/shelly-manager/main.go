@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+	"gorm.io/gorm"
+
 	"github.com/ginsys/shelly-manager/internal/api"
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
@@ -18,8 +21,6 @@ import (
 	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
 	"github.com/ginsys/shelly-manager/internal/service"
-	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 )
 
 // Global variables

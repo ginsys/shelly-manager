@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
-	"github.com/ginsys/shelly-manager/internal/shelly"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // Mock Shelly client for testing

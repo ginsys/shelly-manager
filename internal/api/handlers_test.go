@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/mux"
+
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/testutil"
-	"github.com/gorilla/mux"
 )
 
 // testShellyService creates a test ShellyService for API handler tests

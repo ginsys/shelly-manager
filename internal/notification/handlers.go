@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/gorilla/mux"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // Handler handles HTTP requests for notification operations

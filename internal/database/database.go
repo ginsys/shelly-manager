@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/notification"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 // Manager handles database operations for Shelly devices
