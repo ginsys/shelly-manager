@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -368,7 +369,11 @@ func buildTestBinary(t *testing.T) string {
 	t.Helper()
 
 	tempDir := testutil.TempDir(t)
-	binaryPath := filepath.Join(tempDir, "shelly-manager-test")
+	binaryName := "shelly-manager-test"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(tempDir, binaryName)
 
 	// Build the binary
 	cmd := exec.Command("go", "build", "-o", binaryPath, ".")

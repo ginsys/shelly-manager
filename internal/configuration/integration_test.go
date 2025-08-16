@@ -68,8 +68,7 @@ func TestConfigurationService_TypedConfigurationWorkflow(t *testing.T) {
 		},
 		MQTT: &MQTTConfiguration{
 			Enable: true,
-			Server: "mqtt.example.com",
-			Port:   1883,
+			Server: "mqtt.example.com:1883",
 			User:   "testuser",
 		},
 		Auth: &AuthConfiguration{
@@ -106,11 +105,8 @@ func TestConfigurationService_TypedConfigurationWorkflow(t *testing.T) {
 	if retrievedConfig.MQTT == nil {
 		t.Errorf("MQTT configuration is nil")
 	} else {
-		if retrievedConfig.MQTT.Server != "mqtt.example.com" {
-			t.Errorf("Expected MQTT server 'mqtt.example.com', got %q", retrievedConfig.MQTT.Server)
-		}
-		if retrievedConfig.MQTT.Port != 1883 {
-			t.Errorf("Expected MQTT port 1883, got %d", retrievedConfig.MQTT.Port)
+		if retrievedConfig.MQTT.Server != "mqtt.example.com:1883" {
+			t.Errorf("Expected MQTT server 'mqtt.example.com:1883', got %q", retrievedConfig.MQTT.Server)
 		}
 	}
 
@@ -387,7 +383,7 @@ func TestConfigurationService_BatchValidation(t *testing.T) {
 		{
 			MQTT: &MQTTConfiguration{
 				Enable: true,
-				Server: "mqtt.example.com",
+				Server: "mqtt.example.com:1883",
 				Port:   1883,
 			},
 		},
@@ -437,7 +433,7 @@ func TestConfigurationService_RawToTypedConversion(t *testing.T) {
 				},
 				"mqtt": {
 					"enable": true,
-					"server": "mqtt.example.com",
+					"server": "mqtt.example.com:1883",
 					"port": 1883,
 					"user": "testuser"
 				},
@@ -458,7 +454,7 @@ func TestConfigurationService_RawToTypedConversion(t *testing.T) {
 			}`,
 			expectSuccess:      true,
 			expectedWiFiSSID:   "TestNetwork",
-			expectedMQTTServer: "mqtt.example.com",
+			expectedMQTTServer: "mqtt.example.com:1883",
 		},
 		{
 			name: "Partial configuration with unknown sections",

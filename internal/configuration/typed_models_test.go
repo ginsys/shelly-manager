@@ -23,7 +23,7 @@ func TestTypedConfiguration_Validate(t *testing.T) {
 				},
 				MQTT: &MQTTConfiguration{
 					Enable: true,
-					Server: "mqtt.example.com",
+					Server: "mqtt.example.com:1883",
 					Port:   1883,
 				},
 				Auth: &AuthConfiguration{
@@ -308,8 +308,7 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 			name: "Valid enabled MQTT",
 			mqtt: &MQTTConfiguration{
 				Enable: true,
-				Server: "mqtt.example.com",
-				Port:   1883,
+				Server: "mqtt.example.com:1883",
 			},
 			expectValid: true,
 		},
@@ -324,8 +323,7 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 			name: "Valid MQTT with all settings",
 			mqtt: &MQTTConfiguration{
 				Enable:            true,
-				Server:            "mqtt.example.com",
-				Port:              1883,
+				Server:            "mqtt.example.com:1883",
 				User:              "testuser",
 				Password:          "testpass",
 				ClientID:          "client123",
@@ -357,7 +355,7 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 			name: "Invalid - port out of range",
 			mqtt: &MQTTConfiguration{
 				Enable: true,
-				Server: "mqtt.example.com",
+				Server: "mqtt.example.com:1883",
 				Port:   70000,
 			},
 			expectValid:   false,

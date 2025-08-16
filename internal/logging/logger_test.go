@@ -40,6 +40,7 @@ func TestNew_ValidConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	if logger.config.Level != LevelDebug {
 		t.Errorf("Expected level %s, got %s", LevelDebug, logger.config.Level)
@@ -66,6 +67,7 @@ func TestNew_FileOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger with file output: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Write a log message
 	logger.Info("test message")
@@ -141,7 +143,7 @@ func TestGetWriter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			writer, err := getWriter(test.output)
+			writer, file, err := getWriter(test.output)
 
 			if test.valid && err != nil {
 				t.Errorf("Expected valid writer, got error: %v", err)
@@ -151,6 +153,11 @@ func TestGetWriter(t *testing.T) {
 			}
 			if test.valid && writer == nil {
 				t.Error("Writer should not be nil for valid output")
+			}
+
+			// Clean up file if it was created
+			if file != nil {
+				file.Close()
 			}
 		})
 	}
@@ -169,6 +176,7 @@ func TestWithFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test WithFields
 	fields := map[string]any{
@@ -216,6 +224,7 @@ func TestWithContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test context with values
 	ctx := context.Background()
@@ -251,6 +260,7 @@ func TestLogDBOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test successful operation
 	logger.LogDBOperation("SELECT", "devices", 1500, nil)
@@ -315,6 +325,7 @@ func TestLogHTTPRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test different status codes
 	testCases := []struct {
@@ -376,6 +387,7 @@ func TestLogDiscoveryOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test successful discovery
 	logger.LogDiscoveryOperation("scan", "192.168.1.0/24", 5, 2000, nil)
@@ -424,6 +436,7 @@ func TestLogDeviceOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test device operations
 	logger.LogDeviceOperation("configure", "192.168.1.100", "AA:BB:CC:DD:EE:FF", nil)
@@ -457,6 +470,7 @@ func TestLogAppLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test app lifecycle logging
 	logger.LogAppStart("1.0.0", "0.0.0.0:8080")
@@ -495,6 +509,7 @@ func TestLogConfigLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	// Test successful config load
 	logger.LogConfigLoad("/etc/shelly-manager.yaml", nil)
@@ -566,6 +581,7 @@ func TestLoggerTextFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	logger.Info("test message")
 
@@ -598,6 +614,7 @@ func TestLoggerJSONFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close() // Ensure proper cleanup
 
 	logger.Info("test json message")
 
