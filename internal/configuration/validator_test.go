@@ -59,7 +59,8 @@ func TestConfigurationValidator_ValidateConfiguration(t *testing.T) {
 					"pass": "securepassword"
 				}
 			}`,
-			expectValid: true,
+			expectValid:    true,
+			expectWarnings: 2, // Common username "admin" + weak password complexity
 		},
 		{
 			name:            "Invalid WiFi - missing SSID",
@@ -112,7 +113,7 @@ func TestConfigurationValidator_ValidateConfiguration(t *testing.T) {
 				}
 			}`,
 			expectValid:    true,
-			expectWarnings: 2, // Short WiFi password + default auth password
+			expectWarnings: 5, // WiFi: weak password + Auth: common username + 3 password warnings
 		},
 		{
 			name:            "Strict validation rejects weak passwords",
@@ -134,6 +135,7 @@ func TestConfigurationValidator_ValidateConfiguration(t *testing.T) {
 			}`,
 			expectValid:       false,
 			expectErrors:      2, // Both passwords rejected in strict mode
+			expectWarnings:    4, // Additional password validation warnings
 			expectedErrorCode: "WEAK_WIFI_PASSWORD",
 		},
 		{
@@ -413,8 +415,8 @@ func TestConfigurationValidator_ValidateAuth(t *testing.T) {
 				Username: "admin",
 				Password: "securepassword",
 			},
-			expectWarnings: 1,
-			expectedCodes:  []string{"COMMON_USERNAME"},
+			expectWarnings: 2, // Common username + weak password complexity
+			expectedCodes:  []string{"COMMON_USERNAME", "WEAK_PASSWORD"},
 		},
 		{
 			name:            "Default password warning",
@@ -424,8 +426,8 @@ func TestConfigurationValidator_ValidateAuth(t *testing.T) {
 				Username: "user",
 				Password: "admin",
 			},
-			expectWarnings: 1,
-			expectedCodes:  []string{"DEFAULT_PASSWORD"},
+			expectWarnings: 4, // Common username + 3 password warnings (short, weak, default)
+			expectedCodes:  []string{"COMMON_USERNAME", "WEAK_PASSWORD", "DEFAULT_PASSWORD"},
 		},
 		{
 			name:            "Default password error in strict mode",
@@ -435,7 +437,7 @@ func TestConfigurationValidator_ValidateAuth(t *testing.T) {
 				Username: "user",
 				Password: "123456",
 			},
-			expectWarnings: 0, // Should be error in strict mode
+			expectWarnings: 5, // Common username + 4 password warnings (comprehensive validation)
 		},
 	}
 
@@ -494,20 +496,20 @@ func TestConfigurationValidator_ValidatePasswordStrength(t *testing.T) {
 		{
 			name:             "Short password",
 			password:         "123",
-			expectedWarnings: 1,
-			expectedContains: []string{"shorter than 8 characters"},
+			expectedWarnings: 3, // Short + weak complexity + sequential chars
+			expectedContains: []string{"shorter than 8 characters", "at least 3 of", "sequential characters"},
 		},
 		{
 			name:             "No uppercase",
 			password:         "password123",
-			expectedWarnings: 1,
-			expectedContains: []string{"at least 3 of"},
+			expectedWarnings: 2, // Weak complexity + sequential chars
+			expectedContains: []string{"at least 3 of", "sequential characters"},
 		},
 		{
 			name:             "Repeated characters",
 			password:         "passsword123",
-			expectedWarnings: 1,
-			expectedContains: []string{"repeated characters"},
+			expectedWarnings: 3, // Weak complexity + repeated chars + sequential chars
+			expectedContains: []string{"at least 3 of", "repeated characters", "sequential characters"},
 		},
 		{
 			name:             "Sequential characters",
@@ -643,12 +645,13 @@ func TestConfigurationValidator_ValidateIPConfiguration(t *testing.T) {
 
 func TestConfigurationValidator_DeviceCompatibility(t *testing.T) {
 	tests := []struct {
-		name          string
-		deviceModel   string
-		generation    int
-		config        *TypedConfiguration
-		expectInfo    int
-		expectedCodes []string
+		name           string
+		deviceModel    string
+		generation     int
+		config         *TypedConfiguration
+		expectInfo     int
+		expectWarnings int
+		expectedCodes  []string
 	}{
 		{
 			name:        "BLE on Gen1 device warning",
@@ -663,8 +666,9 @@ func TestConfigurationValidator_DeviceCompatibility(t *testing.T) {
 					},
 				},
 			},
-			expectInfo:    1,
-			expectedCodes: []string{"BLE_NOT_SUPPORTED_GEN1"},
+			expectInfo:     0,
+			expectWarnings: 1,
+			expectedCodes:  []string{"BLE_NOT_SUPPORTED_GEN1"},
 		},
 		{
 			name:        "Eco mode on switch device",
@@ -677,8 +681,9 @@ func TestConfigurationValidator_DeviceCompatibility(t *testing.T) {
 					},
 				},
 			},
-			expectInfo:    1,
-			expectedCodes: []string{"ECO_MODE_SWITCH"},
+			expectInfo:     1,
+			expectWarnings: 0,
+			expectedCodes:  []string{"ECO_MODE_SWITCH"},
 		},
 	}
 
@@ -702,6 +707,10 @@ func TestConfigurationValidator_DeviceCompatibility(t *testing.T) {
 
 			if len(result.Info) != tt.expectInfo {
 				t.Errorf("Expected %d info messages, got %d: %v", tt.expectInfo, len(result.Info), result.Info)
+			}
+
+			if len(result.Warnings) != tt.expectWarnings {
+				t.Errorf("Expected %d warnings, got %d: %v", tt.expectWarnings, len(result.Warnings), result.Warnings)
 			}
 
 			for _, expectedCode := range tt.expectedCodes {
