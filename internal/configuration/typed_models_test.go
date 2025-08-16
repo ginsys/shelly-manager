@@ -349,7 +349,7 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 				Server: "invalid..server",
 			},
 			expectValid:   false,
-			expectedError: "invalid MQTT server format",
+			expectedError: "invalid MQTT server format: invalid..server",
 		},
 		{
 			name: "Invalid - port out of range",
@@ -366,7 +366,7 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 			mqtt: &MQTTConfiguration{
 				Enable:   true,
 				Server:   "mqtt.example.com",
-				ClientID: "ThisClientIDIsWayTooLongAndExceedsTheOneHundredTwentyEightCharacterLimitForMQTTClientIDsWhichShouldCauseValidationToFail",
+				ClientID: "ThisClientIDIsWayTooLongAndExceedsTheOneHundredTwentyEightCharacterLimitForMQTTClientIDsWhichShouldCauseValidationToFailCompletely",
 			},
 			expectValid:   false,
 			expectedError: "MQTT client ID must be 128 characters or less",
@@ -384,9 +384,8 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 			} else {
 				if err == nil {
 					t.Errorf("Expected MQTT configuration to be invalid, got no error")
-				}
-				if tt.expectedError != "" && err.Error() == "" {
-					t.Errorf("Expected error containing %q, got %q", tt.expectedError, err.Error())
+				} else if tt.expectedError != "" && err.Error() != tt.expectedError {
+					t.Errorf("Expected error %q, got %q", tt.expectedError, err.Error())
 				}
 			}
 		})
@@ -440,7 +439,7 @@ func TestAuthConfiguration_Validate(t *testing.T) {
 			name: "Invalid - username too long",
 			auth: &AuthConfiguration{
 				Enable:   true,
-				Username: "ThisUsernameIsWayTooLongAndExceedsTheSixtyFourCharacterLimit123",
+				Username: "ThisUsernameIsWayTooLongAndExceedsTheSixtyFourCharacterLimitExtra",
 				Password: "securepass",
 			},
 			expectValid:   false,
@@ -459,8 +458,7 @@ func TestAuthConfiguration_Validate(t *testing.T) {
 			} else {
 				if err == nil {
 					t.Errorf("Expected auth configuration to be invalid, got no error")
-				}
-				if tt.expectedError != "" && err.Error() != tt.expectedError {
+				} else if tt.expectedError != "" && err.Error() != tt.expectedError {
 					t.Errorf("Expected error %q, got %q", tt.expectedError, err.Error())
 				}
 			}

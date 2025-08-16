@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -307,8 +308,8 @@ func (m *MQTTConfiguration) Validate() error {
 		return fmt.Errorf("MQTT server is required when MQTT is enabled")
 	}
 
-	// Validate server format (hostname:port or IP:port)
-	if !isValidHostnamePort(m.Server) && !isValidIPPort(m.Server) {
+	// Validate server format (hostname:port, IP:port, or just hostname/IP)
+	if !isValidHostnamePort(m.Server) && !isValidIPPort(m.Server) && !isValidHostname(m.Server) && net.ParseIP(m.Server) == nil {
 		return fmt.Errorf("invalid MQTT server format: %s", m.Server)
 	}
 
@@ -553,7 +554,9 @@ func (tc *TypedConfiguration) ToJSON() (json.RawMessage, error) {
 // FromJSON creates typed configuration from JSON
 func FromJSON(data json.RawMessage) (*TypedConfiguration, error) {
 	var tc TypedConfiguration
-	if err := json.Unmarshal(data, &tc); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&tc); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal typed configuration: %w", err)
 	}
 	return &tc, nil
@@ -606,6 +609,11 @@ func isValidIPPort(ipPort string) bool {
 // isValidHostname validates hostname format
 func isValidHostname(hostname string) bool {
 	if len(hostname) == 0 || len(hostname) > 253 {
+		return false
+	}
+
+	// Reject IP addresses - hostnames should not be IPs
+	if net.ParseIP(hostname) != nil {
 		return false
 	}
 
