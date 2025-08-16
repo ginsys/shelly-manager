@@ -919,6 +919,13 @@ func (s *Service) substituteVariables(config json.RawMessage, variables map[stri
 		}
 	}
 
+	// Populate custom context from variables
+	if customData, ok := variables["custom"].(map[string]interface{}); ok {
+		for key, value := range customData {
+			context.Custom[key] = value
+		}
+	}
+
 	// Perform template substitution
 	result, err := s.templateEngine.SubstituteVariables(config, context)
 	if err != nil {
