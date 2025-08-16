@@ -40,7 +40,7 @@ database:
 discovery:
   enabled: true
   networks:
-    - "192.168.1.0/30"
+    - 192.168.1.0/30
   timeout: 1
   concurrent_scans: 2
 `
@@ -310,7 +310,7 @@ discovery:
   enabled: true
   timeout: 1
   networks:
-    - "192.168.1.0/30"
+    - 192.168.1.0/30
 `
 
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
