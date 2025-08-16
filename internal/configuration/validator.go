@@ -717,8 +717,8 @@ func (v *ConfigurationValidator) validatePasswordStrength(password string) []str
 		warnings = append(warnings, "Password should contain at least 3 of: uppercase, lowercase, digits, special characters")
 	}
 
-	// Check for common patterns
-	if regexp.MustCompile(`(.)\1{2,}`).MatchString(password) {
+	// Check for common patterns - detect 3+ repeated characters
+	if hasRepeatedChars(password, 3) {
 		warnings = append(warnings, "Password contains repeated characters")
 	}
 
@@ -878,4 +878,24 @@ func (r *ValidationResult) GetValidationSummary() string {
 		return fmt.Sprintf("Configuration is valid with %d warnings and %d info messages", len(r.Warnings), len(r.Info))
 	}
 	return fmt.Sprintf("Configuration is invalid with %d errors, %d warnings", len(r.Errors), len(r.Warnings))
+}
+
+// hasRepeatedChars checks if a string contains n or more consecutive repeated characters
+func hasRepeatedChars(s string, n int) bool {
+	if len(s) < n {
+		return false
+	}
+
+	count := 1
+	for i := 1; i < len(s); i++ {
+		if s[i] == s[i-1] {
+			count++
+			if count >= n {
+				return true
+			}
+		} else {
+			count = 1
+		}
+	}
+	return false
 }

@@ -180,13 +180,19 @@ func TestConfigurationService_TemplateEngineIntegration(t *testing.T) {
 			}
 		},
 		"mqtt": {
-			"enable": {{.Custom.enable_mqtt | default false}},
-			"server": "{{.Custom.mqtt_server | default \"localhost\"}}",
+			"enable": {{if .Custom.enable_mqtt}}{{.Custom.enable_mqtt}}{{else}}false{{end}},
+			"server": "{{if .Custom.mqtt_server}}{{.Custom.mqtt_server}}{{else}}localhost{{end}}",
 			"id": "{{.Device.MAC | macNone}}"
 		}
 	}`)
 
 	variables := map[string]interface{}{
+		"device": map[string]interface{}{
+			"mac":   device.MAC,
+			"ip":    device.IP,
+			"name":  device.Name,
+			"model": device.Type,
+		},
 		"network": map[string]interface{}{
 			"ssid": "HomeNetwork",
 		},
@@ -282,7 +288,7 @@ func TestConfigurationService_ValidationWorkflow(t *testing.T) {
 			generation:      2,
 			capabilities:    []string{"wifi", "auth"},
 			expectValid:     true,
-			expectWarnings:  4, // Short SSID, weak WiFi password, common username, default auth password
+			expectWarnings:  6, // Short SSID, weak WiFi password, common username, weak password length, weak password complexity, default auth password
 		},
 		{
 			name: "Strict validation rejects weak passwords",
@@ -303,6 +309,7 @@ func TestConfigurationService_ValidationWorkflow(t *testing.T) {
 			generation:      2,
 			capabilities:    []string{"wifi", "auth"},
 			expectValid:     false,
+			expectWarnings:  4, // Common username, password length, password complexity, etc.
 			expectErrors:    2, // Both passwords rejected in strict mode
 		},
 		{
