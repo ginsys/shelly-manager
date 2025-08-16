@@ -90,7 +90,16 @@
       "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestCLICommands/provision_command\" -timeout 30s)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -timeout 60s)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/config -run TestLoad_ValidConfig)",
-      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/testutil -run TestCreateTestConfigFile)"
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/testutil -run TestCreateTestConfigFile)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestCLICommands\" -timeout 60s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestServerCommand\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestBulkDetectDrift\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/logging -run \"TestTimeoutCreatingFileLogger\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/logging -run \"TestGenerateRequestID\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/logging -run \"TestCORSMiddleware_LogsRequests|TestCORSMiddleware_NoLogWithoutOrigin|TestMultipleMiddleware\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/logging -run \"TestTimeoutCreatingFileLogger|TestHTTPMiddleware_LogsRequests|TestCORSMiddleware_LogsRequests|TestCORSMiddleware_NoLogWithoutOrigin|TestMultipleMiddleware|TestGenerateRequestID\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/service -run \"TestShellyService_ConcurrentOperations\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_ValidateTemplates|TestConfigurationValidator_TemplateSecurityValidation|TestConfigurationValidator_TemplateVariableDetection|TestConfigurationValidator_Integration\")"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

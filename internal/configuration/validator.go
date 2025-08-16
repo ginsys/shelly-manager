@@ -7,7 +7,10 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"text/template"
 	"time"
+
+	"github.com/Masterminds/sprig/v3"
 )
 
 // ValidationLevel represents the strictness of validation
@@ -97,6 +100,9 @@ func (v *ConfigurationValidator) ValidateConfiguration(config json.RawMessage) *
 	v.validateMQTT(typedConfig.MQTT, result)
 	v.validateAuth(typedConfig.Auth, result)
 	v.validateSystem(typedConfig.System, result)
+	
+	// Validate template syntax if configuration contains templates
+	v.validateTemplates(config, result)
 	v.validateNetwork(typedConfig.Network, result)
 	v.validateCloud(typedConfig.Cloud, result)
 	v.validateLocation(typedConfig.Location, result)
@@ -899,3 +905,135 @@ func hasRepeatedChars(s string, n int) bool {
 	}
 	return false
 }
+
+// validateTemplates validates template syntax in configuration
+func (v *ConfigurationValidator) validateTemplates(config json.RawMessage, result *ValidationResult) {
+	configStr := string(config)
+	
+	// Check if configuration contains template variables
+	if !containsTemplateVars(configStr) {
+		return
+	}
+
+	// Extract template variables
+	templateVars := extractTemplateVars(configStr)
+	if len(templateVars) == 0 {
+		return
+	}
+
+	// Create template functions for validation
+	funcMap := template.FuncMap{}
+	
+	// Add safe Sprig functions
+	sprigFuncs := sprig.TxtFuncMap()
+	for name, fn := range sprigFuncs {
+		if isSafeTemplateFunction(name) {
+			funcMap[name] = fn
+		}
+	}
+	
+	// Add custom IoT functions
+	customFunctions := map[string]interface{}{
+		"macColon":        func(string) string { return "" },
+		"macDash":         func(string) string { return "" },
+		"macNone":         func(string) string { return "" },
+		"macLast4":        func(string) string { return "" },
+		"macLast6":        func(string) string { return "" },
+		"deviceShortName": func(string, string) string { return "" },
+		"deviceUnique":    func(string, string) string { return "" },
+		"networkName":     func(string) string { return "" },
+		"hostName":        func(string) string { return "" },
+		"env":             func(string) string { return "" },
+		"envOr":           func(string, string) string { return "" },
+		"empty":           func(interface{}) bool { return false },
+		"requiredMsg":     func(interface{}, string) (interface{}, error) { return nil, nil },
+	}
+	
+	for name, fn := range customFunctions {
+		funcMap[name] = fn
+	}
+
+	// Validate template syntax
+	_, err := template.New("validation").Funcs(funcMap).Parse(configStr)
+	if err != nil {
+		result.Valid = false
+		result.Errors = append(result.Errors, ValidationError{
+			Field:   "template_syntax",
+			Message: fmt.Sprintf("Invalid template syntax: %v", err),
+			Code:    "TEMPLATE_SYNTAX_ERROR",
+		})
+		return
+	}
+
+	// Validate template variable references
+	v.validateTemplateVariables(templateVars, result)
+}
+
+// validateTemplateVariables validates that template variables are properly formed
+func (v *ConfigurationValidator) validateTemplateVariables(templateVars []string, result *ValidationResult) {
+	for _, tmplVar := range templateVars {
+		// Check for potentially dangerous template patterns
+		if strings.Contains(tmplVar, "exec") || 
+		   strings.Contains(tmplVar, "shell") ||
+		   strings.Contains(tmplVar, "command") ||
+		   strings.Contains(tmplVar, "readFile") ||
+		   strings.Contains(tmplVar, "writeFile") {
+			result.Errors = append(result.Errors, ValidationError{
+				Field:   "template_variables",
+				Message: fmt.Sprintf("Template contains potentially dangerous function: %s", tmplVar),
+				Code:    "DANGEROUS_TEMPLATE_FUNCTION",
+			})
+			result.Valid = false
+		}
+
+		// Check for undefined variable references
+		if strings.Contains(tmplVar, ".Custom.") {
+			// Extract custom variable name
+			parts := strings.Split(tmplVar, ".Custom.")
+			if len(parts) > 1 {
+				customVar := strings.Split(parts[1], " ")[0]
+				customVar = strings.Split(customVar, ")")[0]
+				customVar = strings.Split(customVar, "|")[0]
+				customVar = strings.TrimSpace(customVar)
+				
+				if customVar != "" {
+					result.Warnings = append(result.Warnings, ValidationWarning{
+						Field:   "template_variables",
+						Message: fmt.Sprintf("Custom variable referenced: %s - ensure it's provided during substitution", customVar),
+						Code:    "CUSTOM_VARIABLE_REFERENCE",
+					})
+				}
+			}
+		}
+
+		// Check for required environment variables
+		if strings.Contains(tmplVar, "env ") || strings.Contains(tmplVar, "envOr ") {
+			result.Info = append(result.Info, ValidationInfo{
+				Field:   "template_variables",
+				Message: fmt.Sprintf("Template references environment variables: %s", tmplVar),
+				Code:    "ENV_VARIABLE_REFERENCE",
+			})
+		}
+	}
+}
+
+// isSafeTemplateFunction checks if a Sprig function is safe to use
+func isSafeTemplateFunction(funcName string) bool {
+	// List of dangerous functions to exclude
+	dangerousFunctions := []string{
+		"readFile", "writeFile", "glob",
+		"exec", "shell", "command",
+		"httpGet", "httpPost", "httpPut", "httpDelete",
+		"getHostByName", "env", // We provide our own env function
+	}
+
+	for _, dangerous := range dangerousFunctions {
+		if funcName == dangerous {
+			return false
+		}
+	}
+	return true
+}
+
+// Note: Template helper functions containsTemplateVars and extractTemplateVars 
+// are defined in template_engine.go to avoid duplication

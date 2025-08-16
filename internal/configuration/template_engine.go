@@ -4,22 +4,28 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+	"github.com/Masterminds/sprig/v3"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // TemplateEngine handles variable substitution in device configurations
 type TemplateEngine struct {
-	logger *logging.Logger
-	funcs  template.FuncMap
+	logger         *logging.Logger
+	funcs          template.FuncMap
+	templateCache  map[string]*template.Template
+	baseTemplates  map[string]string
+	cacheMutex     sync.RWMutex
+	templatesPath  string
 }
 
 // TemplateContext contains variables available for template substitution
@@ -73,29 +79,35 @@ type TemplateContext struct {
 // NewTemplateEngine creates a new template engine with built-in functions
 func NewTemplateEngine(logger *logging.Logger) *TemplateEngine {
 	engine := &TemplateEngine{
-		logger: logger,
-		funcs:  make(template.FuncMap),
+		logger:        logger,
+		funcs:         make(template.FuncMap),
+		templateCache: make(map[string]*template.Template),
+		baseTemplates: make(map[string]string),
+		templatesPath: "internal/configuration/templates",
 	}
 
 	// Add built-in template functions
 	engine.addBuiltinFunctions()
+	
+	// Load base templates
+	engine.loadBaseTemplates()
 
 	return engine
 }
 
 // addBuiltinFunctions adds useful template functions for device configuration
 func (te *TemplateEngine) addBuiltinFunctions() {
-	te.funcs = template.FuncMap{
-		// String manipulation
-		"upper":     strings.ToUpper,
-		"lower":     strings.ToLower,
-		"title":     cases.Title(language.Und).String,
-		"trim":      strings.TrimSpace,
-		"replace":   strings.ReplaceAll,
-		"contains":  strings.Contains,
-		"hasPrefix": strings.HasPrefix,
-		"hasSuffix": strings.HasSuffix,
+	// Start with Sprig functions for rich functionality
+	te.funcs = template.FuncMap{}
+	
+	// Add safe Sprig functions (exclude dangerous ones)
+	safeFunctions := te.getSafeSprigFunctions()
+	for name, fn := range safeFunctions {
+		te.funcs[name] = fn
+	}
 
+	// Add IoT-specific custom functions
+	customFunctions := template.FuncMap{
 		// MAC address formatting
 		"macColon": formatMACColon,
 		"macDash":  formatMACDash,
@@ -111,34 +123,60 @@ func (te *TemplateEngine) addBuiltinFunctions() {
 		"deviceShortName": generateDeviceShortName,
 		"deviceUnique":    generateUniqueDeviceName,
 
-		// Time and date formatting
-		"now":        time.Now,
-		"formatTime": formatTime,
-		"timestamp":  func() int64 { return time.Now().Unix() },
-
-		// Validation helpers
-		"required": requireValue,
-		"default":  defaultValue,
-
 		// Network helpers
 		"networkName": generateNetworkName,
 		"hostName":    generateHostName,
 
-		// JSON helpers
-		"toJson":   toJSON,
-		"fromJson": fromJSON,
+		// Environment variable access with defaults
+		"env":   os.Getenv,
+		"envOr": getEnvWithDefault,
 
-		// Math helpers
-		"add": func(a, b int) int { return a + b },
-		"sub": func(a, b int) int { return a - b },
-		"mul": func(a, b int) int { return a * b },
-		"div": func(a, b int) int {
-			if b == 0 {
-				return 0
-			}
-			return a / b
-		},
+		// Enhanced validation helpers
+		"requiredMsg": requireValueWithMessage,
+		"empty":       isEmpty,
+
+		// Template inheritance helpers
+		"baseTemplate": te.getBaseTemplate,
+		"mergeConfig":  mergeJSONConfig,
 	}
+
+	// Merge custom functions (override Sprig if needed)
+	for name, fn := range customFunctions {
+		te.funcs[name] = fn
+	}
+}
+
+// getSafeSprigFunctions returns Sprig functions excluding dangerous ones
+func (te *TemplateEngine) getSafeSprigFunctions() template.FuncMap {
+	sprigFuncs := sprig.TxtFuncMap()
+	
+	// Remove dangerous functions that could compromise security
+	dangerousFunctions := []string{
+		// File system operations
+		"readFile", "writeFile", "glob",
+		// OS operations  
+		"exec", "shell", "command",
+		// Network operations
+		"httpGet", "httpPost", "httpPut", "httpDelete",
+		// External access
+		"getHostByName", "env", // We'll provide our own safer env function
+	}
+
+	safeFuncs := make(template.FuncMap)
+	for name, fn := range sprigFuncs {
+		safe := true
+		for _, dangerous := range dangerousFunctions {
+			if name == dangerous {
+				safe = false
+				break
+			}
+		}
+		if safe {
+			safeFuncs[name] = fn
+		}
+	}
+
+	return safeFuncs
 }
 
 // SubstituteVariables performs template variable substitution on configuration data
@@ -162,8 +200,8 @@ func (te *TemplateEngine) SubstituteVariables(configData json.RawMessage, contex
 		"component":     "template",
 	}).Info("Processing template variables in configuration")
 
-	// Create and parse template
-	tmpl, err := template.New("config").Funcs(te.funcs).Parse(configStr)
+	// Get or create cached template
+	tmpl, err := te.getOrCreateTemplate(configStr)
 	if err != nil {
 		te.logger.WithFields(map[string]any{
 			"device_id": context.Device.ID,
@@ -204,6 +242,40 @@ func (te *TemplateEngine) SubstituteVariables(configData json.RawMessage, contex
 	}).Info("Template variable substitution completed successfully")
 
 	return json.RawMessage(result), nil
+}
+
+// getOrCreateTemplate gets a cached template or creates and caches a new one
+func (te *TemplateEngine) getOrCreateTemplate(templateStr string) (*template.Template, error) {
+	// Create a hash of the template string for caching
+	templateHash := fmt.Sprintf("%x", templateStr)
+
+	// Check cache first (read lock)
+	te.cacheMutex.RLock()
+	if tmpl, exists := te.templateCache[templateHash]; exists {
+		te.cacheMutex.RUnlock()
+		return tmpl, nil
+	}
+	te.cacheMutex.RUnlock()
+
+	// Create new template (write lock)
+	te.cacheMutex.Lock()
+	defer te.cacheMutex.Unlock()
+
+	// Double-check cache in case another goroutine created it
+	if tmpl, exists := te.templateCache[templateHash]; exists {
+		return tmpl, nil
+	}
+
+	// Create and parse new template
+	tmpl, err := template.New("config").Funcs(te.funcs).Parse(templateStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the template
+	te.templateCache[templateHash] = tmpl
+	
+	return tmpl, nil
 }
 
 // CreateTemplateContext creates a template context from device and system information
@@ -405,6 +477,198 @@ func fromJSON(jsonStr string) (interface{}, error) {
 	var result interface{}
 	err := json.Unmarshal([]byte(jsonStr), &result)
 	return result, err
+}
+
+// Enhanced helper functions
+
+func getEnvWithDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func requireValueWithMessage(value interface{}, message string) (interface{}, error) {
+	if value == nil || (reflect.ValueOf(value).Kind() == reflect.String && value.(string) == "") {
+		if message == "" {
+			message = "required value is missing or empty"
+		}
+		return nil, fmt.Errorf(message)
+	}
+	return value, nil
+}
+
+func isEmpty(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v) == ""
+	case []interface{}:
+		return len(v) == 0
+	case map[string]interface{}:
+		return len(v) == 0
+	default:
+		rv := reflect.ValueOf(value)
+		switch rv.Kind() {
+		case reflect.Slice, reflect.Map, reflect.Array:
+			return rv.Len() == 0
+		case reflect.Ptr, reflect.Interface:
+			return rv.IsNil()
+		}
+	}
+	return false
+}
+
+// loadBaseTemplates loads template files from the templates directory
+func (te *TemplateEngine) loadBaseTemplates() {
+	// Try multiple possible paths for templates
+	possiblePaths := []string{
+		te.templatesPath,
+		filepath.Join(".", te.templatesPath),
+		filepath.Join("..", "..", te.templatesPath),
+		filepath.Join("..", "..", "..", te.templatesPath),
+	}
+
+	var files []string
+	var templatesGlob string
+	
+	for _, path := range possiblePaths {
+		templatesGlob = filepath.Join(path, "*.json")
+		var err error
+		files, err = filepath.Glob(templatesGlob)
+		if err == nil && len(files) > 0 {
+			te.templatesPath = path
+			break
+		}
+	}
+
+	if len(files) == 0 {
+		te.logger.WithFields(map[string]any{
+			"paths_tried": possiblePaths,
+			"component":   "template",
+		}).Warn("No base template files found in any search path")
+		return
+	}
+
+	for _, file := range files {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			te.logger.WithFields(map[string]any{
+				"file":      file,
+				"error":     err.Error(),
+				"component": "template",
+			}).Warn("Failed to read base template file")
+			continue
+		}
+
+		templateName := filepath.Base(file)
+		templateName = strings.TrimSuffix(templateName, filepath.Ext(templateName))
+		te.baseTemplates[templateName] = string(content)
+
+		te.logger.WithFields(map[string]any{
+			"template":  templateName,
+			"file":      file,
+			"component": "template",
+		}).Debug("Loaded base template")
+	}
+}
+
+// getBaseTemplate returns a base template by name for template inheritance
+func (te *TemplateEngine) getBaseTemplate(templateName string) (string, error) {
+	if template, exists := te.baseTemplates[templateName]; exists {
+		return template, nil
+	}
+	return "", fmt.Errorf("base template '%s' not found", templateName)
+}
+
+// ApplyBaseTemplate applies a base template with custom overrides
+func (te *TemplateEngine) ApplyBaseTemplate(deviceGeneration int, customConfig json.RawMessage, context *TemplateContext) (json.RawMessage, error) {
+	// Determine base template name based on device generation
+	var baseTemplateName string
+	if deviceGeneration >= 2 {
+		baseTemplateName = "base_gen2"
+	} else {
+		baseTemplateName = "base_gen1"
+	}
+
+	// Get base template
+	baseTemplate, exists := te.baseTemplates[baseTemplateName]
+	if !exists {
+		te.logger.WithFields(map[string]any{
+			"template":  baseTemplateName,
+			"component": "template",
+		}).Warn("Base template not found, using custom config as-is")
+		return te.SubstituteVariables(customConfig, context)
+	}
+
+	// If no custom config provided, use base template
+	if len(customConfig) == 0 || string(customConfig) == "{}" {
+		return te.SubstituteVariables(json.RawMessage(baseTemplate), context)
+	}
+
+	// Merge base template with custom config
+	merged, err := mergeJSONConfig(baseTemplate, string(customConfig))
+	if err != nil {
+		te.logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "template",
+		}).Warn("Failed to merge base template with custom config")
+		return te.SubstituteVariables(customConfig, context)
+	}
+
+	return te.SubstituteVariables(json.RawMessage(merged), context)
+}
+
+// mergeJSONConfig merges two JSON configurations, with override taking precedence
+func mergeJSONConfig(base, override string) (string, error) {
+	var baseMap, overrideMap map[string]interface{}
+
+	if err := json.Unmarshal([]byte(base), &baseMap); err != nil {
+		return "", fmt.Errorf("failed to parse base JSON: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(override), &overrideMap); err != nil {
+		return "", fmt.Errorf("failed to parse override JSON: %w", err)
+	}
+
+	// Recursively merge the maps
+	merged := mergeMaps(baseMap, overrideMap)
+
+	result, err := json.Marshal(merged)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal merged JSON: %w", err)
+	}
+
+	return string(result), nil
+}
+
+// mergeMaps recursively merges two maps
+func mergeMaps(base, override map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	// Copy base map
+	for key, value := range base {
+		result[key] = value
+	}
+
+	// Apply overrides
+	for key, value := range override {
+		if baseValue, exists := result[key]; exists {
+			// If both values are maps, merge recursively
+			if baseMap, baseIsMap := baseValue.(map[string]interface{}); baseIsMap {
+				if overrideMap, overrideIsMap := value.(map[string]interface{}); overrideIsMap {
+					result[key] = mergeMaps(baseMap, overrideMap)
+					continue
+				}
+			}
+		}
+		// Otherwise, override takes precedence
+		result[key] = value
+	}
+
+	return result
 }
 
 // ValidateTemplate validates a template string without executing it
