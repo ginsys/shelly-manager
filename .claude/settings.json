@@ -81,7 +81,9 @@
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_ValidateConfiguration/Valid_complete_configuration\")",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_ValidateAuth\")",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_ValidatePasswordStrength\")",
-      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_DeviceCompatibility\")"
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_DeviceCompatibility\")",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/config)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/config -run TestLoad_EmptyConfigPath)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
