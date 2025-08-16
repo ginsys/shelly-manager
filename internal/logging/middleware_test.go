@@ -79,6 +79,7 @@ func TestHTTPMiddleware_LogsRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +291,7 @@ func TestRecoveryMiddleware_HandlesPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close()
 
 	// Create handler that panics
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -468,6 +470,7 @@ func TestCORSMiddleware_LogsRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -529,6 +532,7 @@ func TestCORSMiddleware_NoLogWithoutOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -637,6 +641,7 @@ func TestMultipleMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
+	defer logger.Close()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
