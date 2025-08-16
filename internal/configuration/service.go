@@ -1320,8 +1320,8 @@ func (s *Service) UpdateDeviceConfigFromJSON(deviceID uint, configJSON json.RawM
 			UpdatedAt: now,
 		}
 
-		if err := s.db.Create(&newConfig).Error; err != nil {
-			return fmt.Errorf("failed to create device config: %w", err)
+		if createErr := s.db.Create(&newConfig).Error; createErr != nil {
+			return fmt.Errorf("failed to create device config: %w", createErr)
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to check existing config: %w", err)
