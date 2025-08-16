@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -35,7 +36,7 @@ logging:
   output: "stderr"
 
 database:
-  path: "` + dbPath + `"
+  path: ` + strconv.Quote(dbPath) + `
 
 discovery:
   enabled: true
@@ -170,7 +171,7 @@ logging:
   output: "stderr"
 
 database:
-  path: "` + filepath.Join(tempDir, "server.db") + `"
+  path: ` + strconv.Quote(filepath.Join(tempDir, "server.db")) + `
 
 discovery:
   enabled: false
@@ -231,7 +232,7 @@ logging:
   output: "stderr"
 
 database:
-  path: "` + dbPath + `"
+  path: ` + strconv.Quote(dbPath) + `
 
 discovery:
   enabled: true
@@ -304,7 +305,7 @@ logging:
   output: "stderr"
 
 database:
-  path: "` + filepath.Join(tempDir, "exec.db") + `"
+  path: ` + strconv.Quote(filepath.Join(tempDir, "exec.db")) + `
 
 discovery:
   enabled: true
@@ -454,7 +455,7 @@ logging:
   output: "stderr"
 
 database:
-  path: "` + filepath.Join(tempDir, "bench.db") + `"
+  path: ` + strconv.Quote(filepath.Join(tempDir, "bench.db")) + `
 `
 
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
