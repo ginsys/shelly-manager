@@ -8,8 +8,10 @@ bin/
 
 # Build artifacts
 shelly-manager
+shelly-provisioner
 shelly-test
 cmd/shelly-manager/shelly-manager
+cmd/shelly-provisioner/shelly-provisioner
 cmd/shelly-test/shelly-test
 
 # Test binary, built with `go test -c`

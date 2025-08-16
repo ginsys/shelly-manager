@@ -34,9 +34,10 @@ func (Device) TableName() string {
 
 // Service handles configuration management operations
 type Service struct {
-	db       *gorm.DB
-	logger   *logging.Logger
-	reporter *Reporter
+	db             *gorm.DB
+	logger         *logging.Logger
+	reporter       *Reporter
+	templateEngine *TemplateEngine
 }
 
 // NewService creates a new configuration service
@@ -55,10 +56,14 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 	// Create reporter
 	reporter := NewReporter(db, logger)
 
+	// Create template engine
+	templateEngine := NewTemplateEngine(logger)
+
 	return &Service{
-		db:       db,
-		logger:   logger,
-		reporter: reporter,
+		db:             db,
+		logger:         logger,
+		reporter:       reporter,
+		templateEngine: templateEngine,
 	}
 }
 
@@ -833,13 +838,118 @@ func (s *Service) compareMaps(path string, expected, actual map[string]interface
 	}
 }
 
-// substituteVariables replaces template variables with actual values
+// substituteVariables replaces template variables with actual values using the template engine
 func (s *Service) substituteVariables(config json.RawMessage, variables map[string]interface{}) json.RawMessage {
-	// This is a simplified implementation
-	// A more robust version would use a proper template engine
-	// For now, just return the config as-is
-	// TODO: Implement proper variable substitution with text/template or similar
-	return config
+	// Extract device information from variables if available
+	var device *Device
+	if deviceID, ok := variables["device_id"].(uint); ok {
+		// Try to get device from database
+		if dev, err := s.getDeviceByID(deviceID); err == nil {
+			device = dev
+		}
+	}
+
+	// Create template context
+	context := s.templateEngine.CreateTemplateContext(device, variables)
+
+	// Populate additional context from variables
+	if deviceData, ok := variables["device"].(map[string]interface{}); ok {
+		if mac, ok := deviceData["mac"].(string); ok {
+			context.Device.MAC = mac
+		}
+		if ip, ok := deviceData["ip"].(string); ok {
+			context.Device.IP = ip
+		}
+		if name, ok := deviceData["name"].(string); ok {
+			context.Device.Name = name
+		}
+		if model, ok := deviceData["model"].(string); ok {
+			context.Device.Model = model
+		}
+		if gen, ok := deviceData["generation"].(int); ok {
+			context.Device.Generation = gen
+		}
+		if firmware, ok := deviceData["firmware"].(string); ok {
+			context.Device.Firmware = firmware
+		}
+	}
+
+	// Populate network context from variables
+	if networkData, ok := variables["network"].(map[string]interface{}); ok {
+		if ssid, ok := networkData["ssid"].(string); ok {
+			context.Network.SSID = ssid
+		}
+		if gateway, ok := networkData["gateway"].(string); ok {
+			context.Network.Gateway = gateway
+		}
+		if subnet, ok := networkData["subnet"].(string); ok {
+			context.Network.Subnet = subnet
+		}
+		if dns, ok := networkData["dns"].(string); ok {
+			context.Network.DNS = dns
+		}
+	}
+
+	// Populate auth context from variables
+	if authData, ok := variables["auth"].(map[string]interface{}); ok {
+		if username, ok := authData["username"].(string); ok {
+			context.Auth.Username = username
+		}
+		if password, ok := authData["password"].(string); ok {
+			context.Auth.Password = password
+		}
+		if realm, ok := authData["realm"].(string); ok {
+			context.Auth.Realm = realm
+		}
+	}
+
+	// Populate location context from variables
+	if locationData, ok := variables["location"].(map[string]interface{}); ok {
+		if timezone, ok := locationData["timezone"].(string); ok {
+			context.Location.Timezone = timezone
+		}
+		if lat, ok := locationData["latitude"].(float64); ok {
+			context.Location.Latitude = lat
+		}
+		if lng, ok := locationData["longitude"].(float64); ok {
+			context.Location.Longitude = lng
+		}
+		if ntp, ok := locationData["ntp_server"].(string); ok {
+			context.Location.NTPServer = ntp
+		}
+	}
+
+	// Perform template substitution
+	result, err := s.templateEngine.SubstituteVariables(config, context)
+	if err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": context.Device.ID,
+			"error":     err.Error(),
+			"component": "configuration",
+		}).Warn("Template variable substitution failed, returning original config")
+		return config
+	}
+
+	return result
+}
+
+// SubstituteVariables is a public wrapper for template variable substitution
+func (s *Service) SubstituteVariables(config json.RawMessage, variables map[string]interface{}) json.RawMessage {
+	return s.substituteVariables(config, variables)
+}
+
+// SaveTemplate saves a configuration template to the database
+func (s *Service) SaveTemplate(template *ConfigTemplate) error {
+	return s.db.Create(template).Error
+}
+
+// getDeviceByID retrieves device information from the database
+func (s *Service) getDeviceByID(deviceID uint) (*Device, error) {
+	var device Device
+	if err := s.db.First(&device, deviceID).Error; err != nil {
+		return nil, err
+	}
+	return &device, nil
 }
 
 // validateAndSanitizeConfig validates and sanitizes configuration data
@@ -1134,4 +1244,345 @@ func (s *Service) EnhanceBulkDriftResult(result *BulkDriftResult, scheduleID *ui
 
 	// Generate comprehensive report
 	return s.reporter.GenerateComprehensiveReport(reportType, nil, scheduleID, result.Results)
+}
+
+// Typed Configuration Management Methods
+
+// GetTypedDeviceConfig retrieves device configuration as typed configuration
+func (s *Service) GetTypedDeviceConfig(deviceID uint) (*TypedConfiguration, error) {
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"component": "configuration",
+	}).Debug("Getting typed device configuration")
+
+	// Get raw configuration
+	config, err := s.GetDeviceConfig(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get device config: %w", err)
+	}
+
+	// Convert to typed configuration
+	typedConfig, err := FromJSON(config.Config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse typed configuration: %w", err)
+	}
+
+	return typedConfig, nil
+}
+
+// UpdateTypedDeviceConfig updates device configuration from typed configuration
+func (s *Service) UpdateTypedDeviceConfig(deviceID uint, config *TypedConfiguration) error {
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"component": "configuration",
+	}).Info("Updating device configuration from typed config")
+
+	// Validate the typed configuration
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("typed configuration validation failed: %w", err)
+	}
+
+	// Convert to JSON
+	configJSON, err := config.ToJSON()
+	if err != nil {
+		return fmt.Errorf("failed to convert typed config to JSON: %w", err)
+	}
+
+	// Update using existing JSON method
+	return s.UpdateDeviceConfigFromJSON(deviceID, configJSON)
+}
+
+// UpdateDeviceConfigFromJSON updates device configuration from JSON (helper method)
+func (s *Service) UpdateDeviceConfigFromJSON(deviceID uint, configJSON json.RawMessage) error {
+	s.logger.WithFields(map[string]any{
+		"device_id": deviceID,
+		"component": "configuration",
+	}).Debug("Updating device configuration from JSON")
+
+	now := time.Now()
+
+	// Check if config exists
+	var existingConfig DeviceConfig
+	err := s.db.Where("device_id = ?", deviceID).First(&existingConfig).Error
+
+	if err == gorm.ErrRecordNotFound {
+		// Create new configuration
+		newConfig := DeviceConfig{
+			DeviceID:  deviceID,
+			Config:    configJSON,
+			UpdatedAt: now,
+		}
+
+		if err := s.db.Create(&newConfig).Error; err != nil {
+			return fmt.Errorf("failed to create device config: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to check existing config: %w", err)
+	} else {
+		// Update existing configuration
+		existingConfig.Config = configJSON
+		existingConfig.UpdatedAt = now
+
+		if err := s.db.Save(&existingConfig).Error; err != nil {
+			return fmt.Errorf("failed to update device config: %w", err)
+		}
+	}
+
+	// Record configuration history
+	history := ConfigHistory{
+		DeviceID:  deviceID,
+		ConfigID:  1, // Placeholder for now
+		NewConfig: configJSON,
+		Action:    "updated",
+		ChangedBy: "api",
+		CreatedAt: now,
+	}
+
+	if err := s.db.Create(&history).Error; err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": deviceID,
+			"error":     err.Error(),
+		}).Warn("Failed to record config history")
+		// Don't fail the operation for history errors
+	}
+
+	return nil
+}
+
+// ValidateTypedConfiguration validates a typed configuration
+func (s *Service) ValidateTypedConfiguration(config *TypedConfiguration, validationLevel ValidationLevel, deviceModel string, generation int, capabilities []string) *ValidationResult {
+	s.logger.WithFields(map[string]any{
+		"validation_level": validationLevel,
+		"device_model":     deviceModel,
+		"generation":       generation,
+		"component":        "configuration",
+	}).Debug("Validating typed configuration")
+
+	// Create validator
+	validator := NewConfigurationValidator(validationLevel, deviceModel, generation, capabilities)
+
+	// Convert to JSON for validation
+	configJSON, err := config.ToJSON()
+	if err != nil {
+		return &ValidationResult{
+			Valid: false,
+			Errors: []ValidationError{{
+				Field:   "configuration",
+				Message: fmt.Sprintf("Failed to serialize configuration: %v", err),
+				Code:    "SERIALIZATION_ERROR",
+			}},
+		}
+	}
+
+	// Validate
+	return validator.ValidateConfiguration(configJSON)
+}
+
+// ConvertRawToTyped converts raw JSON configuration to typed configuration
+func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfiguration, []string, error) {
+	s.logger.WithFields(map[string]any{
+		"component": "configuration",
+	}).Debug("Converting raw configuration to typed")
+
+	var warnings []string
+
+	// Try direct parsing first
+	typedConfig, err := FromJSON(rawConfig)
+	if err == nil {
+		return typedConfig, warnings, nil
+	}
+
+	// If direct parsing fails, try manual conversion
+	var rawData map[string]interface{}
+	if err := json.Unmarshal(rawConfig, &rawData); err != nil {
+		return nil, warnings, fmt.Errorf("invalid JSON configuration: %w", err)
+	}
+
+	// Create empty typed config and populate known sections
+	typedConfig = &TypedConfiguration{}
+
+	// Convert WiFi section
+	if wifiData, ok := rawData["wifi"].(map[string]interface{}); ok {
+		wifi := &WiFiConfiguration{}
+
+		if enable, ok := wifiData["enable"].(bool); ok {
+			wifi.Enable = enable
+		}
+		if ssid, ok := wifiData["ssid"].(string); ok {
+			wifi.SSID = ssid
+		}
+		if pass, ok := wifiData["pass"].(string); ok {
+			wifi.Password = pass
+		}
+		if ipv4mode, ok := wifiData["ipv4mode"].(string); ok {
+			wifi.IPv4Mode = ipv4mode
+		}
+
+		// Convert static IP if present
+		if staticData, ok := wifiData["ip"].(map[string]interface{}); ok {
+			static := &StaticIPConfig{}
+
+			if ip, ok := staticData["ip"].(string); ok {
+				static.IP = ip
+			}
+			if netmask, ok := staticData["netmask"].(string); ok {
+				static.Netmask = netmask
+			}
+			if gw, ok := staticData["gw"].(string); ok {
+				static.Gateway = gw
+			}
+			if dns, ok := staticData["nameserver"].(string); ok {
+				static.Nameserver = dns
+			}
+
+			wifi.StaticIP = static
+		}
+
+		typedConfig.WiFi = wifi
+		delete(rawData, "wifi")
+	}
+
+	// Convert MQTT section
+	if mqttData, ok := rawData["mqtt"].(map[string]interface{}); ok {
+		mqtt := &MQTTConfiguration{}
+
+		if enable, ok := mqttData["enable"].(bool); ok {
+			mqtt.Enable = enable
+		}
+		if server, ok := mqttData["server"].(string); ok {
+			mqtt.Server = server
+		}
+		if port, ok := mqttData["port"].(float64); ok {
+			mqtt.Port = int(port)
+		}
+		if user, ok := mqttData["user"].(string); ok {
+			mqtt.User = user
+		}
+		if pass, ok := mqttData["pass"].(string); ok {
+			mqtt.Password = pass
+		}
+
+		typedConfig.MQTT = mqtt
+		delete(rawData, "mqtt")
+	}
+
+	// Convert Auth section
+	if authData, ok := rawData["auth"].(map[string]interface{}); ok {
+		auth := &AuthConfiguration{}
+
+		if enable, ok := authData["enable"].(bool); ok {
+			auth.Enable = enable
+		}
+		if user, ok := authData["user"].(string); ok {
+			auth.Username = user
+		}
+		if pass, ok := authData["pass"].(string); ok {
+			auth.Password = pass
+		}
+
+		typedConfig.Auth = auth
+		delete(rawData, "auth")
+	}
+
+	// Convert System section
+	if sysData, ok := rawData["sys"].(map[string]interface{}); ok {
+		system := &SystemConfiguration{}
+
+		// Convert device settings
+		if deviceData, ok := sysData["device"].(map[string]interface{}); ok {
+			device := &TypedDeviceConfig{}
+
+			if name, ok := deviceData["name"].(string); ok {
+				device.Name = name
+			}
+			if hostname, ok := deviceData["hostname"].(string); ok {
+				device.Hostname = hostname
+			}
+			if tz, ok := deviceData["tz"].(string); ok {
+				device.Timezone = tz
+			}
+
+			system.Device = device
+		}
+
+		typedConfig.System = system
+		delete(rawData, "sys")
+	}
+
+	// Convert Cloud section
+	if cloudData, ok := rawData["cloud"].(map[string]interface{}); ok {
+		cloud := &CloudConfiguration{}
+
+		if enable, ok := cloudData["enable"].(bool); ok {
+			cloud.Enable = enable
+		}
+		if server, ok := cloudData["server"].(string); ok {
+			cloud.Server = server
+		}
+
+		typedConfig.Cloud = cloud
+		delete(rawData, "cloud")
+	}
+
+	// Store remaining data in Raw field
+	if len(rawData) > 0 {
+		remainingJSON, _ := json.Marshal(rawData)
+		typedConfig.Raw = remainingJSON
+
+		keys := make([]string, 0, len(rawData))
+		for k := range rawData {
+			keys = append(keys, k)
+		}
+		warnings = append(warnings, fmt.Sprintf("Unconverted configuration sections: %s", strings.Join(keys, ", ")))
+	}
+
+	return typedConfig, warnings, nil
+}
+
+// ConvertTypedToRaw converts typed configuration to raw JSON
+func (s *Service) ConvertTypedToRaw(config *TypedConfiguration) (json.RawMessage, error) {
+	s.logger.WithFields(map[string]any{
+		"component": "configuration",
+	}).Debug("Converting typed configuration to raw JSON")
+
+	// Use the ToJSON method
+	return config.ToJSON()
+}
+
+// GetConfigurationSchema returns the JSON schema for configuration validation
+func (s *Service) GetConfigurationSchema() map[string]interface{} {
+	return GetConfigurationSchema()
+}
+
+// BatchValidateConfigurations validates multiple configurations
+func (s *Service) BatchValidateConfigurations(configs []*TypedConfiguration, validationLevel ValidationLevel) []*ValidationResult {
+	s.logger.WithFields(map[string]any{
+		"config_count":     len(configs),
+		"validation_level": validationLevel,
+		"component":        "configuration",
+	}).Info("Batch validating configurations")
+
+	results := make([]*ValidationResult, len(configs))
+
+	for i, config := range configs {
+		// Create generic validator for batch operations
+		validator := NewConfigurationValidator(validationLevel, "generic", 2, []string{"wifi", "mqtt"})
+
+		configJSON, err := config.ToJSON()
+		if err != nil {
+			results[i] = &ValidationResult{
+				Valid: false,
+				Errors: []ValidationError{{
+					Field:   "configuration",
+					Message: fmt.Sprintf("Failed to serialize configuration: %v", err),
+					Code:    "SERIALIZATION_ERROR",
+				}},
+			}
+			continue
+		}
+
+		results[i] = validator.ValidateConfiguration(configJSON)
+	}
+
+	return results
 }

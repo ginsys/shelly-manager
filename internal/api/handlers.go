@@ -22,6 +22,7 @@ type Handler struct {
 	Service             *service.ShellyService
 	NotificationHandler *notification.Handler
 	MetricsHandler      *metrics.Handler
+	ConfigService       *configuration.Service
 	logger              *logging.Logger
 }
 
@@ -32,11 +33,15 @@ func NewHandler(db *database.Manager, svc *service.ShellyService, notificationHa
 
 // NewHandlerWithLogger creates a new API handler with custom logger
 func NewHandlerWithLogger(db *database.Manager, svc *service.ShellyService, notificationHandler *notification.Handler, metricsHandler *metrics.Handler, logger *logging.Logger) *Handler {
+	// Create configuration service
+	configService := configuration.NewService(db.DB, logger)
+
 	return &Handler{
 		DB:                  db,
 		Service:             svc,
 		NotificationHandler: notificationHandler,
 		MetricsHandler:      metricsHandler,
+		ConfigService:       configService,
 		logger:              logger,
 	}
 }
@@ -1375,4 +1380,204 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(report)
+}
+
+// PreviewTemplate handles POST /api/v1/configuration/preview-template
+func (h *Handler) PreviewTemplate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Template  string                 `json:"template"`
+		Variables map[string]interface{} `json:"variables"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Warn("Failed to decode template preview request")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	// Process custom template
+	result := h.ConfigService.SubstituteVariables(json.RawMessage(req.Template), req.Variables)
+
+	h.logger.WithFields(map[string]any{
+		"template_size": len(req.Template),
+		"result_size":   len(result),
+	}).Info("Template preview completed successfully")
+
+	// Parse result to return as JSON object
+	var resultObj interface{}
+	if err := json.Unmarshal(result, &resultObj); err != nil {
+		// If parsing fails, return as raw string
+		resultObj = string(result)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"result": resultObj,
+	})
+}
+
+// ValidateTemplate handles POST /api/v1/configuration/validate-template
+func (h *Handler) ValidateTemplate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Template string `json:"template"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Warn("Failed to decode template validation request")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"valid": false,
+			"error": "Invalid request body",
+		})
+		return
+	}
+
+	// Create a template engine to validate
+	templateEngine := configuration.NewTemplateEngine(h.logger)
+	err := templateEngine.ValidateTemplate(req.Template)
+
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Info("Template validation failed")
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"valid": false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	h.logger.Info("Template validation succeeded")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"valid": true,
+	})
+}
+
+// SaveTemplate handles POST /api/v1/configuration/templates
+func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name      string                 `json:"name"`
+		Template  string                 `json:"template"`
+		Variables map[string]interface{} `json:"variables"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Warn("Failed to decode save template request")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid request body",
+		})
+		return
+	}
+
+	if req.Name == "" || req.Template == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Template name and content are required",
+		})
+		return
+	}
+
+	// Validate template before saving
+	templateEngine := configuration.NewTemplateEngine(h.logger)
+	if err := templateEngine.ValidateTemplate(req.Template); err != nil {
+		h.logger.WithFields(map[string]any{
+			"name":  req.Name,
+			"error": err.Error(),
+		}).Warn("Cannot save invalid template")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Template validation failed: " + err.Error(),
+		})
+		return
+	}
+
+	// Convert variables to JSON
+	variablesJSON, err := json.Marshal(req.Variables)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"error": err.Error(),
+		}).Warn("Failed to marshal template variables")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to process variables",
+		})
+		return
+	}
+
+	// Create template record
+	template := &configuration.ConfigTemplate{
+		Name:        req.Name,
+		Description: "User-created template via web interface",
+		DeviceType:  "all",
+		Generation:  0, // 0 means applies to all generations
+		Config:      json.RawMessage(req.Template),
+		Variables:   json.RawMessage(variablesJSON),
+		IsDefault:   false,
+	}
+
+	// Save to database using the config service
+	if err := h.ConfigService.SaveTemplate(template); err != nil {
+		h.logger.WithFields(map[string]any{
+			"name":  req.Name,
+			"error": err.Error(),
+		}).Error("Failed to save template to database")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to save template",
+		})
+		return
+	}
+
+	h.logger.WithFields(map[string]any{
+		"name":        req.Name,
+		"template_id": template.ID,
+	}).Info("Template saved successfully")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      template.ID,
+	})
+}
+
+// GetTemplateExamples handles GET /api/v1/configuration/template-examples
+func (h *Handler) GetTemplateExamples(w http.ResponseWriter, r *http.Request) {
+	examples := configuration.GetTemplateExamples()
+	documentation := configuration.GetTemplateDocumentation()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"examples":      examples,
+		"documentation": documentation,
+	})
 }

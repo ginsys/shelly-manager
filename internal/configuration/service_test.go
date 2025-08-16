@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -190,22 +189,6 @@ func (m *mockShellyClient) GetIP() string {
 }
 
 // Test helpers
-func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-
-	// Migrate all required tables
-	err = db.AutoMigrate(
-		&ConfigTemplate{},
-		&DeviceConfig{},
-		&ConfigHistory{},
-		&Device{},
-	)
-	require.NoError(t, err)
-
-	return db
-}
-
 func setupTestService(t *testing.T) (*Service, *gorm.DB) {
 	db := setupTestDB(t)
 	logger, _ := logging.New(logging.Config{Level: "info", Format: "text"})
