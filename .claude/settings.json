@@ -83,7 +83,12 @@
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_ValidatePasswordStrength\")",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_DeviceCompatibility\")",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/config)",
-      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/config -run TestLoad_EmptyConfigPath)"
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/config -run TestLoad_EmptyConfigPath)",
+      "Bash(gh run watch:*)",
+      "Bash(number\". Windows YAML parser was interpreting quoted network addresses\nlike \"192.168.1.0/24\" as potential hexadecimal numbers.\n\nChanges:\n- Remove quotes from discovery.networks array entries\n- Remove quotes from dhcp.network, start_ip, end_ip\n- Remove quotes from opnsense.host\n- Maintain consistent unquoted format for all IP addresses\n\nThis resolves Windows CI test failures in CLI commands that load the\nmain configuration file during testing.\nEOF\n)\")",
+      "Bash(is being used by another process\" errors on Windows.\n\nChanges:\n- Add Close() method to database.Manager that properly closes underlying sql.DB\n- Update createTestDB() helper to use t.Cleanup() for automatic database closure\n- Add database cleanup to benchmark functions that create databases directly\n- Ensure all SQLite database connections are closed before temp directory cleanup\n\nThis resolves Windows CI test failures caused by SQLite file locking issues\nduring test cleanup.\nEOF\n)\")",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestCLICommands/provision_command\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -timeout 60s)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

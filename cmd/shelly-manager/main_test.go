@@ -26,7 +26,7 @@ func TestCLICommands(t *testing.T) {
 	// Create test config file
 	configContent := `server:
   port: 8081
-  host: "127.0.0.1"
+  host: 127.0.0.1
   log_level: "error"
 
 logging:
@@ -161,7 +161,7 @@ func TestServerCommand(t *testing.T) {
 	// Use a unique port to avoid conflicts
 	configContent := `server:
   port: 8082
-  host: "127.0.0.1"
+  host: 127.0.0.1
   log_level: "error"
 
 logging:
@@ -222,7 +222,7 @@ func TestAddCommand(t *testing.T) {
 
 	configContent := `server:
   port: 8083
-  host: "127.0.0.1"
+  host: 127.0.0.1
   log_level: "error"
 
 logging:
@@ -295,7 +295,7 @@ func TestCommandExecution(t *testing.T) {
 
 	configContent := `server:
   port: 8084
-  host: "127.0.0.1"
+  host: 127.0.0.1
   log_level: "error"
 
 logging:
@@ -445,7 +445,7 @@ func BenchmarkListCommand(b *testing.B) {
 
 	configContent := `server:
   port: 8083
-  host: "127.0.0.1"
+  host: 127.0.0.1
   log_level: "error"
 
 logging:
