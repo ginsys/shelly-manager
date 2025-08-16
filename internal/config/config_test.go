@@ -287,7 +287,7 @@ server:
 func TestLoad_EmptyConfigPath(t *testing.T) {
 	// Test loading with empty config path (should use default search paths)
 	// This will likely fail since there's no default config file, but we're testing the behavior
-	_, err := Load("")
+	config, err := Load("")
 
 	// The behavior depends on whether a default config file exists
 	// In test environments, this usually fails, but it's valid behavior
@@ -299,6 +299,19 @@ func TestLoad_EmptyConfigPath(t *testing.T) {
 	} else {
 		// If it succeeds, it found a default config file somewhere
 		t.Log("Load with empty path succeeded (found default config)")
+		
+		// Verify the loaded config has reasonable defaults to ensure it parsed correctly
+		if config == nil {
+			t.Error("Config should not be nil when load succeeds")
+		} else {
+			// Basic sanity checks to ensure the config parsed correctly
+			if config.Server.Port <= 0 || config.Server.Port > 65535 {
+				t.Errorf("Invalid server port: %d", config.Server.Port)
+			}
+			if config.Database.Path == "" {
+				t.Error("Database path should not be empty")
+			}
+		}
 	}
 }
 
