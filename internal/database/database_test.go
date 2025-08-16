@@ -2,6 +2,8 @@ package database
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -21,8 +23,18 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestNewManager_InvalidPath(t *testing.T) {
-	// Test with invalid database path
-	_, err := NewManager("/invalid/path/database.db")
+	// Test with invalid database path - use platform-specific invalid paths
+	var invalidPath string
+	if runtime.GOOS == "windows" {
+		// Use invalid characters for Windows filenames
+		tempDir := t.TempDir()
+		invalidPath = filepath.Join(tempDir, "invalid<>|:*?\"\\", "database.db")
+	} else {
+		// Use a path that requires root permissions
+		invalidPath = "/root/invalid/path/database.db"
+	}
+
+	_, err := NewManager(invalidPath)
 	if err == nil {
 		t.Fatal("Expected error for invalid database path")
 	}

@@ -28,6 +28,7 @@ type Logger struct {
 	*slog.Logger
 	level  slog.Level
 	config Config
+	file   *os.File // Track file handle for proper cleanup
 }
 
 // New creates a new structured logger
@@ -50,7 +51,7 @@ func New(config Config) (*Logger, error) {
 	}
 
 	// Get output writer
-	writer, err := getWriter(config.Output)
+	writer, file, err := getWriter(config.Output)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +83,7 @@ func New(config Config) (*Logger, error) {
 		Logger: logger,
 		level:  level,
 		config: config,
+		file:   file,
 	}, nil
 }
 
@@ -101,21 +103,29 @@ func parseLevel(levelStr string) (slog.Level, error) {
 	}
 }
 
-// getWriter returns the appropriate writer for output
-func getWriter(output string) (io.Writer, error) {
+// getWriter returns the appropriate writer for output and file handle for cleanup
+func getWriter(output string) (io.Writer, *os.File, error) {
 	switch output {
 	case "stdout":
-		return os.Stdout, nil
+		return os.Stdout, nil, nil
 	case "stderr":
-		return os.Stderr, nil
+		return os.Stderr, nil, nil
 	default:
 		// Assume it's a file path
 		file, err := os.OpenFile(output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return file, nil
+		return file, file, nil
 	}
+}
+
+// Close closes the file handle if it exists
+func (l *Logger) Close() error {
+	if l.file != nil {
+		return l.file.Close()
+	}
+	return nil
 }
 
 // WithFields adds structured fields to the logger
@@ -129,6 +139,7 @@ func (l *Logger) WithFields(fields map[string]any) *Logger {
 		Logger: l.Logger.With(args...),
 		level:  l.level,
 		config: l.config,
+		file:   l.file, // Preserve file handle
 	}
 }
 
