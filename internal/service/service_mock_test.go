@@ -360,6 +360,13 @@ func BenchmarkShellyService_CreationMock(b *testing.B) {
 		b.Fatalf("Failed to create database: %v", err)
 	}
 
+	// Ensure database is closed to prevent Windows file locking issues
+	b.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			b.Logf("Failed to close benchmark database: %v", closeErr)
+		}
+	})
+
 	cfg := createTestConfig()
 
 	b.ResetTimer()

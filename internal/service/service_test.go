@@ -32,6 +32,13 @@ func createTestDB(t *testing.T) *database.Manager {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 
+	// Ensure database is closed when test completes to prevent Windows file locking issues
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Logf("Failed to close test database: %v", closeErr)
+		}
+	})
+
 	return db
 }
 
@@ -522,6 +529,13 @@ func BenchmarkShellyService_Creation(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}
+
+	// Ensure database is closed to prevent Windows file locking issues
+	b.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			b.Logf("Failed to close benchmark database: %v", closeErr)
+		}
+	})
 
 	cfg := createTestConfig()
 
