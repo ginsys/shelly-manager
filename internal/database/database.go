@@ -195,11 +195,11 @@ func (m *Manager) Close() error {
 	if m.DB == nil {
 		return nil
 	}
-	
+
 	sqlDB, err := m.DB.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get underlying database: %w", err)
 	}
-	
+
 	return sqlDB.Close()
 }

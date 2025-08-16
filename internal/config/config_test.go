@@ -299,7 +299,7 @@ func TestLoad_EmptyConfigPath(t *testing.T) {
 	} else {
 		// If it succeeds, it found a default config file somewhere
 		t.Log("Load with empty path succeeded (found default config)")
-		
+
 		// Verify the loaded config has reasonable defaults to ensure it parsed correctly
 		if config == nil {
 			t.Error("Config should not be nil when load succeeds")
