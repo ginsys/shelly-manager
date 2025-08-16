@@ -1,12 +1,13 @@
-.PHONY: build run clean docker-build docker-run docker-stop docker-logs dev-setup deps deps-tidy \
+.PHONY: build build-manager build-provisioner run run-provisioner clean docker-build docker-run docker-stop docker-logs dev-setup deps deps-tidy \
 	lint lint-fix format format-check hooks-install hooks-uninstall \
 	test test-unit test-integration test-full \
 	test-race test-race-short test-race-full \
 	test-coverage test-coverage-short test-coverage-full test-coverage-ci test-coverage-check test-coverage-with-check \
 	test-matrix test-ci \
-	benchmark test-watch example-list example-discover example-provision
+	benchmark test-watch example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
 
 BINARY_NAME=shelly-manager
+PROVISIONER_BINARY=shelly-provisioner
 BUILD_DIR=bin
 DOCKER_IMAGE=shelly-manager
 
@@ -14,13 +15,24 @@ DOCKER_IMAGE=shelly-manager
 # BUILD COMMANDS
 # ==============================================================================
 
-# Build the application
-build:
+# Build both applications
+build: build-manager build-provisioner
+
+# Build the main manager application
+build-manager:
 	CGO_ENABLED=1 go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/shelly-manager
 
-# Run the application
+# Build the provisioner application
+build-provisioner:
+	CGO_ENABLED=1 go build -o $(BUILD_DIR)/$(PROVISIONER_BINARY) ./cmd/shelly-provisioner
+
+# Run the main manager application
 run:
 	go run ./cmd/shelly-manager server
+
+# Run the provisioner application
+run-provisioner:
+	go run ./cmd/shelly-provisioner status
 
 # ==============================================================================
 # BASIC TEST COMMANDS
@@ -281,7 +293,7 @@ clean:
 # CLI EXAMPLES
 # ==============================================================================
 
-# CLI examples
+# CLI examples - Manager
 example-list:
 	./$(BUILD_DIR)/$(BINARY_NAME) list
 
@@ -290,3 +302,13 @@ example-discover:
 
 example-provision:
 	./$(BUILD_DIR)/$(BINARY_NAME) provision
+
+# CLI examples - Provisioner
+example-provisioner-status:
+	./$(BUILD_DIR)/$(PROVISIONER_BINARY) status
+
+example-provisioner-scan:
+	./$(BUILD_DIR)/$(PROVISIONER_BINARY) scan-ap
+
+example-provisioner-provision:
+	./$(BUILD_DIR)/$(PROVISIONER_BINARY) provision "MyWiFi" "password123"

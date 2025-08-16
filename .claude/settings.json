@@ -47,7 +47,8 @@
       "Bash(git check-ignore:*)",
       "Bash(export LC_NUMERIC=C)",
       "Bash(export LANG=C)",
-      "Bash(SHELLY_FORCE_NETWORK_TESTS=1 go test -short -v ./internal/discovery -run TestScanHost_NoDevice)"
+      "Bash(SHELLY_FORCE_NETWORK_TESTS=1 go test -short -v ./internal/discovery -run TestScanHost_NoDevice)",
+      "Bash(./bin/shelly-provisioner:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
