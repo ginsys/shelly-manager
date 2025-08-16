@@ -27,8 +27,8 @@ database:
 discovery:
   enabled: true
   networks:
-    - "192.168.1.0/24"
-    - "10.0.0.0/8"
+    - 192.168.1.0/24
+    - 10.0.0.0/8
   interval: 600
   timeout: 10
   enable_mdns: false
@@ -47,14 +47,14 @@ provisioning:
   provision_interval: 300
 
 dhcp:
-  network: "10.0.0.0/24"
-  start_ip: "10.0.0.100"
-  end_ip: "10.0.0.200"
+  network: 10.0.0.0/24
+  start_ip: 10.0.0.100
+  end_ip: 10.0.0.200
   auto_reserve: true
 
 opnsense:
   enabled: true
-  host: "192.168.1.1"
+  host: 192.168.1.1
   port: 8443
   api_key: "testkey"
   api_secret: "testsecret"
@@ -391,8 +391,8 @@ func TestLoad_PartialConfig(t *testing.T) {
 
 discovery:
   networks:
-    - "172.16.0.0/12"
-    - "10.10.10.0/24"
+    - 172.16.0.0/12
+    - 10.10.10.0/24
   timeout: 15
 `
 
