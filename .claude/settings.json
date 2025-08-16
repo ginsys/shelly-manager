@@ -63,7 +63,11 @@
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/logging -run TestGetWriter)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/logging -run TestWithFields)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/database -run TestNewManager_InvalidPath)",
-      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestCLICommands/help_command\" -timeout 30s)"
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestCLICommands/help_command\" -timeout 30s)",
+      "Bash(git push:*)",
+      "Bash(gh workflow:*)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(echo $?)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

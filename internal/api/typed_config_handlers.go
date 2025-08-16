@@ -111,7 +111,7 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 
 	// Decode request
 	var req TypedConfigurationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}

@@ -10,6 +10,9 @@ import (
 	"text/template"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -86,7 +89,7 @@ func (te *TemplateEngine) addBuiltinFunctions() {
 		// String manipulation
 		"upper":     strings.ToUpper,
 		"lower":     strings.ToLower,
-		"title":     strings.Title,
+		"title":     cases.Title(language.Und).String,
 		"trim":      strings.TrimSpace,
 		"replace":   strings.ReplaceAll,
 		"contains":  strings.Contains,
@@ -246,10 +249,8 @@ func (te *TemplateEngine) CreateTemplateContext(device *Device, variables map[st
 	context.System.Version = "1.0.0"          // Could be injected from build
 
 	// Populate custom variables
-	if variables != nil {
-		for key, value := range variables {
-			context.Custom[key] = value
-		}
+	for key, value := range variables {
+		context.Custom[key] = value
 	}
 
 	// Set default values for network if not provided
