@@ -12,32 +12,6 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
-// Helper function to create test database without cleanup (for concurrent tests)
-func createTestDBNoCleanup(t *testing.T) *database.Manager {
-	t.Helper()
-
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "test.db")
-
-	// Create logger for database
-	logger, err := logging.New(logging.Config{
-		Level:  "error", // Minimize test output
-		Format: "text",
-		Output: "stderr",
-	})
-	if err != nil {
-		t.Fatalf("Failed to create logger: %v", err)
-	}
-
-	db, err := database.NewManagerWithLogger(dbPath, logger)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-
-	// Note: No cleanup here - caller must call db.Close() manually
-	return db
-}
-
 // TestShellyService_Basic tests basic service operations without network calls
 func TestShellyService_Basic(t *testing.T) {
 	db := createTestDB(t)
