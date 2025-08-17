@@ -120,7 +120,10 @@
       "Bash(env CGO_ENABLED=1 go test -v ./internal/configuration -run \"TestConfigurationValidator_ValidateTemplates/Complex_valid_template\")",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_ValidateTemplates\")",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_Integration\" -test.v)",
-      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_Integration\")"
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/configuration -run \"TestConfigurationValidator_Integration\")",
+      "mcp__playwright__browser_navigate",
+      "Bash(export SHELLY_MANAGER_SERVER_PORT=8081)",
+      "Bash(SHELLY_MANAGER_SERVER_PORT=8081 go run cmd/shelly-manager/main.go server)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

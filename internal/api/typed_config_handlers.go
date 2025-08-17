@@ -443,9 +443,29 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 	conversionInfo.ConvertedFrom = "raw"
 	conversionInfo.Warnings = []string{}
 
-	// Convert WiFi settings
+	// Convert WiFi settings - handle both unified "wifi" and separate "wifi_sta"/"wifi_ap" structures
+	wifiCombined := make(map[string]interface{})
+
+	// Check for unified WiFi configuration
 	if wifiData, ok := rawData["wifi"].(map[string]interface{}); ok {
-		wifi, warnings := h.convertWiFiConfig(wifiData)
+		for k, v := range wifiData {
+			wifiCombined[k] = v
+		}
+	}
+
+	// Check for separate wifi_sta configuration
+	if staData, ok := rawData["wifi_sta"].(map[string]interface{}); ok {
+		wifiCombined["wifi_sta"] = staData
+	}
+
+	// Check for separate wifi_ap configuration
+	if apData, ok := rawData["wifi_ap"].(map[string]interface{}); ok {
+		wifiCombined["wifi_ap"] = apData
+	}
+
+	// Convert combined WiFi data if we have any
+	if len(wifiCombined) > 0 {
+		wifi, warnings := h.convertWiFiConfig(wifiCombined)
 		if wifi != nil {
 			typedConfig.WiFi = wifi
 			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
@@ -461,8 +481,15 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 		}
 	}
 
-	// Convert Auth settings
-	if authData, ok := rawData["auth"].(map[string]interface{}); ok {
+	// Convert Auth settings - handle both "auth" and "login" (Shelly devices use "login")
+	var authData map[string]interface{}
+	if data, ok := rawData["auth"].(map[string]interface{}); ok {
+		authData = data
+	} else if data, ok := rawData["login"].(map[string]interface{}); ok {
+		authData = data
+	}
+
+	if authData != nil {
 		auth, warnings := h.convertAuthConfig(authData)
 		if auth != nil {
 			typedConfig.Auth = auth
@@ -470,13 +497,11 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 		}
 	}
 
-	// Convert System settings
-	if sysData, ok := rawData["sys"].(map[string]interface{}); ok {
-		system, warnings := h.convertSystemConfig(sysData)
-		if system != nil {
-			typedConfig.System = system
-			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
-		}
+	// Convert System settings - Shelly devices store most settings at root level
+	system, warnings := h.convertSystemConfig(rawData)
+	if system != nil {
+		typedConfig.System = system
+		conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
 	}
 
 	// Convert Cloud settings
@@ -488,10 +513,31 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 		}
 	}
 
+	// Convert CoIoT settings
+	if coiotData, ok := rawData["coiot"].(map[string]interface{}); ok {
+		// Store CoIoT in the Raw field as we don't have a specific typed structure for it yet
+		coiotJSON, _ := json.Marshal(coiotData)
+		if typedConfig.Raw == nil {
+			typedConfig.Raw = coiotJSON
+		} else {
+			// Merge with existing raw data
+			var existingRaw map[string]interface{}
+			json.Unmarshal(typedConfig.Raw, &existingRaw)
+			if existingRaw == nil {
+				existingRaw = make(map[string]interface{})
+			}
+			existingRaw["coiot"] = coiotData
+			updatedRaw, _ := json.Marshal(existingRaw)
+			typedConfig.Raw = updatedRaw
+		}
+	}
+
 	// Store unconverted settings in Raw field
 	filteredRaw := make(map[string]interface{})
 	knownSections := map[string]bool{
-		"wifi": true, "mqtt": true, "auth": true, "sys": true, "cloud": true,
+		"wifi": true, "wifi_sta": true, "wifi_ap": true, "mqtt": true, "auth": true, "login": true,
+		"sys": true, "cloud": true, "device": true, "name": true, "tz": true, "sntp": true,
+		"lat": true, "lng": true, "discoverable": true, "eco_mode": true, "coiot": true,
 	}
 
 	for key, value := range rawData {
@@ -594,40 +640,99 @@ func (h *Handler) convertWiFiConfig(data map[string]interface{}) (*configuration
 	wifi := &configuration.WiFiConfiguration{}
 	var warnings []string
 
-	if enable, ok := data["enable"].(bool); ok {
-		wifi.Enable = enable
-	}
-
-	if ssid, ok := data["ssid"].(string); ok {
-		wifi.SSID = ssid
-	}
-
-	if pass, ok := data["pass"].(string); ok {
-		wifi.Password = pass
-	}
-
-	if ipv4mode, ok := data["ipv4mode"].(string); ok {
-		wifi.IPv4Mode = ipv4mode
-	}
-
-	// Convert static IP if present
-	if staticData, ok := data["ip"].(map[string]interface{}); ok {
-		static := &configuration.StaticIPConfig{}
-
-		if ip, ok := staticData["ip"].(string); ok {
-			static.IP = ip
+	// Handle station mode WiFi configuration (wifi_sta)
+	if staData, ok := data["wifi_sta"].(map[string]interface{}); ok {
+		// Try both "enable" and "enabled" (Shelly devices use "enabled")
+		if enable, ok := staData["enable"].(bool); ok {
+			wifi.Enable = enable
+		} else if enabled, ok := staData["enabled"].(bool); ok {
+			wifi.Enable = enabled
 		}
-		if netmask, ok := staticData["netmask"].(string); ok {
-			static.Netmask = netmask
+		if ssid, ok := staData["ssid"].(string); ok {
+			wifi.SSID = ssid
 		}
-		if gw, ok := staticData["gw"].(string); ok {
-			static.Gateway = gw
+		if pass, ok := staData["pass"].(string); ok {
+			wifi.Password = pass
 		}
-		if dns, ok := staticData["nameserver"].(string); ok {
-			static.Nameserver = dns
+		// Handle both "ipv4mode" and "ipv4_method" (Shelly devices use "ipv4_method")
+		if ipv4mode, ok := staData["ipv4mode"].(string); ok {
+			wifi.IPv4Mode = ipv4mode
+		} else if ipv4method, ok := staData["ipv4_method"].(string); ok {
+			wifi.IPv4Mode = ipv4method
 		}
 
-		wifi.StaticIP = static
+		// Convert static IP if present
+		if staticData, ok := staData["ip"].(map[string]interface{}); ok {
+			static := &configuration.StaticIPConfig{}
+			if ip, ok := staticData["ip"].(string); ok {
+				static.IP = ip
+			}
+			if netmask, ok := staticData["netmask"].(string); ok {
+				static.Netmask = netmask
+			}
+			if gw, ok := staticData["gw"].(string); ok {
+				static.Gateway = gw
+			}
+			if dns, ok := staticData["nameserver"].(string); ok {
+				static.Nameserver = dns
+			}
+			wifi.StaticIP = static
+		}
+	} else {
+		// Fallback to direct WiFi fields for older format
+		if enable, ok := data["enable"].(bool); ok {
+			wifi.Enable = enable
+		}
+		if ssid, ok := data["ssid"].(string); ok {
+			wifi.SSID = ssid
+		}
+		if pass, ok := data["pass"].(string); ok {
+			wifi.Password = pass
+		}
+		if ipv4mode, ok := data["ipv4mode"].(string); ok {
+			wifi.IPv4Mode = ipv4mode
+		}
+
+		// Convert static IP if present
+		if staticData, ok := data["ip"].(map[string]interface{}); ok {
+			static := &configuration.StaticIPConfig{}
+			if ip, ok := staticData["ip"].(string); ok {
+				static.IP = ip
+			}
+			if netmask, ok := staticData["netmask"].(string); ok {
+				static.Netmask = netmask
+			}
+			if gw, ok := staticData["gw"].(string); ok {
+				static.Gateway = gw
+			}
+			if dns, ok := staticData["nameserver"].(string); ok {
+				static.Nameserver = dns
+			}
+			wifi.StaticIP = static
+		}
+	}
+
+	// Handle access point configuration (wifi_ap)
+	if apData, ok := data["wifi_ap"].(map[string]interface{}); ok {
+		ap := &configuration.AccessPointConfig{}
+
+		// Try both "enable" and "enabled" (Shelly devices use "enabled")
+		if enable, ok := apData["enable"].(bool); ok {
+			ap.Enable = enable
+		} else if enabled, ok := apData["enabled"].(bool); ok {
+			ap.Enable = enabled
+		}
+		if ssid, ok := apData["ssid"].(string); ok {
+			ap.SSID = ssid
+		}
+		if pass, ok := apData["pass"].(string); ok {
+			ap.Password = pass
+		}
+		if key, ok := apData["key"].(string); ok {
+			ap.Key = key
+		}
+
+		wifi.AccessPoint = ap
 	}
 
 	return wifi, warnings
@@ -672,12 +777,18 @@ func (h *Handler) convertAuthConfig(data map[string]interface{}) (*configuration
 	auth := &configuration.AuthConfiguration{}
 	var warnings []string
 
+	// Handle both "enable" and "enabled" (Shelly devices use "enabled")
 	if enable, ok := data["enable"].(bool); ok {
 		auth.Enable = enable
+	} else if enabled, ok := data["enabled"].(bool); ok {
+		auth.Enable = enabled
 	}
 
+	// Handle both "user" and "username" (Shelly devices use "username")
 	if user, ok := data["user"].(string); ok {
 		auth.Username = user
+	} else if username, ok := data["username"].(string); ok {
+		auth.Username = username
 	}
 
 	if pass, ok := data["pass"].(string); ok {
@@ -695,38 +806,77 @@ func (h *Handler) convertSystemConfig(data map[string]interface{}) (*configurati
 	system := &configuration.SystemConfiguration{}
 	var warnings []string
 
-	// Convert device settings
-	if deviceData, ok := data["device"].(map[string]interface{}); ok {
-		device := &configuration.TypedDeviceConfig{}
+	// Convert device settings - Shelly devices have mixed structure
+	device := &configuration.TypedDeviceConfig{}
+	hasDeviceData := false
 
-		if name, ok := deviceData["name"].(string); ok {
-			device.Name = name
-		}
+	// Device name from root level "name" field
+	if name, ok := data["name"].(string); ok {
+		device.Name = name
+		hasDeviceData = true
+	}
+
+	// Device info from "device" object
+	if deviceData, ok := data["device"].(map[string]interface{}); ok {
 		if hostname, ok := deviceData["hostname"].(string); ok {
 			device.Hostname = hostname
+			hasDeviceData = true
 		}
-		if tz, ok := deviceData["tz"].(string); ok {
-			device.Timezone = tz
+		if mac, ok := deviceData["mac"].(string); ok {
+			device.MAC = mac
+			hasDeviceData = true
 		}
+		if deviceType, ok := deviceData["type"].(string); ok {
+			device.Profile = deviceType
+			hasDeviceData = true
+		}
+	}
 
+	// Timezone from root level "tz" or "timezone" field
+	if tz, ok := data["tz"].(string); ok {
+		device.Timezone = tz
+		hasDeviceData = true
+	} else if timezone, ok := data["timezone"].(string); ok {
+		device.Timezone = timezone
+		hasDeviceData = true
+	}
+
+	// Discoverable from root level
+	if discoverable, ok := data["discoverable"].(bool); ok {
+		device.Discoverable = discoverable
+		hasDeviceData = true
+	}
+
+	// Eco mode from root level
+	if ecoMode, ok := data["eco_mode"].(bool); ok {
+		device.EcoMode = ecoMode
+		hasDeviceData = true
+	}
+
+	if hasDeviceData {
 		system.Device = device
 	}
 
-	// Convert location settings
-	if locData, ok := data["location"].(map[string]interface{}); ok {
-		location := &configuration.LocationConfig{}
-
-		if tz, ok := locData["tz"].(string); ok {
-			location.Timezone = tz
-		}
-		if lat, ok := locData["lat"].(float64); ok {
+	// Convert location settings from root level lat/lng
+	if lat, ok := data["lat"].(float64); ok {
+		if lng, ok := data["lng"].(float64); ok {
+			location := &configuration.LocationConfig{}
 			location.Latitude = lat
-		}
-		if lng, ok := locData["lng"].(float64); ok {
 			location.Longitude = lng
+			system.Location = location
 		}
+	}
 
-		system.Location = location
+	// Convert SNTP settings from root level "sntp" object
+	if sntpData, ok := data["sntp"].(map[string]interface{}); ok {
+		// Only include SNTP config if it's enabled and has a server
+		if enabled, ok := sntpData["enabled"].(bool); ok && enabled {
+			if server, ok := sntpData["server"].(string); ok && server != "" {
+				sntp := &configuration.SNTPConfig{}
+				sntp.Server = server
+				system.SNTP = sntp
+			}
+		}
 	}
 
 	return system, warnings
@@ -736,8 +886,11 @@ func (h *Handler) convertCloudConfig(data map[string]interface{}) (*configuratio
 	cloud := &configuration.CloudConfiguration{}
 	var warnings []string
 
+	// Handle both "enable" and "enabled" (Shelly devices use "enabled")
 	if enable, ok := data["enable"].(bool); ok {
 		cloud.Enable = enable
+	} else if enabled, ok := data["enabled"].(bool); ok {
+		cloud.Enable = enabled
 	}
 
 	if server, ok := data["server"].(string); ok {
