@@ -416,6 +416,61 @@ func (h *Handler) BulkValidateConfigs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// GetDeviceCapabilities handles GET /api/v1/devices/{id}/capabilities
+func (h *Handler) GetDeviceCapabilities(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get device from database
+	device, err := h.DB.GetDevice(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Device not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Extract model and generation from device settings
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+		http.Error(w, "Invalid device settings", http.StatusInternalServerError)
+		return
+	}
+
+	model := device.Type // fallback to device type
+	if modelStr, ok := settings["model"].(string); ok && modelStr != "" {
+		model = modelStr
+	}
+
+	generation := h.extractGeneration(device.Firmware)
+	if genFloat, ok := settings["gen"].(float64); ok {
+		generation = int(genFloat)
+	}
+
+	capabilities := h.getDeviceCapabilities(model, generation)
+
+	response := struct {
+		DeviceID     uint     `json:"device_id"`
+		DeviceModel  string   `json:"device_model"`
+		Generation   int      `json:"generation"`
+		Capabilities []string `json:"capabilities"`
+	}{
+		DeviceID:     device.ID,
+		DeviceModel:  model,
+		Generation:   generation,
+		Capabilities: capabilities,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // Helper methods
 
 // convertToTypedConfig converts raw JSON configuration to typed configuration
@@ -515,20 +570,69 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 
 	// Convert CoIoT settings
 	if coiotData, ok := rawData["coiot"].(map[string]interface{}); ok {
-		// Store CoIoT in the Raw field as we don't have a specific typed structure for it yet
-		coiotJSON, _ := json.Marshal(coiotData)
-		if typedConfig.Raw == nil {
-			typedConfig.Raw = coiotJSON
-		} else {
-			// Merge with existing raw data
-			var existingRaw map[string]interface{}
-			json.Unmarshal(typedConfig.Raw, &existingRaw)
-			if existingRaw == nil {
-				existingRaw = make(map[string]interface{})
-			}
-			existingRaw["coiot"] = coiotData
-			updatedRaw, _ := json.Marshal(existingRaw)
-			typedConfig.Raw = updatedRaw
+		coiot, warnings := h.convertCoIoTConfig(coiotData)
+		if coiot != nil {
+			typedConfig.CoIoT = coiot
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
+		}
+	}
+
+	// Convert capability-specific configurations based on device type
+	deviceCapabilities := h.getDeviceCapabilities(device.Type, h.extractGeneration(device.Firmware))
+
+	// Convert Relay configuration
+	if contains(deviceCapabilities, "relay") {
+		if relay, warnings := h.convertRelayConfig(rawData, device.Type); relay != nil {
+			typedConfig.Relay = relay
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
+		}
+	}
+
+	// Convert Power Metering configuration
+	if contains(deviceCapabilities, "power_metering") {
+		if power, warnings := h.convertPowerMeteringConfig(rawData); power != nil {
+			typedConfig.PowerMetering = power
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
+		}
+	}
+
+	// Convert Dimming configuration
+	if contains(deviceCapabilities, "dimming") {
+		if dimming, warnings := h.convertDimmingConfig(rawData); dimming != nil {
+			typedConfig.Dimming = dimming
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
+		}
+	}
+
+	// Convert Roller configuration
+	if contains(deviceCapabilities, "roller") {
+		if roller, warnings := h.convertRollerConfig(rawData); roller != nil {
+			typedConfig.Roller = roller
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
+		}
+	}
+
+	// Convert Input configuration
+	if contains(deviceCapabilities, "input") {
+		if input, warnings := h.convertInputConfig(rawData); input != nil {
+			typedConfig.Input = input
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
+		}
+	}
+
+	// Convert LED configuration
+	if contains(deviceCapabilities, "led") {
+		if led, warnings := h.convertLEDConfig(rawData); led != nil {
+			typedConfig.LED = led
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
+		}
+	}
+
+	// Convert Color configuration
+	if contains(deviceCapabilities, "color") || contains(deviceCapabilities, "rgbw") {
+		if color, warnings := h.convertColorConfig(rawData); color != nil {
+			typedConfig.Color = color
+			conversionInfo.Warnings = append(conversionInfo.Warnings, warnings...)
 		}
 	}
 
@@ -536,8 +640,22 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 	filteredRaw := make(map[string]interface{})
 	knownSections := map[string]bool{
 		"wifi": true, "wifi_sta": true, "wifi_ap": true, "mqtt": true, "auth": true, "login": true,
-		"sys": true, "cloud": true, "device": true, "name": true, "tz": true, "sntp": true,
+		"sys": true, "cloud": true, "device": true, "name": true, "tz": true, "timezone": true, "sntp": true,
 		"lat": true, "lng": true, "discoverable": true, "eco_mode": true, "coiot": true,
+		// Capability-specific sections
+		"relay": true, "relays": true, "relay_0": true, "relay_1": true,
+		"light": true, "lights": true, "light_0": true, "light_1": true,
+		"meter": true, "meters": true, "meter_0": true, "meter_1": true,
+		"roller": true, "rollers": true, "roller_0": true,
+		"input": true, "inputs": true, "input_0": true, "input_1": true, "input_2": true,
+		"led": true, "led_status_disable": true, "led_power_disable": true,
+		"color": true, "white": true, "effect": true, "effects": true,
+		"schedule": true, "schedules": true, "actions": true,
+		"ext_power": true, "ext_sensors": true, "temperature": true, "overtemp": true,
+		"max_power": true, "longpush_time": true, "multipush_time": true,
+		"mode": true, "default_state": true, "btn_type": true, "swap": true,
+		"calibrated": true, "positioning": true, "safety_switch": true, "obstacle_mode": true,
+		"fade_rate": true, "brightness": true, "transition": true, "night_mode": true,
 	}
 
 	for key, value := range rawData {
@@ -898,6 +1016,377 @@ func (h *Handler) convertCloudConfig(data map[string]interface{}) (*configuratio
 	}
 
 	return cloud, warnings
+}
+
+// Capability conversion functions
+
+func (h *Handler) convertCoIoTConfig(data map[string]interface{}) (*configuration.CoIoTConfig, []string) {
+	coiot := &configuration.CoIoTConfig{}
+	var warnings []string
+
+	if enabled, ok := data["enabled"].(bool); ok {
+		coiot.Enabled = enabled
+	}
+	if server, ok := data["server"].(string); ok {
+		coiot.Server = server
+	}
+	if port, ok := data["port"].(float64); ok {
+		coiot.Port = int(port)
+	}
+	if period, ok := data["period"].(float64); ok {
+		coiot.Period = int(period)
+	}
+
+	return coiot, warnings
+}
+
+func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType string) (*configuration.RelayConfig, []string) {
+	relay := &configuration.RelayConfig{}
+	var warnings []string
+
+	// Check for single relay configuration
+	if relayData, ok := data["relay"].(map[string]interface{}); ok {
+		if defaultState, ok := relayData["default_state"].(string); ok {
+			relay.DefaultState = defaultState
+		}
+		if btnType, ok := relayData["btn_type"].(string); ok {
+			relay.ButtonType = btnType
+		}
+		if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
+			autoOnInt := int(autoOn)
+			relay.AutoOn = &autoOnInt
+		}
+		if autoOff, ok := relayData["auto_off"].(float64); ok && autoOff > 0 {
+			autoOffInt := int(autoOff)
+			relay.AutoOff = &autoOffInt
+		}
+		if hasTimer, ok := relayData["has_timer"].(bool); ok {
+			relay.HasTimer = hasTimer
+		}
+	}
+
+	// Check for multi-relay devices (SHSW-25, etc.)
+	var relayConfigs []configuration.SingleRelayConfig
+	for i := 0; i < 2; i++ {
+		relayKey := fmt.Sprintf("relay_%d", i)
+		if relayData, ok := data[relayKey].(map[string]interface{}); ok {
+			singleRelay := configuration.SingleRelayConfig{
+				ID: i,
+			}
+			if name, ok := relayData["name"].(string); ok {
+				singleRelay.Name = name
+			}
+			if defaultState, ok := relayData["default_state"].(string); ok {
+				singleRelay.DefaultState = defaultState
+			}
+			if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
+				autoOnInt := int(autoOn)
+				singleRelay.AutoOn = &autoOnInt
+			}
+			if autoOff, ok := relayData["auto_off"].(float64); ok && autoOff > 0 {
+				autoOffInt := int(autoOff)
+				singleRelay.AutoOff = &autoOffInt
+			}
+			if schedule, ok := relayData["schedule"].(bool); ok {
+				singleRelay.Schedule = schedule
+			}
+			relayConfigs = append(relayConfigs, singleRelay)
+		}
+	}
+
+	if len(relayConfigs) > 0 {
+		relay.Relays = relayConfigs
+	}
+
+	// Fall back to global settings if no specific relay config found
+	if relay.DefaultState == "" {
+		if defaultState, ok := data["default_state"].(string); ok {
+			relay.DefaultState = defaultState
+		}
+	}
+
+	return relay, warnings
+}
+
+func (h *Handler) convertPowerMeteringConfig(data map[string]interface{}) (*configuration.PowerMeteringConfig, []string) {
+	power := &configuration.PowerMeteringConfig{}
+	var warnings []string
+
+	if maxPower, ok := data["max_power"].(float64); ok && maxPower > 0 {
+		maxPowerInt := int(maxPower)
+		power.MaxPower = &maxPowerInt
+	}
+	if maxVoltage, ok := data["max_voltage"].(float64); ok && maxVoltage > 0 {
+		maxVoltageInt := int(maxVoltage)
+		power.MaxVoltage = &maxVoltageInt
+	}
+	if maxCurrent, ok := data["max_current"].(float64); ok && maxCurrent > 0 {
+		power.MaxCurrent = &maxCurrent
+	}
+	if protection, ok := data["protection_action"].(string); ok {
+		power.ProtectionAction = protection
+	}
+	if correction, ok := data["power_correction"].(float64); ok {
+		power.PowerCorrection = correction
+	} else {
+		power.PowerCorrection = 1.0 // Default multiplier
+	}
+	if period, ok := data["reporting_period"].(float64); ok {
+		power.ReportingPeriod = int(period)
+	}
+	if costPerKWh, ok := data["cost_per_kwh"].(float64); ok && costPerKWh > 0 {
+		power.CostPerKWh = &costPerKWh
+	}
+	if currency, ok := data["currency"].(string); ok {
+		power.Currency = currency
+	}
+
+	return power, warnings
+}
+
+func (h *Handler) convertDimmingConfig(data map[string]interface{}) (*configuration.DimmingConfig, []string) {
+	dimming := &configuration.DimmingConfig{}
+	var warnings []string
+
+	// Check for light configuration
+	if lightData, ok := data["light"].(map[string]interface{}); ok {
+		data = lightData // Use light data as primary source
+	} else if light0Data, ok := data["light_0"].(map[string]interface{}); ok {
+		data = light0Data // Use first light channel
+	}
+
+	if minBrightness, ok := data["min_brightness"].(float64); ok {
+		dimming.MinBrightness = int(minBrightness)
+	} else {
+		dimming.MinBrightness = 1 // Default minimum
+	}
+	if maxBrightness, ok := data["max_brightness"].(float64); ok {
+		dimming.MaxBrightness = int(maxBrightness)
+	} else {
+		dimming.MaxBrightness = 100 // Default maximum
+	}
+	if defaultBrightness, ok := data["default_brightness"].(float64); ok {
+		dimming.DefaultBrightness = int(defaultBrightness)
+	} else {
+		dimming.DefaultBrightness = 100 // Default
+	}
+	if defaultState, ok := data["default_state"].(bool); ok {
+		dimming.DefaultState = defaultState
+	}
+	if fadeRate, ok := data["fade_rate"].(float64); ok {
+		dimming.FadeRate = int(fadeRate)
+	}
+	if transition, ok := data["transition"].(float64); ok {
+		dimming.TransitionTime = int(transition)
+	}
+	if leadingEdge, ok := data["leading_edge"].(bool); ok {
+		dimming.LeadingEdge = leadingEdge
+	}
+	if nightMode, ok := data["night_mode"].(bool); ok {
+		dimming.NightModeEnabled = nightMode
+	}
+	if nightBrightness, ok := data["night_mode_brightness"].(float64); ok {
+		dimming.NightModeBrightness = int(nightBrightness)
+	}
+	if nightStart, ok := data["night_mode_start"].(string); ok {
+		dimming.NightModeStart = nightStart
+	}
+	if nightEnd, ok := data["night_mode_end"].(string); ok {
+		dimming.NightModeEnd = nightEnd
+	}
+
+	return dimming, warnings
+}
+
+func (h *Handler) convertRollerConfig(data map[string]interface{}) (*configuration.RollerConfig, []string) {
+	roller := &configuration.RollerConfig{}
+	var warnings []string
+
+	// Check for roller configuration
+	if rollerData, ok := data["roller"].(map[string]interface{}); ok {
+		data = rollerData
+	} else if roller0Data, ok := data["roller_0"].(map[string]interface{}); ok {
+		data = roller0Data
+	}
+
+	if motorDirection, ok := data["motor_direction"].(string); ok {
+		roller.MotorDirection = motorDirection
+	}
+	if maxOpenTime, ok := data["max_open_time"].(float64); ok {
+		roller.MaxOpenTime = int(maxOpenTime)
+	}
+	if maxCloseTime, ok := data["max_close_time"].(float64); ok {
+		roller.MaxCloseTime = int(maxCloseTime)
+	}
+	if defaultPos, ok := data["default_position"].(float64); ok {
+		defaultPosInt := int(defaultPos)
+		roller.DefaultPosition = &defaultPosInt
+	}
+	if currentPos, ok := data["current_position"].(float64); ok {
+		roller.CurrentPosition = int(currentPos)
+	}
+	if positioning, ok := data["positioning"].(bool); ok {
+		roller.PositioningEnabled = positioning
+	}
+	if obstacle, ok := data["obstacle_detection"].(bool); ok {
+		roller.ObstacleDetection = obstacle
+	}
+	if obstaclePower, ok := data["obstacle_power"].(float64); ok && obstaclePower > 0 {
+		obstaclePowerInt := int(obstaclePower)
+		roller.ObstaclePower = &obstaclePowerInt
+	}
+	if safetySwitch, ok := data["safety_switch"].(bool); ok {
+		roller.SafetySwitch = safetySwitch
+	}
+	if swap, ok := data["swap"].(bool); ok {
+		roller.SwapInputs = swap
+	}
+	if inputMode, ok := data["input_mode"].(string); ok {
+		roller.InputMode = inputMode
+	}
+	if holdTime, ok := data["button_hold_time"].(float64); ok {
+		roller.ButtonHoldTime = int(holdTime)
+	}
+
+	return roller, warnings
+}
+
+func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuration.InputConfig, []string) {
+	input := &configuration.InputConfig{}
+	var warnings []string
+
+	// Check for input configuration
+	if inputData, ok := data["input"].(map[string]interface{}); ok {
+		data = inputData
+	} else if input0Data, ok := data["input_0"].(map[string]interface{}); ok {
+		data = input0Data
+	}
+
+	if inputType, ok := data["type"].(string); ok {
+		input.Type = inputType
+	}
+	if mode, ok := data["mode"].(string); ok {
+		input.Mode = mode
+	}
+	if inverted, ok := data["inverted"].(bool); ok {
+		input.Inverted = inverted
+	}
+	if debounce, ok := data["debounce_time"].(float64); ok {
+		input.DebounceTime = int(debounce)
+	}
+	if longPush, ok := data["longpush_time"].(float64); ok {
+		input.LongPushTime = int(longPush)
+	}
+	if multiPush, ok := data["multipush_time"].(float64); ok {
+		input.MultiPushTime = int(multiPush)
+	}
+	if singleAction, ok := data["single_push_action"].(string); ok {
+		input.SinglePushAction = singleAction
+	}
+	if doubleAction, ok := data["double_push_action"].(string); ok {
+		input.DoublePushAction = doubleAction
+	}
+	if longAction, ok := data["long_push_action"].(string); ok {
+		input.LongPushAction = longAction
+	}
+
+	return input, warnings
+}
+
+func (h *Handler) convertLEDConfig(data map[string]interface{}) (*configuration.LEDConfig, []string) {
+	led := &configuration.LEDConfig{}
+	var warnings []string
+
+	if enabled, ok := data["led_status_disable"].(bool); ok {
+		led.Enabled = !enabled // led_status_disable is the inverse
+	}
+	if mode, ok := data["led_mode"].(string); ok {
+		led.Mode = mode
+	}
+	if brightness, ok := data["led_brightness"].(float64); ok {
+		led.Brightness = int(brightness)
+	}
+	if nightMode, ok := data["led_night_mode"].(bool); ok {
+		led.NightModeEnabled = nightMode
+	}
+	if powerIndication, ok := data["led_power_disable"].(bool); ok {
+		led.PowerIndication = !powerIndication // led_power_disable is the inverse
+	}
+
+	return led, warnings
+}
+
+func (h *Handler) convertColorConfig(data map[string]interface{}) (*configuration.ColorConfig, []string) {
+	color := &configuration.ColorConfig{}
+	var warnings []string
+
+	// Check for color configuration
+	if colorData, ok := data["color"].(map[string]interface{}); ok {
+		data = colorData
+	} else if color0Data, ok := data["color_0"].(map[string]interface{}); ok {
+		data = color0Data
+	}
+
+	if mode, ok := data["mode"].(string); ok {
+		color.Mode = mode
+	}
+	if effectsEnabled, ok := data["effects_enabled"].(bool); ok {
+		color.EffectsEnabled = effectsEnabled
+	}
+	if activeEffect, ok := data["active_effect"].(float64); ok {
+		activeEffectInt := int(activeEffect)
+		color.ActiveEffect = &activeEffectInt
+	}
+	if effectSpeed, ok := data["effect_speed"].(float64); ok {
+		color.EffectSpeed = int(effectSpeed)
+	}
+	if redCal, ok := data["red_calibration"].(float64); ok {
+		color.RedCalibration = redCal
+	} else {
+		color.RedCalibration = 1.0
+	}
+	if greenCal, ok := data["green_calibration"].(float64); ok {
+		color.GreenCalibration = greenCal
+	} else {
+		color.GreenCalibration = 1.0
+	}
+	if blueCal, ok := data["blue_calibration"].(float64); ok {
+		color.BlueCalibration = blueCal
+	} else {
+		color.BlueCalibration = 1.0
+	}
+	if whiteCal, ok := data["white_calibration"].(float64); ok {
+		color.WhiteCalibration = whiteCal
+	} else {
+		color.WhiteCalibration = 1.0
+	}
+
+	// Default color if specified
+	if defaultColor, ok := data["default_color"].(map[string]interface{}); ok {
+		if r, rOk := defaultColor["r"].(float64); rOk {
+			if g, gOk := defaultColor["g"].(float64); gOk {
+				if b, bOk := defaultColor["b"].(float64); bOk {
+					color.DefaultColor = &configuration.Color{
+						Red:   int(r),
+						Green: int(g),
+						Blue:  int(b),
+					}
+				}
+			}
+		}
+	}
+
+	return color, warnings
+}
+
+// Helper function to check if a slice contains a string
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 // getKeys returns the keys of a map

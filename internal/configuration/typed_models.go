@@ -19,7 +19,23 @@ type TypedConfiguration struct {
 	Network  *NetworkConfiguration  `json:"network,omitempty"`
 	Cloud    *CloudConfiguration    `json:"cloud,omitempty"`
 	Location *LocationConfiguration `json:"location,omitempty"`
-	Raw      json.RawMessage        `json:"raw,omitempty"` // For unsupported settings
+
+	// Device capability-specific configurations
+	Relay          *RelayConfig          `json:"relay,omitempty"`
+	PowerMetering  *PowerMeteringConfig  `json:"power_metering,omitempty"`
+	Dimming        *DimmingConfig        `json:"dimming,omitempty"`
+	Roller         *RollerConfig         `json:"roller,omitempty"`
+	Input          *InputConfig          `json:"input,omitempty"`
+	LED            *LEDConfig            `json:"led,omitempty"`
+	Color          *ColorConfig          `json:"color,omitempty"`
+	TempProtection *TempProtectionConfig `json:"temp_protection,omitempty"`
+	Schedule       *ScheduleConfig       `json:"schedule,omitempty"`
+	CoIoT          *CoIoTConfig          `json:"coiot,omitempty"`
+	EnergyMeter    *EnergyMeterConfig    `json:"energy_meter,omitempty"`
+	Motion         *MotionConfig         `json:"motion,omitempty"`
+	Sensor         *SensorConfig         `json:"sensor,omitempty"`
+
+	Raw json.RawMessage `json:"raw,omitempty"` // For unsupported settings
 }
 
 // WiFiConfiguration represents WiFi settings

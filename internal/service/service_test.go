@@ -189,6 +189,10 @@ func TestShellyService_Stop(t *testing.T) {
 }
 
 func TestShellyService_DiscoverDevices_InvalidNetwork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
 	db := createTestDB(t)
 	cfg := createTestConfig()
 	logger := createTestLogger(t)

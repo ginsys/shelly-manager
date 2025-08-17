@@ -348,6 +348,10 @@ func TestDiscoverHandler(t *testing.T) {
 }
 
 func TestGetProvisioningStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
@@ -425,6 +429,10 @@ func TestGetDHCPReservations(t *testing.T) {
 
 // Integration test for the full API router
 func TestAPIRouter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
@@ -468,6 +476,10 @@ func TestAPIRouter(t *testing.T) {
 }
 
 func TestControlDevice(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
@@ -559,6 +571,10 @@ func TestControlDevice_MissingAction(t *testing.T) {
 }
 
 func TestGetDeviceStatus(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
@@ -597,6 +613,10 @@ func TestGetDeviceStatus_InvalidID(t *testing.T) {
 }
 
 func TestGetDeviceEnergy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)
@@ -701,6 +721,10 @@ func TestCreateConfigTemplate_InvalidJSON(t *testing.T) {
 }
 
 func TestDetectConfigDrift(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
 	// Setup
 	db := testutil.TestDatabase(t)
 	svc := testShellyService(t, db)

@@ -991,11 +991,11 @@
                 <div id="editDeviceForm" style="display: none;">
                     <!-- Tab navigation -->
                     <div class="config-tabs">
-                        <button class="tab-button active" onclick="switchModalTab(event, 'wifi-tab')">WiFi</button>
-                        <button class="tab-button" onclick="switchModalTab(event, 'mqtt-tab')">MQTT</button>
-                        <button class="tab-button" onclick="switchModalTab(event, 'auth-tab')">Authentication</button>
-                        <button class="tab-button" onclick="switchModalTab(event, 'system-tab')">System</button>
-                        <button class="tab-button" onclick="switchModalTab(event, 'json-tab')">Raw JSON</button>
+                        <button class="tab-button active" data-tab="wifi-tab" onclick="switchModalTab(event, 'wifi-tab')">📶 WiFi</button>
+                        <button class="tab-button" data-tab="mqtt-tab" onclick="switchModalTab(event, 'mqtt-tab')">📡 MQTT</button>
+                        <button class="tab-button" data-tab="auth-tab" onclick="switchModalTab(event, 'auth-tab')">🔐 Authentication</button>
+                        <button class="tab-button" data-tab="system-tab" onclick="switchModalTab(event, 'system-tab')">⚙️ System</button>
+                        <button class="tab-button" data-tab="json-tab" onclick="switchModalTab(event, 'json-tab')">📝 Raw JSON</button>
                     </div>
                     
                     <!-- WiFi Configuration Tab -->
@@ -1730,6 +1730,296 @@
             }
         }
 
+        // Device Capability Detection Service
+        async function getDeviceCapabilities(deviceId) {
+            try {
+                const response = await fetch(`${API_BASE}/devices/${deviceId}/capabilities`);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch capabilities: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                return data.capabilities || [];
+            } catch (error) {
+                console.error('Error fetching device capabilities:', error);
+                // Return default capabilities if API fails
+                return ['wifi', 'mqtt', 'auth', 'system'];
+            }
+        }
+
+        // Function to dynamically generate and show tabs based on device capabilities
+        function updateTabsForCapabilities(capabilities) {
+            const capabilityDefinitions = {
+                // Device-specific capability tabs
+                'relay': {
+                    name: 'Relay',
+                    icon: '🔌',
+                    description: 'Switch control and automation settings'
+                },
+                'power_metering': {
+                    name: 'Power',
+                    icon: '⚡',
+                    description: 'Power monitoring and protection settings'
+                },
+                'dimming': {
+                    name: 'Dimming',
+                    icon: '💡',
+                    description: 'Light dimming and brightness control'
+                },
+                'roller': {
+                    name: 'Roller',
+                    icon: '🪟',
+                    description: 'Roller shutter positioning and calibration'
+                },
+                'input': {
+                    name: 'Input',
+                    icon: '🔗',
+                    description: 'Input configuration and event handling'
+                },
+                'led': {
+                    name: 'LED',
+                    icon: '🚨',
+                    description: 'Status LED and indicator settings'
+                },
+                'color': {
+                    name: 'Color',
+                    icon: '🌈',
+                    description: 'RGB/RGBW color control and effects'
+                },
+                'schedule': {
+                    name: 'Schedule',
+                    icon: '⏰',
+                    description: 'Time-based automation schedules'
+                },
+                'motion': {
+                    name: 'Motion',
+                    icon: '🏃',
+                    description: 'Motion detection and sensitivity settings'
+                },
+                'sensor': {
+                    name: 'Sensor',
+                    icon: '🌡️',
+                    description: 'Temperature, humidity, and sensor calibration'
+                }
+            };
+
+            // Get tab navigation container
+            const tabNavigation = document.querySelector('.config-tabs');
+            const tabContainer = document.querySelector('#editDeviceForm');
+            
+            if (!tabNavigation || !tabContainer) {
+                console.error('Tab navigation or container not found');
+                return;
+            }
+
+            // Remove existing capability tabs (keep core tabs)
+            const coreTabButtons = ['wifi', 'mqtt', 'auth', 'system', 'json'];
+            tabNavigation.querySelectorAll('.tab-button').forEach(button => {
+                const tabName = button.getAttribute('data-tab');
+                if (tabName && !coreTabButtons.includes(tabName.replace('-tab', ''))) {
+                    button.remove();
+                }
+            });
+
+            // Remove existing capability tab content
+            tabContainer.querySelectorAll('.tab-content').forEach(content => {
+                const tabId = content.id;
+                if (tabId && !coreTabButtons.map(t => t + '-tab').includes(tabId)) {
+                    content.remove();
+                }
+            });
+
+            // Add capability tabs
+            capabilities.forEach(capability => {
+                const capabilityDef = capabilityDefinitions[capability];
+                if (!capabilityDef) return;
+
+                // Create tab button
+                const tabButton = document.createElement('button');
+                tabButton.className = 'tab-button';
+                tabButton.setAttribute('data-tab', `${capability}-tab`);
+                tabButton.onclick = (event) => switchModalTab(event, `${capability}-tab`);
+                tabButton.innerHTML = `${capabilityDef.icon} ${capabilityDef.name}`;
+                
+                // Insert before the Raw JSON tab (last tab)
+                const jsonTab = tabNavigation.querySelector('button[data-tab="json-tab"], button[onclick*="json-tab"]');
+                if (jsonTab) {
+                    tabNavigation.insertBefore(tabButton, jsonTab);
+                } else {
+                    tabNavigation.appendChild(tabButton);
+                }
+
+                // Create tab content
+                const tabContent = document.createElement('div');
+                tabContent.id = `${capability}-tab`;
+                tabContent.className = 'tab-content';
+                tabContent.innerHTML = generateCapabilityTabContent(capability, capabilityDef);
+                
+                // Insert before the Raw JSON content
+                const jsonContent = document.getElementById('json-tab');
+                if (jsonContent) {
+                    tabContainer.insertBefore(tabContent, jsonContent);
+                } else {
+                    tabContainer.appendChild(tabContent);
+                }
+            });
+
+            console.log('Generated dynamic tabs for capabilities:', capabilities);
+        }
+
+        // Generate HTML content for capability tabs
+        function generateCapabilityTabContent(capability, definition) {
+            const templates = {
+                'relay': `
+                    <h3>${definition.icon} ${definition.name} Configuration</h3>
+                    <p style="color: #666; margin-bottom: 20px;">${definition.description}</p>
+                    
+                    <div class="config-subsection">
+                        <h4>Basic Settings</h4>
+                        <div class="form-group">
+                            <label class="form-label">Default State</label>
+                            <select id="relay-default-state">
+                                <option value="off">Off</option>
+                                <option value="on">On</option>
+                                <option value="last">Last State</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="relay-auto-on"> Auto Turn On
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Auto On Timer (seconds)</label>
+                            <input type="number" id="relay-auto-on-timer" min="0" placeholder="0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Auto Off Timer (seconds)</label>
+                            <input type="number" id="relay-auto-off-timer" min="0" placeholder="0">
+                        </div>
+                    </div>
+                `,
+                
+                'power_metering': `
+                    <h3>${definition.icon} ${definition.name} Configuration</h3>
+                    <p style="color: #666; margin-bottom: 20px;">${definition.description}</p>
+                    
+                    <div class="config-subsection">
+                        <h4>Power Limits</h4>
+                        <div class="form-group">
+                            <label class="form-label">Maximum Power (W)</label>
+                            <input type="number" id="power-max-power" min="0" placeholder="3500">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="power-overpower-protection"> Overpower Protection
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Report Period (seconds)</label>
+                            <input type="number" id="power-report-period" min="1" placeholder="60">
+                        </div>
+                    </div>
+                `,
+                
+                'dimming': `
+                    <h3>${definition.icon} ${definition.name} Configuration</h3>
+                    <p style="color: #666; margin-bottom: 20px;">${definition.description}</p>
+                    
+                    <div class="config-subsection">
+                        <h4>Dimming Settings</h4>
+                        <div class="form-group">
+                            <label class="form-label">Minimum Brightness (%)</label>
+                            <input type="number" id="dimming-min-brightness" min="1" max="100" placeholder="1">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Maximum Brightness (%)</label>
+                            <input type="number" id="dimming-max-brightness" min="1" max="100" placeholder="100">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Fade Rate</label>
+                            <select id="dimming-fade-rate">
+                                <option value="1">Slow</option>
+                                <option value="2">Medium</option>
+                                <option value="3">Fast</option>
+                            </select>
+                        </div>
+                    </div>
+                `,
+                
+                'roller': `
+                    <h3>${definition.icon} ${definition.name} Configuration</h3>
+                    <p style="color: #666; margin-bottom: 20px;">${definition.description}</p>
+                    
+                    <div class="config-subsection">
+                        <h4>Positioning & Calibration</h4>
+                        <div class="form-group">
+                            <label class="form-label">Swap Open/Close Direction</label>
+                            <input type="checkbox" id="roller-swap-inputs">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Full Open Time (seconds)</label>
+                            <input type="number" id="roller-open-time" min="1" placeholder="60">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Full Close Time (seconds)</label>
+                            <input type="number" id="roller-close-time" min="1" placeholder="60">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Positioning Mode</label>
+                            <select id="roller-positioning-mode">
+                                <option value="stop">Stop on position</option>
+                                <option value="continue">Continue past position</option>
+                            </select>
+                        </div>
+                    </div>
+                `,
+                
+                'color': `
+                    <h3>${definition.icon} ${definition.name} Configuration</h3>
+                    <p style="color: #666; margin-bottom: 20px;">${definition.description}</p>
+                    
+                    <div class="config-subsection">
+                        <h4>Color Settings</h4>
+                        <div class="form-group">
+                            <label class="form-label">Default Color</label>
+                            <input type="color" id="color-default" value="#ffffff">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Default Brightness (%)</label>
+                            <input type="number" id="color-default-brightness" min="1" max="100" placeholder="100">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Color Transition Time (ms)</label>
+                            <input type="number" id="color-transition-time" min="0" placeholder="500">
+                        </div>
+                    </div>
+                `
+            };
+
+            // Return template or default
+            return templates[capability] || `
+                <h3>${definition.icon} ${definition.name} Configuration</h3>
+                <p style="color: #666; margin-bottom: 20px;">${definition.description}</p>
+                <div class="config-subsection">
+                    <p style="color: #888;">Configuration options for ${definition.name} will be available in a future update.</p>
+                </div>
+            `;
+        }
+
         async function editDevice(id) {
             showModal('editDeviceModal');
             
@@ -1745,14 +2035,22 @@
             window.currentEditDeviceId = id;
             
             try {
-                // Fetch device configuration using typed config API
-                const response = await fetch(`${API_BASE}/devices/${id}/config/typed`);
+                // Fetch device capabilities and configuration in parallel
+                const [capabilitiesPromise, configPromise] = await Promise.all([
+                    getDeviceCapabilities(id),
+                    fetch(`${API_BASE}/devices/${id}/config/typed`)
+                ]);
+
+                const capabilities = capabilitiesPromise;
                 
-                if (!response.ok) {
-                    throw new Error(`Failed to load configuration: ${response.status} ${response.statusText}`);
+                if (!configPromise.ok) {
+                    throw new Error(`Failed to load configuration: ${configPromise.status} ${configPromise.statusText}`);
                 }
                 
-                const data = await response.json();
+                const data = await configPromise.json();
+                
+                // Update tabs based on device capabilities
+                updateTabsForCapabilities(capabilities);
                 
                 // Populate form with configuration data
                 populateDeviceForm(data.configuration);
@@ -1762,7 +2060,7 @@
                 document.getElementById('editDeviceForm').style.display = 'block';
                 
                 // Set save status
-                document.getElementById('save-status').textContent = 'Configuration loaded successfully';
+                document.getElementById('save-status').textContent = `Configuration loaded successfully (Device capabilities: ${capabilities.join(', ')})`;
                 document.getElementById('save-status').className = 'success';
                 
             } catch (error) {
