@@ -355,4 +355,3 @@ func TestConfigurationValidator_Integration(t *testing.T) {
 		t.Error("Expected other validation warnings")
 	}
 }
-

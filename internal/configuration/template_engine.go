@@ -20,12 +20,12 @@ import (
 
 // TemplateEngine handles variable substitution in device configurations
 type TemplateEngine struct {
-	logger         *logging.Logger
-	funcs          template.FuncMap
-	templateCache  map[string]*template.Template
-	baseTemplates  map[string]string
-	cacheMutex     sync.RWMutex
-	templatesPath  string
+	logger        *logging.Logger
+	funcs         template.FuncMap
+	templateCache map[string]*template.Template
+	baseTemplates map[string]string
+	cacheMutex    sync.RWMutex
+	templatesPath string
 }
 
 // TemplateContext contains variables available for template substitution
@@ -78,6 +78,21 @@ type TemplateContext struct {
 
 // NewTemplateEngine creates a new template engine with built-in functions
 func NewTemplateEngine(logger *logging.Logger) *TemplateEngine {
+	// Handle nil logger case for testing
+	if logger == nil {
+		config := logging.Config{
+			Level:  "info",
+			Format: "text",
+			Output: "stdout",
+		}
+		var err error
+		logger, err = logging.New(config)
+		if err != nil {
+			// If we can't create a logger, create a minimal one
+			logger = &logging.Logger{}
+		}
+	}
+
 	engine := &TemplateEngine{
 		logger:        logger,
 		funcs:         make(template.FuncMap),
@@ -88,7 +103,7 @@ func NewTemplateEngine(logger *logging.Logger) *TemplateEngine {
 
 	// Add built-in template functions
 	engine.addBuiltinFunctions()
-	
+
 	// Load base templates
 	engine.loadBaseTemplates()
 
@@ -99,7 +114,7 @@ func NewTemplateEngine(logger *logging.Logger) *TemplateEngine {
 func (te *TemplateEngine) addBuiltinFunctions() {
 	// Start with Sprig functions for rich functionality
 	te.funcs = template.FuncMap{}
-	
+
 	// Add safe Sprig functions (exclude dangerous ones)
 	safeFunctions := te.getSafeSprigFunctions()
 	for name, fn := range safeFunctions {
@@ -149,12 +164,12 @@ func (te *TemplateEngine) addBuiltinFunctions() {
 // getSafeSprigFunctions returns Sprig functions excluding dangerous ones
 func (te *TemplateEngine) getSafeSprigFunctions() template.FuncMap {
 	sprigFuncs := sprig.TxtFuncMap()
-	
+
 	// Remove dangerous functions that could compromise security
 	dangerousFunctions := []string{
 		// File system operations
 		"readFile", "writeFile", "glob",
-		// OS operations  
+		// OS operations
 		"exec", "shell", "command",
 		// Network operations
 		"httpGet", "httpPost", "httpPut", "httpDelete",
@@ -274,7 +289,7 @@ func (te *TemplateEngine) getOrCreateTemplate(templateStr string) (*template.Tem
 
 	// Cache the template
 	te.templateCache[templateHash] = tmpl
-	
+
 	return tmpl, nil
 }
 
@@ -447,38 +462,6 @@ func generateHostName(deviceName string) string {
 	return hostname
 }
 
-func formatTime(format string, t time.Time) string {
-	return t.Format(format)
-}
-
-func requireValue(value interface{}) (interface{}, error) {
-	if value == nil || (reflect.ValueOf(value).Kind() == reflect.String && value.(string) == "") {
-		return nil, fmt.Errorf("required value is missing or empty")
-	}
-	return value, nil
-}
-
-func defaultValue(value, defaultVal interface{}) interface{} {
-	if value == nil || (reflect.ValueOf(value).Kind() == reflect.String && value.(string) == "") {
-		return defaultVal
-	}
-	return value
-}
-
-func toJSON(value interface{}) (string, error) {
-	bytes, err := json.Marshal(value)
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
-}
-
-func fromJSON(jsonStr string) (interface{}, error) {
-	var result interface{}
-	err := json.Unmarshal([]byte(jsonStr), &result)
-	return result, err
-}
-
 // Enhanced helper functions
 
 func getEnvWithDefault(key, defaultValue string) string {
@@ -493,7 +476,7 @@ func requireValueWithMessage(value interface{}, message string) (interface{}, er
 		if message == "" {
 			message = "required value is missing or empty"
 		}
-		return nil, fmt.Errorf(message)
+		return nil, fmt.Errorf("%s", message)
 	}
 	return value, nil
 }
@@ -533,7 +516,7 @@ func (te *TemplateEngine) loadBaseTemplates() {
 
 	var files []string
 	var templatesGlob string
-	
+
 	for _, path := range possiblePaths {
 		templatesGlob = filepath.Join(path, "*.json")
 		var err error
