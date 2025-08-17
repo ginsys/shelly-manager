@@ -81,6 +81,10 @@ discovery:
 	})
 
 	t.Run("discover command with timeout", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping network-dependent test in short mode")
+		}
+
 		// This should complete quickly since we're using a small network range
 		output, err := runCommandWithTimeout(t, 10*time.Second, binaryPath, "--config", configPath, "discover", "192.168.1.0/30")
 		if err != nil {
@@ -106,6 +110,10 @@ discovery:
 	})
 
 	t.Run("scan-ap command", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping network-dependent test in short mode")
+		}
+
 		output, err := runCommand(t, binaryPath, "--config", configPath, "scan-ap")
 		if err != nil {
 			t.Fatalf("Scan-AP command failed: %v", err)
@@ -259,6 +267,10 @@ discovery:
 	})
 
 	t.Run("add command with unreachable IP", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping network-dependent test in short mode")
+		}
+
 		// Use a non-routable IP address that will timeout quickly
 		_, err := runCommandWithTimeout(t, 5*time.Second, binaryPath, "--config", configPath, "add", "10.255.255.254")
 		if err == nil {
@@ -320,6 +332,10 @@ discovery:
 	}
 
 	t.Run("discover with specific network", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping network-dependent test in short mode")
+		}
+
 		output, err := runCommandWithTimeout(t, 10*time.Second, binaryPath, "--config", configPath, "discover", "192.168.1.0/30")
 		if err != nil {
 			t.Fatalf("Discover command with network failed: %v", err)

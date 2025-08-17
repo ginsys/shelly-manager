@@ -1,6 +1,6 @@
 .PHONY: build build-manager build-provisioner run run-provisioner clean docker-build docker-run docker-stop docker-logs dev-setup deps deps-tidy \
 	lint lint-fix format format-check hooks-install hooks-uninstall \
-	test test-unit test-integration test-full \
+	test test-unit test-integration test-full test-full-short \
 	test-race test-race-short test-race-full \
 	test-coverage test-coverage-short test-coverage-full test-coverage-ci test-coverage-check test-coverage-with-check \
 	test-matrix test-ci \
@@ -53,6 +53,10 @@ test-integration:
 # Run full test suite including network tests (slower, with timeout)
 test-full:
 	CGO_ENABLED=1 go test -v -timeout=5m ./...
+
+# Run full test suite with short flag (faster, skips network tests)
+test-full-short:
+	CGO_ENABLED=1 go test -v -short -timeout=5m ./...
 
 # ==============================================================================
 # RACE DETECTION TESTS
