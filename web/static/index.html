@@ -479,6 +479,214 @@
             width: 20px;
             height: 20px;
         }
+
+        /* Device Edit Modal Styles */
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e1e8ed;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #7f8c8d;
+            background: none;
+            border: none;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .close:hover {
+            color: #e74c3c;
+            background: #f8f9fa;
+        }
+
+        .modal-footer {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #e1e8ed;
+        }
+
+        .config-tabs {
+            display: flex;
+            border-bottom: 2px solid #e1e8ed;
+            margin-bottom: 20px;
+            gap: 5px;
+        }
+
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #7f8c8d;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tab-button:hover {
+            background: #f8f9fa;
+            color: #2c3e50;
+        }
+
+        .tab-button.active {
+            color: #3498db;
+            background: #f8f9fa;
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #3498db;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 20px 0;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tab-content h3 {
+            margin: 0 0 20px 0;
+            color: #2c3e50;
+            font-size: 18px;
+        }
+
+        .field-error {
+            color: #e74c3c;
+            font-size: 12px;
+            margin-top: 5px;
+            min-height: 16px;
+        }
+
+        .form-input.error {
+            border-color: #e74c3c;
+            background: #fdf2f2;
+        }
+
+        .form-input.success {
+            border-color: #27ae60;
+            background: #f2fff2;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            color: #7f8c8d;
+            padding: 5px;
+            border-radius: 3px;
+            transition: all 0.3s ease;
+        }
+
+        .password-toggle:hover {
+            background: #f8f9fa;
+            color: #2c3e50;
+        }
+
+        .form-input[type="password"] + .password-toggle,
+        .form-input[type="text"] + .password-toggle {
+            margin-left: -45px;
+        }
+
+        #wifi-settings, #mqtt-settings, #auth-settings {
+            padding-left: 20px;
+            border-left: 3px solid #e1e8ed;
+            margin-top: 15px;
+        }
+
+        #static-ip-config {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border-left: 3px solid #3498db;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #2980b9, #1f618d);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        #save-status {
+            font-style: italic;
+        }
+
+        #save-status.success {
+            color: #27ae60;
+        }
+
+        #save-status.error {
+            color: #e74c3c;
+        }
+
+        /* Form validation states */
+        .form-group.has-error .form-input {
+            border-color: #e74c3c;
+            background: #fdf2f2;
+        }
+
+        .form-group.has-success .form-input {
+            border-color: #27ae60;
+            background: #f2fff2;
+        }
+
+        /* Loading and error states */
+        #editDeviceLoading {
+            font-style: italic;
+            color: #7f8c8d;
+        }
+
+        #editDeviceError {
+            background: #fdf2f2;
+            border: 1px solid #e74c3c;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -497,9 +705,9 @@
 
         <div class="main-content">
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('devices')">Devices</button>
-                <button class="tab" onclick="switchTab('templates')">Configuration Templates</button>
-                <button class="tab" onclick="switchTab('bulk')">Bulk Operations</button>
+                <button class="tab active" onclick="switchMainTab('devices')">Devices</button>
+                <button class="tab" onclick="switchMainTab('templates')">Configuration Templates</button>
+                <button class="tab" onclick="switchMainTab('bulk')">Bulk Operations</button>
             </div>
             
             <div id="devices-tab" class="tab-content active">
@@ -757,6 +965,363 @@
             </div>
             <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                 <button class="btn" onclick="closeModal('historyModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Edit Modal -->
+    <div id="editDeviceModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 id="editDeviceModalTitle">Edit Device Configuration</h2>
+                <span class="close" onclick="closeModal('editDeviceModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <!-- Loading state -->
+                <div id="editDeviceLoading" style="text-align: center; padding: 20px;">
+                    <p>Loading device configuration...</p>
+                </div>
+                
+                <!-- Error state -->
+                <div id="editDeviceError" style="display: none; text-align: center; padding: 20px; color: #e74c3c;">
+                    <p id="editDeviceErrorMessage">Error loading configuration</p>
+                </div>
+                
+                <!-- Form content -->
+                <div id="editDeviceForm" style="display: none;">
+                    <!-- Tab navigation -->
+                    <div class="config-tabs">
+                        <button class="tab-button active" onclick="switchModalTab(event, 'wifi-tab')">WiFi</button>
+                        <button class="tab-button" onclick="switchModalTab(event, 'mqtt-tab')">MQTT</button>
+                        <button class="tab-button" onclick="switchModalTab(event, 'auth-tab')">Authentication</button>
+                        <button class="tab-button" onclick="switchModalTab(event, 'system-tab')">System</button>
+                        <button class="tab-button" onclick="switchModalTab(event, 'json-tab')">Raw JSON</button>
+                    </div>
+                    
+                    <!-- WiFi Configuration Tab -->
+                    <div id="wifi-tab" class="tab-content active">
+                        <h3>WiFi Configuration</h3>
+                        
+                        <!-- WiFi Station Mode Section -->
+                        <div class="config-subsection">
+                            <h4 style="color: #2c3e50; margin-bottom: 10px;">📡 Connect to WiFi Network (Station Mode)</h4>
+                            <p style="color: #666; font-size: 0.9rem; margin-bottom: 15px;">Configure the device to join an existing WiFi network</p>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" id="wifi-sta-enable" onchange="toggleWiFiStationSettings()"> Enable WiFi Client Mode
+                                </label>
+                            </div>
+                            
+                            <div id="wifi-sta-settings" style="display: none; padding-left: 20px; border-left: 3px solid #3498db; margin-left: 10px;">
+                                <div class="form-group">
+                                    <label class="form-label">Network Name (SSID)</label>
+                                    <input type="text" class="form-input" id="wifi-sta-ssid" maxlength="32" placeholder="MyHomeNetwork">
+                                    <div class="field-error" id="wifi-sta-ssid-error"></div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Network Password</label>
+                                    <div style="position: relative;">
+                                        <input type="password" class="form-input" id="wifi-sta-password" maxlength="63" placeholder="WiFi password">
+                                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('wifi-sta-password')">👁️</button>
+                                    </div>
+                                    <div class="field-error" id="wifi-sta-password-error"></div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">IP Configuration</label>
+                                    <select class="form-input" id="wifi-sta-ipv4mode" onchange="toggleStaticIP()">
+                                        <option value="dhcp">DHCP (Automatic)</option>
+                                        <option value="static">Static IP</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Static IP Configuration -->
+                                <div id="static-ip-config" style="display: none;">
+                                    <div class="form-group">
+                                        <label class="form-label">IP Address</label>
+                                        <input type="text" class="form-input" id="static-ip" placeholder="192.168.1.100">
+                                        <div class="field-error" id="static-ip-error"></div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">Netmask</label>
+                                        <input type="text" class="form-input" id="static-netmask" placeholder="255.255.255.0">
+                                        <div class="field-error" id="static-netmask-error"></div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">Gateway</label>
+                                        <input type="text" class="form-input" id="static-gateway" placeholder="192.168.1.1">
+                                        <div class="field-error" id="static-gateway-error"></div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">DNS Server (optional)</label>
+                                        <input type="text" class="form-input" id="static-nameserver" placeholder="8.8.8.8">
+                                        <div class="field-error" id="static-nameserver-error"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- WiFi Access Point Mode Section -->
+                        <div class="config-subsection" style="margin-top: 30px;">
+                            <h4 style="color: #2c3e50; margin-bottom: 10px;">📶 Access Point Mode (Create Hotspot)</h4>
+                            <p style="color: #666; font-size: 0.9rem; margin-bottom: 15px;">Device creates its own WiFi network for initial setup or fallback access</p>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" id="wifi-ap-enable" onchange="toggleWiFiAPSettings()"> Enable Access Point
+                                </label>
+                            </div>
+                            
+                            <div id="wifi-ap-settings" style="display: none; padding-left: 20px; border-left: 3px solid #e67e22; margin-left: 10px;">
+                                <div class="form-group">
+                                    <label class="form-label">Access Point Name (SSID)</label>
+                                    <input type="text" class="form-input" id="wifi-ap-ssid" maxlength="32" placeholder="Shelly-Device-Setup">
+                                    <div class="field-error" id="wifi-ap-ssid-error"></div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Access Point Password</label>
+                                    <div style="position: relative;">
+                                        <input type="password" class="form-input" id="wifi-ap-password" minlength="8" maxlength="63" placeholder="Minimum 8 characters">
+                                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('wifi-ap-password')">👁️</button>
+                                    </div>
+                                    <div class="field-error" id="wifi-ap-password-error"></div>
+                                    <small style="color: #666;">Leave empty for open network (not recommended)</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Security Mode</label>
+                                    <select class="form-input" id="wifi-ap-security">
+                                        <option value="wpa2_psk">WPA2 (Recommended)</option>
+                                        <option value="wpa_psk">WPA</option>
+                                        <option value="open">Open (No Password)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- MQTT Configuration Tab -->
+                    <div id="mqtt-tab" class="tab-content">
+                        <h3>MQTT Configuration</h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="mqtt-enable"> Enable MQTT
+                            </label>
+                        </div>
+                        
+                        <div id="mqtt-settings" style="display: none;">
+                            <div class="form-group">
+                                <label class="form-label">MQTT Server</label>
+                                <input type="text" class="form-input" id="mqtt-server" placeholder="mqtt.example.com or 192.168.1.10">
+                                <div class="field-error" id="mqtt-server-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Port</label>
+                                <input type="number" class="form-input" id="mqtt-port" min="1" max="65535" placeholder="1883">
+                                <div class="field-error" id="mqtt-port-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Username (optional)</label>
+                                <input type="text" class="form-input" id="mqtt-user" placeholder="MQTT username">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Password (optional)</label>
+                                <div style="position: relative;">
+                                    <input type="password" class="form-input" id="mqtt-password" placeholder="MQTT password">
+                                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('mqtt-password')">👁️</button>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Client ID (optional)</label>
+                                <input type="text" class="form-input" id="mqtt-client-id" maxlength="128" placeholder="shelly-device-123">
+                                <div class="field-error" id="mqtt-client-id-error"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Authentication Configuration Tab -->
+                    <div id="auth-tab" class="tab-content">
+                        <h3>Authentication Configuration</h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">
+                                <input type="checkbox" id="auth-enable"> Enable Authentication
+                            </label>
+                        </div>
+                        
+                        <div id="auth-settings" style="display: none;">
+                            <div class="form-group">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-input" id="auth-username" maxlength="64" placeholder="admin">
+                                <div class="field-error" id="auth-username-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Password</label>
+                                <div style="position: relative;">
+                                    <input type="password" class="form-input" id="auth-password" placeholder="Password">
+                                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('auth-password')">👁️</button>
+                                </div>
+                                <div class="field-error" id="auth-password-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Realm (optional)</label>
+                                <input type="text" class="form-input" id="auth-realm" maxlength="64" placeholder="device">
+                                <div class="field-error" id="auth-realm-error"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- System Configuration Tab -->
+                    <div id="system-tab" class="tab-content">
+                        <h3>System Configuration</h3>
+                        
+                        <!-- Device Settings Section -->
+                        <div class="config-subsection">
+                            <h4 style="color: #2c3e50; margin-bottom: 10px;">📱 Device Settings</h4>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Device Name</label>
+                                <input type="text" class="form-input" id="system-device-name" maxlength="64" placeholder="Living Room Light">
+                                <div class="field-error" id="system-device-name-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Hostname</label>
+                                <input type="text" class="form-input" id="system-hostname" maxlength="63" placeholder="living-room-light">
+                                <div class="field-error" id="system-hostname-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Timezone</label>
+                                <input type="text" class="form-input" id="system-timezone" maxlength="64" placeholder="America/New_York">
+                                <div class="field-error" id="system-timezone-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" id="system-discoverable"> Device Discoverable
+                                </label>
+                                <small style="color: #666; display: block; margin-top: 5px;">Allow device to be discovered by other applications</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" id="system-eco-mode"> Eco Mode
+                                </label>
+                                <small style="color: #666; display: block; margin-top: 5px;">Enable power saving mode</small>
+                            </div>
+                        </div>
+                        
+                        <!-- SNTP Time Settings Section -->
+                        <div class="config-subsection">
+                            <h4 style="color: #2c3e50; margin-bottom: 10px;">🕒 Time Settings</h4>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" id="sntp-enable" onchange="toggleSNTPSettings()"> Enable SNTP
+                                </label>
+                                <small style="color: #666; display: block; margin-top: 5px;">Synchronize time with network time server</small>
+                            </div>
+                            
+                            <div id="sntp-settings" style="display: none; margin-left: 20px;">
+                                <div class="form-group">
+                                    <label class="form-label">SNTP Server</label>
+                                    <input type="text" class="form-input" id="sntp-server" placeholder="pool.ntp.org">
+                                    <div class="field-error" id="sntp-server-error"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Location Settings Section -->
+                        <div class="config-subsection">
+                            <h4 style="color: #2c3e50; margin-bottom: 10px;">📍 Location Settings</h4>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Latitude</label>
+                                <input type="number" class="form-input" id="location-latitude" step="0.000001" min="-90" max="90" placeholder="40.7128">
+                                <div class="field-error" id="location-latitude-error"></div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Longitude</label>
+                                <input type="number" class="form-input" id="location-longitude" step="0.000001" min="-180" max="180" placeholder="-74.0060">
+                                <div class="field-error" id="location-longitude-error"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Cloud Settings Section -->
+                        <div class="config-subsection">
+                            <h4 style="color: #2c3e50; margin-bottom: 10px;">☁️ Cloud Settings</h4>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" id="cloud-enable"> Enable Cloud Connectivity
+                                </label>
+                                <small style="color: #666; display: block; margin-top: 5px;">Connect device to Shelly Cloud service</small>
+                            </div>
+                        </div>
+                        
+                        <!-- CoIoT Settings Section -->
+                        <div class="config-subsection">
+                            <h4 style="color: #2c3e50; margin-bottom: 10px;">🔗 CoIoT Settings</h4>
+                            
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <input type="checkbox" id="coiot-enable" onchange="toggleCoIoTSettings()"> Enable CoIoT
+                                </label>
+                                <small style="color: #666; display: block; margin-top: 5px;">Constrained Application Protocol Internet of Things</small>
+                            </div>
+                            
+                            <div id="coiot-settings" style="display: none; margin-left: 20px;">
+                                <div class="form-group">
+                                    <label class="form-label">CoIoT Peer</label>
+                                    <input type="text" class="form-input" id="coiot-peer" placeholder="224.0.1.187:5683">
+                                    <div class="field-error" id="coiot-peer-error"></div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Update Period (seconds)</label>
+                                    <input type="number" class="form-input" id="coiot-update-period" min="1" max="3600" placeholder="15">
+                                    <div class="field-error" id="coiot-update-period-error"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Raw JSON Tab -->
+                    <div id="json-tab" class="tab-content">
+                        <h3>Raw JSON Configuration</h3>
+                        <p style="margin-bottom: 15px; color: #666;">
+                            Advanced users can edit the raw JSON configuration directly. 
+                            Changes here will override form values.
+                        </p>
+                        <textarea id="config-json" style="width: 100%; height: 400px; font-family: monospace; font-size: 14px; border: 1px solid #ddd; border-radius: 5px; padding: 10px;" placeholder="Loading configuration..."></textarea>
+                        <div class="field-error" id="config-json-error"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <div style="display: flex; gap: 10px; justify-content: space-between; align-items: center;">
+                    <div id="save-status" style="color: #666; font-size: 14px;"></div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" onclick="closeModal('editDeviceModal')">Cancel</button>
+                        <button class="btn btn-primary" onclick="validateAndSaveDeviceConfig()" id="save-config-btn">Save Configuration</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1165,8 +1730,587 @@
             }
         }
 
-        function editDevice(id) {
-            console.log('Edit functionality would be implemented here');
+        async function editDevice(id) {
+            showModal('editDeviceModal');
+            
+            // Update modal title
+            document.getElementById('editDeviceModalTitle').textContent = `Edit Device Configuration - ID: ${id}`;
+            
+            // Show loading state
+            document.getElementById('editDeviceLoading').style.display = 'block';
+            document.getElementById('editDeviceError').style.display = 'none';
+            document.getElementById('editDeviceForm').style.display = 'none';
+            
+            // Store device ID for later use
+            window.currentEditDeviceId = id;
+            
+            try {
+                // Fetch device configuration using typed config API
+                const response = await fetch(`${API_BASE}/devices/${id}/config/typed`);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load configuration: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Populate form with configuration data
+                populateDeviceForm(data.configuration);
+                
+                // Show form and hide loading
+                document.getElementById('editDeviceLoading').style.display = 'none';
+                document.getElementById('editDeviceForm').style.display = 'block';
+                
+                // Set save status
+                document.getElementById('save-status').textContent = 'Configuration loaded successfully';
+                document.getElementById('save-status').className = 'success';
+                
+            } catch (error) {
+                console.error('Error loading device configuration:', error);
+                
+                // Show error state
+                document.getElementById('editDeviceLoading').style.display = 'none';
+                document.getElementById('editDeviceError').style.display = 'block';
+                document.getElementById('editDeviceErrorMessage').textContent = error.message;
+                
+                // Set save status
+                document.getElementById('save-status').textContent = 'Failed to load configuration';
+                document.getElementById('save-status').className = 'error';
+            }
+        }
+
+        // Helper function to populate form with device configuration
+        function populateDeviceForm(config) {
+            // Clear all form fields first
+            clearDeviceForm();
+            
+            // WiFi Station Configuration
+            if (config.wifi) {
+                document.getElementById('wifi-sta-enable').checked = config.wifi.enable || false;
+                document.getElementById('wifi-sta-ssid').value = config.wifi.ssid || '';
+                document.getElementById('wifi-sta-password').value = config.wifi.password || '';
+                document.getElementById('wifi-sta-ipv4mode').value = config.wifi.ipv4mode || 'dhcp';
+                
+                // Static IP configuration
+                if (config.wifi.static_ip) {
+                    document.getElementById('static-ip').value = config.wifi.static_ip.ip || '';
+                    document.getElementById('static-netmask').value = config.wifi.static_ip.netmask || '';
+                    document.getElementById('static-gateway').value = config.wifi.static_ip.gw || '';
+                    document.getElementById('static-nameserver').value = config.wifi.static_ip.nameserver || '';
+                }
+                
+                // Access Point configuration
+                if (config.wifi.ap) {
+                    document.getElementById('wifi-ap-enable').checked = config.wifi.ap.enable || false;
+                    document.getElementById('wifi-ap-ssid').value = config.wifi.ap.ssid || '';
+                    document.getElementById('wifi-ap-password').value = config.wifi.ap.pass || '';
+                    document.getElementById('wifi-ap-security').value = config.wifi.ap.key || 'wpa2_psk';
+                }
+                
+                toggleWiFiStationSettings();
+                toggleWiFiAPSettings();
+                toggleStaticIP();
+            }
+            
+            // MQTT Configuration
+            if (config.mqtt) {
+                document.getElementById('mqtt-enable').checked = config.mqtt.enable || false;
+                document.getElementById('mqtt-server').value = config.mqtt.server || '';
+                document.getElementById('mqtt-port').value = config.mqtt.port || '';
+                document.getElementById('mqtt-user').value = config.mqtt.user || '';
+                document.getElementById('mqtt-password').value = config.mqtt.pass || '';
+                document.getElementById('mqtt-client-id').value = config.mqtt.id || '';
+                
+                toggleMQTTSettings();
+            }
+            
+            // Authentication Configuration
+            if (config.auth) {
+                document.getElementById('auth-enable').checked = config.auth.enable || false;
+                document.getElementById('auth-username').value = config.auth.user || '';
+                document.getElementById('auth-password').value = config.auth.pass || '';
+                document.getElementById('auth-realm').value = config.auth.realm || '';
+                
+                toggleAuthSettings();
+            }
+            
+            // System Configuration
+            if (config.system) {
+                // Device settings
+                if (config.system.device) {
+                    document.getElementById('system-device-name').value = config.system.device.name || '';
+                    document.getElementById('system-hostname').value = config.system.device.hostname || '';
+                    document.getElementById('system-timezone').value = config.system.device.timezone || '';
+                    document.getElementById('system-discoverable').checked = config.system.device.discoverable || false;
+                    document.getElementById('system-eco-mode').checked = config.system.device.eco_mode || false;
+                }
+                
+                // Location settings
+                if (config.system.location) {
+                    document.getElementById('location-latitude').value = config.system.location.lat || '';
+                    document.getElementById('location-longitude').value = config.system.location.lng || '';
+                }
+                
+                // SNTP settings - check both typed config and raw data
+                let sntpEnabled = false;
+                let sntpServer = '';
+                
+                if (config.system.sntp) {
+                    sntpEnabled = true; // If present in typed config, it means it's enabled
+                    sntpServer = config.system.sntp.server || '';
+                } else if (config.raw) {
+                    // Check raw data for SNTP settings
+                    try {
+                        const rawData = typeof config.raw === 'string' ? JSON.parse(config.raw) : config.raw;
+                        if (rawData.sntp) {
+                            sntpEnabled = rawData.sntp.enabled || false;
+                            sntpServer = rawData.sntp.server || '';
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse raw config for SNTP:', e);
+                    }
+                }
+                
+                document.getElementById('sntp-enable').checked = sntpEnabled;
+                document.getElementById('sntp-server').value = sntpServer;
+                toggleSNTPSettings();
+            }
+            
+            // Cloud Configuration
+            if (config.cloud) {
+                document.getElementById('cloud-enable').checked = config.cloud.enable || false;
+            }
+            
+            // CoIoT Configuration from raw field
+            let coiotConfig = null;
+            if (config.raw) {
+                try {
+                    const rawData = typeof config.raw === 'string' ? JSON.parse(config.raw) : config.raw;
+                    coiotConfig = rawData.coiot;
+                } catch (e) {
+                    console.warn('Failed to parse raw config for CoIoT:', e);
+                }
+            }
+            
+            if (coiotConfig) {
+                document.getElementById('coiot-enable').checked = coiotConfig.enabled || false;
+                document.getElementById('coiot-peer').value = coiotConfig.peer || '';
+                document.getElementById('coiot-update-period').value = coiotConfig.update_period || '';
+                toggleCoIoTSettings();
+            }
+            
+            // Raw JSON
+            document.getElementById('config-json').value = JSON.stringify(config, null, 2);
+        }
+
+        // Helper function to clear all form fields
+        function clearDeviceForm() {
+            // Clear all text inputs
+            document.querySelectorAll('#editDeviceModal input[type="text"], #editDeviceModal input[type="password"], #editDeviceModal input[type="number"]').forEach(input => {
+                input.value = '';
+                input.classList.remove('error', 'success');
+            });
+            
+            // Clear all checkboxes
+            document.querySelectorAll('#editDeviceModal input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            
+            // Clear all selects
+            document.querySelectorAll('#editDeviceModal select').forEach(select => {
+                select.selectedIndex = 0;
+            });
+            
+            // Clear all error messages
+            document.querySelectorAll('.field-error').forEach(error => {
+                error.textContent = '';
+            });
+            
+            // Hide conditional sections
+            document.getElementById('wifi-sta-settings').style.display = 'none';
+            document.getElementById('wifi-ap-settings').style.display = 'none';
+            document.getElementById('mqtt-settings').style.display = 'none';
+            document.getElementById('auth-settings').style.display = 'none';
+            document.getElementById('static-ip-config').style.display = 'none';
+            document.getElementById('sntp-settings').style.display = 'none';
+            document.getElementById('coiot-settings').style.display = 'none';
+        }
+
+        // Modal tab switching functionality
+        function switchModalTab(event, tabName) {
+            // Prevent event bubbling to avoid interfering with main page
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            // Remove active class from all modal tab buttons only
+            document.querySelectorAll('#editDeviceModal .tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Remove active class from all modal tab content only
+            document.querySelectorAll('#editDeviceModal .tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Add active class to clicked button and corresponding content
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
+            const targetTab = document.getElementById(tabName);
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
+        }
+
+        // Toggle password visibility
+        function togglePasswordVisibility(inputId) {
+            const input = document.getElementById(inputId);
+            const button = input.nextElementSibling;
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                button.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                button.textContent = '👁️';
+            }
+        }
+
+        // Toggle WiFi settings visibility
+        function toggleWiFiSettings() {
+            const enabled = document.getElementById('wifi-enable').checked;
+            document.getElementById('wifi-settings').style.display = enabled ? 'block' : 'none';
+        }
+
+        // Toggle WiFi Station settings visibility
+        function toggleWiFiStationSettings() {
+            const enabled = document.getElementById('wifi-sta-enable').checked;
+            document.getElementById('wifi-sta-settings').style.display = enabled ? 'block' : 'none';
+        }
+
+        // Toggle WiFi Access Point settings visibility
+        function toggleWiFiAPSettings() {
+            const enabled = document.getElementById('wifi-ap-enable').checked;
+            document.getElementById('wifi-ap-settings').style.display = enabled ? 'block' : 'none';
+        }
+
+        // Toggle static IP configuration visibility
+        function toggleStaticIP() {
+            const mode = document.getElementById('wifi-sta-ipv4mode').value;
+            document.getElementById('static-ip-config').style.display = mode === 'static' ? 'block' : 'none';
+        }
+
+        // Toggle MQTT settings visibility
+        function toggleMQTTSettings() {
+            const enabled = document.getElementById('mqtt-enable').checked;
+            document.getElementById('mqtt-settings').style.display = enabled ? 'block' : 'none';
+        }
+
+        // Toggle Auth settings visibility
+        function toggleAuthSettings() {
+            const enabled = document.getElementById('auth-enable').checked;
+            document.getElementById('auth-settings').style.display = enabled ? 'block' : 'none';
+        }
+
+        // Toggle SNTP settings visibility
+        function toggleSNTPSettings() {
+            const enabled = document.getElementById('sntp-enable').checked;
+            document.getElementById('sntp-settings').style.display = enabled ? 'block' : 'none';
+        }
+
+        // Toggle CoIoT settings visibility
+        function toggleCoIoTSettings() {
+            const enabled = document.getElementById('coiot-enable').checked;
+            document.getElementById('coiot-settings').style.display = enabled ? 'block' : 'none';
+        }
+
+        // Add event listeners for checkbox toggles
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners after DOM is loaded
+            setTimeout(() => {
+                const wifiEnableCheckbox = document.getElementById('wifi-enable');
+                if (wifiEnableCheckbox) {
+                    wifiEnableCheckbox.addEventListener('change', toggleWiFiSettings);
+                }
+                
+                const mqttEnableCheckbox = document.getElementById('mqtt-enable');
+                if (mqttEnableCheckbox) {
+                    mqttEnableCheckbox.addEventListener('change', toggleMQTTSettings);
+                }
+                
+                const authEnableCheckbox = document.getElementById('auth-enable');
+                if (authEnableCheckbox) {
+                    authEnableCheckbox.addEventListener('change', toggleAuthSettings);
+                }
+            }, 100);
+        });
+
+        // Validate and save device configuration
+        async function validateAndSaveDeviceConfig() {
+            if (!window.currentEditDeviceId) {
+                console.error('No device ID available for saving');
+                return;
+            }
+
+            const saveButton = document.getElementById('save-config-btn');
+            const statusElement = document.getElementById('save-status');
+            
+            // Disable save button and show loading state
+            saveButton.disabled = true;
+            saveButton.textContent = 'Saving...';
+            statusElement.textContent = 'Saving configuration...';
+            statusElement.className = '';
+
+            try {
+                // Collect form data into typed configuration structure
+                const configuration = collectFormData();
+                
+                // Validate configuration
+                const validationResponse = await fetch(`${API_BASE}/configuration/validate-typed`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        configuration: configuration,
+                        validation_level: 'basic'
+                    })
+                });
+
+                if (!validationResponse.ok) {
+                    throw new Error('Validation request failed');
+                }
+
+                const validationResult = await validationResponse.json();
+                
+                if (!validationResult.valid) {
+                    displayValidationErrors(validationResult.errors);
+                    throw new Error('Configuration validation failed');
+                }
+
+                // Save configuration
+                const saveResponse = await fetch(`${API_BASE}/devices/${window.currentEditDeviceId}/config/typed`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        configuration: configuration,
+                        validation_level: 'basic'
+                    })
+                });
+
+                if (!saveResponse.ok) {
+                    throw new Error(`Save failed: ${saveResponse.status} ${saveResponse.statusText}`);
+                }
+
+                // Success
+                statusElement.textContent = 'Configuration saved successfully!';
+                statusElement.className = 'success';
+                
+                // Refresh device list to show updated data
+                setTimeout(() => {
+                    loadDevices();
+                }, 1000);
+
+            } catch (error) {
+                console.error('Error saving configuration:', error);
+                statusElement.textContent = `Error: ${error.message}`;
+                statusElement.className = 'error';
+            } finally {
+                // Re-enable save button
+                saveButton.disabled = false;
+                saveButton.textContent = 'Save Configuration';
+            }
+        }
+
+        // Collect form data into typed configuration structure
+        function collectFormData() {
+            const config = {};
+
+            // WiFi Station Configuration
+            if (document.getElementById('wifi-sta-enable').checked) {
+                config.wifi = {
+                    enable: true,
+                    ssid: document.getElementById('wifi-sta-ssid').value,
+                    password: document.getElementById('wifi-sta-password').value,
+                    ipv4mode: document.getElementById('wifi-sta-ipv4mode').value
+                };
+
+                // Add static IP if selected
+                if (config.wifi.ipv4mode === 'static') {
+                    const staticIP = document.getElementById('static-ip').value;
+                    const staticNetmask = document.getElementById('static-netmask').value;
+                    const staticGateway = document.getElementById('static-gateway').value;
+                    const staticNameserver = document.getElementById('static-nameserver').value;
+
+                    if (staticIP && staticNetmask && staticGateway) {
+                        config.wifi.static_ip = {
+                            ip: staticIP,
+                            netmask: staticNetmask,
+                            gw: staticGateway
+                        };
+                        
+                        if (staticNameserver) {
+                            config.wifi.static_ip.nameserver = staticNameserver;
+                        }
+                    }
+                }
+
+                // Add Access Point configuration if enabled
+                if (document.getElementById('wifi-ap-enable').checked) {
+                    config.wifi.ap = {
+                        enable: true,
+                        ssid: document.getElementById('wifi-ap-ssid').value,
+                        pass: document.getElementById('wifi-ap-password').value,
+                        key: document.getElementById('wifi-ap-security').value
+                    };
+                }
+            } else {
+                // Check if only AP mode is enabled
+                if (document.getElementById('wifi-ap-enable').checked) {
+                    config.wifi = {
+                        enable: false, // Station mode disabled
+                        ap: {
+                            enable: true,
+                            ssid: document.getElementById('wifi-ap-ssid').value,
+                            pass: document.getElementById('wifi-ap-password').value,
+                            key: document.getElementById('wifi-ap-security').value
+                        }
+                    };
+                }
+            }
+
+            // MQTT Configuration
+            if (document.getElementById('mqtt-enable').checked) {
+                config.mqtt = {
+                    enable: true,
+                    server: document.getElementById('mqtt-server').value,
+                    port: parseInt(document.getElementById('mqtt-port').value) || 1883,
+                    user: document.getElementById('mqtt-user').value,
+                    pass: document.getElementById('mqtt-password').value,
+                    id: document.getElementById('mqtt-client-id').value
+                };
+            }
+
+            // Authentication Configuration
+            if (document.getElementById('auth-enable').checked) {
+                config.auth = {
+                    enable: true,
+                    user: document.getElementById('auth-username').value,
+                    pass: document.getElementById('auth-password').value,
+                    realm: document.getElementById('auth-realm').value
+                };
+            }
+
+            // System Configuration
+            const deviceName = document.getElementById('system-device-name').value;
+            const hostname = document.getElementById('system-hostname').value;
+            const timezone = document.getElementById('system-timezone').value;
+            const discoverable = document.getElementById('system-discoverable').checked;
+            const ecoMode = document.getElementById('system-eco-mode').checked;
+            const latitude = parseFloat(document.getElementById('location-latitude').value);
+            const longitude = parseFloat(document.getElementById('location-longitude').value);
+
+            // Build system configuration object
+            let systemConfig = { device: {} };
+            
+            // Device settings
+            if (deviceName) systemConfig.device.name = deviceName;
+            if (hostname) systemConfig.device.hostname = hostname;
+            if (timezone) systemConfig.device.timezone = timezone;
+            systemConfig.device.discoverable = discoverable;
+            systemConfig.device.eco_mode = ecoMode;
+            
+            // Location settings
+            if (!isNaN(latitude) && !isNaN(longitude)) {
+                systemConfig.location = {
+                    lat: latitude,
+                    lng: longitude
+                };
+            }
+            
+            // SNTP configuration
+            if (document.getElementById('sntp-enable').checked) {
+                systemConfig.sntp = {
+                    enabled: true,
+                    server: document.getElementById('sntp-server').value
+                };
+            }
+            
+            config.system = systemConfig;
+            
+            // Cloud Configuration
+            if (document.getElementById('cloud-enable').checked) {
+                config.cloud = {
+                    enable: true
+                };
+            }
+            
+            // CoIoT Configuration
+            if (document.getElementById('coiot-enable').checked) {
+                const coiotPeer = document.getElementById('coiot-peer').value;
+                const updatePeriod = parseInt(document.getElementById('coiot-update-period').value);
+                
+                config.coiot = {
+                    enabled: true,
+                    peer: coiotPeer,
+                    update_period: updatePeriod || 15
+                };
+            }
+
+            return config;
+        }
+
+        // Display validation errors in form
+        function displayValidationErrors(errors) {
+            // Clear previous errors
+            document.querySelectorAll('.field-error').forEach(error => {
+                error.textContent = '';
+            });
+            
+            document.querySelectorAll('.form-input').forEach(input => {
+                input.classList.remove('error');
+            });
+
+            // Display new errors
+            errors.forEach(error => {
+                const field = error.field || error.path;
+                let errorElement = null;
+                
+                // Map error fields to form elements
+                if (field.includes('wifi.ssid')) {
+                    errorElement = document.getElementById('wifi-ssid-error');
+                    document.getElementById('wifi-ssid').classList.add('error');
+                } else if (field.includes('wifi.password')) {
+                    errorElement = document.getElementById('wifi-password-error');
+                    document.getElementById('wifi-password').classList.add('error');
+                } else if (field.includes('static_ip.ip')) {
+                    errorElement = document.getElementById('static-ip-error');
+                    document.getElementById('static-ip').classList.add('error');
+                } else if (field.includes('static_ip.netmask')) {
+                    errorElement = document.getElementById('static-netmask-error');
+                    document.getElementById('static-netmask').classList.add('error');
+                } else if (field.includes('static_ip.gw')) {
+                    errorElement = document.getElementById('static-gateway-error');
+                    document.getElementById('static-gateway').classList.add('error');
+                } else if (field.includes('mqtt.server')) {
+                    errorElement = document.getElementById('mqtt-server-error');
+                    document.getElementById('mqtt-server').classList.add('error');
+                } else if (field.includes('mqtt.port')) {
+                    errorElement = document.getElementById('mqtt-port-error');
+                    document.getElementById('mqtt-port').classList.add('error');
+                } else if (field.includes('auth.user')) {
+                    errorElement = document.getElementById('auth-username-error');
+                    document.getElementById('auth-username').classList.add('error');
+                }
+                
+                if (errorElement) {
+                    errorElement.textContent = error.message || error.error;
+                }
+            });
         }
 
         function exportDHCP() {
@@ -1449,8 +2593,8 @@
             }
         }
 
-        // Tab switching
-        function switchTab(tabName) {
+        // Main page tab switching
+        function switchMainTab(tabName) {
             // Update tab buttons
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.classList.remove('active');
