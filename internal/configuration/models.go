@@ -5,6 +5,22 @@ import (
 	"time"
 )
 
+// Device represents device information for configuration management
+type Device struct {
+	ID       uint      `json:"id"`
+	MAC      string    `json:"mac"`
+	IP       string    `json:"ip"`
+	Type     string    `json:"type"`
+	Name     string    `json:"name"`
+	Settings string    `json:"settings"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+// TableName returns the table name for GORM
+func (Device) TableName() string {
+	return "devices"
+}
+
 // ConfigLevel represents the configuration hierarchy level
 type ConfigLevel int
 

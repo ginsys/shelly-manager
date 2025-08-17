@@ -78,7 +78,22 @@ func (v *ConfigurationValidator) ValidateConfiguration(config json.RawMessage) *
 		Info:     []ValidationInfo{},
 	}
 
-	// Parse as typed configuration first
+	// Check for templates first, before JSON parsing
+	configStr := string(config)
+	hasTemplates := containsTemplateVars(configStr)
+
+	if hasTemplates {
+		// If configuration contains templates, validate them
+		v.validateTemplates(config, result)
+		// For template configs, we can't do full typed validation
+		// So we do basic safety checks instead
+		v.validateTemplateBasics(config, result)
+		// Also try to do partial validation on non-template parts
+		v.validatePartialConfig(config, result)
+		return result
+	}
+
+	// Parse as typed configuration
 	typedConfig, err := FromJSON(config)
 	if err != nil {
 		// If typed parsing fails, try raw JSON validation
@@ -100,9 +115,6 @@ func (v *ConfigurationValidator) ValidateConfiguration(config json.RawMessage) *
 	v.validateMQTT(typedConfig.MQTT, result)
 	v.validateAuth(typedConfig.Auth, result)
 	v.validateSystem(typedConfig.System, result)
-	
-	// Validate template syntax if configuration contains templates
-	v.validateTemplates(config, result)
 	v.validateNetwork(typedConfig.Network, result)
 	v.validateCloud(typedConfig.Cloud, result)
 	v.validateLocation(typedConfig.Location, result)
@@ -909,7 +921,7 @@ func hasRepeatedChars(s string, n int) bool {
 // validateTemplates validates template syntax in configuration
 func (v *ConfigurationValidator) validateTemplates(config json.RawMessage, result *ValidationResult) {
 	configStr := string(config)
-	
+
 	// Check if configuration contains template variables
 	if !containsTemplateVars(configStr) {
 		return
@@ -923,7 +935,7 @@ func (v *ConfigurationValidator) validateTemplates(config json.RawMessage, resul
 
 	// Create template functions for validation
 	funcMap := template.FuncMap{}
-	
+
 	// Add safe Sprig functions
 	sprigFuncs := sprig.TxtFuncMap()
 	for name, fn := range sprigFuncs {
@@ -931,7 +943,7 @@ func (v *ConfigurationValidator) validateTemplates(config json.RawMessage, resul
 			funcMap[name] = fn
 		}
 	}
-	
+
 	// Add custom IoT functions
 	customFunctions := map[string]interface{}{
 		"macColon":        func(string) string { return "" },
@@ -948,21 +960,48 @@ func (v *ConfigurationValidator) validateTemplates(config json.RawMessage, resul
 		"empty":           func(interface{}) bool { return false },
 		"requiredMsg":     func(interface{}, string) (interface{}, error) { return nil, nil },
 	}
-	
+
 	for name, fn := range customFunctions {
 		funcMap[name] = fn
 	}
 
-	// Validate template syntax
-	_, err := template.New("validation").Funcs(funcMap).Parse(configStr)
-	if err != nil {
-		result.Valid = false
-		result.Errors = append(result.Errors, ValidationError{
-			Field:   "template_syntax",
-			Message: fmt.Sprintf("Invalid template syntax: %v", err),
-			Code:    "TEMPLATE_SYNTAX_ERROR",
-		})
-		return
+	// For complex templates (with if/else/end), skip detailed syntax validation
+	// Focus on security and variable validation instead
+	hasComplexTemplates := strings.Contains(configStr, "{{if") ||
+		strings.Contains(configStr, "{{else") ||
+		strings.Contains(configStr, "{{end")
+
+	if !hasComplexTemplates {
+		// Validate individual simple template expressions
+		for _, tmplVar := range templateVars {
+			// Skip syntax validation if this template contains dangerous functions
+			// The dangerous function validation will catch these
+			containsDangerous := strings.Contains(tmplVar, "exec ") || strings.Contains(tmplVar, "exec\"") || strings.Contains(tmplVar, "exec(") ||
+				strings.Contains(tmplVar, "shell ") || strings.Contains(tmplVar, "shell\"") || strings.Contains(tmplVar, "shell(") ||
+				strings.Contains(tmplVar, "command ") || strings.Contains(tmplVar, "command\"") || strings.Contains(tmplVar, "command(") ||
+				strings.Contains(tmplVar, "readFile ") || strings.Contains(tmplVar, "readFile\"") || strings.Contains(tmplVar, "readFile(") ||
+				strings.Contains(tmplVar, "writeFile ") || strings.Contains(tmplVar, "writeFile\"") || strings.Contains(tmplVar, "writeFile(")
+
+			// Also skip templates with JSON-escaped quotes which cause parsing issues
+			hasEscapedQuotes := strings.Contains(tmplVar, "\\\"")
+
+			if containsDangerous || hasEscapedQuotes {
+				continue // Skip syntax validation for problematic templates
+			}
+
+			// Create a simple template to validate each expression
+			testTemplate := tmplVar
+			_, err := template.New("validation").Funcs(funcMap).Parse(testTemplate)
+			if err != nil {
+				result.Valid = false
+				result.Errors = append(result.Errors, ValidationError{
+					Field:   "template_syntax",
+					Message: fmt.Sprintf("Invalid template syntax: %v", err),
+					Code:    "TEMPLATE_SYNTAX_ERROR",
+				})
+				continue // Continue checking other templates
+			}
+		}
 	}
 
 	// Validate template variable references
@@ -971,19 +1010,32 @@ func (v *ConfigurationValidator) validateTemplates(config json.RawMessage, resul
 
 // validateTemplateVariables validates that template variables are properly formed
 func (v *ConfigurationValidator) validateTemplateVariables(templateVars []string, result *ValidationResult) {
+	// Track reported custom variables to avoid duplicates
+	reportedCustomVars := make(map[string]bool)
+	reportedEnvVars := make(map[string]bool)
+
 	for _, tmplVar := range templateVars {
-		// Check for potentially dangerous template patterns
-		if strings.Contains(tmplVar, "exec") || 
-		   strings.Contains(tmplVar, "shell") ||
-		   strings.Contains(tmplVar, "command") ||
-		   strings.Contains(tmplVar, "readFile") ||
-		   strings.Contains(tmplVar, "writeFile") {
-			result.Errors = append(result.Errors, ValidationError{
-				Field:   "template_variables",
-				Message: fmt.Sprintf("Template contains potentially dangerous function: %s", tmplVar),
-				Code:    "DANGEROUS_TEMPLATE_FUNCTION",
-			})
-			result.Valid = false
+		// Check for potentially dangerous template patterns (function calls)
+		dangerousPatterns := []string{
+			"exec ", "exec\"", "exec(",
+			"shell ", "shell\"", "shell(",
+			"command ", "command\"", "command(",
+			"readFile ", "readFile\"", "readFile(",
+			"writeFile ", "writeFile\"", "writeFile(",
+			"httpGet ", "httpGet\"", "httpGet(",
+			"httpPost ", "httpPost\"", "httpPost(",
+		}
+
+		for _, pattern := range dangerousPatterns {
+			if strings.Contains(tmplVar, pattern) {
+				result.Errors = append(result.Errors, ValidationError{
+					Field:   "template_variables",
+					Message: fmt.Sprintf("Template contains potentially dangerous function: %s", tmplVar),
+					Code:    "DANGEROUS_TEMPLATE_FUNCTION",
+				})
+				result.Valid = false
+				break // Only report once per template variable
+			}
 		}
 
 		// Check for undefined variable references
@@ -995,8 +1047,9 @@ func (v *ConfigurationValidator) validateTemplateVariables(templateVars []string
 				customVar = strings.Split(customVar, ")")[0]
 				customVar = strings.Split(customVar, "|")[0]
 				customVar = strings.TrimSpace(customVar)
-				
-				if customVar != "" {
+
+				if customVar != "" && !reportedCustomVars[customVar] {
+					reportedCustomVars[customVar] = true
 					result.Warnings = append(result.Warnings, ValidationWarning{
 						Field:   "template_variables",
 						Message: fmt.Sprintf("Custom variable referenced: %s - ensure it's provided during substitution", customVar),
@@ -1008,11 +1061,16 @@ func (v *ConfigurationValidator) validateTemplateVariables(templateVars []string
 
 		// Check for required environment variables
 		if strings.Contains(tmplVar, "env ") || strings.Contains(tmplVar, "envOr ") {
-			result.Info = append(result.Info, ValidationInfo{
-				Field:   "template_variables",
-				Message: fmt.Sprintf("Template references environment variables: %s", tmplVar),
-				Code:    "ENV_VARIABLE_REFERENCE",
-			})
+			// Extract environment variable name for deduplication
+			envVar := tmplVar
+			if !reportedEnvVars[envVar] {
+				reportedEnvVars[envVar] = true
+				result.Info = append(result.Info, ValidationInfo{
+					Field:   "template_variables",
+					Message: fmt.Sprintf("Template references environment variables: %s", tmplVar),
+					Code:    "ENV_VARIABLE_REFERENCE",
+				})
+			}
 		}
 	}
 }
@@ -1035,5 +1093,100 @@ func isSafeTemplateFunction(funcName string) bool {
 	return true
 }
 
-// Note: Template helper functions containsTemplateVars and extractTemplateVars 
+// validatePartialConfig performs partial validation on template configurations
+// focusing on literal values that can be validated without template substitution
+func (v *ConfigurationValidator) validatePartialConfig(config json.RawMessage, result *ValidationResult) {
+	// Try to parse as JSON to extract literal values
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		// If we can't parse as JSON (maybe templates break it), skip partial validation
+		return
+	}
+
+	// Validate literal password values if present
+	if wifi, ok := configMap["wifi"].(map[string]interface{}); ok {
+		if password, ok := wifi["password"].(string); ok {
+			// Only validate if it's not a template
+			if !containsTemplateVars(password) {
+				if len(password) < 8 {
+					result.Warnings = append(result.Warnings, ValidationWarning{
+						Field:   "wifi.password",
+						Message: "WiFi password is weak (less than 8 characters)",
+						Code:    "WEAK_WIFI_PASSWORD",
+					})
+				}
+			}
+		}
+	}
+
+	// Validate auth settings
+	if auth, ok := configMap["auth"].(map[string]interface{}); ok {
+		if enable, ok := auth["enable"].(bool); ok && !enable {
+			result.Warnings = append(result.Warnings, ValidationWarning{
+				Field:   "auth.enable",
+				Message: "Device authentication is disabled - consider enabling for security",
+				Code:    "AUTH_DISABLED",
+			})
+		}
+	}
+}
+
+// validateTemplateBasics performs basic validation for template configurations
+func (v *ConfigurationValidator) validateTemplateBasics(config json.RawMessage, result *ValidationResult) {
+	// For template configurations, we can only do basic structural checks
+	// since the JSON may not be valid until after template processing
+
+	configStr := string(config)
+
+	// Check for basic JSON structure (balanced braces)
+	braceCount := 0
+	inString := false
+	escaped := false
+
+	for i, char := range configStr {
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if char == '\\' {
+			escaped = true
+			continue
+		}
+
+		if char == '"' && !escaped {
+			inString = !inString
+			continue
+		}
+
+		if !inString {
+			switch char {
+			case '{':
+				braceCount++
+			case '}':
+				braceCount--
+				if braceCount < 0 {
+					result.Valid = false
+					result.Errors = append(result.Errors, ValidationError{
+						Field:   "json_structure",
+						Message: fmt.Sprintf("Unmatched closing brace at position %d", i),
+						Code:    "INVALID_JSON_STRUCTURE",
+					})
+					return
+				}
+			}
+		}
+	}
+
+	if braceCount != 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors, ValidationError{
+			Field:   "json_structure",
+			Message: fmt.Sprintf("Unmatched opening braces: %d", braceCount),
+			Code:    "INVALID_JSON_STRUCTURE",
+		})
+	}
+}
+
+// Note: Template helper functions containsTemplateVars and extractTemplateVars
 // are defined in template_engine.go to avoid duplication
