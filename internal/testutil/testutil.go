@@ -255,3 +255,19 @@ func AssertEqual[T comparable](t *testing.T, expected, actual T) {
 		t.Fatalf("Expected %v, got %v", expected, actual)
 	}
 }
+
+// AssertTrue asserts that a condition is true
+func AssertTrue(t *testing.T, condition bool) {
+	t.Helper()
+	if !condition {
+		t.Fatalf("Expected condition to be true, but it was false")
+	}
+}
+
+// AssertNotNil asserts that a value is not nil
+func AssertNotNil(t *testing.T, value interface{}) {
+	t.Helper()
+	if value == nil {
+		t.Fatalf("Expected value to be not nil, but it was nil")
+	}
+}

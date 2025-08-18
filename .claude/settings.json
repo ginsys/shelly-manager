@@ -142,7 +142,12 @@
       "Bash(then echo \"Database exists\")",
       "Bash(sqlite3:*)",
       "Bash(else echo \"Database does not exist\")",
-      "Bash(fi)"
+      "Bash(fi)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./...)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./internal/api ./internal/service)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./internal/api)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./internal/api ./internal/configuration)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/notification"
@@ -760,4 +761,339 @@ func TestBulkDetectConfigDrift(t *testing.T) {
 
 	// Should succeed even without devices since it just tries to process all devices
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
+}
+
+func TestNewHandler(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+
+	handler := NewHandler(db, svc, notificationHandler)
+
+	// Verify handler is properly initialized
+	testutil.AssertNotNil(t, handler)
+	testutil.AssertNotNil(t, handler.DB)
+	testutil.AssertNotNil(t, handler.Service)
+	testutil.AssertNotNil(t, handler.ConfigService)
+}
+
+func TestGetProvisioningStatusNew(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	req := httptest.NewRequest("GET", "/api/v1/provisioning/status", nil)
+	w := httptest.NewRecorder()
+
+	handler.GetProvisioningStatus(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	testutil.AssertNoError(t, err)
+
+	status, exists := response["status"]
+	testutil.AssertTrue(t, exists)
+	testutil.AssertEqual(t, "idle", status)
+}
+
+func TestGetDeviceEnergy_InvalidID(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	req := httptest.NewRequest("GET", "/api/v1/devices/invalid/energy", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
+
+	w := httptest.NewRecorder()
+	handler.GetDeviceEnergy(w, req)
+
+	testutil.AssertEqual(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImportDeviceConfig(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Add a test device
+	device := testutil.TestDevice()
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/config/import", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.ImportDeviceConfig(w, req)
+
+	// Should get an error since we're not actually connecting to a device
+	testutil.AssertEqual(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestImportDeviceConfig_InvalidID(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	req := httptest.NewRequest("POST", "/api/v1/devices/invalid/config/import", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
+
+	w := httptest.NewRecorder()
+	handler.ImportDeviceConfig(w, req)
+
+	testutil.AssertEqual(t, http.StatusBadRequest, w.Code)
+}
+
+func TestGetImportStatus(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Add a test device
+	device := testutil.TestDevice()
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/config/import/status", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.GetImportStatus(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	testutil.AssertNoError(t, err)
+
+	status, exists := response["status"]
+	testutil.AssertTrue(t, exists)
+	testutil.AssertEqual(t, "idle", status)
+}
+
+func TestExportDeviceConfig(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Add a test device
+	device := testutil.TestDevice()
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/config/export", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.ExportDeviceConfig(w, req)
+
+	// Should get an error since we're not actually connecting to a device
+	testutil.AssertEqual(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestBulkImportConfigs(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	req := httptest.NewRequest("POST", "/api/v1/config/import/bulk", nil)
+	w := httptest.NewRecorder()
+
+	handler.BulkImportConfigs(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	testutil.AssertNoError(t, err)
+
+	status, exists := response["status"]
+	testutil.AssertTrue(t, exists)
+	testutil.AssertEqual(t, "import_started", status)
+}
+
+func TestBulkExportConfigs(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	req := httptest.NewRequest("POST", "/api/v1/config/export/bulk", nil)
+	w := httptest.NewRecorder()
+
+	handler.BulkExportConfigs(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	testutil.AssertNoError(t, err)
+
+	status, exists := response["status"]
+	testutil.AssertTrue(t, exists)
+	testutil.AssertEqual(t, "export_started", status)
+}
+
+func TestDetectConfigDrift_InvalidID(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	req := httptest.NewRequest("POST", "/api/v1/devices/invalid/drift/detect", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "invalid"})
+
+	w := httptest.NewRecorder()
+	handler.DetectConfigDrift(w, req)
+
+	testutil.AssertEqual(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateConfigTemplate(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// First create a template
+	template := &configuration.ConfigTemplate{
+		Name:        "Test Template",
+		Description: "Test Description",
+		DeviceType:  "shelly-1",
+		Config:      []byte(`{"relay": {"auto_on": true}}`),
+	}
+	err := db.DB.Create(template).Error
+	testutil.AssertNoError(t, err)
+
+	// Update the template
+	updateReq := map[string]interface{}{
+		"name":        "Updated Template",
+		"description": "Updated Description",
+		"deviceType":  "shelly-1",
+		"config":      map[string]interface{}{"relay": map[string]interface{}{"auto_on": false}},
+	}
+	body, _ := json.Marshal(updateReq)
+
+	req := httptest.NewRequest("PUT", fmt.Sprintf("/api/v1/config/templates/%d", template.ID), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(template.ID))})
+
+	w := httptest.NewRecorder()
+	handler.UpdateConfigTemplate(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+
+	// Verify template was updated
+	var updatedTemplate configuration.ConfigTemplate
+	err = db.DB.First(&updatedTemplate, template.ID).Error
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, "Updated Template", updatedTemplate.Name)
+}
+
+func TestDeleteConfigTemplate(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// First create a template
+	template := &configuration.ConfigTemplate{
+		Name:        "Test Template",
+		Description: "Test Description",
+		DeviceType:  "shelly-1",
+		Config:      []byte(`{"relay": {"auto_on": true}}`),
+	}
+	err := db.DB.Create(template).Error
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/config/templates/%d", template.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(template.ID))})
+
+	w := httptest.NewRecorder()
+	handler.DeleteConfigTemplate(w, req)
+
+	testutil.AssertEqual(t, http.StatusNoContent, w.Code)
+
+	// Verify template was deleted
+	var deletedTemplate configuration.ConfigTemplate
+	err = db.DB.First(&deletedTemplate, template.ID).Error
+	testutil.AssertTrue(t, err != nil) // Should not be found
+}
+
+func TestApplyConfigTemplate(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Create a template
+	template := &configuration.ConfigTemplate{
+		Name:        "Test Template",
+		Description: "Test Description",
+		DeviceType:  "shelly-1",
+		Config:      []byte(`{"relay": {"auto_on": true}}`),
+	}
+	err := db.DB.Create(template).Error
+	testutil.AssertNoError(t, err)
+
+	// Add a test device
+	device := testutil.TestDevice()
+	err = db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	applyReq := map[string]interface{}{
+		"device_ids": []int{int(device.ID)},
+	}
+	body, _ := json.Marshal(applyReq)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/config/templates/%d/apply", template.ID), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(template.ID))})
+
+	w := httptest.NewRecorder()
+	handler.ApplyConfigTemplate(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	testutil.AssertNoError(t, err)
+
+	status, exists := response["status"]
+	testutil.AssertTrue(t, exists)
+	testutil.AssertEqual(t, "template_applied", status)
+}
+
+func TestGetConfigHistory(t *testing.T) {
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Add a test device
+	device := testutil.TestDevice()
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/config/history", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.GetConfigHistory(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+
+	var history []interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &history)
+	testutil.AssertNoError(t, err)
 }
