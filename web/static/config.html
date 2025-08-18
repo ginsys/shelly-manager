@@ -185,6 +185,18 @@
             padding: 15px;
             background: #f8f9fa;
             resize: vertical;
+            transition: border-color 0.3s ease;
+        }
+
+        .code-editor.error {
+            border-color: #e74c3c;
+            background: #fdf2f2;
+        }
+
+        .code-editor:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
         }
 
         .variable-panel {
@@ -344,6 +356,7 @@
 
                 <div style="margin-top: 15px;">
                     <button id="previewBtn" class="btn">🔍 Preview Template</button>
+                    <button id="realTimeBtn" class="btn btn-secondary" onclick="toggleRealTimePreview()">▶️ Enable Live Preview</button>
                     <button id="validateBtn" class="btn btn-secondary">✅ Validate Syntax</button>
                     <button id="saveBtn" class="btn btn-success">💾 Save Template</button>
                 </div>
@@ -593,6 +606,16 @@
             document.getElementById('previewBtn').addEventListener('click', previewCurrentTemplate);
             document.getElementById('validateBtn').addEventListener('click', validateTemplate);
             document.getElementById('saveBtn').addEventListener('click', saveTemplate);
+            
+            // Real-time preview on template changes
+            const templateEditor = document.getElementById('templateEditor');
+            templateEditor.addEventListener('input', schedulePreview);
+            
+            // Real-time preview on variable changes
+            const variableInputs = document.querySelectorAll('.variable-input input');
+            variableInputs.forEach(input => {
+                input.addEventListener('input', schedulePreview);
+            });
         }
 
         function loadTemplate(templateKey) {
@@ -611,9 +634,18 @@
             }
         }
 
+        // Real-time template processing with debouncing
+        let previewTimeout = null;
+        let isPreviewEnabled = false;
+
         function previewCurrentTemplate() {
             const templateContent = document.getElementById('templateEditor').value;
             const variables = gatherVariables();
+            
+            if (!templateContent.trim()) {
+                document.getElementById('previewEditor').value = '';
+                return;
+            }
             
             showStatus('Processing template...', 'info');
             setLoading(true);
@@ -634,17 +666,73 @@
                 
                 if (data.error) {
                     showStatus('Template error: ' + data.error, 'error');
-                    document.getElementById('previewEditor').value = 'Error: ' + data.error;
+                    document.getElementById('previewEditor').value = 'Error processing template:\n' + data.error;
+                    highlightTemplateErrors(data.error);
                 } else {
                     showStatus('Template processed successfully!', 'success');
                     document.getElementById('previewEditor').value = JSON.stringify(data.result, null, 2);
+                    clearTemplateErrors();
                 }
             })
             .catch(error => {
                 setLoading(false);
                 showStatus('Network error: ' + error.message, 'error');
                 console.error('Preview error:', error);
+                document.getElementById('previewEditor').value = 'Network error: ' + error.message;
             });
+        }
+
+        // Real-time preview with debouncing
+        function schedulePreview() {
+            if (!isPreviewEnabled) return;
+            
+            if (previewTimeout) {
+                clearTimeout(previewTimeout);
+            }
+            
+            previewTimeout = setTimeout(() => {
+                previewCurrentTemplate();
+            }, 500); // 500ms debounce
+        }
+
+        function toggleRealTimePreview() {
+            isPreviewEnabled = !isPreviewEnabled;
+            const button = document.getElementById('realTimeBtn');
+            
+            if (isPreviewEnabled) {
+                button.textContent = '⏸️ Pause Live Preview';
+                button.classList.add('btn-success');
+                schedulePreview(); // Initial preview
+            } else {
+                button.textContent = '▶️ Enable Live Preview';
+                button.classList.remove('btn-success');
+                if (previewTimeout) {
+                    clearTimeout(previewTimeout);
+                }
+            }
+        }
+
+        function highlightTemplateErrors(error) {
+            const editor = document.getElementById('templateEditor');
+            editor.classList.add('error');
+            
+            // Try to highlight specific error lines if possible
+            if (error.includes('line')) {
+                const lineMatch = error.match(/line (\d+)/);
+                if (lineMatch) {
+                    const lineNum = parseInt(lineMatch[1]);
+                    const lines = editor.value.split('\n');
+                    if (lineNum <= lines.length) {
+                        // Could implement line highlighting here
+                        console.log(`Error on line ${lineNum}: ${lines[lineNum - 1]}`);
+                    }
+                }
+            }
+        }
+
+        function clearTemplateErrors() {
+            const editor = document.getElementById('templateEditor');
+            editor.classList.remove('error');
         }
 
         function validateTemplate() {

@@ -9,7 +9,7 @@ import (
 func TestLoad_ValidConfig(t *testing.T) {
 	// Create temporary config file
 	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "test-config.yaml")
+	configPath := filepath.Join(tempDir, "testing.yaml")
 
 	configContent := `server:
   port: 9090

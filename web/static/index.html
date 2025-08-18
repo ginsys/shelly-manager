@@ -697,8 +697,12 @@
                 <p>Manage and control your Shelly smart home devices</p>
             </div>
             <div class="header-nav">
+                <a href="/" class="nav-link">🏠 Devices</a>
                 <a href="/dashboard.html" class="nav-link">📊 Dashboard</a>
                 <a href="/config.html" class="nav-link">⚙️ Templates</a>
+                <a href="/device-config.html" class="nav-link">🔧 Configure</a>
+                <a href="/setup-wizard.html" class="nav-link">🧙‍♂️ Setup Wizard</a>
+                <a href="/config-diff.html" class="nav-link">📊 Compare</a>
                 <a href="/metrics/prometheus" class="nav-link" target="_blank">📈 Metrics</a>
             </div>
         </div>
@@ -706,7 +710,7 @@
         <div class="main-content">
             <div class="tabs">
                 <button class="tab active" onclick="switchMainTab('devices')">Devices</button>
-                <button class="tab" onclick="switchMainTab('templates')">Configuration Templates</button>
+                <a href="/config.html" class="tab" style="text-decoration: none;">⚙️ Configuration Templates</a>
                 <button class="tab" onclick="switchMainTab('bulk')">Bulk Operations</button>
             </div>
             
@@ -742,19 +746,6 @@
                 </div>
             </div>
             
-            <div id="templates-tab" class="tab-content">
-                <div class="controls">
-                    <button class="btn btn-success" onclick="showCreateTemplateModal()">➕ Create Template</button>
-                    <button class="btn" onclick="loadTemplates()">🔄 Refresh Templates</button>
-                </div>
-                
-                <div class="device-grid" id="templatesGrid"></div>
-                
-                <div class="empty-state" id="templatesEmptyState" style="display: none;">
-                    <h3>No templates found</h3>
-                    <p>Create configuration templates to apply to multiple devices</p>
-                </div>
-            </div>
             
             <div id="bulk-tab" class="tab-content">
                 <div class="controls">
@@ -1629,6 +1620,7 @@
                             <button class="config-btn" onclick="exportConfig(${device.id})" title="Export configuration to device">📤 Export</button>
                             <button class="config-btn" onclick="checkDrift(${device.id})" title="Check for configuration drift">🔍 Check Drift</button>
                             <button class="config-btn" onclick="viewConfig(${device.id})" title="View current configuration">👁️ View</button>
+                            <button class="config-btn" onclick="window.open('/device-config.html?device=${device.id}', '_blank')" title="Configure device with forms">🔧 Configure</button>
                             <button class="config-btn" onclick="showHistory(${device.id}, '${device.name}')" title="View configuration history">📜 History</button>
                         </div>
                     </div>
@@ -2906,96 +2898,11 @@
             document.getElementById(`${tabName}-tab`).classList.add('active');
             
             // Load data for the selected tab
-            if (tabName === 'templates') {
-                loadTemplates();
-            } else if (tabName === 'bulk') {
+            if (tabName === 'bulk') {
                 loadBulkDevices();
             }
         }
 
-        // Template Management
-        async function loadTemplates() {
-            try {
-                const response = await fetch(`${API_BASE}/config/templates`);
-                if (!response.ok) throw new Error('Failed to fetch templates');
-                
-                const templates = await response.json();
-                displayTemplates(templates);
-            } catch (error) {
-                console.error('Error loading templates:', error);
-            }
-        }
-
-        function displayTemplates(templates) {
-            const grid = document.getElementById('templatesGrid');
-            const emptyState = document.getElementById('templatesEmptyState');
-            
-            if (templates.length === 0) {
-                grid.style.display = 'none';
-                emptyState.style.display = 'block';
-                return;
-            }
-            
-            grid.style.display = 'grid';
-            emptyState.style.display = 'none';
-            
-            grid.innerHTML = templates.map(template => `
-                <div class="device-card">
-                    <div class="device-name">${template.name}</div>
-                    <div class="device-type">${template.description || 'No description'}</div>
-                    
-                    <div class="device-info">
-                        <p><strong>Device Type:</strong> ${template.device_type}</p>
-                        <p><strong>Generation:</strong> ${template.generation === 0 ? 'All' : `Gen${template.generation}`}</p>
-                        <p><strong>Default:</strong> ${template.is_default ? 'Yes' : 'No'}</p>
-                    </div>
-                    
-                    <div class="device-actions">
-                        <button class="btn btn-sm" onclick="editTemplate(${template.id})">Edit</button>
-                        <button class="btn btn-sm" onclick="previewTemplate(${template.id})">Preview</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteTemplate(${template.id})">Delete</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function showCreateTemplateModal() {
-            showModal('createTemplateModal');
-        }
-
-        async function createTemplate() {
-            const name = document.getElementById('templateName').value;
-            const description = document.getElementById('templateDescription').value;
-            const deviceType = document.getElementById('templateDeviceType').value;
-            const generation = parseInt(document.getElementById('templateGeneration').value);
-            const configStr = document.getElementById('templateConfig').value;
-            
-            try {
-                const config = JSON.parse(configStr);
-                
-                const response = await fetch(`${API_BASE}/config/templates`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name,
-                        description,
-                        device_type: deviceType,
-                        generation,
-                        config
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to create template');
-                }
-                
-                closeModal('createTemplateModal');
-                loadTemplates();
-                console.log('Template created successfully');
-            } catch (error) {
-                console.log(`Failed to create template: ${error.message}`);
-            }
-        }
 
         // Bulk Operations
         let selectedDevices = new Set();

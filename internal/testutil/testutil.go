@@ -204,7 +204,7 @@ func TempDir(t *testing.T) string {
 // CreateTestConfigFile creates a temporary config file for testing
 func CreateTestConfigFile(t *testing.T, cfg *config.Config) string {
 	dir := TempDir(t)
-	configFile := filepath.Join(dir, "test-config.yaml")
+	configFile := filepath.Join(dir, "testing.yaml")
 
 	content := `server:
   port: 8080
