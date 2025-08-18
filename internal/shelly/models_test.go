@@ -26,16 +26,16 @@ func TestDeviceInfo_JSONSerialization(t *testing.T) {
 		IP:         "192.168.1.100",
 		Discovered: originalTime,
 	}
-	
+
 	// Test JSON marshaling
 	data, err := json.Marshal(info)
 	assertNoError(t, err)
-	
+
 	// Test JSON unmarshaling
 	var restored DeviceInfo
 	err = json.Unmarshal(data, &restored)
 	assertNoError(t, err)
-	
+
 	// Check that all JSON-tagged fields were preserved
 	assertEqual(t, info.ID, restored.ID)
 	assertEqual(t, info.MAC, restored.MAC)
@@ -49,7 +49,7 @@ func TestDeviceInfo_JSONSerialization(t *testing.T) {
 	assertEqual(t, info.Type, restored.Type)
 	assertEqual(t, info.FW, restored.FW)
 	assertEqual(t, info.Auth, restored.Auth)
-	
+
 	// Check that non-JSON fields are their zero values
 	assertEqual(t, "", restored.IP)
 	assertEqual(t, time.Time{}, restored.Discovered)
@@ -122,7 +122,7 @@ func TestDeviceStatus_Components(t *testing.T) {
 			"custom_field": "custom_value",
 		},
 	}
-	
+
 	// Test that all fields are accessible
 	assertEqual(t, 45.2, status.Temperature)
 	assertEqual(t, false, status.Overtemperature)
@@ -144,17 +144,17 @@ func TestDeviceConfig_Initialization(t *testing.T) {
 		Lat:      42.6977,
 		Lng:      23.3219,
 		WiFi: &WiFiConfig{
-			Enable:    true,
-			SSID:      "TestNetwork",
-			Password:  "password123",
-			IPV4Mode:  "dhcp",
-			IP:        "",
-			Netmask:   "",
-			Gateway:   "",
-			DNS:       "",
+			Enable:   true,
+			SSID:     "TestNetwork",
+			Password: "password123",
+			IPV4Mode: "dhcp",
+			IP:       "",
+			Netmask:  "",
+			Gateway:  "",
+			DNS:      "",
 		},
 		Ethernet: &EthernetConfig{
-			Enable:  true,
+			Enable:   true,
 			IPV4Mode: "dhcp",
 		},
 		Auth: &AuthConfig{
@@ -211,43 +211,43 @@ func TestDeviceConfig_Initialization(t *testing.T) {
 		WebUI: true,
 		Raw:   json.RawMessage(`{"custom_setting": "value"}`),
 	}
-	
+
 	// Test field access
 	assertEqual(t, "Test Device", config.Name)
 	assertEqual(t, "Europe/Sofia", config.Timezone)
 	assertEqual(t, 42.6977, config.Lat)
 	assertEqual(t, 23.3219, config.Lng)
-	
+
 	assertNotNil(t, config.WiFi)
 	assertTrue(t, config.WiFi.Enable)
 	assertEqual(t, "TestNetwork", config.WiFi.SSID)
-	
+
 	assertNotNil(t, config.Ethernet)
 	assertTrue(t, config.Ethernet.Enable)
-	
+
 	assertNotNil(t, config.Auth)
 	assertTrue(t, config.Auth.Enable)
 	assertEqual(t, "admin", config.Auth.Username)
-	
+
 	assertNotNil(t, config.Cloud)
 	assertEqual(t, false, config.Cloud.Enable)
-	
+
 	assertNotNil(t, config.MQTT)
 	assertTrue(t, config.MQTT.Enable)
 	assertEqual(t, "mqtt.example.com:1883", config.MQTT.Server)
-	
+
 	assertEqual(t, 1, len(config.Switches))
 	assertEqual(t, "Switch 0", config.Switches[0].Name)
-	
+
 	assertEqual(t, 1, len(config.Lights))
 	assertEqual(t, "Light 0", config.Lights[0].Name)
-	
+
 	assertEqual(t, 1, len(config.Inputs))
 	assertEqual(t, "Input 0", config.Inputs[0].Name)
-	
+
 	assertEqual(t, 1, len(config.Rollers))
 	assertEqual(t, "Roller 0", config.Rollers[0].Name)
-	
+
 	assertEqual(t, false, config.Debug)
 	assertTrue(t, config.WebUI)
 	assertNotNil(t, config.Raw)
@@ -260,7 +260,7 @@ func TestWiFiStatus_Fields(t *testing.T) {
 		IP:        "192.168.1.100",
 		RSSI:      -45,
 	}
-	
+
 	assertTrue(t, status.Connected)
 	assertEqual(t, "TestNetwork", status.SSID)
 	assertEqual(t, "192.168.1.100", status.IP)
@@ -269,7 +269,7 @@ func TestWiFiStatus_Fields(t *testing.T) {
 
 func TestWiFiStatus_EmptyValues(t *testing.T) {
 	status := &WiFiStatus{}
-	
+
 	assertEqual(t, false, status.Connected)
 	assertEqual(t, "", status.SSID)
 	assertEqual(t, "", status.IP)
@@ -282,7 +282,7 @@ func TestDeviceInfo_Gen1Fields(t *testing.T) {
 		FW:   "20231219-134356",
 		Auth: true,
 	}
-	
+
 	assertEqual(t, "SHSW-1", info.Type)
 	assertEqual(t, "20231219-134356", info.FW)
 	assertTrue(t, info.Auth)
@@ -300,7 +300,7 @@ func TestDeviceInfo_Gen2Fields(t *testing.T) {
 		AuthEn:     false,
 		AuthDomain: "shellyplusht-08b61fcb7f3c",
 	}
-	
+
 	assertEqual(t, "shellyplusht-08b61fcb7f3c", info.ID)
 	assertEqual(t, "08B61FCB7F3C", info.MAC)
 	assertEqual(t, "SNSN-0013A", info.Model)
@@ -318,19 +318,19 @@ func TestDeviceInfo_MetadataFields(t *testing.T) {
 		IP:         "192.168.1.100",
 		Discovered: discovered,
 	}
-	
+
 	assertEqual(t, "192.168.1.100", info.IP)
 	assertEqual(t, discovered, info.Discovered)
 }
 
 func TestDeviceStatus_OptionalFields(t *testing.T) {
 	status := &DeviceStatus{}
-	
+
 	// Test that optional fields can be nil
 	assertEqual(t, (*WiFiStatus)(nil), status.WiFiStatus)
 	assertEqual(t, (*CloudStatus)(nil), status.Cloud)
 	assertEqual(t, (*MQTTStatus)(nil), status.MQTT)
-	
+
 	// Test that slices are empty by default
 	assertEqual(t, 0, len(status.Switches))
 	assertEqual(t, 0, len(status.Lights))
@@ -341,14 +341,14 @@ func TestDeviceStatus_OptionalFields(t *testing.T) {
 
 func TestDeviceConfig_OptionalFields(t *testing.T) {
 	config := &DeviceConfig{}
-	
+
 	// Test that optional config sections can be nil
 	assertEqual(t, (*WiFiConfig)(nil), config.WiFi)
 	assertEqual(t, (*EthernetConfig)(nil), config.Ethernet)
 	assertEqual(t, (*AuthConfig)(nil), config.Auth)
 	assertEqual(t, (*CloudConfig)(nil), config.Cloud)
 	assertEqual(t, (*MQTTConfig)(nil), config.MQTT)
-	
+
 	// Test that component config slices are empty by default
 	assertEqual(t, 0, len(config.Switches))
 	assertEqual(t, 0, len(config.Lights))
@@ -361,9 +361,9 @@ func TestDeviceConfig_RawJSON(t *testing.T) {
 	config := &DeviceConfig{
 		Raw: rawData,
 	}
-	
+
 	assertNotNil(t, config.Raw)
-	
+
 	// Parse the raw JSON to verify it's valid
 	var parsed map[string]interface{}
 	err := json.Unmarshal(config.Raw, &parsed)
@@ -380,14 +380,14 @@ func TestDeviceStatus_RawData(t *testing.T) {
 		},
 		"extra_field": "extra_value",
 	}
-	
+
 	status := &DeviceStatus{
 		Raw: rawData,
 	}
-	
+
 	assertNotNil(t, status.Raw)
 	assertEqual(t, "extra_value", status.Raw["extra_field"])
-	
+
 	customComponent, ok := status.Raw["custom_component"].(map[string]interface{})
 	assertTrue(t, ok)
 	assertEqual(t, 42.0, customComponent["value"])

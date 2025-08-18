@@ -108,11 +108,11 @@ func createTestDevice(t *testing.T, db *database.Manager, ip string) *database.D
 	t.Helper()
 
 	device := &database.Device{
-		IP:              ip,
-		MAC:             "68C63A123456",
-		Type:            "SHSW-25",
-		Name:            "Test Device",
-		Firmware:        "1.14.0",
+		IP:       ip,
+		MAC:      "68C63A123456",
+		Type:     "SHSW-25",
+		Name:     "Test Device",
+		Firmware: "1.14.0",
 	}
 
 	if err := db.AddDevice(device); err != nil {
@@ -346,10 +346,10 @@ func TestShellyService_getClient_Authentication(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			device := &database.Device{
-				ID:         1,
-				IP:         "192.168.1.100",
-				MAC:        "68C63A123456",
-				Type:       "SHSW-25",
+				ID:   1,
+				IP:   "192.168.1.100",
+				MAC:  "68C63A123456",
+				Type: "SHSW-25",
 			}
 
 			client, err := service.getClient(device)
@@ -375,10 +375,10 @@ func TestShellyService_ClientCaching(t *testing.T) {
 	service := NewService(db, cfg)
 
 	device := &database.Device{
-		ID:         1,
-		IP:         "192.168.1.100",
-		MAC:        "68C63A123456",
-		Type:       "SHSW-25",
+		ID:   1,
+		IP:   "192.168.1.100",
+		MAC:  "68C63A123456",
+		Type: "SHSW-25",
 	}
 
 	// First call should create client
