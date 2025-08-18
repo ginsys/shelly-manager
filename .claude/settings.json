@@ -147,7 +147,13 @@
       "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./...)",
       "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./internal/api ./internal/service)",
       "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./internal/api)",
-      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./internal/api ./internal/configuration)"
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_new.out ./internal/api ./internal/configuration)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_shelly.out ./internal/shelly/...)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_shelly_new.out ./internal/shelly/...)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen1)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2)",
+      "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_shelly_final.out ./internal/shelly/...)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/...)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
