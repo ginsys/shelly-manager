@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shelly Manager - Device Configuration</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #2c3e50, #3498db);
+            color: white;
+            padding: 30px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content {
+            text-align: center;
+            flex: 1;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 15px;
+        }
+
+        .nav-link {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .config-tabs {
+            display: flex;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 30px;
+            overflow-x: auto;
+        }
+
+        .tab-button {
+            padding: 15px 25px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+            font-weight: 600;
+        }
+
+        .tab-button:hover:not(.active) {
+            color: #2c3e50;
+            background: #f8f9fa;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-weight: 500;
+            color: #2c3e50;
+            font-size: 0.95rem;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .form-group input.error,
+        .form-group select.error {
+            border-color: #e74c3c;
+            box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+        }
+
+        .help-text {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            font-size: 0.85rem;
+            margin-top: 4px;
+            display: none;
+        }
+
+        .validation-summary {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .validation-summary.error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        .validation-summary.success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .actions-bar {
+            background: white;
+            padding: 20px;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #27ae60, #219a52);
+            color: white;
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: #3498db;
+            border: 2px solid #3498db;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .device-info {
+            background: linear-gradient(45deg, #e8f4fd, #f1f8ff);
+            border: 1px solid #bee5eb;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .device-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .device-info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .device-info-label {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .device-info-value {
+            font-size: 1rem;
+            color: #2c3e50;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .loading-spinner {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .actions-bar {
+                flex-direction: column;
+            }
+            
+            .config-tabs {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <h1>Device Configuration</h1>
+                <p>Configure device settings with structured forms</p>
+            </div>
+            <div class="header-nav">
+                <a href="/" class="nav-link">📊 Device List</a>
+                <a href="/dashboard.html" class="nav-link">📈 Dashboard</a>
+                <a href="/config.html" class="nav-link">⚙️ Templates</a>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Device Information -->
+            <div class="device-info" id="deviceInfo" style="display: none;">
+                <div class="device-info-grid">
+                    <div class="device-info-item">
+                        <span class="device-info-label">Device Name</span>
+                        <span class="device-info-value" id="deviceName">-</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="device-info-label">Model</span>
+                        <span class="device-info-value" id="deviceModel">-</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="device-info-label">IP Address</span>
+                        <span class="device-info-value" id="deviceIP">-</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="device-info-label">MAC Address</span>
+                        <span class="device-info-value" id="deviceMAC">-</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="device-info-label">Generation</span>
+                        <span class="device-info-value" id="deviceGeneration">-</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="device-info-label">Status</span>
+                        <span class="device-info-value" id="deviceStatus">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validation Summary -->
+            <div class="validation-summary" id="validationSummary">
+                <div id="validationMessage"></div>
+            </div>
+
+            <!-- Configuration Tabs -->
+            <div class="config-tabs">
+                <button class="tab-button active" data-tab="wifi">📶 WiFi</button>
+                <button class="tab-button" data-tab="mqtt">📡 MQTT</button>
+                <button class="tab-button" data-tab="auth">🔐 Authentication</button>
+                <button class="tab-button" data-tab="system">⚙️ System</button>
+                <button class="tab-button" data-tab="network">🌐 Network</button>
+                <button class="tab-button" data-tab="advanced">🔧 Advanced</button>
+            </div>
+
+            <!-- WiFi Configuration Tab -->
+            <div class="tab-content active" id="wifi-tab">
+                <form id="wifiForm">
+                    <div class="form-section">
+                        <h3 class="section-title">📶 WiFi Station Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="wifi_enable" checked>
+                                    <label for="wifi_enable">Enable WiFi</label>
+                                </div>
+                                <div class="help-text">Enable or disable WiFi connectivity</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="wifi_ssid">Network Name (SSID) *</label>
+                                <input type="text" id="wifi_ssid" maxlength="32" required>
+                                <div class="help-text">Maximum 32 characters</div>
+                                <div class="error-message">SSID is required and must be 1-32 characters</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="wifi_password">WiFi Password</label>
+                                <input type="password" id="wifi_password" maxlength="63">
+                                <div class="help-text">Leave empty for open networks</div>
+                                <div class="error-message">Password must be less than 64 characters</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="wifi_ipv4mode">IP Configuration</label>
+                                <select id="wifi_ipv4mode">
+                                    <option value="dhcp">DHCP (Automatic)</option>
+                                    <option value="static">Static IP</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section" id="staticIpSection" style="display: none;">
+                        <h3 class="section-title">🌐 Static IP Configuration</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="static_ip">IP Address *</label>
+                                <input type="text" id="static_ip" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+                                <div class="help-text">e.g., 192.168.1.100</div>
+                                <div class="error-message">Enter a valid IP address</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="static_netmask">Subnet Mask *</label>
+                                <input type="text" id="static_netmask" value="255.255.255.0" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+                                <div class="help-text">Usually 255.255.255.0</div>
+                                <div class="error-message">Enter a valid subnet mask</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="static_gateway">Gateway *</label>
+                                <input type="text" id="static_gateway" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+                                <div class="help-text">Your router's IP address</div>
+                                <div class="error-message">Enter a valid gateway IP</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="static_nameserver">DNS Server</label>
+                                <input type="text" id="static_nameserver" value="8.8.8.8" pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$">
+                                <div class="help-text">DNS server for name resolution</div>
+                                <div class="error-message">Enter a valid DNS server IP</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="section-title">📡 Access Point Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="ap_enable">
+                                    <label for="ap_enable">Enable Access Point</label>
+                                </div>
+                                <div class="help-text">Create a WiFi hotspot for configuration</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="ap_ssid">AP Network Name</label>
+                                <input type="text" id="ap_ssid" maxlength="32">
+                                <div class="help-text">Name for the device's WiFi hotspot</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="ap_password">AP Password</label>
+                                <input type="password" id="ap_password" minlength="8" maxlength="63">
+                                <div class="help-text">At least 8 characters for security</div>
+                                <div class="error-message">Password must be 8-63 characters</div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- MQTT Configuration Tab -->
+            <div class="tab-content" id="mqtt-tab">
+                <form id="mqttForm">
+                    <div class="form-section">
+                        <h3 class="section-title">📡 MQTT Broker Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="mqtt_enable">
+                                    <label for="mqtt_enable">Enable MQTT</label>
+                                </div>
+                                <div class="help-text">Connect to MQTT broker for home automation</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt_server">MQTT Server</label>
+                                <input type="text" id="mqtt_server" placeholder="mqtt.example.com">
+                                <div class="help-text">Hostname or IP address of MQTT broker</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt_port">Port</label>
+                                <input type="number" id="mqtt_port" value="1883" min="1" max="65535">
+                                <div class="help-text">Standard port is 1883 (8883 for SSL)</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt_user">Username</label>
+                                <input type="text" id="mqtt_user">
+                                <div class="help-text">Leave empty if no authentication</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt_password">Password</label>
+                                <input type="password" id="mqtt_password">
+                                <div class="help-text">MQTT broker password</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt_client_id">Client ID</label>
+                                <input type="text" id="mqtt_client_id" maxlength="128">
+                                <div class="help-text">Unique identifier (auto-generated if empty)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="section-title">📋 MQTT Topics & Behavior</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="mqtt_topic_prefix">Topic Prefix</label>
+                                <input type="text" id="mqtt_topic_prefix" maxlength="256" placeholder="homeassistant">
+                                <div class="help-text">Prefix for all MQTT topics</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt_keep_alive">Keep Alive (seconds)</label>
+                                <input type="number" id="mqtt_keep_alive" value="60" min="1" max="3600">
+                                <div class="help-text">Heartbeat interval (1-3600 seconds)</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt_update_period">Update Period (seconds)</label>
+                                <input type="number" id="mqtt_update_period" value="30" min="1" max="3600">
+                                <div class="help-text">How often to publish status updates</div>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="mqtt_clean_session" checked>
+                                    <label for="mqtt_clean_session">Clean Session</label>
+                                </div>
+                                <div class="help-text">Start fresh connection each time</div>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="mqtt_rpc_notifications">
+                                    <label for="mqtt_rpc_notifications">RPC Notifications</label>
+                                </div>
+                                <div class="help-text">Enable RPC command notifications</div>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="mqtt_status_notifications" checked>
+                                    <label for="mqtt_status_notifications">Status Notifications</label>
+                                </div>
+                                <div class="help-text">Publish device status changes</div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Authentication Configuration Tab -->
+            <div class="tab-content" id="auth-tab">
+                <form id="authForm">
+                    <div class="form-section">
+                        <h3 class="section-title">🔐 Device Authentication</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="auth_enable">
+                                    <label for="auth_enable">Enable Authentication</label>
+                                </div>
+                                <div class="help-text">Require login to access device web interface</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="auth_username">Username</label>
+                                <input type="text" id="auth_username" maxlength="64" placeholder="admin">
+                                <div class="help-text">Login username (1-64 characters)</div>
+                                <div class="error-message">Username must be 1-64 characters</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="auth_password">Password</label>
+                                <input type="password" id="auth_password" minlength="1">
+                                <div class="help-text">Strong password recommended</div>
+                                <div class="error-message">Password is required</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="auth_realm">Authentication Realm</label>
+                                <input type="text" id="auth_realm" maxlength="64" placeholder="Shelly Device">
+                                <div class="help-text">Authentication realm description</div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- System Configuration Tab -->
+            <div class="tab-content" id="system-tab">
+                <form id="systemForm">
+                    <div class="form-section">
+                        <h3 class="section-title">⚙️ Device Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="device_name">Device Name</label>
+                                <input type="text" id="device_name" placeholder="Living Room Switch">
+                                <div class="help-text">Friendly name for the device</div>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="device_discoverable" checked>
+                                    <label for="device_discoverable">Discoverable</label>
+                                </div>
+                                <div class="help-text">Allow device discovery by other systems</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="section-title">🌍 Location & Time</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="location_timezone">Timezone</label>
+                                <select id="location_timezone">
+                                    <option value="UTC">UTC</option>
+                                    <option value="Europe/London">Europe/London</option>
+                                    <option value="Europe/Paris">Europe/Paris</option>
+                                    <option value="Europe/Berlin">Europe/Berlin</option>
+                                    <option value="America/New_York">America/New_York</option>
+                                    <option value="America/Los_Angeles">America/Los_Angeles</option>
+                                    <option value="Asia/Tokyo">Asia/Tokyo</option>
+                                    <option value="Australia/Sydney">Australia/Sydney</option>
+                                </select>
+                                <div class="help-text">Device timezone for scheduling</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="location_latitude">Latitude</label>
+                                <input type="number" id="location_latitude" step="0.0001" min="-90" max="90">
+                                <div class="help-text">Geographic latitude (-90 to 90)</div>
+                            </div>
+                            <div class="form-group">
+                                <label for="location_longitude">Longitude</label>
+                                <input type="number" id="location_longitude" step="0.0001" min="-180" max="180">
+                                <div class="help-text">Geographic longitude (-180 to 180)</div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Network Configuration Tab -->
+            <div class="tab-content" id="network-tab">
+                <form id="networkForm">
+                    <div class="form-section">
+                        <h3 class="section-title">🌐 Network Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="network_hostname">Hostname</label>
+                                <input type="text" id="network_hostname" pattern="^[a-zA-Z0-9-]+$">
+                                <div class="help-text">Network hostname (letters, numbers, hyphens)</div>
+                                <div class="error-message">Invalid hostname format</div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Advanced Configuration Tab -->
+            <div class="tab-content" id="advanced-tab">
+                <form id="advancedForm">
+                    <div class="form-section">
+                        <h3 class="section-title">🔧 Advanced Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="debug_enable">
+                                    <label for="debug_enable">Enable Debug Mode</label>
+                                </div>
+                                <div class="help-text">Enable detailed logging for troubleshooting</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3 class="section-title">📝 Raw Configuration</h3>
+                        <div class="form-group">
+                            <label for="raw_config">Additional Settings (JSON)</label>
+                            <textarea id="raw_config" rows="6" placeholder="{}"></textarea>
+                            <div class="help-text">Additional configuration in JSON format</div>
+                            <div class="error-message">Invalid JSON format</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Actions Bar -->
+        <div class="actions-bar">
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-outline" id="validateBtn">✅ Validate</button>
+                <button class="btn btn-secondary" id="previewBtn">👁️ Preview</button>
+                <button class="btn btn-outline" id="resetBtn">🔄 Reset</button>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-success" id="saveBtn">💾 Save Configuration</button>
+                <button class="btn btn-primary" id="applyBtn">🚀 Apply to Device</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <div>Processing...</div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentDeviceId = null;
+        let originalConfig = null;
+        let currentConfig = {};
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            initializePage();
+            bindEventListeners();
+            
+            // Get device ID from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const deviceId = urlParams.get('device');
+            if (deviceId) {
+                loadDeviceConfiguration(deviceId);
+            }
+        });
+
+        function initializePage() {
+            // Initialize tab switching
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => switchTab(button.dataset.tab));
+            });
+
+            // Initialize form validation
+            setupFormValidation();
+            
+            // Initialize conditional fields
+            setupConditionalFields();
+        }
+
+        function bindEventListeners() {
+            document.getElementById('validateBtn').addEventListener('click', validateConfiguration);
+            document.getElementById('previewBtn').addEventListener('click', previewConfiguration);
+            document.getElementById('saveBtn').addEventListener('click', saveConfiguration);
+            document.getElementById('applyBtn').addEventListener('click', applyConfiguration);
+            document.getElementById('resetBtn').addEventListener('click', resetConfiguration);
+        }
+
+        function setupConditionalFields() {
+            // Show/hide static IP section based on IP mode
+            document.getElementById('wifi_ipv4mode').addEventListener('change', function() {
+                const staticSection = document.getElementById('staticIpSection');
+                staticSection.style.display = this.value === 'static' ? 'block' : 'none';
+            });
+        }
+
+        function setupFormValidation() {
+            // Real-time validation for required fields
+            const requiredFields = document.querySelectorAll('input[required], input[pattern]');
+            requiredFields.forEach(field => {
+                field.addEventListener('blur', () => validateField(field));
+                field.addEventListener('input', () => clearFieldError(field));
+            });
+        }
+
+        function switchTab(tabId) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+        }
+
+        function validateField(field) {
+            const isValid = field.checkValidity();
+            const errorMsg = field.parentNode.querySelector('.error-message');
+            
+            if (!isValid) {
+                field.classList.add('error');
+                if (errorMsg) errorMsg.style.display = 'block';
+            } else {
+                field.classList.remove('error');
+                if (errorMsg) errorMsg.style.display = 'none';
+            }
+            
+            return isValid;
+        }
+
+        function clearFieldError(field) {
+            field.classList.remove('error');
+            const errorMsg = field.parentNode.querySelector('.error-message');
+            if (errorMsg) errorMsg.style.display = 'none';
+        }
+
+        function gatherFormData() {
+            const config = {
+                wifi: {
+                    enable: document.getElementById('wifi_enable').checked,
+                    ssid: document.getElementById('wifi_ssid').value,
+                    password: document.getElementById('wifi_password').value,
+                    ipv4mode: document.getElementById('wifi_ipv4mode').value
+                },
+                mqtt: {
+                    enable: document.getElementById('mqtt_enable').checked,
+                    server: document.getElementById('mqtt_server').value,
+                    port: parseInt(document.getElementById('mqtt_port').value) || 1883,
+                    user: document.getElementById('mqtt_user').value,
+                    pass: document.getElementById('mqtt_password').value,
+                    id: document.getElementById('mqtt_client_id').value,
+                    topic_prefix: document.getElementById('mqtt_topic_prefix').value,
+                    keep_alive: parseInt(document.getElementById('mqtt_keep_alive').value) || 60,
+                    update_period: parseInt(document.getElementById('mqtt_update_period').value) || 30,
+                    clean_session: document.getElementById('mqtt_clean_session').checked,
+                    rpc_ntf: document.getElementById('mqtt_rpc_notifications').checked,
+                    status_ntf: document.getElementById('mqtt_status_notifications').checked
+                },
+                auth: {
+                    enable: document.getElementById('auth_enable').checked,
+                    user: document.getElementById('auth_username').value,
+                    pass: document.getElementById('auth_password').value,
+                    realm: document.getElementById('auth_realm').value
+                },
+                system: {
+                    device: {
+                        name: document.getElementById('device_name').value,
+                        discoverable: document.getElementById('device_discoverable').checked
+                    },
+                    location: {
+                        tz: document.getElementById('location_timezone').value,
+                        lat: parseFloat(document.getElementById('location_latitude').value) || 0,
+                        lng: parseFloat(document.getElementById('location_longitude').value) || 0
+                    },
+                    debug: {
+                        enable: document.getElementById('debug_enable').checked
+                    }
+                }
+            };
+
+            // Add static IP configuration if enabled
+            if (config.wifi.ipv4mode === 'static') {
+                config.wifi.static_ip = {
+                    ip: document.getElementById('static_ip').value,
+                    netmask: document.getElementById('static_netmask').value,
+                    gw: document.getElementById('static_gateway').value,
+                    nameserver: document.getElementById('static_nameserver').value
+                };
+            }
+
+            // Add access point configuration if enabled
+            if (document.getElementById('ap_enable').checked) {
+                config.wifi.ap = {
+                    enable: true,
+                    ssid: document.getElementById('ap_ssid').value,
+                    pass: document.getElementById('ap_password').value
+                };
+            }
+
+            // Add raw configuration if provided
+            const rawConfig = document.getElementById('raw_config').value.trim();
+            if (rawConfig) {
+                try {
+                    config.raw = JSON.parse(rawConfig);
+                } catch (e) {
+                    showValidationMessage('Invalid JSON in raw configuration', 'error');
+                    return null;
+                }
+            }
+
+            return config;
+        }
+
+        function populateForm(config) {
+            // WiFi settings
+            if (config.wifi) {
+                document.getElementById('wifi_enable').checked = config.wifi.enable || false;
+                document.getElementById('wifi_ssid').value = config.wifi.ssid || '';
+                document.getElementById('wifi_password').value = config.wifi.password || '';
+                document.getElementById('wifi_ipv4mode').value = config.wifi.ipv4mode || 'dhcp';
+                
+                if (config.wifi.static_ip) {
+                    document.getElementById('static_ip').value = config.wifi.static_ip.ip || '';
+                    document.getElementById('static_netmask').value = config.wifi.static_ip.netmask || '';
+                    document.getElementById('static_gateway').value = config.wifi.static_ip.gw || '';
+                    document.getElementById('static_nameserver').value = config.wifi.static_ip.nameserver || '';
+                }
+                
+                if (config.wifi.ap) {
+                    document.getElementById('ap_enable').checked = config.wifi.ap.enable || false;
+                    document.getElementById('ap_ssid').value = config.wifi.ap.ssid || '';
+                    document.getElementById('ap_password').value = config.wifi.ap.pass || '';
+                }
+            }
+
+            // MQTT settings
+            if (config.mqtt) {
+                document.getElementById('mqtt_enable').checked = config.mqtt.enable || false;
+                document.getElementById('mqtt_server').value = config.mqtt.server || '';
+                document.getElementById('mqtt_port').value = config.mqtt.port || 1883;
+                document.getElementById('mqtt_user').value = config.mqtt.user || '';
+                document.getElementById('mqtt_password').value = config.mqtt.pass || '';
+                document.getElementById('mqtt_client_id').value = config.mqtt.id || '';
+                document.getElementById('mqtt_topic_prefix').value = config.mqtt.topic_prefix || '';
+                document.getElementById('mqtt_keep_alive').value = config.mqtt.keep_alive || 60;
+                document.getElementById('mqtt_update_period').value = config.mqtt.update_period || 30;
+                document.getElementById('mqtt_clean_session').checked = config.mqtt.clean_session !== false;
+                document.getElementById('mqtt_rpc_notifications').checked = config.mqtt.rpc_ntf || false;
+                document.getElementById('mqtt_status_notifications').checked = config.mqtt.status_ntf !== false;
+            }
+
+            // Auth settings
+            if (config.auth) {
+                document.getElementById('auth_enable').checked = config.auth.enable || false;
+                document.getElementById('auth_username').value = config.auth.user || '';
+                document.getElementById('auth_password').value = config.auth.pass || '';
+                document.getElementById('auth_realm').value = config.auth.realm || '';
+            }
+
+            // System settings
+            if (config.system) {
+                if (config.system.device) {
+                    document.getElementById('device_name').value = config.system.device.name || '';
+                    document.getElementById('device_discoverable').checked = config.system.device.discoverable !== false;
+                }
+                
+                if (config.system.location) {
+                    document.getElementById('location_timezone').value = config.system.location.tz || 'UTC';
+                    document.getElementById('location_latitude').value = config.system.location.lat || '';
+                    document.getElementById('location_longitude').value = config.system.location.lng || '';
+                }
+                
+                if (config.system.debug) {
+                    document.getElementById('debug_enable').checked = config.system.debug.enable || false;
+                }
+            }
+
+            // Raw configuration
+            if (config.raw) {
+                document.getElementById('raw_config').value = JSON.stringify(config.raw, null, 2);
+            }
+
+            // Update conditional fields
+            setupConditionalFields();
+            if (document.getElementById('wifi_ipv4mode').value === 'static') {
+                document.getElementById('staticIpSection').style.display = 'block';
+            }
+        }
+
+        async function loadDeviceConfiguration(deviceId) {
+            currentDeviceId = deviceId;
+            showLoading(true);
+            
+            try {
+                // Load device information
+                const deviceResponse = await fetch(`/api/v1/devices/${deviceId}`);
+                const deviceData = await deviceResponse.json();
+                
+                if (deviceData.success) {
+                    populateDeviceInfo(deviceData.device);
+                }
+                
+                // Load device configuration
+                const configResponse = await fetch(`/api/v1/devices/${deviceId}/config/typed`);
+                const configData = await configResponse.json();
+                
+                if (configData.success) {
+                    originalConfig = configData.configuration;
+                    currentConfig = JSON.parse(JSON.stringify(originalConfig));
+                    populateForm(currentConfig);
+                    showValidationMessage('Configuration loaded successfully', 'success');
+                } else {
+                    showValidationMessage('Failed to load configuration: ' + (configData.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showValidationMessage('Network error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function populateDeviceInfo(device) {
+            document.getElementById('deviceName').textContent = device.name || '-';
+            document.getElementById('deviceModel').textContent = device.model || '-';
+            document.getElementById('deviceIP').textContent = device.ip || '-';
+            document.getElementById('deviceMAC').textContent = device.mac || '-';
+            document.getElementById('deviceGeneration').textContent = device.generation || '-';
+            document.getElementById('deviceStatus').textContent = device.online ? 'Online' : 'Offline';
+            document.getElementById('deviceInfo').style.display = 'block';
+        }
+
+        async function validateConfiguration() {
+            const config = gatherFormData();
+            if (!config) return;
+
+            showLoading(true);
+            
+            try {
+                const response = await fetch('/api/v1/configuration/validate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        configuration: config,
+                        validation_level: 'strict',
+                        device_id: currentDeviceId
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.valid) {
+                    showValidationMessage('✅ Configuration is valid!', 'success');
+                } else {
+                    const errors = result.errors || ['Unknown validation error'];
+                    showValidationMessage('❌ Validation failed:\n' + errors.join('\n'), 'error');
+                }
+            } catch (error) {
+                showValidationMessage('Validation error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function previewConfiguration() {
+            const config = gatherFormData();
+            if (!config) return;
+
+            const previewWindow = window.open('', '_blank', 'width=800,height=600');
+            previewWindow.document.write(`
+                <html>
+                <head>
+                    <title>Configuration Preview</title>
+                    <style>
+                        body { font-family: monospace; padding: 20px; }
+                        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Configuration Preview</h2>
+                    <pre>${JSON.stringify(config, null, 2)}</pre>
+                </body>
+                </html>
+            `);
+        }
+
+        async function saveConfiguration() {
+            if (!currentDeviceId) {
+                showValidationMessage('No device selected', 'error');
+                return;
+            }
+
+            const config = gatherFormData();
+            if (!config) return;
+
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`/api/v1/devices/${currentDeviceId}/config/typed`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        configuration: config,
+                        validation_level: 'production'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    originalConfig = JSON.parse(JSON.stringify(config));
+                    currentConfig = JSON.parse(JSON.stringify(config));
+                    showValidationMessage('✅ Configuration saved successfully!', 'success');
+                } else {
+                    showValidationMessage('❌ Failed to save configuration: ' + (result.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showValidationMessage('Save error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function applyConfiguration() {
+            if (!currentDeviceId) {
+                showValidationMessage('No device selected', 'error');
+                return;
+            }
+
+            if (!confirm('Apply configuration to device? This will restart the device and may temporarily disconnect it.')) {
+                return;
+            }
+
+            await saveConfiguration();
+            
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`/api/v1/devices/${currentDeviceId}/apply-config`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showValidationMessage('✅ Configuration applied to device successfully!', 'success');
+                } else {
+                    showValidationMessage('❌ Failed to apply configuration: ' + (result.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showValidationMessage('Apply error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function resetConfiguration() {
+            if (!confirm('Reset configuration to last saved version? All unsaved changes will be lost.')) {
+                return;
+            }
+
+            if (originalConfig) {
+                currentConfig = JSON.parse(JSON.stringify(originalConfig));
+                populateForm(currentConfig);
+                showValidationMessage('Configuration reset to saved version', 'info');
+            }
+        }
+
+        function showValidationMessage(message, type) {
+            const summary = document.getElementById('validationSummary');
+            const messageEl = document.getElementById('validationMessage');
+            
+            summary.className = `validation-summary ${type}`;
+            messageEl.textContent = message;
+            summary.style.display = 'block';
+            
+            // Auto-hide success/info messages after 5 seconds
+            if (type === 'success' || type === 'info') {
+                setTimeout(() => {
+                    summary.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        function showLoading(show) {
+            document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+        }
+    </script>
+</body>
+</html>

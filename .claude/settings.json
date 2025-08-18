@@ -133,12 +133,24 @@
       "Bash(env CGO_ENABLED=1 go test -v -timeout=30s -short ./internal/service)",
       "Bash(env CGO_ENABLED=1 go test -v -timeout=30s -short ./internal/discovery)",
       "Bash(CGO_ENABLED=1 go build -v ./cmd/shelly-manager)",
-      "mcp__playwright__browser_click"
+      "mcp__playwright__browser_click",
+      "Bash(od:*)",
+      "Bash(strace:*)",
+      "Bash(python3:*)",
+      "Bash(cp:*)",
+      "Bash(if [ -f data/shelly.db ])",
+      "Bash(then echo \"Database exists\")",
+      "Bash(sqlite3:*)",
+      "Bash(else echo \"Database does not exist\")",
+      "Bash(fi)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
-      "/home/serge/scratch"
+      "/home/serge/scratch",
+      "/home/serge",
+      "/etc",
+      "/tmp"
     ]
   },
   "memory": ".claude/CLAUDE.md",

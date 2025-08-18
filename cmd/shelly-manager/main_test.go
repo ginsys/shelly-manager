@@ -22,7 +22,7 @@ func TestCLICommands(t *testing.T) {
 	// Create temporary directories for test
 	tempDir := testutil.TempDir(t)
 	dbPath := filepath.Join(tempDir, "test.db")
-	configPath := filepath.Join(tempDir, "test-config.yaml")
+	configPath := filepath.Join(tempDir, "testing.yaml")
 
 	// Create test config file
 	configContent := `server:
