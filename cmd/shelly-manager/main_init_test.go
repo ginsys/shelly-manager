@@ -410,8 +410,8 @@ database:
 database:
   path: ${DB_PATH:-/tmp/test.db}
 `,
-			expectError: false,
-			description: "Should handle environment variable placeholders",
+			expectError: true,
+			description: "Should fail on environment variable placeholders (not supported)",
 		},
 		{
 			name: "Minimal Valid Config",

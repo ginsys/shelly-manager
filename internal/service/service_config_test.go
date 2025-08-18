@@ -322,6 +322,12 @@ func TestShellyService_UpdateRelayConfig(t *testing.T) {
 	serverIP := server.URL[len("http://"):]
 	device := createTestDevice(t, db, serverIP)
 
+	// Import device configuration first (required for capability config updates)
+	_, err := service.ImportDeviceConfig(device.ID)
+	if err != nil {
+		t.Fatalf("ImportDeviceConfig failed: %v", err)
+	}
+
 	autoOn := 10
 	autoOff := 20
 	relayConfig := &configuration.RelayConfig{
@@ -330,7 +336,7 @@ func TestShellyService_UpdateRelayConfig(t *testing.T) {
 		AutoOff:      &autoOff,
 	}
 
-	err := service.UpdateRelayConfig(device.ID, relayConfig)
+	err = service.UpdateRelayConfig(device.ID, relayConfig)
 	if err != nil {
 		t.Fatalf("UpdateRelayConfig failed: %v", err)
 	}
@@ -362,13 +368,19 @@ func TestShellyService_UpdateDimmingConfig(t *testing.T) {
 	serverIP := server.URL[len("http://"):]
 	device := createTestDevice(t, db, serverIP)
 
+	// Import device configuration first (required for capability config updates)
+	_, err := service.ImportDeviceConfig(device.ID)
+	if err != nil {
+		t.Fatalf("ImportDeviceConfig failed: %v", err)
+	}
+
 	dimmingConfig := &configuration.DimmingConfig{
 		DefaultBrightness: 75,
 		FadeRate:          1000,
 		DefaultState:      true,
 	}
 
-	err := service.UpdateDimmingConfig(device.ID, dimmingConfig)
+	err = service.UpdateDimmingConfig(device.ID, dimmingConfig)
 	if err != nil {
 		t.Fatalf("UpdateDimmingConfig failed: %v", err)
 	}
@@ -385,6 +397,12 @@ func TestShellyService_UpdateRollerConfig(t *testing.T) {
 	serverIP := server.URL[len("http://"):]
 	device := createTestDevice(t, db, serverIP)
 
+	// Import device configuration first (required for capability config updates)
+	_, err := service.ImportDeviceConfig(device.ID)
+	if err != nil {
+		t.Fatalf("ImportDeviceConfig failed: %v", err)
+	}
+
 	rollerConfig := &configuration.RollerConfig{
 		MaxOpenTime:      60,
 		MaxCloseTime:     60,
@@ -392,7 +410,7 @@ func TestShellyService_UpdateRollerConfig(t *testing.T) {
 		CalibrationState: "not_calibrated",
 	}
 
-	err := service.UpdateRollerConfig(device.ID, rollerConfig)
+	err = service.UpdateRollerConfig(device.ID, rollerConfig)
 	if err != nil {
 		t.Fatalf("UpdateRollerConfig failed: %v", err)
 	}
@@ -409,6 +427,12 @@ func TestShellyService_UpdatePowerMeteringConfig(t *testing.T) {
 	serverIP := server.URL[len("http://"):]
 	device := createTestDevice(t, db, serverIP)
 
+	// Import device configuration first (required for capability config updates)
+	_, err := service.ImportDeviceConfig(device.ID)
+	if err != nil {
+		t.Fatalf("ImportDeviceConfig failed: %v", err)
+	}
+
 	maxPower := 3500
 	maxVoltage := 240
 	maxCurrent := 16.0
@@ -418,7 +442,7 @@ func TestShellyService_UpdatePowerMeteringConfig(t *testing.T) {
 		MaxCurrent: &maxCurrent,
 	}
 
-	err := service.UpdatePowerMeteringConfig(device.ID, powerConfig)
+	err = service.UpdatePowerMeteringConfig(device.ID, powerConfig)
 	if err != nil {
 		t.Fatalf("UpdatePowerMeteringConfig failed: %v", err)
 	}
