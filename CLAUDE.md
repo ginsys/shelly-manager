@@ -309,3 +309,4 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 **Phase Completed**: Phase 4.2 - CI/CD Pipeline Fixes (100% Complete)  
 **Current Focus**: Test Coverage Improvement → Container & Kubernetes Integration  
 **Next Major Milestone**: 30%+ test coverage → Production-ready containerized deployment
+- always test linting and run go format before finishing a changeset

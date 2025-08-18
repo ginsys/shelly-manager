@@ -25,7 +25,7 @@ func TestNewFactoryWithLogger(t *testing.T) {
 
 func TestFactory_CreateClient_ReturnsError(t *testing.T) {
 	factory := NewFactory()
-	
+
 	client, err := factory.CreateClient("192.168.1.100", 1)
 	assertError(t, err)
 	assertEqual(t, (Client)(nil), client)
@@ -47,10 +47,10 @@ func TestFactory_DetectGeneration_Gen2Device(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	
+
 	factory := NewFactory()
 	serverIP := server.URL[len("http://"):]
-	
+
 	ctx := context.Background()
 	generation, err := factory.DetectGeneration(ctx, serverIP)
 	assertNoError(t, err)
@@ -73,10 +73,10 @@ func TestFactory_DetectGeneration_Gen3Device(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	
+
 	factory := NewFactory()
 	serverIP := server.URL[len("http://"):]
-	
+
 	ctx := context.Background()
 	generation, err := factory.DetectGeneration(ctx, serverIP)
 	assertNoError(t, err)
@@ -102,10 +102,10 @@ func TestFactory_DetectGeneration_Gen1Device(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	
+
 	factory := NewFactory()
 	serverIP := server.URL[len("http://"):]
-	
+
 	ctx := context.Background()
 	generation, err := factory.DetectGeneration(ctx, serverIP)
 	assertNoError(t, err)
@@ -124,10 +124,10 @@ func TestFactory_DetectGeneration_InvalidResponse(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	
+
 	factory := NewFactory()
 	serverIP := server.URL[len("http://"):]
-	
+
 	ctx := context.Background()
 	generation, err := factory.DetectGeneration(ctx, serverIP)
 	assertError(t, err)
@@ -140,10 +140,10 @@ func TestFactory_DetectGeneration_NoResponse(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer server.Close()
-	
+
 	factory := NewFactory()
 	serverIP := server.URL[len("http://"):]
-	
+
 	ctx := context.Background()
 	generation, err := factory.DetectGeneration(ctx, serverIP)
 	assertError(t, err)
@@ -164,10 +164,10 @@ func TestFactory_DetectGeneration_EmptyResponse(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	
+
 	factory := NewFactory()
 	serverIP := server.URL[len("http://"):]
-	
+
 	ctx := context.Background()
 	generation, err := factory.DetectGeneration(ctx, serverIP)
 	assertError(t, err)
@@ -177,7 +177,7 @@ func TestFactory_DetectGeneration_EmptyResponse(t *testing.T) {
 
 func TestFactory_DetectGeneration_NetworkError(t *testing.T) {
 	factory := NewFactory()
-	
+
 	ctx := context.Background()
 	generation, err := factory.DetectGeneration(ctx, "192.168.1.200") // Non-existent IP
 	assertError(t, err)
@@ -186,11 +186,11 @@ func TestFactory_DetectGeneration_NetworkError(t *testing.T) {
 
 func TestFactory_DetectGeneration_ContextCancellation(t *testing.T) {
 	factory := NewFactory()
-	
+
 	// Create a context that's already cancelled
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	
+
 	generation, err := factory.DetectGeneration(ctx, "192.168.1.100")
 	assertError(t, err)
 	assertEqual(t, 0, generation)
@@ -212,13 +212,13 @@ func TestFactory_CreateClientWithDetection(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	
+
 	factory := NewFactory()
 	serverIP := server.URL[len("http://"):]
-	
+
 	ctx := context.Background()
 	client, err := factory.CreateClientWithDetection(ctx, serverIP)
-	
+
 	// Should detect generation but fail to create client due to import cycle limitation
 	assertError(t, err)
 	assertEqual(t, (Client)(nil), client)
@@ -226,7 +226,7 @@ func TestFactory_CreateClientWithDetection(t *testing.T) {
 
 func TestDefaultFactory(t *testing.T) {
 	assertNotNil(t, DefaultFactory)
-	
+
 	// Test that it implements the Factory interface
 	var _ Factory = DefaultFactory
 }
@@ -241,12 +241,12 @@ func TestFactory_Interface(t *testing.T) {
 func TestFactory_EdgeCases(t *testing.T) {
 	factory := NewFactory()
 	ctx := context.Background()
-	
+
 	// Test with empty IP
 	generation, err := factory.DetectGeneration(ctx, "")
 	assertError(t, err)
 	assertEqual(t, 0, generation)
-	
+
 	// Test with invalid IP format
 	generation, err = factory.DetectGeneration(ctx, "invalid-ip")
 	assertError(t, err)
@@ -256,11 +256,11 @@ func TestFactory_EdgeCases(t *testing.T) {
 // Test with different response status codes
 func TestFactory_DetectGeneration_StatusCodes(t *testing.T) {
 	tests := []struct {
-		name           string
-		gen2Status     int
-		gen1Status     int
-		expectedGen    int
-		expectedError  bool
+		name          string
+		gen2Status    int
+		gen1Status    int
+		expectedGen   int
+		expectedError bool
 	}{
 		{
 			name:          "Gen2 OK, Gen1 Not Found",
@@ -298,7 +298,7 @@ func TestFactory_DetectGeneration_StatusCodes(t *testing.T) {
 			expectedError: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -331,13 +331,13 @@ func TestFactory_DetectGeneration_StatusCodes(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			
+
 			factory := NewFactory()
 			serverIP := server.URL[len("http://"):]
-			
+
 			ctx := context.Background()
 			generation, err := factory.DetectGeneration(ctx, serverIP)
-			
+
 			if tt.expectedError {
 				assertError(t, err)
 			} else {

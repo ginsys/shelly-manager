@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/testutil"
+	"github.com/spf13/cobra"
 )
 
 // Test helper to create in-memory test environment
@@ -98,7 +98,7 @@ func TestDiscoverCommand_Direct(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping discover command test in short mode due to network operations")
 	}
-	
+
 	origShellyService := shellyService
 	origCfg := cfg
 	defer func() {
@@ -142,7 +142,7 @@ func TestAddCommand_Direct(t *testing.T) {
 			t.Errorf("Add command panicked: %v", r)
 		}
 	}()
-	
+
 	// These may exit or fail, but should not panic
 	// addCmd.Run(nil, []string{"invalid-ip"})
 	// addCmd.Run(nil, []string{"192.168.255.254"})
@@ -234,10 +234,10 @@ func TestServerCommand_Setup(t *testing.T) {
 func TestCommandValidation(t *testing.T) {
 	// Test command argument validation
 	tests := []struct {
-		name     string
-		cmd      *cobra.Command
-		args     []string
-		wantErr  bool
+		name    string
+		cmd     *cobra.Command
+		args    []string
+		wantErr bool
 	}{
 		{
 			name:    "list command - no args",

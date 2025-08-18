@@ -296,7 +296,7 @@ func TestApplicationShutdown(t *testing.T) {
 func TestConcurrentInitialization(t *testing.T) {
 	// Test that initialization is safe under concurrent access
 	tempDir := testutil.TempDir(t)
-	
+
 	var wg sync.WaitGroup
 	errors := make(chan error, 10)
 
@@ -380,16 +380,16 @@ func TestConfigurationEdgeCases(t *testing.T) {
 	tempDir := testutil.TempDir(t)
 
 	tests := []struct {
-		name           string
-		configContent  string
-		expectError    bool
-		description    string
+		name          string
+		configContent string
+		expectError   bool
+		description   string
 	}{
 		{
-			name: "Empty Config",
+			name:          "Empty Config",
 			configContent: "",
-			expectError: false,
-			description: "Should handle empty config with defaults",
+			expectError:   false,
+			description:   "Should handle empty config with defaults",
 		},
 		{
 			name: "Config with Comments",
@@ -433,7 +433,7 @@ database:
 
 			_, err = config.Load(configPath)
 			if (err != nil) != tt.expectError {
-				t.Errorf("Config loading error = %v, expectError = %v (%s)", 
+				t.Errorf("Config loading error = %v, expectError = %v (%s)",
 					err, tt.expectError, tt.description)
 			}
 		})
