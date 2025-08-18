@@ -112,10 +112,10 @@ func Load(configFile string) (*Config, error) {
 		// Default configuration search paths - be more specific to avoid binary files
 		viper.SetConfigName("shelly-manager")
 		viper.SetConfigType("yaml")
-		
+
 		// Only search in specific directories for config files
-		viper.AddConfigPath("./configs")          // Project configs directory
-		viper.AddConfigPath(".")                  // Current directory
+		viper.AddConfigPath("./configs")             // Project configs directory
+		viper.AddConfigPath(".")                     // Current directory
 		viper.AddConfigPath("$HOME/.shelly-manager") // User config directory
 		viper.AddConfigPath("/etc/shelly-manager")   // System config directory
 
@@ -135,13 +135,13 @@ func Load(configFile string) (*Config, error) {
 		if configFile != "" {
 			return nil, fmt.Errorf("failed to read config file at '%s': %w", configFile, err)
 		}
-		return nil, fmt.Errorf("failed to read config file (searched paths: %s): %w", 
-			fmt.Sprintf("./configs, ., $HOME/.shelly-manager, /etc/shelly-manager"), err)
+		return nil, fmt.Errorf("failed to read config file (searched paths: %s): %w",
+			"./configs, ., $HOME/.shelly-manager, /etc/shelly-manager", err)
 	}
 
 	// Report which config file was loaded
 	configFilePath := viper.ConfigFileUsed()
-	
+
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config from '%s': %w", configFilePath, err)
