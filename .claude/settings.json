@@ -164,7 +164,10 @@
       "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_database_final.out ./internal/database)",
       "Bash(env CGO_ENABLED=1 go test -v -short -coverprofile=coverage_final_all.out ./...)",
       "Bash(env CGO_ENABLED=1 go test -short -coverprofile=coverage_final_all.out ./...)",
-      "Bash(env CGO_ENABLED=1 go test -short -cover ./internal/shelly/... ./internal/database/... ./internal/service/... ./cmd/shelly-manager/...)"
+      "Bash(env CGO_ENABLED=1 go test -short -cover ./internal/shelly/... ./internal/database/... ./internal/service/... ./cmd/shelly-manager/...)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestListCommand_Direct|TestCommandValidation|TestGlobalVariableInitialization\")",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestGlobalVariableInitialization\")",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestListCommand_Direct\")"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
