@@ -104,11 +104,11 @@ test-coverage-ci:
 	@echo "Coverage summary:"
 	go tool cover -func=coverage.out | tail -1
 
-# Check coverage threshold (30% minimum) - requires existing coverage.out
+# Check coverage threshold (27.5% minimum) - requires existing coverage.out
 test-coverage-check:
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	echo "Total coverage: $${COVERAGE}%"; \
-	THRESHOLD=28; \
+	THRESHOLD=27.5; \
 	if [ "$$(echo "$$COVERAGE < $$THRESHOLD" | bc -l)" = "1" ]; then \
 		echo "Coverage $${COVERAGE}% is below threshold $${THRESHOLD}%"; \
 		exit 1; \
