@@ -327,6 +327,30 @@ func startServer() {
 		}
 	}
 
+	// Start background cleanup process for discovered devices
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour) // Cleanup every hour
+		defer ticker.Stop()
+
+		logger.WithFields(map[string]any{
+			"component": "cleanup",
+		}).Info("Starting discovered devices cleanup scheduler")
+
+		for range ticker.C {
+			if deleted, err := dbManager.CleanupExpiredDiscoveredDevices(); err != nil {
+				logger.WithFields(map[string]any{
+					"error":     err.Error(),
+					"component": "cleanup",
+				}).Warn("Failed to cleanup expired discovered devices")
+			} else if deleted > 0 {
+				logger.WithFields(map[string]any{
+					"deleted":   deleted,
+					"component": "cleanup",
+				}).Info("Scheduled cleanup completed for discovered devices")
+			}
+		}
+	}()
+
 	// Start server
 	address := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	logger.LogAppStart("1.0.0", address)
