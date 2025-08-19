@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+
+	"github.com/ginsys/shelly-manager/internal/database"
 )
 
 // ProvisionerAgent represents a registered provisioning agent
@@ -418,6 +420,7 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 
 	// Process discovered devices
 	devicesProcessed := 0
+	devicesPersisted := 0
 	for _, device := range req.Devices {
 		// Log each discovered device
 		h.logger.WithFields(map[string]any{
@@ -432,8 +435,31 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 			"component":  "provisioner_handler",
 		}).Info("Processing discovered Shelly device")
 
-		// TODO: Store discovered devices in database for UI display
-		// For now, we'll just log and count them
+		// Store discovered device in database for UI display
+		discoveredDevice := &database.DiscoveredDevice{
+			MAC:        device.MAC,
+			SSID:       device.SSID,
+			Model:      device.Model,
+			Generation: device.Generation,
+			IP:         device.IP,
+			Signal:     device.Signal,
+			AgentID:    req.AgentID,
+			TaskID:     req.TaskID,
+			Discovered: device.Discovered,
+			ExpiresAt:  device.Discovered.Add(24 * time.Hour), // Expire after 24 hours
+		}
+
+		if err := h.DB.UpsertDiscoveredDevice(discoveredDevice); err != nil {
+			h.logger.WithFields(map[string]any{
+				"mac":       device.MAC,
+				"agent_id":  req.AgentID,
+				"error":     err.Error(),
+				"component": "provisioner_handler",
+			}).Warn("Failed to persist discovered device")
+		} else {
+			devicesPersisted++
+		}
+
 		devicesProcessed++
 	}
 
@@ -456,8 +482,59 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 		"success":           true,
 		"devices_received":  len(req.Devices),
 		"devices_processed": devicesProcessed,
+		"devices_persisted": devicesPersisted,
 		"timestamp":         time.Now(),
-		"message":           fmt.Sprintf("Successfully processed %d discovered devices", devicesProcessed),
+		"message":           fmt.Sprintf("Successfully processed %d discovered devices (%d persisted)", devicesProcessed, devicesPersisted),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetDiscoveredDevices handles GET /api/v1/provisioner/discovered-devices
+func (h *Handler) GetDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	agentID := r.URL.Query().Get("agent_id")
+
+	// Retrieve discovered devices from database
+	devices, err := h.DB.GetDiscoveredDevices(agentID)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"agent_id":  agentID,
+			"error":     err.Error(),
+			"component": "provisioner_handler",
+		}).Error("Failed to retrieve discovered devices")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Clean up expired devices while we're here (async cleanup)
+	go func() {
+		if deleted, err := h.DB.CleanupExpiredDiscoveredDevices(); err != nil {
+			h.logger.WithFields(map[string]any{
+				"error":     err.Error(),
+				"component": "provisioner_handler",
+			}).Warn("Failed to cleanup expired discovered devices")
+		} else if deleted > 0 {
+			h.logger.WithFields(map[string]any{
+				"deleted":   deleted,
+				"component": "provisioner_handler",
+			}).Debug("Cleaned up expired discovered devices")
+		}
+	}()
+
+	h.logger.WithFields(map[string]any{
+		"agent_id":     agentID,
+		"device_count": len(devices),
+		"component":    "provisioner_handler",
+	}).Info("Retrieved discovered devices")
+
+	response := map[string]interface{}{
+		"success":      true,
+		"devices":      devices,
+		"device_count": len(devices),
+		"filtered_by":  agentID,
+		"timestamp":    time.Now(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
