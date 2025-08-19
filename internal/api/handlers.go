@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -66,6 +67,12 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate and normalize device settings
+	if err := h.validateDeviceSettings(&device); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid device settings: %v", err), http.StatusBadRequest)
+		return
+	}
+
 	if err := h.DB.AddDevice(&device); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -123,6 +130,12 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	var updatedDevice database.Device
 	if err := json.NewDecoder(r.Body).Decode(&updatedDevice); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Validate and normalize device settings
+	if err := h.validateDeviceSettings(&updatedDevice); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid device settings: %v", err), http.StatusBadRequest)
 		return
 	}
 
@@ -1580,4 +1593,39 @@ func (h *Handler) GetTemplateExamples(w http.ResponseWriter, r *http.Request) {
 		"examples":      examples,
 		"documentation": documentation,
 	})
+}
+
+// validateDeviceSettings ensures device settings are valid JSON or sets defaults
+func (h *Handler) validateDeviceSettings(device *database.Device) error {
+	// If settings are empty, provide minimal valid JSON
+	if device.Settings == "" {
+		device.Settings = `{"model":"Unknown","gen":1,"auth_enabled":false}`
+		return nil
+	}
+
+	// Validate that settings is valid JSON
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+		return fmt.Errorf("settings must be valid JSON: %w", err)
+	}
+
+	// Ensure minimum required fields exist
+	if _, exists := settings["model"]; !exists {
+		settings["model"] = "Unknown"
+	}
+	if _, exists := settings["gen"]; !exists {
+		settings["gen"] = 1
+	}
+	if _, exists := settings["auth_enabled"]; !exists {
+		settings["auth_enabled"] = false
+	}
+
+	// Re-serialize the normalized settings
+	normalizedSettings, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("failed to normalize settings: %w", err)
+	}
+	device.Settings = string(normalizedSettings)
+
+	return nil
 }
