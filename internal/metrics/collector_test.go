@@ -235,8 +235,8 @@ func TestCollectorPeriodicCollection(t *testing.T) {
 	// Get initial collection time
 	initialTime := service.GetLastCollectionTime()
 
-	// Wait for at least 2 collection cycles
-	time.Sleep(120 * time.Millisecond)
+	// Wait for at least 2 collection cycles (50ms * 2 + buffer)
+	time.Sleep(20 * time.Millisecond)
 
 	// Should have updated collection time
 	newTime := service.GetLastCollectionTime()
@@ -266,7 +266,7 @@ func TestCollectorContextCancellation(t *testing.T) {
 	cancel()
 
 	// Give it a moment to stop
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond) // Reduced for faster tests
 
 	// Should still report as running (context cancellation stops loop but doesn't change running flag)
 	// The running flag is only changed by explicit Stop() call

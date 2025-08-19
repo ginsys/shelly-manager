@@ -598,3 +598,49 @@ func TestTestutilConcurrency(t *testing.T) {
 		}
 	}
 }
+
+// Test TEST-NET validation functions
+func TestTestNetAddressValidation(t *testing.T) {
+	testCases := []struct {
+		address  string
+		expected bool
+		desc     string
+	}{
+		{"192.0.2.1", true, "TEST-NET-1"},
+		{"192.0.2.255", true, "TEST-NET-1 boundary"},
+		{"198.51.100.1", true, "TEST-NET-2"},
+		{"203.0.113.1", true, "TEST-NET-3"},
+		{"192.168.1.1", false, "Private network"},
+		{"8.8.8.8", false, "Public address"},
+		{"127.0.0.1", false, "Loopback"},
+		{"10.0.0.1", false, "Private network"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			result := IsTestNetAddress(tc.address)
+			if result != tc.expected {
+				t.Errorf("IsTestNetAddress(%s) = %v, expected %v", tc.address, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestAssertTestNetAddress(t *testing.T) {
+	// Test valid TEST-NET address (should not fail)
+	t.Run("valid TEST-NET", func(t *testing.T) {
+		AssertTestNetAddress(t, "192.0.2.1") // Should pass
+	})
+
+	// Note: We can't easily test the failure case of AssertTestNetAddress
+	// because it calls t.Fatalf which terminates the test.
+}
+
+func TestLogTestNetUsage(t *testing.T) {
+	// Test that logging works for TEST-NET addresses
+	LogTestNetUsage(t, "192.0.2.1")
+	LogTestNetUsage(t, "203.0.113.100")
+
+	// Should not log for non-TEST-NET addresses
+	LogTestNetUsage(t, "192.168.1.1")
+}

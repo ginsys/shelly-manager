@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -84,4 +85,39 @@ func TestNetworkAddress() string {
 func TestNetworkCIDR() string {
 	// Use small TEST-NET-1 range for fast tests
 	return "192.0.2.0/30" // Only 4 addresses
+}
+
+// IsTestNetAddress validates that an address is in a safe TEST-NET range
+func IsTestNetAddress(addr string) bool {
+	// TEST-NET-1: 192.0.2.0/24
+	// TEST-NET-2: 198.51.100.0/24
+	// TEST-NET-3: 203.0.113.0/24
+	testNetPrefixes := []string{
+		"192.0.2.",
+		"198.51.100.",
+		"203.0.113.",
+	}
+
+	for _, prefix := range testNetPrefixes {
+		if strings.HasPrefix(addr, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// AssertTestNetAddress fails the test if the address is not in TEST-NET range
+func AssertTestNetAddress(t *testing.T, addr string) {
+	t.Helper()
+	if !IsTestNetAddress(addr) {
+		t.Fatalf("Address %s is not in TEST-NET range - tests should only use RFC 5737 TEST-NET addresses", addr)
+	}
+}
+
+// LogTestNetUsage logs that a test is using TEST-NET addresses for transparency
+func LogTestNetUsage(t *testing.T, addr string) {
+	t.Helper()
+	if IsTestNetAddress(addr) {
+		t.Logf("Using safe TEST-NET address: %s (RFC 5737 - no real network traffic)", addr)
+	}
 }

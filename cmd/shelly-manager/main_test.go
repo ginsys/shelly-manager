@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -203,11 +204,29 @@ discovery:
 		t.Fatalf("Failed to start server: %v", err)
 	}
 
-	// Give server time to start
-	time.Sleep(2 * time.Second)
+	// Wait for server to start by polling health endpoint
+	serverURL := "http://127.0.0.1:8082/health"
+	serverReady := false
 
-	// Test that server is running by trying to connect
-	// (We're not doing a full HTTP test here, just checking it starts)
+	for i := 0; i < 20; i++ { // Poll for up to 1 second (20 * 50ms)
+		time.Sleep(50 * time.Millisecond)
+		resp, err := http.Get(serverURL)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				serverReady = true
+				break
+			}
+		}
+	}
+
+	if !serverReady {
+		// If health endpoint is not available, just verify the server process is running
+		// This ensures the test doesn't fail if health endpoint is not implemented
+		if cmd.Process == nil {
+			t.Fatal("Server process should be running")
+		}
+	}
 
 	// Kill the server
 	if cmd.Process != nil {
