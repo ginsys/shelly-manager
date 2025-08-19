@@ -124,6 +124,7 @@ test-coverage-with-check: test-coverage-ci test-coverage-check
 
 # Run matrix tests (race detection, short mode)
 test-matrix:
+	@echo "Running matrix tests with race detection and short mode..."
 	CGO_ENABLED=1 go test -v -race -short ./...
 
 # Complete CI test suite (coverage + race detection + threshold check)
