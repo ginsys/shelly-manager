@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Config Integration Tests</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .pass { background-color: #d4edda; border-color: #28a745; }
+        .fail { background-color: #f8d7da; border-color: #dc3545; }
+        .pending { background-color: #fff3cd; border-color: #ffc107; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-left: 4px solid #007bff; font-family: monospace; white-space: pre-wrap; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        #mock-server-status { margin: 10px 0; padding: 10px; background: #e9ecef; border-radius: 3px; }
+        .field-error, .field-warning { font-size: 12px; margin-top: 4px; }
+        .field-error { color: #e74c3c; }
+        .field-warning { color: #f39c12; }
+        input.error { border-color: #e74c3c; }
+        input.warning { border-color: #f39c12; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 200px; padding: 5px; margin-bottom: 5px; }
+        .validation-message { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .validation-message.success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .validation-message.error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .validation-message.pending { background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; }
+        .loading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <h1>Device Config Integration Test Suite</h1>
+    <div id="mock-server-status">Mock server status: <span id="server-status">Not started</span></div>
+    
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <!-- Mock DOM elements for testing -->>
+    <div id="test-container" style="display: none;">
+        <!-- Mock form elements that device-config.html uses -->
+        <div class="form-group">
+            <input type="checkbox" id="wifi_enable">
+            <label for="wifi_ssid">WiFi SSID:</label>
+            <input type="text" id="wifi_ssid" value="TestNetwork">
+        </div>
+        <div class="form-group">
+            <label for="wifi_password">WiFi Password:</label>
+            <input type="password" id="wifi_password" value="testpass">
+        </div>
+        <div class="form-group">
+            <label for="wifi_ipv4mode">IP Mode:</label>
+            <select id="wifi_ipv4mode">
+                <option value="dhcp">DHCP</option>
+                <option value="static">Static</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <input type="checkbox" id="mqtt_enable">
+            <label for="mqtt_server">MQTT Server:</label>
+            <input type="text" id="mqtt_server" value="broker.example.com">
+        </div>
+        <div class="form-group">
+            <input type="checkbox" id="auth_enable">
+            <label for="auth_user">Auth User:</label>
+            <input type="text" id="auth_user" value="admin">
+        </div>
+        <div class="form-group">
+            <label for="auth_password">Auth Password:</label>
+            <input type="password" id="auth_password" value="secure123">
+        </div>
+        
+        <div id="validationMessage" class="validation-message" style="display: none;"></div>
+        <div id="loadingIndicator" class="loading" style="display: none;">Loading...</div>
+        <div id="deviceInfo" style="display: none;">
+            <span id="deviceName">-</span>
+            <span id="deviceModel">-</span>
+            <span id="deviceIP">-</span>
+            <span id="deviceMAC">-</span>
+            <span id="deviceGeneration">-</span>
+            <span id="deviceStatus">-</span>
+        </div>
+    </div>
+    
+    <div id="test-results"></div>
+
+    <script>
+        // Constants and global variables
+        const API_BASE = '/api/v1';
+        let testResults = [];
+        let currentDeviceId = null;
+        let originalConfig = null;
+        let currentConfig = {};
+        
+        // Mock the console to capture logs for testing
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        let testLogs = [];
+        
+        function captureConsole() {
+            testLogs = [];
+            console.log = (...args) => {
+                testLogs.push({ type: 'log', message: args.join(' ') });
+                originalConsoleLog(...args);
+            };
+            console.error = (...args) => {
+                testLogs.push({ type: 'error', message: args.join(' ') });
+                originalConsoleError(...args);
+            };
+        }
+        
+        function restoreConsole() {
+            console.log = originalConsoleLog;
+            console.error = originalConsoleError;
+        }
+        
+        // Mock functions from device-config.html
+        function showLoading(show) {
+            const indicator = document.getElementById('loadingIndicator');
+            indicator.style.display = show ? 'block' : 'none';
+            
+            // Add loading class to form elements
+            const container = document.getElementById('test-container');
+            if (show) {
+                container.classList.add('loading');
+            } else {
+                container.classList.remove('loading');
+            }
+        }
+        
+        function showValidationMessage(message, type) {
+            const element = document.getElementById('validationMessage');
+            element.textContent = message;
+            element.className = `validation-message ${type}`;
+            element.style.display = 'block';
+        }
+        
+        function populateDeviceInfo(device) {
+            document.getElementById('deviceName').textContent = device.name || '-';
+            document.getElementById('deviceModel').textContent = device.model || '-';
+            document.getElementById('deviceIP').textContent = device.ip || '-';
+            document.getElementById('deviceMAC').textContent = device.mac || '-';
+            document.getElementById('deviceGeneration').textContent = device.generation || '-';
+            document.getElementById('deviceStatus').textContent = device.online ? 'Online' : 'Offline';
+            document.getElementById('deviceInfo').style.display = 'block';
+        }
+        
+        function populateForm(config) {
+            // Populate WiFi settings
+            if (config.wifi) {
+                document.getElementById('wifi_enable').checked = config.wifi.enable || false;
+                document.getElementById('wifi_ssid').value = config.wifi.ssid || '';
+                document.getElementById('wifi_password').value = config.wifi.password || '';
+                document.getElementById('wifi_ipv4mode').value = config.wifi.ipv4mode || 'dhcp';
+            }
+            
+            // Populate MQTT settings
+            if (config.mqtt) {
+                document.getElementById('mqtt_enable').checked = config.mqtt.enable || false;
+                document.getElementById('mqtt_server').value = config.mqtt.server || '';
+            }
+            
+            // Populate Auth settings
+            if (config.auth) {
+                document.getElementById('auth_enable').checked = config.auth.enable || false;
+                document.getElementById('auth_user').value = config.auth.user || '';
+                document.getElementById('auth_password').value = config.auth.password || '';
+            }
+        }
+        
+        function gatherFormData() {
+            const config = {};
+            
+            // WiFi Configuration
+            if (document.getElementById('wifi_enable').checked) {
+                config.wifi = {
+                    enable: true,
+                    ssid: document.getElementById('wifi_ssid').value,
+                    password: document.getElementById('wifi_password').value,
+                    ipv4mode: document.getElementById('wifi_ipv4mode').value
+                };
+            }
+            
+            // MQTT Configuration
+            if (document.getElementById('mqtt_enable').checked) {
+                config.mqtt = {
+                    enable: true,
+                    server: document.getElementById('mqtt_server').value
+                };
+            }
+            
+            // Auth Configuration
+            if (document.getElementById('auth_enable').checked) {
+                config.auth = {
+                    enable: true,
+                    user: document.getElementById('auth_user').value,
+                    password: document.getElementById('auth_password').value
+                };
+            }
+            
+            return config;
+        }
+        
+        // Enhanced validation functions from device-config.html
+        function clearValidationErrors() {
+            document.querySelectorAll('.field-error').forEach(error => error.remove());
+            document.querySelectorAll('.field-warning').forEach(warning => warning.remove());
+            document.querySelectorAll('input, select').forEach(field => {
+                field.classList.remove('error', 'warning');
+            });
+        }
+
+        function displayValidationErrors(errors) {
+            errors.forEach(error => {
+                const field = findFormFieldByName(error.field);
+                if (field) {
+                    field.classList.add('error');
+                    // Create or update error message
+                    let errorElement = field.parentNode.querySelector('.field-error');
+                    if (!errorElement) {
+                        errorElement = document.createElement('div');
+                        errorElement.className = 'field-error error-message';
+                        errorElement.style.color = '#e74c3c';
+                        errorElement.style.fontSize = '12px';
+                        errorElement.style.marginTop = '4px';
+                        field.parentNode.appendChild(errorElement);
+                    }
+                    errorElement.textContent = `❌ ${error.message}`;
+                    errorElement.style.display = 'block';
+                }
+            });
+        }
+
+        function displayValidationWarnings(warnings) {
+            warnings.forEach(warning => {
+                const field = findFormFieldByName(warning.field);
+                if (field) {
+                    field.classList.add('warning');
+                    // Create or update warning message
+                    let warningElement = field.parentNode.querySelector('.field-warning');
+                    if (!warningElement) {
+                        warningElement = document.createElement('div');
+                        warningElement.className = 'field-warning';
+                        warningElement.style.color = '#f39c12';
+                        warningElement.style.fontSize = '12px';
+                        warningElement.style.marginTop = '4px';
+                        field.parentNode.appendChild(warningElement);
+                    }
+                    warningElement.textContent = `⚠️ ${warning.message}`;
+                    warningElement.style.display = 'block';
+                }
+            });
+        }
+
+        function findFormFieldByName(fieldName) {
+            const possibleIds = [
+                fieldName,                    // "wifi.ssid"
+                fieldName.replace('.', '_'),  // "wifi_ssid" 
+                fieldName.replace(/\./g, '_'), // Handle multiple dots
+                `${fieldName.split('.')[0]}_${fieldName.split('.').slice(1).join('_')}` // "wifi_ssid"
+            ];
+            
+            for (const id of possibleIds) {
+                const element = document.getElementById(id);
+                if (element) return element;
+            }
+            
+            return document.querySelector(`[name="${fieldName}"]`);
+        }
+        
+        // Mock fetch function for different test scenarios
+        function createMockFetch(deviceScenario, validationScenario, saveScenario) {
+            return async (url, options) => {
+                await new Promise(resolve => setTimeout(resolve, 10)); // Simulate network delay
+                
+                // Device information endpoint
+                if (url.includes('/devices/') && !url.includes('/config') && options?.method !== 'PUT') {
+                    switch (deviceScenario) {
+                        case 'device-success':
+                            return {
+                                ok: true,
+                                status: 200,
+                                json: async () => ({
+                                    success: true,
+                                    device: {
+                                        id: 1,
+                                        name: 'Test Device',
+                                        model: 'Shelly 1',
+                                        ip: '192.168.1.100',
+                                        mac: 'AA:BB:CC:DD:EE:FF',
+                                        generation: 'Gen1',
+                                        online: true
+                                    }
+                                })
+                            };
+                        case 'device-not-found':
+                            return {
+                                ok: false,
+                                status: 404,
+                                statusText: 'Not Found',
+                                json: async () => ({ success: false, error: 'Device not found' })
+                            };
+                    }
+                }
+                
+                // Device config endpoint (GET)
+                if (url.includes('/config/typed') && options?.method !== 'PUT') {
+                    return {
+                        ok: true,
+                        status: 200,
+                        json: async () => ({
+                            success: true,
+                            configuration: {
+                                wifi: { enable: true, ssid: 'HomeNetwork', password: 'secret123', ipv4mode: 'dhcp' },
+                                mqtt: { enable: true, server: 'broker.home.local:1883' },
+                                auth: { enable: true, user: 'admin', password: 'admin123' }
+                            },
+                            validation: {
+                                valid: true,
+                                errors: [],
+                                warnings: [
+                                    { field: 'mqtt', message: 'MQTT broker connectivity not verified', code: 'MQTT_UNVERIFIED' }
+                                ]
+                            }
+                        })
+                    };
+                }
+                
+                // Validation endpoint
+                if (url.includes('/configuration/validate-typed')) {
+                    switch (validationScenario) {
+                        case 'validation-success':
+                            return {
+                                ok: true,
+                                status: 200,
+                                json: async () => ({
+                                    valid: true,
+                                    errors: [],
+                                    warnings: [
+                                        { field: 'mqtt.server', message: 'MQTT server not verified', code: 'MQTT_UNVERIFIED' }
+                                    ]
+                                })
+                            };
+                        case 'validation-errors':
+                            return {
+                                ok: true,
+                                status: 200,
+                                json: async () => ({
+                                    valid: false,
+                                    errors: [
+                                        { field: 'wifi.ssid', message: 'SSID is required when WiFi is enabled', code: 'REQUIRED_FIELD' },
+                                        { field: 'auth.password', message: 'Password is required when auth is enabled', code: 'REQUIRED_PASSWORD' }
+                                    ],
+                                    warnings: []
+                                })
+                            };
+                        case 'validation-server-error':
+                            return {
+                                ok: false,
+                                status: 500,
+                                statusText: 'Internal Server Error',
+                                text: async () => 'Validation service unavailable'
+                            };
+                    }
+                }
+                
+                // Save endpoint
+                if (url.includes('/config/typed') && options?.method === 'PUT') {
+                    switch (saveScenario) {
+                        case 'save-success':
+                            return {
+                                ok: true,
+                                status: 200,
+                                json: async () => ({
+                                    success: true,
+                                    message: 'Configuration saved successfully'
+                                })
+                            };
+                        case 'save-server-error':
+                            return {
+                                ok: false,
+                                status: 500,
+                                statusText: 'Internal Server Error',
+                                text: async () => 'Failed to save configuration'
+                            };
+                    }
+                }
+                
+                return { ok: false, status: 500, statusText: 'Mock error' };
+            };
+        }
+        
+        // Include the core functions from device-config.html
+        async function loadDeviceConfiguration(deviceId) {
+            currentDeviceId = deviceId;
+            showLoading(true);
+            
+            try {
+                // Load device information
+                const deviceResponse = await fetch(`${API_BASE}/devices/${deviceId}`);
+                const deviceData = await deviceResponse.json();
+                
+                if (deviceData.success) {
+                    populateDeviceInfo(deviceData.device);
+                }
+                
+                // Load device configuration
+                const configResponse = await fetch(`${API_BASE}/devices/${deviceId}/config/typed`);
+                const configData = await configResponse.json();
+                
+                if (configData.success) {
+                    originalConfig = configData.configuration;
+                    currentConfig = JSON.parse(JSON.stringify(originalConfig));
+                    populateForm(currentConfig);
+                    showValidationMessage('Configuration loaded successfully', 'success');
+                } else {
+                    showValidationMessage('Failed to load configuration: ' + (configData.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showValidationMessage('Network error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        async function saveConfiguration() {
+            if (!currentDeviceId) {
+                showValidationMessage('No device selected', 'error');
+                return;
+            }
+
+            const config = gatherFormData();
+            if (!config) return;
+
+            showLoading(true);
+            
+            try {
+                console.log(`Starting save process for device ${currentDeviceId}...`);
+                console.log('Collecting form data...', config);
+                
+                // Phase 1: Validate configuration
+                console.log('Validating configuration...');
+                showValidationMessage('Validating configuration...', 'pending');
+                
+                const validationResponse = await fetch('/api/v1/configuration/validate-typed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        configuration: config,
+                        validation_level: 'basic',
+                        device_id: currentDeviceId
+                    })
+                });
+
+                if (!validationResponse.ok) {
+                    let errorMessage;
+                    try {
+                        const errorData = await validationResponse.text();
+                        errorMessage = `Validation request failed (${validationResponse.status}): ${errorData}`;
+                    } catch {
+                        errorMessage = `Validation request failed: ${validationResponse.status} ${validationResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const validationResult = await validationResponse.json();
+                console.log('Validation result:', validationResult);
+                
+                // Clear previous validation errors
+                clearValidationErrors();
+                
+                // Handle validation errors (block save)
+                if (!validationResult.valid && validationResult.errors && validationResult.errors.length > 0) {
+                    showValidationMessage(`❌ Validation failed: ${validationResult.errors.length} error(s) found`, 'error');
+                    displayValidationErrors(validationResult.errors);
+                    return; // Don't proceed with save
+                }
+
+                // Phase 2: Save configuration
+                console.log('Saving configuration...');
+                showValidationMessage('Saving configuration...', 'pending');
+                
+                const saveResponse = await fetch(`${API_BASE}/devices/${currentDeviceId}/config/typed`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        configuration: config,
+                        validation_level: 'basic'
+                    })
+                });
+
+                if (!saveResponse.ok) {
+                    let errorMessage;
+                    try {
+                        const errorData = await saveResponse.text();
+                        errorMessage = `Save failed (${saveResponse.status}): ${errorData}`;
+                    } catch {
+                        errorMessage = `Save failed: ${saveResponse.status} ${saveResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const saveResult = await saveResponse.json();
+                console.log('Save result:', saveResult);
+                
+                // Success - update local state
+                originalConfig = JSON.parse(JSON.stringify(config));
+                currentConfig = JSON.parse(JSON.stringify(config));
+                
+                // Show success message with warnings if present
+                const warningText = validationResult.warnings && validationResult.warnings.length > 0 
+                    ? ` (${validationResult.warnings.length} warning(s))` 
+                    : '';
+                showValidationMessage(`✅ Configuration saved successfully!${warningText}`, 'success');
+                
+                // Display warnings (non-blocking)
+                if (validationResult.warnings && validationResult.warnings.length > 0) {
+                    displayValidationWarnings(validationResult.warnings);
+                }
+                
+                console.log(`Successfully saved configuration for device ${currentDeviceId}`);
+                
+            } catch (error) {
+                console.error('Error saving configuration:', error);
+                showValidationMessage(`❌ Error: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        // Test cases
+        const tests = [
+            {
+                name: 'loadDeviceConfiguration - Successful device and config load',
+                test: async () => {
+                    window.fetch = createMockFetch('device-success', 'validation-success', 'save-success');
+                    captureConsole();
+                    
+                    await loadDeviceConfiguration(1);
+                    
+                    restoreConsole();
+                    
+                    const deviceInfo = document.getElementById('deviceInfo');
+                    const deviceName = document.getElementById('deviceName');
+                    const validationMsg = document.getElementById('validationMessage');
+                    const wifiSsid = document.getElementById('wifi_ssid');
+                    const wifiEnable = document.getElementById('wifi_enable');
+                    
+                    return [
+                        { condition: deviceInfo.style.display === 'block', message: 'Device info should be visible' },
+                        { condition: deviceName.textContent === 'Test Device', message: 'Device name should be populated' },
+                        { condition: validationMsg.textContent.includes('Configuration loaded successfully'), message: 'Should show success message' },
+                        { condition: wifiEnable.checked, message: 'WiFi should be enabled from loaded config' },
+                        { condition: wifiSsid.value === 'HomeNetwork', message: 'WiFi SSID should be populated from config' },
+                        { condition: currentDeviceId === 1, message: 'Current device ID should be set' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'loadDeviceConfiguration - Device not found error',
+                test: async () => {
+                    window.fetch = createMockFetch('device-not-found', 'validation-success', 'save-success');
+                    captureConsole();
+                    
+                    await loadDeviceConfiguration(999);
+                    
+                    restoreConsole();
+                    
+                    const validationMsg = document.getElementById('validationMessage');
+                    
+                    return [
+                        { condition: validationMsg.textContent.includes('Failed to load configuration'), message: 'Should show config load error' },
+                        { condition: validationMsg.className.includes('error'), message: 'Should have error styling' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'saveConfiguration - Successful validation and save with warnings',
+                test: async () => {
+                    window.fetch = createMockFetch('device-success', 'validation-success', 'save-success');
+                    currentDeviceId = 1;
+                    
+                    // Set up form data
+                    document.getElementById('wifi_enable').checked = true;
+                    document.getElementById('wifi_ssid').value = 'TestNetwork';
+                    document.getElementById('wifi_password').value = 'testpass';
+                    
+                    captureConsole();
+                    
+                    await saveConfiguration();
+                    
+                    restoreConsole();
+                    
+                    const validationMsg = document.getElementById('validationMessage');
+                    const loadingIndicator = document.getElementById('loadingIndicator');
+                    
+                    return [
+                        { condition: validationMsg.textContent.includes('Configuration saved successfully'), message: 'Should show success message' },
+                        { condition: validationMsg.textContent.includes('(1 warning'), message: 'Should show warning count' },
+                        { condition: validationMsg.className.includes('success'), message: 'Should have success styling' },
+                        { condition: loadingIndicator.style.display === 'none', message: 'Loading should be hidden after completion' },
+                        { condition: testLogs.some(log => log.message.includes('Validating configuration')), message: 'Should log validation phase' },
+                        { condition: testLogs.some(log => log.message.includes('Saving configuration')), message: 'Should log save phase' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'saveConfiguration - Validation errors block save',
+                test: async () => {
+                    window.fetch = createMockFetch('device-success', 'validation-errors', 'save-success');
+                    currentDeviceId = 1;
+                    
+                    // Set up form data that will cause validation errors
+                    document.getElementById('wifi_enable').checked = true;
+                    document.getElementById('wifi_ssid').value = ''; // Empty SSID
+                    document.getElementById('auth_enable').checked = true;
+                    document.getElementById('auth_password').value = ''; // Empty password
+                    
+                    captureConsole();
+                    
+                    await saveConfiguration();
+                    
+                    restoreConsole();
+                    
+                    const validationMsg = document.getElementById('validationMessage');
+                    const wifiSsidField = document.getElementById('wifi_ssid');
+                    const authPasswordField = document.getElementById('auth_password');
+                    
+                    return [
+                        { condition: validationMsg.textContent.includes('Validation failed: 2 error(s) found'), message: 'Should show validation error count' },
+                        { condition: validationMsg.className.includes('error'), message: 'Should have error styling' },
+                        { condition: wifiSsidField.classList.contains('error'), message: 'WiFi SSID field should have error class' },
+                        { condition: authPasswordField.classList.contains('error'), message: 'Auth password field should have error class' },
+                        { condition: document.querySelectorAll('.field-error').length >= 1, message: 'Should display field error messages' },
+                        { condition: !testLogs.some(log => log.message.includes('Successfully saved configuration')), message: 'Should NOT complete save on validation failure' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'saveConfiguration - Validation server error',
+                test: async () => {
+                    window.fetch = createMockFetch('device-success', 'validation-server-error', 'save-success');
+                    currentDeviceId = 1;
+                    
+                    document.getElementById('wifi_enable').checked = true;
+                    document.getElementById('wifi_ssid').value = 'TestNetwork';
+                    
+                    captureConsole();
+                    
+                    await saveConfiguration();
+                    
+                    restoreConsole();
+                    
+                    const validationMsg = document.getElementById('validationMessage');
+                    
+                    return [
+                        { condition: validationMsg.textContent.includes('Validation request failed (500)'), message: 'Should show validation server error' },
+                        { condition: validationMsg.textContent.includes('Validation service unavailable'), message: 'Should show error details' },
+                        { condition: validationMsg.className.includes('error'), message: 'Should have error styling' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'saveConfiguration - Save server error after successful validation',
+                test: async () => {
+                    window.fetch = createMockFetch('device-success', 'validation-success', 'save-server-error');
+                    currentDeviceId = 1;
+                    
+                    document.getElementById('wifi_enable').checked = true;
+                    document.getElementById('wifi_ssid').value = 'TestNetwork';
+                    
+                    captureConsole();
+                    
+                    await saveConfiguration();
+                    
+                    restoreConsole();
+                    
+                    const validationMsg = document.getElementById('validationMessage');
+                    
+                    return [
+                        { condition: validationMsg.textContent.includes('Save failed (500)'), message: 'Should show save server error' },
+                        { condition: validationMsg.textContent.includes('Failed to save configuration'), message: 'Should show error details' },
+                        { condition: validationMsg.className.includes('error'), message: 'Should have error styling' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'saveConfiguration - No device ID error',
+                test: async () => {
+                    currentDeviceId = null; // No device selected
+                    
+                    captureConsole();
+                    
+                    await saveConfiguration();
+                    
+                    restoreConsole();
+                    
+                    const validationMsg = document.getElementById('validationMessage');
+                    
+                    return [
+                        { condition: validationMsg.textContent.includes('No device selected'), message: 'Should show no device error' },
+                        { condition: validationMsg.className.includes('error'), message: 'Should have error styling' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'Field validation helper functions - findFormFieldByName',
+                test: async () => {
+                    // Test field name mapping
+                    const wifiSsidById = findFormFieldByName('wifi_ssid');
+                    const wifiSsidByDot = findFormFieldByName('wifi.ssid');
+                    const mqttServerById = findFormFieldByName('mqtt_server');
+                    const nonExistentField = findFormFieldByName('nonexistent.field');
+                    
+                    return [
+                        { condition: wifiSsidById && wifiSsidById.id === 'wifi_ssid', message: 'Should find field by exact ID' },
+                        { condition: wifiSsidByDot && wifiSsidByDot.id === 'wifi_ssid', message: 'Should find field by converting dots to underscores' },
+                        { condition: mqttServerById && mqttServerById.id === 'mqtt_server', message: 'Should find MQTT server field' },
+                        { condition: nonExistentField === null, message: 'Should return null for non-existent fields' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'Validation error display - displayValidationErrors',
+                test: async () => {
+                    // Clear any existing errors
+                    clearValidationErrors();
+                    
+                    const errors = [
+                        { field: 'wifi.ssid', message: 'SSID is required', code: 'REQUIRED_FIELD' },
+                        { field: 'auth.password', message: 'Password is required', code: 'REQUIRED_PASSWORD' }
+                    ];
+                    
+                    displayValidationErrors(errors);
+                    
+                    const wifiSsidField = document.getElementById('wifi_ssid');
+                    const authPasswordField = document.getElementById('auth_password');
+                    const errorMessages = document.querySelectorAll('.field-error');
+                    
+                    return [
+                        { condition: wifiSsidField.classList.contains('error'), message: 'WiFi SSID field should have error class' },
+                        { condition: authPasswordField.classList.contains('error'), message: 'Auth password field should have error class' },
+                        { condition: errorMessages.length >= 2, message: 'Should display error messages for both fields' },
+                        { condition: Array.from(errorMessages).some(el => el.textContent.includes('SSID is required')), message: 'Should show SSID error message' },
+                        { condition: Array.from(errorMessages).some(el => el.textContent.includes('Password is required')), message: 'Should show password error message' }
+                    ];
+                }
+            },
+            
+            {
+                name: 'Validation warning display - displayValidationWarnings',
+                test: async () => {
+                    // Clear any existing errors/warnings
+                    clearValidationErrors();
+                    
+                    const warnings = [
+                        { field: 'mqtt.server', message: 'MQTT server not verified', code: 'MQTT_UNVERIFIED' }
+                    ];
+                    
+                    displayValidationWarnings(warnings);
+                    
+                    const mqttServerField = document.getElementById('mqtt_server');
+                    const warningMessages = document.querySelectorAll('.field-warning');
+                    
+                    return [
+                        { condition: mqttServerField.classList.contains('warning'), message: 'MQTT server field should have warning class' },
+                        { condition: warningMessages.length >= 1, message: 'Should display warning message' },
+                        { condition: Array.from(warningMessages).some(el => el.textContent.includes('MQTT server not verified')), message: 'Should show MQTT warning message' }
+                    ];
+                }
+            }
+        ];
+        
+        // Test runner functions
+        async function runTest(test) {
+            try {
+                // Reset state before each test
+                currentDeviceId = null;
+                clearValidationErrors();
+                showValidationMessage('', 'success');
+                document.getElementById('validationMessage').style.display = 'none';
+                showLoading(false);
+                
+                // Reset form state
+                document.getElementById('wifi_enable').checked = false;
+                document.getElementById('wifi_ssid').value = '';
+                document.getElementById('wifi_password').value = '';
+                document.getElementById('mqtt_enable').checked = false;
+                document.getElementById('mqtt_server').value = '';
+                document.getElementById('auth_enable').checked = false;
+                document.getElementById('auth_user').value = '';
+                document.getElementById('auth_password').value = '';
+                
+                const assertions = await test.test();
+                const passed = assertions.filter(a => a.condition).length;
+                const total = assertions.length;
+                
+                return {
+                    name: test.name,
+                    passed: passed === total,
+                    assertions: assertions,
+                    passedCount: passed,
+                    totalCount: total,
+                    error: null
+                };
+            } catch (error) {
+                return {
+                    name: test.name,
+                    passed: false,
+                    assertions: [],
+                    passedCount: 0,
+                    totalCount: 1,
+                    error: error.message
+                };
+            }
+        }
+        
+        async function runAllTests() {
+            document.getElementById('server-status').textContent = 'Running tests...';
+            testResults = [];
+            
+            for (const test of tests) {
+                const result = await runTest(test);
+                testResults.push(result);
+            }
+            
+            displayResults();
+            document.getElementById('server-status').textContent = 'Tests completed';
+        }
+        
+        function displayResults() {
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = '';
+            
+            testResults.forEach(result => {
+                const testDiv = document.createElement('div');
+                testDiv.className = `test ${result.passed ? 'pass' : 'fail'}`;
+                
+                let assertionsHtml = '';
+                if (result.assertions.length > 0) {
+                    assertionsHtml = result.assertions.map(assertion => 
+                        `<li style="color: ${assertion.condition ? 'green' : 'red'};">${assertion.message}</li>`
+                    ).join('');
+                }
+                
+                testDiv.innerHTML = `
+                    <h3>${result.name} ${result.passed ? '✅' : '❌'}</h3>
+                    <p>Passed: ${result.passedCount}/${result.totalCount}</p>
+                    ${result.error ? `<p style="color: red;">Error: ${result.error}</p>` : ''}
+                    ${assertionsHtml ? `<ul>${assertionsHtml}</ul>` : ''}
+                `;
+                
+                resultsDiv.appendChild(testDiv);
+            });
+            
+            // Summary
+            const passed = testResults.filter(r => r.passed).length;
+            const total = testResults.length;
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = `test ${passed === total ? 'pass' : 'fail'}`;
+            summaryDiv.innerHTML = `<h2>Test Summary: ${passed}/${total} tests passed</h2>`;
+            resultsDiv.insertBefore(summaryDiv, resultsDiv.firstChild);
+        }
+        
+        function clearResults() {
+            document.getElementById('test-results').innerHTML = '';
+            testResults = [];
+        }
+    </script>
+</body>
+</html>
