@@ -134,12 +134,19 @@ test-ci: test-coverage-check
 # LINTING AND QUALITY
 # ==============================================================================
 
-# Run basic linting (gofmt, go vet)
+# Run comprehensive linting (gofmt, go vet, golangci-lint)
 lint:
 	@echo "Running go fmt..."
 	go fmt ./...
 	@echo "Running go vet..."
 	go vet ./...
+	@echo "Running golangci-lint..."
+	golangci-lint run --timeout=5m
+
+# Run golangci-lint exactly as CI does (requires golangci-lint to be installed)
+lint-ci:
+	@echo "Running golangci-lint (same as CI)..."
+	golangci-lint run --timeout=5m
 
 # Run golangci-lint (requires golangci-lint to be installed)
 lint-fix:
