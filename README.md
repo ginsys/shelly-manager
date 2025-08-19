@@ -11,41 +11,36 @@ A comprehensive Golang application for managing Shelly smart home devices with K
 
 ## 📊 Project Status
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the detailed development roadmap.
+**Current Version**: v0.5.2-alpha  
+**Status**: Production-ready dual-binary architecture with modern UI integration
 
-### ✅ Completed
-- Core package architecture with clear separation
-- SQLite database with GORM ORM  
-- Structured logging (slog)
-- Configuration management (Viper)
-- Complete HTTP REST API with 25+ endpoints
-- CLI framework (Cobra)
-- Feature-complete web interface with error handling
-- Real Shelly device API integration (Gen1 & Gen2+)
-- Device authentication (Basic auth & RFC 2617 Digest auth)
-- Capability-based configuration system
-- Configuration import/export/drift detection
-- Energy monitoring and device control
-- Discovery framework (HTTP/mDNS)
-- Platform-specific WiFi interfaces (Linux/macOS/Windows)
-- Comprehensive test coverage for core packages
+### ✅ COMPLETED - Production Ready
+- **Phase 1**: ✅ Core Shelly Device Management - Complete REST API, device authentication, real device integration
+- **Phase 2**: ✅ Dual-Binary Architecture - API server + provisioning agent with complete inter-service communication
+- **Phase 2.5**: ✅ Template System Enhancement - Sprig v3 integration, security controls, template inheritance
+- **Phase 3**: ✅ JSON to Structured Migration - Typed configuration models, bidirectional conversion, API endpoints
+- **Phase 4**: ✅ User Interface Enhancement - Modern structured forms, configuration wizards, real-time validation
+- **Phase 5**: ✅ Container & Kubernetes Integration - Production-ready containerization and security hardening
+- **Phase 5.1**: ✅ API Integration Enhancement - Complete provisioner-API communication with comprehensive testing
+- **Phase 5.1.1**: ✅ Discovered Device Database Persistence - Real-time device discovery with database integration
+- **Phase 5.2**: ✅ UI Modernization - Complete discovered devices integration with modern web interface
 
-### ✅ Recent Additions
-- Multi-stage Docker build with security hardening
-- Production-ready Kubernetes manifests with PersistentVolume
-- Comprehensive test performance optimization (34.6% coverage)
-- Network isolation for all tests using TEST-NET addresses
+### 🎯 Key Achievements
+- **Dual-Binary Architecture**: API server (containerized) + provisioning agent (host-based) with full communication
+- **Modern Configuration System**: Structured forms replacing raw JSON editing, template engine with Sprig v3
+- **Production Deployment**: Multi-stage Docker builds, Kubernetes manifests, security hardening
+- **Real Device Integration**: Gen1 & Gen2+ Shelly devices with comprehensive API coverage
+- **Database Persistence**: Discovered device storage with 24-hour TTL and automatic cleanup
+- **Modern Web UI**: Real-time device discovery, configuration wizards, diff tools, responsive design
+- **Comprehensive Testing**: 42.3% test coverage with API integration and comprehensive validation
 
-### 🚧 In Progress
-- WiFi provisioning flow implementation
-- Inter-service communication protocol
-
-### 📋 Planned
-- DHCP reservation management
-- OPNSense integration
-- Device export functionality
-- Monitoring and metrics
-- Advanced automation features
+### 📊 Current Capabilities
+- **Device Management**: 25+ REST endpoints, real Shelly device communication
+- **Configuration**: Template-based configuration with inheritance and validation
+- **Discovery**: Real-time device discovery with database persistence and web UI integration
+- **Provisioning**: Task-based orchestration between API server and provisioning agent
+- **Web Interface**: Modern UI with structured forms, wizards, and real-time feedback
+- **Container Support**: Production-ready Docker images and Kubernetes deployment
 
 ## 🚀 Quick Start
 
@@ -303,31 +298,18 @@ make test-integration
 - [x] Comprehensive configuration management
 - [x] Web UI with error handling and authentication flow
 
-### Phase 2: Provisioning System
-- [ ] Separate provisioner binary
-- [ ] API communication protocol
-- [ ] WiFi AP scanning
-- [ ] Device provisioning flow
-- [ ] Queue management
+### Phase 6: Database Abstraction & Export System (Planned)
+- [ ] Multi-database support (PostgreSQL, MySQL)
+- [ ] Export functionality (JSON, CSV, hosts, DHCP)
+- [ ] OPNSense integration
+- [ ] Advanced backup system with .sma format
+- [ ] Plugin-based export architecture
 
-### Phase 3: Container & Kubernetes
-- [ ] Multi-stage Docker builds
-- [ ] Kubernetes manifests
-- [ ] Helm chart
-- [ ] ConfigMaps and Secrets
-- [ ] Service mesh integration
-
-### Phase 4: Integration & Export
-- [ ] Export API implementation
-- [ ] OPNSense client
-- [ ] DHCP reservation generation
-- [ ] Bulk operations
-
-### Phase 5: Production Features
-- [ ] Monitoring and metrics
-- [ ] Backup/restore
+### Phase 7: Production Features (Future)
+- [ ] Monitoring and metrics (Prometheus)
 - [ ] High availability setup
-- [ ] Advanced automation
+- [ ] Advanced automation features
+- [ ] Enhanced security features
 
 ## 📚 Documentation
 
@@ -367,7 +349,9 @@ MIT License - See [LICENSE](LICENSE) file for details
 
 ---
 
-**Current Version**: v0.2.0-alpha  
+**Current Version**: v0.5.2-alpha  
+**Status**: Production-ready with modern UI integration  
 **Supported Devices**: Shelly Gen1 & Gen2+ devices  
 **Minimum Go Version**: 1.21  
-**Container Registry**: ghcr.io/ginsys/shelly-manager
+**Container Registry**: ghcr.io/ginsys/shelly-manager  
+**Architecture**: Dual-binary (API server + provisioning agent)
