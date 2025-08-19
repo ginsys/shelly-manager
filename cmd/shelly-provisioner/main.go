@@ -618,8 +618,39 @@ func processDeviceDiscoveryTask(ctx context.Context, task *provisioning.Provisio
 		"component":     "agent",
 	}).Info("Device discovery completed")
 
-	// TODO: Send discovered devices back to API server
-	// This could be done via a separate endpoint or as part of task result
+	// Convert UnprovisionedDevice to DiscoveredDevice and report to API server
+	if len(devices) > 0 && apiClient != nil && apiClient.IsRegistered() {
+		discoveredDevices := make([]*provisioning.DiscoveredDevice, 0, len(devices))
+		for _, device := range devices {
+			discoveredDevice := &provisioning.DiscoveredDevice{
+				MAC:        device.MAC,
+				SSID:       device.SSID,
+				Model:      device.Model,
+				Generation: device.Generation,
+				IP:         device.IP,
+				Signal:     device.Signal,
+				Discovered: device.Discovered,
+			}
+			discoveredDevices = append(discoveredDevices, discoveredDevice)
+		}
+
+		// Report discovered devices to API server
+		if err := apiClient.ReportDiscoveredDevices(task.ID, discoveredDevices); err != nil {
+			logger.WithFields(map[string]any{
+				"task_id":      task.ID,
+				"device_count": len(discoveredDevices),
+				"error":        err.Error(),
+				"component":    "agent",
+			}).Error("Failed to report discovered devices to API server")
+			// Don't return error - discovery task still completed successfully
+		} else {
+			logger.WithFields(map[string]any{
+				"task_id":      task.ID,
+				"device_count": len(discoveredDevices),
+				"component":    "agent",
+			}).Info("Successfully reported discovered devices to API server")
+		}
+	}
 
 	return nil
 }

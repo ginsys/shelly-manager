@@ -268,6 +268,95 @@ func TestAPIClient(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "401")
 	})
+
+	t.Run("ReportDiscoveredDevices_Success", func(t *testing.T) {
+		// Create mock server
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "POST", r.Method)
+			assert.Equal(t, "/api/v1/provisioner/discovered-devices", r.URL.Path)
+			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+
+			// Decode and validate request body
+			var req DeviceDiscoveryRequest
+			err := json.NewDecoder(r.Body).Decode(&req)
+			require.NoError(t, err)
+
+			assert.Equal(t, "agent-1", req.AgentID)
+			assert.Equal(t, "task-123", req.TaskID)
+			assert.Len(t, req.Devices, 2)
+
+			// Validate first device
+			assert.Equal(t, "AA:BB:CC:DD:EE:FF", req.Devices[0].MAC)
+			assert.Equal(t, "shelly1-AABBCC", req.Devices[0].SSID)
+			assert.Equal(t, "SHSW-1", req.Devices[0].Model)
+			assert.Equal(t, 1, req.Devices[0].Generation)
+			assert.Equal(t, "192.168.33.1", req.Devices[0].IP)
+			assert.Equal(t, -45, req.Devices[0].Signal)
+
+			// Return success response
+			response := DeviceDiscoveryResponse{
+				Success:          true,
+				DevicesReceived:  2,
+				DevicesProcessed: 2,
+				Timestamp:        time.Now(),
+				Message:          "Successfully processed devices",
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(response)
+		}))
+		defer server.Close()
+
+		// Create client and register it first
+		client := NewAPIClient(server.URL, "test-key", "agent-1", logger)
+		client.registered = true // Mock registration
+
+		// Create test devices
+		devices := []*DiscoveredDevice{
+			{
+				MAC:        "AA:BB:CC:DD:EE:FF",
+				SSID:       "shelly1-AABBCC",
+				Model:      "SHSW-1",
+				Generation: 1,
+				IP:         "192.168.33.1",
+				Signal:     -45,
+				Discovered: time.Now(),
+			},
+			{
+				MAC:        "11:22:33:44:55:66",
+				SSID:       "shellyplus1-112233",
+				Model:      "SNSW-001X16EU",
+				Generation: 2,
+				IP:         "192.168.33.1",
+				Signal:     -52,
+				Discovered: time.Now(),
+			},
+		}
+
+		// Test reporting discovered devices
+		err := client.ReportDiscoveredDevices("task-123", devices)
+		assert.NoError(t, err)
+	})
+
+	t.Run("ReportDiscoveredDevices_NotRegistered", func(t *testing.T) {
+		client := NewAPIClient("http://localhost:8080", "test-key", "agent-1", logger)
+
+		devices := []*DiscoveredDevice{
+			{
+				MAC:        "AA:BB:CC:DD:EE:FF",
+				SSID:       "shelly1-AABBCC",
+				Model:      "SHSW-1",
+				Generation: 1,
+				IP:         "192.168.33.1",
+				Signal:     -45,
+				Discovered: time.Now(),
+			},
+		}
+
+		err := client.ReportDiscoveredDevices("task-123", devices)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "agent not registered")
+	})
 }
 
 func TestProvisioningTask_JSONSerialization(t *testing.T) {
@@ -300,4 +389,5 @@ func TestProvisioningTask_JSONSerialization(t *testing.T) {
 		// JSON unmarshaling converts numbers to float64
 		assert.Equal(t, float64(300), unmarshaled.Config["timeout"])
 	})
+
 }

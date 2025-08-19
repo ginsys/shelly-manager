@@ -363,3 +363,103 @@ func (h *Handler) ProvisionerHealthCheck(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
+
+// ReportDiscoveredDevices handles POST /api/v1/provisioner/discovered-devices
+func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		AgentID string `json:"agent_id"`
+		TaskID  string `json:"task_id,omitempty"`
+		Devices []struct {
+			MAC        string    `json:"mac"`
+			SSID       string    `json:"ssid"`
+			Model      string    `json:"model"`
+			Generation int       `json:"generation"`
+			IP         string    `json:"ip"`
+			Signal     int       `json:"signal"`
+			Discovered time.Time `json:"discovered"`
+		} `json:"devices"`
+		Timestamp time.Time `json:"timestamp"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.AgentID == "" {
+		http.Error(w, "Agent ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Devices) == 0 {
+		http.Error(w, "At least one device is required", http.StatusBadRequest)
+		return
+	}
+
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	// Verify agent is registered
+	agent, exists := registry.agents[req.AgentID]
+	if !exists {
+		http.Error(w, "Agent not registered", http.StatusUnauthorized)
+		return
+	}
+
+	// Update agent's last seen timestamp
+	agent.LastSeen = time.Now()
+
+	h.logger.WithFields(map[string]any{
+		"agent_id":     req.AgentID,
+		"task_id":      req.TaskID,
+		"device_count": len(req.Devices),
+		"component":    "provisioner_handler",
+	}).Info("Received discovered devices from provisioning agent")
+
+	// Process discovered devices
+	devicesProcessed := 0
+	for _, device := range req.Devices {
+		// Log each discovered device
+		h.logger.WithFields(map[string]any{
+			"mac":        device.MAC,
+			"ssid":       device.SSID,
+			"model":      device.Model,
+			"generation": device.Generation,
+			"ip":         device.IP,
+			"signal":     device.Signal,
+			"discovered": device.Discovered,
+			"agent_id":   req.AgentID,
+			"component":  "provisioner_handler",
+		}).Info("Processing discovered Shelly device")
+
+		// TODO: Store discovered devices in database for UI display
+		// For now, we'll just log and count them
+		devicesProcessed++
+	}
+
+	// Update task status if task ID is provided
+	if req.TaskID != "" {
+		if task, taskExists := registry.tasks[req.TaskID]; taskExists {
+			task.Status = "completed"
+			task.UpdatedAt = time.Now()
+
+			h.logger.WithFields(map[string]any{
+				"task_id":       req.TaskID,
+				"agent_id":      req.AgentID,
+				"devices_found": len(req.Devices),
+				"component":     "provisioner_handler",
+			}).Info("Discovery task completed with results")
+		}
+	}
+
+	response := map[string]interface{}{
+		"success":           true,
+		"devices_received":  len(req.Devices),
+		"devices_processed": devicesProcessed,
+		"timestamp":         time.Now(),
+		"message":           fmt.Sprintf("Successfully processed %d discovered devices", devicesProcessed),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
