@@ -189,7 +189,15 @@
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/api -run \"TestGetImportStatus$|TestBulkImportConfigs$|TestBulkExportConfigs$|TestApplyConfigTemplate$\" -timeout 10s)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/api -run \"TestImportDeviceConfig|TestGetImportStatus|TestExportDeviceConfig|TestBulkImportConfigs|TestBulkExportConfigs|TestApplyConfigTemplate\" -timeout 10s)",
       "Bash(env CGO_ENABLED=1 go test -v -short -timeout=30s ./internal/api -run \"TestImportDeviceConfig|TestExportDeviceConfig\")",
-      "Bash(env CGO_ENABLED=1 go test -v -short -timeout=30s ./internal/service -run \"TestShellyService_DiscoverDevices\")"
+      "Bash(env CGO_ENABLED=1 go test -v -short -timeout=30s ./internal/service -run \"TestShellyService_DiscoverDevices\")",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/testutil -run \"TestTestNetAddressValidation\")",
+      "Bash(time env CGO_ENABLED=1 go test -v -short ./internal/logging -run \"TestHTTPMiddleware_LogsRequests\")",
+      "Bash(time:*)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -run \"TestClient_ErrorHandling|TestClient_ContextCancellation\" -timeout 30s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -timeout 60s)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -run \"TestClient_UpdateOperations\" -timeout 30s)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

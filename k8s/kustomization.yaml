@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: shelly-manager
+  namespace: default
+
+# Common labels applied to all resources
+commonLabels:
+  app: shelly-manager
+  version: v0.4.2-alpha
+  component: smart-home
+
+# Resources to deploy
+resources:
+- deployment.yaml
+- configmap.yaml
+- ingress.yaml
+
+# Image configurations
+images:
+- name: shelly-manager
+  newTag: v0.4.2-alpha
+
+# Namespace for all resources
+namespace: default
+
+# ConfigMap generator for environment-specific configs
+configMapGenerator:
+- name: shelly-manager-env-config
+  literals:
+  - GIN_MODE=release
+  - LOG_LEVEL=info
+  - METRICS_ENABLED=true
+
+# Secret generator for sensitive data
+secretGenerator:
+- name: shelly-manager-app-secrets
+  literals:
+  - database-encryption-key=changeme-generate-secure-key
+
+# Patches for different environments
+patchesStrategicMerge:
+- |-
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: shelly-manager
+  spec:
+    template:
+      spec:
+        containers:
+        - name: shelly-manager
+          env:
+          - name: DATABASE_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: shelly-manager-app-secrets
+                key: database-encryption-key
+
+# Replica configuration
+replicas:
+- name: shelly-manager
+  count: 1
