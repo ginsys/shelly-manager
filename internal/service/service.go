@@ -347,8 +347,24 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		AuthPass    string `json:"auth_pass,omitempty"`
 	}
 
-	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
-		return nil, fmt.Errorf("failed to parse device settings: %w", err)
+	// Handle empty or invalid settings gracefully
+	if device.Settings == "" {
+		// Use default settings for devices without configuration
+		settings = struct {
+			Model       string `json:"model"`
+			Gen         int    `json:"gen"`
+			AuthEnabled bool   `json:"auth_enabled"`
+			AuthUser    string `json:"auth_user,omitempty"`
+			AuthPass    string `json:"auth_pass,omitempty"`
+		}{
+			Model:       "Unknown",
+			Gen:         1, // Default to Gen1 for unknown devices
+			AuthEnabled: false,
+		}
+	} else {
+		if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+			return nil, fmt.Errorf("failed to parse device settings: %w", err)
+		}
 	}
 
 	// Create new client based on generation
