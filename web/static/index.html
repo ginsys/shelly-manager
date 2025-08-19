@@ -189,6 +189,47 @@
             margin: 5px 0;
             color: #34495e;
         }
+        
+        /* Discovered Devices Styles */
+        .expired-device {
+            opacity: 0.7;
+            background: #fdf2f2 !important;
+        }
+        
+        .expired-text {
+            color: #e74c3c !important;
+            font-weight: bold;
+        }
+        
+        .device-detail {
+            margin: 8px 0;
+            color: #34495e;
+            font-size: 0.9rem;
+        }
+        
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        
+        .device-header h3 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 1.2rem;
+        }
+        
+        .device-generation {
+            background: #3498db;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
 
         .device-controls {
             display: flex;
@@ -710,6 +751,7 @@
         <div class="main-content">
             <div class="tabs">
                 <button class="tab active" onclick="switchMainTab('devices')">Devices</button>
+                <button class="tab" onclick="switchMainTab('discovered')">🔍 Discovered Devices</button>
                 <a href="/config.html" class="tab" style="text-decoration: none;">⚙️ Configuration Templates</a>
                 <button class="tab" onclick="switchMainTab('bulk')">Bulk Operations</button>
             </div>
@@ -719,6 +761,7 @@
                     <button class="btn" onclick="loadDevices()">🔄 Refresh Devices</button>
                     <button class="btn btn-success" onclick="discoverDevices()">🔍 Discover Devices</button>
                     <button class="btn" onclick="showAddDeviceModal()">➕ Add Device</button>
+                    <button class="btn" onclick="window.open('/setup-wizard.html', '_blank')">🧙‍♂️ Setup Wizard</button>
                     <button class="btn" onclick="showProvisioningModal()">📡 Provision Devices</button>
                     <button class="btn" onclick="showDHCPModal()">📋 DHCP Reservations</button>
                 <div class="auto-refresh">
@@ -746,6 +789,31 @@
                 </div>
             </div>
             
+            <div id="discovered-tab" class="tab-content">
+                <div class="controls">
+                    <button class="btn" onclick="loadDiscoveredDevices()">🔄 Refresh</button>
+                    <button class="btn btn-success" onclick="scanForDevices()">🔍 Scan Network</button>
+                    <button class="btn" onclick="clearExpiredDevices()">🗑️ Clear Expired</button>
+                <div class="auto-refresh">
+                    <input type="checkbox" id="autoRefreshDiscovered" onchange="toggleAutoRefreshDiscovered()">
+                    <label for="autoRefreshDiscovered">Auto-refresh (10s)</label>
+                </div>
+            </div>
+            <div class="status-bar">
+                <div><strong id="discoveredDeviceCount">0</strong> discovered devices</div>
+                <div>Last scanned: <span id="lastDiscoveredUpdate">Never</span></div>
+                <div>Agent: <span id="agentStatus">🟡 Unknown</span></div>
+            </div>
+            <div class="loading" id="discoveredLoading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading discovered devices...</p>
+            </div>
+                <div class="device-grid" id="discoveredDeviceGrid"></div>
+                <div class="empty-state" id="discoveredEmptyState" style="display: none;">
+                    <h3>No discovered devices</h3>
+                    <p>Click "Scan Network" to discover new Shelly devices</p>
+                </div>
+            </div>
             
             <div id="bulk-tab" class="tab-content">
                 <div class="controls">
@@ -1621,6 +1689,7 @@
                             <button class="config-btn" onclick="checkDrift(${device.id})" title="Check for configuration drift">🔍 Check Drift</button>
                             <button class="config-btn" onclick="viewConfig(${device.id})" title="View current configuration">👁️ View</button>
                             <button class="config-btn" onclick="window.open('/device-config.html?device=${device.id}', '_blank')" title="Configure device with forms">🔧 Configure</button>
+                            <button class="config-btn" onclick="window.open('/config-diff.html?device=${device.id}', '_blank')" title="Compare configurations">📊 Compare</button>
                             <button class="config-btn" onclick="showHistory(${device.id}, '${device.name}')" title="View configuration history">📜 History</button>
                         </div>
                     </div>
@@ -3048,6 +3117,8 @@
             // Load data for the selected tab
             if (tabName === 'bulk') {
                 loadBulkDevices();
+            } else if (tabName === 'discovered') {
+                loadDiscoveredDevices();
             }
         }
 
@@ -3361,6 +3432,208 @@
                     notification.remove();
                 }
             }, 5000);
+        }
+        
+        // Discovered Devices Functions
+        let discoveredAutoRefreshInterval = null;
+        
+        async function loadDiscoveredDevices() {
+            showDiscoveredLoading(true);
+            try {
+                const response = await fetch(`${API_BASE}/provisioner/discovered-devices`);
+                if (!response.ok) throw new Error('Failed to fetch discovered devices');
+                
+                const data = await response.json();
+                displayDiscoveredDevices(data.devices || []);
+                updateDiscoveredStatus(data.device_count || 0);
+            } catch (error) {
+                console.error('Error loading discovered devices:', error);
+                showNotification('Failed to load discovered devices', 'error');
+            } finally {
+                showDiscoveredLoading(false);
+            }
+        }
+        
+        function displayDiscoveredDevices(devices) {
+            const grid = document.getElementById('discoveredDeviceGrid');
+            const emptyState = document.getElementById('discoveredEmptyState');
+            
+            if (devices.length === 0) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+            
+            grid.style.display = 'grid';
+            emptyState.style.display = 'none';
+            grid.innerHTML = devices.map(device => {
+                const discoveredTime = new Date(device.discovered).toLocaleString();
+                const expiresTime = new Date(device.expires_at).toLocaleString();
+                const isExpired = new Date() > new Date(device.expires_at);
+                const signalStrength = getSignalIcon(device.signal);
+                
+                return `
+                <div class="device-card ${isExpired ? 'expired-device' : ''}" style="border-left: 4px solid ${isExpired ? '#e74c3c' : '#27ae60'};">
+                    <div class="device-header">
+                        <h3>${device.model || 'Unknown Model'}</h3>
+                        <span class="device-generation">Gen${device.generation || 'Unknown'}</span>
+                    </div>
+                    
+                    <div class="device-info">
+                        <div class="device-detail">
+                            <strong>MAC:</strong> ${device.mac || 'Unknown'}
+                        </div>
+                        <div class="device-detail">
+                            <strong>IP:</strong> ${device.ip || 'N/A'}
+                        </div>
+                        <div class="device-detail">
+                            <strong>SSID:</strong> ${device.ssid || 'N/A'}
+                        </div>
+                        <div class="device-detail">
+                            <strong>Signal:</strong> ${signalStrength} ${device.signal || 0} dBm
+                        </div>
+                        <div class="device-detail">
+                            <strong>Agent:</strong> ${device.agent_id || 'Unknown'}
+                        </div>
+                        <div class="device-detail">
+                            <strong>Discovered:</strong> ${discoveredTime}
+                        </div>
+                        <div class="device-detail ${isExpired ? 'expired-text' : ''}">
+                            <strong>Expires:</strong> ${expiresTime} ${isExpired ? '(EXPIRED)' : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="device-actions">
+                        <button class="btn btn-sm btn-success" onclick="addDiscoveredDevice('${device.mac}', '${device.ip}', '${device.model || 'Shelly Device'}')">
+                            ➕ Add to Devices
+                        </button>
+                        <button class="btn btn-sm" onclick="window.open('/device-config.html?ip=${device.ip}&name=${device.model || 'Shelly Device'}', '_blank')">
+                            🔧 Quick Configure
+                        </button>
+                        <button class="btn btn-sm" onclick="showDiscoveredDeviceDetails('${device.mac}')">
+                            📋 Details
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+        
+        function getSignalIcon(signal) {
+            if (!signal) return '📶';
+            if (signal > -50) return '📶';
+            if (signal > -70) return '📶';
+            if (signal > -80) return '📶';
+            return '📶';
+        }
+        
+        async function scanForDevices() {
+            showNotification('Network scan started. Check provisioner logs for progress.', 'info');
+            try {
+                // This would trigger a network scan via the provisioner
+                const response = await fetch(`${API_BASE}/provisioner/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'scan_network',
+                        params: { scan_type: 'discover_devices' }
+                    })
+                });
+                
+                if (response.ok) {
+                    showNotification('Scan task created successfully', 'success');
+                    // Refresh discovered devices after a short delay
+                    setTimeout(() => loadDiscoveredDevices(), 2000);
+                } else {
+                    throw new Error('Failed to create scan task');
+                }
+            } catch (error) {
+                console.error('Error starting network scan:', error);
+                showNotification('Failed to start network scan', 'error');
+            }
+        }
+        
+        async function clearExpiredDevices() {
+            try {
+                // The API automatically cleans up expired devices, so just refresh
+                await loadDiscoveredDevices();
+                showNotification('Expired devices cleaned up', 'success');
+            } catch (error) {
+                console.error('Error clearing expired devices:', error);
+                showNotification('Failed to clear expired devices', 'error');
+            }
+        }
+        
+        async function addDiscoveredDevice(mac, ip, name) {
+            try {
+                const response = await fetch(`${API_BASE}/devices`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ip: ip,
+                        name: name,
+                        type: 'shelly'
+                    })
+                });
+                
+                if (response.ok) {
+                    showNotification(`Device ${name} added successfully`, 'success');
+                    // Refresh both discovered and main device lists
+                    loadDiscoveredDevices();
+                    loadDevices();
+                } else {
+                    throw new Error('Failed to add device');
+                }
+            } catch (error) {
+                console.error('Error adding device:', error);
+                showNotification('Failed to add device', 'error');
+            }
+        }
+        
+        function showDiscoveredDeviceDetails(mac) {
+            // Find the device data to show in a modal
+            showNotification(`Device details for MAC: ${mac}`, 'info');
+        }
+        
+        function showDiscoveredLoading(show) {
+            const loading = document.getElementById('discoveredLoading');
+            const grid = document.getElementById('discoveredDeviceGrid');
+            const emptyState = document.getElementById('discoveredEmptyState');
+            
+            if (show) {
+                loading.style.display = 'block';
+                grid.style.display = 'none';
+                emptyState.style.display = 'none';
+            } else {
+                loading.style.display = 'none';
+            }
+        }
+        
+        function updateDiscoveredStatus(count) {
+            document.getElementById('discoveredDeviceCount').textContent = count;
+            document.getElementById('lastDiscoveredUpdate').textContent = new Date().toLocaleTimeString();
+            
+            // Update agent status based on whether we have devices
+            const agentStatus = document.getElementById('agentStatus');
+            if (count > 0) {
+                agentStatus.innerHTML = '🟢 Active';
+            } else {
+                agentStatus.innerHTML = '🟡 Idle';
+            }
+        }
+        
+        function toggleAutoRefreshDiscovered() {
+            const checkbox = document.getElementById('autoRefreshDiscovered');
+            if (checkbox.checked) {
+                discoveredAutoRefreshInterval = setInterval(() => {
+                    loadDiscoveredDevices();
+                }, 10000); // 10 second refresh for discovered devices
+            } else {
+                if (discoveredAutoRefreshInterval) {
+                    clearInterval(discoveredAutoRefreshInterval);
+                    discoveredAutoRefreshInterval = null;
+                }
+            }
         }
 
         // Authentication Prompt
