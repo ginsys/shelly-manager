@@ -105,8 +105,7 @@ func TestHTTPMiddleware_LogsRequests(t *testing.T) {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	// Wait a moment for log to be written
-	time.Sleep(100 * time.Millisecond)
+	// slog writes synchronously, no need to wait
 
 	// Check log file
 	content, err := os.ReadFile(tempFile)
@@ -319,8 +318,7 @@ func TestRecoveryMiddleware_HandlesPanic(t *testing.T) {
 		t.Error("Expected error message in response")
 	}
 
-	// Wait for log to be written
-	time.Sleep(100 * time.Millisecond)
+	// slog writes synchronously, no need to wait
 
 	// Check log file for panic record
 	content, err := os.ReadFile(tempFile)
@@ -490,8 +488,7 @@ func TestCORSMiddleware_LogsRequests(t *testing.T) {
 	// Execute request
 	wrappedHandler.ServeHTTP(rec, req)
 
-	// Wait for log to be written
-	time.Sleep(100 * time.Millisecond)
+	// slog writes synchronously, no need to wait
 
 	// Check log file
 	content, err := os.ReadFile(tempFile)
@@ -551,8 +548,7 @@ func TestCORSMiddleware_NoLogWithoutOrigin(t *testing.T) {
 	// Execute request
 	wrappedHandler.ServeHTTP(rec, req)
 
-	// Wait for any potential log writing
-	time.Sleep(100 * time.Millisecond)
+	// slog writes synchronously, no need to wait
 
 	// Check log file - should be empty or not exist
 	if _, err := os.Stat(tempFile); err == nil {
@@ -685,8 +681,7 @@ func TestMultipleMiddleware(t *testing.T) {
 		t.Errorf("Expected response body 'success', got %s", rec.Body.String())
 	}
 
-	// Wait for logs to be written
-	time.Sleep(200 * time.Millisecond)
+	// slog writes synchronously, no need to wait
 
 	// Check log file - should have entries from both CORS and HTTP middleware
 	content, err := os.ReadFile(tempFile)

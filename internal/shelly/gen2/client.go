@@ -127,6 +127,7 @@ func (c *Client) GetInfo(ctx context.Context) (*shelly.DeviceInfo, error) {
 		Generation int    `json:"gen"`
 		FirmwareID string `json:"fw_id"`
 		Version    string `json:"ver"`
+		FW         string `json:"fw"`
 		App        string `json:"app"`
 		AuthEn     bool   `json:"auth_en"`
 		AuthDomain string `json:"auth_domain"`
@@ -148,6 +149,7 @@ func (c *Client) GetInfo(ctx context.Context) (*shelly.DeviceInfo, error) {
 		Generation: result.Generation,
 		FirmwareID: result.FirmwareID,
 		Version:    result.Version,
+		FW:         result.FW,
 		App:        result.App,
 		AuthEn:     result.AuthEn,
 		AuthDomain: result.AuthDomain,

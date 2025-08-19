@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,25 @@ import (
 )
 
 // Helper functions are in ../testhelpers_test.go
+
+// isTestNetAddress validates that an address is in a safe TEST-NET range (RFC 5737)
+func isTestNetAddress(addr string) bool {
+	testNetPrefixes := []string{"192.0.2.", "198.51.100.", "203.0.113."}
+	for _, prefix := range testNetPrefixes {
+		if strings.HasPrefix(addr, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// assertTestNetAddress fails the test if the address is not in TEST-NET range
+func assertTestNetAddress(t *testing.T, addr string) {
+	t.Helper()
+	if !isTestNetAddress(addr) {
+		t.Fatalf("Address %s is not in TEST-NET range - tests should only use RFC 5737 TEST-NET addresses", addr)
+	}
+}
 
 func TestNewClient(t *testing.T) {
 	// Test with default options
@@ -630,8 +650,12 @@ func TestClient_GetEnergyData(t *testing.T) {
 
 // Test error cases
 func TestClient_ErrorHandling(t *testing.T) {
-	// Test with non-existent server
-	client := NewClient("192.168.1.200")
+	// Test with non-existent server using TEST-NET address
+	testAddr := "192.0.2.200"
+	assertTestNetAddress(t, testAddr)
+	t.Logf("Using safe TEST-NET address: %s (RFC 5737 - no real network traffic)", testAddr)
+
+	client := NewClient(testAddr, WithTimeout(50*time.Millisecond))
 	ctx := context.Background()
 
 	_, err := client.GetInfo(ctx)
@@ -645,7 +669,11 @@ func TestClient_ErrorHandling(t *testing.T) {
 }
 
 func TestClient_ContextCancellation(t *testing.T) {
-	client := NewClient("192.168.1.200") // Non-existent IP
+	testAddr := "192.0.2.200"
+	assertTestNetAddress(t, testAddr)
+	t.Logf("Using safe TEST-NET address: %s (RFC 5737 - no real network traffic)", testAddr)
+
+	client := NewClient(testAddr, WithTimeout(50*time.Millisecond))
 
 	// Create a context that cancels immediately
 	ctx, cancel := context.WithCancel(context.Background())

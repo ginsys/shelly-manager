@@ -64,7 +64,7 @@ func TestScanHost_Gen1Device(t *testing.T) {
 		t.Fatalf("Failed to parse server URL: %v", err)
 	}
 
-	scanner := NewScanner(5*time.Second, 1)
+	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout for TEST-NET scanning
 	ctx := context.Background()
 
 	device, err := scanner.ScanHost(ctx, serverURL.Host)
@@ -108,7 +108,7 @@ func TestScanHost_Gen2Device(t *testing.T) {
 		t.Fatalf("Failed to parse server URL: %v", err)
 	}
 
-	scanner := NewScanner(5*time.Second, 1)
+	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout for TEST-NET scanning
 	ctx := context.Background()
 
 	device, err := scanner.ScanHost(ctx, serverURL.Host)
@@ -148,7 +148,9 @@ func TestScanHost_NoDevice(t *testing.T) {
 	defer cancel()
 
 	// Try to scan a non-routable address (TEST-NET-1 range)
-	device, err := scanner.ScanHost(ctx, testutil.TestNetworkAddress())
+	testAddr := testutil.TestNetworkAddress()
+	testutil.AssertTestNetAddress(t, testAddr) // Verify we're using TEST-NET
+	device, err := scanner.ScanHost(ctx, testAddr)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -167,7 +169,9 @@ func TestScanHost_Timeout(t *testing.T) {
 	ctx := context.Background()
 
 	// Try to scan a non-routable address (TEST-NET-2 range)
-	device, err := scanner.ScanHost(ctx, "198.51.100.1") // Will timeout
+	testAddr := "198.51.100.1"
+	testutil.AssertTestNetAddress(t, testAddr)     // Verify we're using TEST-NET
+	device, err := scanner.ScanHost(ctx, testAddr) // Will timeout
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -301,7 +305,9 @@ func TestScanNetwork_SmallRange(t *testing.T) {
 
 	// Test with a small range in TEST-NET-3 that won't find anything
 	// (since our mock server is on localhost, not in a real network range)
-	devices, err := scanner.ScanNetwork(ctx, "203.0.113.0/30") // Only 4 IPs in TEST-NET-3
+	testCIDR := "203.0.113.0/30"                    // Only 4 IPs in TEST-NET-3
+	testutil.AssertTestNetAddress(t, "203.0.113.1") // Verify CIDR is in TEST-NET
+	devices, err := scanner.ScanNetwork(ctx, testCIDR)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
 	}
@@ -327,7 +333,7 @@ func TestGetDeviceStatus_Gen1(t *testing.T) {
 		t.Fatalf("Failed to parse server URL: %v", err)
 	}
 
-	scanner := NewScanner(5*time.Second, 1)
+	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout for TEST-NET scanning
 	ctx := context.Background()
 
 	// Test Gen1 device status
