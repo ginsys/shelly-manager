@@ -103,6 +103,11 @@ type Config struct {
 
 // Load loads configuration from file
 func Load(configFile string) (*Config, error) {
+	return LoadWithName(configFile, "shelly-manager")
+}
+
+// LoadWithName loads configuration from file with a specific config name
+func LoadWithName(configFile string, configName string) (*Config, error) {
 	// Reset viper state to prevent interference between config loads
 	viper.Reset()
 
@@ -110,7 +115,7 @@ func Load(configFile string) (*Config, error) {
 		viper.SetConfigFile(configFile)
 	} else {
 		// Default configuration search paths - be more specific to avoid binary files
-		viper.SetConfigName("shelly-manager")
+		viper.SetConfigName(configName)
 		viper.SetConfigType("yaml")
 
 		// Only search in specific directories for config files

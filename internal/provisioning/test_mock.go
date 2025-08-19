@@ -54,6 +54,17 @@ func NewTestMockNetworkInterface(logger *logging.Logger) *TestMockNetworkInterfa
 	}
 }
 
+// GetInterfaceInfo returns information about the test mock network interface
+func (ni *TestMockNetworkInterface) GetInterfaceInfo() NetworkInterfaceInfo {
+	return NetworkInterfaceInfo{
+		Name:         "test-mock-wlan0",
+		Type:         "wireless",
+		Tooling:      "test-mock (unit testing)",
+		Capabilities: []string{"scan", "connect", "disconnect", "simulate"},
+		Status:       "available",
+	}
+}
+
 // GetAvailableNetworks returns mock WiFi networks
 func (ni *TestMockNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]WiFiNetwork, error) {
 	ni.logger.WithFields(map[string]any{

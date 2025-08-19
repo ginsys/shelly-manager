@@ -141,6 +141,15 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/provisioning/status", handler.GetProvisioningStatus).Methods("GET")
 	api.HandleFunc("/provisioning/provision", handler.ProvisionDevices).Methods("POST")
 
+	// Provisioner agent management routes
+	api.HandleFunc("/provisioner/agents/register", handler.RegisterAgent).Methods("POST")
+	api.HandleFunc("/provisioner/agents", handler.GetProvisionerAgents).Methods("GET")
+	api.HandleFunc("/provisioner/agents/{id}/tasks", handler.PollTasks).Methods("GET")
+	api.HandleFunc("/provisioner/tasks", handler.CreateProvisioningTask).Methods("POST")
+	api.HandleFunc("/provisioner/tasks", handler.GetProvisioningTasks).Methods("GET")
+	api.HandleFunc("/provisioner/tasks/{id}/status", handler.UpdateTaskStatus).Methods("PUT")
+	api.HandleFunc("/provisioner/health", handler.ProvisionerHealthCheck).Methods("GET")
+
 	// DHCP routes
 	api.HandleFunc("/dhcp/reservations", handler.GetDHCPReservations).Methods("GET")
 

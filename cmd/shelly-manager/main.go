@@ -465,7 +465,7 @@ func initApp() {
 func init() {
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "",
-		"config file (default is shelly-manager.yaml)")
+		"config file (default is ./configs/shelly-manager.yaml)")
 
 	// Add provisioning command flags
 	provisionCmd.Flags().String("name", "", "Device name (auto-generated if not specified)")

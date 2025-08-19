@@ -1,0 +1,29 @@
+# Shelly Provisioner Configuration
+
+# Logging configuration
+logging:
+  level: info        # debug, info, warn, error
+  format: text       # text, json
+  output: stdout     # stdout, file path
+
+# Provisioning configuration
+provisioning:
+  enabled: true
+  provision_interval: 30    # seconds between polling for tasks
+  auto_provision: false     # automatically provision discovered devices
+  max_concurrent: 1         # maximum concurrent provisioning operations
+  timeout: 300             # provisioning timeout in seconds
+
+# API client configuration (for agent mode)
+api:
+  url: ""                  # main API server URL (set via --api-url flag)
+  key: ""                  # API authentication key (set via --api-key flag)
+  timeout: 30             # HTTP request timeout in seconds
+  retry_attempts: 3       # number of retry attempts for failed requests
+  retry_delay: 5          # delay between retry attempts in seconds
+
+# Network interface configuration
+network:
+  preferred_interface: ""  # preferred network interface name (auto-detect if empty)
+  scan_timeout: 60        # WiFi scan timeout in seconds
+  connect_timeout: 30     # WiFi connection timeout in seconds
