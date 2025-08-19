@@ -42,10 +42,60 @@ func (sp *ShellyProvisioner) DiscoverUnprovisionedDevices(ctx context.Context) (
 		"component": "shelly_provisioner",
 	}).Info("Scanning for Shelly devices in AP mode")
 
+	// Get network interface information
+	interfaceInfo := sp.netIface.GetInterfaceInfo()
+	sp.logger.WithFields(map[string]any{
+		"component":      "shelly_provisioner",
+		"interface_name": interfaceInfo.Name,
+		"interface_type": interfaceInfo.Type,
+		"tooling":        interfaceInfo.Tooling,
+		"capabilities":   interfaceInfo.Capabilities,
+		"status":         interfaceInfo.Status,
+	}).Info("Using network interface for WiFi scanning")
+
+	// Also log interface details to stdout for user visibility
+	fmt.Printf("Network Interface Details:\n")
+	fmt.Printf("  - Interface: %s (%s)\n", interfaceInfo.Name, interfaceInfo.Type)
+	fmt.Printf("  - Tooling: %s\n", interfaceInfo.Tooling)
+	fmt.Printf("  - Status: %s\n", interfaceInfo.Status)
+	fmt.Printf("  - Capabilities: %v\n", interfaceInfo.Capabilities)
+
 	// Get available WiFi networks
+	sp.logger.WithFields(map[string]any{
+		"component": "shelly_provisioner",
+	}).Info("Initiating WiFi network scan")
+
+	fmt.Printf("\nInitiating WiFi network scan...\n")
+
 	networks, err := sp.netIface.GetAvailableNetworks(ctx)
 	if err != nil {
+		fmt.Printf("❌ WiFi scan failed: %v\n", err)
 		return nil, fmt.Errorf("failed to scan WiFi networks: %w", err)
+	}
+
+	sp.logger.WithFields(map[string]any{
+		"component":      "shelly_provisioner",
+		"networks_found": len(networks),
+	}).Info("WiFi network scan completed")
+
+	fmt.Printf("✅ WiFi scan completed - found %d networks\n", len(networks))
+
+	// Show all discovered networks for better visibility
+	if len(networks) > 0 {
+		fmt.Printf("\nDiscovered WiFi Networks:\n")
+		for _, network := range networks {
+			fmt.Printf("  📶 %s (Signal: %d%%, Security: %s)\n",
+				network.SSID, network.Signal,
+				func() string {
+					if network.Security == "" {
+						return "Open"
+					}
+					return network.Security
+				}())
+		}
+		fmt.Printf("\n")
+	} else {
+		fmt.Printf("No WiFi networks detected by the interface\n\n")
 	}
 
 	var devices []UnprovisionedDevice
@@ -53,8 +103,14 @@ func (sp *ShellyProvisioner) DiscoverUnprovisionedDevices(ctx context.Context) (
 	// Look for Shelly AP SSIDs
 	shellyAPPattern := regexp.MustCompile(`^shelly[a-zA-Z0-9\-_]*$`)
 
+	fmt.Printf("Analyzing networks for Shelly devices...\n")
+	shellyNetworksFound := 0
+
 	for _, network := range networks {
 		if shellyAPPattern.MatchString(strings.ToLower(network.SSID)) {
+			shellyNetworksFound++
+			fmt.Printf("🔍 Found potential Shelly device: %s (Signal: %d%%)\n", network.SSID, network.Signal)
+
 			device, err := sp.identifyShellyDevice(ctx, network)
 			if err != nil {
 				sp.logger.WithFields(map[string]any{
@@ -62,6 +118,7 @@ func (sp *ShellyProvisioner) DiscoverUnprovisionedDevices(ctx context.Context) (
 					"ssid":      network.SSID,
 					"error":     err.Error(),
 				}).Warn("Failed to identify Shelly device")
+				fmt.Printf("  ❌ Failed to identify device: %v\n", err)
 				continue
 			}
 
@@ -73,9 +130,19 @@ func (sp *ShellyProvisioner) DiscoverUnprovisionedDevices(ctx context.Context) (
 					"device_ssid":  device.SSID,
 					"device_model": device.Model,
 				}).Info("Discovered unprovisioned Shelly device")
+				fmt.Printf("  ✅ Identified: %s (Gen%d, Model: %s)\n", device.SSID, device.Generation, device.Model)
 			}
 		}
 	}
+
+	if shellyNetworksFound == 0 {
+		fmt.Printf("No Shelly device access points detected\n")
+	}
+
+	fmt.Printf("\nScan Summary:\n")
+	fmt.Printf("  - Total networks scanned: %d\n", len(networks))
+	fmt.Printf("  - Potential Shelly APs found: %d\n", shellyNetworksFound)
+	fmt.Printf("  - Identified Shelly devices: %d\n", len(devices))
 
 	return devices, nil
 }

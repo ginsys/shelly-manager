@@ -1,0 +1,365 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/mux"
+)
+
+// ProvisionerAgent represents a registered provisioning agent
+type ProvisionerAgent struct {
+	ID           string            `json:"id"`
+	Hostname     string            `json:"hostname"`
+	IP           string            `json:"ip"`
+	Version      string            `json:"version,omitempty"`
+	Capabilities []string          `json:"capabilities,omitempty"`
+	Status       string            `json:"status"`
+	LastSeen     time.Time         `json:"last_seen"`
+	RegisteredAt time.Time         `json:"registered_at"`
+	Metadata     map[string]string `json:"metadata,omitempty"`
+}
+
+// ProvisioningTask represents a task for a provisioning agent
+type ProvisioningTask struct {
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"`
+	DeviceMAC  string                 `json:"device_mac,omitempty"`
+	TargetSSID string                 `json:"target_ssid,omitempty"`
+	Config     map[string]interface{} `json:"config,omitempty"`
+	Status     string                 `json:"status"`
+	AgentID    string                 `json:"agent_id,omitempty"`
+	CreatedAt  time.Time              `json:"created_at"`
+	UpdatedAt  time.Time              `json:"updated_at"`
+	Priority   int                    `json:"priority,omitempty"`
+}
+
+// ProvisionerRegistry manages registered agents and tasks
+type ProvisionerRegistry struct {
+	mu     sync.RWMutex
+	agents map[string]*ProvisionerAgent
+	tasks  map[string]*ProvisioningTask
+}
+
+// Global registry instance
+var registry = &ProvisionerRegistry{
+	agents: make(map[string]*ProvisionerAgent),
+	tasks:  make(map[string]*ProvisioningTask),
+}
+
+// RegisterAgent handles POST /api/v1/provisioner/agents/register
+func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID           string            `json:"id"`
+		Hostname     string            `json:"hostname"`
+		Version      string            `json:"version,omitempty"`
+		Capabilities []string          `json:"capabilities,omitempty"`
+		Metadata     map[string]string `json:"metadata,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if req.ID == "" || req.Hostname == "" {
+		http.Error(w, "Missing required fields: id and hostname", http.StatusBadRequest)
+		return
+	}
+
+	// Get client IP
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.Header.Get("X-Real-IP")
+	}
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+	}
+
+	// Create or update agent registration
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	now := time.Now()
+	agent, exists := registry.agents[req.ID]
+
+	if !exists {
+		agent = &ProvisionerAgent{
+			ID:           req.ID,
+			RegisteredAt: now,
+		}
+		registry.agents[req.ID] = agent
+
+		h.logger.WithFields(map[string]any{
+			"agent_id": req.ID,
+			"hostname": req.Hostname,
+			"ip":       clientIP,
+		}).Info("New provisioning agent registered")
+	} else {
+		h.logger.WithFields(map[string]any{
+			"agent_id": req.ID,
+			"hostname": req.Hostname,
+			"ip":       clientIP,
+		}).Debug("Existing provisioning agent re-registered")
+	}
+
+	// Update agent information
+	agent.Hostname = req.Hostname
+	agent.IP = clientIP
+	agent.Version = req.Version
+	agent.Capabilities = req.Capabilities
+	agent.Status = "online"
+	agent.LastSeen = now
+	agent.Metadata = req.Metadata
+
+	response := map[string]interface{}{
+		"success":       true,
+		"agent_id":      agent.ID,
+		"registered_at": agent.RegisteredAt,
+		"status":        "registered",
+		"message":       "Agent registered successfully",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetProvisionerAgents handles GET /api/v1/provisioner/agents
+func (h *Handler) GetProvisionerAgents(w http.ResponseWriter, r *http.Request) {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+
+	agents := make([]*ProvisionerAgent, 0, len(registry.agents))
+	for _, agent := range registry.agents {
+		// Update status based on last seen time
+		if time.Since(agent.LastSeen) > 5*time.Minute {
+			agent.Status = "offline"
+		}
+		agents = append(agents, agent)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"agents": agents,
+		"count":  len(agents),
+	})
+}
+
+// PollTasks handles GET /api/v1/provisioner/agents/{id}/tasks
+func (h *Handler) PollTasks(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	agentID := vars["id"]
+
+	if agentID == "" {
+		http.Error(w, "Agent ID is required", http.StatusBadRequest)
+		return
+	}
+
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	// Update agent last seen time
+	agent, exists := registry.agents[agentID]
+	if !exists {
+		http.Error(w, "Agent not registered", http.StatusNotFound)
+		return
+	}
+
+	agent.LastSeen = time.Now()
+	agent.Status = "online"
+
+	// Find pending tasks for this agent or unassigned tasks
+	var availableTasks []*ProvisioningTask
+	for _, task := range registry.tasks {
+		if (task.AgentID == "" || task.AgentID == agentID) && task.Status == "pending" {
+			task.AgentID = agentID
+			task.Status = "assigned"
+			task.UpdatedAt = time.Now()
+			availableTasks = append(availableTasks, task)
+		}
+	}
+
+	h.logger.WithFields(map[string]any{
+		"agent_id":        agentID,
+		"available_tasks": len(availableTasks),
+	}).Debug("Agent polling for tasks")
+
+	response := map[string]interface{}{
+		"agent_id": agentID,
+		"tasks":    availableTasks,
+		"count":    len(availableTasks),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// UpdateTaskStatus handles PUT /api/v1/provisioner/tasks/{id}/status
+func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["id"]
+
+	if taskID == "" {
+		http.Error(w, "Task ID is required", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Status  string                 `json:"status"`
+		AgentID string                 `json:"agent_id"`
+		Result  map[string]interface{} `json:"result,omitempty"`
+		Error   string                 `json:"error,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		return
+	}
+
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	task, exists := registry.tasks[taskID]
+	if !exists {
+		http.Error(w, "Task not found", http.StatusNotFound)
+		return
+	}
+
+	// Update task status
+	task.Status = req.Status
+	task.UpdatedAt = time.Now()
+
+	h.logger.WithFields(map[string]any{
+		"task_id":  taskID,
+		"agent_id": req.AgentID,
+		"status":   req.Status,
+		"error":    req.Error,
+	}).Info("Provisioning task status updated")
+
+	response := map[string]interface{}{
+		"success":    true,
+		"task_id":    taskID,
+		"status":     task.Status,
+		"updated_at": task.UpdatedAt,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// CreateProvisioningTask handles POST /api/v1/provisioner/tasks
+func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Type       string                 `json:"type"`
+		DeviceMAC  string                 `json:"device_mac,omitempty"`
+		TargetSSID string                 `json:"target_ssid,omitempty"`
+		Config     map[string]interface{} `json:"config,omitempty"`
+		AgentID    string                 `json:"agent_id,omitempty"`
+		Priority   int                    `json:"priority,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Type == "" {
+		http.Error(w, "Task type is required", http.StatusBadRequest)
+		return
+	}
+
+	// Generate task ID
+	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
+
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	task := &ProvisioningTask{
+		ID:         taskID,
+		Type:       req.Type,
+		DeviceMAC:  req.DeviceMAC,
+		TargetSSID: req.TargetSSID,
+		Config:     req.Config,
+		Status:     "pending",
+		AgentID:    req.AgentID,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		Priority:   req.Priority,
+	}
+
+	registry.tasks[taskID] = task
+
+	h.logger.WithFields(map[string]any{
+		"task_id":     taskID,
+		"type":        req.Type,
+		"device_mac":  req.DeviceMAC,
+		"target_ssid": req.TargetSSID,
+		"agent_id":    req.AgentID,
+	}).Info("New provisioning task created")
+
+	response := map[string]interface{}{
+		"success":    true,
+		"task_id":    taskID,
+		"status":     "pending",
+		"created_at": task.CreatedAt,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
+// GetProvisioningTasks handles GET /api/v1/provisioner/tasks
+func (h *Handler) GetProvisioningTasks(w http.ResponseWriter, r *http.Request) {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+
+	tasks := make([]*ProvisioningTask, 0, len(registry.tasks))
+	for _, task := range registry.tasks {
+		tasks = append(tasks, task)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tasks": tasks,
+		"count": len(tasks),
+	})
+}
+
+// HealthCheck handles GET /api/v1/provisioner/health
+func (h *Handler) ProvisionerHealthCheck(w http.ResponseWriter, r *http.Request) {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+
+	activeAgents := 0
+	for _, agent := range registry.agents {
+		if time.Since(agent.LastSeen) <= 5*time.Minute {
+			activeAgents++
+		}
+	}
+
+	pendingTasks := 0
+	for _, task := range registry.tasks {
+		if task.Status == "pending" || task.Status == "assigned" {
+			pendingTasks++
+		}
+	}
+
+	response := map[string]interface{}{
+		"status":          "healthy",
+		"total_agents":    len(registry.agents),
+		"active_agents":   activeAgents,
+		"total_tasks":     len(registry.tasks),
+		"pending_tasks":   pendingTasks,
+		"timestamp":       time.Now(),
+		"provisioner_api": "operational",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}

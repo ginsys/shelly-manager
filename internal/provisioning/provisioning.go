@@ -81,8 +81,20 @@ type WiFiNetwork struct {
 	Frequency int    `json:"frequency"` // MHz
 }
 
+// NetworkInterfaceInfo contains information about the network interface
+type NetworkInterfaceInfo struct {
+	Name         string   `json:"name"`         // Interface name (e.g., wlan0, WiFi)
+	Type         string   `json:"type"`         // Interface type (e.g., wireless, ethernet)
+	Tooling      string   `json:"tooling"`      // Tooling used (e.g., nmcli, iwlist, netsh, mock)
+	Capabilities []string `json:"capabilities"` // Supported operations
+	Status       string   `json:"status"`       // Current status (up, down, connected, etc.)
+}
+
 // NetworkInterface represents a system network interface abstraction
 type NetworkInterface interface {
+	// GetInterfaceInfo returns information about the network interface
+	GetInterfaceInfo() NetworkInterfaceInfo
+
 	// GetAvailableNetworks scans for available WiFi networks
 	GetAvailableNetworks(ctx context.Context) ([]WiFiNetwork, error)
 

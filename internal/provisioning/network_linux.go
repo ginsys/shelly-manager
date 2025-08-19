@@ -25,6 +25,58 @@ func NewLinuxNetworkInterface(logger *logging.Logger) *LinuxNetworkInterface {
 	}
 }
 
+// GetInterfaceInfo returns information about the Linux network interface
+func (ni *LinuxNetworkInterface) GetInterfaceInfo() NetworkInterfaceInfo {
+	info := NetworkInterfaceInfo{
+		Type:         "wireless",
+		Tooling:      "nmcli (NetworkManager)",
+		Capabilities: []string{"scan", "connect", "disconnect", "monitor"},
+		Status:       "unknown",
+	}
+
+	// Try to get WiFi device information using nmcli
+	cmd := exec.Command("nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status")
+	output, err := cmd.Output()
+	if err != nil {
+		ni.logger.WithFields(map[string]any{
+			"component": "network_interface",
+			"error":     err.Error(),
+		}).Warn("Failed to get network device information")
+		info.Name = "unknown"
+		info.Status = "error"
+		return info
+	}
+
+	// Parse nmcli output to find WiFi device
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		fields := strings.Split(line, ":")
+		if len(fields) >= 3 && fields[1] == "wifi" {
+			info.Name = fields[0]
+			switch fields[2] {
+			case "connected":
+				info.Status = "connected"
+			case "disconnected":
+				info.Status = "disconnected"
+			case "unavailable":
+				info.Status = "unavailable"
+			default:
+				info.Status = fields[2]
+			}
+			break
+		}
+	}
+
+	// If no WiFi device found, set default values
+	if info.Name == "" {
+		info.Name = "no-wifi-device"
+		info.Status = "unavailable"
+		info.Capabilities = []string{"none"}
+	}
+
+	return info
+}
+
 // GetAvailableNetworks scans for available WiFi networks using nmcli
 func (ni *LinuxNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]WiFiNetwork, error) {
 	ni.logger.WithFields(map[string]any{

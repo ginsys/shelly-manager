@@ -22,6 +22,7 @@ var (
 	provisioningManager *provisioning.ProvisioningManager
 	shellyProvisioner   *provisioning.ShellyProvisioner
 	netInterface        provisioning.NetworkInterface
+	apiClient           *provisioning.APIClient
 	cfg                 *config.Config
 	logger              *logging.Logger
 	configFile          string
@@ -407,27 +408,207 @@ func getConfigFilePath() string {
 	if configFile != "" {
 		return configFile
 	}
-	return "default (shelly-provisioner.yaml)"
+	return "default (./configs/shelly-provisioner.yaml)"
 }
 
 func registerWithAPI() error {
-	// TODO: Implement API registration
-	logger.WithFields(map[string]any{
-		"component": "agent",
-	}).Info("API registration not yet implemented")
-	return nil
+	if apiClient == nil {
+		return fmt.Errorf("API client not initialized")
+	}
+
+	hostname, _ := os.Hostname()
+	capabilities := []string{"wifi-provisioning", "device-discovery", "shelly-gen1", "shelly-gen2"}
+	metadata := map[string]string{
+		"version":  "0.5.0-alpha",
+		"platform": "golang",
+	}
+
+	return apiClient.RegisterAgent(hostname, capabilities, metadata)
 }
 
 func pollForTasks(ctx context.Context) error {
-	// TODO: Implement task polling from API
+	if apiClient == nil || !apiClient.IsRegistered() {
+		return fmt.Errorf("API client not initialized or not registered")
+	}
+
+	tasks, err := apiClient.PollTasks()
+	if err != nil {
+		return err
+	}
+
+	if len(tasks) == 0 {
+		return nil // No tasks available
+	}
+
 	logger.WithFields(map[string]any{
-		"component": "agent",
-	}).Debug("Task polling not yet implemented")
+		"task_count": len(tasks),
+		"component":  "agent",
+	}).Info("Received provisioning tasks from API server")
+
+	// Process each task
+	for _, task := range tasks {
+		if err := processTask(ctx, task); err != nil {
+			logger.WithFields(map[string]any{
+				"task_id":   task.ID,
+				"task_type": task.Type,
+				"error":     err.Error(),
+				"component": "agent",
+			}).Error("Failed to process task")
+
+			// Update task status to failed
+			apiClient.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+		} else {
+			logger.WithFields(map[string]any{
+				"task_id":   task.ID,
+				"task_type": task.Type,
+				"component": "agent",
+			}).Info("Task completed successfully")
+
+			// Update task status to completed
+			apiClient.UpdateTaskStatus(task.ID, "completed", nil, "")
+		}
+	}
+
 	return nil
 }
 
 func testAPIConnectivity() error {
-	// TODO: Implement API connectivity test
+	if apiClient == nil {
+		return fmt.Errorf("API client not initialized")
+	}
+
+	return apiClient.TestConnectivity()
+}
+
+// processTask processes a single provisioning task from the API server
+func processTask(ctx context.Context, task *provisioning.ProvisioningTask) error {
+	logger.WithFields(map[string]any{
+		"task_id":     task.ID,
+		"task_type":   task.Type,
+		"device_mac":  task.DeviceMAC,
+		"target_ssid": task.TargetSSID,
+		"component":   "agent",
+	}).Info("Processing provisioning task")
+
+	switch task.Type {
+	case "provision_device":
+		return processDeviceProvisioningTask(ctx, task)
+	case "discover_devices":
+		return processDeviceDiscoveryTask(ctx, task)
+	default:
+		return fmt.Errorf("unknown task type: %s", task.Type)
+	}
+}
+
+// processDeviceProvisioningTask handles device provisioning tasks
+func processDeviceProvisioningTask(ctx context.Context, task *provisioning.ProvisioningTask) error {
+	if task.TargetSSID == "" {
+		return fmt.Errorf("target SSID is required for provisioning task")
+	}
+
+	// First discover available devices
+	devices, err := shellyProvisioner.DiscoverUnprovisionedDevices(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to discover devices: %w", err)
+	}
+
+	if len(devices) == 0 {
+		return fmt.Errorf("no unprovisioned devices found")
+	}
+
+	var targetDevice provisioning.UnprovisionedDevice
+	var found bool
+	if task.DeviceMAC != "" {
+		// Find specific device by MAC
+		for _, device := range devices {
+			if device.MAC == task.DeviceMAC {
+				targetDevice = device
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("device with MAC %s not found", task.DeviceMAC)
+		}
+	} else {
+		// Use the first available device
+		if len(devices) > 0 {
+			targetDevice = devices[0]
+			found = true
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("no suitable device found")
+	}
+
+	// Create provisioning request from task config
+	request := provisioning.ProvisioningRequest{
+		SSID:    task.TargetSSID,
+		Timeout: 300, // 5 minutes default
+	}
+
+	// Extract additional configuration from task
+	if task.Config != nil {
+		if password, ok := task.Config["password"].(string); ok {
+			request.Password = password
+		}
+		if deviceName, ok := task.Config["device_name"].(string); ok {
+			request.DeviceName = deviceName
+		}
+		if enableAuth, ok := task.Config["enable_auth"].(bool); ok {
+			request.EnableAuth = enableAuth
+		}
+		if authUser, ok := task.Config["auth_user"].(string); ok {
+			request.AuthUser = authUser
+		}
+		if authPassword, ok := task.Config["auth_password"].(string); ok {
+			request.AuthPassword = authPassword
+		}
+		if timeout, ok := task.Config["timeout"].(float64); ok {
+			request.Timeout = int(timeout)
+		}
+	}
+
+	// Generate device name if not provided
+	if request.DeviceName == "" {
+		request.DeviceName = fmt.Sprintf("Shelly-%s", targetDevice.MAC[len(targetDevice.MAC)-6:])
+	}
+
+	// Execute provisioning
+	result, err := provisioningManager.ProvisionDevice(ctx, targetDevice, request)
+	if err != nil {
+		return fmt.Errorf("device provisioning failed: %w", err)
+	}
+
+	logger.WithFields(map[string]any{
+		"task_id":     task.ID,
+		"device_mac":  targetDevice.MAC,
+		"device_name": result.DeviceName,
+		"device_ip":   result.DeviceIP,
+		"duration":    result.Duration,
+		"component":   "agent",
+	}).Info("Device provisioning completed successfully")
+
+	return nil
+}
+
+// processDeviceDiscoveryTask handles device discovery tasks
+func processDeviceDiscoveryTask(ctx context.Context, task *provisioning.ProvisioningTask) error {
+	devices, err := shellyProvisioner.DiscoverUnprovisionedDevices(ctx)
+	if err != nil {
+		return fmt.Errorf("device discovery failed: %w", err)
+	}
+
+	logger.WithFields(map[string]any{
+		"task_id":       task.ID,
+		"devices_found": len(devices),
+		"component":     "agent",
+	}).Info("Device discovery completed")
+
+	// TODO: Send discovered devices back to API server
+	// This could be done via a separate endpoint or as part of task result
+
 	return nil
 }
 
@@ -436,7 +617,7 @@ func initApp() {
 	var err error
 
 	// Load configuration
-	cfg, err = config.Load(configFile)
+	cfg, err = config.LoadWithName(configFile, "shelly-provisioner")
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
 	}
@@ -468,6 +649,16 @@ func initApp() {
 	shellyProvisioner = provisioning.NewShellyProvisioner(logger, netInterface)
 	provisioningManager.SetDeviceProvisioner(shellyProvisioner)
 
+	// Initialize API client if API URL is provided
+	if apiURL != "" {
+		apiClient = provisioning.NewAPIClient(apiURL, apiKey, generateAgentID(), logger)
+		logger.WithFields(map[string]any{
+			"api_url":   apiURL,
+			"agent_id":  generateAgentID(),
+			"component": "app",
+		}).Info("API client initialized")
+	}
+
 	logger.WithFields(map[string]any{
 		"agent_id":  generateAgentID(),
 		"component": "app",
@@ -478,12 +669,15 @@ func initApp() {
 	if netInterface != nil {
 		fmt.Printf("Network interface: Available\n")
 	}
+	if apiClient != nil {
+		fmt.Printf("API client: Configured for %s\n", apiURL)
+	}
 }
 
 func init() {
 	// Add persistent flags
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "",
-		"config file (default is shelly-provisioner.yaml)")
+		"config file (default is ./configs/shelly-provisioner.yaml)")
 	rootCmd.PersistentFlags().StringVar(&apiURL, "api-url", "",
 		"main API server URL (required for agent mode)")
 	rootCmd.PersistentFlags().StringVar(&apiKey, "api-key", "",
