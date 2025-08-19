@@ -331,6 +331,26 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 - ✅ Visual feedback with loading states, success/error notifications
 - ✅ Accessible design with semantic markup and keyboard navigation
 
+### 🛠️ Testing & Development Standards
+
+**Primary Testing Command**: `make test-ci` - **Most important test to run locally before committing**
+- **Purpose**: Executes identical tests to GitHub Actions test.yml workflow
+- **Steps**: Dependencies install → Coverage/race tests → Threshold check → Linting
+- **Usage**: Run before every commit to ensure CI pipeline success
+- **Benefits**: Prevents CI failures, maintains code quality, ensures local-CI parity
+
+**Test Commands Hierarchy**:
+1. **`make test-ci`** - Complete CI simulation (primary pre-commit test) ⭐ **MOST IMPORTANT**
+2. `make test` - Quick development tests (short mode, no race detection)  
+3. `make test-coverage-ci` - Coverage with race detection (CI subset)
+4. `make lint-ci` - Comprehensive linting (matches CI exactly)
+5. `make test-matrix` - Multi-platform testing simulation
+
+**Development Workflow**:
+- **Before Commit**: Always run `make test-ci` to ensure CI pipeline success
+- **During Development**: Use `make test` for quick validation cycles
+- **Coverage Monitoring**: Current threshold 27.5%, target exceeded at 42.3%
+
 ### 🎯 Next Phase Success Metrics (Container & Kubernetes)
 
 **Infrastructure Quality**:
