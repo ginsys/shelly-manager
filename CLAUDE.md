@@ -207,6 +207,7 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 - `internal/api/provisioner_handlers.go` - Enhanced with persistence and new GET endpoint
 - `internal/api/router.go` - Added GET route for discovered devices
 - `cmd/shelly-manager/main.go` - Added hourly cleanup scheduler
+- `web/static/index.html` - Added complete discovered devices UI integration
 
 **Key Deliverables**:
 - ✅ **Complete API Integration** (`internal/provisioning/api_client.go`): Full HTTP client for agent-server communication with 6 core methods
@@ -236,9 +237,40 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 - **Mock Integration**: Enhanced test mocks with GetInterfaceInfo() method
 - **Coverage Improvement**: Provisioning package coverage increased from 27.9% to 42.3%
 
-### 🎯 CURRENT STATUS - UI Modernization Phase Active
+### ✅ COMPLETED - Phase 5.2: UI Modernization Phase 2 (v0.5.2-alpha)
 
-**Current State**: Production-ready containerized application with UI modernization in progress
+**Achievement**: Successfully completed comprehensive UI modernization with discovered devices integration and enhanced navigation.
+
+**Key Deliverables**:
+- ✅ **Discovered Devices Tab** (`web/static/index.html`): Complete tab with real-time device discovery, visual status indicators, and auto-refresh
+- ✅ **Enhanced Navigation**: Integrated modern UI components (device-config.html, setup-wizard.html, config-diff.html) with contextual access
+- ✅ **REST API Integration**: Full integration with `GET /api/v1/provisioner/discovered-devices` endpoint with error handling
+- ✅ **Rich Device Display**: Device cards with MAC, IP, SSID, Model, Generation, Signal strength, and expiration management
+- ✅ **Interactive Controls**: Refresh, scan network, clear expired, auto-refresh toggle, and one-click device addition
+- ✅ **Enhanced Styling**: CSS styling for expired devices, device headers, generation badges, and responsive design
+
+**UI Modernization Features**:
+- **Real-time Discovery**: Live display of devices discovered by provisioner agents with 10-second auto-refresh
+- **Device Actions**: One-click addition to managed devices, quick configure links, and detailed device information
+- **Visual Indicators**: Color-coded borders (green=active, red=expired), expiration warnings, and agent status
+- **Navigation Enhancement**: Setup wizard button in main controls, config diff in device actions, quick configure for discovered devices
+- **Responsive Design**: Mobile-friendly interface with touch-optimized controls and consistent styling
+
+**Technical Implementation**:
+- **JavaScript Functions**: 8 new functions for discovered devices management with comprehensive error handling
+- **CSS Enhancements**: Specialized styling for expired devices, structured device layouts, and visual feedback
+- **Tab Integration**: Seamless tab switching with automatic data loading and state management
+- **Error Handling**: User-friendly notifications, loading states, and graceful fallback mechanisms
+
+**Production Features**:
+- **Auto-refresh**: Configurable 10-second refresh with manual override
+- **Agent Monitoring**: Real-time agent status tracking and filtering capabilities
+- **Expiration Management**: 24-hour TTL with visual warnings and automatic cleanup
+- **Quality Assurance**: All tests passing, lint compliant, comprehensive error handling
+
+### 🎯 CURRENT STATUS - UI Modernization Phase 2 Complete
+
+**Current State**: Production-ready containerized application with comprehensive UI modernization Phase 2 completed
 
 **All Architecture Goals Achieved**:
 - ✅ **Dual-Binary Architecture**: API server and provisioning agent with complete inter-service communication
@@ -251,7 +283,7 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 
 **UI Modernization Progress**:
 - **Phase 1**: ✅ Core functionality fixes (editDevice, validateAndSaveDeviceConfig functions)
-- **Phase 2**: 🔄 UI component integration (device-config.html, setup-wizard.html, config-diff.html)
+- **Phase 2**: ✅ UI component integration - COMPLETED (discovered devices tab, enhanced navigation, modern UI component integration)
 - **Phase 3**: ⏳ Form enhancement and real-time validation
 - **Phase 4**: ⏳ Template system integration
 
