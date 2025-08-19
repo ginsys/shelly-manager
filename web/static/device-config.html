@@ -166,10 +166,33 @@
         }
 
         .form-group input.error,
-        .form-group select.error {
+        .form-group select.error,
+        .form-group textarea.error {
             border-color: #e74c3c;
             box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
         }
+
+        .form-group input.warning,
+        .form-group select.warning,
+        .form-group textarea.warning {
+            border-color: #f39c12;
+            box-shadow: 0 0 0 3px rgba(243, 156, 18, 0.1);
+        }
+
+        .field-error {
+            color: #e74c3c !important;
+            font-size: 12px !important;
+            margin-top: 4px !important;
+            display: block;
+        }
+
+        .field-warning {
+            color: #f39c12 !important;
+            font-size: 12px !important;
+            margin-top: 4px !important;
+            display: block;
+        }
+
 
         .checkbox-group {
             display: flex;
@@ -1099,31 +1122,170 @@
             showLoading(true);
             
             try {
-                const response = await fetch(`/api/v1/devices/${currentDeviceId}/config/typed`, {
-                    method: 'PUT',
+                console.log(`Starting save process for device ${currentDeviceId}...`);
+                console.log('Collecting form data...', config);
+                
+                // Phase 1: Validate configuration
+                console.log('Validating configuration...');
+                showValidationMessage('Validating configuration...', 'pending');
+                
+                const validationResponse = await fetch('/api/v1/configuration/validate-typed', {
+                    method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({
                         configuration: config,
-                        validation_level: 'production'
+                        validation_level: 'basic',
+                        device_id: currentDeviceId
                     })
                 });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    originalConfig = JSON.parse(JSON.stringify(config));
-                    currentConfig = JSON.parse(JSON.stringify(config));
-                    showValidationMessage('✅ Configuration saved successfully!', 'success');
-                } else {
-                    showValidationMessage('❌ Failed to save configuration: ' + (result.error || 'Unknown error'), 'error');
+
+                if (!validationResponse.ok) {
+                    let errorMessage;
+                    try {
+                        const errorData = await validationResponse.text();
+                        errorMessage = `Validation request failed (${validationResponse.status}): ${errorData}`;
+                    } catch {
+                        errorMessage = `Validation request failed: ${validationResponse.status} ${validationResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
                 }
+
+                const validationResult = await validationResponse.json();
+                console.log('Validation result:', validationResult);
+                
+                // Clear previous validation errors
+                clearValidationErrors();
+                
+                // Handle validation errors (block save)
+                if (!validationResult.valid && validationResult.errors && validationResult.errors.length > 0) {
+                    showValidationMessage(`❌ Validation failed: ${validationResult.errors.length} error(s) found`, 'error');
+                    displayValidationErrors(validationResult.errors);
+                    return; // Don't proceed with save
+                }
+
+                // Phase 2: Save configuration
+                console.log('Saving configuration...');
+                showValidationMessage('Saving configuration...', 'pending');
+                
+                const saveResponse = await fetch(`/api/v1/devices/${currentDeviceId}/config/typed`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        configuration: config,
+                        validation_level: 'basic'
+                    })
+                });
+
+                if (!saveResponse.ok) {
+                    let errorMessage;
+                    try {
+                        const errorData = await saveResponse.text();
+                        errorMessage = `Save failed (${saveResponse.status}): ${errorData}`;
+                    } catch {
+                        errorMessage = `Save failed: ${saveResponse.status} ${saveResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const saveResult = await saveResponse.json();
+                console.log('Save result:', saveResult);
+                
+                // Success - update local state
+                originalConfig = JSON.parse(JSON.stringify(config));
+                currentConfig = JSON.parse(JSON.stringify(config));
+                
+                // Show success message with warnings if present
+                const warningText = validationResult.warnings && validationResult.warnings.length > 0 
+                    ? ` (${validationResult.warnings.length} warning(s))` 
+                    : '';
+                showValidationMessage(`✅ Configuration saved successfully!${warningText}`, 'success');
+                
+                // Display warnings (non-blocking)
+                if (validationResult.warnings && validationResult.warnings.length > 0) {
+                    displayValidationWarnings(validationResult.warnings);
+                }
+                
+                console.log(`Successfully saved configuration for device ${currentDeviceId}`);
+                
             } catch (error) {
-                showValidationMessage('Save error: ' + error.message, 'error');
+                console.error('Error saving configuration:', error);
+                showValidationMessage(`❌ Error: ${error.message}`, 'error');
             } finally {
                 showLoading(false);
             }
+        }
+
+        // Helper functions for field-level validation display
+        function clearValidationErrors() {
+            document.querySelectorAll('.field-error').forEach(error => error.remove());
+            document.querySelectorAll('.field-warning').forEach(warning => warning.remove());
+            document.querySelectorAll('input, select').forEach(field => {
+                field.classList.remove('error', 'warning');
+            });
+        }
+
+        function displayValidationErrors(errors) {
+            errors.forEach(error => {
+                const field = findFormFieldByName(error.field);
+                if (field) {
+                    field.classList.add('error');
+                    // Create or update error message
+                    let errorElement = field.parentNode.querySelector('.field-error');
+                    if (!errorElement) {
+                        errorElement = document.createElement('div');
+                        errorElement.className = 'field-error error-message';
+                        errorElement.style.color = '#e74c3c';
+                        errorElement.style.fontSize = '12px';
+                        errorElement.style.marginTop = '4px';
+                        field.parentNode.appendChild(errorElement);
+                    }
+                    errorElement.textContent = `❌ ${error.message}`;
+                    errorElement.style.display = 'block';
+                }
+            });
+        }
+
+        function displayValidationWarnings(warnings) {
+            warnings.forEach(warning => {
+                const field = findFormFieldByName(warning.field);
+                if (field) {
+                    field.classList.add('warning');
+                    // Create or update warning message
+                    let warningElement = field.parentNode.querySelector('.field-warning');
+                    if (!warningElement) {
+                        warningElement = document.createElement('div');
+                        warningElement.className = 'field-warning';
+                        warningElement.style.color = '#f39c12';
+                        warningElement.style.fontSize = '12px';
+                        warningElement.style.marginTop = '4px';
+                        field.parentNode.appendChild(warningElement);
+                    }
+                    warningElement.textContent = `⚠️ ${warning.message}`;
+                    warningElement.style.display = 'block';
+                }
+            });
+        }
+
+        function findFormFieldByName(fieldName) {
+            const possibleIds = [
+                fieldName,                    // "wifi.ssid"
+                fieldName.replace('.', '_'),  // "wifi_ssid" 
+                fieldName.replace(/\./g, '_'), // Handle multiple dots
+                `${fieldName.split('.')[0]}_${fieldName.split('.').slice(1).join('_')}` // "wifi_ssid"
+            ];
+            
+            for (const id of possibleIds) {
+                const element = document.getElementById(id);
+                if (element) return element;
+            }
+            
+            return document.querySelector(`[name="${fieldName}"]`);
         }
 
         async function applyConfiguration() {
