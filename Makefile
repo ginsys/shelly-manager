@@ -127,8 +127,19 @@ test-matrix:
 	@echo "Running matrix tests with race detection and short mode..."
 	CGO_ENABLED=1 go test -v -race -short ./...
 
-# Complete CI test suite (coverage + race detection + threshold check)
-test-ci: test-coverage-check
+# Complete CI test suite - matches GitHub Actions test.yml workflow exactly
+# This is the most important test to run locally before committing
+test-ci:
+	@echo "Running complete CI test suite (matches GitHub Actions)..."
+	@echo "Step 1/4: Installing dependencies..."
+	$(MAKE) deps
+	@echo "Step 2/4: Running tests with coverage and race detection..."
+	$(MAKE) test-coverage-ci
+	@echo "Step 3/4: Checking coverage threshold..."
+	$(MAKE) test-coverage-check
+	@echo "Step 4/4: Running linting..."
+	$(MAKE) lint-ci
+	@echo "✅ All CI tests passed! Ready to commit."
 
 # ==============================================================================
 # LINTING AND QUALITY
