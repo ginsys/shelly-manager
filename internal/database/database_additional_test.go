@@ -2,6 +2,7 @@ package database
 
 import (
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -61,7 +62,15 @@ func TestNewManagerWithLogger_InvalidPath(t *testing.T) {
 	logger := logging.GetDefault()
 
 	// Test with invalid path that can't be created
-	invalidPath := "/root/nonexistent/deeply/nested/path/database.db"
+	var invalidPath string
+	if runtime.GOOS == "windows" {
+		// Windows: Try to use an invalid character in filename
+		invalidPath = "C:\\invalid<>filename.db"
+	} else {
+		// Unix-like: Try to create in restricted directory
+		invalidPath = "/root/nonexistent/deeply/nested/path/database.db"
+	}
+
 	_, err := NewManagerWithLogger(invalidPath, logger)
 	if err == nil {
 		t.Error("Expected error for invalid database path with logger")

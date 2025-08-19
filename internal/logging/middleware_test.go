@@ -2,6 +2,7 @@ package logging
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -249,7 +250,7 @@ func TestRandomString(t *testing.T) {
 	lengths := []int{4, 8, 16, 32}
 
 	for _, length := range lengths {
-		t.Run(string(rune(length)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("length_%d", length), func(t *testing.T) {
 			result := randomString(length)
 
 			if len(result) != length {

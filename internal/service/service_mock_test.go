@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -329,8 +330,12 @@ func TestShellyService_ConcurrentOperations(t *testing.T) {
 				return
 			}
 
-			// Use service briefly
-			time.Sleep(10 * time.Millisecond)
+			// Use service briefly - increase sleep on Windows for better scheduling
+			if runtime.GOOS == "windows" {
+				time.Sleep(50 * time.Millisecond)
+			} else {
+				time.Sleep(10 * time.Millisecond)
+			}
 
 			// Stop service
 			localService.Stop()
@@ -344,7 +349,7 @@ func TestShellyService_ConcurrentOperations(t *testing.T) {
 			// Success
 		case err := <-errors:
 			t.Error(err)
-		case <-time.After(5 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Error("Concurrent operations timed out")
 			return
 		}

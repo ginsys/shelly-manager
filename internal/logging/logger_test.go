@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -685,21 +686,29 @@ func BenchmarkLogMessage(b *testing.B) {
 func TestTimeoutCreatingFileLogger(t *testing.T) {
 	// Create a directory without write permissions to test error handling
 	tempDir := t.TempDir()
-	restrictedDir := filepath.Join(tempDir, "restricted")
 
-	if err := os.Mkdir(restrictedDir, 0444); err != nil {
-		t.Skipf("Cannot create restricted directory: %v", err)
+	var testPath string
+	if runtime.GOOS == "windows" {
+		// Windows: Use invalid characters in filename
+		testPath = filepath.Join(tempDir, "invalid<>file.log")
+	} else {
+		// Unix-like: Use restricted directory permissions
+		restrictedDir := filepath.Join(tempDir, "restricted")
+		if err := os.Mkdir(restrictedDir, 0444); err != nil {
+			t.Skipf("Cannot create restricted directory: %v", err)
+		}
+		testPath = filepath.Join(restrictedDir, "test.log")
 	}
 
 	config := Config{
 		Level:  LevelInfo,
 		Format: "text",
-		Output: filepath.Join(restrictedDir, "test.log"),
+		Output: testPath,
 	}
 
 	_, err := New(config)
 	if err == nil {
-		t.Error("Expected error when creating logger with restricted directory")
+		t.Error("Expected error when creating logger with invalid path")
 	}
 }
 
