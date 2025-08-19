@@ -79,6 +79,34 @@ type HealthCheckResponse struct {
 	ProvisionerAPI string    `json:"provisioner_api"`
 }
 
+// DiscoveredDevice represents a device discovered during provisioning scan
+type DiscoveredDevice struct {
+	MAC        string    `json:"mac"`
+	SSID       string    `json:"ssid"`       // AP SSID (e.g., shelly1-AABBCC)
+	Model      string    `json:"model"`      // Device model
+	Generation int       `json:"generation"` // Gen1 or Gen2+
+	IP         string    `json:"ip"`         // IP in AP mode (usually 192.168.33.1)
+	Signal     int       `json:"signal"`     // WiFi signal strength
+	Discovered time.Time `json:"discovered"`
+}
+
+// DeviceDiscoveryRequest represents the request to report discovered devices
+type DeviceDiscoveryRequest struct {
+	AgentID   string              `json:"agent_id"`
+	TaskID    string              `json:"task_id,omitempty"`
+	Devices   []*DiscoveredDevice `json:"devices"`
+	Timestamp time.Time           `json:"timestamp"`
+}
+
+// DeviceDiscoveryResponse represents the API response for device discovery reporting
+type DeviceDiscoveryResponse struct {
+	Success          bool      `json:"success"`
+	DevicesReceived  int       `json:"devices_received"`
+	DevicesProcessed int       `json:"devices_processed"`
+	Timestamp        time.Time `json:"timestamp"`
+	Message          string    `json:"message,omitempty"`
+}
+
 // NewAPIClient creates a new API client for provisioner communication
 func NewAPIClient(baseURL, apiKey, agentID string, logger *logging.Logger) *APIClient {
 	return &APIClient{
@@ -222,6 +250,49 @@ func (c *APIClient) IsRegistered() bool {
 // GetAgentID returns the agent ID
 func (c *APIClient) GetAgentID() string {
 	return c.agentID
+}
+
+// ReportDiscoveredDevices reports discovered devices to the API server
+func (c *APIClient) ReportDiscoveredDevices(taskID string, devices []*DiscoveredDevice) error {
+	if !c.registered {
+		return fmt.Errorf("agent not registered with API server")
+	}
+
+	req := DeviceDiscoveryRequest{
+		AgentID:   c.agentID,
+		TaskID:    taskID,
+		Devices:   devices,
+		Timestamp: time.Now(),
+	}
+
+	var resp DeviceDiscoveryResponse
+	err := c.makeRequest("POST", "/api/v1/provisioner/discovered-devices", req, &resp)
+	if err != nil {
+		c.logger.WithFields(map[string]any{
+			"error":        err.Error(),
+			"agent_id":     c.agentID,
+			"task_id":      taskID,
+			"device_count": len(devices),
+			"component":    "api_client",
+		}).Error("Failed to report discovered devices")
+		return fmt.Errorf("failed to report discovered devices: %w", err)
+	}
+
+	c.logger.WithFields(map[string]any{
+		"agent_id":          c.agentID,
+		"task_id":           taskID,
+		"devices_sent":      len(devices),
+		"devices_received":  resp.DevicesReceived,
+		"devices_processed": resp.DevicesProcessed,
+		"success":           resp.Success,
+		"component":         "api_client",
+	}).Info("Successfully reported discovered devices")
+
+	if !resp.Success {
+		return fmt.Errorf("API server failed to process discovered devices: %s", resp.Message)
+	}
+
+	return nil
 }
 
 // makeRequest is a helper method to make HTTP requests to the API server

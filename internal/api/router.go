@@ -148,6 +148,7 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	api.HandleFunc("/provisioner/tasks", handler.CreateProvisioningTask).Methods("POST")
 	api.HandleFunc("/provisioner/tasks", handler.GetProvisioningTasks).Methods("GET")
 	api.HandleFunc("/provisioner/tasks/{id}/status", handler.UpdateTaskStatus).Methods("PUT")
+	api.HandleFunc("/provisioner/discovered-devices", handler.ReportDiscoveredDevices).Methods("POST")
 	api.HandleFunc("/provisioner/health", handler.ProvisionerHealthCheck).Methods("GET")
 
 	// DHCP routes
