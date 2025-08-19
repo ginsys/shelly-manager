@@ -197,7 +197,9 @@
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -timeout 30s)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -run \"TestClient_ErrorHandling|TestClient_ContextCancellation\" -timeout 30s)",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -timeout 60s)",
-      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -run \"TestClient_UpdateOperations\" -timeout 30s)"
+      "Bash(env CGO_ENABLED=1 go test -v -short ./internal/shelly/gen2 -run \"TestClient_UpdateOperations\" -timeout 30s)",
+      "Bash(gh api:*)",
+      "Bash(env CGO_ENABLED=1 go test -v -short ./cmd/shelly-manager -run \"TestErrorConditions/Invalid_Database_Path\")"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

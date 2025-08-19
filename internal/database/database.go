@@ -27,12 +27,21 @@ func NewManager(dbPath string) (*Manager, error) {
 
 // NewManagerWithLogger creates a new database manager with custom logger
 func NewManagerWithLogger(dbPath string, logger *logging.Logger) (*Manager, error) {
-	// Ensure the directory exists
+	// Validate database path and ensure directory exists
 	dir := filepath.Dir(dbPath)
 	if dir != "" && dir != "." {
+		// Create directory if it doesn't exist
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create database directory %s: %w", dir, err)
 		}
+
+		// Test write permissions by creating and removing a test file
+		testFile := filepath.Join(dir, ".db_write_test")
+		if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+			return nil, fmt.Errorf("insufficient permissions for database directory %s: %w", dir, err)
+		}
+		// Clean up test file
+		os.Remove(testFile)
 	}
 
 	// Open/create the database with proper config to suppress GORM's default logger

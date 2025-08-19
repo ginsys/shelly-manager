@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -206,11 +207,19 @@ func TestInitializationWithDefaults(t *testing.T) {
 func TestErrorConditions(t *testing.T) {
 	// Test initialization error conditions
 	t.Run("Invalid Database Path", func(t *testing.T) {
-		// Try to create database in non-existent directory without permissions
-		invalidPath := "/root/nonexistent/test.db"
+		// Use OS-specific invalid path that should fail
+		var invalidPath string
+		if runtime.GOOS == "windows" {
+			// Windows: Try to create database in system directory without permissions
+			invalidPath = "C:\\Windows\\System32\\NonexistentDir\\test.db"
+		} else {
+			// Unix-like: Try to create database in root directory without permissions
+			invalidPath = "/root/nonexistent/test.db"
+		}
+
 		_, err := database.NewManager(invalidPath)
 		if err == nil {
-			t.Error("Expected error for invalid database path")
+			t.Errorf("Expected error for invalid database path %s", invalidPath)
 		}
 	})
 
