@@ -2013,6 +2013,7 @@
         }
 
         async function editDevice(id) {
+            console.log(`Opening edit modal for device ID: ${id}`);
             showModal('editDeviceModal');
             
             // Update modal title
@@ -2026,20 +2027,44 @@
             // Store device ID for later use
             window.currentEditDeviceId = id;
             
+            // Clear any previous form data
+            clearDeviceForm();
+            
             try {
+                console.log(`Fetching configuration for device ${id}...`);
+                
                 // Fetch device capabilities and configuration in parallel
-                const [capabilitiesPromise, configPromise] = await Promise.all([
+                const [capabilities, configResponse] = await Promise.all([
                     getDeviceCapabilities(id),
-                    fetch(`${API_BASE}/devices/${id}/config/typed`)
+                    fetch(`${API_BASE}/devices/${id}/config/typed`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        }
+                    })
                 ]);
 
-                const capabilities = capabilitiesPromise;
+                console.log(`Configuration response status: ${configResponse.status}`);
                 
-                if (!configPromise.ok) {
-                    throw new Error(`Failed to load configuration: ${configPromise.status} ${configPromise.statusText}`);
+                if (!configResponse.ok) {
+                    let errorMessage;
+                    try {
+                        const errorData = await configResponse.text();
+                        errorMessage = `Failed to load configuration (${configResponse.status}): ${errorData}`;
+                    } catch {
+                        errorMessage = `Failed to load configuration: ${configResponse.status} ${configResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
                 }
                 
-                const data = await configPromise.json();
+                const data = await configResponse.json();
+                console.log('Configuration data loaded:', data);
+                
+                // Validate the response structure
+                if (!data.configuration) {
+                    throw new Error('Invalid configuration data structure - missing configuration object');
+                }
                 
                 // Update tabs based on device capabilities
                 updateTabsForCapabilities(capabilities);
@@ -2051,9 +2076,13 @@
                 document.getElementById('editDeviceLoading').style.display = 'none';
                 document.getElementById('editDeviceForm').style.display = 'block';
                 
-                // Set save status
-                document.getElementById('save-status').textContent = `Configuration loaded successfully (Device capabilities: ${capabilities.join(', ')})`;
+                // Set save status with validation info
+                const validationStatus = data.validation && data.validation.valid ? '✓ Valid' : '⚠ Has validation issues';
+                const warningCount = data.validation && data.validation.warnings ? data.validation.warnings.length : 0;
+                document.getElementById('save-status').textContent = `Configuration loaded successfully. ${validationStatus}${warningCount > 0 ? ` (${warningCount} warnings)` : ''}`;
                 document.getElementById('save-status').className = 'success';
+                
+                console.log(`Successfully loaded configuration for device ${id}`);
                 
             } catch (error) {
                 console.error('Error loading device configuration:', error);
@@ -2341,50 +2370,83 @@
         async function validateAndSaveDeviceConfig() {
             if (!window.currentEditDeviceId) {
                 console.error('No device ID available for saving');
+                document.getElementById('save-status').textContent = 'Error: No device selected for saving';
+                document.getElementById('save-status').className = 'error';
                 return;
             }
+
+            console.log(`Starting save process for device ${window.currentEditDeviceId}...`);
 
             const saveButton = document.getElementById('save-config-btn');
             const statusElement = document.getElementById('save-status');
             
+            // Clear any previous validation errors
+            clearValidationErrors();
+            
             // Disable save button and show loading state
             saveButton.disabled = true;
-            saveButton.textContent = 'Saving...';
-            statusElement.textContent = 'Saving configuration...';
-            statusElement.className = '';
+            saveButton.textContent = 'Validating...';
+            statusElement.textContent = 'Validating configuration...';
+            statusElement.className = 'pending';
 
             try {
                 // Collect form data into typed configuration structure
+                console.log('Collecting form data...');
                 const configuration = collectFormData();
+                console.log('Collected configuration:', configuration);
                 
-                // Validate configuration
+                // Step 1: Validate configuration
+                console.log('Validating configuration...');
                 const validationResponse = await fetch(`${API_BASE}/configuration/validate-typed`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({
                         configuration: configuration,
-                        validation_level: 'basic'
+                        validation_level: 'basic',
+                        device_id: window.currentEditDeviceId
                     })
                 });
 
                 if (!validationResponse.ok) {
-                    throw new Error('Validation request failed');
+                    let errorMessage;
+                    try {
+                        const errorData = await validationResponse.text();
+                        errorMessage = `Validation request failed (${validationResponse.status}): ${errorData}`;
+                    } catch {
+                        errorMessage = `Validation request failed: ${validationResponse.status} ${validationResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
                 }
 
                 const validationResult = await validationResponse.json();
+                console.log('Validation result:', validationResult);
                 
-                if (!validationResult.valid) {
+                // Handle validation warnings (show but don't block save)
+                if (validationResult.warnings && validationResult.warnings.length > 0) {
+                    displayValidationWarnings(validationResult.warnings);
+                }
+                
+                // Handle validation errors (block save)
+                if (!validationResult.valid && validationResult.errors && validationResult.errors.length > 0) {
                     displayValidationErrors(validationResult.errors);
-                    throw new Error('Configuration validation failed');
+                    statusElement.textContent = `Validation failed: ${validationResult.errors.length} error(s) found`;
+                    statusElement.className = 'error';
+                    return; // Don't proceed with save
                 }
 
-                // Save configuration
+                // Step 2: Save configuration
+                console.log('Saving configuration...');
+                saveButton.textContent = 'Saving...';
+                statusElement.textContent = 'Saving configuration...';
+                
                 const saveResponse = await fetch(`${API_BASE}/devices/${window.currentEditDeviceId}/config/typed`, {
                     method: 'PUT',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
                     body: JSON.stringify({
                         configuration: configuration,
@@ -2393,17 +2455,40 @@
                 });
 
                 if (!saveResponse.ok) {
-                    throw new Error(`Save failed: ${saveResponse.status} ${saveResponse.statusText}`);
+                    let errorMessage;
+                    try {
+                        const errorData = await saveResponse.text();
+                        errorMessage = `Save failed (${saveResponse.status}): ${errorData}`;
+                    } catch {
+                        errorMessage = `Save failed: ${saveResponse.status} ${saveResponse.statusText}`;
+                    }
+                    throw new Error(errorMessage);
                 }
 
+                const saveResult = await saveResponse.json();
+                console.log('Save result:', saveResult);
+
                 // Success
-                statusElement.textContent = 'Configuration saved successfully!';
+                const warningText = validationResult.warnings && validationResult.warnings.length > 0 
+                    ? ` (${validationResult.warnings.length} warning(s))` 
+                    : '';
+                statusElement.textContent = `Configuration saved successfully!${warningText}`;
                 statusElement.className = 'success';
+                
+                console.log(`Successfully saved configuration for device ${window.currentEditDeviceId}`);
                 
                 // Refresh device list to show updated data
                 setTimeout(() => {
+                    console.log('Refreshing device list...');
                     loadDevices();
-                }, 1000);
+                }, 1500);
+
+                // Auto-close modal after successful save (optional)
+                setTimeout(() => {
+                    if (confirm('Configuration saved successfully. Close edit window?')) {
+                        closeModal('editDeviceModal');
+                    }
+                }, 2000);
 
             } catch (error) {
                 console.error('Error saving configuration:', error);
@@ -2414,6 +2499,69 @@
                 saveButton.disabled = false;
                 saveButton.textContent = 'Save Configuration';
             }
+        }
+
+        // Clear validation errors and warnings
+        function clearValidationErrors() {
+            document.querySelectorAll('.field-error').forEach(error => {
+                error.textContent = '';
+            });
+            document.querySelectorAll('.field-warning').forEach(warning => {
+                warning.textContent = '';
+            });
+            document.querySelectorAll('input, select').forEach(field => {
+                field.classList.remove('error', 'warning');
+            });
+        }
+
+        // Display validation warnings (non-blocking)
+        function displayValidationWarnings(warnings) {
+            warnings.forEach(warning => {
+                console.warn('Validation warning:', warning);
+                
+                // Try to find the field and display the warning
+                const fieldName = warning.field;
+                const field = findFormFieldByName(fieldName);
+                if (field) {
+                    field.classList.add('warning');
+                    const warningElement = field.parentNode.querySelector('.field-warning') 
+                        || createFieldMessage(field, 'field-warning');
+                    warningElement.textContent = `⚠️ ${warning.message}`;
+                }
+            });
+        }
+
+        // Helper function to find form field by name
+        function findFormFieldByName(fieldName) {
+            // Try common field naming patterns
+            const possibleIds = [
+                fieldName,
+                fieldName.replace('.', '-'),
+                fieldName.replace(/\./g, '-'),
+                `${fieldName.split('.')[0]}-${fieldName.split('.').slice(1).join('-')}`
+            ];
+            
+            for (const id of possibleIds) {
+                const element = document.getElementById(id);
+                if (element) return element;
+            }
+            
+            // Try by name attribute
+            return document.querySelector(`[name="${fieldName}"]`);
+        }
+
+        // Helper function to create field message element
+        function createFieldMessage(field, className) {
+            const messageElement = document.createElement('div');
+            messageElement.className = className;
+            messageElement.style.color = className.includes('error') ? '#e74c3c' : '#f39c12';
+            messageElement.style.fontSize = '12px';
+            messageElement.style.marginTop = '4px';
+            
+            // Insert after the field
+            field.parentNode.insertBefore(messageElement, field.nextSibling);
+            
+            return messageElement;
         }
 
         // Collect form data into typed configuration structure
