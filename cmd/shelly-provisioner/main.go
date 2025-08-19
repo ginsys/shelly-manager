@@ -456,7 +456,13 @@ func pollForTasks(ctx context.Context) error {
 			}).Error("Failed to process task")
 
 			// Update task status to failed
-			apiClient.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+			if updateErr := apiClient.UpdateTaskStatus(task.ID, "failed", nil, err.Error()); updateErr != nil {
+				logger.WithFields(map[string]any{
+					"task_id":   task.ID,
+					"error":     updateErr.Error(),
+					"component": "agent",
+				}).Error("Failed to update task status to failed")
+			}
 		} else {
 			logger.WithFields(map[string]any{
 				"task_id":   task.ID,
@@ -465,7 +471,13 @@ func pollForTasks(ctx context.Context) error {
 			}).Info("Task completed successfully")
 
 			// Update task status to completed
-			apiClient.UpdateTaskStatus(task.ID, "completed", nil, "")
+			if updateErr := apiClient.UpdateTaskStatus(task.ID, "completed", nil, ""); updateErr != nil {
+				logger.WithFields(map[string]any{
+					"task_id":   task.ID,
+					"error":     updateErr.Error(),
+					"component": "agent",
+				}).Error("Failed to update task status to completed")
+			}
 		}
 	}
 
