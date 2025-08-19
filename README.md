@@ -30,10 +30,15 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the detailed development roadmap.
 - Platform-specific WiFi interfaces (Linux/macOS/Windows)
 - Comprehensive test coverage for core packages
 
+### ✅ Recent Additions
+- Multi-stage Docker build with security hardening
+- Production-ready Kubernetes manifests with PersistentVolume
+- Comprehensive test performance optimization (34.6% coverage)
+- Network isolation for all tests using TEST-NET addresses
+
 ### 🚧 In Progress
 - WiFi provisioning flow implementation
 - Inter-service communication protocol
-- Kubernetes deployment manifests
 
 ### 📋 Planned
 - DHCP reservation management
@@ -91,12 +96,17 @@ make run
 # Build container
 make docker-build
 
-# Deploy to Kubernetes
-kubectl apply -f deployments/kubernetes/
+# Deploy to Kubernetes using Kustomize
+kubectl apply -k k8s/
 
-# Check status
-kubectl get pods -n shelly-manager
+# Or deploy individual manifests
+kubectl apply -f k8s/
+
+# Check deployment status
+kubectl get pods,svc,ingress -l app=shelly-manager
 ```
+
+See [k8s/README.md](k8s/README.md) for comprehensive Kubernetes deployment documentation including TLS setup, monitoring configuration, and production considerations.
 
 ### Docker Compose (Development)
 ```bash
