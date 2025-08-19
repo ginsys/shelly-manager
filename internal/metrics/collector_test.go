@@ -236,7 +236,7 @@ func TestCollectorPeriodicCollection(t *testing.T) {
 	initialTime := service.GetLastCollectionTime()
 
 	// Wait for at least 2 collection cycles (50ms * 2 + buffer)
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(120 * time.Millisecond)
 
 	// Should have updated collection time
 	newTime := service.GetLastCollectionTime()

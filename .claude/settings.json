@@ -95,7 +95,8 @@
       "mcp__playwright__browser_click",
       "mcp__sequential-thinking__sequentialthinking",
       "Bash(env CGO_ENABLED=1 go test -v -short ./internal/api -run TestValidateDeviceSettings)",
-      "Bash(env CGO_ENABLED=1 go test -short ./internal/api -run TestValidateDeviceSettings)"
+      "Bash(env CGO_ENABLED=1 go test -short ./internal/api -run TestValidateDeviceSettings)",
+      "Bash(CGO_ENABLED=1 go test -v -short internal/metrics/collector_test.go internal/metrics/collector.go internal/metrics/service.go internal/metrics/models.go -run TestCollectorPeriodicCollection)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
