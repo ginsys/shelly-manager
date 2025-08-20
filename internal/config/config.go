@@ -62,6 +62,13 @@ type Config struct {
 		APIKey  string `mapstructure:"api_key"`
 		Enabled bool   `mapstructure:"enabled"`
 	} `mapstructure:"main_app"`
+	API struct {
+		URL           string `mapstructure:"url"`
+		Key           string `mapstructure:"key"`
+		Timeout       int    `mapstructure:"timeout"`
+		RetryAttempts int    `mapstructure:"retry_attempts"`
+		RetryDelay    int    `mapstructure:"retry_delay"`
+	} `mapstructure:"api"`
 	Notifications struct {
 		Enabled bool `mapstructure:"enabled"`
 		Email   struct {
@@ -202,6 +209,13 @@ func setDefaults() {
 	// Main app defaults
 	viper.SetDefault("main_app.url", "http://localhost:8080")
 	viper.SetDefault("main_app.enabled", true)
+
+	// API defaults (for provisioner agent mode)
+	viper.SetDefault("api.url", "http://0.0.0.0:8080")
+	viper.SetDefault("api.key", "")
+	viper.SetDefault("api.timeout", 30)
+	viper.SetDefault("api.retry_attempts", 3)
+	viper.SetDefault("api.retry_delay", 5)
 
 	// Metrics defaults
 	viper.SetDefault("metrics.enabled", true)

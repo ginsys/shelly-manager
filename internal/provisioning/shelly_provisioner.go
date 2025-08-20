@@ -67,9 +67,23 @@ func (sp *ShellyProvisioner) DiscoverUnprovisionedDevices(ctx context.Context) (
 
 	fmt.Printf("\nInitiating WiFi network scan...\n")
 
+	// Add context timeout info
+	deadline, hasDeadline := ctx.Deadline()
+	if hasDeadline {
+		sp.logger.WithFields(map[string]any{
+			"component": "shelly_provisioner",
+			"timeout":   time.Until(deadline),
+		}).Debug("Context deadline set for network scan")
+	}
+
 	networks, err := sp.netIface.GetAvailableNetworks(ctx)
 	if err != nil {
 		fmt.Printf("❌ WiFi scan failed: %v\n", err)
+		sp.logger.WithFields(map[string]any{
+			"component":  "shelly_provisioner",
+			"error":      err.Error(),
+			"error_type": fmt.Sprintf("%T", err),
+		}).Error("WiFi network scan failed with detailed error")
 		return nil, fmt.Errorf("failed to scan WiFi networks: %w", err)
 	}
 
@@ -106,18 +120,46 @@ func (sp *ShellyProvisioner) DiscoverUnprovisionedDevices(ctx context.Context) (
 	fmt.Printf("Analyzing networks for Shelly devices...\n")
 	shellyNetworksFound := 0
 
-	for _, network := range networks {
-		if shellyAPPattern.MatchString(strings.ToLower(network.SSID)) {
+	sp.logger.WithFields(map[string]any{
+		"component":      "shelly_provisioner",
+		"total_networks": len(networks),
+		"regex_pattern":  shellyAPPattern.String(),
+	}).Debug("Starting Shelly device analysis")
+
+	for i, network := range networks {
+		sp.logger.WithFields(map[string]any{
+			"component":     "shelly_provisioner",
+			"network_index": i,
+			"ssid":          network.SSID,
+			"ssid_lower":    strings.ToLower(network.SSID),
+			"signal":        network.Signal,
+			"security":      network.Security,
+		}).Debug("Evaluating network for Shelly pattern")
+
+		matchesPattern := shellyAPPattern.MatchString(strings.ToLower(network.SSID))
+		sp.logger.WithFields(map[string]any{
+			"component":       "shelly_provisioner",
+			"ssid":            network.SSID,
+			"matches_pattern": matchesPattern,
+		}).Debug("Pattern matching result")
+
+		if matchesPattern {
 			shellyNetworksFound++
 			fmt.Printf("🔍 Found potential Shelly device: %s (Signal: %d%%)\n", network.SSID, network.Signal)
+
+			sp.logger.WithFields(map[string]any{
+				"component": "shelly_provisioner",
+				"ssid":      network.SSID,
+			}).Debug("Attempting to identify Shelly device")
 
 			device, err := sp.identifyShellyDevice(ctx, network)
 			if err != nil {
 				sp.logger.WithFields(map[string]any{
-					"component": "shelly_provisioner",
-					"ssid":      network.SSID,
-					"error":     err.Error(),
-				}).Warn("Failed to identify Shelly device")
+					"component":    "shelly_provisioner",
+					"ssid":         network.SSID,
+					"error":        err.Error(),
+					"error_detail": fmt.Sprintf("%+v", err),
+				}).Warn("Failed to identify Shelly device with detailed error")
 				fmt.Printf("  ❌ Failed to identify device: %v\n", err)
 				continue
 			}
@@ -149,14 +191,51 @@ func (sp *ShellyProvisioner) DiscoverUnprovisionedDevices(ctx context.Context) (
 
 // identifyShellyDevice attempts to identify a Shelly device from its AP
 func (sp *ShellyProvisioner) identifyShellyDevice(ctx context.Context, network WiFiNetwork) (*UnprovisionedDevice, error) {
+	sp.logger.WithFields(map[string]any{
+		"component": "shelly_provisioner",
+		"ssid":      network.SSID,
+		"signal":    network.Signal,
+		"security":  network.Security,
+		"frequency": network.Frequency,
+		"channel":   network.Channel,
+	}).Debug("Starting Shelly device identification")
+
 	// Extract potential MAC from SSID (e.g., shelly1-AABBCC)
 	parts := strings.Split(network.SSID, "-")
+	sp.logger.WithFields(map[string]any{
+		"component":   "shelly_provisioner",
+		"ssid":        network.SSID,
+		"parts_count": len(parts),
+		"parts":       parts,
+	}).Debug("SSID split into parts")
+
 	if len(parts) < 2 {
+		sp.logger.WithFields(map[string]any{
+			"component":   "shelly_provisioner",
+			"ssid":        network.SSID,
+			"parts_count": len(parts),
+			"expected":    ">=2",
+		}).Debug("Invalid SSID format - insufficient parts")
 		return nil, fmt.Errorf("invalid Shelly SSID format: %s", network.SSID)
 	}
 
 	macSuffix := parts[len(parts)-1]
+	sp.logger.WithFields(map[string]any{
+		"component":      "shelly_provisioner",
+		"ssid":           network.SSID,
+		"mac_suffix":     macSuffix,
+		"mac_suffix_len": len(macSuffix),
+		"expected_len":   6,
+	}).Debug("Extracted MAC suffix from SSID")
+
 	if len(macSuffix) != 6 {
+		sp.logger.WithFields(map[string]any{
+			"component":      "shelly_provisioner",
+			"ssid":           network.SSID,
+			"mac_suffix":     macSuffix,
+			"mac_suffix_len": len(macSuffix),
+			"expected_len":   6,
+		}).Debug("Invalid MAC suffix length")
 		return nil, fmt.Errorf("invalid MAC suffix in SSID: %s", network.SSID)
 	}
 
@@ -168,17 +247,44 @@ func (sp *ShellyProvisioner) identifyShellyDevice(ctx context.Context, network W
 	// Determine model from SSID prefix
 	model := sp.getModelFromSSID(network.SSID)
 	generation := sp.getGenerationFromModel(model)
+	defaultPassword := sp.getDefaultPassword(model, macSuffix)
+
+	sp.logger.WithFields(map[string]any{
+		"component":        "shelly_provisioner",
+		"ssid":             network.SSID,
+		"detected_model":   model,
+		"detected_gen":     generation,
+		"default_password": defaultPassword,
+		"mac_suffix":       macSuffix,
+	}).Debug("Device identification completed")
 
 	device := &UnprovisionedDevice{
 		MAC:        fullMAC,
 		SSID:       network.SSID,
-		Password:   sp.getDefaultPassword(model, macSuffix),
+		Password:   defaultPassword,
 		Model:      model,
 		Generation: generation,
 		IP:         "192.168.33.1", // Standard Shelly AP IP
 		Signal:     network.Signal,
 		Discovered: time.Now(),
 	}
+
+	sp.logger.WithFields(map[string]any{
+		"component":       "shelly_provisioner",
+		"device_mac":      device.MAC,
+		"device_ssid":     device.SSID,
+		"device_model":    device.Model,
+		"device_gen":      device.Generation,
+		"device_ip":       device.IP,
+		"device_signal":   device.Signal,
+		"device_password": "[hidden]",
+	}).Debug("Created UnprovisionedDevice object")
+
+	sp.logger.WithFields(map[string]any{
+		"component": "shelly_provisioner",
+		"ssid":      network.SSID,
+		"success":   true,
+	}).Debug("Device identification successful")
 
 	return device, nil
 }

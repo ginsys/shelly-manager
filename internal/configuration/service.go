@@ -1515,6 +1515,122 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 		delete(rawData, "cloud")
 	}
 
+	// Convert Relay section
+	if relaysData, ok := rawData["relays"].([]interface{}); ok && len(relaysData) > 0 {
+		relay := &RelayConfig{}
+
+		// Convert first relay (most common case for single-relay devices)
+		if firstRelay, ok := relaysData[0].(map[string]interface{}); ok {
+			if defaultState, ok := firstRelay["default_state"].(string); ok {
+				relay.DefaultState = defaultState
+			}
+			if btnType, ok := firstRelay["btn_type"].(string); ok {
+				relay.ButtonType = btnType
+			}
+			if autoOn, ok := firstRelay["auto_on"].(float64); ok && autoOn > 0 {
+				autoOnInt := int(autoOn)
+				relay.AutoOn = &autoOnInt
+			}
+			if autoOff, ok := firstRelay["auto_off"].(float64); ok && autoOff > 0 {
+				autoOffInt := int(autoOff)
+				relay.AutoOff = &autoOffInt
+			}
+			if hasTimer, ok := firstRelay["has_timer"].(bool); ok {
+				relay.HasTimer = hasTimer
+			}
+			if schedule, ok := firstRelay["schedule"].(bool); ok && schedule {
+				relay.HasTimer = true // schedule implies timer capability
+			}
+			if maxPower, ok := firstRelay["max_power"].(float64); ok && maxPower > 0 {
+				maxPowerInt := int(maxPower)
+				relay.MaxPowerLimit = &maxPowerInt
+			}
+		}
+
+		// Convert individual relay configurations
+		relays := make([]SingleRelayConfig, len(relaysData))
+		for i, relayData := range relaysData {
+			if relayMap, ok := relayData.(map[string]interface{}); ok {
+				singleRelay := SingleRelayConfig{
+					ID: i,
+				}
+
+				if name, ok := relayMap["name"].(string); ok && name != "" {
+					singleRelay.Name = name
+				} else if appType, ok := relayMap["appliance_type"].(string); ok {
+					singleRelay.Name = appType
+				}
+
+				if defaultState, ok := relayMap["default_state"].(string); ok {
+					singleRelay.DefaultState = defaultState
+				}
+				if autoOn, ok := relayMap["auto_on"].(float64); ok && autoOn > 0 {
+					autoOnInt := int(autoOn)
+					singleRelay.AutoOn = &autoOnInt
+				}
+				if autoOff, ok := relayMap["auto_off"].(float64); ok && autoOff > 0 {
+					autoOffInt := int(autoOff)
+					singleRelay.AutoOff = &autoOffInt
+				}
+				if schedule, ok := relayMap["schedule"].(bool); ok {
+					singleRelay.Schedule = schedule
+				}
+
+				relays[i] = singleRelay
+			}
+		}
+		relay.Relays = relays
+
+		typedConfig.Relay = relay
+		delete(rawData, "relays")
+	}
+
+	// Convert Input section
+	if inputsData, ok := rawData["inputs"].([]interface{}); ok && len(inputsData) > 0 {
+		input := &InputConfig{
+			Type: "button", // Default for most Shelly devices
+		}
+
+		// Convert first input for global settings
+		if firstInput, ok := inputsData[0].(map[string]interface{}); ok {
+			if btnType, ok := firstInput["btn_type"].(string); ok {
+				input.Mode = btnType
+			}
+			if btnReverse, ok := firstInput["btn_reverse"].(float64); ok {
+				input.Inverted = btnReverse > 0
+			}
+		}
+
+		// Convert individual input configurations
+		inputs := make([]SingleInputConfig, len(inputsData))
+		for i, inputData := range inputsData {
+			if inputMap, ok := inputData.(map[string]interface{}); ok {
+				singleInput := SingleInputConfig{
+					ID:   i,
+					Type: "button",
+				}
+
+				if name, ok := inputMap["name"].(string); ok && name != "" {
+					singleInput.Name = name
+				} else {
+					singleInput.Name = fmt.Sprintf("Input %d", i)
+				}
+
+				if btnType, ok := inputMap["btn_type"].(string); ok {
+					singleInput.Mode = btnType
+				}
+				if btnReverse, ok := inputMap["btn_reverse"].(float64); ok {
+					singleInput.Inverted = btnReverse > 0
+				}
+
+				inputs[i] = singleInput
+			}
+		}
+
+		typedConfig.Input = input
+		delete(rawData, "inputs")
+	}
+
 	// Store remaining data in Raw field
 	if len(rawData) > 0 {
 		remainingJSON, _ := json.Marshal(rawData)

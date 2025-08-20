@@ -81,11 +81,19 @@ func TestGetDevices(t *testing.T) {
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
 
-	var devices []database.Device
-	err := json.Unmarshal(w.Body.Bytes(), &devices)
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	testutil.AssertNoError(t, err)
 
-	testutil.AssertEqual(t, 2, len(devices))
+	// Check response structure
+	testutil.AssertEqual(t, true, response["success"])
+	devicesInterface, exists := response["devices"]
+	testutil.AssertEqual(t, true, exists)
+
+	// Convert devices array to check length
+	devicesArray, ok := devicesInterface.([]interface{})
+	testutil.AssertEqual(t, true, ok)
+	testutil.AssertEqual(t, 2, len(devicesArray))
 }
 
 func TestAddDevice(t *testing.T) {
@@ -659,6 +667,37 @@ func TestGetDeviceConfig(t *testing.T) {
 
 	// Should get an error since we're not actually connecting to a device
 	testutil.AssertEqual(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetCurrentDeviceConfig(t *testing.T) {
+	// Setup
+	db := testutil.TestDatabase(t)
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Add a test device
+	device := testutil.TestDevice()
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/config/current", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.GetCurrentDeviceConfig(w, req)
+
+	// Should get JSON response with success wrapper
+	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+
+	// Decode the response to check structure
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	testutil.AssertNoError(t, err)
+
+	// Should have success field (will be false due to service error, but that's expected)
+	_, hasSuccess := response["success"]
+	testutil.AssertEqual(t, true, hasSuccess)
 }
 
 func TestGetConfigTemplates(t *testing.T) {

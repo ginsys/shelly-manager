@@ -2,7 +2,7 @@
 
 # Logging configuration
 logging:
-  level: info        # debug, info, warn, error
+  level: debug        # debug, info, warn, error
   format: text       # text, json
   output: stdout     # stdout, file path
 
@@ -16,11 +16,11 @@ provisioning:
 
 # API client configuration (for agent mode)
 api:
-  url: ""                  # main API server URL (set via --api-url flag)
-  key: ""                  # API authentication key (set via --api-key flag)
-  timeout: 30             # HTTP request timeout in seconds
-  retry_attempts: 3       # number of retry attempts for failed requests
-  retry_delay: 5          # delay between retry attempts in seconds
+  url: "http://0.0.0.0:8080"   # main API server base URL (API client adds /api/v1/... paths automatically)
+  key: ""                      # API authentication key (set via --api-key flag)
+  timeout: 30                  # HTTP request timeout in seconds
+  retry_attempts: 3            # number of retry attempts for failed requests
+  retry_delay: 5               # delay between retry attempts in seconds
 
 # Network interface configuration
 network:

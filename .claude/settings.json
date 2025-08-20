@@ -47,7 +47,10 @@
       "Bash(pkill:go)",
       "Bash(gh:*)",
       "Bash(true)",
-      "mcp__sequential-thinking__sequentialthinking"
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(curl:*)",
+      "Bash(sqlite3:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

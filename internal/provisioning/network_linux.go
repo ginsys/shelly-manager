@@ -84,13 +84,33 @@ func (ni *LinuxNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]Wi
 		"platform":  "linux",
 	}).Debug("Scanning for available WiFi networks")
 
+	// Debug: Check if nmcli is available and get device status first
+	deviceCmd := exec.CommandContext(ctx, "nmcli", "device", "status")
+	deviceOutput, deviceErr := deviceCmd.CombinedOutput()
+	ni.logger.WithFields(map[string]any{
+		"component": "network_interface",
+		"command":   "nmcli device status",
+		"output":    string(deviceOutput),
+		"error":     deviceErr,
+	}).Debug("NetworkManager device status")
+
 	// Request a fresh scan
 	scanCmd := exec.CommandContext(ctx, "nmcli", "device", "wifi", "rescan")
-	if err := scanCmd.Run(); err != nil {
+	scanOutput, scanErr := scanCmd.CombinedOutput()
+	if scanErr != nil {
+		ni.logger.WithFields(map[string]any{
+			"component":   "network_interface",
+			"command":     "nmcli device wifi rescan",
+			"error":       scanErr.Error(),
+			"output":      string(scanOutput),
+			"exit_status": scanCmd.ProcessState.ExitCode(),
+		}).Warn("Failed to trigger WiFi rescan - detailed error info")
+	} else {
 		ni.logger.WithFields(map[string]any{
 			"component": "network_interface",
-			"error":     err.Error(),
-		}).Warn("Failed to trigger WiFi rescan")
+			"command":   "nmcli device wifi rescan",
+			"output":    string(scanOutput),
+		}).Debug("WiFi rescan command completed successfully")
 	}
 
 	// Wait a moment for scan to complete
@@ -98,12 +118,28 @@ func (ni *LinuxNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]Wi
 
 	// Get the list of networks
 	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL,CHAN,FREQ", "device", "wifi", "list")
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
+	ni.logger.WithFields(map[string]any{
+		"component":    "network_interface",
+		"command":      "nmcli -t -f SSID,SECURITY,SIGNAL,CHAN,FREQ device wifi list",
+		"raw_output":   string(output),
+		"output_lines": len(strings.Split(string(output), "\n")),
+		"error":        err,
+	}).Debug("WiFi network list command output")
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to list WiFi networks: %w", err)
+		return nil, fmt.Errorf("failed to list WiFi networks: %w (output: %s)", err, string(output))
 	}
 
-	return ni.parseNetworkList(string(output))
+	networks, parseErr := ni.parseNetworkList(string(output))
+	ni.logger.WithFields(map[string]any{
+		"component":       "network_interface",
+		"raw_output_len":  len(output),
+		"networks_parsed": len(networks),
+		"parse_error":     parseErr,
+	}).Debug("Network parsing completed")
+
+	return networks, parseErr
 }
 
 // parseNetworkList parses nmcli output into WiFiNetwork structs
@@ -112,18 +148,65 @@ func (ni *LinuxNetworkInterface) parseNetworkList(output string) ([]WiFiNetwork,
 	networks := make([]WiFiNetwork, 0, len(lines))
 	seen := make(map[string]bool)
 
-	for _, line := range lines {
+	ni.logger.WithFields(map[string]any{
+		"component":  "network_interface",
+		"raw_output": output,
+		"line_count": len(lines),
+	}).Debug("Starting network list parsing")
+
+	for i, line := range lines {
+		ni.logger.WithFields(map[string]any{
+			"component":    "network_interface",
+			"line_index":   i,
+			"line_content": line,
+		}).Debug("Processing network line")
+
 		if line == "" {
+			ni.logger.WithFields(map[string]any{
+				"component":  "network_interface",
+				"line_index": i,
+			}).Debug("Skipping empty line")
 			continue
 		}
 
 		parts := strings.Split(line, ":")
+		ni.logger.WithFields(map[string]any{
+			"component":   "network_interface",
+			"line_index":  i,
+			"parts_count": len(parts),
+			"parts":       parts,
+		}).Debug("Line split into parts")
+
 		if len(parts) < 5 {
+			ni.logger.WithFields(map[string]any{
+				"component":   "network_interface",
+				"line_index":  i,
+				"parts_count": len(parts),
+				"expected":    5,
+			}).Debug("Skipping line with insufficient parts")
 			continue
 		}
 
 		ssid := strings.TrimSpace(parts[0])
+		ni.logger.WithFields(map[string]any{
+			"component":    "network_interface",
+			"line_index":   i,
+			"ssid":         ssid,
+			"already_seen": seen[ssid],
+		}).Debug("Processing SSID")
+
 		if ssid == "" || seen[ssid] {
+			ni.logger.WithFields(map[string]any{
+				"component":  "network_interface",
+				"line_index": i,
+				"ssid":       ssid,
+				"reason": func() string {
+					if ssid == "" {
+						return "empty_ssid"
+					}
+					return "duplicate_ssid"
+				}(),
+			}).Debug("Skipping SSID")
 			continue // Skip empty SSIDs or duplicates
 		}
 		seen[ssid] = true

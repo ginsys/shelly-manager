@@ -1,18 +1,24 @@
 # Shelly Device Manager
 
-A comprehensive Golang application for managing Shelly smart home devices with Kubernetes-native architecture, dual-binary design for secure WiFi provisioning, and extensible integration capabilities.
+A comprehensive Golang application for managing Shelly smart home devices with Kubernetes-native architecture, dual-binary design for secure WiFi provisioning, and advanced configuration management with complete normalization and comparison capabilities.
 
 ## 🏗️ Architecture Overview
 
 ### Dual-Binary Design
-- **Main API Server** (`shelly-manager`): Runs in Kubernetes, manages device database, provides REST API
-- **Provisioning Agent** (`shelly-provisioner`): Runs on host with WiFi access, handles device provisioning
-- **Communication**: Provisioning agent connects to main API for instructions and device registration
+- **Main API Server** (`shelly-manager`): Runs in Kubernetes, manages device database, provides REST API with standardized responses
+- **Provisioning Agent** (`shelly-provisioner`): Runs on host with WiFi access, handles device provisioning with enhanced error handling
+- **Communication**: Provisioning agent connects to main API for instructions and device registration with comprehensive task orchestration
+
+### Advanced Configuration System
+- **Typed Configuration Models**: Complete structured configuration with validation for all device types
+- **Configuration Normalization**: Server-side normalization for accurate comparison between raw and saved configurations
+- **Bidirectional Conversion**: Seamless conversion between raw JSON and typed structures with complete field preservation
+- **Enhanced Device Support**: Full support for relay devices (Shelly 1, Plus 1, etc.), smart plugs, power meters, and 3-input controllers
 
 ## 📊 Project Status
 
-**Current Version**: v0.5.2-alpha  
-**Status**: Production-ready dual-binary architecture with modern UI integration
+**Current Version**: v0.5.3-alpha  
+**Status**: Production-ready with advanced configuration normalization and API standardization
 
 ### ✅ COMPLETED - Production Ready
 - **Phase 1**: ✅ Core Shelly Device Management - Complete REST API, device authentication, real device integration
@@ -24,23 +30,28 @@ A comprehensive Golang application for managing Shelly smart home devices with K
 - **Phase 5.1**: ✅ API Integration Enhancement - Complete provisioner-API communication with comprehensive testing
 - **Phase 5.1.1**: ✅ Discovered Device Database Persistence - Real-time device discovery with database integration
 - **Phase 5.2**: ✅ UI Modernization - Complete discovered devices integration with modern web interface
+- **Phase 5.3**: ✅ Configuration Normalization & API Standardization - Complete field preservation, standardized responses
 
 ### 🎯 Key Achievements
 - **Dual-Binary Architecture**: API server (containerized) + provisioning agent (host-based) with full communication
-- **Modern Configuration System**: Structured forms replacing raw JSON editing, template engine with Sprig v3
+- **Advanced Configuration System**: Complete normalization and comparison with field preservation, structured forms
+- **API Standardization**: Consistent `{success: true/false, data/error}` response format across all endpoints
+- **Enhanced Device Support**: Full support for all Shelly device types with accurate capability detection
 - **Production Deployment**: Multi-stage Docker builds, Kubernetes manifests, security hardening
-- **Real Device Integration**: Gen1 & Gen2+ Shelly devices with comprehensive API coverage
+- **Real Device Integration**: Gen1 & Gen2+ Shelly devices with comprehensive API coverage and error handling
 - **Database Persistence**: Discovered device storage with 24-hour TTL and automatic cleanup
-- **Modern Web UI**: Real-time device discovery, configuration wizards, diff tools, responsive design
-- **Comprehensive Testing**: 42.3% test coverage with API integration and comprehensive validation
+- **Modern Web UI**: Real-time device discovery, configuration wizards, diff tools, responsive design with improved feedback
+- **Configuration Comparison**: Server-side normalization enabling accurate configuration diff and validation
+- **Comprehensive Testing**: 42.3+ test coverage with API integration, configuration validation, and error handling
 
 ### 📊 Current Capabilities
-- **Device Management**: 25+ REST endpoints, real Shelly device communication
-- **Configuration**: Template-based configuration with inheritance and validation
+- **Device Management**: 30+ REST endpoints with standardized responses, real Shelly device communication
+- **Configuration**: Advanced template-based configuration with normalization, inheritance, validation, and comparison
 - **Discovery**: Real-time device discovery with database persistence and web UI integration
-- **Provisioning**: Task-based orchestration between API server and provisioning agent
-- **Web Interface**: Modern UI with structured forms, wizards, and real-time feedback
-- **Container Support**: Production-ready Docker images and Kubernetes deployment
+- **Provisioning**: Task-based orchestration between API server and provisioning agent with enhanced error handling
+- **Web Interface**: Modern UI with structured forms, wizards, real-time feedback, and bulk operation progress
+- **API Integration**: Comprehensive configuration comparison with server-side normalization for accurate field preservation
+- **Container Support**: Production-ready Docker images and Kubernetes deployment with security hardening
 
 ## 🚀 Quick Start
 
@@ -123,15 +134,30 @@ sudo systemctl start shelly-manager
 
 ## 🔌 API Endpoints
 
+All API endpoints return standardized responses in the format: `{success: true/false, data/error: ...}`
+
 ### Device Management
-- `GET    /api/v1/devices` - List all devices
+- `GET    /api/v1/devices` - List all devices with standardized response format
 - `POST   /api/v1/devices` - Add new device
 - `GET    /api/v1/devices/{id}` - Get device details
 - `PUT    /api/v1/devices/{id}` - Update device
 - `DELETE /api/v1/devices/{id}` - Delete device
 
+### Configuration Management
+- `GET    /api/v1/devices/{id}/config` - Get saved device configuration
+- `PUT    /api/v1/devices/{id}/config` - Update device configuration
+- `GET    /api/v1/devices/{id}/config/current` - Get current live device configuration
+- `GET    /api/v1/devices/{id}/config/current/normalized` - Get normalized current configuration
+- `GET    /api/v1/devices/{id}/config/typed` - Get typed configuration with conversion info
+- `GET    /api/v1/devices/{id}/config/typed/normalized` - Get normalized typed configuration
+- `POST   /api/v1/devices/{id}/config/import` - Import configuration from device
+- `GET    /api/v1/devices/{id}/config/status` - Get import status
+- `POST   /api/v1/devices/{id}/config/export` - Export configuration to device
+
 ### Discovery & Provisioning
 - `POST   /api/v1/discover` - Trigger network discovery
+- `GET    /api/v1/provisioner/discovered-devices` - Get discovered devices list
+- `POST   /api/v1/provisioner/report-device` - Report discovered device
 - `GET    /api/v1/provisioning/status` - Provisioning status
 - `POST   /api/v1/provisioning/start` - Start provisioning
 - `GET    /api/v1/provisioning/queue` - List devices awaiting provisioning
@@ -148,26 +174,79 @@ sudo systemctl start shelly-manager
 - `GET    /ready` - Readiness probe
 - `GET    /metrics` - Prometheus metrics (planned)
 
+## ⚙️ Configuration Management Features
+
+### Advanced Configuration System
+The Shelly Manager includes a comprehensive configuration management system with the following key features:
+
+#### Configuration Normalization
+- **Server-Side Normalization**: All configurations are normalized on the server side for accurate comparison
+- **Complete Field Preservation**: All device configuration fields are captured and preserved, including raw fields
+- **Bidirectional Conversion**: Seamless conversion between raw JSON and typed structures
+- **Comparison-Ready Format**: Normalized configurations enable accurate diff and comparison operations
+
+#### Device Support Matrix
+| Device Type | Model Examples | Supported Features |
+|-------------|----------------|-------------------|
+| **Relay Switches** | Shelly 1, Shelly Plus 1, SHSW-1 | Relay configuration, auto-on/off, default state, button type |
+| **Smart Plugs** | Shelly Plug, Shelly Plus Plug | Power metering, relay control, energy monitoring |
+| **Power Meter Switches** | Shelly 1PM, Shelly Plus 1PM | Power monitoring, relay control, energy thresholds |
+| **Multi-Input Controllers** | SHIX3-1 (3-Input) | Input configuration, button types, timing settings |
+
+#### Configuration Features
+- **Typed Configuration Models**: Complete structured models for all device configuration sections
+- **Template-Based Configuration**: Sprig v3 template engine with security controls and inheritance
+- **Real-Time Validation**: Configuration validation with device-specific context and warnings
+- **Configuration Diff**: Visual comparison between current device state and saved configuration
+- **Bulk Operations**: Mass configuration import/export with progress feedback
+
+#### API Integration
+- **Standardized Responses**: All API endpoints return consistent `{success: boolean, data/error}` format
+- **Enhanced Error Handling**: Comprehensive error responses with actionable information
+- **Configuration Endpoints**: Multiple endpoints for different configuration views (raw, typed, normalized)
+
 ## 🏗️ Architecture Details
 
 ### Package Structure
 ```
 cmd/
 ├── shelly-manager/      # Main API server binary
-└── shelly-provisioner/  # WiFi provisioning agent (planned)
+└── shelly-provisioner/  # WiFi provisioning agent
 
 internal/
-├── api/                 # REST API handlers
-├── config/             # Configuration management
-├── database/           # Models and database operations
-├── discovery/          # Device discovery (HTTP/mDNS/SSDP)
-├── provisioning/       # WiFi provisioning logic
-├── service/            # Business logic layer
-├── logging/            # Structured logging
-└── integration/        # External system integrations (planned)
-    ├── opnsense/       # OPNSense API client
-    └── export/         # Export formatters
+├── api/                 # REST API handlers and configuration normalization
+├── config/              # Application configuration management
+├── configuration/       # Device configuration models and services
+├── database/            # Models and database operations
+├── discovery/           # Device discovery (HTTP/mDNS/SSDP)
+├── provisioning/        # WiFi provisioning logic and network interfaces
+├── service/             # Business logic layer
+├── logging/             # Structured logging
+├── metrics/             # Metrics collection and monitoring
+└── integration/         # External system integrations (planned)
+    ├── opnsense/        # OPNSense API client
+    └── export/          # Export formatters
 ```
+
+### Key Components
+
+#### Configuration System (`internal/api/config_normalizer.go`)
+- **NormalizedConfig**: Unified configuration structure for comparison
+- **Bidirectional Conversion**: Raw JSON ↔ Typed Configuration ↔ Normalized Format
+- **Complete Field Preservation**: Captures all device fields including unknown/additional fields
+- **Device-Aware Processing**: Handles device-specific capabilities and configurations
+
+#### API Handlers (`internal/api/`)
+- **Standardized Responses**: Consistent `{success, data/error}` format across all endpoints
+- **Configuration Endpoints**: Multiple views of device configuration (raw, typed, normalized)
+- **Enhanced Error Handling**: Comprehensive error context and actionable messages
+- **Bulk Operation Support**: Progress feedback and status reporting
+
+#### Device Configuration (`internal/configuration/`)
+- **Typed Models**: Complete structured models for all configuration sections
+- **Template Engine**: Sprig v3 integration with security controls
+- **Service Layer**: Business logic for configuration conversion and validation
+- **Device Support**: Relay switches, smart plugs, power meters, input controllers
 
 ### Scaling Considerations
 
@@ -349,9 +428,9 @@ MIT License - See [LICENSE](LICENSE) file for details
 
 ---
 
-**Current Version**: v0.5.2-alpha  
-**Status**: Production-ready with modern UI integration  
-**Supported Devices**: Shelly Gen1 & Gen2+ devices  
+**Current Version**: v0.5.3-alpha  
+**Status**: Production-ready with advanced configuration normalization and API standardization  
+**Supported Devices**: Shelly Gen1 & Gen2+ devices with comprehensive configuration support  
 **Minimum Go Version**: 1.21  
 **Container Registry**: ghcr.io/ginsys/shelly-manager  
-**Architecture**: Dual-binary (API server + provisioning agent)
+**Architecture**: Dual-binary (API server + provisioning agent) with standardized API responses
