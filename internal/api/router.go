@@ -45,6 +45,9 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	// Device configuration routes
 	api.HandleFunc("/devices/{id}/config", handler.GetDeviceConfig).Methods("GET")
 	api.HandleFunc("/devices/{id}/config", handler.UpdateDeviceConfig).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/current", handler.GetCurrentDeviceConfig).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/current/normalized", handler.GetCurrentDeviceConfigNormalized).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/typed/normalized", handler.GetTypedDeviceConfigNormalized).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/import", handler.ImportDeviceConfig).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/status", handler.GetImportStatus).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/export", handler.ExportDeviceConfig).Methods("POST")

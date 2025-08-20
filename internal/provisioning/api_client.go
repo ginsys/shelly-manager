@@ -299,6 +299,16 @@ func (c *APIClient) ReportDiscoveredDevices(taskID string, devices []*Discovered
 func (c *APIClient) makeRequest(method, endpoint string, requestBody interface{}, responseBody interface{}) error {
 	url := c.baseURL + endpoint
 
+	// Enhanced logging to show exact URL being called
+	c.logger.WithFields(map[string]any{
+		"component": "api_client",
+		"method":    method,
+		"base_url":  c.baseURL,
+		"endpoint":  endpoint,
+		"full_url":  url,
+		"agent_id":  c.agentID,
+	}).Debug("Making API request")
+
 	var body io.Reader
 	if requestBody != nil {
 		jsonBody, err := json.Marshal(requestBody)
@@ -336,15 +346,39 @@ func (c *APIClient) makeRequest(method, endpoint string, requestBody interface{}
 
 	// Check status code
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		c.logger.WithFields(map[string]any{
+			"component":     "api_client",
+			"method":        method,
+			"full_url":      url,
+			"status_code":   resp.StatusCode,
+			"response_body": string(respBody),
+			"agent_id":      c.agentID,
+		}).Error("API request failed with HTTP error")
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	// Parse response if responseBody is provided
 	if responseBody != nil {
 		if err := json.Unmarshal(respBody, responseBody); err != nil {
+			c.logger.WithFields(map[string]any{
+				"component":     "api_client",
+				"method":        method,
+				"full_url":      url,
+				"status_code":   resp.StatusCode,
+				"response_body": string(respBody),
+				"error":         err.Error(),
+			}).Error("Failed to parse JSON response")
 			return fmt.Errorf("failed to unmarshal response body: %w", err)
 		}
 	}
+
+	c.logger.WithFields(map[string]any{
+		"component":   "api_client",
+		"method":      method,
+		"full_url":    url,
+		"status_code": resp.StatusCode,
+		"agent_id":    c.agentID,
+	}).Debug("API request completed successfully")
 
 	return nil
 }

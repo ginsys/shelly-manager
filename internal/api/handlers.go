@@ -51,12 +51,20 @@ func NewHandlerWithLogger(db *database.Manager, svc *service.ShellyService, noti
 func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.DB.GetDevices()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to get devices: " + err.Error(),
+		})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(devices)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"devices": devices,
+	})
 }
 
 // AddDevice handles POST /api/v1/devices
@@ -436,6 +444,97 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(config)
+}
+
+// GetCurrentDeviceConfig handles GET /api/v1/devices/{id}/config/current
+// Returns the current live device configuration directly from the device
+func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid device ID",
+		})
+		return
+	}
+
+	// Get current configuration directly from the device
+	config, err := h.Service.ImportDeviceConfig(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to get current device config from device")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":       true,
+		"configuration": config,
+	})
+}
+
+// GetCurrentDeviceConfigNormalized handles GET /api/v1/devices/{id}/config/current/normalized
+// Returns the current live device configuration in normalized format for comparison
+func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid device ID",
+		})
+		return
+	}
+
+	// Get current configuration directly from the device
+	config, err := h.Service.ImportDeviceConfig(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to get current device config from device for normalization")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// Parse the raw config for normalization
+	var rawConfig map[string]interface{}
+	if err := json.Unmarshal(config.Config, &rawConfig); err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to parse device config for normalization")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Failed to parse device configuration",
+		})
+		return
+	}
+
+	// Normalize the configuration
+	normalizer := NewConfigNormalizer()
+	normalized := normalizer.NormalizeRawConfig(rawConfig)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":       true,
+		"configuration": normalized,
+	})
 }
 
 // ImportDeviceConfig handles POST /api/v1/devices/{id}/config/import

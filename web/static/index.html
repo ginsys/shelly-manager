@@ -1400,7 +1400,8 @@
                 const response = await fetch(`${API_BASE}/devices`);
                 if (!response.ok) throw new Error('Failed to fetch devices');
                 
-                const devices = await response.json();
+                const responseData = await response.json();
+                const devices = responseData.devices || [];
                 displayDevices(devices);
                 updateStatus('🟢 Connected', devices.length);
                 updateLastRefresh();
@@ -3136,7 +3137,8 @@
                 const response = await fetch(`${API_BASE}/devices`);
                 if (!response.ok) throw new Error('Failed to fetch devices');
                 
-                const devices = await response.json();
+                const responseData = await response.json();
+                const devices = responseData.devices || [];
                 displayBulkDevices(devices);
             } catch (error) {
                 console.error('Error loading devices for bulk:', error);
@@ -3193,13 +3195,16 @@
 
         async function bulkImportConfig() {
             if (selectedDevices.size === 0) {
-                console.log('Please select at least one device');
+                showNotification('⚠️ Please select at least one device', 'warning');
                 return;
             }
             
-            console.log(`Starting import for ${selectedDevices.size} device(s)`);
+            const totalDevices = selectedDevices.size;
+            console.log(`Starting import for ${totalDevices} device(s)`);
             
-            console.log(`Starting bulk import for ${selectedDevices.size} devices...`);
+            // Show progress notification
+            showNotification(`🔄 Starting bulk import for ${totalDevices} devices...`, 'info');
+            
             let success = 0, failed = 0;
             const results = [];
             
@@ -3207,7 +3212,10 @@
             let current = 0;
             for (const deviceId of selectedDevices) {
                 current++;
-                console.log(`Processing device ${current} of ${selectedDevices.size} (ID: ${deviceId})...`);
+                
+                // Update progress notification
+                showNotification(`🔄 Processing device ${current} of ${totalDevices}...`, 'info');
+                console.log(`Processing device ${current} of ${totalDevices} (ID: ${deviceId})...`);
                 
                 try {
                     const response = await fetch(`${API_BASE}/devices/${deviceId}/config/import`, { 
@@ -3231,17 +3239,25 @@
                 }
                 
                 // Add small delay between requests to avoid overwhelming devices
-                if (current < selectedDevices.size) {
+                if (current < totalDevices) {
                     await new Promise(resolve => setTimeout(resolve, 300));
                 }
             }
             
-            // Show results
-            let message = `Import complete: ${success} succeeded, ${failed} failed`;
-            if (results.length > 0) {
-                message += '\n\nErrors:\n' + results.join('\n');
+            // Show completion results
+            if (failed === 0) {
+                showNotification(`✅ Import complete! ${success} devices imported successfully`, 'success');
+            } else if (success === 0) {
+                showNotification(`❌ Import failed for all ${failed} devices`, 'error');
+            } else {
+                showNotification(`⚠️ Import complete: ${success} succeeded, ${failed} failed`, 'warning');
             }
-            console.log(message);
+            
+            // Show detailed results if there were errors
+            if (results.length > 0) {
+                console.log('Import errors:', results);
+                // You could also show a detailed modal here if needed
+            }
         }
 
         async function bulkExportConfig() {

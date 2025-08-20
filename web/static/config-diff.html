@@ -604,7 +604,7 @@
 
         async function loadCurrentConfiguration(deviceId) {
             try {
-                const response = await fetch(`/api/v1/devices/${deviceId}/config/current`);
+                const response = await fetch(`/api/v1/devices/${deviceId}/config/current/normalized`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -621,7 +621,7 @@
 
         async function loadSavedConfiguration(deviceId) {
             try {
-                const response = await fetch(`/api/v1/devices/${deviceId}/config/typed`);
+                const response = await fetch(`/api/v1/devices/${deviceId}/config/typed/normalized`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -733,50 +733,121 @@
         }
 
         function generateDiff(leftConfig, rightConfig) {
-            const leftLines = JSON.stringify(leftConfig, null, 2).split('\n');
-            const rightLines = JSON.stringify(rightConfig, null, 2).split('\n');
+            // Configurations are already normalized by the server
+            const leftNorm = flattenConfig(leftConfig);
+            const rightNorm = flattenConfig(rightConfig);
             
-            // Simple line-by-line diff
+            // Generate semantic diff
             const diff = {
                 left: [],
                 right: [],
-                stats: { added: 0, removed: 0, changed: 0, total: Math.max(leftLines.length, rightLines.length) },
+                stats: { added: 0, removed: 0, changed: 0, total: 0 },
                 changes: []
             };
             
-            const maxLines = Math.max(leftLines.length, rightLines.length);
+            // Compare normalized configurations
+            const allKeys = new Set([...Object.keys(leftNorm), ...Object.keys(rightNorm)]);
             
-            for (let i = 0; i < maxLines; i++) {
-                const leftLine = leftLines[i] || '';
-                const rightLine = rightLines[i] || '';
-                const lineNum = i + 1;
+            for (const key of allKeys) {
+                const leftValue = leftNorm[key];
+                const rightValue = rightNorm[key];
                 
-                if (leftLine === rightLine) {
-                    // No change
-                    diff.left.push({ type: 'context', line: leftLine, number: lineNum });
-                    diff.right.push({ type: 'context', line: rightLine, number: lineNum });
-                } else if (leftLine && !rightLine) {
-                    // Line removed
-                    diff.left.push({ type: 'removed', line: leftLine, number: lineNum });
-                    diff.right.push({ type: 'removed', line: '', number: lineNum });
-                    diff.stats.removed++;
-                    diff.changes.push({ type: 'remove', path: `Line ${lineNum}`, value: leftLine.trim() });
-                } else if (!leftLine && rightLine) {
-                    // Line added
-                    diff.left.push({ type: 'added', line: '', number: lineNum });
-                    diff.right.push({ type: 'added', line: rightLine, number: lineNum });
+                if (leftValue === undefined && rightValue !== undefined) {
+                    // Added in right
+                    diff.changes.push({ 
+                        type: 'add', 
+                        path: key, 
+                        value: rightValue 
+                    });
                     diff.stats.added++;
-                    diff.changes.push({ type: 'add', path: `Line ${lineNum}`, value: rightLine.trim() });
-                } else {
-                    // Line changed
-                    diff.left.push({ type: 'changed', line: leftLine, number: lineNum });
-                    diff.right.push({ type: 'changed', line: rightLine, number: lineNum });
+                } else if (leftValue !== undefined && rightValue === undefined) {
+                    // Removed from right
+                    diff.changes.push({ 
+                        type: 'remove', 
+                        path: key, 
+                        value: leftValue 
+                    });
+                    diff.stats.removed++;
+                } else if (leftValue !== rightValue) {
+                    // Changed
+                    diff.changes.push({ 
+                        type: 'modify', 
+                        path: key, 
+                        value: `"${leftValue}" → "${rightValue}"` 
+                    });
                     diff.stats.changed++;
-                    diff.changes.push({ type: 'modify', path: `Line ${lineNum}`, value: `"${leftLine.trim()}" → "${rightLine.trim()}"` });
                 }
             }
             
+            diff.stats.total = allKeys.size;
+            
+            // Generate formatted display
+            const leftDisplay = generateConfigDisplay(leftNorm, diff.changes, 'left');
+            const rightDisplay = generateConfigDisplay(rightNorm, diff.changes, 'right');
+            
+            diff.left = leftDisplay;
+            diff.right = rightDisplay;
+            
             return diff;
+        }
+        
+        // Flatten nested config object to dot notation for comparison
+        function flattenConfig(obj, prefix = '', result = {}) {
+            if (obj === null || obj === undefined) {
+                return result;
+            }
+            
+            for (const key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    const value = obj[key];
+                    const newKey = prefix ? `${prefix}.${key}` : key;
+                    
+                    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                        flattenConfig(value, newKey, result);
+                    } else {
+                        // Skip null/undefined values
+                        if (value !== null && value !== undefined) {
+                            result[newKey] = value;
+                        }
+                    }
+                }
+            }
+            
+            return result;
+        }
+        
+        function generateConfigDisplay(normalizedConfig, changes, side) {
+            const display = [];
+            let lineNumber = 1;
+            
+            const changeMap = new Map();
+            changes.forEach(change => {
+                changeMap.set(change.path, change);
+            });
+            
+            // Sort keys for consistent display
+            const sortedKeys = Object.keys(normalizedConfig).sort();
+            
+            for (const key of sortedKeys) {
+                const value = normalizedConfig[key];
+                const change = changeMap.get(key);
+                
+                let type = 'context';
+                if (change) {
+                    if (change.type === 'add' && side === 'right') type = 'added';
+                    else if (change.type === 'remove' && side === 'left') type = 'removed';
+                    else if (change.type === 'modify') type = 'changed';
+                }
+                
+                const line = `${key}: ${JSON.stringify(value)}`;
+                display.push({
+                    type: type,
+                    line: line,
+                    number: lineNumber++
+                });
+            }
+            
+            return display;
         }
 
         function displayDiff(diff, leftType, rightType) {

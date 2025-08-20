@@ -411,6 +411,14 @@ func getConfigFilePath() string {
 	return "default (./configs/shelly-provisioner.yaml)"
 }
 
+func getActualConfigPath(configFile string) string {
+	if configFile != "" {
+		return configFile
+	}
+	// Return the expected default path
+	return "./configs/shelly-provisioner.yaml"
+}
+
 func registerWithAPI() error {
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
@@ -678,8 +686,26 @@ func initApp() {
 	// Set as default logger
 	logging.SetDefault(logger)
 
-	// Log configuration load
-	logger.LogConfigLoad(configFile, nil)
+	// Log configuration load with the actual path used
+	actualConfigFile := getActualConfigPath(configFile)
+	logger.LogConfigLoad(actualConfigFile, nil)
+
+	// Use config file values for API URL and key if not provided via flags
+	if apiURL == "" && cfg.API.URL != "" {
+		apiURL = cfg.API.URL
+		logger.WithFields(map[string]any{
+			"api_url":   apiURL,
+			"source":    "config_file",
+			"component": "app",
+		}).Info("Using API URL from config file")
+	}
+	if apiKey == "" && cfg.API.Key != "" {
+		apiKey = cfg.API.Key
+		logger.WithFields(map[string]any{
+			"source":    "config_file",
+			"component": "app",
+		}).Info("Using API key from config file")
+	}
 
 	// Initialize provisioning manager
 	provisioningManager = provisioning.NewProvisioningManager(cfg, logger)

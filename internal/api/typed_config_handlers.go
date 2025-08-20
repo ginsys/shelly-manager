@@ -43,17 +43,31 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid device ID",
+		})
 		return
 	}
 
 	// Get device info for validation context
 	device, err := h.DB.GetDevice(uint(id))
 	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
 		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Device not found", http.StatusNotFound)
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Device not found",
+			})
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   err.Error(),
+			})
 		}
 		return
 	}
@@ -65,7 +79,12 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get device config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
@@ -76,7 +95,12 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to convert to typed config")
-		http.Error(w, fmt.Sprintf("Failed to convert configuration: %v", err), http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("Failed to convert configuration: %v", err),
+		})
 		return
 	}
 
@@ -96,8 +120,90 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		ConversionInfo:   conversionInfo,
 	}
 
+	// Wrap response with success for frontend compatibility
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":       true,
+		"configuration": response,
+	})
+}
+
+// GetTypedDeviceConfigNormalized handles GET /api/v1/devices/{id}/config/typed/normalized
+// Returns the saved typed configuration in normalized format for comparison
+func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid device ID",
+		})
+		return
+	}
+
+	// Get device info for validation context
+	device, err := h.DB.GetDevice(uint(id))
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if err == gorm.ErrRecordNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   "Device not found",
+			})
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success": false,
+				"error":   err.Error(),
+			})
+		}
+		return
+	}
+
+	// Get device configuration (may be raw JSON or typed)
+	rawConfig, err := h.Service.GetDeviceConfig(uint(id))
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to get device config for normalization")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// Convert to typed configuration
+	typedConfig, _, err := h.convertToTypedConfig(rawConfig.Config, device)
+	if err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+		}).Error("Failed to convert to typed config for normalization")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   fmt.Sprintf("Failed to convert configuration: %v", err),
+		})
+		return
+	}
+
+	// Normalize the typed configuration
+	normalizer := NewConfigNormalizer()
+	normalized := normalizer.NormalizeTypedConfig(typedConfig)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":       true,
+		"configuration": normalized,
+	})
 }
 
 // UpdateTypedDeviceConfig handles PUT /api/v1/devices/{id}/config/typed
@@ -577,8 +683,22 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 		}
 	}
 
-	// Convert capability-specific configurations based on device type
-	deviceCapabilities := h.getDeviceCapabilities(device.Type, h.extractGeneration(device.Firmware))
+	// Extract model from device settings for accurate capability detection
+	var settings map[string]interface{}
+	model := device.Type // fallback to device type
+	generation := h.extractGeneration(device.Firmware)
+
+	if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil {
+		if modelStr, ok := settings["model"].(string); ok && modelStr != "" {
+			model = modelStr
+		}
+		if genFloat, ok := settings["gen"].(float64); ok {
+			generation = int(genFloat)
+		}
+	}
+
+	// Convert capability-specific configurations based on device model
+	deviceCapabilities := h.getDeviceCapabilities(model, generation)
 
 	// Convert Relay configuration
 	if contains(deviceCapabilities, "relay") {
@@ -742,6 +862,8 @@ func (h *Handler) getDeviceCapabilities(model string, generation int) []string {
 		capabilities = append(capabilities, "rgbw", "dimming")
 	case strings.Contains(model, "SHHT"):
 		capabilities = append(capabilities, "humidity", "temperature")
+	case strings.Contains(model, "SHIX3"):
+		capabilities = append(capabilities, "input")
 	}
 
 	// Generation-specific capabilities
@@ -1065,32 +1187,92 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 		}
 	}
 
-	// Check for multi-relay devices (SHSW-25, etc.)
+	// Check for "relays" array format (most common format)
 	var relayConfigs []configuration.SingleRelayConfig
-	for i := 0; i < 2; i++ {
-		relayKey := fmt.Sprintf("relay_%d", i)
-		if relayData, ok := data[relayKey].(map[string]interface{}); ok {
-			singleRelay := configuration.SingleRelayConfig{
-				ID: i,
+	if relaysData, ok := data["relays"].([]interface{}); ok {
+		for i, relayData := range relaysData {
+			if relayMap, ok := relayData.(map[string]interface{}); ok {
+				singleRelay := configuration.SingleRelayConfig{
+					ID: i,
+				}
+
+				if name, ok := relayMap["name"].(string); ok && name != "" {
+					singleRelay.Name = name
+				} else if appType, ok := relayMap["appliance_type"].(string); ok {
+					singleRelay.Name = appType
+				}
+
+				if defaultState, ok := relayMap["default_state"].(string); ok {
+					singleRelay.DefaultState = defaultState
+					// Also set global default state from first relay
+					if i == 0 && relay.DefaultState == "" {
+						relay.DefaultState = defaultState
+					}
+				}
+				if autoOn, ok := relayMap["auto_on"].(float64); ok {
+					autoOnInt := int(autoOn)
+					singleRelay.AutoOn = &autoOnInt
+					// Also set global auto_on from first relay
+					if i == 0 && relay.AutoOn == nil {
+						relay.AutoOn = &autoOnInt
+					}
+				}
+				if autoOff, ok := relayMap["auto_off"].(float64); ok {
+					autoOffInt := int(autoOff)
+					singleRelay.AutoOff = &autoOffInt
+					// Also set global auto_off from first relay
+					if i == 0 && relay.AutoOff == nil {
+						relay.AutoOff = &autoOffInt
+					}
+				}
+				if schedule, ok := relayMap["schedule"].(bool); ok {
+					singleRelay.Schedule = schedule
+				}
+				if btnType, ok := relayMap["btn_type"].(string); ok {
+					// Set global button type from first relay
+					if i == 0 && relay.ButtonType == "" {
+						relay.ButtonType = btnType
+					}
+				}
+				if hasTimer, ok := relayMap["has_timer"].(bool); ok {
+					// Set global has_timer from first relay
+					if i == 0 {
+						relay.HasTimer = hasTimer
+					}
+				}
+
+				relayConfigs = append(relayConfigs, singleRelay)
 			}
-			if name, ok := relayData["name"].(string); ok {
-				singleRelay.Name = name
+		}
+	}
+
+	// Check for multi-relay devices (SHSW-25, etc.) - relay_0, relay_1 format
+	if len(relayConfigs) == 0 {
+		for i := 0; i < 2; i++ {
+			relayKey := fmt.Sprintf("relay_%d", i)
+			if relayData, ok := data[relayKey].(map[string]interface{}); ok {
+				singleRelay := configuration.SingleRelayConfig{
+					ID: i,
+				}
+				if name, ok := relayData["name"].(string); ok {
+					singleRelay.Name = name
+				}
+				if defaultState, ok := relayData["default_state"].(string); ok {
+					singleRelay.DefaultState = defaultState
+				}
+				if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
+					autoOnInt := int(autoOn)
+					singleRelay.AutoOn = &autoOnInt
+				}
+				if autoOff, ok := relayData["auto_off"].(float64); ok && autoOff > 0 {
+					autoOffInt := int(autoOff)
+					singleRelay.AutoOff = &autoOffInt
+				}
+				if schedule, ok := relayData["schedule"].(bool); ok {
+					singleRelay.Schedule = schedule
+				}
+				relayConfigs = append(relayConfigs, singleRelay)
 			}
-			if defaultState, ok := relayData["default_state"].(string); ok {
-				singleRelay.DefaultState = defaultState
-			}
-			if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
-				autoOnInt := int(autoOn)
-				singleRelay.AutoOn = &autoOnInt
-			}
-			if autoOff, ok := relayData["auto_off"].(float64); ok && autoOff > 0 {
-				autoOffInt := int(autoOff)
-				singleRelay.AutoOff = &autoOffInt
-			}
-			if schedule, ok := relayData["schedule"].(bool); ok {
-				singleRelay.Schedule = schedule
-			}
-			relayConfigs = append(relayConfigs, singleRelay)
 		}
 	}
 
@@ -1103,6 +1285,11 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 		if defaultState, ok := data["default_state"].(string); ok {
 			relay.DefaultState = defaultState
 		}
+	}
+
+	// Ensure we always have at least a default state to prevent empty object
+	if relay.DefaultState == "" {
+		relay.DefaultState = "off" // Sensible default
 	}
 
 	return relay, warnings
@@ -1255,7 +1442,51 @@ func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuratio
 	input := &configuration.InputConfig{}
 	var warnings []string
 
-	// Check for input configuration
+	// Check for inputs array configuration (for multi-input devices like SHIX3-1)
+	if inputsData, ok := data["inputs"].([]interface{}); ok {
+		for i, inputData := range inputsData {
+			if inputMap, ok := inputData.(map[string]interface{}); ok {
+				singleInput := configuration.SingleInputConfig{ID: i}
+
+				// Extract individual input properties
+				if name, ok := inputMap["name"].(string); ok && name != "" {
+					singleInput.Name = name
+				}
+				if btnType, ok := inputMap["btn_type"].(string); ok {
+					singleInput.Type = "button" // Default type
+					singleInput.Mode = btnType
+				}
+				if btnReverse, ok := inputMap["btn_reverse"].(float64); ok {
+					singleInput.Inverted = btnReverse != 0
+				}
+
+				// Add timing settings from global config
+				if longPushDuration, ok := data["longpush_duration_ms"].(map[string]interface{}); ok {
+					if _, ok := longPushDuration["min"].(float64); ok {
+						singleInput.LongPushAction = "long" // Default action
+					}
+				}
+
+				input.Inputs = append(input.Inputs, singleInput)
+			}
+		}
+
+		// Set global input properties from timing configurations
+		if longPushDuration, ok := data["longpush_duration_ms"].(map[string]interface{}); ok {
+			if minDuration, ok := longPushDuration["min"].(float64); ok {
+				input.LongPushTime = int(minDuration)
+			}
+		}
+		if multiPushTime, ok := data["multipush_time_between_pushes_ms"].(map[string]interface{}); ok {
+			if maxTime, ok := multiPushTime["max"].(float64); ok {
+				input.MultiPushTime = int(maxTime)
+			}
+		}
+
+		return input, warnings
+	}
+
+	// Check for single input configuration
 	if inputData, ok := data["input"].(map[string]interface{}); ok {
 		data = inputData
 	} else if input0Data, ok := data["input_0"].(map[string]interface{}); ok {

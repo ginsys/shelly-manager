@@ -391,7 +391,7 @@ func (s *Service) CollectMetrics(ctx context.Context) error {
 
 	s.logger.WithFields(map[string]any{
 		"component": "metrics",
-	}).Info("Starting metrics collection")
+	}).Debug("Starting metrics collection")
 
 	// Collect drift metrics
 	if err := s.collectDriftMetrics(ctx); err != nil {
@@ -423,7 +423,7 @@ func (s *Service) CollectMetrics(ctx context.Context) error {
 	s.logger.WithFields(map[string]any{
 		"duration":  duration,
 		"component": "metrics",
-	}).Info("Completed metrics collection")
+	}).Debug("Completed metrics collection")
 
 	return nil
 }
