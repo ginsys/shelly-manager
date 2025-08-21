@@ -14,16 +14,17 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
 func TestReportDiscoveredDevicesDatabase(t *testing.T) {
-	// Setup test database
+	// Setup test database with proper isolation
+	dbManager, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+
+	// Create logger
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err)
-
-	dbManager, err := database.NewManagerWithLogger(":memory:", logger)
-	require.NoError(t, err)
-	defer dbManager.Close()
 
 	// Create handler
 	handler := &Handler{DB: dbManager, logger: logger}
@@ -77,7 +78,7 @@ func TestReportDiscoveredDevicesDatabase(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		err := json.Unmarshal(w.Body.Bytes(), &response)
+		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
@@ -173,18 +174,7 @@ func TestReportDiscoveredDevicesDatabase(t *testing.T) {
 }
 
 func TestGetDiscoveredDevicesDatabase(t *testing.T) {
-	// Setup test database
-	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
-	require.NoError(t, err)
-
-	dbManager, err := database.NewManagerWithLogger(":memory:", logger)
-	require.NoError(t, err)
-	defer dbManager.Close()
-
-	// Create handler
-	handler := &Handler{DB: dbManager, logger: logger}
-
-	// Seed test data
+	// Define test data that will be used by all subtests
 	testDevices := []*database.DiscoveredDevice{
 		{
 			MAC:        "aa:bb:cc:dd:ee:ff",
@@ -224,12 +214,23 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 		},
 	}
 
-	for _, device := range testDevices {
-		err := dbManager.AddDiscoveredDevice(device)
-		require.NoError(t, err)
-	}
-
 	t.Run("GetAllDiscoveredDevices", func(t *testing.T) {
+		// Create isolated database for this subtest
+		dbManager, cleanup := testutil.TestDatabase(t)
+		defer cleanup()
+
+		// Create logger
+		logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+		require.NoError(t, err)
+
+		// Seed test data for this specific test
+		for _, device := range testDevices {
+			err := dbManager.AddDiscoveredDevice(device)
+			require.NoError(t, err)
+		}
+
+		// Create handler with isolated database
+		handler := &Handler{DB: dbManager, logger: logger}
 		req := httptest.NewRequest("GET", "/api/v1/provisioner/discovered-devices", nil)
 		w := httptest.NewRecorder()
 
@@ -238,7 +239,7 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		err := json.Unmarshal(w.Body.Bytes(), &response)
+		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
@@ -250,6 +251,22 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 	})
 
 	t.Run("GetDiscoveredDevicesFilteredByAgent", func(t *testing.T) {
+		// Create isolated database for this subtest
+		dbManager, cleanup := testutil.TestDatabase(t)
+		defer cleanup()
+
+		// Create logger
+		logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+		require.NoError(t, err)
+
+		// Seed test data for this specific test
+		for _, device := range testDevices {
+			err := dbManager.AddDiscoveredDevice(device)
+			require.NoError(t, err)
+		}
+
+		// Create handler with isolated database
+		handler := &Handler{DB: dbManager, logger: logger}
 		req := httptest.NewRequest("GET", "/api/v1/provisioner/discovered-devices?agent_id=agent-1", nil)
 		w := httptest.NewRecorder()
 
@@ -258,7 +275,7 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		err := json.Unmarshal(w.Body.Bytes(), &response)
+		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
@@ -276,6 +293,22 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 	})
 
 	t.Run("GetDiscoveredDevicesEmptyResult", func(t *testing.T) {
+		// Create isolated database for this subtest
+		dbManager, cleanup := testutil.TestDatabase(t)
+		defer cleanup()
+
+		// Create logger
+		logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+		require.NoError(t, err)
+
+		// Seed test data for this specific test
+		for _, device := range testDevices {
+			err := dbManager.AddDiscoveredDevice(device)
+			require.NoError(t, err)
+		}
+
+		// Create handler with isolated database
+		handler := &Handler{DB: dbManager, logger: logger}
 		req := httptest.NewRequest("GET", "/api/v1/provisioner/discovered-devices?agent_id=non-existent-agent", nil)
 		w := httptest.NewRecorder()
 
@@ -284,7 +317,7 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		err := json.Unmarshal(w.Body.Bytes(), &response)
+		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
@@ -297,13 +330,13 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 }
 
 func TestDiscoveredDevicesDatabaseIntegration(t *testing.T) {
-	// Setup test database
+	// Setup test database with proper isolation
+	dbManager, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+
+	// Create logger
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err)
-
-	dbManager, err := database.NewManagerWithLogger(":memory:", logger)
-	require.NoError(t, err)
-	defer dbManager.Close()
 
 	// Create handler and router
 	handler := &Handler{DB: dbManager, logger: logger}
@@ -359,7 +392,7 @@ func TestDiscoveredDevicesDatabaseIntegration(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		err := json.Unmarshal(w.Body.Bytes(), &response)
+		err = json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))

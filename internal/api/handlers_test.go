@@ -45,7 +45,8 @@ func testNotificationHandler(t *testing.T, db *database.Manager) *notification.H
 
 func TestGetDevices(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -98,7 +99,8 @@ func TestGetDevices(t *testing.T) {
 
 func TestAddDevice(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -133,7 +135,8 @@ func TestAddDevice(t *testing.T) {
 }
 
 func TestAddDevice_InvalidJSON(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -152,7 +155,8 @@ func TestAddDevice_InvalidJSON(t *testing.T) {
 
 func TestGetDevice(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -182,7 +186,8 @@ func TestGetDevice(t *testing.T) {
 }
 
 func TestGetDevice_NotFound(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -200,7 +205,8 @@ func TestGetDevice_NotFound(t *testing.T) {
 }
 
 func TestGetDevice_InvalidID(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -219,7 +225,8 @@ func TestGetDevice_InvalidID(t *testing.T) {
 
 func TestUpdateDevice(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -262,7 +269,8 @@ func TestUpdateDevice(t *testing.T) {
 }
 
 func TestUpdateDevice_NotFound(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -286,7 +294,8 @@ func TestUpdateDevice_NotFound(t *testing.T) {
 
 func TestDeleteDevice(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -313,7 +322,8 @@ func TestDeleteDevice(t *testing.T) {
 }
 
 func TestDeleteDevice_NotFound(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -331,7 +341,8 @@ func TestDeleteDevice_NotFound(t *testing.T) {
 }
 
 func TestDiscoverHandler(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -361,7 +372,8 @@ func TestGetProvisioningStatus(t *testing.T) {
 		t.Skip("Skipping network test in short mode")
 	}
 
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -387,7 +399,8 @@ func TestGetProvisioningStatus(t *testing.T) {
 }
 
 func TestProvisionDevices(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -413,7 +426,8 @@ func TestProvisionDevices(t *testing.T) {
 }
 
 func TestGetDHCPReservations(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -442,7 +456,8 @@ func TestAPIRouter(t *testing.T) {
 		t.Skip("Skipping network test in short mode")
 	}
 
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -490,7 +505,8 @@ func TestControlDevice(t *testing.T) {
 	}
 
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -520,7 +536,8 @@ func TestControlDevice(t *testing.T) {
 
 func TestControlDevice_InvalidID(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -542,7 +559,8 @@ func TestControlDevice_InvalidID(t *testing.T) {
 
 func TestControlDevice_InvalidJSON(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -559,7 +577,8 @@ func TestControlDevice_InvalidJSON(t *testing.T) {
 
 func TestControlDevice_MissingAction(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -585,7 +604,8 @@ func TestGetDeviceStatus(t *testing.T) {
 	}
 
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -607,7 +627,8 @@ func TestGetDeviceStatus(t *testing.T) {
 
 func TestGetDeviceStatus_InvalidID(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -627,7 +648,8 @@ func TestGetDeviceEnergy(t *testing.T) {
 	}
 
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -649,7 +671,8 @@ func TestGetDeviceEnergy(t *testing.T) {
 
 func TestGetDeviceConfig(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -671,7 +694,8 @@ func TestGetDeviceConfig(t *testing.T) {
 
 func TestGetCurrentDeviceConfig(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -702,7 +726,8 @@ func TestGetCurrentDeviceConfig(t *testing.T) {
 
 func TestGetConfigTemplates(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -722,7 +747,8 @@ func TestGetConfigTemplates(t *testing.T) {
 
 func TestCreateConfigTemplate(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -746,7 +772,8 @@ func TestCreateConfigTemplate(t *testing.T) {
 
 func TestCreateConfigTemplate_InvalidJSON(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -766,7 +793,8 @@ func TestDetectConfigDrift(t *testing.T) {
 	}
 
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -788,7 +816,8 @@ func TestDetectConfigDrift(t *testing.T) {
 
 func TestBulkDetectConfigDrift(t *testing.T) {
 	// Setup
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -803,7 +832,8 @@ func TestBulkDetectConfigDrift(t *testing.T) {
 }
 
 func TestNewHandler(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 
@@ -817,7 +847,8 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestGetProvisioningStatusNew(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -840,7 +871,8 @@ func TestGetProvisioningStatusNew(t *testing.T) {
 }
 
 func TestGetDeviceEnergy_InvalidID(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -859,7 +891,8 @@ func TestImportDeviceConfig(t *testing.T) {
 		t.Skip("Skipping network test in short mode")
 	}
 
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -880,7 +913,8 @@ func TestImportDeviceConfig(t *testing.T) {
 }
 
 func TestImportDeviceConfig_InvalidID(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -895,7 +929,8 @@ func TestImportDeviceConfig_InvalidID(t *testing.T) {
 }
 
 func TestGetImportStatus(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -927,7 +962,8 @@ func TestExportDeviceConfig(t *testing.T) {
 		t.Skip("Skipping network test in short mode")
 	}
 
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -948,7 +984,8 @@ func TestExportDeviceConfig(t *testing.T) {
 }
 
 func TestBulkImportConfigs(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -983,7 +1020,8 @@ func TestBulkImportConfigs(t *testing.T) {
 }
 
 func TestBulkExportConfigs(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -1018,7 +1056,8 @@ func TestBulkExportConfigs(t *testing.T) {
 }
 
 func TestDetectConfigDrift_InvalidID(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -1033,7 +1072,8 @@ func TestDetectConfigDrift_InvalidID(t *testing.T) {
 }
 
 func TestUpdateConfigTemplate(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -1074,7 +1114,8 @@ func TestUpdateConfigTemplate(t *testing.T) {
 }
 
 func TestDeleteConfigTemplate(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -1104,7 +1145,8 @@ func TestDeleteConfigTemplate(t *testing.T) {
 }
 
 func TestApplyConfigTemplate(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
@@ -1144,7 +1186,8 @@ func TestApplyConfigTemplate(t *testing.T) {
 }
 
 func TestGetConfigHistory(t *testing.T) {
-	db := testutil.TestDatabase(t)
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
