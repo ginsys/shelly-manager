@@ -73,7 +73,8 @@ func TestTestConfig(t *testing.T) {
 }
 
 func TestTestDatabase(t *testing.T) {
-	db := TestDatabase(t)
+	db, cleanup := TestDatabase(t)
+	defer cleanup()
 
 	if db == nil {
 		t.Fatal("TestDatabase should return a database manager")
@@ -446,7 +447,8 @@ func TestTestutilIntegration(t *testing.T) {
 	AssertEqual(t, 8080, cfg.Server.Port)
 
 	// Create test database
-	db := TestDatabase(t)
+	db, cleanup := TestDatabase(t)
+	defer cleanup()
 
 	// Create test device and add to database
 	device := TestDevice()

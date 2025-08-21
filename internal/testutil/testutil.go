@@ -11,6 +11,8 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/stretchr/testify/require"
 )
 
 // TestConfig creates a test configuration
@@ -50,13 +52,51 @@ func TestConfig() *config.Config {
 	}
 }
 
-// TestDatabase creates a test database manager
-func TestDatabase(t *testing.T) *database.Manager {
-	db, err := database.NewManager(":memory:")
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
+// TestDatabase creates a test database manager with proper isolation
+// It returns the database manager and a cleanup function that should be deferred
+func TestDatabase(t *testing.T) (*database.Manager, func()) {
+	// Create a unique temporary file for this test to avoid in-memory issues
+	tmpFile, err := os.CreateTemp("", "test-*.db")
+	require.NoError(t, err, "Failed to create temp file for test database")
+	tmpFile.Close() // Close the file handle, we just need the path
+
+	// Create logger for the database
+	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+	require.NoError(t, err, "Failed to create logger")
+
+	// Create database manager with the temporary file
+	dbManager, err := database.NewManagerWithLogger(tmpFile.Name(), logger)
+	require.NoError(t, err, "Failed to create test database")
+
+	// Return cleanup function that closes DB and removes temp file
+	cleanup := func() {
+		if dbManager != nil {
+			dbManager.Close()
+		}
+		os.Remove(tmpFile.Name())
 	}
-	return db
+
+	return dbManager, cleanup
+}
+
+// TestDatabaseMemory creates an in-memory test database with shared cache
+// This is faster but should be used carefully to avoid race conditions
+func TestDatabaseMemory(t *testing.T) (*database.Manager, func()) {
+	// Use shared cache to prevent table disappearing issues
+	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+	require.NoError(t, err, "Failed to create logger")
+
+	// Use file::memory:?cache=shared for shared in-memory database
+	dbManager, err := database.NewManagerWithLogger("file::memory:?cache=shared", logger)
+	require.NoError(t, err, "Failed to create test database")
+
+	cleanup := func() {
+		if dbManager != nil {
+			dbManager.Close()
+		}
+	}
+
+	return dbManager, cleanup
 }
 
 // TestDevice creates a test device
