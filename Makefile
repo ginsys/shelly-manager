@@ -188,7 +188,8 @@ hooks-install:
 	@echo "Installing git pre-commit hook..."
 	@echo '#!/bin/bash' > .git/hooks/pre-commit
 	@echo '#' >> .git/hooks/pre-commit
-	@echo '# Pre-commit hook for Go code formatting and basic linting' >> .git/hooks/pre-commit
+	@echo '# Pre-commit hook for Go code formatting and comprehensive linting' >> .git/hooks/pre-commit
+	@echo '# This hook runs the same linting as CI to ensure local-CI parity' >> .git/hooks/pre-commit
 	@echo '#' >> .git/hooks/pre-commit
 	@echo '' >> .git/hooks/pre-commit
 	@echo '# Colors for output' >> .git/hooks/pre-commit
@@ -229,10 +230,10 @@ hooks-install:
 	@echo '    echo -e "$${GREEN}Code formatted and added to commit.$${NC}"' >> .git/hooks/pre-commit
 	@echo 'fi' >> .git/hooks/pre-commit
 	@echo '' >> .git/hooks/pre-commit
-	@echo '# Run go vet on the staged files' >> .git/hooks/pre-commit
-	@echo 'echo -e "$${YELLOW}Running go vet...$${NC}"' >> .git/hooks/pre-commit
-	@echo 'if ! go vet ./...; then' >> .git/hooks/pre-commit
-	@echo '    echo -e "$${RED}go vet found issues. Please fix them before committing.$${NC}"' >> .git/hooks/pre-commit
+	@echo '# Run complete lint suite (same as CI)' >> .git/hooks/pre-commit
+	@echo 'echo -e "$${YELLOW}Running complete lint suite (same as CI)...$${NC}"' >> .git/hooks/pre-commit
+	@echo 'if ! make lint-ci; then' >> .git/hooks/pre-commit
+	@echo '    echo -e "$${RED}Linting failed. Please fix issues before committing.$${NC}"' >> .git/hooks/pre-commit
 	@echo '    exit 1' >> .git/hooks/pre-commit
 	@echo 'fi' >> .git/hooks/pre-commit
 	@echo '' >> .git/hooks/pre-commit
@@ -240,7 +241,7 @@ hooks-install:
 	@echo 'exit 0' >> .git/hooks/pre-commit
 	@chmod +x .git/hooks/pre-commit
 	@echo "Pre-commit hook installed successfully!"
-	@echo "The hook will automatically format Go code and run go vet before each commit."
+	@echo "The hook will automatically format Go code and run comprehensive linting (same as CI) before each commit."
 
 # Uninstall git pre-commit hook
 hooks-uninstall:
