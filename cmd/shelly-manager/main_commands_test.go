@@ -119,8 +119,8 @@ func TestDiscoverCommand_Direct(t *testing.T) {
 	cfg = config
 
 	// Just test that the command structure is valid
-	if discoverCmd.Use != "discover" {
-		t.Errorf("Expected discover command use to be 'discover', got %s", discoverCmd.Use)
+	if discoverCmd.Use != "discover [network]" {
+		t.Errorf("Expected discover command use to be 'discover [network]', got %s", discoverCmd.Use)
 	}
 
 	if !strings.Contains(discoverCmd.Short, "Discover devices") {
@@ -218,7 +218,16 @@ func TestServerCommand_Setup(t *testing.T) {
 			LogLevel: "info",
 		},
 		Database: struct {
-			Path string `mapstructure:"path"`
+			Path            string            `mapstructure:"path"`
+			Provider        string            `mapstructure:"provider"`
+			DSN             string            `mapstructure:"dsn"`
+			MaxOpenConns    int               `mapstructure:"max_open_conns"`
+			MaxIdleConns    int               `mapstructure:"max_idle_conns"`
+			ConnMaxLifetime int               `mapstructure:"conn_max_lifetime"`
+			ConnMaxIdleTime int               `mapstructure:"conn_max_idle_time"`
+			SlowQueryTime   int               `mapstructure:"slow_query_time"`
+			LogLevel        string            `mapstructure:"log_level"`
+			Options         map[string]string `mapstructure:"options"`
 		}{
 			Path: ":memory:",
 		},
