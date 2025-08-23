@@ -62,23 +62,20 @@ func TestConfig() *config.Config {
 	}
 }
 
-// TestDatabase creates a test database manager with proper isolation
-// It returns the database manager and a cleanup function that should be deferred
+// TestDatabase creates a test database using provider abstraction
 func TestDatabase(t *testing.T) (*database.Manager, func()) {
 	// Create a unique temporary file for this test to avoid in-memory issues
 	tmpFile, err := os.CreateTemp("", "test-*.db")
-	require.NoError(t, err, "Failed to create temp file for test database")
-	tmpFile.Close() // Close the file handle, we just need the path
+	require.NoError(t, err, "Failed to create temp file")
+	tmpFile.Close()
 
-	// Create logger for the database
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err, "Failed to create logger")
 
-	// Create database manager with the temporary file
-	dbManager, err := database.NewManagerWithLogger(tmpFile.Name(), logger)
+	// Create database manager with the temporary file using provider abstraction
+	dbManager, err := database.NewManagerFromPathWithLogger(tmpFile.Name(), logger)
 	require.NoError(t, err, "Failed to create test database")
 
-	// Return cleanup function that closes DB and removes temp file
 	cleanup := func() {
 		if dbManager != nil {
 			dbManager.Close()
@@ -89,15 +86,14 @@ func TestDatabase(t *testing.T) (*database.Manager, func()) {
 	return dbManager, cleanup
 }
 
-// TestDatabaseMemory creates an in-memory test database with shared cache
+// TestDatabaseMemory creates an in-memory test database using provider abstraction
 // This is faster but should be used carefully to avoid race conditions
 func TestDatabaseMemory(t *testing.T) (*database.Manager, func()) {
-	// Use shared cache to prevent table disappearing issues
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err, "Failed to create logger")
 
 	// Use file::memory:?cache=shared for shared in-memory database
-	dbManager, err := database.NewManagerWithLogger("file::memory:?cache=shared", logger)
+	dbManager, err := database.NewManagerFromPathWithLogger("file::memory:?cache=shared", logger)
 	require.NoError(t, err, "Failed to create test database")
 
 	cleanup := func() {

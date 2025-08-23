@@ -69,7 +69,7 @@ func TestValidateDeviceSettings(t *testing.T) {
 
 func TestAddDeviceWithValidation(t *testing.T) {
 	// Create test database
-	db, err := database.NewManager(":memory:")
+	db, err := database.NewManagerFromPath(":memory:")
 	require.NoError(t, err)
 
 	// Create handler

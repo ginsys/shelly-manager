@@ -35,3 +35,12 @@ type DiscoveredDevice struct {
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
+
+// DiscoveryUpdate contains fields that should be updated during discovery
+type DiscoveryUpdate struct {
+	IP       string
+	Type     string
+	Firmware string
+	Status   string
+	LastSeen time.Time
+}

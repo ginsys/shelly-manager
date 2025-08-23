@@ -257,7 +257,7 @@ func TestShellyService_ErrorHandling(t *testing.T) {
 	// Try to create database inside the file (should fail)
 	invalidDBPath := filepath.Join(blockerFile, "test.db")
 
-	_, err := database.NewManagerWithLogger(invalidDBPath, logger)
+	_, err := database.NewManagerFromPathWithLogger(invalidDBPath, logger)
 	if err == nil {
 		t.Error("Should fail with invalid database path")
 	}
@@ -367,7 +367,7 @@ func BenchmarkShellyService_CreationMock(b *testing.B) {
 		Output: "stderr",
 	})
 
-	db, err := database.NewManagerWithLogger(dbPath, logger)
+	db, err := database.NewManagerFromPathWithLogger(dbPath, logger)
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}

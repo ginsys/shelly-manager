@@ -15,7 +15,7 @@ func TestDiscoveredDeviceOperations(t *testing.T) {
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err)
 
-	manager, err := NewManagerWithLogger(":memory:", logger)
+	manager, err := NewManagerFromPathWithLogger(":memory:", logger)
 	require.NoError(t, err)
 	defer manager.Close()
 
@@ -96,7 +96,7 @@ func TestDiscoveredDeviceOperations(t *testing.T) {
 
 	t.Run("GetDiscoveredDevices_All", func(t *testing.T) {
 		// Clear any existing data
-		manager.DB.Exec("DELETE FROM discovered_devices")
+		manager.GetDB().Exec("DELETE FROM discovered_devices")
 
 		// Add multiple devices
 		devices := []*DiscoveredDevice{
@@ -137,7 +137,7 @@ func TestDiscoveredDeviceOperations(t *testing.T) {
 
 	t.Run("GetDiscoveredDevices_FilteredByAgent", func(t *testing.T) {
 		// Clear any existing data
-		manager.DB.Exec("DELETE FROM discovered_devices")
+		manager.GetDB().Exec("DELETE FROM discovered_devices")
 
 		// Add devices for different agents
 		devices := []*DiscoveredDevice{
@@ -178,7 +178,7 @@ func TestDiscoveredDeviceOperations(t *testing.T) {
 
 	t.Run("GetDiscoveredDevices_ExcludesExpired", func(t *testing.T) {
 		// Clear any existing data
-		manager.DB.Exec("DELETE FROM discovered_devices")
+		manager.GetDB().Exec("DELETE FROM discovered_devices")
 
 		now := time.Now()
 
@@ -211,7 +211,7 @@ func TestDiscoveredDeviceOperations(t *testing.T) {
 
 	t.Run("CleanupExpiredDiscoveredDevices", func(t *testing.T) {
 		// Clear any existing data
-		manager.DB.Exec("DELETE FROM discovered_devices")
+		manager.GetDB().Exec("DELETE FROM discovered_devices")
 
 		now := time.Now()
 
@@ -256,7 +256,7 @@ func TestDiscoveredDeviceOperations(t *testing.T) {
 
 	t.Run("CleanupExpiredDiscoveredDevices_NoExpired", func(t *testing.T) {
 		// Clear any existing data
-		manager.DB.Exec("DELETE FROM discovered_devices")
+		manager.GetDB().Exec("DELETE FROM discovered_devices")
 
 		// Add only valid devices
 		device := &DiscoveredDevice{
@@ -286,7 +286,7 @@ func TestDiscoveredDeviceValidation(t *testing.T) {
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err)
 
-	manager, err := NewManagerWithLogger(":memory:", logger)
+	manager, err := NewManagerFromPathWithLogger(":memory:", logger)
 	require.NoError(t, err)
 	defer manager.Close()
 

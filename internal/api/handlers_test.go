@@ -39,7 +39,7 @@ func testNotificationHandler(t *testing.T, db *database.Manager) *notification.H
 		From:     "test@example.com",
 		TLS:      false,
 	}
-	notificationService := notification.NewService(db.DB, logger, emailConfig)
+	notificationService := notification.NewService(db.GetDB(), logger, emailConfig)
 	return notification.NewHandler(notificationService, logger)
 }
 
@@ -1085,7 +1085,7 @@ func TestUpdateConfigTemplate(t *testing.T) {
 		DeviceType:  "shelly-1",
 		Config:      []byte(`{"relay": {"auto_on": true}}`),
 	}
-	err := db.DB.Create(template).Error
+	err := db.GetDB().Create(template).Error
 	testutil.AssertNoError(t, err)
 
 	// Update the template
@@ -1108,7 +1108,7 @@ func TestUpdateConfigTemplate(t *testing.T) {
 
 	// Verify template was updated
 	var updatedTemplate configuration.ConfigTemplate
-	err = db.DB.First(&updatedTemplate, template.ID).Error
+	err = db.GetDB().First(&updatedTemplate, template.ID).Error
 	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, "Updated Template", updatedTemplate.Name)
 }
@@ -1127,7 +1127,7 @@ func TestDeleteConfigTemplate(t *testing.T) {
 		DeviceType:  "shelly-1",
 		Config:      []byte(`{"relay": {"auto_on": true}}`),
 	}
-	err := db.DB.Create(template).Error
+	err := db.GetDB().Create(template).Error
 	testutil.AssertNoError(t, err)
 
 	req := httptest.NewRequest("DELETE", fmt.Sprintf("/api/v1/config/templates/%d", template.ID), nil)
@@ -1140,7 +1140,7 @@ func TestDeleteConfigTemplate(t *testing.T) {
 
 	// Verify template was deleted
 	var deletedTemplate configuration.ConfigTemplate
-	err = db.DB.First(&deletedTemplate, template.ID).Error
+	err = db.GetDB().First(&deletedTemplate, template.ID).Error
 	testutil.AssertTrue(t, err != nil) // Should not be found
 }
 
@@ -1158,7 +1158,7 @@ func TestApplyConfigTemplate(t *testing.T) {
 		DeviceType:  "shelly-1",
 		Config:      []byte(`{"relay": {"auto_on": true}}`),
 	}
-	err := db.DB.Create(template).Error
+	err := db.GetDB().Create(template).Error
 	testutil.AssertNoError(t, err)
 
 	// Add a test device
