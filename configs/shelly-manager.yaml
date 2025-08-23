@@ -1,2 +1,137 @@
+# Shelly Manager Configuration
+# Complete configuration file showing all available options with their default values
+# Uncomment and modify values as needed for your setup
+
+# Web server configuration
 server:
-  port: 8080
+  port: 8080                 # HTTP server port
+  host: "0.0.0.0"           # Bind address (0.0.0.0 = all interfaces)
+  log_level: "info"         # Server log level (debug, info, warn, error)
+
+# Application logging configuration  
+logging:
+  level: "info"             # Log level (debug, info, warn, error)
+  format: "text"            # Log format (text, json)
+  output: "stdout"          # Log output (stdout, stderr, or file path)
+
+# Database configuration (supports SQLite, PostgreSQL, MySQL)
+database:
+  # Legacy field for backward compatibility
+  path: "data/shelly.db"
+  
+  # Provider-based configuration
+  provider: "sqlite"        # Database provider: "sqlite", "postgresql", "mysql"
+  dsn: "data/shelly.db"     # Data Source Name (connection string)
+  max_open_conns: 1         # Maximum open connections
+  max_idle_conns: 1         # Maximum idle connections  
+  conn_max_lifetime: 300    # Connection max lifetime (seconds)
+  conn_max_idle_time: 600   # Connection max idle time (seconds) 
+  slow_query_time: 500      # Slow query threshold (milliseconds)
+  log_level: "warn"         # Database log level
+  options:                  # Provider-specific options
+    foreign_keys: "true"    # Enable foreign key constraints (SQLite)
+    journal_mode: "WAL"     # Journal mode (SQLite)
+    synchronous: "NORMAL"   # Synchronous mode (SQLite)
+    cache_size: "-64000"    # Cache size -64MB (SQLite)
+    busy_timeout: "5000"    # Busy timeout 5s (SQLite)
+
+# Device discovery configuration
+discovery:
+  enabled: true             # Enable device discovery
+  networks:                 # Networks to scan for devices
+    - "192.168.1.0/24"
+  interval: 300             # Discovery interval (seconds)
+  timeout: 5                # Discovery timeout per device (seconds)
+  enable_mdns: true         # Enable mDNS discovery
+  enable_ssdp: true         # Enable SSDP discovery  
+  concurrent_scans: 20      # Maximum concurrent device scans
+
+# Device provisioning configuration
+provisioning:
+  auth_enabled: false       # Enable authentication on devices
+  auth_user: "admin"        # Default admin username
+  auth_password: ""         # Default admin password (if auth enabled)
+  cloud_enabled: false      # Enable Shelly Cloud integration
+  mqtt_enabled: false       # Enable MQTT on devices
+  mqtt_server: ""           # MQTT server address
+  device_name_pattern: "shelly_{type}_{mac}"  # Device naming pattern
+  auto_provision: false     # Automatically provision discovered devices
+  provision_interval: 600   # Auto-provision check interval (seconds)
+
+# DHCP reservation configuration  
+dhcp:
+  network: "192.168.1.0/24" # Network for DHCP reservations
+  start_ip: "192.168.1.100" # Start of IP range for reservations
+  end_ip: "192.168.1.199"   # End of IP range for reservations
+  auto_reserve: false       # Automatically create DHCP reservations
+
+# OPNSense firewall integration
+opnsense:
+  enabled: false            # Enable OPNSense integration
+  host: ""                  # OPNSense host/IP
+  port: 443                 # OPNSense API port
+  api_key: ""              # OPNSense API key
+  api_secret: ""           # OPNSense API secret
+  auto_apply: false        # Automatically apply firewall changes
+
+# Main application settings (for agent mode)
+main_app:
+  url: "http://localhost:8080"  # Main application URL
+  api_key: ""               # API key for authentication
+  enabled: true             # Enable main app integration
+
+# API client settings (for provisioner agent mode)
+api:
+  url: "http://0.0.0.0:8080"    # API server URL
+  key: ""                   # API authentication key
+  timeout: 30               # Request timeout (seconds)
+  retry_attempts: 3         # Number of retry attempts
+  retry_delay: 5            # Delay between retries (seconds)
+
+# Notification system configuration
+notifications:
+  enabled: true             # Enable notifications
+  
+  # Email notifications
+  email:
+    smtp_host: ""           # SMTP server host
+    smtp_port: 587          # SMTP server port
+    smtp_user: ""           # SMTP username
+    smtp_password: ""       # SMTP password
+    from_address: ""        # From email address
+    tls: true              # Use TLS encryption
+  
+  # Webhook notifications
+  webhooks:
+    - url: ""               # Webhook URL
+      secret: ""            # Webhook secret for signing
+      headers:              # Additional HTTP headers
+        Content-Type: "application/json"
+  
+  # Notification thresholds
+  thresholds:
+    critical_drift_count: 5     # Critical config drift threshold
+    warning_drift_count: 10     # Warning config drift threshold  
+    max_per_hour: 20           # Maximum notifications per hour
+
+# Auto-resolution configuration
+resolution:
+  auto_fix_enabled: false   # Enable automatic issue resolution
+  safe_mode: true          # Safe mode (prevent destructive changes)
+  approval_required: true   # Require approval for auto-fixes
+  auto_fix_categories:      # Categories eligible for auto-fix
+    - "network"
+    - "time"
+  excluded_paths:           # Paths excluded from auto-resolution
+    - "/debug"
+    - "/test"
+
+# Metrics and monitoring configuration
+metrics:
+  enabled: true                     # Enable metrics collection
+  prometheus_enabled: true          # Enable Prometheus metrics
+  prometheus_port: 9090            # Prometheus metrics port
+  collection_interval: 300         # Metrics collection interval (seconds)
+  retention_days: 30               # Metrics retention period (days)
+  enable_http_metrics: true        # Enable HTTP request metrics
+  enable_detailed_timing: false    # Enable detailed timing metrics
