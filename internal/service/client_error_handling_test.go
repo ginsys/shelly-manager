@@ -11,7 +11,7 @@ import (
 
 func TestGetClient_EmptySettings(t *testing.T) {
 	// Create test database
-	db, err := database.NewManager(":memory:")
+	db, err := database.NewManagerFromPath(":memory:")
 	require.NoError(t, err)
 
 	// Create service
@@ -41,7 +41,7 @@ func TestGetClient_EmptySettings(t *testing.T) {
 
 func TestGetClient_InvalidSettings(t *testing.T) {
 	// Create test database
-	db, err := database.NewManager(":memory:")
+	db, err := database.NewManagerFromPath(":memory:")
 	require.NoError(t, err)
 
 	// Create service
@@ -72,7 +72,7 @@ func TestGetClient_InvalidSettings(t *testing.T) {
 
 func TestGetClient_ValidSettings(t *testing.T) {
 	// Create test database
-	db, err := database.NewManager(":memory:")
+	db, err := database.NewManagerFromPath(":memory:")
 	require.NoError(t, err)
 
 	// Create service
@@ -102,7 +102,7 @@ func TestGetClient_ValidSettings(t *testing.T) {
 
 func TestGetClient_AuthEnabledSettings(t *testing.T) {
 	// Create test database
-	db, err := database.NewManager(":memory:")
+	db, err := database.NewManagerFromPath(":memory:")
 	require.NoError(t, err)
 
 	// Create service

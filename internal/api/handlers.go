@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -19,7 +20,7 @@ import (
 
 // Handler contains dependencies for API handlers
 type Handler struct {
-	DB                  *database.Manager
+	DB                  database.DatabaseInterface
 	Service             *service.ShellyService
 	NotificationHandler *notification.Handler
 	MetricsHandler      *metrics.Handler
@@ -28,14 +29,14 @@ type Handler struct {
 }
 
 // NewHandler creates a new API handler
-func NewHandler(db *database.Manager, svc *service.ShellyService, notificationHandler *notification.Handler) *Handler {
+func NewHandler(db database.DatabaseInterface, svc *service.ShellyService, notificationHandler *notification.Handler) *Handler {
 	return NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 }
 
 // NewHandlerWithLogger creates a new API handler with custom logger
-func NewHandlerWithLogger(db *database.Manager, svc *service.ShellyService, notificationHandler *notification.Handler, metricsHandler *metrics.Handler, logger *logging.Logger) *Handler {
+func NewHandlerWithLogger(db database.DatabaseInterface, svc *service.ShellyService, notificationHandler *notification.Handler, metricsHandler *metrics.Handler, logger *logging.Logger) *Handler {
 	// Create configuration service
-	configService := configuration.NewService(db.DB, logger)
+	configService := configuration.NewService(db.GetDB(), logger)
 
 	return &Handler{
 		DB:                  db,
@@ -168,8 +169,11 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.DB.DeleteDevice(uint(id)); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		// If device doesn't exist, still return 204 (idempotent delete)
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)

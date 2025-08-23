@@ -114,7 +114,7 @@ metrics:
 	})
 
 	t.Run("Database Initialization", func(t *testing.T) {
-		db, err := database.NewManager(dbPath)
+		db, err := database.NewManagerFromPath(dbPath)
 		if err != nil {
 			t.Fatalf("Failed to create database manager: %v", err)
 		}
@@ -130,7 +130,7 @@ metrics:
 		}
 
 		// Close database connection if possible
-		if sqlDB, err := db.DB.DB(); err == nil {
+		if sqlDB, err := db.GetDB().DB(); err == nil {
 			sqlDB.Close()
 		}
 	})
@@ -181,7 +181,7 @@ func TestInitializationWithDefaults(t *testing.T) {
 	}
 
 	t.Run("Minimal Database Setup", func(t *testing.T) {
-		db, err := database.NewManager(minimalConfig.Database.Path)
+		db, err := database.NewManagerFromPath(minimalConfig.Database.Path)
 		if err != nil {
 			t.Fatalf("Failed to create database with minimal config: %v", err)
 		}
@@ -197,7 +197,7 @@ func TestInitializationWithDefaults(t *testing.T) {
 		}
 
 		// Close database connection
-		if sqlDB, err := db.DB.DB(); err == nil {
+		if sqlDB, err := db.GetDB().DB(); err == nil {
 			sqlDB.Close()
 		}
 	})
@@ -226,7 +226,7 @@ func TestErrorConditions(t *testing.T) {
 			invalidPath = "/root/nonexistent/test.db"
 		}
 
-		_, err := database.NewManager(invalidPath)
+		_, err := database.NewManagerFromPath(invalidPath)
 		if err == nil {
 			t.Errorf("Expected error for invalid database path %s", invalidPath)
 		}
@@ -261,14 +261,14 @@ func TestApplicationShutdown(t *testing.T) {
 	tempDir := testutil.TempDir(t)
 	dbPath := filepath.Join(tempDir, "shutdown_test.db")
 
-	db, err := database.NewManager(dbPath)
+	db, err := database.NewManagerFromPath(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 
 	t.Run("Database Cleanup", func(t *testing.T) {
 		// Test that database connections are properly closed
-		sqlDB, err := db.DB.DB()
+		sqlDB, err := db.GetDB().DB()
 		if err != nil {
 			t.Fatalf("Failed to get SQL DB: %v", err)
 		}
@@ -326,7 +326,7 @@ func TestConcurrentInitialization(t *testing.T) {
 
 			// Each goroutine creates its own database
 			dbPath := filepath.Join(tempDir, "concurrent_"+string(rune('0'+id))+".db")
-			db, err := database.NewManager(dbPath)
+			db, err := database.NewManagerFromPath(dbPath)
 			if err != nil {
 				errors <- err
 				return
@@ -345,7 +345,7 @@ func TestConcurrentInitialization(t *testing.T) {
 			}
 
 			// Close database
-			if sqlDB, err := db.DB.DB(); err == nil {
+			if sqlDB, err := db.GetDB().DB(); err == nil {
 				sqlDB.Close()
 			}
 		}(i)
@@ -371,7 +371,7 @@ func TestMemoryUsage(t *testing.T) {
 
 	// Create multiple database managers to test for leaks
 	for i := 0; i < 100; i++ {
-		db, err := database.NewManager(dbPath)
+		db, err := database.NewManagerFromPath(dbPath)
 		if err != nil {
 			t.Fatalf("Failed to create database manager %d: %v", i, err)
 		}
@@ -383,7 +383,7 @@ func TestMemoryUsage(t *testing.T) {
 		}
 
 		// Close database connection
-		if sqlDB, err := db.DB.DB(); err == nil {
+		if sqlDB, err := db.GetDB().DB(); err == nil {
 			sqlDB.Close()
 		}
 	}

@@ -21,7 +21,7 @@ func createTestEnvironment(t *testing.T) (*database.Manager, *service.ShellyServ
 	tempDir := testutil.TempDir(t)
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	db, err := database.NewManager(dbPath)
+	db, err := database.NewManagerFromPath(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}

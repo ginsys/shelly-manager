@@ -27,7 +27,7 @@ func createTestDB(t *testing.T) *database.Manager {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 
-	db, err := database.NewManagerWithLogger(dbPath, logger)
+	db, err := database.NewManagerFromPathWithLogger(dbPath, logger)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
@@ -59,7 +59,7 @@ func createTestDBNoCleanup(t *testing.T) *database.Manager {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 
-	db, err := database.NewManagerWithLogger(dbPath, logger)
+	db, err := database.NewManagerFromPathWithLogger(dbPath, logger)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
@@ -555,7 +555,7 @@ func BenchmarkShellyService_Creation(b *testing.B) {
 		Output: "stderr",
 	})
 
-	db, err := database.NewManagerWithLogger(dbPath, logger)
+	db, err := database.NewManagerFromPathWithLogger(dbPath, logger)
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}

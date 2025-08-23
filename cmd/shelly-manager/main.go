@@ -407,8 +407,8 @@ func initApp() {
 	// Log configuration load
 	logger.LogConfigLoad(configFile, nil)
 
-	// Initialize database with logger
-	dbManager, err = database.NewManagerWithLogger(cfg.Database.Path, logger)
+	// Initialize database with logger using provider abstraction
+	dbManager, err = database.NewManagerFromConfigWithLogger(cfg, logger)
 	if err != nil {
 		logger.WithFields(map[string]any{
 			"db_path":   cfg.Database.Path,
@@ -430,12 +430,12 @@ func initApp() {
 		From:     cfg.Notifications.Email.FromAddress,
 		TLS:      cfg.Notifications.Email.TLS,
 	}
-	notificationService := notification.NewService(dbManager.DB, logger, emailConfig)
+	notificationService := notification.NewService(dbManager.GetDB(), logger, emailConfig)
 	notificationHandler = notification.NewHandler(notificationService, logger)
 
 	// Initialize metrics service if enabled
 	if cfg.Metrics.Enabled {
-		metricsService = metrics.NewService(dbManager.DB, logger, nil)
+		metricsService = metrics.NewService(dbManager.GetDB(), logger, nil)
 		metricsHandler = metrics.NewHandler(metricsService, logger)
 
 		// Start metrics collector if enabled
