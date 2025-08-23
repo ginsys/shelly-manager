@@ -21,7 +21,19 @@ type Config struct {
 		Output string `mapstructure:"output"` // stdout, stderr, or file path
 	} `mapstructure:"logging"`
 	Database struct {
+		// Legacy field for backward compatibility
 		Path string `mapstructure:"path"`
+
+		// New provider-based configuration
+		Provider        string            `mapstructure:"provider"` // "sqlite", "postgresql", "mysql"
+		DSN             string            `mapstructure:"dsn"`      // Data Source Name
+		MaxOpenConns    int               `mapstructure:"max_open_conns"`
+		MaxIdleConns    int               `mapstructure:"max_idle_conns"`
+		ConnMaxLifetime int               `mapstructure:"conn_max_lifetime"`  // seconds
+		ConnMaxIdleTime int               `mapstructure:"conn_max_idle_time"` // seconds
+		SlowQueryTime   int               `mapstructure:"slow_query_time"`    // milliseconds
+		LogLevel        string            `mapstructure:"log_level"`          // "silent", "error", "warn", "info"
+		Options         map[string]string `mapstructure:"options"`            // Provider-specific options
 	} `mapstructure:"database"`
 	Discovery struct {
 		Enabled         bool     `mapstructure:"enabled"`
@@ -175,7 +187,22 @@ func setDefaults() {
 	viper.SetDefault("logging.output", "stdout")
 
 	// Database defaults
-	viper.SetDefault("database.path", "data/shelly.db")
+	viper.SetDefault("database.path", "data/shelly.db") // Legacy compatibility
+	viper.SetDefault("database.provider", "sqlite")
+	viper.SetDefault("database.dsn", "data/shelly.db")
+	viper.SetDefault("database.max_open_conns", 1)
+	viper.SetDefault("database.max_idle_conns", 1)
+	viper.SetDefault("database.conn_max_lifetime", 300)  // 5 minutes
+	viper.SetDefault("database.conn_max_idle_time", 600) // 10 minutes
+	viper.SetDefault("database.slow_query_time", 500)    // 500ms
+	viper.SetDefault("database.log_level", "warn")
+	viper.SetDefault("database.options", map[string]string{
+		"foreign_keys": "true",
+		"journal_mode": "WAL",
+		"synchronous":  "NORMAL",
+		"cache_size":   "-64000", // 64MB
+		"busy_timeout": "5000",   // 5 seconds
+	})
 
 	// Discovery defaults
 	viper.SetDefault("discovery.enabled", true)

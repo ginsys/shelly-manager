@@ -29,7 +29,16 @@ func TestConfig() *config.Config {
 			LogLevel: "debug",
 		},
 		Database: struct {
-			Path string `mapstructure:"path"`
+			Path            string            `mapstructure:"path"`
+			Provider        string            `mapstructure:"provider"`
+			DSN             string            `mapstructure:"dsn"`
+			MaxOpenConns    int               `mapstructure:"max_open_conns"`
+			MaxIdleConns    int               `mapstructure:"max_idle_conns"`
+			ConnMaxLifetime int               `mapstructure:"conn_max_lifetime"`
+			ConnMaxIdleTime int               `mapstructure:"conn_max_idle_time"`
+			SlowQueryTime   int               `mapstructure:"slow_query_time"`
+			LogLevel        string            `mapstructure:"log_level"`
+			Options         map[string]string `mapstructure:"options"`
 		}{
 			Path: ":memory:", // Use in-memory SQLite for tests
 		},
