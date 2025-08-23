@@ -158,6 +158,14 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	// DHCP routes
 	api.HandleFunc("/dhcp/reservations", handler.GetDHCPReservations).Methods("GET")
 
+	// Export/Import routes (if handlers are configured)
+	if handler.ExportHandlers != nil {
+		handler.ExportHandlers.AddExportRoutes(api)
+	}
+	if handler.ImportHandlers != nil {
+		handler.ImportHandlers.AddImportRoutes(api)
+	}
+
 	// Static file serving
 	r.PathPrefix("/web/").Handler(http.StripPrefix("/web/", http.FileServer(http.Dir("./web/static/"))))
 	r.PathPrefix("/").Handler(http.StripPrefix("/", http.FileServer(http.Dir("./web/static/"))))

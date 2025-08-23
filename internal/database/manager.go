@@ -116,6 +116,11 @@ func (m *Manager) GetStats() provider.DatabaseStats {
 	return m.provider.GetStats()
 }
 
+// GetProvider returns the database provider instance
+func (m *Manager) GetProvider() provider.DatabaseProvider {
+	return m.provider
+}
+
 // GetProviderInfo returns information about the current database provider
 func (m *Manager) GetProviderInfo() (string, string) {
 	return m.provider.Name(), m.provider.Version()
