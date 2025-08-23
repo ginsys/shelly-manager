@@ -51,7 +51,8 @@
       "Bash(curl:*)",
       "Bash(sqlite3:*)",
       "Bash(pkill:*)",
-      "Bash(env)"
+      "Bash(env)",
+      "Bash(sed:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

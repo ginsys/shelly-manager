@@ -25,6 +25,8 @@ type Handler struct {
 	NotificationHandler *notification.Handler
 	MetricsHandler      *metrics.Handler
 	ConfigService       *configuration.Service
+	ExportHandlers      *ExportHandlers
+	ImportHandlers      *ImportHandlers
 	logger              *logging.Logger
 }
 
