@@ -72,8 +72,32 @@ func (ate *AdvancedTemplateEngine) addBuiltinFunctions() {
 	// Add basic utility functions
 	basicFunctions := template.FuncMap{
 		// String manipulation
-		"sanitize":     sanitizeString,
-		"truncate":     truncateString,
+		"sanitize": sanitizeString,
+		"truncate": func(arg1, arg2 interface{}) string {
+			var s string
+			var length int
+			var ok bool
+
+			// Try to determine which argument is which
+			if s, ok = arg1.(string); ok {
+				// First arg is string, second should be length
+				if length, ok = arg2.(int); ok {
+					if len(s) <= length {
+						return s
+					}
+					return s[:length]
+				}
+			} else if length, ok = arg1.(int); ok {
+				// First arg is length, second should be string (pipeline case)
+				if s, ok = arg2.(string); ok {
+					if len(s) <= length {
+						return s
+					}
+					return s[:length]
+				}
+			}
+			return ""
+		},
 		"padLeft":      padStringLeft,
 		"padRight":     padStringRight,
 		"regexMatch":   regexMatch,
@@ -127,10 +151,11 @@ func (ate *AdvancedTemplateEngine) addExportFunctions() {
 		"macGenerate":     generateMAC,
 
 		// Device operations
-		"deviceType":       determineDeviceType,
-		"deviceCapability": checkDeviceCapability,
-		"deviceGroup":      assignDeviceGroup,
-		"devicePriority":   assignDevicePriority,
+		"deviceType":            determineDeviceType,
+		"checkDeviceCapability": checkDeviceCapability,
+		"deviceCapability":      checkDeviceCapability,
+		"deviceGroup":           assignDeviceGroup,
+		"devicePriority":        assignDevicePriority,
 
 		// Configuration generation
 		"dhcpConfig":   generateDHCPConfig,
@@ -527,8 +552,18 @@ func getCurrentTimestamp() string {
 	return time.Now().Format(time.RFC3339)
 }
 
-func formatTimestamp(t time.Time, format string) string {
-	return t.Format(format)
+func formatTimestamp(t interface{}, format string) string {
+	switch v := t.(type) {
+	case time.Time:
+		return v.Format(format)
+	case string:
+		if parsedTime, err := time.Parse(time.RFC3339, v); err == nil {
+			return parsedTime.Format(format)
+		}
+		return v
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
 
 func jsonMarshal(v interface{}) string {

@@ -362,7 +362,7 @@ func TestAdvancedTemplateEngine_TimeFunctions(t *testing.T) {
 		t.Errorf("Template rendering failed: %v", err)
 	}
 
-	expected := "2023-12-25 15:04:05"
+	expected := "2023-12-25 15:30:45"
 	if result2 != expected {
 		t.Errorf("Expected '%s', got '%s'", expected, result2)
 	}

@@ -19,10 +19,14 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/metrics"
 	"github.com/ginsys/shelly-manager/internal/notification"
+	"github.com/ginsys/shelly-manager/internal/plugins"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/backup"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/gitops"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/opnsense"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/registry"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/sync"
-	"github.com/ginsys/shelly-manager/internal/sync/registry"
 )
 
 // Global variables
@@ -35,6 +39,7 @@ var (
 	metricsCollector    *metrics.Collector
 	metricsHandler      *metrics.Handler
 	syncEngine          *sync.SyncEngine
+	basePluginRegistry  *plugins.Registry
 	pluginRegistry      *registry.PluginRegistry
 	cfg                 *config.Config
 	logger              *logging.Logger
@@ -312,6 +317,11 @@ func startServer() {
 	// Create API handler with service and logger
 	apiHandler := api.NewHandlerWithLogger(dbManager, shellyService, notificationHandler, metricsHandler, logger)
 
+	// Wire sync handlers for export/import functionality
+	syncHandlers := api.NewSyncHandlers(syncEngine, logger)
+	apiHandler.ExportHandlers = syncHandlers
+	apiHandler.ImportHandlers = api.NewImportHandlers(syncEngine, logger)
+
 	// Setup routes with middleware
 	router := api.SetupRoutesWithLogger(apiHandler, logger)
 
@@ -477,21 +487,56 @@ func initApp() {
 	shellyProvisioner := provisioning.NewShellyProvisioner(logger, netInterface)
 	provisioningManager.SetDeviceProvisioner(shellyProvisioner)
 
-	// Initialize sync engine and plugin registry
-	syncEngine = sync.NewSyncEngine(dbManager, logger)
-	pluginRegistry = registry.NewPluginRegistry(syncEngine, logger)
+	// Initialize base plugin registry
+	basePluginRegistry = plugins.NewRegistry(logger)
 
-	// Register all plugins
+	// Initialize sync-specific plugin registry
+	pluginRegistry = registry.NewPluginRegistry(basePluginRegistry, logger)
+
+	// Register all sync plugins
 	if err := pluginRegistry.RegisterAllPlugins(); err != nil {
 		logger.WithFields(map[string]any{
 			"error":     err.Error(),
 			"component": "plugins",
-		}).Warn("Some plugins failed to register")
+		}).Warn("Some sync plugins failed to register")
 		// Continue startup even if some plugins fail to register
 	} else {
 		logger.WithFields(map[string]any{
 			"component": "plugins",
 		}).Info("All sync plugins registered successfully")
+	}
+
+	// Initialize sync engine and register plugins with it
+	syncEngine = sync.NewSyncEngine(dbManager, logger)
+
+	// Register sync plugins directly with the sync engine using the old interface
+	syncPlugins := []sync.SyncPlugin{
+		backup.NewPlugin(),
+		gitops.NewPlugin(),
+		opnsense.NewPlugin(),
+	}
+
+	for _, plugin := range syncPlugins {
+		if err := syncEngine.RegisterPlugin(plugin); err != nil {
+			logger.WithFields(map[string]any{
+				"plugin":    plugin.Info().Name,
+				"error":     err.Error(),
+				"component": "sync_engine",
+			}).Warn("Failed to register plugin with sync engine")
+		} else {
+			logger.WithFields(map[string]any{
+				"plugin":    plugin.Info().Name,
+				"component": "sync_engine",
+			}).Info("Plugin registered with sync engine")
+		}
+	}
+
+	// Register backup plugin with database manager for enhanced functionality
+	if err := pluginRegistry.RegisterPluginWithDatabaseManager(dbManager); err != nil {
+		logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "plugins",
+		}).Warn("Failed to register backup plugin with database manager")
 	}
 
 	logger.WithFields(map[string]any{

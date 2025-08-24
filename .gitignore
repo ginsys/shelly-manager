@@ -8,6 +8,9 @@ bin/
 
 # Build artifacts
 bin/
+shelly-manager
+shelly-provisioner
+shelly-test
 
 # Test binary, built with `go test -c`
 *.test
