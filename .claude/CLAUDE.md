@@ -34,6 +34,7 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 **Phase 5**: ✅ Container & Kubernetes Integration - Multi-stage Docker builds, security hardening, production-ready Kubernetes manifests
 **Phase 5.1**: ✅ API Integration Enhancement - Complete provisioner-API communication with task-based orchestration and 42.3% test coverage
 **Phase 5.1.1**: ✅ Discovered Device Database Persistence - Real-time device discovery with database integration and cleanup scheduler
+**Phase 5.2**: ✅ Plugin Architecture Restructuring - Generalized extensible plugin system with sync, notification, and discovery plugin support
 
 ## 🎯 CURRENT STATUS - Complete Production-Ready System
 
@@ -69,6 +70,9 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 - ✅ Template engine with Sprig v3 and security controls
 - ✅ Comprehensive configuration validation pipeline
 - ✅ Container security hardening and Kubernetes deployment
+- ✅ **Generalized Plugin System**: Type-aware registry supporting sync, notification, and discovery plugins
+- ✅ **Bidirectional Sync Plugins**: Backup, GitOps, and OPNSense with import/export capabilities
+- ✅ **Advanced Template Engine**: Custom functions for MAC, network, device operations
 
 **Key Files**:
 - `internal/configuration/typed_models.go` - Complete typed configuration models with validation
@@ -80,8 +84,15 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 - `internal/database/database.go` - Database operations including discovered device management
 - `internal/api/provisioner_handlers.go` - Provisioner API endpoints and task management
 - `internal/provisioning/api_client.go` - Complete HTTP client for agent-server communication
+- `internal/plugins/interfaces.go` - Generalized plugin system interfaces and types
+- `internal/plugins/registry.go` - Type-aware plugin registry with health monitoring
+- `internal/plugins/sync/registry/registry.go` - Sync plugin registry with database integration
+- `internal/plugins/sync/backup/backup.go` - Backup plugin with SMA format and database operations
+- `internal/plugins/sync/gitops/gitops.go` - GitOps plugin for Git-based synchronization
+- `internal/plugins/sync/opnsense/opnsense.go` - OPNSense DHCP integration with bidirectional sync
+- `internal/sync/template_engine.go` - Advanced template engine with custom device/network functions
 - `cmd/shelly-provisioner/main.go` - Completed provisioning agent with API integration
-- `cmd/shelly-manager/main.go` - Main API server with provisioner endpoints and cleanup scheduler
+- `cmd/shelly-manager/main.go` - Main API server with plugin system initialization
 - `web/static/index.html` - Complete modern web interface with discovered devices integration
 - `web/static/device-config.html` - Modern structured configuration forms
 - `web/static/setup-wizard.html` - 5-step guided configuration wizard

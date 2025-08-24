@@ -168,4 +168,3 @@ type PreviewResult struct {
 	EstimatedSize int64    `json:"estimated_size"`
 	Warnings      []string `json:"warnings,omitempty"`
 }
-

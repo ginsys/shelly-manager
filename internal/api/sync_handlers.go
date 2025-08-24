@@ -7,8 +7,8 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/ginsys/shelly-manager/internal/sync"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
 // SyncHandlers provides HTTP handlers for sync operations (export/import)
@@ -129,8 +129,8 @@ func (eh *SyncHandlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 
 	var requestBody struct {
 		Config  map[string]interface{} `json:"config"`
-		Filters sync.ExportFilters   `json:"filters"`
-		Options sync.ExportOptions   `json:"options"`
+		Filters sync.ExportFilters     `json:"filters"`
+		Options sync.ExportOptions     `json:"options"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -177,8 +177,8 @@ func (eh *SyncHandlers) CreateGitOpsExport(w http.ResponseWriter, r *http.Reques
 
 	var requestBody struct {
 		Config  map[string]interface{} `json:"config"`
-		Filters sync.ExportFilters   `json:"filters"`
-		Options sync.ExportOptions   `json:"options"`
+		Filters sync.ExportFilters     `json:"filters"`
+		Options sync.ExportOptions     `json:"options"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
