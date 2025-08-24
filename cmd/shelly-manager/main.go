@@ -21,6 +21,8 @@ import (
 	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
 	"github.com/ginsys/shelly-manager/internal/service"
+	"github.com/ginsys/shelly-manager/internal/sync"
+	"github.com/ginsys/shelly-manager/internal/sync/registry"
 )
 
 // Global variables
@@ -32,6 +34,8 @@ var (
 	metricsService      *metrics.Service
 	metricsCollector    *metrics.Collector
 	metricsHandler      *metrics.Handler
+	syncEngine          *sync.SyncEngine
+	pluginRegistry      *registry.PluginRegistry
 	cfg                 *config.Config
 	logger              *logging.Logger
 	configFile          string
@@ -472,6 +476,23 @@ func initApp() {
 	// Create Shelly device provisioner
 	shellyProvisioner := provisioning.NewShellyProvisioner(logger, netInterface)
 	provisioningManager.SetDeviceProvisioner(shellyProvisioner)
+
+	// Initialize sync engine and plugin registry
+	syncEngine = sync.NewSyncEngine(dbManager, logger)
+	pluginRegistry = registry.NewPluginRegistry(syncEngine, logger)
+
+	// Register all plugins
+	if err := pluginRegistry.RegisterAllPlugins(); err != nil {
+		logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "plugins",
+		}).Warn("Some plugins failed to register")
+		// Continue startup even if some plugins fail to register
+	} else {
+		logger.WithFields(map[string]any{
+			"component": "plugins",
+		}).Info("All sync plugins registered successfully")
+	}
 
 	logger.WithFields(map[string]any{
 		"db_path":   cfg.Database.Path,
