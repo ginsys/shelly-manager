@@ -52,7 +52,8 @@
       "Bash(sqlite3:*)",
       "Bash(pkill:*)",
       "Bash(env)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(rmdir:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

@@ -6,21 +6,21 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/ginsys/shelly-manager/internal/export"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
 // ImportHandlers provides HTTP handlers for import operations
 type ImportHandlers struct {
-	importEngine *export.ImportEngine
-	logger       *logging.Logger
+	syncEngine *sync.SyncEngine
+	logger     *logging.Logger
 }
 
 // NewImportHandlers creates new import handlers
-func NewImportHandlers(importEngine *export.ImportEngine, logger *logging.Logger) *ImportHandlers {
+func NewImportHandlers(syncEngine *sync.SyncEngine, logger *logging.Logger) *ImportHandlers {
 	return &ImportHandlers{
-		importEngine: importEngine,
-		logger:       logger,
+		syncEngine: syncEngine,
+		logger:     logger,
 	}
 }
 
@@ -47,7 +47,7 @@ func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) 
 	var requestBody struct {
 		BackupPath string                 `json:"backup_path"`
 		Config     map[string]interface{} `json:"config"`
-		Options    export.ImportOptions   `json:"options"`
+		Options    sync.ImportOptions     `json:"options"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -68,10 +68,10 @@ func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Create import request
-	importRequest := export.ImportRequest{
+	importRequest := sync.ImportRequest{
 		PluginName: "backup",
 		Format:     "sma",
-		Source: export.ImportSource{
+		Source: sync.ImportSource{
 			Type: "file",
 			Path: requestBody.BackupPath,
 		},
@@ -80,7 +80,7 @@ func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Perform the import
-	result, err := ih.importEngine.Import(r.Context(), importRequest)
+	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Backup restore failed", "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -122,20 +122,20 @@ func (ih *ImportHandlers) ValidateBackup(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Create validation-only import request
-	importRequest := export.ImportRequest{
+	importRequest := sync.ImportRequest{
 		PluginName: "backup",
 		Format:     "sma",
-		Source: export.ImportSource{
+		Source: sync.ImportSource{
 			Type: "file",
 			Path: requestBody.BackupPath,
 		},
-		Options: export.ImportOptions{
+		Options: sync.ImportOptions{
 			ValidateOnly: true,
 		},
 	}
 
 	// Perform validation
-	result, err := ih.importEngine.Import(r.Context(), importRequest)
+	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Backup validation failed", "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -158,7 +158,7 @@ func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SourcePath string                 `json:"source_path"`
 		Config     map[string]interface{} `json:"config"`
-		Options    export.ImportOptions   `json:"options"`
+		Options    sync.ImportOptions     `json:"options"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -179,10 +179,10 @@ func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create import request
-	importRequest := export.ImportRequest{
+	importRequest := sync.ImportRequest{
 		PluginName: "gitops",
 		Format:     "yaml",
-		Source: export.ImportSource{
+		Source: sync.ImportSource{
 			Type: "file",
 			Path: requestBody.SourcePath,
 		},
@@ -191,7 +191,7 @@ func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Perform the import
-	result, err := ih.importEngine.Import(r.Context(), importRequest)
+	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("GitOps import failed", "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -234,22 +234,22 @@ func (ih *ImportHandlers) PreviewGitOpsImport(w http.ResponseWriter, r *http.Req
 	}
 
 	// Create preview import request
-	importRequest := export.ImportRequest{
+	importRequest := sync.ImportRequest{
 		PluginName: "gitops",
 		Format:     "yaml",
-		Source: export.ImportSource{
+		Source: sync.ImportSource{
 			Type: "file",
 			Path: requestBody.SourcePath,
 		},
 		Config: requestBody.Config,
-		Options: export.ImportOptions{
+		Options: sync.ImportOptions{
 			DryRun:       true,
 			ValidateOnly: true,
 		},
 	}
 
-	// Generate preview
-	result, err := ih.importEngine.PreviewImport(r.Context(), importRequest)
+	// Generate preview by running in dry run mode
+	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("GitOps import preview failed", "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -275,7 +275,7 @@ func (ih *ImportHandlers) PreviewGitOpsImport(w http.ResponseWriter, r *http.Req
 func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	ih.logger.Info("Generic import request")
 
-	var importRequest export.ImportRequest
+	var importRequest sync.ImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&importRequest); err != nil {
 		ih.logger.Error("Invalid import request", "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -303,7 +303,7 @@ func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Perform the import
-	result, err := ih.importEngine.Import(r.Context(), importRequest)
+	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Import failed", "plugin", importRequest.PluginName, "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -323,7 +323,7 @@ func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) {
 	ih.logger.Info("Import preview request")
 
-	var importRequest export.ImportRequest
+	var importRequest sync.ImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&importRequest); err != nil {
 		ih.logger.Error("Invalid import request", "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -333,8 +333,8 @@ func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Generate preview
-	result, err := ih.importEngine.PreviewImport(r.Context(), importRequest)
+	// Generate preview by running in dry run mode
+	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Import preview failed", "plugin", importRequest.PluginName, "error", err)
 		sendJSONResponse(w, map[string]interface{}{
@@ -374,7 +374,7 @@ func (ih *ImportHandlers) GetImportResult(w http.ResponseWriter, r *http.Request
 
 // Helper functions
 
-func (ih *ImportHandlers) countChangesByType(changes []export.ImportChange, changeType string) int {
+func (ih *ImportHandlers) countChangesByType(changes []sync.ImportChange, changeType string) int {
 	count := 0
 	for _, change := range changes {
 		if change.Type == changeType {
