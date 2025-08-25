@@ -355,7 +355,10 @@ func (o *OPNSensePlugin) Initialize(logger *logging.Logger) error {
 // Cleanup cleans up plugin resources
 func (o *OPNSensePlugin) Cleanup() error {
 	if o.client != nil {
-		o.client.Close()
+		if err := o.client.Close(); err != nil {
+			// Log but continue - client is being closed anyway
+			_ = err
+		}
 	}
 	o.logger.Info("Cleaning up OPNSense exporter plugin")
 	return nil

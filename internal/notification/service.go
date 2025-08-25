@@ -630,7 +630,12 @@ func (s *Service) sendWebhook(ctx context.Context, channel *NotificationChannel,
 	if err != nil {
 		return fmt.Errorf("failed to send webhook: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
@@ -694,7 +699,12 @@ func (s *Service) sendSlack(ctx context.Context, channel *NotificationChannel, h
 	if err != nil {
 		return fmt.Errorf("failed to send slack notification: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("slack webhook returned status %d", resp.StatusCode)

@@ -705,7 +705,12 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				// Log error if possible but continue
+				_ = err
+			}
+		}()
 
 		if resp.StatusCode == http.StatusUnauthorized {
 			return shelly.ErrAuthRequired
@@ -779,7 +784,12 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				// Log error if possible but continue
+				_ = err
+			}
+		}()
 
 		if resp.StatusCode == http.StatusUnauthorized {
 			return shelly.ErrAuthRequired

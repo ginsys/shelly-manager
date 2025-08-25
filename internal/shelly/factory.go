@@ -68,7 +68,12 @@ func (f *factory) DetectGeneration(ctx context.Context, ip string) (int, error) 
 
 	resp, err := f.httpClient.Do(req)
 	if err == nil && resp.StatusCode == http.StatusOK {
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				// Log error if possible but continue
+				_ = err
+			}
+		}()
 		var info struct {
 			ID  string `json:"id"`
 			Gen int    `json:"gen"`
@@ -94,7 +99,12 @@ func (f *factory) DetectGeneration(ctx context.Context, ip string) (int, error) 
 	if err != nil {
 		return 0, fmt.Errorf("device not reachable at %s: %w", ip, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode == http.StatusOK {
 		var info struct {

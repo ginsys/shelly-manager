@@ -131,7 +131,9 @@ metrics:
 
 		// Close database connection if possible
 		if sqlDB, err := db.GetDB().DB(); err == nil {
-			sqlDB.Close()
+			if err := sqlDB.Close(); err != nil {
+				t.Logf("Failed to close database connection: %v", err)
+			}
 		}
 	})
 
@@ -198,7 +200,9 @@ func TestInitializationWithDefaults(t *testing.T) {
 
 		// Close database connection
 		if sqlDB, err := db.GetDB().DB(); err == nil {
-			sqlDB.Close()
+			if err := sqlDB.Close(); err != nil {
+				t.Logf("Failed to close database connection: %v", err)
+			}
 		}
 	})
 
@@ -346,7 +350,9 @@ func TestConcurrentInitialization(t *testing.T) {
 
 			// Close database
 			if sqlDB, err := db.GetDB().DB(); err == nil {
-				sqlDB.Close()
+				if err := sqlDB.Close(); err != nil {
+					t.Logf("Failed to close database connection: %v", err)
+				}
 			}
 		}(i)
 	}
@@ -384,7 +390,9 @@ func TestMemoryUsage(t *testing.T) {
 
 		// Close database connection
 		if sqlDB, err := db.GetDB().DB(); err == nil {
-			sqlDB.Close()
+			if err := sqlDB.Close(); err != nil {
+				t.Logf("Failed to close database connection: %v", err)
+			}
 		}
 	}
 

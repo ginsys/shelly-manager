@@ -306,7 +306,10 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (c *WebSocketClient) readPump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
 	}()
 
 	c.conn.SetReadLimit(512)
@@ -346,7 +349,10 @@ func (c *WebSocketClient) writePump() {
 	ticker := time.NewTicker(54 * time.Second)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
 	}()
 
 	for {

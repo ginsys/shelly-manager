@@ -185,7 +185,14 @@ func (s *Scanner) checkDevice(ctx context.Context, ip string) *ShellyDevice {
 		}
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			s.logger.WithFields(map[string]any{
+				"error":     err.Error(),
+				"component": "discovery",
+			}).Debug("Failed to close response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil
@@ -252,7 +259,14 @@ func (s *Scanner) GetDeviceStatus(ctx context.Context, ip string, gen int) (map[
 		s.logger.LogDeviceOperation("get_status", ip, "", err)
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			s.logger.WithFields(map[string]any{
+				"error":     err.Error(),
+				"component": "discovery",
+			}).Debug("Failed to close response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		err := fmt.Errorf("status code: %d", resp.StatusCode)

@@ -17,7 +17,11 @@ func TestDiscoveredDeviceOperations(t *testing.T) {
 
 	manager, err := NewManagerFromPathWithLogger(":memory:", logger)
 	require.NoError(t, err)
-	defer manager.Close()
+	defer func() {
+		if err := manager.Close(); err != nil {
+			t.Logf("Failed to close manager: %v", err)
+		}
+	}()
 
 	t.Run("AddDiscoveredDevice", func(t *testing.T) {
 		device := &DiscoveredDevice{
@@ -288,7 +292,11 @@ func TestDiscoveredDeviceValidation(t *testing.T) {
 
 	manager, err := NewManagerFromPathWithLogger(":memory:", logger)
 	require.NoError(t, err)
-	defer manager.Close()
+	defer func() {
+		if err := manager.Close(); err != nil {
+			t.Logf("Failed to close manager: %v", err)
+		}
+	}()
 
 	t.Run("RequiredFields", func(t *testing.T) {
 		// Test that empty MAC or AgentID can still be added (GORM behavior)

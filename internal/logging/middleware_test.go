@@ -34,6 +34,9 @@ func TestResponseWriter_Write(t *testing.T) {
 
 	data := []byte("test response")
 	n, err := rw.Write(data)
+	if err != nil {
+		t.Logf("Failed to write response: %v", err)
+	}
 
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
@@ -59,7 +62,9 @@ func TestResponseWriter_WriteWithoutHeader(t *testing.T) {
 
 	// Write without calling WriteHeader first
 	data := []byte("test")
-	rw.Write(data)
+	if _, err := rw.Write(data); err != nil {
+		t.Logf("Failed to write response: %v", err)
+	}
 
 	// Should default to 200 OK
 	if rw.statusCode != http.StatusOK {
@@ -80,12 +85,18 @@ func TestHTTPMiddleware_LogsRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	defer logger.Close()
+	defer func() {
+		if err := logger.Close(); err != nil {
+			t.Logf("Failed to close logger: %v", err)
+		}
+	}()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	})
 
 	// Wrap with middleware
@@ -291,7 +302,11 @@ func TestRecoveryMiddleware_HandlesPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	defer logger.Close()
+	defer func() {
+		if err := logger.Close(); err != nil {
+			t.Logf("Failed to close logger: %v", err)
+		}
+	}()
 
 	// Create handler that panics
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -351,7 +366,9 @@ func TestRecoveryMiddleware_NoInterferenceOnSuccess(t *testing.T) {
 	// Create normal handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
+		if _, err := w.Write([]byte("success")); err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	})
 
 	// Wrap with recovery middleware
@@ -381,7 +398,9 @@ func TestCORSMiddleware_SetsHeaders(t *testing.T) {
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	})
 
 	// Wrap with CORS middleware
@@ -469,7 +488,11 @@ func TestCORSMiddleware_LogsRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	defer logger.Close()
+	defer func() {
+		if err := logger.Close(); err != nil {
+			t.Logf("Failed to close logger: %v", err)
+		}
+	}()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -530,7 +553,11 @@ func TestCORSMiddleware_NoLogWithoutOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	defer logger.Close()
+	defer func() {
+		if err := logger.Close(); err != nil {
+			t.Logf("Failed to close logger: %v", err)
+		}
+	}()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -638,7 +665,11 @@ func TestMultipleMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	defer logger.Close()
+	defer func() {
+		if err := logger.Close(); err != nil {
+			t.Logf("Failed to close logger: %v", err)
+		}
+	}()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -648,7 +679,9 @@ func TestMultipleMiddleware(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
+		if _, err := w.Write([]byte("success")); err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	})
 
 	// Wrap with multiple middleware (order matters)

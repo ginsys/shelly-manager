@@ -141,7 +141,13 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.WithFields(map[string]any{
+				"error": err.Error(),
+			}).Debug("Failed to close response body")
+		}
+	}()
 
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)

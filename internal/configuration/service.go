@@ -27,7 +27,7 @@ type Service struct {
 // NewService creates a new configuration service
 func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 	// Auto-migrate configuration tables
-	db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&ConfigTemplate{},
 		&DeviceConfig{},
 		&ConfigHistory{},
@@ -35,7 +35,9 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 		&DriftDetectionRun{},
 		&DriftReport{},
 		&DriftTrend{},
-	)
+	); err != nil && logger != nil {
+		logger.Error("Failed to auto-migrate configuration tables", "error", err)
+	}
 
 	// Create reporter
 	reporter := NewReporter(db, logger)

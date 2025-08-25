@@ -18,7 +18,11 @@ import (
 func TestCLICommands(t *testing.T) {
 	// Build the binary for testing
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			t.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	// Create temporary directories for test
 	tempDir := testutil.TempDir(t)
@@ -136,7 +140,11 @@ discovery:
 
 func TestConfigFileHandling(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			t.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	t.Run("missing config file", func(t *testing.T) {
 		_, err := runCommand(t, binaryPath, "--config", "/nonexistent/config.yaml", "list")
@@ -163,7 +171,11 @@ func TestConfigFileHandling(t *testing.T) {
 
 func TestServerCommand(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			t.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	tempDir := testutil.TempDir(t)
 	configPath := filepath.Join(tempDir, "server-config.yaml")
@@ -212,7 +224,9 @@ discovery:
 		time.Sleep(50 * time.Millisecond)
 		resp, err := http.Get(serverURL)
 		if err == nil {
-			resp.Body.Close()
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Logf("Failed to close response body: %v", closeErr)
+			}
 			if resp.StatusCode == http.StatusOK {
 				serverReady = true
 				break
@@ -230,8 +244,12 @@ discovery:
 
 	// Kill the server
 	if cmd.Process != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
+		if killErr := cmd.Process.Kill(); killErr != nil {
+			t.Logf("Failed to kill process: %v", killErr)
+		}
+		if waitErr := cmd.Wait(); waitErr != nil {
+			t.Logf("Process wait error: %v", waitErr)
+		}
 	}
 
 	output := out.String()
@@ -242,7 +260,11 @@ discovery:
 
 func TestAddCommand(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			t.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	tempDir := testutil.TempDir(t)
 	dbPath := filepath.Join(tempDir, "add-test.db")
@@ -300,7 +322,11 @@ discovery:
 
 func TestCommandLineArguments(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			t.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	t.Run("version information", func(t *testing.T) {
 		output, _ := runCommand(t, binaryPath, "--help")
@@ -320,7 +346,11 @@ func TestCommandLineArguments(t *testing.T) {
 
 func TestCommandExecution(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			t.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	tempDir := testutil.TempDir(t)
 	configPath := filepath.Join(tempDir, "exec-config.yaml")
@@ -382,7 +412,11 @@ discovery:
 
 func TestErrorHandling(t *testing.T) {
 	binaryPath := buildTestBinary(t)
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			t.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	t.Run("unknown flag", func(t *testing.T) {
 		_, err := runCommand(t, binaryPath, "--unknown-flag")
@@ -456,7 +490,9 @@ func runCommandWithTimeout(t *testing.T, timeout time.Duration, binary string, a
 		return out.String(), err
 	case <-time.After(timeout):
 		if cmd.Process != nil {
-			cmd.Process.Kill()
+			if killErr := cmd.Process.Kill(); killErr != nil {
+				t.Logf("Failed to kill process: %v", killErr)
+			}
 		}
 		<-done // Wait for the process to be killed
 		return out.String(), &TimeoutError{timeout}
@@ -474,7 +510,11 @@ func (e *TimeoutError) Error() string {
 // Benchmark tests
 func BenchmarkListCommand(b *testing.B) {
 	binaryPath := buildTestBinary(&testing.T{})
-	defer os.Remove(binaryPath)
+	defer func() {
+		if err := os.Remove(binaryPath); err != nil {
+			b.Logf("Failed to remove binary: %v", err)
+		}
+	}()
 
 	tempDir := testutil.TempDir(&testing.T{})
 	configPath := filepath.Join(tempDir, "bench-config.yaml")

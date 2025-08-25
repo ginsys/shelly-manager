@@ -403,5 +403,8 @@ func sendJSONResponse(w http.ResponseWriter, data interface{}) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		// Log error if possible, but continue
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }

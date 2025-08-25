@@ -90,6 +90,9 @@ func TestCollectorIsRunning(t *testing.T) {
 	// Stop collector
 	err = collector.Stop()
 	if err != nil {
+		t.Logf("Failed to stop collector: %v", err)
+	}
+	if err != nil {
 		t.Fatalf("Failed to stop collector: %v", err)
 	}
 
@@ -121,7 +124,9 @@ func TestCollectorStartTwice(t *testing.T) {
 	}
 
 	// Clean up
-	collector.Stop()
+	if err := collector.Stop(); err != nil {
+		t.Logf("Failed to stop collector: %v", err)
+	}
 }
 
 func TestCollectorStopTwice(t *testing.T) {
@@ -136,11 +141,17 @@ func TestCollectorStopTwice(t *testing.T) {
 	// Stop first time
 	err = collector.Stop()
 	if err != nil {
+		t.Logf("Failed to stop collector: %v", err)
+	}
+	if err != nil {
 		t.Fatalf("Failed to stop collector first time: %v", err)
 	}
 
 	// Stop second time should be no-op
 	err = collector.Stop()
+	if err != nil {
+		t.Logf("Failed to stop collector: %v", err)
+	}
 	if err != nil {
 		t.Errorf("Stopping already stopped collector should not error: %v", err)
 	}
@@ -188,7 +199,11 @@ func TestCollectorTriggerCollection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start collector: %v", err)
 	}
-	defer collector.Stop()
+	defer func() {
+		if err := collector.Stop(); err != nil {
+			t.Logf("Failed to stop collector: %v", err)
+		}
+	}()
 
 	// Get initial collection time
 	initialTime := service.GetLastCollectionTime()
@@ -230,7 +245,11 @@ func TestCollectorPeriodicCollection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start collector: %v", err)
 	}
-	defer collector.Stop()
+	defer func() {
+		if err := collector.Stop(); err != nil {
+			t.Logf("Failed to stop collector: %v", err)
+		}
+	}()
 
 	// Get initial collection time
 	initialTime := service.GetLastCollectionTime()
@@ -277,6 +296,9 @@ func TestCollectorContextCancellation(t *testing.T) {
 	// Explicit stop should work
 	err = collector.Stop()
 	if err != nil {
+		t.Logf("Failed to stop collector: %v", err)
+	}
+	if err != nil {
 		t.Fatalf("Failed to stop collector: %v", err)
 	}
 }
@@ -292,7 +314,11 @@ func TestCollectorIntervalChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start collector: %v", err)
 	}
-	defer collector.Stop()
+	defer func() {
+		if err := collector.Stop(); err != nil {
+			t.Logf("Failed to stop collector: %v", err)
+		}
+	}()
 
 	// Change interval
 	collector.SetInterval(200 * time.Millisecond)
@@ -362,6 +388,9 @@ func TestCollectorConcurrentOperations(t *testing.T) {
 	// Clean stop
 	err := collector.Stop()
 	if err != nil {
+		t.Logf("Failed to stop collector: %v", err)
+	}
+	if err != nil {
 		t.Fatalf("Failed to stop collector: %v", err)
 	}
 }
@@ -380,6 +409,9 @@ func TestCollectorStopTimeout(t *testing.T) {
 	stopDone := make(chan bool, 1)
 	go func() {
 		err := collector.Stop()
+		if err != nil {
+			t.Logf("Failed to stop collector: %v", err)
+		}
 		if err != nil {
 			t.Errorf("Stop failed: %v", err)
 		}
@@ -414,6 +446,9 @@ func TestCollectorMemoryCleanup(t *testing.T) {
 
 		err = collector.Stop()
 		if err != nil {
+			t.Logf("Failed to stop collector: %v", err)
+		}
+		if err != nil {
 			t.Fatalf("Failed to stop collector (iteration %d): %v", i, err)
 		}
 
@@ -433,6 +468,9 @@ func TestCollectorMemoryCleanup(t *testing.T) {
 	}
 
 	err = collector.Stop()
+	if err != nil {
+		t.Logf("Failed to stop collector: %v", err)
+	}
 	if err != nil {
 		t.Fatalf("Failed to final stop: %v", err)
 	}
