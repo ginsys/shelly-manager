@@ -436,7 +436,7 @@ This is primarily a personal project, but contributions are welcome!
 ### Development Setup
 
 **Prerequisites:**
-- Go 1.24 or later (managed via [mise](https://mise.jdx.dev/))
+- Go 1.23 or later (managed via [mise](https://mise.jdx.dev/))
 - SQLite3 development libraries
 - GCC (for CGO compilation)
 
@@ -444,7 +444,7 @@ This is primarily a personal project, but contributions are welcome!
 # Clone repository
 git clone https://github.com/ginsys/shelly-manager
 
-# Install Go 1.24 (if using mise)
+# Install Go 1.23 (if using mise)
 mise install
 
 # Install dependencies
