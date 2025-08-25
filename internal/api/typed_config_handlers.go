@@ -45,7 +45,7 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Invalid device ID",
 		})
@@ -58,13 +58,13 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err == gorm.ErrRecordNotFound {
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			h.writeJSON(w, map[string]interface{}{
 				"success": false,
 				"error":   "Device not found",
 			})
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			h.writeJSON(w, map[string]interface{}{
 				"success": false,
 				"error":   err.Error(),
 			})
@@ -81,7 +81,7 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		}).Error("Failed to get device config")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
 		})
@@ -97,7 +97,7 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		}).Error("Failed to convert to typed config")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to convert configuration: %v", err),
 		})
@@ -122,7 +122,7 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Wrap response with success for frontend compatibility
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"success":       true,
 		"configuration": response,
 	})
@@ -136,7 +136,7 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Invalid device ID",
 		})
@@ -149,13 +149,13 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 		w.Header().Set("Content-Type", "application/json")
 		if err == gorm.ErrRecordNotFound {
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			h.writeJSON(w, map[string]interface{}{
 				"success": false,
 				"error":   "Device not found",
 			})
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			h.writeJSON(w, map[string]interface{}{
 				"success": false,
 				"error":   err.Error(),
 			})
@@ -172,7 +172,7 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 		}).Error("Failed to get device config for normalization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
 		})
@@ -188,7 +188,7 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 		}).Error("Failed to convert to typed config for normalization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   fmt.Sprintf("Failed to convert configuration: %v", err),
 		})
@@ -200,7 +200,7 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 	normalized := normalizer.NormalizeTypedConfig(typedConfig)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"success":       true,
 		"configuration": normalized,
 	})
@@ -255,7 +255,7 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	if !validationResult.Valid {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"error":      "Configuration validation failed",
 			"validation": validationResult,
 		})
@@ -279,7 +279,7 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // ValidateTypedConfig handles POST /api/v1/configuration/validate-typed
@@ -325,7 +325,7 @@ func (h *Handler) ValidateTypedConfig(w http.ResponseWriter, r *http.Request) {
 	validationResult := validator.ValidateConfiguration(configJSON)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(validationResult)
+	h.writeJSON(w, validationResult)
 }
 
 // ConvertConfigToTyped handles POST /api/v1/configuration/convert-to-typed
@@ -363,7 +363,7 @@ func (h *Handler) ConvertConfigToTyped(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // ConvertTypedToRaw handles POST /api/v1/configuration/convert-to-raw
@@ -396,7 +396,7 @@ func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetConfigurationSchema handles GET /api/v1/configuration/schema
@@ -404,7 +404,7 @@ func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request)
 	schema := configuration.GetConfigurationSchema()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(schema)
+	h.writeJSON(w, schema)
 }
 
 // BulkValidateConfigs handles POST /api/v1/configuration/bulk-validate
@@ -519,7 +519,7 @@ func (h *Handler) BulkValidateConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetDeviceCapabilities handles GET /api/v1/devices/{id}/capabilities
@@ -574,7 +574,7 @@ func (h *Handler) GetDeviceCapabilities(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // Helper methods

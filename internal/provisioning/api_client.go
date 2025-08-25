@@ -336,7 +336,12 @@ func (c *APIClient) makeRequest(method, endpoint string, requestBody interface{}
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
+	}()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)

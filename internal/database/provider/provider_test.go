@@ -96,7 +96,11 @@ func TestSQLiteProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to SQLite: %v", err)
 	}
-	defer provider.Close()
+	defer func() {
+		if err := provider.Close(); err != nil {
+			t.Logf("Failed to close provider: %v", err)
+		}
+	}()
 
 	// Test ping
 	if err := provider.Ping(); err != nil {
@@ -150,7 +154,11 @@ func TestSQLiteProviderFileDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect to SQLite: %v", err)
 	}
-	defer provider.Close()
+	defer func() {
+		if err := provider.Close(); err != nil {
+			t.Logf("Failed to close provider: %v", err)
+		}
+	}()
 
 	// Verify database file was created
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {

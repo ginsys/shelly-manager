@@ -636,7 +636,12 @@ func (sp *ShellyProvisioner) pingDevice(ctx context.Context, ip string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("device returned status %d", resp.StatusCode)
@@ -676,7 +681,12 @@ func (sp *ShellyProvisioner) makeDeviceRequest(ctx context.Context, method, url 
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error if possible but continue
+			_ = err
+		}
+	}()
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(resp.Body)

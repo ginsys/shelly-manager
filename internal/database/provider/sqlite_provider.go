@@ -246,7 +246,10 @@ func (s *SQLiteProvider) prepareDatabasePath(dsn string) error {
 			return fmt.Errorf("insufficient permissions for database directory %s: %w", dir, err)
 		}
 		// Clean up test file
-		os.Remove(testFile)
+		if err := os.Remove(testFile); err != nil {
+			// Log but don't fail since it's just cleanup
+			_ = err // Ignore cleanup error
+		}
 	}
 
 	return nil

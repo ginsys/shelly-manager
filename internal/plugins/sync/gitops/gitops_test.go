@@ -102,7 +102,9 @@ func TestGitOpsExporter_ValidateConfig(t *testing.T) {
 
 func TestGitOpsExporter_GroupDevices(t *testing.T) {
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	devices := []sync.DeviceData{
 		{ID: 1, Name: "Living Room Light", Type: "SHSW-1", MAC: "00:11:22:33:44:55"},
@@ -149,7 +151,9 @@ func TestGitOpsExporter_GroupDevices(t *testing.T) {
 
 func TestGitOpsExporter_GroupDevicesByType(t *testing.T) {
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	devices := []sync.DeviceData{
 		{ID: 1, Name: "Device 1", Type: "SHSW-1"},
@@ -174,7 +178,9 @@ func TestGitOpsExporter_GroupDevicesByType(t *testing.T) {
 
 func TestGitOpsExporter_ExtractLocationFromName(t *testing.T) {
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	testCases := []struct {
 		name     string
@@ -199,7 +205,9 @@ func TestGitOpsExporter_ExtractLocationFromName(t *testing.T) {
 
 func TestGitOpsExporter_GenerateCommonConfig(t *testing.T) {
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	testData := &sync.ExportData{
 		Metadata: sync.ExportMetadata{
@@ -239,7 +247,9 @@ func TestGitOpsExporter_GenerateCommonConfig(t *testing.T) {
 
 func TestGitOpsExporter_GenerateDeviceConfig(t *testing.T) {
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	device := sync.DeviceData{
 		ID:       1,
@@ -299,7 +309,9 @@ func TestGitOpsExporter_GenerateDeviceConfig(t *testing.T) {
 
 func TestGitOpsExporter_SanitizeFilename(t *testing.T) {
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	testCases := []struct {
 		input    string
@@ -331,7 +343,9 @@ func TestGitOpsExporter_Export(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	// Create test data
 	testData := &sync.ExportData{
@@ -402,7 +416,9 @@ func TestGitOpsExporter_Export(t *testing.T) {
 
 func TestGitOpsExporter_Preview(t *testing.T) {
 	exporter := NewGitOpsExporter()
-	exporter.Initialize(logging.GetDefault())
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	testData := &sync.ExportData{
 		Devices: []sync.DeviceData{

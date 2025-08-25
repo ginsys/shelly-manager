@@ -46,7 +46,9 @@ func TestHTTPMiddleware(t *testing.T) {
 	// Create a test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	})
 
 	// Wrap with metrics middleware
@@ -95,7 +97,9 @@ func TestHTTPMiddlewareWithDifferentMethods(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("Created"))
+		if _, err := w.Write([]byte("Created")); err != nil {
+			t.Logf("Failed to write response: %v", err)
+		}
 	})
 
 	middleware := metrics.HTTPMiddleware()
@@ -125,7 +129,9 @@ func TestHTTPMiddlewareWithDifferentStatusCodes(t *testing.T) {
 	for _, statusCode := range statusCodes {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(statusCode)
-			w.Write([]byte("Response"))
+			if _, err := w.Write([]byte("Response")); err != nil {
+				t.Logf("Failed to write response: %v", err)
+			}
 		})
 
 		middleware := metrics.HTTPMiddleware()
@@ -160,7 +166,9 @@ func TestHTTPMiddlewareResponseSize(t *testing.T) {
 	for i, tc := range testCases {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(tc.body))
+			if _, err := w.Write([]byte(tc.body)); err != nil {
+				t.Logf("Failed to write response: %v", err)
+			}
 		})
 
 		middleware := metrics.HTTPMiddleware()
@@ -208,7 +216,9 @@ func TestResponseWriterWrapper(t *testing.T) {
 
 	// Test multiple writes
 	moreData := []byte(" more")
-	wrapper.Write(moreData)
+	if _, err := wrapper.Write(moreData); err != nil {
+		t.Logf("Failed to write additional data: %v", err)
+	}
 
 	expectedSize := len(data) + len(moreData)
 	if wrapper.size != expectedSize {

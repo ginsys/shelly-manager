@@ -50,13 +50,20 @@ func NewHandlerWithLogger(db database.DatabaseInterface, svc *service.ShellyServ
 	}
 }
 
+// writeJSON writes a JSON response and logs any encoding errors
+func (h *Handler) writeJSON(w http.ResponseWriter, data interface{}) {
+	if err := json.NewEncoder(w).Encode(data); err != nil && h.logger != nil {
+		h.logger.Error("Failed to encode JSON response", "error", err)
+	}
+}
+
 // GetDevices handles GET /api/v1/devices
 func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.DB.GetDevices()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Failed to get devices: " + err.Error(),
 		})
@@ -64,7 +71,7 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"success": true,
 		"devices": devices,
 	})
@@ -91,7 +98,7 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(device)
+	h.writeJSON(w, device)
 }
 
 // GetDevice handles GET /api/v1/devices/{id}
@@ -114,7 +121,7 @@ func (h *Handler) GetDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(device)
+	h.writeJSON(w, device)
 }
 
 // UpdateDevice handles PUT /api/v1/devices/{id}
@@ -158,7 +165,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updatedDevice)
+	h.writeJSON(w, updatedDevice)
 }
 
 // DeleteDevice handles DELETE /api/v1/devices/{id}
@@ -245,7 +252,9 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 				existing.Status = device.Status
 				existing.LastSeen = device.LastSeen
 				existing.Firmware = device.Firmware
-				h.DB.UpdateDevice(existing)
+				if err := h.DB.UpdateDevice(existing); err != nil && h.logger != nil {
+					h.logger.Error("Failed to update device during import", "error", err, "deviceID", existing.ID)
+				}
 
 				// Import config if requested
 				if req.ImportConfig {
@@ -289,7 +298,7 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetProvisioningStatus handles GET /api/v1/provisioning/status
@@ -303,7 +312,7 @@ func (h *Handler) GetProvisioningStatus(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	h.writeJSON(w, status)
 }
 
 // ProvisionDevices handles POST /api/v1/provisioning/provision
@@ -314,7 +323,7 @@ func (h *Handler) ProvisionDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetDHCPReservations handles GET /api/v1/dhcp/reservations
@@ -322,7 +331,7 @@ func (h *Handler) GetDHCPReservations(w http.ResponseWriter, r *http.Request) {
 	reservations := []map[string]interface{}{}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(reservations)
+	h.writeJSON(w, reservations)
 }
 
 // ControlDevice handles POST /api/v1/devices/{id}/control
@@ -368,7 +377,7 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetDeviceStatus handles GET /api/v1/devices/{id}/status
@@ -392,7 +401,7 @@ func (h *Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	h.writeJSON(w, status)
 }
 
 // GetDeviceEnergy handles GET /api/v1/devices/{id}/energy
@@ -425,7 +434,7 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(energy)
+	h.writeJSON(w, energy)
 }
 
 // GetDeviceConfig handles GET /api/v1/devices/{id}/config
@@ -449,7 +458,7 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	h.writeJSON(w, config)
 }
 
 // GetCurrentDeviceConfig handles GET /api/v1/devices/{id}/config/current
@@ -459,7 +468,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Invalid device ID",
 		})
@@ -474,7 +483,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 			"error":     err.Error(),
 		}).Error("Failed to get current device config from device")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
 		})
@@ -482,7 +491,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"success":       true,
 		"configuration": config,
 	})
@@ -495,7 +504,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Invalid device ID",
 		})
@@ -510,7 +519,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 			"error":     err.Error(),
 		}).Error("Failed to get current device config from device for normalization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   err.Error(),
 		})
@@ -525,7 +534,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 			"error":     err.Error(),
 		}).Error("Failed to parse device config for normalization")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Failed to parse device configuration",
 		})
@@ -537,7 +546,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 	normalized := normalizer.NormalizeRawConfig(rawConfig)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"success":       true,
 		"configuration": normalized,
 	})
@@ -564,7 +573,7 @@ func (h *Handler) ImportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	h.writeJSON(w, config)
 }
 
 // GetImportStatus handles GET /api/v1/devices/{id}/config/status
@@ -588,7 +597,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	h.writeJSON(w, status)
 }
 
 // ExportDeviceConfig handles POST /api/v1/devices/{id}/config/export
@@ -617,7 +626,7 @@ func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // BulkImportConfigs handles POST /api/v1/config/bulk-import
@@ -682,7 +691,7 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // BulkExportConfigs handles POST /api/v1/config/bulk-export
@@ -746,7 +755,7 @@ func (h *Handler) BulkExportConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // DetectConfigDrift handles GET /api/v1/devices/{id}/config/drift
@@ -776,12 +785,12 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 			"message":   "No configuration drift detected",
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		h.writeJSON(w, response)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(drift)
+	h.writeJSON(w, drift)
 }
 
 // BulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect
@@ -797,7 +806,7 @@ func (h *Handler) BulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	h.writeJSON(w, result)
 }
 
 // GetConfigTemplates handles GET /api/v1/config/templates
@@ -812,7 +821,7 @@ func (h *Handler) GetConfigTemplates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(templates)
+	h.writeJSON(w, templates)
 }
 
 // CreateConfigTemplate handles POST /api/v1/config/templates
@@ -833,7 +842,7 @@ func (h *Handler) CreateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(template)
+	h.writeJSON(w, template)
 }
 
 // UpdateConfigTemplate handles PUT /api/v1/config/templates/{id}
@@ -862,7 +871,7 @@ func (h *Handler) UpdateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(template)
+	h.writeJSON(w, template)
 }
 
 // DeleteConfigTemplate handles DELETE /api/v1/config/templates/{id}
@@ -922,7 +931,7 @@ func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetConfigHistory handles GET /api/v1/devices/{id}/config/history
@@ -953,7 +962,7 @@ func (h *Handler) GetConfigHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(history)
+	h.writeJSON(w, history)
 }
 
 // UpdateDeviceConfig handles PUT /api/v1/devices/{id}/config
@@ -991,7 +1000,7 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	h.writeJSON(w, config)
 }
 
 // UpdateRelayConfig handles PUT /api/v1/devices/{id}/config/relay
@@ -1022,7 +1031,7 @@ func (h *Handler) UpdateRelayConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	h.writeJSON(w, map[string]string{"status": "success"})
 }
 
 // UpdateDimmingConfig handles PUT /api/v1/devices/{id}/config/dimming
@@ -1053,7 +1062,7 @@ func (h *Handler) UpdateDimmingConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	h.writeJSON(w, map[string]string{"status": "success"})
 }
 
 // UpdateRollerConfig handles PUT /api/v1/devices/{id}/config/roller
@@ -1084,7 +1093,7 @@ func (h *Handler) UpdateRollerConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	h.writeJSON(w, map[string]string{"status": "success"})
 }
 
 // UpdatePowerMeteringConfig handles PUT /api/v1/devices/{id}/config/power-metering
@@ -1115,7 +1124,7 @@ func (h *Handler) UpdatePowerMeteringConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	h.writeJSON(w, map[string]string{"status": "success"})
 }
 
 // UpdateDeviceAuth handles PUT /api/v1/devices/{id}/config/auth
@@ -1149,7 +1158,7 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	h.writeJSON(w, map[string]string{"status": "success"})
 }
 
 // GetDriftSchedules handles GET /api/v1/config/drift-schedules
@@ -1164,7 +1173,7 @@ func (h *Handler) GetDriftSchedules(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(schedules)
+	h.writeJSON(w, schedules)
 }
 
 // CreateDriftSchedule handles POST /api/v1/config/drift-schedules
@@ -1187,7 +1196,7 @@ func (h *Handler) CreateDriftSchedule(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(created)
+	h.writeJSON(w, created)
 }
 
 // GetDriftSchedule handles GET /api/v1/config/drift-schedules/{id}
@@ -1214,7 +1223,7 @@ func (h *Handler) GetDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(schedule)
+	h.writeJSON(w, schedule)
 }
 
 // UpdateDriftSchedule handles PUT /api/v1/config/drift-schedules/{id}
@@ -1247,7 +1256,7 @@ func (h *Handler) UpdateDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updated)
+	h.writeJSON(w, updated)
 }
 
 // DeleteDriftSchedule handles DELETE /api/v1/config/drift-schedules/{id}
@@ -1274,7 +1283,7 @@ func (h *Handler) DeleteDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+	h.writeJSON(w, map[string]string{"status": "deleted"})
 }
 
 // ToggleDriftSchedule handles POST /api/v1/config/drift-schedules/{id}/toggle
@@ -1301,7 +1310,7 @@ func (h *Handler) ToggleDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updated)
+	h.writeJSON(w, updated)
 }
 
 // GetDriftScheduleRuns handles GET /api/v1/config/drift-schedules/{id}/runs
@@ -1332,7 +1341,7 @@ func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(runs)
+	h.writeJSON(w, runs)
 }
 
 // GetDriftReports handles GET /api/v1/config/drift-reports
@@ -1369,7 +1378,7 @@ func (h *Handler) GetDriftReports(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(reports)
+	h.writeJSON(w, reports)
 }
 
 // GenerateDeviceDriftReport handles POST /api/v1/devices/{id}/drift-report
@@ -1393,7 +1402,7 @@ func (h *Handler) GenerateDeviceDriftReport(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(report)
+	h.writeJSON(w, report)
 }
 
 // GetDriftTrends handles GET /api/v1/config/drift-trends
@@ -1437,7 +1446,7 @@ func (h *Handler) GetDriftTrends(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(trends)
+	h.writeJSON(w, trends)
 }
 
 // MarkTrendResolved handles POST /api/v1/config/drift-trends/{id}/resolve
@@ -1460,7 +1469,7 @@ func (h *Handler) MarkTrendResolved(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "resolved"})
+	h.writeJSON(w, map[string]string{"status": "resolved"})
 }
 
 // EnhancedBulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect-enhanced
@@ -1485,7 +1494,7 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 
 		// Fall back to basic result if reporting fails
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		h.writeJSON(w, result)
 		return
 	}
 
@@ -1497,7 +1506,7 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 	}).Info("Enhanced bulk drift detection completed")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(report)
+	h.writeJSON(w, report)
 }
 
 // PreviewTemplate handles POST /api/v1/configuration/preview-template
@@ -1514,7 +1523,7 @@ func (h *Handler) PreviewTemplate(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		h.writeJSON(w, map[string]string{"error": "Invalid request body"})
 		return
 	}
 
@@ -1534,7 +1543,7 @@ func (h *Handler) PreviewTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"result": resultObj,
 	})
 }
@@ -1552,7 +1561,7 @@ func (h *Handler) ValidateTemplate(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"valid": false,
 			"error": "Invalid request body",
 		})
@@ -1569,7 +1578,7 @@ func (h *Handler) ValidateTemplate(w http.ResponseWriter, r *http.Request) {
 		}).Info("Template validation failed")
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"valid": false,
 			"error": err.Error(),
 		})
@@ -1579,7 +1588,7 @@ func (h *Handler) ValidateTemplate(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("Template validation succeeded")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"valid": true,
 	})
 }
@@ -1599,7 +1608,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Invalid request body",
 		})
@@ -1609,7 +1618,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" || req.Template == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Template name and content are required",
 		})
@@ -1626,7 +1635,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Template validation failed: " + err.Error(),
 		})
@@ -1642,7 +1651,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Failed to process variables",
 		})
@@ -1669,7 +1678,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		h.writeJSON(w, map[string]interface{}{
 			"success": false,
 			"error":   "Failed to save template",
 		})
@@ -1682,7 +1691,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 	}).Info("Template saved successfully")
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"success": true,
 		"id":      template.ID,
 	})
@@ -1694,7 +1703,7 @@ func (h *Handler) GetTemplateExamples(w http.ResponseWriter, r *http.Request) {
 	documentation := configuration.GetTemplateDocumentation()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"examples":      examples,
 		"documentation": documentation,
 	})

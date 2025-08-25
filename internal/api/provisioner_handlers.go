@@ -128,7 +128,7 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetProvisionerAgents handles GET /api/v1/provisioner/agents
@@ -146,7 +146,7 @@ func (h *Handler) GetProvisionerAgents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"agents": agents,
 		"count":  len(agents),
 	})
@@ -198,7 +198,7 @@ func (h *Handler) PollTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // UpdateTaskStatus handles PUT /api/v1/provisioner/tasks/{id}/status
@@ -251,7 +251,7 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // CreateProvisioningTask handles POST /api/v1/provisioner/tasks
@@ -313,7 +313,7 @@ func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetProvisioningTasks handles GET /api/v1/provisioner/tasks
@@ -327,7 +327,7 @@ func (h *Handler) GetProvisioningTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	h.writeJSON(w, map[string]interface{}{
 		"tasks": tasks,
 		"count": len(tasks),
 	})
@@ -363,7 +363,7 @@ func (h *Handler) ProvisionerHealthCheck(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // ReportDiscoveredDevices handles POST /api/v1/provisioner/discovered-devices
@@ -488,7 +488,7 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }
 
 // GetDiscoveredDevices handles GET /api/v1/provisioner/discovered-devices
@@ -538,5 +538,5 @@ func (h *Handler) GetDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	h.writeJSON(w, response)
 }

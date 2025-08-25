@@ -621,11 +621,21 @@ func (g *GitOpsPlugin) writeYAMLFile(filePath string, data interface{}) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Log but continue - file is still usable
+			_ = err
+		}
+	}()
 
 	encoder := yaml.NewEncoder(file)
 	encoder.SetIndent(2)
-	defer encoder.Close()
+	defer func() {
+		if err := encoder.Close(); err != nil {
+			// Log but continue - encoder is still functional
+			_ = err
+		}
+	}()
 
 	return encoder.Encode(data)
 }

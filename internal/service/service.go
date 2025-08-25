@@ -150,6 +150,11 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 
 		// Save updated settings
 		if err := s.DB.UpdateDevice(device); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+		}).Error("Failed to update device")
+	}; err != nil {
 			s.logger.WithFields(map[string]any{
 				"device_id": device.ID,
 				"error":     err.Error(),
@@ -279,7 +284,17 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		settings.AuthPass = ""
 		updatedSettings, _ := json.Marshal(settings)
 		device.Settings = string(updatedSettings)
-		s.DB.UpdateDevice(device)
+		if err := s.DB.UpdateDevice(device); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+		}).Error("Failed to update device")
+	}; err != nil {
+			s.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"error":     err.Error(),
+			}).Error("Failed to update device with new settings")
+		}
 
 		// Clear from cache
 		s.ClearClientCache(device.IP)
@@ -497,7 +512,17 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			settings.AuthPass = ""
 			updatedSettings, _ := json.Marshal(settings)
 			device.Settings = string(updatedSettings)
-			s.DB.UpdateDevice(device)
+			if err := s.DB.UpdateDevice(device); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+		}).Error("Failed to update device")
+	}; err != nil {
+				s.logger.WithFields(map[string]any{
+					"device_id": device.ID,
+					"error":     err.Error(),
+				}).Error("Failed to update device after clearing credentials")
+			}
 
 			// Clear from cache
 			s.clientMu.Lock()
@@ -590,7 +615,12 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 				delete(settings, "auth_pass")
 				updatedSettings, _ := json.Marshal(settings)
 				device.Settings = string(updatedSettings)
-				s.DB.UpdateDevice(device)
+				if err := s.DB.UpdateDevice(device); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+		}).Error("Failed to update device")
+	}
 
 				// Clear from cache
 				s.ClearClientCache(device.IP)
@@ -651,7 +681,12 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 	// Update device status in database
 	device.Status = "online"
 	device.LastSeen = time.Now()
-	s.DB.UpdateDevice(device)
+	if err := s.DB.UpdateDevice(device); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+		}).Error("Failed to update device")
+	}
 
 	s.logger.WithFields(map[string]any{
 		"device_id": deviceID,
@@ -700,7 +735,12 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 	// Update device in database
 	device.Status = "online"
 	device.LastSeen = time.Now()
-	s.DB.UpdateDevice(device)
+	if err := s.DB.UpdateDevice(device); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+		}).Error("Failed to update device")
+	}
 
 	return result, nil
 }
@@ -830,7 +870,14 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 	settingsJSON, _ := json.Marshal(settings)
 	device.Settings = string(settingsJSON)
 
-	return s.DB.UpdateDevice(device)
+	if err := s.DB.UpdateDevice(device); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+		}).Error("Failed to update device")
+		return err
+	}
+	return nil
 }
 
 // ExportDeviceConfig exports configuration to a physical device

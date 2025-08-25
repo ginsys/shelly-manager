@@ -136,8 +136,11 @@ var discoverCmd = &cobra.Command{
 				if existingDevice.IP != device.IP {
 					existingDevice.IP = device.IP
 					existingDevice.LastSeen = time.Now()
-					dbManager.UpdateDevice(existingDevice)
-					fmt.Printf("✓ Updated IP address in database\n")
+					if err := dbManager.UpdateDevice(existingDevice); err != nil {
+						fmt.Printf("✗ Failed to update device: %v\n", err)
+					} else {
+						fmt.Printf("✓ Updated IP address in database\n")
+					}
 				} else {
 					fmt.Printf("• Already in database\n")
 				}
