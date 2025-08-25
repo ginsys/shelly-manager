@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
 
 jobs:
   test:
@@ -58,7 +58,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go-version: ['1.21', '1.22', '1.23']
+        go-version: ['1.22', '1.23', '1.24']
     
     steps:
     - name: Checkout code
@@ -88,7 +88,7 @@ jobs:
     continue-on-error: true  # This prevents Windows failures from failing the workflow
     strategy:
       matrix:
-        go-version: ['1.21', '1.22', '1.23']
+        go-version: ['1.22', '1.23', '1.24']
     
     steps:
     - name: Checkout code

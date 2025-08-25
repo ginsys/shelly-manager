@@ -340,11 +340,15 @@ func TestGitOpsExporter_Export(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp directory: %v", removeErr)
+		}
+	}()
 
 	exporter := NewGitOpsExporter()
-	if err := exporter.Initialize(logging.GetDefault()); err != nil {
-		t.Logf("Failed to initialize exporter: %v", err)
+	if initErr := exporter.Initialize(logging.GetDefault()); initErr != nil {
+		t.Logf("Failed to initialize exporter: %v", initErr)
 	}
 
 	// Create test data

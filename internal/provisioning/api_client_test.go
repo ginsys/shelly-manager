@@ -57,13 +57,15 @@ func TestAPIClient(t *testing.T) {
 
 			// Send success response
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"success":       true,
 				"agent_id":      "test-agent",
 				"registered_at": time.Now(),
 				"status":        "registered",
 				"message":       "Agent registered successfully",
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -76,7 +78,9 @@ func TestAPIClient(t *testing.T) {
 	t.Run("RegisterAgent_ServerError", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Internal server error"))
+			if _, err := w.Write([]byte("Internal server error")); err != nil {
+				t.Logf("Failed to write response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -112,9 +116,11 @@ func TestAPIClient(t *testing.T) {
 			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"tasks": expectedTasks,
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -134,9 +140,11 @@ func TestAPIClient(t *testing.T) {
 	t.Run("PollTasks_EmptyResponse", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"tasks": []interface{}{},
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -170,7 +178,9 @@ func TestAPIClient(t *testing.T) {
 			assert.Equal(t, "Device provisioned successfully", statusUpdate.Result["message"])
 
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "updated"})
+			if err := json.NewEncoder(w).Encode(map[string]string{"status": "updated"}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -185,7 +195,9 @@ func TestAPIClient(t *testing.T) {
 	t.Run("UpdateTaskStatus_TaskNotFound", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte("Task not found"))
+			if _, err := w.Write([]byte("Task not found")); err != nil {
+				t.Logf("Failed to write response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -205,10 +217,12 @@ func TestAPIClient(t *testing.T) {
 			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{
+			if err := json.NewEncoder(w).Encode(map[string]string{
 				"status":    "healthy",
 				"timestamp": time.Now().Format(time.RFC3339),
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -231,7 +245,9 @@ func TestAPIClient(t *testing.T) {
 			// Simulate slow response
 			time.Sleep(200 * time.Millisecond)
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+			if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}))
 		defer server.Close()
 
@@ -254,7 +270,9 @@ func TestAPIClient(t *testing.T) {
 			auth := r.Header.Get("Authorization")
 			if auth != "Bearer valid-key" {
 				w.WriteHeader(http.StatusUnauthorized)
-				w.Write([]byte("Unauthorized"))
+				if _, err := w.Write([]byte("Unauthorized")); err != nil {
+					t.Logf("Failed to write response: %v", err)
+				}
 				return
 			}
 			w.WriteHeader(http.StatusOK)
@@ -303,7 +321,9 @@ func TestAPIClient(t *testing.T) {
 				Message:          "Successfully processed devices",
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}))
 		defer server.Close()
 

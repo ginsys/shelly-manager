@@ -74,7 +74,7 @@ func TestDatabase(t *testing.T) (*database.Manager, func()) {
 	// Create a unique temporary file for this test to avoid in-memory issues
 	tmpFile, err := os.CreateTemp("", "test-*.db")
 	require.NoError(t, err, "Failed to create temp file")
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err, "Failed to create logger")
@@ -90,7 +90,7 @@ func TestDatabase(t *testing.T) (*database.Manager, func()) {
 			defer testDbMutex.Unlock()
 
 			if dbManager != nil {
-				dbManager.Close()
+				_ = dbManager.Close()
 			}
 
 			// Handle Windows file locking issues
@@ -104,7 +104,7 @@ func TestDatabase(t *testing.T) (*database.Manager, func()) {
 					time.Sleep(100 * time.Millisecond)
 				}
 			} else {
-				os.Remove(tmpFile.Name())
+				_ = os.Remove(tmpFile.Name())
 			}
 		})
 	}
@@ -133,7 +133,7 @@ func TestDatabaseMemory(t *testing.T) (*database.Manager, func()) {
 			defer testDbMutex.Unlock()
 
 			if dbManager != nil {
-				dbManager.Close()
+				_ = dbManager.Close()
 			}
 		})
 	}
@@ -277,7 +277,7 @@ func TempDir(t *testing.T) string {
 	}
 
 	t.Cleanup(func() {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 	})
 
 	return dir

@@ -284,7 +284,7 @@ func mockGen2Server() *httptest.Server {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp) // Error ignored in test mock
 	})
 
 	return httptest.NewServer(mux)
@@ -687,7 +687,7 @@ func TestClient_AuthRequired(t *testing.T) {
 	// Create mock server that returns 401 for unauthorized requests
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Unauthorized"))
+		_, _ = w.Write([]byte("Unauthorized"))
 	}))
 	defer server.Close()
 

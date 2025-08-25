@@ -16,7 +16,7 @@ func createMockShellyConfigServer() *httptest.Server {
 	// Gen1 configuration endpoints
 	mux.HandleFunc("/shelly", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"type": "SHSW-25",
 			"mac": "68C63A123456",
 			"auth": false,
@@ -27,7 +27,7 @@ func createMockShellyConfigServer() *httptest.Server {
 
 	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"device": {
 				"type": "SHSW-25",
 				"mac": "68C63A123456",
@@ -104,7 +104,7 @@ func createMockShellyConfigServer() *httptest.Server {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"name": "Updated Relay", "ison": false}`)
+		_, _ = fmt.Fprintf(w, `{"name": "Updated Relay", "ison": false}`)
 	})
 
 	return httptest.NewServer(mux)

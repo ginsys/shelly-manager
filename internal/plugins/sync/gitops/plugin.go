@@ -111,7 +111,7 @@ func (p *Plugin) Health() plugins.HealthStatus {
 		LastChecked: time.Now(),
 		Message:     message,
 		Details: map[string]interface{}{
-			"logger": p.GitOpsPlugin.logger != nil,
+			"logger": p.logger != nil,
 		},
 	}
 }

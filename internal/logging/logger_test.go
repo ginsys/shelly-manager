@@ -42,8 +42,8 @@ func TestNew_ValidConfig(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -73,8 +73,8 @@ func TestNew_FileOutput(t *testing.T) {
 		t.Fatalf("Failed to create logger with file output: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -82,7 +82,7 @@ func TestNew_FileOutput(t *testing.T) {
 	logger.Info("test message")
 
 	// Verify file was created
-	if _, err := os.Stat(logFile); os.IsNotExist(err) {
+	if _, statErr := os.Stat(logFile); os.IsNotExist(statErr) {
 		t.Error("Log file was not created")
 	}
 
@@ -188,8 +188,8 @@ func TestWithFields(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -240,15 +240,15 @@ func TestWithContext(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
 	// Test context with values
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "request_id", "req-123")
-	ctx = context.WithValue(ctx, "user_id", "user-456")
+	ctx = context.WithValue(ctx, requestIDKey, "req-123")
+	ctx = context.WithValue(ctx, userIDKey, "user-456")
 
 	contextLogger := logger.WithContext(ctx)
 
@@ -280,8 +280,8 @@ func TestLogDBOperation(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -349,8 +349,8 @@ func TestLogHTTPRequest(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -415,8 +415,8 @@ func TestLogDiscoveryOperation(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -468,8 +468,8 @@ func TestLogDeviceOperation(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -506,8 +506,8 @@ func TestLogAppLifecycle(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -549,8 +549,8 @@ func TestLogConfigLoad(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -625,8 +625,8 @@ func TestLoggerTextFormat(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -662,8 +662,8 @@ func TestLoggerJSONFormat(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 

@@ -86,16 +86,16 @@ func TestHTTPMiddleware_LogsRequests(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("OK")); err != nil {
-			t.Logf("Failed to write response: %v", err)
+		if _, writeErr := w.Write([]byte("OK")); writeErr != nil {
+			t.Logf("Failed to write response: %v", writeErr)
 		}
 	})
 
@@ -303,8 +303,8 @@ func TestRecoveryMiddleware_HandlesPanic(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -366,8 +366,8 @@ func TestRecoveryMiddleware_NoInterferenceOnSuccess(t *testing.T) {
 	// Create normal handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("success")); err != nil {
-			t.Logf("Failed to write response: %v", err)
+		if _, writeErr := w.Write([]byte("success")); writeErr != nil {
+			t.Logf("Failed to write response: %v", writeErr)
 		}
 	})
 
@@ -398,8 +398,8 @@ func TestCORSMiddleware_SetsHeaders(t *testing.T) {
 	// Create test handler
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("OK")); err != nil {
-			t.Logf("Failed to write response: %v", err)
+		if _, writeErr := w.Write([]byte("OK")); writeErr != nil {
+			t.Logf("Failed to write response: %v", writeErr)
 		}
 	})
 
@@ -489,8 +489,8 @@ func TestCORSMiddleware_LogsRequests(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -554,8 +554,8 @@ func TestCORSMiddleware_NoLogWithoutOrigin(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -666,8 +666,8 @@ func TestMultipleMiddleware(t *testing.T) {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
 	defer func() {
-		if err := logger.Close(); err != nil {
-			t.Logf("Failed to close logger: %v", err)
+		if closeErr := logger.Close(); closeErr != nil {
+			t.Logf("Failed to close logger: %v", closeErr)
 		}
 	}()
 
@@ -679,8 +679,8 @@ func TestMultipleMiddleware(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("success")); err != nil {
-			t.Logf("Failed to write response: %v", err)
+		if _, writeErr := w.Write([]byte("success")); writeErr != nil {
+			t.Logf("Failed to write response: %v", writeErr)
 		}
 	})
 

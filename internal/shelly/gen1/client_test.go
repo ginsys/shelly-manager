@@ -17,18 +17,20 @@ func mockGen1Server(t *testing.T) *httptest.Server {
 		switch r.URL.Path {
 		case "/shelly":
 			// Device info endpoint
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"type":        "SHSW-25",
 				"mac":         "A4CF12F45678",
 				"auth":        false,
 				"fw":          "20230913-114008/v1.14.0-gcb84623",
 				"num_outputs": 2,
 				"num_meters":  2,
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 
 		case "/status":
 			// Status endpoint
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"wifi_sta": map[string]interface{}{
 					"connected": true,
 					"ssid":      "TestNetwork",
@@ -77,12 +79,15 @@ func mockGen1Server(t *testing.T) *httptest.Server {
 						"total":     0,
 					},
 				},
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 
 		case "/settings":
-			if r.Method == "GET" {
+			switch r.Method {
+			case "GET":
 				// Get settings
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				if err := json.NewEncoder(w).Encode(map[string]interface{}{
 					"name":     "Test Shelly",
 					"timezone": "Europe/Amsterdam",
 					"lat":      52.3676,
@@ -109,32 +114,38 @@ func mockGen1Server(t *testing.T) *httptest.Server {
 							"auto_off": 0,
 						},
 					},
-				})
-			} else if r.Method == "POST" {
+				}); err != nil {
+					t.Logf("Failed to encode JSON response: %v", err)
+				}
+			case "POST":
 				// Set settings
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				if err := json.NewEncoder(w).Encode(map[string]interface{}{
 					"success": true,
-				})
+				}); err != nil {
+					t.Logf("Failed to encode JSON response: %v", err)
+				}
 			}
 
 		case "/relay/0", "/relay/1":
 			if r.Method == "POST" {
 				// Control relay
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				if err := json.NewEncoder(w).Encode(map[string]interface{}{
 					"ison":            r.FormValue("turn") == "on",
 					"has_timer":       false,
 					"timer_started":   0,
 					"timer_duration":  0,
 					"timer_remaining": 0,
 					"source":          "http",
-				})
+				}); err != nil {
+					t.Logf("Failed to encode JSON response: %v", err)
+				}
 			}
 
 		case "/meter/0", "/meter/1":
 			// Meter endpoint
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"power":     15.32,
 				"is_valid":  true,
 				"timestamp": time.Now().Unix(),
@@ -143,38 +154,47 @@ func mockGen1Server(t *testing.T) *httptest.Server {
 				"voltage":   230.5,
 				"current":   0.067,
 				"pf":        0.99,
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 
 		case "/ota":
-			if r.Method == "GET" {
+			switch r.Method {
+			case "GET":
 				// Check for updates
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				if err := json.NewEncoder(w).Encode(map[string]interface{}{
 					"has_update":    true,
 					"new_version":   "20231015-120000/v1.14.1",
 					"old_version":   "20230913-114008/v1.14.0-gcb84623",
 					"release_notes": "Bug fixes and improvements",
-				})
-			} else if r.Method == "POST" {
+				}); err != nil {
+					t.Logf("Failed to encode JSON response: %v", err)
+				}
+			case "POST":
 				// Trigger update
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				if err := json.NewEncoder(w).Encode(map[string]interface{}{
 					"status": "updating",
-				})
+				}); err != nil {
+					t.Logf("Failed to encode JSON response: %v", err)
+				}
 			}
 
 		case "/reboot":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 
 		case "/settings/factory_reset":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			_, _ = w.Write([]byte("OK"))
 
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			if err := json.NewEncoder(w).Encode(map[string]interface{}{
 				"error": "Not found",
-			})
+			}); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		}
 	}))
 }
@@ -358,11 +378,13 @@ func TestGen1Client_AuthRequired(t *testing.T) {
 		}
 
 		// Return success if auth is correct
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"type": "SHSW-1",
 			"mac":  "A4CF12F45678",
 			"auth": true,
-		})
+		}); err != nil {
+			t.Logf("Failed to encode JSON response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -399,10 +421,12 @@ func TestGen1Client_Retry(t *testing.T) {
 			return
 		}
 		// Succeed on 3rd attempt
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"type": "SHSW-1",
 			"mac":  "A4CF12F45678",
-		})
+		}); err != nil {
+			t.Logf("Failed to encode JSON response: %v", err)
+		}
 	}))
 	defer server.Close()
 

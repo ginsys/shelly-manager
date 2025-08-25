@@ -136,7 +136,7 @@ func (l *Logger) WithFields(fields map[string]any) *Logger {
 	}
 
 	return &Logger{
-		Logger: l.Logger.With(args...),
+		Logger: l.With(args...),
 		level:  l.level,
 		config: l.config,
 		file:   l.file, // Preserve file handle

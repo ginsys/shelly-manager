@@ -60,7 +60,7 @@ func TestImportEngine_ImportGitOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create GitOps structure
 	err = createTestGitOpsStructure(tmpDir)
@@ -114,7 +114,7 @@ func TestImportEngine_PreviewImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create GitOps structure
 	err = createTestGitOpsStructure(tmpDir)
@@ -203,7 +203,7 @@ func TestGitOpsImporter_LoadGitOpsStructure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create GitOps structure
 	err = createTestGitOpsStructure(tmpDir)
@@ -442,11 +442,11 @@ func writeYAMLFile(filePath string, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	encoder := yaml.NewEncoder(file)
 	encoder.SetIndent(2)
-	defer encoder.Close()
+	defer func() { _ = encoder.Close() }()
 
 	return encoder.Encode(data)
 }

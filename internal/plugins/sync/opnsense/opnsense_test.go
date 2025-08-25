@@ -127,7 +127,9 @@ func TestOPNSenseExporter_ValidateConfig(t *testing.T) {
 func TestOPNSenseExporter_Preview(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
 	exporter := NewOPNSenseExporter()
-	exporter.Initialize(logger)
+	if err := exporter.Initialize(logger); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	// Create test data
 	testData := &sync.ExportData{
@@ -286,7 +288,9 @@ func TestOPNSenseExporter_SanitizeHostname(t *testing.T) {
 func TestOPNSenseExporter_ConvertToDeviceMappings(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
 	exporter := NewOPNSenseExporter()
-	exporter.Initialize(logger)
+	if err := exporter.Initialize(logger); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	testData := &sync.ExportData{
 		Devices: []sync.DeviceData{
@@ -369,7 +373,9 @@ func TestOPNSenseExporter_Initialize(t *testing.T) {
 func TestOPNSenseExporter_Cleanup(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
 	exporter := NewOPNSenseExporter()
-	exporter.Initialize(logger)
+	if err := exporter.Initialize(logger); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	err := exporter.Cleanup()
 	if err != nil {
@@ -381,7 +387,9 @@ func TestOPNSenseExporter_Cleanup(t *testing.T) {
 func BenchmarkOPNSenseExporter_ConvertToDeviceMappings(b *testing.B) {
 	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
 	exporter := NewOPNSenseExporter()
-	exporter.Initialize(logger)
+	if err := exporter.Initialize(logger); err != nil {
+		b.Logf("Failed to initialize exporter: %v", err)
+	}
 
 	// Create test data with many devices
 	testData := &sync.ExportData{

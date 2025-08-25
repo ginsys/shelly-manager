@@ -13,7 +13,10 @@ import (
 // contextKey is a type for context keys to avoid collisions
 type contextKey string
 
-const requestIDKey contextKey = "request_id"
+const (
+	requestIDKey contextKey = "request_id"
+	userIDKey    contextKey = "user_id"
+)
 
 // GetRequestID extracts the request ID from a context
 func GetRequestID(ctx context.Context) string {

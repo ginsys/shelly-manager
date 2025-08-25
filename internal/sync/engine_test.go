@@ -231,8 +231,8 @@ func TestExportEngine_ListPlugins(t *testing.T) {
 	plugin1 := &MockPlugin{name: "plugin1", formats: []string{"json"}}
 	plugin2 := &MockPlugin{name: "plugin2", formats: []string{"yaml"}}
 
-	engine.RegisterPlugin(plugin1)
-	engine.RegisterPlugin(plugin2)
+	_ = engine.RegisterPlugin(plugin1)
+	_ = engine.RegisterPlugin(plugin2)
 
 	plugins = engine.ListPlugins()
 	if len(plugins) != 2 {
@@ -263,7 +263,7 @@ func TestExportEngine_GetPlugin(t *testing.T) {
 
 	// Register and get plugin
 	mockPlugin := &MockPlugin{name: "test-plugin", formats: []string{"json"}}
-	engine.RegisterPlugin(mockPlugin)
+	_ = engine.RegisterPlugin(mockPlugin)
 
 	plugin, err := engine.GetPlugin("test-plugin")
 	if err != nil {
@@ -284,7 +284,7 @@ func TestExportEngine_ValidateExport(t *testing.T) {
 		name:    "test-plugin",
 		formats: []string{"json", "yaml"},
 	}
-	engine.RegisterPlugin(mockPlugin)
+	_ = engine.RegisterPlugin(mockPlugin)
 
 	// Test valid request
 	request := ExportRequest{
@@ -331,7 +331,7 @@ func TestExportEngine_Export(t *testing.T) {
 		name:    "test-plugin",
 		formats: []string{"json"},
 	}
-	engine.RegisterPlugin(mockPlugin)
+	_ = engine.RegisterPlugin(mockPlugin)
 
 	request := ExportRequest{
 		PluginName: "test-plugin",
@@ -370,7 +370,7 @@ func TestExportEngine_Preview(t *testing.T) {
 		name:    "test-plugin",
 		formats: []string{"json"},
 	}
-	engine.RegisterPlugin(mockPlugin)
+	_ = engine.RegisterPlugin(mockPlugin)
 
 	request := ExportRequest{
 		PluginName: "test-plugin",
@@ -403,8 +403,8 @@ func TestExportEngine_Shutdown(t *testing.T) {
 	plugin1 := &MockPlugin{name: "plugin1", formats: []string{"json"}}
 	plugin2 := &MockPlugin{name: "plugin2", formats: []string{"yaml"}}
 
-	engine.RegisterPlugin(plugin1)
-	engine.RegisterPlugin(plugin2)
+	_ = engine.RegisterPlugin(plugin1)
+	_ = engine.RegisterPlugin(plugin2)
 
 	err := engine.Shutdown()
 	if err != nil {

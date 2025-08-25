@@ -600,10 +600,10 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 				delete(settings, "auth_pass")
 				updatedSettings, _ := json.Marshal(settings)
 				device.Settings = string(updatedSettings)
-				if err := s.DB.UpdateDevice(device); err != nil {
+				if updateErr := s.DB.UpdateDevice(device); updateErr != nil {
 					s.logger.WithFields(map[string]any{
 						"device_id": device.ID,
-						"error":     err.Error(),
+						"error":     updateErr.Error(),
 					}).Error("Failed to update device")
 				}
 

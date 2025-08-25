@@ -10,7 +10,6 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
-	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // Test helper to create a mock Shelly device server
@@ -21,7 +20,7 @@ func createMockShellyServer() *httptest.Server {
 	mux.HandleFunc("/shelly", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"type": "SHSW-25",
 			"mac": "68C63A123456",
 			"auth": false,
@@ -33,7 +32,7 @@ func createMockShellyServer() *httptest.Server {
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"wifi_sta": {"connected": true, "ssid": "TestNetwork", "ip": "192.168.1.100", "rssi": -45},
 			"cloud": {"enabled": false, "connected": false},
 			"mqtt": {"connected": true},
@@ -56,7 +55,7 @@ func createMockShellyServer() *httptest.Server {
 		if r.Method == "POST" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, `{"ison": true, "has_timer": false}`)
+			_, _ = fmt.Fprintf(w, `{"ison": true, "has_timer": false}`)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -65,7 +64,7 @@ func createMockShellyServer() *httptest.Server {
 	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"device": {"type": "SHSW-25", "mac": "68C63A123456", "hostname": "shelly1-68C63A123456"},
 			"wifi_ap": {"enabled": false},
 			"wifi_sta": {"enabled": true, "ssid": "TestNetwork", "ipv4_method": "dhcp", "ip": null, "gw": null, "mask": null, "dns": null},
@@ -93,7 +92,7 @@ func createMockShellyServer() *httptest.Server {
 	mux.HandleFunc("/meter/0", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"power": 25.5,
 			"is_valid": true,
 			"timestamp": 1640995440,
@@ -546,16 +545,4 @@ func createTestConfigBusiness() *config.Config {
 			Enabled:  true,
 		},
 	}
-}
-
-func createTestLoggerBusiness(t *testing.T) *logging.Logger {
-	logger, err := logging.New(logging.Config{
-		Level:  "error", // Minimize test output
-		Format: "text",
-		Output: "stderr",
-	})
-	if err != nil {
-		t.Fatalf("Failed to create test logger: %v", err)
-	}
-	return logger
 }

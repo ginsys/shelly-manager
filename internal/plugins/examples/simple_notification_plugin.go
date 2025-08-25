@@ -196,11 +196,12 @@ func (p *SimpleNotificationPlugin) BatchSend(ctx context.Context, notifications 
 	totalFailed := 0
 
 	// Send each notification individually
+sendLoop:
 	for _, notif := range notifications {
 		select {
 		case <-ctx.Done():
 			// Context cancelled, stop processing
-			break
+			break sendLoop
 		default:
 			result, err := p.Send(ctx, notif)
 			if err != nil {

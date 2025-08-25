@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/testutil"
-	"github.com/spf13/cobra"
 )
 
 // Test helper to create in-memory test environment
@@ -26,7 +27,7 @@ func createTestEnvironment(t *testing.T) (*database.Manager, *service.ShellyServ
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 
-	cfg := &config.Config{
+	testCfg := &config.Config{
 		Discovery: struct {
 			Enabled         bool     `mapstructure:"enabled"`
 			Networks        []string `mapstructure:"networks"`
@@ -42,9 +43,9 @@ func createTestEnvironment(t *testing.T) (*database.Manager, *service.ShellyServ
 		},
 	}
 
-	service := service.NewService(db, cfg)
+	service := service.NewService(db, testCfg)
 
-	return db, service, cfg
+	return db, service, testCfg
 }
 
 func TestListCommand_Direct(t *testing.T) {
@@ -429,6 +430,7 @@ func TestCommandErrorHandling(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
 			// Expected to panic with nil dbManager
+			t.Log("Recovered from panic as expected:", r)
 		}
 	}()
 	// listCmd.Run(nil, []string{})  // Would panic with nil dbManager
