@@ -56,7 +56,9 @@
       "Bash(rmdir:*)",
       "Bash(docker-compose:*)",
       "Bash(tree:*)",
-      "Bash(kubectl kustomize:*)"
+      "Bash(kubectl kustomize:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

@@ -129,7 +129,7 @@ jobs:
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v8
       with:
-        version: v1.60.3
+        version: v2.4.0
         args: --timeout=5m
     
     # Alternative: use make command (requires golangci-lint to be installed)

@@ -179,7 +179,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Comprehensive linting with automatic fixes
 - Before major commits
 - Catching advanced style and potential issues
-- **Requires**: golangci-lint installed
+- **Requires**: golangci-lint v2.4.0+ installed (v2 configuration format)
 
 #### `make format`
 **Purpose**: Format code (gofmt + goimports)  
@@ -239,8 +239,8 @@ The GitHub Actions workflows (`test.yml`) use the following make commands:
 2. `make test-matrix` - Run tests across OS/Go version matrix
 
 ### Lint job:
-- Uses golangci-lint action directly
-- Alternative: `make lint` (requires golangci-lint installed)
+- Uses golangci-lint-action@v8 with golangci-lint v2.4.0
+- Alternative: `make lint` (requires golangci-lint v2.4.0+ installed)
 
 ### Build job:
 - `make build` - Build the binary
@@ -282,7 +282,7 @@ The GitHub Actions workflows (`test.yml`) use the following make commands:
 - **Go version**: 1.21+ (as specified in workflows)
 - **Optional tools**: 
   - `entr` for watch mode (`brew install entr`)
-  - `golangci-lint` for linting
+  - `golangci-lint v2.4.0+` for linting (v2 configuration format required)
   - `bc` for coverage calculations
 
 ### Test Categories by Location
