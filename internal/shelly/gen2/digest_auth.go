@@ -152,7 +152,7 @@ func doRequestWithDigestAuth(client *http.Client, req *http.Request, username, p
 
 	// Parse WWW-Authenticate header
 	challenge := resp.Header.Get("WWW-Authenticate")
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if challenge == "" {
 		return nil, fmt.Errorf("no WWW-Authenticate header in 401 response")

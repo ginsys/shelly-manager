@@ -29,6 +29,7 @@ func TestTemplateEngine_Creation(t *testing.T) {
 
 	if engine == nil {
 		t.Error("Expected template engine to be created")
+		return
 	}
 
 	if engine.logger == nil {

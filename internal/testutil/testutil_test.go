@@ -178,7 +178,7 @@ func TestMockShellyServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get /shelly: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -212,7 +212,7 @@ func TestMockShellyServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get /status: %v", err)
 	}
-	defer statusResp.Body.Close()
+	defer func() { _ = statusResp.Body.Close() }()
 
 	if statusResp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", statusResp.StatusCode)
@@ -269,7 +269,7 @@ func TestMockShellyGen2Server(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get /shelly: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -481,12 +481,12 @@ func TestTestutilIntegration(t *testing.T) {
 	// Verify servers respond correctly
 	resp1, err := http.Get(gen1Server.URL + "/shelly")
 	AssertNoError(t, err)
-	defer resp1.Body.Close()
+	defer func() { _ = resp1.Body.Close() }()
 	AssertEqual(t, http.StatusOK, resp1.StatusCode)
 
 	resp2, err := http.Get(gen2Server.URL + "/shelly")
 	AssertNoError(t, err)
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	AssertEqual(t, http.StatusOK, resp2.StatusCode)
 }
 
@@ -556,11 +556,11 @@ func TestTestutilEdgeCases(t *testing.T) {
 	// Both should work independently
 	resp1, err := http.Get(server1.URL + "/shelly")
 	AssertNoError(t, err)
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	resp2, err := http.Get(server2.URL + "/shelly")
 	AssertNoError(t, err)
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 }
 
 // Test concurrent usage

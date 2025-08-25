@@ -133,7 +133,7 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 	c.logger.Debug("Making OPNSense API request",
 		"method", method,
 		"endpoint", endpoint,
-		"url", strings.Replace(fullURL, c.apiKey, "***", -1),
+		"url", strings.ReplaceAll(fullURL, c.apiKey, "***"),
 	)
 
 	// Make the request
@@ -142,9 +142,9 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
 			c.logger.WithFields(map[string]any{
-				"error": err.Error(),
+				"error": closeErr.Error(),
 			}).Debug("Failed to close response body")
 		}
 	}()

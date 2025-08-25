@@ -107,7 +107,7 @@ func (p *Plugin) Health() plugins.HealthStatus {
 	message := "Backup plugin is healthy"
 
 	// Check if database manager is available
-	if p.BackupPlugin.dbManager == nil {
+	if p.dbManager == nil {
 		status = plugins.HealthStatusDegraded
 		message = "Database manager not initialized"
 	}
@@ -117,8 +117,8 @@ func (p *Plugin) Health() plugins.HealthStatus {
 		LastChecked: time.Now(),
 		Message:     message,
 		Details: map[string]interface{}{
-			"database_manager": p.BackupPlugin.dbManager != nil,
-			"logger":           p.BackupPlugin.logger != nil,
+			"database_manager": p.dbManager != nil,
+			"logger":           p.logger != nil,
 		},
 	}
 }
@@ -140,12 +140,12 @@ func (p *Plugin) Capabilities() plugins.PluginCapabilities {
 
 // SetDatabaseManager sets the database manager for the backup plugin
 func (p *Plugin) SetDatabaseManager(dbManager DatabaseManagerInterface) {
-	p.BackupPlugin.dbManager = dbManager
+	p.dbManager = dbManager
 }
 
 // GetDatabaseManager returns the database manager
 func (p *Plugin) GetDatabaseManager() DatabaseManagerInterface {
-	return p.BackupPlugin.dbManager
+	return p.dbManager
 }
 
 // NewPluginWithDBManager creates a new backup plugin with a database manager

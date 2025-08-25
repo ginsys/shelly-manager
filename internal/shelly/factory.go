@@ -69,9 +69,9 @@ func (f *factory) DetectGeneration(ctx context.Context, ip string) (int, error) 
 	resp, err := f.httpClient.Do(req)
 	if err == nil && resp.StatusCode == http.StatusOK {
 		defer func() {
-			if err := resp.Body.Close(); err != nil {
+			if closeErr := resp.Body.Close(); closeErr != nil {
 				// Log error if possible but continue
-				_ = err
+				_ = closeErr
 			}
 		}()
 		var info struct {

@@ -152,6 +152,7 @@ metrics:
 
 		if logger == nil {
 			t.Error("Logger should not be nil")
+			return
 		}
 
 		// Test basic logging functionality
@@ -210,6 +211,7 @@ func TestInitializationWithDefaults(t *testing.T) {
 		logger := logging.GetDefault()
 		if logger == nil {
 			t.Error("Default logger should not be nil")
+			return
 		}
 
 		// Test default logger functionality

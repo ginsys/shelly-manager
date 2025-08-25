@@ -598,7 +598,8 @@ func (r *Reporter) updateDriftTrends(devices []DeviceDriftAnalysis) error {
 			result := r.db.Where("device_id = ? AND path = ? AND resolved = ?",
 				device.DeviceID, diff.Path, false).First(&trend)
 
-			if result.Error == gorm.ErrRecordNotFound {
+			switch result.Error {
+			case gorm.ErrRecordNotFound:
 				// Create new trend
 				trend = DriftTrend{
 					DeviceID:    device.DeviceID,
@@ -620,7 +621,7 @@ func (r *Reporter) updateDriftTrends(devices []DeviceDriftAnalysis) error {
 						"component": "reporter",
 					}).Error("Failed to create drift trend")
 				}
-			} else if result.Error == nil {
+			case nil:
 				// Update existing trend
 				trend.LastSeen = now
 				trend.Occurrences++

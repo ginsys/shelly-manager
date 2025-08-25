@@ -310,7 +310,7 @@ func (f *FirewallManager) validateAlias(alias FirewallAlias) error {
 
 	// Validate name format (alphanumeric and underscores only)
 	for _, r := range alias.Name {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' {
 			return fmt.Errorf("alias name contains invalid characters (only alphanumeric and underscores allowed)")
 		}
 	}

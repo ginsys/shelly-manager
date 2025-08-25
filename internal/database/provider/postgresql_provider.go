@@ -13,11 +13,7 @@ import (
 // PostgreSQLProvider implements DatabaseProvider for PostgreSQL databases
 type PostgreSQLProvider struct {
 	db     *gorm.DB
-	config DatabaseConfig
 	logger *logging.Logger
-
-	// Connection state
-	connected bool
 }
 
 // NewPostgreSQLProvider creates a new PostgreSQL database provider

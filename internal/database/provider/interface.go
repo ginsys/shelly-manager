@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // DatabaseProvider defines the interface for database providers

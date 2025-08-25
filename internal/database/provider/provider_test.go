@@ -97,8 +97,8 @@ func TestSQLiteProvider(t *testing.T) {
 		t.Fatalf("Failed to connect to SQLite: %v", err)
 	}
 	defer func() {
-		if err := provider.Close(); err != nil {
-			t.Logf("Failed to close provider: %v", err)
+		if closeErr := provider.Close(); closeErr != nil {
+			t.Logf("Failed to close provider: %v", closeErr)
 		}
 	}()
 
@@ -155,13 +155,13 @@ func TestSQLiteProviderFileDatabase(t *testing.T) {
 		t.Fatalf("Failed to connect to SQLite: %v", err)
 	}
 	defer func() {
-		if err := provider.Close(); err != nil {
-			t.Logf("Failed to close provider: %v", err)
+		if closeErr := provider.Close(); closeErr != nil {
+			t.Logf("Failed to close provider: %v", closeErr)
 		}
 	}()
 
 	// Verify database file was created
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(dbPath); os.IsNotExist(statErr) {
 		t.Errorf("Database file was not created")
 	}
 

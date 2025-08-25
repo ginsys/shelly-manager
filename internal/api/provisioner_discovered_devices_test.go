@@ -225,8 +225,8 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 
 		// Seed test data for this specific test
 		for _, device := range testDevices {
-			err := dbManager.AddDiscoveredDevice(device)
-			require.NoError(t, err)
+			addErr := dbManager.AddDiscoveredDevice(device)
+			require.NoError(t, addErr)
 		}
 
 		// Create handler with isolated database
@@ -261,8 +261,8 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 
 		// Seed test data for this specific test
 		for _, device := range testDevices {
-			err := dbManager.AddDiscoveredDevice(device)
-			require.NoError(t, err)
+			addErr := dbManager.AddDiscoveredDevice(device)
+			require.NoError(t, addErr)
 		}
 
 		// Create handler with isolated database
@@ -303,8 +303,8 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 
 		// Seed test data for this specific test
 		for _, device := range testDevices {
-			err := dbManager.AddDiscoveredDevice(device)
-			require.NoError(t, err)
+			addErr := dbManager.AddDiscoveredDevice(device)
+			require.NoError(t, addErr)
 		}
 
 		// Create handler with isolated database

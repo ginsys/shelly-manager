@@ -466,7 +466,7 @@ func (n *NetworkConfiguration) Validate() error {
 
 	if n.Ethernet != nil {
 		if err := n.Ethernet.Validate(); err != nil {
-			return fmt.Errorf("Ethernet validation failed: %w", err)
+			return fmt.Errorf("ethernet validation failed: %w", err)
 		}
 	}
 

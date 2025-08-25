@@ -461,7 +461,7 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == http.StatusUnauthorized {
 			return shelly.ErrAuthRequired

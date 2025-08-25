@@ -200,8 +200,8 @@ func TestCollectorTriggerCollection(t *testing.T) {
 		t.Fatalf("Failed to start collector: %v", err)
 	}
 	defer func() {
-		if err := collector.Stop(); err != nil {
-			t.Logf("Failed to stop collector: %v", err)
+		if stopErr := collector.Stop(); stopErr != nil {
+			t.Logf("Failed to stop collector: %v", stopErr)
 		}
 	}()
 
@@ -246,8 +246,8 @@ func TestCollectorPeriodicCollection(t *testing.T) {
 		t.Fatalf("Failed to start collector: %v", err)
 	}
 	defer func() {
-		if err := collector.Stop(); err != nil {
-			t.Logf("Failed to stop collector: %v", err)
+		if stopErr := collector.Stop(); stopErr != nil {
+			t.Logf("Failed to stop collector: %v", stopErr)
 		}
 	}()
 
@@ -315,8 +315,8 @@ func TestCollectorIntervalChange(t *testing.T) {
 		t.Fatalf("Failed to start collector: %v", err)
 	}
 	defer func() {
-		if err := collector.Stop(); err != nil {
-			t.Logf("Failed to stop collector: %v", err)
+		if stopErr := collector.Stop(); stopErr != nil {
+			t.Logf("Failed to stop collector: %v", stopErr)
 		}
 	}()
 

@@ -211,8 +211,8 @@ func TestBackupExporter_Export(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Logf("Failed to remove temp directory: %v", err)
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp directory: %v", removeErr)
 		}
 	}()
 
@@ -220,8 +220,8 @@ func TestBackupExporter_Export(t *testing.T) {
 	mockProvider := &MockBackupProvider{}
 	mockDB := &MockDatabaseManager{provider: mockProvider}
 	exporter := NewBackupExporter(mockDB)
-	if err := exporter.Initialize(logging.GetDefault()); err != nil {
-		t.Logf("Failed to initialize exporter: %v", err)
+	if initErr := exporter.Initialize(logging.GetDefault()); initErr != nil {
+		t.Logf("Failed to initialize exporter: %v", initErr)
 	}
 
 	// Create test data
@@ -384,23 +384,23 @@ func TestBackupExporter_RestoreBackup(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Logf("Failed to remove temp directory: %v", err)
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp directory: %v", removeErr)
 		}
 	}()
 
 	backupPath := filepath.Join(tmpDir, "test-backup.sma")
 
 	// Create dummy backup file
-	if err := os.WriteFile(backupPath, []byte("dummy backup data"), 0644); err != nil {
-		t.Fatalf("Failed to create backup file: %v", err)
+	if writeErr := os.WriteFile(backupPath, []byte("dummy backup data"), 0644); writeErr != nil {
+		t.Fatalf("Failed to create backup file: %v", writeErr)
 	}
 
 	mockProvider := &MockBackupProvider{}
 	mockDB := &MockDatabaseManager{provider: mockProvider}
 	exporter := NewBackupExporter(mockDB)
-	if err := exporter.Initialize(logging.GetDefault()); err != nil {
-		t.Logf("Failed to initialize exporter: %v", err)
+	if initErr := exporter.Initialize(logging.GetDefault()); initErr != nil {
+		t.Logf("Failed to initialize exporter: %v", initErr)
 	}
 
 	ctx := context.Background()
@@ -431,23 +431,23 @@ func TestBackupExporter_ValidateBackup(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Logf("Failed to remove temp directory: %v", err)
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			t.Logf("Failed to remove temp directory: %v", removeErr)
 		}
 	}()
 
 	backupPath := filepath.Join(tmpDir, "test-backup.sma")
 
 	// Create dummy backup file
-	if err := os.WriteFile(backupPath, []byte("dummy backup data"), 0644); err != nil {
-		t.Fatalf("Failed to create backup file: %v", err)
+	if writeErr := os.WriteFile(backupPath, []byte("dummy backup data"), 0644); writeErr != nil {
+		t.Fatalf("Failed to create backup file: %v", writeErr)
 	}
 
 	mockProvider := &MockBackupProvider{}
 	mockDB := &MockDatabaseManager{provider: mockProvider}
 	exporter := NewBackupExporter(mockDB)
-	if err := exporter.Initialize(logging.GetDefault()); err != nil {
-		t.Logf("Failed to initialize exporter: %v", err)
+	if initErr := exporter.Initialize(logging.GetDefault()); initErr != nil {
+		t.Logf("Failed to initialize exporter: %v", initErr)
 	}
 
 	ctx := context.Background()

@@ -41,7 +41,9 @@ func TestFactory_DetectGeneration_Gen2Device(t *testing.T) {
 				"mac": "08B61FCB7F3C",
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		} else {
 			http.NotFound(w, r)
 		}
@@ -67,7 +69,9 @@ func TestFactory_DetectGeneration_Gen3Device(t *testing.T) {
 				"mac": "8C4B14123456",
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		} else {
 			http.NotFound(w, r)
 		}
@@ -86,18 +90,21 @@ func TestFactory_DetectGeneration_Gen3Device(t *testing.T) {
 func TestFactory_DetectGeneration_Gen1Device(t *testing.T) {
 	// Mock server that responds like a Gen1 device
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/rpc/Shelly.GetDeviceInfo" {
+		switch r.URL.Path {
+		case "/rpc/Shelly.GetDeviceInfo":
 			// Gen1 devices don't respond to RPC endpoints, so return 404
 			http.NotFound(w, r)
-		} else if r.URL.Path == "/shelly" {
+		case "/shelly":
 			response := map[string]interface{}{
 				"type": "SHSW-1",
 				"mac":  "A4CF12345678",
 				"auth": true,
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
-		} else {
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
+		default:
 			http.NotFound(w, r)
 		}
 	}))
@@ -115,11 +122,12 @@ func TestFactory_DetectGeneration_Gen1Device(t *testing.T) {
 func TestFactory_DetectGeneration_InvalidResponse(t *testing.T) {
 	// Mock server that returns invalid JSON
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/rpc/Shelly.GetDeviceInfo" {
-			w.Write([]byte("invalid json"))
-		} else if r.URL.Path == "/shelly" {
-			w.Write([]byte("invalid json"))
-		} else {
+		switch r.URL.Path {
+		case "/rpc/Shelly.GetDeviceInfo":
+			_, _ = w.Write([]byte("invalid json"))
+		case "/shelly":
+			_, _ = w.Write([]byte("invalid json"))
+		default:
 			http.NotFound(w, r)
 		}
 	}))
@@ -153,13 +161,14 @@ func TestFactory_DetectGeneration_NoResponse(t *testing.T) {
 func TestFactory_DetectGeneration_EmptyResponse(t *testing.T) {
 	// Mock server that returns empty JSON objects
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/rpc/Shelly.GetDeviceInfo" {
+		switch r.URL.Path {
+		case "/rpc/Shelly.GetDeviceInfo":
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte("{}"))
-		} else if r.URL.Path == "/shelly" {
+			_, _ = w.Write([]byte("{}"))
+		case "/shelly":
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte("{}"))
-		} else {
+			_, _ = w.Write([]byte("{}"))
+		default:
 			http.NotFound(w, r)
 		}
 	}))
@@ -206,7 +215,9 @@ func TestFactory_CreateClientWithDetection(t *testing.T) {
 				"mac": "08B61FCB7F3C",
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(response)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				t.Logf("Failed to encode JSON response: %v", err)
+			}
 		} else {
 			http.NotFound(w, r)
 		}
@@ -228,12 +239,12 @@ func TestDefaultFactory(t *testing.T) {
 	assertNotNil(t, DefaultFactory)
 
 	// Test that it implements the Factory interface
-	var _ Factory = DefaultFactory
+	var _ = DefaultFactory
 }
 
 func TestFactory_Interface(t *testing.T) {
 	// Test that factory implements Factory interface
-	var factory Factory = NewFactory()
+	factory := NewFactory()
 	assertNotNil(t, factory)
 }
 
@@ -302,7 +313,8 @@ func TestFactory_DetectGeneration_StatusCodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/rpc/Shelly.GetDeviceInfo" {
+				switch r.URL.Path {
+				case "/rpc/Shelly.GetDeviceInfo":
 					if tt.gen2Status == http.StatusOK {
 						response := map[string]interface{}{
 							"id":  "shellyplusht-08b61fcb7f3c",
@@ -310,11 +322,13 @@ func TestFactory_DetectGeneration_StatusCodes(t *testing.T) {
 							"mac": "08B61FCB7F3C",
 						}
 						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
+						if err := json.NewEncoder(w).Encode(response); err != nil {
+							t.Logf("Failed to encode JSON response: %v", err)
+						}
 					} else {
 						w.WriteHeader(tt.gen2Status)
 					}
-				} else if r.URL.Path == "/shelly" {
+				case "/shelly":
 					if tt.gen1Status == http.StatusOK {
 						response := map[string]interface{}{
 							"type": "SHSW-1",
@@ -322,11 +336,13 @@ func TestFactory_DetectGeneration_StatusCodes(t *testing.T) {
 							"auth": true,
 						}
 						w.Header().Set("Content-Type", "application/json")
-						json.NewEncoder(w).Encode(response)
+						if err := json.NewEncoder(w).Encode(response); err != nil {
+							t.Logf("Failed to encode JSON response: %v", err)
+						}
 					} else {
 						w.WriteHeader(tt.gen1Status)
 					}
-				} else {
+				default:
 					http.NotFound(w, r)
 				}
 			}))

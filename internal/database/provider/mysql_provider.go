@@ -13,11 +13,7 @@ import (
 // MySQLProvider implements DatabaseProvider for MySQL databases
 type MySQLProvider struct {
 	db     *gorm.DB
-	config DatabaseConfig
 	logger *logging.Logger
-
-	// Connection state
-	connected bool
 }
 
 // NewMySQLProvider creates a new MySQL database provider
