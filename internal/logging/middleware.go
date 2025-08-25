@@ -3,7 +3,8 @@ package logging
 import (
 	"bufio"
 	"context"
-	"math/rand"
+	"crypto/rand"
+	"encoding/hex"
 	"net"
 	"net/http"
 	"time"
@@ -99,15 +100,21 @@ func generateRequestID() string {
 	return time.Now().Format("20060102150405") + "-" + randomString(8)
 }
 
-// randomString generates a random string of given length
+// randomString generates a cryptographically random string of given length
 func randomString(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, length)
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := range b {
-		b[i] = charset[rng.Intn(len(charset))]
+	// Generate random bytes, need half the length since hex encoding doubles the size
+	bytes := make([]byte, (length+1)/2)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to timestamp-based ID if crypto/rand fails
+		return time.Now().Format("150405")
 	}
-	return string(b)
+
+	// Convert to hex and truncate to desired length
+	hexStr := hex.EncodeToString(bytes)
+	if len(hexStr) > length {
+		return hexStr[:length]
+	}
+	return hexStr
 }
 
 // Recovery middleware with logging

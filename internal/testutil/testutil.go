@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,8 +64,13 @@ func TestConfig() *config.Config {
 	}
 }
 
+var testDbMutex sync.Mutex
+
 // TestDatabase creates a test database using provider abstraction
 func TestDatabase(t *testing.T) (*database.Manager, func()) {
+	testDbMutex.Lock()
+	defer testDbMutex.Unlock()
+
 	// Create a unique temporary file for this test to avoid in-memory issues
 	tmpFile, err := os.CreateTemp("", "test-*.db")
 	require.NoError(t, err, "Failed to create temp file")
@@ -76,11 +83,30 @@ func TestDatabase(t *testing.T) (*database.Manager, func()) {
 	dbManager, err := database.NewManagerFromPathWithLogger(tmpFile.Name(), logger)
 	require.NoError(t, err, "Failed to create test database")
 
+	var cleanupOnce sync.Once
 	cleanup := func() {
-		if dbManager != nil {
-			dbManager.Close()
-		}
-		os.Remove(tmpFile.Name())
+		cleanupOnce.Do(func() {
+			testDbMutex.Lock()
+			defer testDbMutex.Unlock()
+
+			if dbManager != nil {
+				dbManager.Close()
+			}
+
+			// Handle Windows file locking issues
+			if runtime.GOOS == "windows" {
+				// Small delay to ensure file handles are released on Windows
+				time.Sleep(50 * time.Millisecond)
+				for i := 0; i < 5; i++ {
+					if err := os.Remove(tmpFile.Name()); err == nil {
+						break
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+			} else {
+				os.Remove(tmpFile.Name())
+			}
+		})
 	}
 
 	return dbManager, cleanup
@@ -89,17 +115,27 @@ func TestDatabase(t *testing.T) (*database.Manager, func()) {
 // TestDatabaseMemory creates an in-memory test database using provider abstraction
 // This is faster but should be used carefully to avoid race conditions
 func TestDatabaseMemory(t *testing.T) (*database.Manager, func()) {
+	testDbMutex.Lock()
+	defer testDbMutex.Unlock()
+
 	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
 	require.NoError(t, err, "Failed to create logger")
 
-	// Use file::memory:?cache=shared for shared in-memory database
-	dbManager, err := database.NewManagerFromPathWithLogger("file::memory:?cache=shared", logger)
+	// Use unique in-memory database to prevent shared state issues
+	dbPath := ":memory:"
+	dbManager, err := database.NewManagerFromPathWithLogger(dbPath, logger)
 	require.NoError(t, err, "Failed to create test database")
 
+	var cleanupOnce sync.Once
 	cleanup := func() {
-		if dbManager != nil {
-			dbManager.Close()
-		}
+		cleanupOnce.Do(func() {
+			testDbMutex.Lock()
+			defer testDbMutex.Unlock()
+
+			if dbManager != nil {
+				dbManager.Close()
+			}
+		})
 	}
 
 	return dbManager, cleanup
