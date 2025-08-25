@@ -640,7 +640,7 @@ func (o *OPNSensePlugin) generateXMLConfig(devices []opnsense.DeviceMapping, con
 	xml.WriteString("  <dhcp>\n")
 
 	for _, device := range devices {
-		xml.WriteString(fmt.Sprintf("    <staticmap>\n"))
+		xml.WriteString("    <staticmap>\n")
 		xml.WriteString(fmt.Sprintf("      <mac>%s</mac>\n", device.ShellyMAC))
 		xml.WriteString(fmt.Sprintf("      <ipaddr>%s</ipaddr>\n", device.ShellyIP))
 		xml.WriteString(fmt.Sprintf("      <hostname>%s</hostname>\n", device.OPNSenseHostname))
