@@ -1,0 +1,92 @@
+services:
+  shelly-manager:
+    image: ${REGISTRY:-ghcr.io/ginsys}/shelly-manager:${TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.manager
+    container_name: shelly-manager
+    ports:
+      - "${SERVER_PORT:-8080}:${SERVER_PORT:-8080}"
+    volumes:
+      - shelly-data:/data
+      - ../../configs:/app/configs:ro
+    environment:
+      # Database Configuration
+      - SHELLY_DATABASE_PATH=${DATABASE_PATH:-/data/shelly.db}
+      - SHELLY_DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite}
+      
+      # Server Configuration
+      - SHELLY_SERVER_PORT=${SERVER_PORT:-8080}
+      - SHELLY_SERVER_HOST=${SERVER_HOST:-0.0.0.0}
+      
+      # Discovery Configuration
+      - SHELLY_DISCOVERY_ENABLED=${DISCOVERY_ENABLED:-true}
+      - SHELLY_DISCOVERY_NETWORKS=${DISCOVERY_NETWORKS:-192.168.1.0/24}
+      - SHELLY_DISCOVERY_INTERVAL=${DISCOVERY_INTERVAL:-300}
+      
+      # Provisioning Configuration
+      - SHELLY_PROVISIONING_AUTO=${PROVISIONING_AUTO:-false}
+      - SHELLY_PROVISIONING_INTERVAL=${PROVISIONING_INTERVAL:-600}
+      
+      # Logging Configuration
+      - SHELLY_LOGGING_LEVEL=${LOG_LEVEL:-info}
+      - SHELLY_LOGGING_FORMAT=${LOG_FORMAT:-json}
+      - SHELLY_LOGGING_OUTPUT=${LOG_OUTPUT:-stdout}
+      
+      # Runtime Configuration
+      - GIN_MODE=${GIN_MODE:-release}
+    networks:
+      - shelly-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "./shelly-manager", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  shelly-provisioner:
+    image: ${REGISTRY:-ghcr.io/ginsys}/shelly-provisioner:${TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.provisioner
+    container_name: shelly-provisioner
+    network_mode: host  # Required for WiFi interface access
+    volumes:
+      - ../../configs:/app/configs:ro
+      - /var/run/wpa_supplicant:/var/run/wpa_supplicant:rw  # For WiFi control
+    environment:
+      # API Configuration (connect to manager)
+      - SHELLY_API_URL=${API_URL:-http://localhost:8080}
+      - SHELLY_API_KEY=${API_KEY:-}
+      - SHELLY_API_TIMEOUT=${API_TIMEOUT:-30}
+      
+      # Provisioning Configuration
+      - SHELLY_PROVISIONING_INTERVAL=${PROVISIONING_INTERVAL:-600}
+      - SHELLY_PROVISIONING_AUTO=${PROVISIONING_AUTO:-false}
+      
+      # Logging Configuration
+      - SHELLY_LOGGING_LEVEL=${LOG_LEVEL:-info}
+      - SHELLY_LOGGING_FORMAT=${LOG_FORMAT:-json}
+      - SHELLY_LOGGING_OUTPUT=${LOG_OUTPUT:-stdout}
+      
+      # Runtime Configuration
+      - GIN_MODE=${GIN_MODE:-release}
+    restart: unless-stopped
+    depends_on:
+      - shelly-manager
+    healthcheck:
+      test: ["CMD", "./shelly-provisioner", "status"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    privileged: true  # Required for network interface access
+
+networks:
+  shelly-net:
+    driver: bridge
+
+volumes:
+  shelly-data:
+    driver: local

@@ -1,0 +1,45 @@
+# Production overrides
+services:
+  shelly-manager:
+    # Use pre-built images in production
+    build: null
+    image: ${REGISTRY:-ghcr.io/ginsys}/shelly-manager:${TAG:-latest}
+    environment:
+      - SHELLY_LOGGING_LEVEL=info
+      - SHELLY_LOGGING_FORMAT=json
+      - GIN_MODE=release
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  shelly-provisioner:
+    # Use pre-built images in production
+    build: null
+    image: ${REGISTRY:-ghcr.io/ginsys}/shelly-provisioner:${TAG:-latest}
+    environment:
+      - SHELLY_LOGGING_LEVEL=info
+      - SHELLY_LOGGING_FORMAT=json
+      - GIN_MODE=release
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    healthcheck:
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

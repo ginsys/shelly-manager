@@ -1,4 +1,4 @@
-.PHONY: build build-manager build-provisioner run run-provisioner clean docker-build docker-run docker-stop docker-logs dev-setup deps deps-tidy \
+.PHONY: build build-manager build-provisioner run run-provisioner clean docker-build docker-build-manager docker-build-provisioner docker-run docker-run-prod docker-stop docker-logs docker-pull docker-dev docker-clean dev-setup deps deps-tidy \
 	lint lint-fix format format-check hooks-install hooks-uninstall \
 	test test-unit test-integration test-full test-full-short \
 	test-race test-race-short test-race-full \
@@ -9,7 +9,11 @@
 BINARY_NAME=shelly-manager
 PROVISIONER_BINARY=shelly-provisioner
 BUILD_DIR=bin
-DOCKER_IMAGE=shelly-manager
+# Docker configuration
+REGISTRY=ghcr.io/ginsys
+MANAGER_IMAGE=shelly-manager
+PROVISIONER_IMAGE=shelly-provisioner
+DOCKER_TAG=latest
 
 # ==============================================================================
 # BUILD COMMANDS
@@ -279,21 +283,44 @@ deps-tidy:
 # DOCKER COMMANDS
 # ==============================================================================
 
-# Build Docker image
-docker-build:
-	docker build -f docker/Dockerfile -t $(DOCKER_IMAGE) .
+# Build Docker images locally
+docker-build: docker-build-manager docker-build-provisioner
 
-# Run with Docker Compose
+# Build Manager Docker image locally
+docker-build-manager:
+	docker build -f deploy/docker/Dockerfile.manager -t $(REGISTRY)/$(MANAGER_IMAGE):$(DOCKER_TAG) .
+
+# Build Provisioner Docker image locally
+docker-build-provisioner:
+	docker build -f deploy/docker/Dockerfile.provisioner -t $(REGISTRY)/$(PROVISIONER_IMAGE):$(DOCKER_TAG) .
+
+# Run with Docker Compose (development)
 docker-run:
-	docker-compose up -d
+	cd deploy/docker-compose && docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+# Run with Docker Compose (production)
+docker-run-prod:
+	cd deploy/docker-compose && docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # Stop Docker Compose
 docker-stop:
-	docker-compose down
+	cd deploy/docker-compose && docker-compose down
 
 # View logs
 docker-logs:
-	docker-compose logs -f
+	cd deploy/docker-compose && docker-compose logs -f
+
+# Pull latest images from registry
+docker-pull:
+	cd deploy/docker-compose && docker-compose pull
+
+# Build and run locally (development)
+docker-dev: docker-build docker-run
+
+# Clean up Docker containers and images
+docker-clean:
+	cd deploy/docker-compose && docker-compose down -v --remove-orphans
+	docker system prune -f
 
 # ==============================================================================
 # DEVELOPMENT AND SETUP

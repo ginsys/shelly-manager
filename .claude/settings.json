@@ -53,7 +53,10 @@
       "Bash(pkill:*)",
       "Bash(env)",
       "Bash(sed:*)",
-      "Bash(rmdir:*)"
+      "Bash(rmdir:*)",
+      "Bash(docker-compose:*)",
+      "Bash(tree:*)",
+      "Bash(kubectl kustomize:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

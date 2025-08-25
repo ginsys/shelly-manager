@@ -1,0 +1,38 @@
+# Development files
+*.md
+*.txt
+LICENSE
+.git
+.gitignore
+.github
+
+# Test files and coverage
+*_test.go
+coverage.*
+tmp/
+
+# Build artifacts
+bin/
+*.db
+
+# Documentation
+docs/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Mac OS
+.DS_Store
+
+# Development configs
+.env
+.env.local
+
+# Node modules (if any)
+node_modules/
+
+# Deploy artifacts (avoid recursive includes)
+deploy/

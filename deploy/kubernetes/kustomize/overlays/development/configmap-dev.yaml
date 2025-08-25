@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shelly-manager-config
+data:
+  # Development-specific overrides
+  LOG_LEVEL: "debug"
+  LOG_FORMAT: "text"
+  GIN_MODE: "debug"
+  
+  # Use ephemeral storage for development
+  DATABASE_PATH: "/tmp/shelly.db"
+  
+  # Enable detailed metrics for debugging
+  METRICS_ENABLE_DETAILED_TIMING: "true"
+  
+  # Faster intervals for development
+  DISCOVERY_INTERVAL: "60"
+  PROVISIONING_INTERVAL: "300"
