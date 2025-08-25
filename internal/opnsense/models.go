@@ -123,7 +123,7 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	if e.Details != nil && len(e.Details) > 0 {
+	if len(e.Details) > 0 {
 		return fmt.Sprintf("OPNSense API error (HTTP %d): %s, details: %+v", e.HTTPStatus, e.Message, e.Details)
 	}
 	return fmt.Sprintf("OPNSense API error (HTTP %d): %s", e.HTTPStatus, e.Message)

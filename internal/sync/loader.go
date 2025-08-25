@@ -10,8 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"gopkg.in/yaml.v3"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // ExternalPluginLoader handles loading and management of external export plugins

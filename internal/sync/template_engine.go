@@ -300,13 +300,6 @@ func sanitizeString(s string) string {
 	return reg.ReplaceAllString(s, "")
 }
 
-func truncateString(s string, length int) string {
-	if len(s) <= length {
-		return s
-	}
-	return s[:length]
-}
-
 func padStringLeft(s string, width int, pad string) string {
 	if len(s) >= width {
 		return s
@@ -573,7 +566,9 @@ func jsonMarshal(v interface{}) string {
 
 func jsonUnmarshal(s string) interface{} {
 	var result interface{}
-	json.Unmarshal([]byte(s), &result)
+	if err := json.Unmarshal([]byte(s), &result); err != nil {
+		return nil
+	}
 	return result
 }
 
