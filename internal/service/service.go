@@ -150,11 +150,6 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 
 		// Save updated settings
 		if err := s.DB.UpdateDevice(device); err != nil {
-		s.logger.WithFields(map[string]any{
-			"device_id": device.ID,
-			"error":     err.Error(),
-		}).Error("Failed to update device")
-	}; err != nil {
 			s.logger.WithFields(map[string]any{
 				"device_id": device.ID,
 				"error":     err.Error(),
@@ -285,11 +280,6 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		updatedSettings, _ := json.Marshal(settings)
 		device.Settings = string(updatedSettings)
 		if err := s.DB.UpdateDevice(device); err != nil {
-		s.logger.WithFields(map[string]any{
-			"device_id": device.ID,
-			"error":     err.Error(),
-		}).Error("Failed to update device")
-	}; err != nil {
 			s.logger.WithFields(map[string]any{
 				"device_id": device.ID,
 				"error":     err.Error(),
@@ -513,11 +503,6 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			updatedSettings, _ := json.Marshal(settings)
 			device.Settings = string(updatedSettings)
 			if err := s.DB.UpdateDevice(device); err != nil {
-		s.logger.WithFields(map[string]any{
-			"device_id": device.ID,
-			"error":     err.Error(),
-		}).Error("Failed to update device")
-	}; err != nil {
 				s.logger.WithFields(map[string]any{
 					"device_id": device.ID,
 					"error":     err.Error(),
@@ -616,11 +601,11 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 				updatedSettings, _ := json.Marshal(settings)
 				device.Settings = string(updatedSettings)
 				if err := s.DB.UpdateDevice(device); err != nil {
-		s.logger.WithFields(map[string]any{
-			"device_id": device.ID,
-			"error":     err.Error(),
-		}).Error("Failed to update device")
-	}
+					s.logger.WithFields(map[string]any{
+						"device_id": device.ID,
+						"error":     err.Error(),
+					}).Error("Failed to update device")
+				}
 
 				// Clear from cache
 				s.ClearClientCache(device.IP)
