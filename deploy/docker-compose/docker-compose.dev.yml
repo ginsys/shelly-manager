@@ -1,0 +1,28 @@
+# Development overrides
+services:
+  shelly-manager:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.manager
+    environment:
+      - SHELLY_LOGGING_LEVEL=debug
+      - SHELLY_LOGGING_FORMAT=text
+      - GIN_MODE=debug
+    ports:
+      - "8080:8080"
+      - "9090:9090"  # Prometheus metrics
+    volumes:
+      # Add hot-reload volumes for development
+      - ../../web:/app/web:ro
+      - ../../configs:/app/configs:ro
+
+  shelly-provisioner:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.provisioner
+    environment:
+      - SHELLY_LOGGING_LEVEL=debug
+      - SHELLY_LOGGING_FORMAT=text
+      - GIN_MODE=debug
+    volumes:
+      - ../../configs:/app/configs:ro

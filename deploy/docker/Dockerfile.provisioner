@@ -1,0 +1,60 @@
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git gcc musl-dev sqlite-dev
+
+# Copy go mod files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the provisioner application with optimization and static linking
+RUN CGO_ENABLED=1 GOOS=linux go build \
+    -a -installsuffix cgo \
+    -ldflags '-extldflags "-static" -s -w' \
+    -o shelly-provisioner ./cmd/shelly-provisioner
+
+# Final stage
+FROM alpine:latest
+
+# Install network tools for WiFi operations and security hardening
+RUN apk --no-cache add ca-certificates sqlite tzdata \
+    wireless-tools iw wpa_supplicant \
+    && adduser -D -u 10001 -s /bin/sh shellyuser \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /app
+
+# Create data directory with proper ownership
+RUN mkdir -p /data \
+    && chown -R shellyuser:shellyuser /data /app
+
+# Copy binary from builder
+COPY --from=builder /app/shelly-provisioner ./shelly-provisioner
+
+# Copy config with proper ownership
+COPY --chown=shellyuser:shellyuser configs/ ./configs/
+
+# Switch to non-root user
+USER shellyuser
+
+# Create volume for data persistence
+VOLUME ["/data"]
+
+# Set environment variables
+ENV GIN_MODE=release
+
+# Health check - provisioner status command
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["./shelly-provisioner", "status"] || exit 1
+
+# Graceful shutdown signal
+STOPSIGNAL SIGTERM
+
+# Default command - run agent mode
+CMD ["./shelly-provisioner", "agent"]

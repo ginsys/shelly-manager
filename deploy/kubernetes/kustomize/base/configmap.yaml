@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shelly-manager-config
+  labels:
+    app: shelly-manager
+    component: configuration
+data:
+  # Server Configuration
+  SERVER_PORT: "8080"
+  SERVER_HOST: "0.0.0.0"
+  
+  # Database Configuration
+  DATABASE_PROVIDER: "sqlite"
+  DATABASE_PATH: "/data/shelly.db"
+  
+  # Logging Configuration
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  LOG_OUTPUT: "stdout"
+  
+  # Discovery Configuration
+  DISCOVERY_ENABLED: "true"
+  DISCOVERY_NETWORKS: "192.168.1.0/24"
+  DISCOVERY_INTERVAL: "300"
+  DISCOVERY_TIMEOUT: "5"
+  DISCOVERY_ENABLE_MDNS: "true"
+  DISCOVERY_ENABLE_SSDP: "true"
+  DISCOVERY_CONCURRENT_SCANS: "20"
+  
+  # Provisioning Configuration
+  PROVISIONING_AUTO: "false"
+  PROVISIONING_INTERVAL: "600"
+  PROVISIONING_AUTH_ENABLED: "false"
+  PROVISIONING_AUTH_USER: "admin"
+  PROVISIONING_CLOUD_ENABLED: "false"
+  PROVISIONING_MQTT_ENABLED: "false"
+  PROVISIONING_DEVICE_NAME_PATTERN: "shelly_{type}_{mac}"
+  
+  # Metrics Configuration
+  METRICS_ENABLED: "true"
+  METRICS_PROMETHEUS_ENABLED: "true"
+  METRICS_PROMETHEUS_PORT: "9090"
+  METRICS_COLLECTION_INTERVAL: "300"
+  METRICS_RETENTION_DAYS: "30"
+  METRICS_ENABLE_HTTP_METRICS: "true"
+  METRICS_ENABLE_DETAILED_TIMING: "false"
+  
+  # Runtime Configuration
+  GIN_MODE: "release"

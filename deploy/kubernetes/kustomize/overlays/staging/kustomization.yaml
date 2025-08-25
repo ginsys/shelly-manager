@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: shelly-manager-staging
+
+resources:
+- ../../base
+
+namePrefix: staging-
+namespace: shelly-staging
+
+commonLabels:
+  environment: staging
+  
+patchesStrategicMerge:
+- replica-patch.yaml
+- resources-patch.yaml
+- ingress-staging.yaml
+
+configMapGenerator:
+- name: shelly-manager-config
+  behavior: merge
+  literals:
+  - LOG_LEVEL=info
+  - GIN_MODE=release
+  - DATABASE_PROVIDER=postgresql
+  - DATABASE_DSN=postgresql://shelly:$(POSTGRES_PASSWORD)@postgresql:5432/shelly
+
+images:
+- name: ghcr.io/ginsys/shelly-manager
+  newTag: staging-latest
+- name: ghcr.io/ginsys/shelly-provisioner
+  newTag: staging-latest
+
+replicas:
+- name: shelly-manager
+  count: 2

@@ -1,0 +1,40 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: shelly-manager
+  labels:
+    app: shelly-manager
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: shelly-manager
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+  namespaceSelector:
+    matchNames:
+    - shelly-production
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor  
+metadata:
+  name: shelly-provisioner
+  labels:
+    app: shelly-manager
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: shelly-manager
+      component: provisioner
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+  namespaceSelector:
+    matchNames:
+    - shelly-production

@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: shelly-manager-production
+
+resources:
+- ../../base
+- servicemonitor.yaml
+- hpa.yaml
+
+namePrefix: prod-
+namespace: shelly-production
+
+commonLabels:
+  environment: production
+  version: v1.0.0
+  
+patchesStrategicMerge:
+- replica-patch.yaml
+- resources-patch.yaml
+- ingress-production.yaml
+
+configMapGenerator:
+- name: shelly-manager-config
+  behavior: merge
+  literals:
+  - LOG_LEVEL=info
+  - GIN_MODE=release
+  - DATABASE_PROVIDER=postgresql
+  - DATABASE_DSN=postgresql://shelly:$(POSTGRES_PASSWORD)@postgresql:5432/shelly
+  - METRICS_RETENTION_DAYS=90
+
+images:
+- name: ghcr.io/ginsys/shelly-manager
+  newTag: 20250825-143022-abc1234  # Specific production version
+- name: ghcr.io/ginsys/shelly-provisioner
+  newTag: 20250825-143022-abc1234
+
+replicas:
+- name: shelly-manager
+  count: 3
