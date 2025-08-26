@@ -129,7 +129,12 @@ test-coverage-with-check: test-coverage-ci test-coverage-check
 # Run matrix tests (race detection, short mode)
 test-matrix:
 	@echo "Running matrix tests with race detection and short mode..."
-	CGO_ENABLED=1 go test -v -race -short ./...
+	@if [ "$(shell uname)" = "Darwin" ] && [ "$(shell go version | grep -o 'go1\.22')" = "go1.22" ]; then \
+		echo "macOS Go 1.22 detected - suppressing linker warnings"; \
+		CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-w" go test -v -race -short ./...; \
+	else \
+		CGO_ENABLED=1 go test -v -race -short ./...; \
+	fi
 
 # Complete CI test suite - matches GitHub Actions test.yml workflow exactly
 # This is the most important test to run locally before committing
