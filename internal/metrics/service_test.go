@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	dto "github.com/prometheus/client_model/go"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/logging"

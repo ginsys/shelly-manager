@@ -2,8 +2,8 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache git gcc musl-dev sqlite-dev
+# Install build dependencies (git only - no longer need C compiler for pure Go build)
+RUN apk add --no-cache git
 
 # Copy go mod files
 COPY go.mod go.sum ./
@@ -16,16 +16,16 @@ COPY . .
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 RUN echo "Building for $TARGETPLATFORM on $BUILDPLATFORM"
-RUN CGO_ENABLED=1 go build \
+RUN CGO_ENABLED=0 go build \
     -a -installsuffix cgo \
-    -ldflags '-extldflags "-static" -s -w' \
+    -ldflags '-s -w' \
     -o shelly-manager ./cmd/shelly-manager
 
 # Final stage
 FROM alpine:latest
 
-# Security hardening
-RUN apk --no-cache add ca-certificates sqlite tzdata \
+# Security hardening (sqlite removed - using pure Go driver)
+RUN apk --no-cache add ca-certificates tzdata \
     && adduser -D -u 10001 -s /bin/sh shellyuser \
     && rm -rf /var/cache/apk/*
 
