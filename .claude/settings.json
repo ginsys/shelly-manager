@@ -79,7 +79,8 @@
       "Bash(CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o test-provisioner-amd64 ./cmd/shelly-provisioner)",
       "Bash(CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o test-manager-windows.exe ./cmd/shelly-manager)",
       "Bash(CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o test-provisioner-windows.exe ./cmd/shelly-provisioner)",
-      "Bash(docker build:*)"
+      "Bash(docker build:*)",
+      "Bash(docker rmi:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

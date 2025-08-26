@@ -45,7 +45,15 @@ jobs:
         with:
           driver-opts: |
             image=moby/buildkit:latest
+          config-inline: |
+            [worker.oci]
+              max-parallelism = 1
             
+      - name: Clear Docker build cache
+        run: |
+          docker builder prune -a -f
+          docker system prune -f
+          
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -92,12 +100,13 @@ jobs:
           push: true
           tags: ${{ steps.meta-manager.outputs.tags }}
           labels: ${{ steps.meta-manager.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true
           build-args: |
             BUILDTIME=${{ steps.version.outputs.date }}
             VERSION=${{ steps.version.outputs.version }}
             REVISION=${{ github.sha }}
+            CGO_ENABLED=0
+            GOOS=linux
             
       - name: Build and push Provisioner image
         uses: docker/build-push-action@v5
@@ -108,12 +117,13 @@ jobs:
           push: true
           tags: ${{ steps.meta-provisioner.outputs.tags }}
           labels: ${{ steps.meta-provisioner.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true
           build-args: |
             BUILDTIME=${{ steps.version.outputs.date }}
             VERSION=${{ steps.version.outputs.version }}
             REVISION=${{ github.sha }}
+            CGO_ENABLED=0
+            GOOS=linux
             
       - name: Output image information
         run: |
