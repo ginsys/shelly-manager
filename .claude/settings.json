@@ -80,7 +80,11 @@
       "Bash(CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o test-manager-windows.exe ./cmd/shelly-manager)",
       "Bash(CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o test-provisioner-windows.exe ./cmd/shelly-provisioner)",
       "Bash(docker build:*)",
-      "Bash(docker rmi:*)"
+      "Bash(docker rmi:*)",
+      "Bash(CGO_ENABLED=1 go test -v -short ./internal/database/provider/ -run PostgreSQL)",
+      "Bash(CGO_ENABLED=1 go test -v -short ./internal/database/provider/ -run Security)",
+      "Bash(CGO_ENABLED=1 go test -v -short ./internal/database/provider/)",
+      "Bash(CGO_ENABLED=1 go test -v -bench=. -short ./internal/database/provider/ -run \"^(TestPostgreSQLCredentialSecurity|TestPostgreSQLSecurityDSNInjection)$\")"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
