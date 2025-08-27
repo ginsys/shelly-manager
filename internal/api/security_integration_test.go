@@ -595,7 +595,24 @@ func TestSecurityHeadersCompliance(t *testing.T) {
 
 func TestErrorResponseConsistency(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
-	securityConfig := middleware.DefaultSecurityConfig()
+
+	// Create security configuration with low rate limits for testing
+	securityConfig := &middleware.SecurityConfig{
+		CSP:               "default-src 'self'",
+		RateLimit:         10,          // Low limit to trigger rate limiting
+		RateLimitWindow:   time.Second, // Short window for fast testing
+		RateLimitByPath:   map[string]int{"/api/v1/control": 3},
+		MaxRequestSize:    1024 * 1024, // 1MB
+		RequestTimeout:    5 * time.Second,
+		EnableHSTS:        false,
+		HSTSMaxAge:        31536000,
+		PermissionsPolicy: "geolocation=(), camera=(), microphone=()",
+		LogSecurityEvents: true,
+		LogAllRequests:    false,
+		EnableMonitoring:  true,
+		EnableIPBlocking:  true,
+		BlockDuration:     time.Hour,
+	}
 	validationConfig := middleware.DefaultValidationConfig()
 
 	testHandler := &TestHandler{logger: logger}
@@ -675,8 +692,15 @@ func TestErrorResponseConsistency(t *testing.T) {
 
 			assert.False(t, errorResponse.Success, "Error response should have success=false")
 			assert.NotNil(t, errorResponse.Error, "Error response should have error object")
-			assert.Equal(t, tt.expectedErrCode, errorResponse.Error.Code, "Error code should match expected")
-			assert.NotEmpty(t, errorResponse.Error.Message, "Error should have message")
+
+			// Add nil check to prevent panic
+			if errorResponse.Error != nil {
+				assert.Equal(t, tt.expectedErrCode, errorResponse.Error.Code, "Error code should match expected")
+				assert.NotEmpty(t, errorResponse.Error.Message, "Error should have message")
+			} else {
+				t.Errorf("Error response is nil - response was: %+v", errorResponse)
+			}
+
 			assert.False(t, errorResponse.Timestamp.IsZero(), "Error response should have timestamp")
 		})
 	}

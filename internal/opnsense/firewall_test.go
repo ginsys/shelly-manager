@@ -497,8 +497,14 @@ func TestFirewallManager_ValidatePortOrRange(t *testing.T) {
 		"443",
 		"8080-8090",
 		"1000-2000",
+		"1-65535",
 		"ssh",
 		"http",
+		"https",
+		"ftp-data",
+		"service_name",
+		"SERVICE-NAME",
+		"Service123",
 	}
 
 	for _, validCase := range validCases {
@@ -508,16 +514,31 @@ func TestFirewallManager_ValidatePortOrRange(t *testing.T) {
 		})
 	}
 
-	invalidCases := []string{
-		"", // Empty
-		"80-",
-		"-80",
+	invalidCases := []struct {
+		input       string
+		description string
+	}{
+		{"", "Empty"},
+		{"80-", "Missing end port"},
+		{"-80", "Missing start port"},
+		{"0", "Port zero"},
+		{"65536", "Port above 65535"},
+		{"-1", "Negative port"},
+		{"80-79", "Range with start > end"},
+		{"0-80", "Range with zero start"},
+		{"80-65536", "Range with end above 65535"},
+		{"abc-80", "Range with invalid start"},
+		{"80-abc", "Range with invalid end"},
+		{"port@name", "Service name with invalid character"},
+		{"port name", "Service name with space"},
+		{"80--90", "Double hyphen"},
+		{"80-90-100", "Multiple hyphens"},
 	}
 
 	for _, invalidCase := range invalidCases {
-		t.Run(fmt.Sprintf("Invalid_%s", invalidCase), func(t *testing.T) {
-			err := firewallManager.validatePortOrRange(invalidCase)
-			assert.Error(t, err)
+		t.Run(fmt.Sprintf("Invalid_%s", invalidCase.description), func(t *testing.T) {
+			err := firewallManager.validatePortOrRange(invalidCase.input)
+			assert.Error(t, err, "Expected error for input: %s", invalidCase.input)
 		})
 	}
 }

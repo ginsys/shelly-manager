@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -523,7 +524,7 @@ func isSuspiciousHeaderName(name string) bool {
 // getRequestIDFromContext extracts request ID from request context
 func getRequestIDFromContext(r *http.Request) string {
 	if ctx := r.Context(); ctx != nil {
-		if requestID, ok := ctx.Value("request_id").(string); ok {
+		if requestID, ok := ctx.Value(response.RequestIDKey).(string); ok {
 			return requestID
 		}
 	}

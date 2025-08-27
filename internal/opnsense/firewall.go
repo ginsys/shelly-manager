@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -375,19 +376,82 @@ func (f *FirewallManager) validateIPOrNetwork(content string) error {
 
 // validatePortOrRange validates a port number or port range
 func (f *FirewallManager) validatePortOrRange(content string) error {
-	// This is a simplified validation - OPNSense supports complex port expressions
+	if content == "" {
+		return fmt.Errorf("empty port content")
+	}
+
+	// Check if it contains a hyphen
 	if strings.Contains(content, "-") {
-		// Port range
+		// Count hyphens - multiple hyphens in a row or too many hyphens are invalid
+		hyphenCount := strings.Count(content, "-")
+		if strings.Contains(content, "--") {
+			return fmt.Errorf("invalid format: consecutive hyphens not allowed")
+		}
+
 		parts := strings.SplitN(content, "-", 2)
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid port range format")
 		}
-		// Additional port range validation could be added here
-	}
 
-	// For now, accept any non-empty content for ports
-	if content == "" {
-		return fmt.Errorf("empty port content")
+		// Validate both parts are not empty
+		if parts[0] == "" || parts[1] == "" {
+			return fmt.Errorf("invalid port range: missing start or end port")
+		}
+
+		// Check if both parts are numeric (port range)
+		startPort, startErr := strconv.Atoi(parts[0])
+		endPort, endErr := strconv.Atoi(parts[1])
+
+		if startErr == nil && endErr == nil {
+			// Both parts are numeric - this is a port range
+			// But first check if there are additional hyphens in the second part
+			if strings.Contains(parts[1], "-") {
+				return fmt.Errorf("invalid port range format: multiple hyphens")
+			}
+
+			if startPort < 1 || startPort > 65535 {
+				return fmt.Errorf("invalid start port %d: must be between 1 and 65535", startPort)
+			}
+			if endPort < 1 || endPort > 65535 {
+				return fmt.Errorf("invalid end port %d: must be between 1 and 65535", endPort)
+			}
+			if startPort > endPort {
+				return fmt.Errorf("invalid port range %d-%d: start port must be <= end port", startPort, endPort)
+			}
+		} else if startErr != nil && endErr != nil {
+			// Both parts are non-numeric - could be a service name with hyphen
+			// But reject mixed formats and multiple hyphens
+			if hyphenCount > 2 { // Allow reasonable number of hyphens in service names
+				return fmt.Errorf("invalid service name: too many hyphens")
+			}
+
+			// Validate the entire string as a service name
+			for _, r := range content {
+				if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r != '-' {
+					return fmt.Errorf("invalid port/service name '%s': contains invalid characters", content)
+				}
+			}
+		} else {
+			// Mixed format (one numeric, one non-numeric) - this is invalid
+			return fmt.Errorf("invalid format '%s': mixed numeric/non-numeric parts not allowed", content)
+		}
+	} else {
+		// Single port - check if it's numeric
+		if port, err := strconv.Atoi(content); err == nil {
+			// Numeric port - validate range
+			if port < 1 || port > 65535 {
+				return fmt.Errorf("invalid port %d: must be between 1 and 65535", port)
+			}
+		} else {
+			// Non-numeric - could be a service name like "ssh", "http", etc.
+			// OPNSense supports service names, so we accept non-numeric values
+			// but they must be reasonable (no special characters that could be injection)
+			for _, r := range content {
+				if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r != '-' {
+					return fmt.Errorf("invalid port/service name '%s': contains invalid characters", content)
+				}
+			}
+		}
 	}
 
 	return nil

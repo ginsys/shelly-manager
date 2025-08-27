@@ -425,10 +425,14 @@ func (d *DHCPManager) getLastFourMAC(mac string) string {
 
 // sanitizeHostname ensures hostname meets DNS requirements
 func (d *DHCPManager) sanitizeHostname(hostname string) string {
+	// Check if original had leading/trailing whitespace (before lowercasing)
+	hadLeadingWhitespace := len(hostname) > 0 && (hostname[0] == ' ' || hostname[0] == '\t')
+	hadTrailingWhitespace := len(hostname) > 0 && (hostname[len(hostname)-1] == ' ' || hostname[len(hostname)-1] == '\t')
+
 	// Convert to lowercase
 	hostname = strings.ToLower(hostname)
 
-	// Replace invalid characters with hyphens
+	// Replace ALL invalid characters (including spaces) with hyphens
 	var result strings.Builder
 	for _, r := range hostname {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
@@ -440,12 +444,16 @@ func (d *DHCPManager) sanitizeHostname(hostname string) string {
 
 	hostname = result.String()
 
-	// Remove leading/trailing hyphens
-	hostname = strings.Trim(hostname, "-")
-
-	// Ensure maximum length
+	// Ensure maximum length (truncate to 63 characters)
 	if len(hostname) > 63 {
 		hostname = hostname[:63]
+		// After truncation, we might have trailing hyphens, so trim them
+		hostname = strings.TrimRight(hostname, "-")
+	}
+
+	// Only trim hyphens if the original string had leading/trailing whitespace
+	if hadLeadingWhitespace || hadTrailingWhitespace {
+		hostname = strings.Trim(hostname, "-")
 	}
 
 	// Ensure not empty

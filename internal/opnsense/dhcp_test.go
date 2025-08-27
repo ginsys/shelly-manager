@@ -630,7 +630,7 @@ func TestDHCPManager_SanitizeHostname(t *testing.T) {
 		{"Multiple---Hyphens", "multiple---hyphens"},
 		{"   Leading-And-Trailing   ", "leading-and-trailing"},
 		{"", "shelly-device"}, // Empty should get default
-		{"a-very-long-hostname-that-exceeds-sixty-three-characters-limit", "a-very-long-hostname-that-exceeds-sixty-three-characters-li"},
+		{"a-very-long-hostname-that-exceeds-sixty-three-characters-limit-for-sure", "a-very-long-hostname-that-exceeds-sixty-three-characters-limit"},
 	}
 
 	for _, tc := range testCases {

@@ -266,7 +266,7 @@ func RateLimitMiddleware(config *SecurityConfig, logger *logging.Logger) func(ht
 				w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", time.Now().Add(config.RateLimitWindow).Unix()))
 				w.WriteHeader(http.StatusTooManyRequests)
 
-				// Write standardized error response
+				// Write standardized error response with timestamp
 				response := map[string]interface{}{
 					"success": false,
 					"error": map[string]interface{}{
@@ -276,6 +276,7 @@ func RateLimitMiddleware(config *SecurityConfig, logger *logging.Logger) func(ht
 					"meta": map[string]interface{}{
 						"retry_after": config.RateLimitWindow.Seconds(),
 					},
+					"timestamp": time.Now().UTC(),
 				}
 
 				if err := writeJSONResponse(w, response); err != nil && logger != nil {
@@ -412,6 +413,7 @@ func TimeoutMiddleware(config *SecurityConfig, logger *logging.Logger) func(http
 						"code":    "REQUEST_TIMEOUT",
 						"message": "Request processing timeout",
 					},
+					"timestamp": time.Now().UTC(),
 				}
 				if err := writeJSONResponse(w, response); err != nil {
 					// Log the error but don't panic - this is a timeout response
@@ -539,6 +541,7 @@ func IPBlockingMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logg
 						"code":    "IP_BLOCKED",
 						"message": "Your IP has been temporarily blocked due to suspicious activity.",
 					},
+					"timestamp": time.Now().UTC(),
 				}
 
 				if err := writeJSONResponse(w, response); err != nil && logger != nil {
