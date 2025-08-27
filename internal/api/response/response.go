@@ -9,6 +9,14 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// RequestIDKey is the context key for request IDs
+	RequestIDKey contextKey = "request_id"
+)
+
 // APIResponse represents the standardized API response format
 type APIResponse struct {
 	Success   bool        `json:"success"`
@@ -336,7 +344,7 @@ func InternalError() *APIResponse {
 // Helper function to extract request ID from context
 func getRequestIDFromContext(r *http.Request) string {
 	if ctx := r.Context(); ctx != nil {
-		if requestID, ok := ctx.Value("request_id").(string); ok {
+		if requestID, ok := ctx.Value(RequestIDKey).(string); ok {
 			return requestID
 		}
 	}

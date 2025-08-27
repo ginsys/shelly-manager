@@ -17,11 +17,7 @@ import (
 )
 
 // contextKey is a custom type for context keys to avoid collisions
-type contextKey string
-
-const (
-	requestIDKey contextKey = "request_id"
-)
+// Remove duplicate contextKey definition - use the one from response.go
 
 func TestAPIResponseStructure(t *testing.T) {
 	tests := []struct {
@@ -339,7 +335,7 @@ func TestRequestIDHandling(t *testing.T) {
 		rr := httptest.NewRecorder()
 
 		// Create request with request ID in context
-		ctx := context.WithValue(context.Background(), requestIDKey, "req-12345")
+		ctx := context.WithValue(context.Background(), RequestIDKey, "req-12345")
 		req := httptest.NewRequest("GET", "/api/v1/test", nil).WithContext(ctx)
 
 		writer.WriteSuccess(rr, req, map[string]string{"status": "ok"})

@@ -138,6 +138,11 @@ func TestPostgreSQLSecuritySSLCertificateValidation(t *testing.T) {
 
 // TestPostgreSQLSecurityCredentialProtection tests that credentials are not leaked
 func TestPostgreSQLSecurityCredentialProtection(t *testing.T) {
+	// Skip network tests if in short mode
+	if testing.Short() {
+		t.Skip("Skipping network-dependent PostgreSQL security tests in short mode")
+	}
+
 	logger := logging.GetDefault()
 	provider := NewPostgreSQLProvider(logger)
 
@@ -160,7 +165,9 @@ func TestPostgreSQLSecurityCredentialProtection(t *testing.T) {
 				Provider: "postgresql",
 				DSN:      dsn,
 				Options: map[string]string{
-					"sslmode": "disable",
+					"sslmode":           "disable",
+					"connect_timeout":   "2",    // Short timeout for tests
+					"statement_timeout": "2000", // 2 second statement timeout
 				},
 			}
 
