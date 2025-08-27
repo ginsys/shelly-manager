@@ -1,10 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
 
+	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -15,17 +17,69 @@ func SetupRoutes(handler *Handler) *mux.Router {
 
 // SetupRoutesWithLogger configures all API routes with logging middleware
 func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router {
+	return SetupRoutesWithSecurity(handler, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
+}
+
+// SetupRoutesWithSecurity configures all API routes with comprehensive security middleware
+func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityConfig *middleware.SecurityConfig, validationConfig *middleware.ValidationConfig) *mux.Router {
 	r := mux.NewRouter()
+
+	// Initialize security monitor
+	var securityMonitor *middleware.SecurityMonitor
+	if securityConfig.EnableMonitoring {
+		securityMonitor = middleware.NewSecurityMonitor(securityConfig, logger)
+
+		// Store security monitor in handler for metrics endpoint access
+		if handler != nil {
+			handler.securityMonitor = securityMonitor
+		}
+	}
 
 	// WebSocket endpoint FIRST, without any middleware to preserve Hijacker interface
 	if handler.MetricsHandler != nil {
 		r.HandleFunc("/metrics/ws", handler.MetricsHandler.HandleWebSocket).Methods("GET")
 	}
 
-	// Add logging middleware to all other routes
-	r.Use(logging.HTTPMiddleware(logger))
+	// Apply security middleware in proper order:
+	// 1. Recovery middleware (catch panics first)
 	r.Use(logging.RecoveryMiddleware(logger))
-	r.Use(logging.CORSMiddleware(logger))
+
+	// 2. IP blocking middleware (block malicious IPs early)
+	if securityConfig.EnableIPBlocking && securityMonitor != nil {
+		r.Use(middleware.IPBlockingMiddleware(securityConfig, securityMonitor, logger))
+	}
+
+	// 3. Security monitoring middleware (track all requests)
+	if securityMonitor != nil {
+		r.Use(middleware.MonitoringMiddleware(securityConfig, securityMonitor, logger))
+	}
+
+	// 4. Security logging middleware (log all requests for monitoring)
+	r.Use(middleware.SecurityLoggingMiddleware(securityConfig, logger))
+
+	// 5. Security headers middleware (set security headers early)
+	r.Use(middleware.SecurityHeadersMiddleware(securityConfig, logger))
+
+	// 6. Request timeout middleware (prevent resource exhaustion)
+	r.Use(middleware.TimeoutMiddleware(securityConfig, logger))
+
+	// 7. Rate limiting middleware (prevent DoS attacks)
+	r.Use(middleware.RateLimitMiddleware(securityConfig, logger))
+
+	// 8. Request size limiting middleware (prevent large payload attacks)
+	r.Use(middleware.RequestSizeMiddleware(securityConfig, logger))
+
+	// 9. Request validation middleware (validate headers, content types, etc.)
+	r.Use(middleware.ValidateHeadersMiddleware(validationConfig, logger))
+	r.Use(middleware.ValidateContentTypeMiddleware(validationConfig, logger))
+	r.Use(middleware.ValidateQueryParamsMiddleware(validationConfig, logger))
+	r.Use(middleware.ValidateJSONMiddleware(validationConfig, logger))
+
+	// 10. Enhanced CORS middleware (security-aware CORS handling)
+	r.Use(enhancedCORSMiddleware(logger))
+
+	// 11. Standard logging middleware (existing functionality)
+	r.Use(logging.HTTPMiddleware(logger))
 
 	// API routes
 	api := r.PathPrefix("/api/v1").Subrouter()
@@ -135,6 +189,11 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 		// Dashboard endpoints
 		metricsAPI.HandleFunc("/dashboard", handler.MetricsHandler.GetDashboardMetrics).Methods("GET")
 		metricsAPI.HandleFunc("/test-alert", handler.MetricsHandler.SendTestAlert).Methods("POST")
+
+		// Security metrics endpoint
+		if securityMonitor != nil {
+			metricsAPI.HandleFunc("/security", createSecurityMetricsHandler(securityMonitor, logger)).Methods("GET")
+		}
 	}
 
 	// Discovery route
@@ -171,4 +230,70 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 	r.PathPrefix("/").Handler(http.StripPrefix("/", http.FileServer(http.Dir("./web/static/"))))
 
 	return r
+}
+
+// enhancedCORSMiddleware provides security-aware CORS handling
+func enhancedCORSMiddleware(logger *logging.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+
+			// Security-enhanced CORS headers
+			w.Header().Set("Access-Control-Allow-Origin", "*") // TODO: Make configurable for production
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			w.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset")
+			w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours preflight cache
+
+			// Log CORS requests for security monitoring
+			if origin != "" {
+				logger.WithFields(map[string]any{
+					"method":    r.Method,
+					"path":      r.URL.Path,
+					"origin":    origin,
+					"component": "cors",
+				}).Debug("CORS request processed")
+
+				// TODO: Add origin validation for production
+				// For now, accept all origins but log them for monitoring
+			}
+
+			// Handle preflight requests
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// createSecurityMetricsHandler creates a handler for security metrics
+func createSecurityMetricsHandler(monitor *middleware.SecurityMonitor, logger *logging.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if monitor == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if _, err := w.Write([]byte(`{"success": false, "error": {"code": "SERVICE_UNAVAILABLE", "message": "Security monitoring is not enabled"}}`)); err != nil {
+				// Log the error but continue - response has already been initiated
+				return
+			}
+			return
+		}
+
+		metrics := monitor.GetMetrics()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		response := map[string]interface{}{
+			"success": true,
+			"data":    metrics,
+		}
+
+		if err := json.NewEncoder(w).Encode(response); err != nil && logger != nil {
+			logger.Error("Failed to encode security metrics response", "error", err)
+		}
+	}
 }

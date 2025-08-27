@@ -163,7 +163,39 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, body 
 			"status_code", resp.StatusCode,
 			"response", string(responseBody),
 		)
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(responseBody))
+
+		// Try to parse the response body for more detailed error information
+		var errorResponse struct {
+			Status      string                 `json:"status"`
+			Message     string                 `json:"message"`
+			Validations map[string]interface{} `json:"validations"`
+		}
+
+		if err := json.Unmarshal(responseBody, &errorResponse); err != nil {
+			// If we can't parse JSON, use the raw response as the message
+			return nil, &APIError{
+				HTTPStatus: resp.StatusCode,
+				Message:    string(responseBody),
+			}
+		}
+
+		// Extract message from parsed JSON, fallback to generic message
+		message := errorResponse.Message
+		if message == "" {
+			message = "API request failed"
+		}
+
+		// Convert validations to string map for compatibility with APIError.Details
+		details := make(map[string]string)
+		for key, value := range errorResponse.Validations {
+			details[key] = fmt.Sprintf("%v", value)
+		}
+
+		return nil, &APIError{
+			HTTPStatus: resp.StatusCode,
+			Message:    message,
+			Details:    details,
+		}
 	}
 
 	c.logger.Debug("OPNSense API request successful",
