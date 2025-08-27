@@ -28,6 +28,7 @@ type Handler struct {
 	ExportHandlers      *ExportHandlers
 	ImportHandlers      *ImportHandlers
 	logger              *logging.Logger
+	securityMonitor     interface{} // Security monitor for metrics (using interface{} to avoid circular imports)
 }
 
 // NewHandler creates a new API handler
