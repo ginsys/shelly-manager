@@ -50,6 +50,10 @@ type SecurityConfig struct {
 	// Attack detection
 	EnableIPBlocking bool          // enable automatic IP blocking
 	BlockDuration    time.Duration // how long to block suspicious IPs
+
+	// Proxy handling
+	UseProxyHeaders bool     // trust proxy headers for client IP extraction
+	TrustedProxies  []string // list of trusted proxy IPs or CIDR ranges
 }
 
 // DefaultSecurityConfig returns a secure default configuration
@@ -73,6 +77,8 @@ func DefaultSecurityConfig() *SecurityConfig {
 		EnableMonitoring:  true,      // enable security monitoring
 		EnableIPBlocking:  true,      // enable automatic IP blocking
 		BlockDuration:     time.Hour, // block for 1 hour
+		UseProxyHeaders:   false,
+		TrustedProxies:    nil,
 	}
 }
 
@@ -453,18 +459,45 @@ func (w *securityResponseWriter) Write(data []byte) (int, error) {
 
 // getClientIP extracts the real client IP from request
 func getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header first
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// Take the first IP in the chain
-		if idx := strings.Index(xff, ","); idx != -1 {
-			return strings.TrimSpace(xff[:idx])
+	// If proxy headers are trusted, try to extract the client IP considering trusted proxies
+	// We infer the config from context if present; otherwise, use conservative behavior
+	var trusted []string
+	useProxy := false
+	if cfgVal := r.Context().Value(contextKey("security_config")); cfgVal != nil {
+		if cfg, ok := cfgVal.(*SecurityConfig); ok {
+			trusted = cfg.TrustedProxies
+			useProxy = cfg.UseProxyHeaders
 		}
-		return strings.TrimSpace(xff)
 	}
 
-	// Check X-Real-IP header
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
+	if useProxy {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			// Iterate from rightmost to leftmost; pick first not in trusted set
+			for i := len(parts) - 1; i >= 0; i-- {
+				ip := strings.TrimSpace(parts[i])
+				if ip == "" {
+					continue
+				}
+				if !isTrustedProxyIP(ip, trusted) {
+					return ip
+				}
+			}
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" && !isTrustedProxyIP(strings.TrimSpace(xri), trusted) {
+			return strings.TrimSpace(xri)
+		}
+	} else {
+		// Legacy behavior: take first XFF IP if present, else X-Real-IP
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if idx := strings.Index(xff, ","); idx != -1 {
+				return strings.TrimSpace(xff[:idx])
+			}
+			return strings.TrimSpace(xff)
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return strings.TrimSpace(xri)
+		}
 	}
 
 	// Fall back to RemoteAddr
@@ -473,6 +506,31 @@ func getClientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// isTrustedProxyIP checks if an IP string is within the trusted proxies list (IPs or CIDRs)
+func isTrustedProxyIP(ipStr string, trusted []string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	for _, entry := range trusted {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if _, ipnet, err := net.ParseCIDR(entry); err == nil {
+			if ipnet.Contains(ip) {
+				return true
+			}
+			continue
+		}
+		// Exact IP match
+		if ip.Equal(net.ParseIP(entry)) {
+			return true
+		}
+	}
+	return false
 }
 
 // generateNonce creates a cryptographically secure nonce for CSP
