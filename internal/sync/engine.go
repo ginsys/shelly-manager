@@ -31,6 +31,9 @@ type SyncEngine struct {
 	// In-memory result stores (recent results for retrieval/download)
 	exportResults map[string]*ExportResult
 	importResults map[string]*ImportResult
+
+	// Scheduling (in-memory for now)
+	schedules map[string]*ExportSchedule
 }
 
 // ExportEngine provides backward compatibility
@@ -44,6 +47,7 @@ func NewSyncEngine(dbManager DatabaseManagerInterface, logger *logging.Logger) *
 		logger:        logger,
 		exportResults: make(map[string]*ExportResult),
 		importResults: make(map[string]*ImportResult),
+		schedules:     make(map[string]*ExportSchedule),
 	}
 }
 
@@ -522,6 +526,143 @@ func (e *SyncEngine) loadExportData(ctx context.Context, filters ExportFilters) 
 		Metadata:          metadata,
 		Timestamp:         time.Now(),
 	}, nil
+}
+
+// ---- Scheduling (simple in-memory implementation) ----
+
+// ExportSchedule defines a scheduled export job
+type ExportSchedule struct {
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	IntervalSec int                    `json:"interval_sec"` // simple interval scheduling
+	Enabled     bool                   `json:"enabled"`
+	Request     ExportRequest          `json:"request"`
+	LastRun     *time.Time             `json:"last_run,omitempty"`
+	NextRun     *time.Time             `json:"next_run,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// ExportScheduleRequest is used to create/update schedules
+type ExportScheduleRequest struct {
+	Name        string        `json:"name"`
+	IntervalSec int           `json:"interval_sec"`
+	Enabled     bool          `json:"enabled"`
+	Request     ExportRequest `json:"request"`
+}
+
+// ListSchedules lists all schedules
+func (e *SyncEngine) ListSchedules() []*ExportSchedule {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	list := make([]*ExportSchedule, 0, len(e.schedules))
+	for _, s := range e.schedules {
+		list = append(list, s)
+	}
+	return list
+}
+
+// CreateSchedule creates a new schedule
+func (e *SyncEngine) CreateSchedule(req ExportScheduleRequest) (*ExportSchedule, error) {
+	if req.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if req.IntervalSec <= 0 {
+		return nil, fmt.Errorf("interval_sec must be > 0")
+	}
+	if req.Request.PluginName == "" || req.Request.Format == "" {
+		return nil, fmt.Errorf("request.plugin_name and request.format are required")
+	}
+	// basic validation against plugin
+	if err := e.ValidateExport(req.Request); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	id := uuid.New().String()
+	next := now.Add(time.Duration(req.IntervalSec) * time.Second)
+	sch := &ExportSchedule{
+		ID:          id,
+		Name:        req.Name,
+		IntervalSec: req.IntervalSec,
+		Enabled:     req.Enabled,
+		Request:     req.Request,
+		LastRun:     nil,
+		NextRun:     &next,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	e.mutex.Lock()
+	e.schedules[id] = sch
+	e.mutex.Unlock()
+	return sch, nil
+}
+
+// GetSchedule retrieves a schedule by ID
+func (e *SyncEngine) GetSchedule(id string) (*ExportSchedule, bool) {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	s, ok := e.schedules[id]
+	return s, ok
+}
+
+// UpdateSchedule updates a schedule by ID
+func (e *SyncEngine) UpdateSchedule(id string, req ExportScheduleRequest) (*ExportSchedule, error) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	sch, ok := e.schedules[id]
+	if !ok {
+		return nil, fmt.Errorf("schedule not found")
+	}
+	if req.Name != "" {
+		sch.Name = req.Name
+	}
+	if req.IntervalSec > 0 {
+		sch.IntervalSec = req.IntervalSec
+	}
+	sch.Enabled = req.Enabled
+	if req.Request.PluginName != "" {
+		sch.Request = req.Request
+	}
+	now := time.Now()
+	sch.UpdatedAt = now
+	next := now.Add(time.Duration(sch.IntervalSec) * time.Second)
+	sch.NextRun = &next
+	return sch, nil
+}
+
+// DeleteSchedule deletes a schedule by ID
+func (e *SyncEngine) DeleteSchedule(id string) error {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	if _, ok := e.schedules[id]; !ok {
+		return fmt.Errorf("schedule not found")
+	}
+	delete(e.schedules, id)
+	return nil
+}
+
+// RunSchedule triggers the export for a schedule immediately
+func (e *SyncEngine) RunSchedule(ctx context.Context, id string) (*ExportResult, error) {
+	e.mutex.RLock()
+	sch, ok := e.schedules[id]
+	e.mutex.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("schedule not found")
+	}
+	// Execute export now
+	res, err := e.Export(ctx, sch.Request)
+	// Update last/next run timestamps
+	now := time.Now()
+	e.mutex.Lock()
+	if ok {
+		sch.LastRun = &now
+		next := now.Add(time.Duration(sch.IntervalSec) * time.Second)
+		sch.NextRun = &next
+		sch.UpdatedAt = now
+	}
+	e.mutex.Unlock()
+	return res, err
 }
 
 // Helper functions

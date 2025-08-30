@@ -49,10 +49,18 @@ func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
 	api.HandleFunc("/export/gitops", eh.CreateGitOpsExport).Methods("POST")
 	api.HandleFunc("/export/gitops/{id}/download", eh.DownloadGitOpsExport).Methods("GET")
 
+	// Scheduling endpoints (register before generic /export/{id} to avoid collisions)
+	api.HandleFunc("/export/schedules", eh.ListSchedules).Methods("GET")
+	api.HandleFunc("/export/schedules", eh.CreateSchedule).Methods("POST")
+	api.HandleFunc("/export/schedules/{id}", eh.GetSchedule).Methods("GET")
+	api.HandleFunc("/export/schedules/{id}", eh.UpdateSchedule).Methods("PUT")
+	api.HandleFunc("/export/schedules/{id}", eh.DeleteSchedule).Methods("DELETE")
+	api.HandleFunc("/export/schedules/{id}/run", eh.RunSchedule).Methods("POST")
+
 	// Generic export endpoints
 	api.HandleFunc("/export", eh.Export).Methods("POST")
-	api.HandleFunc("/export/{id}", eh.GetExportResult).Methods("GET")
 	api.HandleFunc("/export/preview", eh.PreviewExport).Methods("POST")
+	api.HandleFunc("/export/{id}", eh.GetExportResult).Methods("GET")
 	api.HandleFunc("/export/{id}/download", eh.DownloadExport).Methods("GET")
 
 	// Import endpoints
@@ -285,6 +293,79 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	http.ServeFile(w, r, res.OutputPath)
+}
+
+// Scheduling handlers
+
+// ListSchedules returns all export schedules
+func (eh *SyncHandlers) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	schedules := eh.syncEngine.ListSchedules()
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, map[string]interface{}{
+		"schedules": schedules,
+		"count":     len(schedules),
+	})
+}
+
+// CreateSchedule creates a new export schedule
+func (eh *SyncHandlers) CreateSchedule(w http.ResponseWriter, r *http.Request) {
+	var req sync.ExportScheduleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
+		return
+	}
+	sch, err := eh.syncEngine.CreateSchedule(req)
+	if err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
+		return
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteCreated(w, r, sch)
+}
+
+// GetSchedule returns a schedule by ID
+func (eh *SyncHandlers) GetSchedule(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	if sch, ok := eh.syncEngine.GetSchedule(id); ok {
+		apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, sch)
+		return
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, "Export schedule")
+}
+
+// UpdateSchedule updates a schedule
+func (eh *SyncHandlers) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	var req sync.ExportScheduleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
+		return
+	}
+	sch, err := eh.syncEngine.UpdateSchedule(id, req)
+	if err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
+		return
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, sch)
+}
+
+// DeleteSchedule deletes a schedule
+func (eh *SyncHandlers) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	if err := eh.syncEngine.DeleteSchedule(id); err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
+		return
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, map[string]string{"status": "deleted"})
+}
+
+// RunSchedule triggers a schedule immediately
+func (eh *SyncHandlers) RunSchedule(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	res, err := eh.syncEngine.RunSchedule(r.Context(), id)
+	if err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
+		return
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, res)
 }
 
 // Import performs a generic import using any plugin
