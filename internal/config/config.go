@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -129,6 +130,11 @@ func Load(configFile string) (*Config, error) {
 func LoadWithName(configFile string, configName string) (*Config, error) {
 	// Reset viper state to prevent interference between config loads
 	viper.Reset()
+
+	// Environment variable overrides: SHELLY_ prefix, nested keys with underscores
+	viper.SetEnvPrefix("SHELLY")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 
 	if configFile != "" {
 		viper.SetConfigFile(configFile)

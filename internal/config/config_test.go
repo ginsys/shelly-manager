@@ -208,6 +208,47 @@ main_app:
 	}
 }
 
+func TestEnvOverrides_PrecedenceAndMapping(t *testing.T) {
+	// Prepare minimal config file with baseline values
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "env-test.yaml")
+
+	configContent := `server:
+  port: 8080
+  log_level: "info"
+database:
+  provider: "sqlite"
+  dsn: "data/shelly.db"
+`
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Set environment variable overrides using SHELLY_ prefix and underscore mapping
+	t.Setenv("SHELLY_SERVER_PORT", "9091")
+	t.Setenv("SHELLY_SERVER_LOG_LEVEL", "debug")
+	t.Setenv("SHELLY_DATABASE_PROVIDER", "postgresql")
+	t.Setenv("SHELLY_DATABASE_DSN", "host=localhost user=app dbname=shelly sslmode=disable")
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Failed to load config with env overrides: %v", err)
+	}
+
+	if cfg.Server.Port != 9091 {
+		t.Errorf("Expected env override for server.port = 9091, got %d", cfg.Server.Port)
+	}
+	if cfg.Server.LogLevel != "debug" {
+		t.Errorf("Expected env override for server.log_level = debug, got %s", cfg.Server.LogLevel)
+	}
+	if cfg.Database.Provider != "postgresql" {
+		t.Errorf("Expected env override for database.provider = postgresql, got %s", cfg.Database.Provider)
+	}
+	if cfg.Database.DSN != "host=localhost user=app dbname=shelly sslmode=disable" {
+		t.Errorf("Expected env override for database.dsn, got %s", cfg.Database.DSN)
+	}
+}
+
 func TestLoad_DefaultConfig(t *testing.T) {
 	// Create minimal config file
 	tempDir := t.TempDir()

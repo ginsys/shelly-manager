@@ -292,6 +292,17 @@ internal/
 
 ## 🔧 Configuration
 
+### Environment Overrides
+- Supports environment variable overrides with `SHELLY_` prefix and nested key mapping using underscores.
+- Precedence: environment > config file > defaults.
+- Examples:
+  - `SHELLY_SERVER_PORT=9091` overrides `server.port`.
+  - `SHELLY_SERVER_LOG_LEVEL=debug` overrides `server.log_level`.
+  - `SHELLY_DATABASE_PROVIDER=postgresql` overrides `database.provider`.
+  - `SHELLY_DATABASE_DSN="host=localhost user=app dbname=shelly sslmode=disable"` overrides `database.dsn`.
+  - Arrays and complex types should be configured via file where possible; use env for scalars and secrets.
+
+
 ### Main API Server (`/etc/shelly/config.yaml`)
 ```yaml
 server:
