@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
@@ -63,13 +64,10 @@ func (eh *SyncHandlers) ListPlugins(w http.ResponseWriter, r *http.Request) {
 	eh.logger.Info("Listing export plugins")
 
 	plugins := eh.syncEngine.ListPlugins()
-
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data": map[string]interface{}{
-			"plugins": plugins,
-			"count":   len(plugins),
-		},
+	rw := apiresp.NewResponseWriter(eh.logger)
+	rw.WriteSuccess(w, r, map[string]interface{}{
+		"plugins": plugins,
+		"count":   len(plugins),
 	})
 }
 
@@ -81,22 +79,16 @@ func (eh *SyncHandlers) GetPlugin(w http.ResponseWriter, r *http.Request) {
 	plugin, err := eh.syncEngine.GetPlugin(pluginName)
 	if err != nil {
 		eh.logger.Error("Plugin not found", "name", pluginName, "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   fmt.Sprintf("Plugin not found: %s", pluginName),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, fmt.Sprintf("plugin %s", pluginName))
 		return
 	}
 
 	info := plugin.Info()
 	capabilities := plugin.Capabilities()
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data": map[string]interface{}{
-			"info":         info,
-			"capabilities": capabilities,
-		},
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, map[string]interface{}{
+		"info":         info,
+		"capabilities": capabilities,
 	})
 }
 
@@ -108,19 +100,13 @@ func (eh *SyncHandlers) GetPluginSchema(w http.ResponseWriter, r *http.Request) 
 	plugin, err := eh.syncEngine.GetPlugin(pluginName)
 	if err != nil {
 		eh.logger.Error("Plugin not found", "name", pluginName, "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   fmt.Sprintf("Plugin not found: %s", pluginName),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, fmt.Sprintf("plugin %s", pluginName))
 		return
 	}
 
 	schema := plugin.ConfigSchema()
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data":    schema,
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, schema)
 }
 
 // CreateBackup creates a new backup export
@@ -135,10 +121,7 @@ func (eh *SyncHandlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		eh.logger.Error("Invalid request body", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid request body",
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
@@ -158,17 +141,11 @@ func (eh *SyncHandlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
 		eh.logger.Error("Backup export failed", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
 }
 
 // CreateGitOpsExport creates a new GitOps export
@@ -183,10 +160,7 @@ func (eh *SyncHandlers) CreateGitOpsExport(w http.ResponseWriter, r *http.Reques
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		eh.logger.Error("Invalid request body", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid request body",
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
@@ -206,17 +180,11 @@ func (eh *SyncHandlers) CreateGitOpsExport(w http.ResponseWriter, r *http.Reques
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
 		eh.logger.Error("GitOps export failed", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
 }
 
 // Export performs a generic export using any plugin
@@ -226,20 +194,14 @@ func (eh *SyncHandlers) Export(w http.ResponseWriter, r *http.Request) {
 	var exportRequest sync.ExportRequest
 	if err := json.NewDecoder(r.Body).Decode(&exportRequest); err != nil {
 		eh.logger.Error("Invalid export request", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid export request",
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid export request")
 		return
 	}
 
 	// Validate the export request
 	if err := eh.syncEngine.ValidateExport(exportRequest); err != nil {
 		eh.logger.Error("Export validation failed", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   fmt.Sprintf("Validation failed: %v", err),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, fmt.Sprintf("Validation failed: %v", err))
 		return
 	}
 
@@ -247,17 +209,11 @@ func (eh *SyncHandlers) Export(w http.ResponseWriter, r *http.Request) {
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
 		eh.logger.Error("Export failed", "plugin", exportRequest.PluginName, "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
 }
 
 // PreviewExport generates a preview of what would be exported
@@ -267,10 +223,7 @@ func (eh *SyncHandlers) PreviewExport(w http.ResponseWriter, r *http.Request) {
 	var exportRequest sync.ExportRequest
 	if err := json.NewDecoder(r.Body).Decode(&exportRequest); err != nil {
 		eh.logger.Error("Invalid export request", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid export request",
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid export request")
 		return
 	}
 
@@ -278,17 +231,11 @@ func (eh *SyncHandlers) PreviewExport(w http.ResponseWriter, r *http.Request) {
 	preview, err := eh.syncEngine.Preview(r.Context(), exportRequest)
 	if err != nil {
 		eh.logger.Error("Export preview failed", "plugin", exportRequest.PluginName, "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data":    preview,
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, preview)
 }
 
 // GetExportResult returns the result of an export operation
@@ -300,10 +247,7 @@ func (eh *SyncHandlers) GetExportResult(w http.ResponseWriter, r *http.Request) 
 	// For now, return a placeholder response
 	eh.logger.Info("Getting export result", "export_id", exportID)
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": false,
-		"error":   "Export result retrieval not yet implemented",
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Export result retrieval not yet implemented", nil)
 }
 
 // DownloadBackup serves a backup file for download
@@ -319,10 +263,7 @@ func (eh *SyncHandlers) DownloadBackup(w http.ResponseWriter, r *http.Request) {
 
 	eh.logger.Info("Downloading backup", "backup_id", backupID)
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": false,
-		"error":   "Backup download not yet implemented",
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Backup download not yet implemented", nil)
 }
 
 // DownloadGitOpsExport serves a GitOps export for download
@@ -333,10 +274,7 @@ func (eh *SyncHandlers) DownloadGitOpsExport(w http.ResponseWriter, r *http.Requ
 	// TODO: Implement GitOps export file serving
 	eh.logger.Info("Downloading GitOps export", "export_id", exportID)
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": false,
-		"error":   "GitOps export download not yet implemented",
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "GitOps export download not yet implemented", nil)
 }
 
 // Import performs a generic import using any plugin
@@ -346,10 +284,7 @@ func (eh *SyncHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	var importRequest sync.ImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&importRequest); err != nil {
 		eh.logger.Error("Invalid import request", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid import request",
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid import request")
 		return
 	}
 
@@ -357,10 +292,7 @@ func (eh *SyncHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	result, err := eh.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		eh.logger.Error("Import failed", "plugin", importRequest.PluginName, "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
 		return
 	}
 
@@ -370,10 +302,7 @@ func (eh *SyncHandlers) Import(w http.ResponseWriter, r *http.Request) {
 		"skipped", result.RecordsSkipped,
 	)
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": true,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
 }
 
 // GetImportResult returns the result of an import operation
@@ -385,26 +314,9 @@ func (eh *SyncHandlers) GetImportResult(w http.ResponseWriter, r *http.Request) 
 	// For now, return a placeholder response
 	eh.logger.Info("Getting import result", "import_id", importID)
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": false,
-		"error":   "Import result retrieval not yet implemented",
-	})
+	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Import result retrieval not yet implemented", nil)
 }
 
 // Utility functions
 
-func sendJSONResponse(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-
-	// Check if this is an error response
-	if response, ok := data.(map[string]interface{}); ok {
-		if success, exists := response["success"]; exists && success == false {
-			w.WriteHeader(http.StatusBadRequest)
-		}
-	}
-
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// Log error if possible, but continue
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
+// Deprecated: use standardized response writer in handlers above.

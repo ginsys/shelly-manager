@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
@@ -52,18 +53,12 @@ func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) 
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		ih.logger.Error("Invalid request body", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid request body",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
 	if requestBody.BackupPath == "" {
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "backup_path is required",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "backup_path is required")
 		return
 	}
 
@@ -83,17 +78,11 @@ func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) 
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Backup restore failed", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": result.Success,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
 }
 
 // ValidateBackup validates a backup file without importing it
@@ -106,18 +95,12 @@ func (ih *ImportHandlers) ValidateBackup(w http.ResponseWriter, r *http.Request)
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		ih.logger.Error("Invalid request body", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid request body",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
 	if requestBody.BackupPath == "" {
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "backup_path is required",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "backup_path is required")
 		return
 	}
 
@@ -138,17 +121,11 @@ func (ih *ImportHandlers) ValidateBackup(w http.ResponseWriter, r *http.Request)
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Backup validation failed", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": result.Success,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
 }
 
 // ImportGitOps imports a GitOps configuration
@@ -163,18 +140,12 @@ func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		ih.logger.Error("Invalid request body", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid request body",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
 	if requestBody.SourcePath == "" {
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "source_path is required",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "source_path is required")
 		return
 	}
 
@@ -194,17 +165,11 @@ func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("GitOps import failed", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": result.Success,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
 }
 
 // PreviewGitOpsImport generates a preview of GitOps import changes
@@ -218,18 +183,12 @@ func (ih *ImportHandlers) PreviewGitOpsImport(w http.ResponseWriter, r *http.Req
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		ih.logger.Error("Invalid request body", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid request body",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
 	if requestBody.SourcePath == "" {
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "source_path is required",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "source_path is required")
 		return
 	}
 
@@ -252,22 +211,16 @@ func (ih *ImportHandlers) PreviewGitOpsImport(w http.ResponseWriter, r *http.Req
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("GitOps import preview failed", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": result.Success,
-		"data": map[string]interface{}{
-			"preview":       result,
-			"changes_count": len(result.Changes),
-			"will_create":   ih.countChangesByType(result.Changes, "create"),
-			"will_update":   ih.countChangesByType(result.Changes, "update"),
-			"will_delete":   ih.countChangesByType(result.Changes, "delete"),
-		},
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, map[string]interface{}{
+		"preview":       result,
+		"changes_count": len(result.Changes),
+		"will_create":   ih.countChangesByType(result.Changes, "create"),
+		"will_update":   ih.countChangesByType(result.Changes, "update"),
+		"will_delete":   ih.countChangesByType(result.Changes, "delete"),
 	})
 }
 
@@ -278,27 +231,18 @@ func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	var importRequest sync.ImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&importRequest); err != nil {
 		ih.logger.Error("Invalid import request", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid import request",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid import request")
 		return
 	}
 
 	// Validate required fields
 	if importRequest.PluginName == "" {
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "plugin_name is required",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "plugin_name is required")
 		return
 	}
 
 	if importRequest.Source.Type == "" {
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "source.type is required",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "source.type is required")
 		return
 	}
 
@@ -306,17 +250,11 @@ func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Import failed", "plugin", importRequest.PluginName, "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": result.Success,
-		"data":    result,
-	})
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
 }
 
 // PreviewImport generates a preview of what would be imported
@@ -326,10 +264,7 @@ func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) 
 	var importRequest sync.ImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&importRequest); err != nil {
 		ih.logger.Error("Invalid import request", "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid import request",
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid import request")
 		return
 	}
 
@@ -337,23 +272,17 @@ func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) 
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Import preview failed", "plugin", importRequest.PluginName, "error", err)
-		sendJSONResponse(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	sendJSONResponse(w, map[string]interface{}{
-		"success": result.Success,
-		"data": map[string]interface{}{
-			"preview":       result,
-			"changes_count": len(result.Changes),
-			"summary": map[string]int{
-				"will_create": ih.countChangesByType(result.Changes, "create"),
-				"will_update": ih.countChangesByType(result.Changes, "update"),
-				"will_delete": ih.countChangesByType(result.Changes, "delete"),
-			},
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, map[string]interface{}{
+		"preview":       result,
+		"changes_count": len(result.Changes),
+		"summary": map[string]int{
+			"will_create": ih.countChangesByType(result.Changes, "create"),
+			"will_update": ih.countChangesByType(result.Changes, "update"),
+			"will_delete": ih.countChangesByType(result.Changes, "delete"),
 		},
 	})
 }
@@ -365,11 +294,7 @@ func (ih *ImportHandlers) GetImportResult(w http.ResponseWriter, r *http.Request
 
 	// TODO: Implement import result storage and retrieval
 	ih.logger.Info("Getting import result", "import_id", importID)
-
-	sendJSONResponse(w, map[string]interface{}{
-		"success": false,
-		"error":   "Import result retrieval not yet implemented",
-	})
+	apiresp.NewResponseWriter(ih.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Import result retrieval not yet implemented", nil)
 }
 
 // Helper functions

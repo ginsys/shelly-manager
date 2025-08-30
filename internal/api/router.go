@@ -1,12 +1,12 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
 
 	"github.com/ginsys/shelly-manager/internal/api/middleware"
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -272,28 +272,13 @@ func enhancedCORSMiddleware(logger *logging.Logger) func(http.Handler) http.Hand
 // createSecurityMetricsHandler creates a handler for security metrics
 func createSecurityMetricsHandler(monitor *middleware.SecurityMonitor, logger *logging.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		rw := apiresp.NewResponseWriter(logger)
 		if monitor == nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			if _, err := w.Write([]byte(`{"success": false, "error": {"code": "SERVICE_UNAVAILABLE", "message": "Security monitoring is not enabled"}}`)); err != nil {
-				// Log the error but continue - response has already been initiated
-				return
-			}
+			rw.WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeServiceUnavailable, "Security monitoring is not enabled", nil)
 			return
 		}
 
 		metrics := monitor.GetMetrics()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
-		response := map[string]interface{}{
-			"success": true,
-			"data":    metrics,
-		}
-
-		if err := json.NewEncoder(w).Encode(response); err != nil && logger != nil {
-			logger.Error("Failed to encode security metrics response", "error", err)
-		}
+		rw.WriteSuccess(w, r, metrics)
 	}
 }

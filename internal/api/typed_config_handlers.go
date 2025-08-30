@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
@@ -43,31 +44,17 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid device ID",
-		})
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	// Get device info for validation context
 	device, err := h.DB.GetDevice(uint(id))
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
 		if err == gorm.ErrRecordNotFound {
-			w.WriteHeader(http.StatusNotFound)
-			h.writeJSON(w, map[string]interface{}{
-				"success": false,
-				"error":   "Device not found",
-			})
+			h.responseWriter().WriteNotFoundError(w, r, "Device")
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			h.writeJSON(w, map[string]interface{}{
-				"success": false,
-				"error":   err.Error(),
-			})
+			h.responseWriter().WriteInternalError(w, r, err)
 		}
 		return
 	}
@@ -79,12 +66,7 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get device config")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -121,11 +103,7 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Wrap response with success for frontend compatibility
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"success":       true,
-		"configuration": response,
-	})
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // GetTypedDeviceConfigNormalized handles GET /api/v1/devices/{id}/config/typed/normalized
@@ -353,7 +331,7 @@ func (h *Handler) ConvertConfigToTyped(w http.ResponseWriter, r *http.Request) {
 	// Convert to typed configuration
 	typedConfig, conversionInfo, err := h.convertToTypedConfig(req.Configuration, device)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to convert configuration: %v", err), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to convert configuration: %w", err))
 		return
 	}
 
@@ -362,27 +340,26 @@ func (h *Handler) ConvertConfigToTyped(w http.ResponseWriter, r *http.Request) {
 		ConversionInfo: conversionInfo,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // ConvertTypedToRaw handles POST /api/v1/configuration/convert-to-raw
 func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 	var req TypedConfigurationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	if req.Configuration == nil {
-		http.Error(w, "Configuration is required", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Configuration is required")
 		return
 	}
 
 	// Convert to raw JSON
 	rawJSON, err := req.Configuration.ToJSON()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to convert to raw JSON: %v", err), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to convert to raw JSON: %w", err))
 		return
 	}
 
@@ -395,16 +372,14 @@ func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // GetConfigurationSchema handles GET /api/v1/configuration/schema
 func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request) {
 	schema := configuration.GetConfigurationSchema()
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, schema)
+	h.responseWriter().WriteSuccess(w, r, schema)
 }
 
 // BulkValidateConfigs handles POST /api/v1/configuration/bulk-validate
@@ -416,12 +391,12 @@ func (h *Handler) BulkValidateConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	if len(req.Configurations) == 0 {
-		http.Error(w, "No configurations provided", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "No configurations provided")
 		return
 	}
 

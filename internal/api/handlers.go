@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -58,48 +59,42 @@ func (h *Handler) writeJSON(w http.ResponseWriter, data interface{}) {
 	}
 }
 
+// responseWriter returns a standardized API response writer
+func (h *Handler) responseWriter() *apiresp.ResponseWriter {
+	return apiresp.NewResponseWriter(h.logger)
+}
+
 // GetDevices handles GET /api/v1/devices
 func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.DB.GetDevices()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Failed to get devices: " + err.Error(),
-		})
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"success": true,
-		"devices": devices,
-	})
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"devices": devices})
 }
 
 // AddDevice handles POST /api/v1/devices
 func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 	var device database.Device
 	if err := json.NewDecoder(r.Body).Decode(&device); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	// Validate and normalize device settings
 	if err := h.validateDeviceSettings(&device); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid device settings: %v", err), http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
 		return
 	}
 
 	if err := h.DB.AddDevice(&device); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	h.writeJSON(w, device)
+	h.responseWriter().WriteCreated(w, r, device)
 }
 
 // GetDevice handles GET /api/v1/devices/{id}
@@ -107,22 +102,21 @@ func (h *Handler) GetDevice(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	device, err := h.DB.GetDevice(uint(id))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Device not found", http.StatusNotFound)
+			h.responseWriter().WriteNotFoundError(w, r, "Device")
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			h.responseWriter().WriteInternalError(w, r, err)
 		}
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, device)
+	h.responseWriter().WriteSuccess(w, r, device)
 }
 
 // UpdateDevice handles PUT /api/v1/devices/{id}
@@ -130,7 +124,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -138,9 +132,9 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	existingDevice, err := h.DB.GetDevice(uint(id))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Device not found", http.StatusNotFound)
+			h.responseWriter().WriteNotFoundError(w, r, "Device")
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			h.responseWriter().WriteInternalError(w, r, err)
 		}
 		return
 	}
@@ -148,25 +142,24 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	// Decode updated device data
 	var updatedDevice database.Device
 	if err := json.NewDecoder(r.Body).Decode(&updatedDevice); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	// Validate and normalize device settings
 	if err := h.validateDeviceSettings(&updatedDevice); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid device settings: %v", err), http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
 		return
 	}
 
 	// Update existing device with new data
 	updatedDevice.ID = existingDevice.ID
 	if err := h.DB.UpdateDevice(&updatedDevice); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, updatedDevice)
+	h.responseWriter().WriteSuccess(w, r, updatedDevice)
 }
 
 // DeleteDevice handles DELETE /api/v1/devices/{id}
@@ -174,19 +167,19 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	if err := h.DB.DeleteDevice(uint(id)); err != nil {
 		// If device doesn't exist, still return 204 (idempotent delete)
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			h.responseWriter().WriteInternalError(w, r, err)
 			return
 		}
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	h.responseWriter().WriteNoContent(w, r)
 }
 
 // DiscoverHandler handles POST /api/v1/discover
@@ -293,13 +286,10 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 		}).Info("Discovery processing completed")
 	}()
 
-	response := map[string]interface{}{
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
 		"status":  "discovery_started",
 		"message": "Device discovery has been initiated in background",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	})
 }
 
 // GetProvisioningStatus handles GET /api/v1/provisioning/status
@@ -340,7 +330,7 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -350,13 +340,13 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 		Params map[string]interface{} `json:"params"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	// Validate action
 	if req.Action == "" {
-		http.Error(w, "Action is required", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Action is required")
 		return
 	}
 
@@ -367,18 +357,15 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 			"action":    req.Action,
 			"error":     err.Error(),
 		}).Error("Device control failed")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	response := map[string]interface{}{
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
 		"status":    "success",
 		"device_id": id,
 		"action":    req.Action,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	})
 }
 
 // GetDeviceStatus handles GET /api/v1/devices/{id}/status
@@ -558,7 +545,7 @@ func (h *Handler) ImportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -569,12 +556,11 @@ func (h *Handler) ImportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to import device config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, config)
+	h.responseWriter().WriteSuccess(w, r, config)
 }
 
 // GetImportStatus handles GET /api/v1/devices/{id}/config/status
@@ -582,7 +568,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -593,12 +579,11 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get import status")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, status)
+	h.responseWriter().WriteSuccess(w, r, status)
 }
 
 // ExportDeviceConfig handles POST /api/v1/devices/{id}/config/export
@@ -606,7 +591,7 @@ func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -616,7 +601,7 @@ func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to export device config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -626,8 +611,7 @@ func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		"message":   "Configuration exported to device",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // BulkImportConfigs handles POST /api/v1/config/bulk-import
