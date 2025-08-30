@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
 
@@ -63,13 +64,13 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	// Validate required fields
 	if req.ID == "" || req.Hostname == "" {
-		http.Error(w, "Missing required fields: id and hostname", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Missing required fields: id and hostname")
 		return
 	}
 
@@ -119,13 +120,11 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	agent.Metadata = req.Metadata
 
 	response := map[string]interface{}{
-		"success":       true,
 		"agent_id":      agent.ID,
 		"registered_at": agent.RegisteredAt,
 		"status":        "registered",
 		"message":       "Agent registered successfully",
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	h.writeJSON(w, response)
@@ -146,7 +145,7 @@ func (h *Handler) GetProvisionerAgents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
 		"agents": agents,
 		"count":  len(agents),
 	})
@@ -158,7 +157,7 @@ func (h *Handler) PollTasks(w http.ResponseWriter, r *http.Request) {
 	agentID := vars["id"]
 
 	if agentID == "" {
-		http.Error(w, "Agent ID is required", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Agent ID is required")
 		return
 	}
 
@@ -168,7 +167,7 @@ func (h *Handler) PollTasks(w http.ResponseWriter, r *http.Request) {
 	// Update agent last seen time
 	agent, exists := registry.agents[agentID]
 	if !exists {
-		http.Error(w, "Agent not registered", http.StatusNotFound)
+		h.responseWriter().WriteNotFoundError(w, r, "Agent")
 		return
 	}
 
@@ -197,8 +196,7 @@ func (h *Handler) PollTasks(w http.ResponseWriter, r *http.Request) {
 		"count":    len(availableTasks),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // UpdateTaskStatus handles PUT /api/v1/provisioner/tasks/{id}/status
@@ -207,7 +205,7 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	taskID := vars["id"]
 
 	if taskID == "" {
-		http.Error(w, "Task ID is required", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Task ID is required")
 		return
 	}
 
@@ -219,7 +217,7 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -228,7 +226,7 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 	task, exists := registry.tasks[taskID]
 	if !exists {
-		http.Error(w, "Task not found", http.StatusNotFound)
+		h.responseWriter().WriteNotFoundError(w, r, "Task")
 		return
 	}
 
@@ -250,8 +248,7 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		"updated_at": task.UpdatedAt,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // CreateProvisioningTask handles POST /api/v1/provisioner/tasks
@@ -266,12 +263,12 @@ func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	if req.Type == "" {
-		http.Error(w, "Task type is required", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Task type is required")
 		return
 	}
 
@@ -312,8 +309,7 @@ func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	h.writeJSON(w, response)
+	h.responseWriter().WriteCreated(w, r, response)
 }
 
 // GetProvisioningTasks handles GET /api/v1/provisioner/tasks
@@ -362,8 +358,7 @@ func (h *Handler) ProvisionerHealthCheck(w http.ResponseWriter, r *http.Request)
 		"provisioner_api": "operational",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // ReportDiscoveredDevices handles POST /api/v1/provisioner/discovered-devices
@@ -384,7 +379,7 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON request body", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -487,8 +482,7 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 		"message":           fmt.Sprintf("Successfully processed %d discovered devices (%d persisted)", devicesProcessed, devicesPersisted),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // GetDiscoveredDevices handles GET /api/v1/provisioner/discovered-devices
@@ -504,7 +498,7 @@ func (h *Handler) GetDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "provisioner_handler",
 		}).Error("Failed to retrieve discovered devices")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, fmt.Errorf("failed to retrieve discovered devices"))
 		return
 	}
 
@@ -537,6 +531,5 @@ func (h *Handler) GetDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 		"timestamp":    time.Now(),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
