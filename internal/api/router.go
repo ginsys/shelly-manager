@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -76,7 +78,7 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	r.Use(middleware.ValidateJSONMiddleware(validationConfig, logger))
 
 	// 10. Enhanced CORS middleware (security-aware CORS handling)
-	r.Use(enhancedCORSMiddleware(logger))
+	r.Use(enhancedCORSMiddleware(logger, securityConfig))
 
 	// 11. Standard logging middleware (existing functionality)
 	r.Use(logging.HTTPMiddleware(logger))
@@ -233,17 +235,46 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 }
 
 // enhancedCORSMiddleware provides security-aware CORS handling
-func enhancedCORSMiddleware(logger *logging.Logger) func(http.Handler) http.Handler {
+func enhancedCORSMiddleware(logger *logging.Logger, config *middleware.SecurityConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 
-			// Security-enhanced CORS headers
-			w.Header().Set("Access-Control-Allow-Origin", "*") // TODO: Make configurable for production
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			// Determine allowed origin
+			allowedOrigin := "*"
+			if config != nil && len(config.CORSAllowedOrigins) > 0 {
+				// If a specific list is configured, only echo back when matched
+				for _, ao := range config.CORSAllowedOrigins {
+					if ao == "*" || ao == origin {
+						allowedOrigin = origin
+						break
+					}
+				}
+				if origin == "" {
+					allowedOrigin = "*"
+				}
+			}
+
+			// Security-aware CORS headers
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			w.Header().Set("Vary", "Origin")
+
+			methods := "GET, POST, PUT, DELETE, OPTIONS"
+			if config != nil && len(config.CORSAllowedMethods) > 0 {
+				methods = strings.Join(config.CORSAllowedMethods, ", ")
+			}
+			headers := "Content-Type, Authorization, X-Requested-With"
+			if config != nil && len(config.CORSAllowedHeaders) > 0 {
+				headers = strings.Join(config.CORSAllowedHeaders, ", ")
+			}
+			maxAge := "86400"
+			if config != nil && config.CORSMaxAge > 0 {
+				maxAge = strconv.Itoa(config.CORSMaxAge)
+			}
+			w.Header().Set("Access-Control-Allow-Methods", methods)
+			w.Header().Set("Access-Control-Allow-Headers", headers)
 			w.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset")
-			w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours preflight cache
+			w.Header().Set("Access-Control-Max-Age", maxAge)
 
 			// Log CORS requests for security monitoring
 			if origin != "" {

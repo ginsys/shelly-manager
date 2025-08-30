@@ -41,6 +41,11 @@ type SecurityConfig struct {
 	EnableHSTS        bool   // enable Strict-Transport-Security
 	HSTSMaxAge        int    // HSTS max-age in seconds
 	PermissionsPolicy string // permissions policy header
+	// CORS
+	CORSAllowedOrigins []string // allowed origins; if empty, uses "*" (dev)
+	CORSAllowedMethods []string // allowed methods
+	CORSAllowedHeaders []string // allowed headers
+	CORSMaxAge         int      // preflight cache seconds
 
 	// Logging and monitoring
 	LogSecurityEvents bool // enable security event logging
@@ -67,18 +72,22 @@ func DefaultSecurityConfig() *SecurityConfig {
 			"/api/v1/provisioning":         50,  // provisioning endpoints
 			"/api/v1/config/bulk":          20,  // bulk operations
 		},
-		MaxRequestSize:    10 * 1024 * 1024, // 10MB
-		RequestTimeout:    30 * time.Second,
-		EnableHSTS:        false,    // disabled by default, enable for HTTPS
-		HSTSMaxAge:        31536000, // 1 year
-		PermissionsPolicy: "geolocation=(), camera=(), microphone=(), payment=()",
-		LogSecurityEvents: true,
-		LogAllRequests:    false,     // enable for debugging
-		EnableMonitoring:  true,      // enable security monitoring
-		EnableIPBlocking:  true,      // enable automatic IP blocking
-		BlockDuration:     time.Hour, // block for 1 hour
-		UseProxyHeaders:   false,
-		TrustedProxies:    nil,
+		MaxRequestSize:     10 * 1024 * 1024, // 10MB
+		RequestTimeout:     30 * time.Second,
+		EnableHSTS:         false,    // disabled by default, enable for HTTPS
+		HSTSMaxAge:         31536000, // 1 year
+		PermissionsPolicy:  "geolocation=(), camera=(), microphone=(), payment=()",
+		CORSAllowedOrigins: nil,
+		CORSAllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		CORSAllowedHeaders: []string{"Content-Type", "Authorization", "X-Requested-With"},
+		CORSMaxAge:         86400,
+		LogSecurityEvents:  true,
+		LogAllRequests:     false,     // enable for debugging
+		EnableMonitoring:   true,      // enable security monitoring
+		EnableIPBlocking:   true,      // enable automatic IP blocking
+		BlockDuration:      time.Hour, // block for 1 hour
+		UseProxyHeaders:    false,
+		TrustedProxies:     nil,
 	}
 }
 
