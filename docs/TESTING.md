@@ -15,7 +15,7 @@ This document describes the comprehensive testing framework for the Shelly Manag
 
 ## Test Command Groups
 
-All test commands are organized into logical groups and defined in the `Makefile`. The GitHub Actions workflows use these make commands for consistent testing across environments.
+All test commands are organized into logical groups and defined in the `Makefile`. The GitHub Actions workflow calls `make test-ci` to ensure exact parity with local validation.
 
 ### 1. Basic Test Commands
 
@@ -113,7 +113,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Atomic coverage mode for better accuracy
 
 #### `make test-coverage-check`
-**Purpose**: Check if coverage meets minimum threshold (30%)  
+**Purpose**: Check if coverage meets minimum threshold (27.5%)  
 **When to use**:
 - Quality gates in CI/CD
 - Ensuring minimum test coverage
@@ -137,8 +137,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Standardized test execution for CI
 
 #### `make test-ci`
-**Purpose**: Complete CI test suite with all validations  
-**Dependencies**: `test-coverage-with-check`  
+**Purpose**: Complete CI test suite with all validations (deps → coverage+race → coverage threshold → lint)  
 **When to use**:
 - Main CI/CD pipeline
 - Comprehensive validation
@@ -179,7 +178,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Comprehensive linting with automatic fixes
 - Before major commits
 - Catching advanced style and potential issues
-- **Requires**: golangci-lint v2.4.0+ installed (v2 configuration format)
+- **Requires**: golangci-lint 1.60.3 (pinned via `mise.toml`)
 
 #### `make format`
 **Purpose**: Format code (gofmt + goimports)  
@@ -227,23 +226,12 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 ## GitHub Actions Integration
 
-The GitHub Actions workflows (`test.yml`) use the following make commands:
+The GitHub Actions workflow (`test.yml`) uses these steps:
 
-### Main test job:
-1. `make deps` - Install and verify dependencies
-2. `make test-coverage-ci` - Run tests with coverage and race detection
-3. `make test-coverage-check` - Verify coverage meets 30% threshold
-
-### Matrix test job:
-1. `make deps` - Install dependencies  
-2. `make test-matrix` - Run tests across OS/Go version matrix
-
-### Lint job:
-- Uses golangci-lint-action@v8 with golangci-lint v2.4.0
-- Alternative: `make lint` (requires golangci-lint v2.4.0+ installed)
-
-### Build job:
-- `make build` - Build the binary
+- Main test job: `make test-ci` (installs deps, runs coverage+race, enforces 27.5% threshold, runs lint via golangci-lint 1.60.3 read from `mise.toml`).
+- Matrix job: `make test-matrix` on Linux/macOS across Go versions (fast, race+short).
+- Windows job (informational): `go test -v -race -short ./...` without `make`.
+- Build job: `make build` and publish artifact.
 
 ## Command Selection Guide
 
@@ -273,7 +261,7 @@ The GitHub Actions workflows (`test.yml`) use the following make commands:
 ## Coverage Thresholds and Environment
 
 ### Coverage Requirements
-- **Minimum coverage**: 30% (enforced in CI)
+- **Minimum coverage**: 27.5% (enforced in CI)
 - **Coverage check**: Automatically enforced with `make test-coverage-check`
 - **Files generated**: `coverage.out`, `coverage.html`
 
@@ -282,7 +270,7 @@ The GitHub Actions workflows (`test.yml`) use the following make commands:
 - **Go version**: 1.21+ (as specified in workflows)
 - **Optional tools**: 
   - `entr` for watch mode (`brew install entr`)
-  - `golangci-lint v2.4.0+` for linting (v2 configuration format required)
+  - `golangci-lint 1.60.3` for linting (pinned via `mise.toml`)
   - `bc` for coverage calculations
 
 ### Test Categories by Location

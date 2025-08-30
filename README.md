@@ -1,5 +1,9 @@
 # Shelly Device Manager
 
+[![CI Status](https://github.com/ginsys/shelly-manager/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/ginsys/shelly-manager/actions/workflows/test.yml)
+[![Docker Publish](https://github.com/ginsys/shelly-manager/actions/workflows/docker-build.yml/badge.svg?branch=main)](https://github.com/ginsys/shelly-manager/actions/workflows/docker-build.yml)
+[![codecov](https://codecov.io/gh/ginsys/shelly-manager/branch/main/graph/badge.svg)](https://codecov.io/gh/ginsys/shelly-manager)
+
 A comprehensive Golang application for managing Shelly smart home devices with Kubernetes-native architecture, dual-binary design for secure WiFi provisioning, and advanced configuration management with complete normalization and comparison capabilities.
 
 ## 🏗️ Architecture Overview
@@ -440,12 +444,17 @@ make test-integration
 - [Deployment Guide](docs/deployment.md) (planned)
 - [Integration Guide](docs/integrations.md) (planned)
 - [Development Guide](docs/development.md) (planned)
+- [Repository Guidelines](AGENTS.md)
+ - [Tasks & Roadmap](TASKS.md) — single source of truth for ongoing work
 
 ## 🤝 Contributing
 
 This is primarily a personal project, but contributions are welcome! 
 
 ### Development Setup
+
+See the contributor guide in [AGENTS.md](AGENTS.md) for project structure, commands, coding style, testing, and PR requirements.
+Before starting work, review [TASKS.md](TASKS.md); it is the single source of truth for current priorities and acceptance criteria.
 
 **Prerequisites:**
 - Go 1.23 or later (managed via [mise](https://mise.jdx.dev/))
