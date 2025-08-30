@@ -338,12 +338,28 @@ dev-setup:
 	@echo "Installing git pre-commit hooks..."
 	$(MAKE) hooks-install
 
-# Clean build artifacts
+# Clean build artifacts and test outputs
 clean:
+	# Build artifacts
 	rm -rf $(BUILD_DIR)/
-	rm -f *.db
+	# Stray root binaries (from ad-hoc builds)
+	rm -f shelly-manager shelly-provisioner shelly-manager.exe
+	# Coverage artifacts
 	rm -f coverage.out coverage.html
-	rm -rf tmp/
+	rm -f coverage_*.out *_coverage.out
+	# CI/JUnit and logs
+	rm -f junit-*.xml ci-test.log matrix-test-*.log windows-test-*.log
+	# Temporary folders used by local tooling and CI downloads
+	rm -rf .tmp/ tmp/
+
+# More aggressive cleanup including Go build caches and (optionally) local data
+.PHONY: clean-all
+clean-all: clean
+	go clean -cache -testcache >/dev/null 2>&1 || true
+	# Uncomment the next line if you also want to clear module cache
+	# go clean -modcache || true
+	# Local data (kept by default). Uncomment to wipe local DBs
+	# rm -rf data/
 
 # ==============================================================================
 # CLI EXAMPLES
