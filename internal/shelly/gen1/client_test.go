@@ -8,8 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // mockGen1Server creates a test server that mimics a Gen1 Shelly device
@@ -401,8 +399,8 @@ func TestGen1Client_AuthRequired(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := client.GetInfo(ctx)
-	if err != shelly.ErrAuthRequired {
-		t.Errorf("Expected ErrAuthRequired, got %v", err)
+	if err == nil || err.Error() != "authentication required" {
+		t.Errorf("Expected authentication required, got %v", err)
 	}
 
 	// Test with auth - should succeed

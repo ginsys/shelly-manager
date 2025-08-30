@@ -115,7 +115,33 @@ jobs:
       run: make deps
     
     - name: Run tests
-      run: make test-matrix
+      run: |
+        set -o pipefail
+        make test-matrix 2>&1 | tee matrix-test-${{ matrix.os }}-${{ matrix.go-version }}.log
+
+    - name: Upload matrix test logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: matrix-logs-${{ matrix.os }}-${{ matrix.go-version }}
+        path: matrix-test-${{ matrix.os }}-${{ matrix.go-version }}.log
+
+    - name: Run per-package JSON tests (matrix)
+      run: |
+        set -o pipefail
+        mkdir -p test-reports
+        PKGS=$(go list ./...)
+        for pkg in $PKGS; do
+          safe=$(echo "$pkg" | tr '/.' '__')
+          go test -json -race -short "$pkg" > "test-reports/${safe}.jsonl" || true
+        done
+
+    - name: Upload JSON test reports (matrix)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-json-reports-${{ matrix.os }}-${{ matrix.go-version }}
+        path: test-reports/
 
   # Separate Windows tests that don't fail the overall workflow
   test-windows:
@@ -146,7 +172,16 @@ jobs:
       run: go mod download && go mod verify
     
     - name: Run Windows tests (race, short)
-      run: go test -v -race -short ./...
+      run: |
+        set -o pipefail
+        go test -v -race -short ./... 2>&1 | tee windows-test-${{ matrix.go-version }}.log
+
+    - name: Upload Windows test logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-logs-${{ matrix.go-version }}
+        path: windows-test-${{ matrix.go-version }}.log
 
   build:
     name: Build Binary
