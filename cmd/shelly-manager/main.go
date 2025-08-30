@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/api"
+	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -325,8 +326,24 @@ func startServer() {
 	apiHandler.ExportHandlers = syncHandlers
 	apiHandler.ImportHandlers = api.NewImportHandlers(syncEngine, logger)
 
-	// Setup routes with middleware
-	router := api.SetupRoutesWithLogger(apiHandler, logger)
+	// Build security config from application config
+	secCfg := middleware.DefaultSecurityConfig()
+	if cfg != nil {
+		secCfg.UseProxyHeaders = cfg.Security.UseProxyHeaders
+		secCfg.TrustedProxies = cfg.Security.TrustedProxies
+		secCfg.CORSAllowedOrigins = cfg.Security.CORS.AllowedOrigins
+		if len(cfg.Security.CORS.AllowedMethods) > 0 {
+			secCfg.CORSAllowedMethods = cfg.Security.CORS.AllowedMethods
+		}
+		if len(cfg.Security.CORS.AllowedHeaders) > 0 {
+			secCfg.CORSAllowedHeaders = cfg.Security.CORS.AllowedHeaders
+		}
+		if cfg.Security.CORS.MaxAge > 0 {
+			secCfg.CORSMaxAge = cfg.Security.CORS.MaxAge
+		}
+	}
+	// Setup routes with middleware using configured security
+	router := api.SetupRoutesWithSecurity(apiHandler, logger, secCfg, middleware.DefaultValidationConfig())
 
 	// Start WebSocket hub if metrics are enabled
 	if metricsHandler != nil {

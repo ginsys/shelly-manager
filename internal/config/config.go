@@ -119,6 +119,16 @@ type Config struct {
 		EnableHTTPMetrics    bool `mapstructure:"enable_http_metrics"`
 		EnableDetailedTiming bool `mapstructure:"enable_detailed_timing"`
 	} `mapstructure:"metrics"`
+	Security struct {
+		UseProxyHeaders bool     `mapstructure:"use_proxy_headers"`
+		TrustedProxies  []string `mapstructure:"trusted_proxies"`
+		CORS            struct {
+			AllowedOrigins []string `mapstructure:"allowed_origins"`
+			AllowedMethods []string `mapstructure:"allowed_methods"`
+			AllowedHeaders []string `mapstructure:"allowed_headers"`
+			MaxAge         int      `mapstructure:"max_age"`
+		} `mapstructure:"cors"`
+	} `mapstructure:"security"`
 }
 
 // Load loads configuration from file
@@ -271,4 +281,12 @@ func setDefaults() {
 	viper.SetDefault("resolution.approval_required", true)
 	viper.SetDefault("resolution.auto_fix_categories", []string{"network", "time"})
 	viper.SetDefault("resolution.excluded_paths", []string{"/debug", "/test"})
+
+	// Security defaults
+	viper.SetDefault("security.use_proxy_headers", false)
+	viper.SetDefault("security.trusted_proxies", []string{})
+	viper.SetDefault("security.cors.allowed_origins", []string{}) // empty => *
+	viper.SetDefault("security.cors.allowed_methods", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
+	viper.SetDefault("security.cors.allowed_headers", []string{"Content-Type", "Authorization", "X-Requested-With"})
+	viper.SetDefault("security.cors.max_age", 86400)
 }
