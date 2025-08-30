@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -242,6 +243,17 @@ func MockShellyServer() *httptest.Server {
 	})
 
 	return httptest.NewServer(mux)
+}
+
+// SkipIfNoSocketPermissions skips the test if the environment cannot bind sockets.
+func SkipIfNoSocketPermissions(t *testing.T) {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("Skipping test due to restricted socket permissions: %v", err)
+		return
+	}
+	_ = ln.Close()
 }
 
 // MockShellyGen2Server creates a mock server for Gen2+ devices

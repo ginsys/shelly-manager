@@ -3,6 +3,7 @@ package shelly
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -32,6 +33,11 @@ func TestFactory_CreateClient_ReturnsError(t *testing.T) {
 }
 
 func TestFactory_DetectGeneration_Gen2Device(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	// Mock server that responds like a Gen2+ device
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/rpc/Shelly.GetDeviceInfo" {
@@ -60,6 +66,11 @@ func TestFactory_DetectGeneration_Gen2Device(t *testing.T) {
 }
 
 func TestFactory_DetectGeneration_Gen3Device(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	// Mock server that responds like a Gen3 device
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/rpc/Shelly.GetDeviceInfo" {
@@ -88,6 +99,11 @@ func TestFactory_DetectGeneration_Gen3Device(t *testing.T) {
 }
 
 func TestFactory_DetectGeneration_Gen1Device(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	// Mock server that responds like a Gen1 device
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

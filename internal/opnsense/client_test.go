@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
 func setupTestLogger(t *testing.T) *logging.Logger {
@@ -150,6 +151,9 @@ func TestClientTestConnection(t *testing.T) {
 	logger := setupTestLogger(t)
 
 	t.Run("Successful Connection", func(t *testing.T) {
+		// Skip in restricted environments where sockets are not permitted
+		// (CI runs allow socket binding; some sandboxes do not)
+		testutil.SkipIfNoSocketPermissions(t)
 		// Mock server that returns a successful response
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Verify basic auth is present
@@ -238,6 +242,7 @@ func TestClientTestConnection(t *testing.T) {
 	})
 
 	t.Run("Context Cancellation", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Simulate slow response
 			time.Sleep(100 * time.Millisecond)
