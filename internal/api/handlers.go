@@ -373,7 +373,7 @@ func (h *Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -384,12 +384,11 @@ func (h *Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get device status")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, status)
+	h.responseWriter().WriteSuccess(w, r, status)
 }
 
 // GetDeviceEnergy handles GET /api/v1/devices/{id}/energy
@@ -397,7 +396,7 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -417,12 +416,11 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 			"channel":   channel,
 			"error":     err.Error(),
 		}).Error("Failed to get energy data")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, energy)
+	h.responseWriter().WriteSuccess(w, r, energy)
 }
 
 // GetDeviceConfig handles GET /api/v1/devices/{id}/config
@@ -430,7 +428,7 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -441,12 +439,11 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get device config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, config)
+	h.responseWriter().WriteSuccess(w, r, config)
 }
 
 // GetCurrentDeviceConfig handles GET /api/v1/devices/{id}/config/current
@@ -455,11 +452,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid device ID",
-		})
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -470,11 +463,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get current device config from device")
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -521,11 +510,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to parse device config for normalization")
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Failed to parse device configuration",
-		})
+		h.responseWriter().WriteError(w, r, http.StatusInternalServerError, apiresp.ErrCodeInternalServer, "Failed to parse device configuration", nil)
 		return
 	}
 
@@ -533,11 +518,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 	normalizer := NewConfigNormalizer()
 	normalized := normalizer.NormalizeRawConfig(rawConfig)
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"success":       true,
-		"configuration": normalized,
-	})
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"configuration": normalized})
 }
 
 // ImportDeviceConfig handles POST /api/v1/devices/{id}/config/import
@@ -622,7 +603,7 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to get devices")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -675,8 +656,7 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 		"results": results,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // BulkExportConfigs handles POST /api/v1/config/bulk-export
@@ -687,7 +667,7 @@ func (h *Handler) BulkExportConfigs(w http.ResponseWriter, r *http.Request) {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to get devices")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -739,8 +719,7 @@ func (h *Handler) BulkExportConfigs(w http.ResponseWriter, r *http.Request) {
 		"results": results,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // DetectConfigDrift handles GET /api/v1/devices/{id}/config/drift
@@ -748,7 +727,7 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -759,7 +738,7 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to detect config drift")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -769,13 +748,11 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 			"drift":     false,
 			"message":   "No configuration drift detected",
 		}
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, response)
+		h.responseWriter().WriteSuccess(w, r, response)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, drift)
+	h.responseWriter().WriteSuccess(w, r, drift)
 }
 
 // BulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect
@@ -786,12 +763,10 @@ func (h *Handler) BulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) 
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to perform bulk drift detection")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, result)
+	h.responseWriter().WriteSuccess(w, r, result)
 }
 
 // GetConfigTemplates handles GET /api/v1/config/templates
@@ -801,19 +776,17 @@ func (h *Handler) GetConfigTemplates(w http.ResponseWriter, r *http.Request) {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to get config templates")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, templates)
+	h.responseWriter().WriteSuccess(w, r, templates)
 }
 
 // CreateConfigTemplate handles POST /api/v1/config/templates
 func (h *Handler) CreateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	var template configuration.ConfigTemplate
 	if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -821,13 +794,10 @@ func (h *Handler) CreateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to create config template")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	h.writeJSON(w, template)
+	h.responseWriter().WriteCreated(w, r, template)
 }
 
 // UpdateConfigTemplate handles PUT /api/v1/config/templates/{id}
@@ -835,13 +805,13 @@ func (h *Handler) UpdateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid template ID", nil)
 		return
 	}
 
 	var template configuration.ConfigTemplate
 	if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -851,12 +821,10 @@ func (h *Handler) UpdateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 			"template_id": id,
 			"error":       err.Error(),
 		}).Error("Failed to update config template")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, template)
+	h.responseWriter().WriteSuccess(w, r, template)
 }
 
 // DeleteConfigTemplate handles DELETE /api/v1/config/templates/{id}
@@ -864,7 +832,7 @@ func (h *Handler) DeleteConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid template ID", nil)
 		return
 	}
 
@@ -873,11 +841,10 @@ func (h *Handler) DeleteConfigTemplate(w http.ResponseWriter, r *http.Request) {
 			"template_id": id,
 			"error":       err.Error(),
 		}).Error("Failed to delete config template")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.WriteHeader(http.StatusNoContent)
+	h.responseWriter().WriteNoContent(w, r)
 }
 
 // ApplyConfigTemplate handles POST /api/v1/devices/{id}/config/apply-template
@@ -885,7 +852,7 @@ func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -894,7 +861,7 @@ func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
 		Variables  map[string]interface{} `json:"variables"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -904,7 +871,7 @@ func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
 			"template_id": req.TemplateID,
 			"error":       err.Error(),
 		}).Error("Failed to apply config template")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -915,8 +882,7 @@ func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
 		"message":     "Template applied to device",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // GetConfigHistory handles GET /api/v1/devices/{id}/config/history
@@ -924,7 +890,7 @@ func (h *Handler) GetConfigHistory(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -942,12 +908,11 @@ func (h *Handler) GetConfigHistory(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get config history")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, history)
+	h.responseWriter().WriteSuccess(w, r, history)
 }
 
 // UpdateDeviceConfig handles PUT /api/v1/devices/{id}/config
@@ -955,14 +920,14 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	// Parse request body
 	var configUpdate map[string]interface{}
 	if decodeErr := json.NewDecoder(r.Body).Decode(&configUpdate); decodeErr != nil {
-		http.Error(w, "Invalid JSON in request body", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON in request body")
 		return
 	}
 
@@ -973,19 +938,18 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to update device config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
 	// Return updated config
 	config, err := h.Service.GetDeviceConfig(uint(id))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, config)
+	h.responseWriter().WriteSuccess(w, r, config)
 }
 
 // UpdateRelayConfig handles PUT /api/v1/devices/{id}/config/relay
@@ -993,14 +957,14 @@ func (h *Handler) UpdateRelayConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	// Parse relay configuration
 	var relayConfig configuration.RelayConfig
 	if decodeErr := json.NewDecoder(r.Body).Decode(&relayConfig); decodeErr != nil {
-		http.Error(w, "Invalid relay configuration JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid relay configuration JSON")
 		return
 	}
 
@@ -1011,12 +975,11 @@ func (h *Handler) UpdateRelayConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to update relay config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]string{"status": "success"})
+	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "success"})
 }
 
 // UpdateDimmingConfig handles PUT /api/v1/devices/{id}/config/dimming
@@ -1024,14 +987,14 @@ func (h *Handler) UpdateDimmingConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	// Parse dimming configuration
 	var dimmingConfig configuration.DimmingConfig
 	if decodeErr := json.NewDecoder(r.Body).Decode(&dimmingConfig); decodeErr != nil {
-		http.Error(w, "Invalid dimming configuration JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid dimming configuration JSON")
 		return
 	}
 
@@ -1042,12 +1005,11 @@ func (h *Handler) UpdateDimmingConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to update dimming config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]string{"status": "success"})
+	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "success"})
 }
 
 // UpdateRollerConfig handles PUT /api/v1/devices/{id}/config/roller
@@ -1055,14 +1017,14 @@ func (h *Handler) UpdateRollerConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	// Parse roller configuration
 	var rollerConfig configuration.RollerConfig
 	if decodeErr := json.NewDecoder(r.Body).Decode(&rollerConfig); decodeErr != nil {
-		http.Error(w, "Invalid roller configuration JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid roller configuration JSON")
 		return
 	}
 
@@ -1073,12 +1035,11 @@ func (h *Handler) UpdateRollerConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to update roller config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]string{"status": "success"})
+	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "success"})
 }
 
 // UpdatePowerMeteringConfig handles PUT /api/v1/devices/{id}/config/power-metering
@@ -1086,14 +1047,14 @@ func (h *Handler) UpdatePowerMeteringConfig(w http.ResponseWriter, r *http.Reque
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
 	// Parse power metering configuration
 	var powerConfig configuration.PowerMeteringConfig
 	if decodeErr := json.NewDecoder(r.Body).Decode(&powerConfig); decodeErr != nil {
-		http.Error(w, "Invalid power metering configuration JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid power metering configuration JSON")
 		return
 	}
 
@@ -1104,12 +1065,11 @@ func (h *Handler) UpdatePowerMeteringConfig(w http.ResponseWriter, r *http.Reque
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to update power metering config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]string{"status": "success"})
+	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "success"})
 }
 
 // UpdateDeviceAuth handles PUT /api/v1/devices/{id}/config/auth
@@ -1117,7 +1077,7 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -1127,7 +1087,7 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if decodeErr := json.NewDecoder(r.Body).Decode(&authConfig); decodeErr != nil {
-		http.Error(w, "Invalid auth configuration JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid auth configuration JSON")
 		return
 	}
 
@@ -1138,12 +1098,11 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to update device auth")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]string{"status": "success"})
+	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "success"})
 }
 
 // GetDriftSchedules handles GET /api/v1/config/drift-schedules
@@ -1153,19 +1112,17 @@ func (h *Handler) GetDriftSchedules(w http.ResponseWriter, r *http.Request) {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to get drift schedules")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, schedules)
+	h.responseWriter().WriteSuccess(w, r, schedules)
 }
 
 // CreateDriftSchedule handles POST /api/v1/config/drift-schedules
 func (h *Handler) CreateDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	var schedule configuration.DriftDetectionSchedule
 	if err := json.NewDecoder(r.Body).Decode(&schedule); err != nil {
-		http.Error(w, "Invalid schedule JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid schedule JSON")
 		return
 	}
 
@@ -1175,13 +1132,10 @@ func (h *Handler) CreateDriftSchedule(w http.ResponseWriter, r *http.Request) {
 			"schedule_name": schedule.Name,
 			"error":         err.Error(),
 		}).Error("Failed to create drift schedule")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	h.writeJSON(w, created)
+	h.responseWriter().WriteCreated(w, r, created)
 }
 
 // GetDriftSchedule handles GET /api/v1/config/drift-schedules/{id}
@@ -1189,26 +1143,24 @@ func (h *Handler) GetDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
 		return
 	}
 
 	schedule, err := h.Service.GetDriftSchedule(uint(id))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
+			h.responseWriter().WriteNotFoundError(w, r, "Schedule")
 			return
 		}
 		h.logger.WithFields(map[string]any{
 			"schedule_id": id,
 			"error":       err.Error(),
 		}).Error("Failed to get drift schedule")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, schedule)
+	h.responseWriter().WriteSuccess(w, r, schedule)
 }
 
 // UpdateDriftSchedule handles PUT /api/v1/config/drift-schedules/{id}
@@ -1216,32 +1168,30 @@ func (h *Handler) UpdateDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
 		return
 	}
 
 	var updates configuration.DriftDetectionSchedule
 	if decodeErr := json.NewDecoder(r.Body).Decode(&updates); decodeErr != nil {
-		http.Error(w, "Invalid schedule JSON", http.StatusBadRequest)
+		h.responseWriter().WriteValidationError(w, r, "Invalid schedule JSON")
 		return
 	}
 
 	updated, err := h.Service.UpdateDriftSchedule(uint(id), updates)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
+			h.responseWriter().WriteNotFoundError(w, r, "Schedule")
 			return
 		}
 		h.logger.WithFields(map[string]any{
 			"schedule_id": id,
 			"error":       err.Error(),
 		}).Error("Failed to update drift schedule")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, updated)
+	h.responseWriter().WriteSuccess(w, r, updated)
 }
 
 // DeleteDriftSchedule handles DELETE /api/v1/config/drift-schedules/{id}
@@ -1249,26 +1199,24 @@ func (h *Handler) DeleteDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
 		return
 	}
 
 	err = h.Service.DeleteDriftSchedule(uint(id))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
+			h.responseWriter().WriteNotFoundError(w, r, "Schedule")
 			return
 		}
 		h.logger.WithFields(map[string]any{
 			"schedule_id": id,
 			"error":       err.Error(),
 		}).Error("Failed to delete drift schedule")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]string{"status": "deleted"})
+	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "deleted"})
 }
 
 // ToggleDriftSchedule handles POST /api/v1/config/drift-schedules/{id}/toggle
@@ -1276,26 +1224,24 @@ func (h *Handler) ToggleDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
 		return
 	}
 
 	updated, err := h.Service.ToggleDriftSchedule(uint(id))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
+			h.responseWriter().WriteNotFoundError(w, r, "Schedule")
 			return
 		}
 		h.logger.WithFields(map[string]any{
 			"schedule_id": id,
 			"error":       err.Error(),
 		}).Error("Failed to toggle drift schedule")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, updated)
+	h.responseWriter().WriteSuccess(w, r, updated)
 }
 
 // GetDriftScheduleRuns handles GET /api/v1/config/drift-schedules/{id}/runs
@@ -1303,7 +1249,7 @@ func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
 		return
 	}
 
@@ -1321,12 +1267,10 @@ func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
 			"schedule_id": id,
 			"error":       err.Error(),
 		}).Error("Failed to get drift schedule runs")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, runs)
+	h.responseWriter().WriteSuccess(w, r, runs)
 }
 
 // GetDriftReports handles GET /api/v1/config/drift-reports
@@ -1358,12 +1302,10 @@ func (h *Handler) GetDriftReports(w http.ResponseWriter, r *http.Request) {
 			"device_id":   deviceID,
 			"error":       err.Error(),
 		}).Error("Failed to get drift reports")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, reports)
+	h.responseWriter().WriteSuccess(w, r, reports)
 }
 
 // GenerateDeviceDriftReport handles POST /api/v1/devices/{id}/drift-report
@@ -1371,7 +1313,7 @@ func (h *Handler) GenerateDeviceDriftReport(w http.ResponseWriter, r *http.Reque
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
@@ -1381,13 +1323,11 @@ func (h *Handler) GenerateDeviceDriftReport(w http.ResponseWriter, r *http.Reque
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to generate device drift report")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	h.writeJSON(w, report)
+	h.responseWriter().WriteCreated(w, r, report)
 }
 
 // GetDriftTrends handles GET /api/v1/config/drift-trends
@@ -1426,12 +1366,11 @@ func (h *Handler) GetDriftTrends(w http.ResponseWriter, r *http.Request) {
 			"resolved":  resolved,
 			"error":     err.Error(),
 		}).Error("Failed to get drift trends")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, trends)
+	h.responseWriter().WriteSuccess(w, r, trends)
 }
 
 // MarkTrendResolved handles POST /api/v1/config/drift-trends/{id}/resolve
@@ -1439,7 +1378,7 @@ func (h *Handler) MarkTrendResolved(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid trend ID", http.StatusBadRequest)
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid trend ID", nil)
 		return
 	}
 
@@ -1449,12 +1388,11 @@ func (h *Handler) MarkTrendResolved(w http.ResponseWriter, r *http.Request) {
 			"trend_id": id,
 			"error":    err.Error(),
 		}).Error("Failed to mark trend as resolved")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]string{"status": "resolved"})
+	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "resolved"})
 }
 
 // EnhancedBulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect-enhanced
@@ -1466,7 +1404,7 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to perform bulk drift detection")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -1478,8 +1416,7 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 		}).Warn("Failed to generate comprehensive report, returning basic result")
 
 		// Fall back to basic result if reporting fails
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, result)
+		h.responseWriter().WriteSuccess(w, r, result)
 		return
 	}
 
@@ -1490,8 +1427,7 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 		"recommendations": len(report.Recommendations),
 	}).Info("Enhanced bulk drift detection completed")
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, report)
+	h.responseWriter().WriteSuccess(w, r, report)
 }
 
 // PreviewTemplate handles POST /api/v1/configuration/preview-template
@@ -1505,10 +1441,7 @@ func (h *Handler) PreviewTemplate(w http.ResponseWriter, r *http.Request) {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Warn("Failed to decode template preview request")
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		h.writeJSON(w, map[string]string{"error": "Invalid request body"})
+		h.responseWriter().WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
@@ -1527,10 +1460,7 @@ func (h *Handler) PreviewTemplate(w http.ResponseWriter, r *http.Request) {
 		resultObj = string(result)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"result": resultObj,
-	})
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"result": resultObj})
 }
 
 // ValidateTemplate handles POST /api/v1/configuration/validate-template
@@ -1543,13 +1473,7 @@ func (h *Handler) ValidateTemplate(w http.ResponseWriter, r *http.Request) {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Warn("Failed to decode template validation request")
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		h.writeJSON(w, map[string]interface{}{
-			"valid": false,
-			"error": "Invalid request body",
-		})
+		h.responseWriter().WriteValidationError(w, r, "Invalid request body")
 		return
 	}
 
@@ -1562,20 +1486,13 @@ func (h *Handler) ValidateTemplate(w http.ResponseWriter, r *http.Request) {
 			"error": err.Error(),
 		}).Info("Template validation failed")
 
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, map[string]interface{}{
-			"valid": false,
-			"error": err.Error(),
-		})
+		h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"valid": false, "error": err.Error()})
 		return
 	}
 
 	h.logger.Info("Template validation succeeded")
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"valid": true,
-	})
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"valid": true})
 }
 
 // SaveTemplate handles POST /api/v1/configuration/templates
@@ -1601,12 +1518,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Name == "" || req.Template == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Template name and content are required",
-		})
+		h.responseWriter().WriteValidationError(w, r, "Template name and content are required")
 		return
 	}
 
@@ -1618,12 +1530,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 			"error": err.Error(),
 		}).Warn("Cannot save invalid template")
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Template validation failed: " + err.Error(),
-		})
+		h.responseWriter().WriteValidationError(w, r, "Template validation failed: "+err.Error())
 		return
 	}
 
@@ -1634,12 +1541,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 			"error": err.Error(),
 		}).Warn("Failed to marshal template variables")
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Failed to process variables",
-		})
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to process variables"))
 		return
 	}
 
@@ -1661,12 +1563,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 			"error": err.Error(),
 		}).Error("Failed to save template to database")
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Failed to save template",
-		})
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to save template"))
 		return
 	}
 
@@ -1675,11 +1572,7 @@ func (h *Handler) SaveTemplate(w http.ResponseWriter, r *http.Request) {
 		"template_id": template.ID,
 	}).Info("Template saved successfully")
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"success": true,
-		"id":      template.ID,
-	})
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"id": template.ID})
 }
 
 // GetTemplateExamples handles GET /api/v1/configuration/template-examples
@@ -1687,11 +1580,7 @@ func (h *Handler) GetTemplateExamples(w http.ResponseWriter, r *http.Request) {
 	examples := configuration.GetTemplateExamples()
 	documentation := configuration.GetTemplateDocumentation()
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"examples":      examples,
-		"documentation": documentation,
-	})
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"examples": examples, "documentation": documentation})
 }
 
 // validateDeviceSettings ensures device settings are valid JSON or sets defaults
