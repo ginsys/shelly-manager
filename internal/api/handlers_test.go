@@ -86,9 +86,11 @@ func TestGetDevices(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	testutil.AssertNoError(t, err)
 
-	// Check response structure
+	// Check standardized response structure
 	testutil.AssertEqual(t, true, response["success"])
-	devicesInterface, exists := response["devices"]
+	data, ok := response["data"].(map[string]interface{})
+	testutil.AssertEqual(t, true, ok)
+	devicesInterface, exists := data["devices"]
 	testutil.AssertEqual(t, true, exists)
 
 	// Convert devices array to check length
@@ -121,10 +123,15 @@ func TestAddDevice(t *testing.T) {
 	testutil.AssertEqual(t, http.StatusCreated, w.Code)
 	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
 
-	var returnedDevice database.Device
-	err = json.Unmarshal(w.Body.Bytes(), &returnedDevice)
+	var wrap map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &wrap)
 	testutil.AssertNoError(t, err)
-
+	dataMap, ok := wrap["data"].(map[string]interface{})
+	testutil.AssertEqual(t, true, ok)
+	dataJSON, _ := json.Marshal(dataMap)
+	var returnedDevice database.Device
+	err = json.Unmarshal(dataJSON, &returnedDevice)
+	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, device.MAC, returnedDevice.MAC)
 	testutil.AssertEqual(t, device.Name, returnedDevice.Name)
 
@@ -177,10 +184,15 @@ func TestGetDevice(t *testing.T) {
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
 
-	var returnedDevice database.Device
-	err = json.Unmarshal(w.Body.Bytes(), &returnedDevice)
+	var wrap map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &wrap)
 	testutil.AssertNoError(t, err)
-
+	dataMap, ok := wrap["data"].(map[string]interface{})
+	testutil.AssertEqual(t, true, ok)
+	dataJSON, _ := json.Marshal(dataMap)
+	var returnedDevice database.Device
+	err = json.Unmarshal(dataJSON, &returnedDevice)
+	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, device.ID, returnedDevice.ID)
 	testutil.AssertEqual(t, device.MAC, returnedDevice.MAC)
 }
@@ -255,10 +267,15 @@ func TestUpdateDevice(t *testing.T) {
 	// Assert
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 
-	var returnedDevice database.Device
-	err = json.Unmarshal(w.Body.Bytes(), &returnedDevice)
+	var wrap map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &wrap)
 	testutil.AssertNoError(t, err)
-
+	dataMap, ok := wrap["data"].(map[string]interface{})
+	testutil.AssertEqual(t, true, ok)
+	dataJSON, _ := json.Marshal(dataMap)
+	var returnedDevice database.Device
+	err = json.Unmarshal(dataJSON, &returnedDevice)
+	testutil.AssertNoError(t, err)
 	testutil.AssertEqual(t, "Updated Device Name", returnedDevice.Name)
 	testutil.AssertEqual(t, "offline", returnedDevice.Status)
 
@@ -1000,21 +1017,22 @@ func TestBulkImportConfigs(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	testutil.AssertNoError(t, err)
+	data, ok := response["data"].(map[string]interface{})
+	testutil.AssertEqual(t, true, ok)
 
-	// Check that response has expected structure
-	total, totalExists := response["total"]
+	// Check that response has expected structure inside data
+	total, totalExists := data["total"]
 	testutil.AssertTrue(t, totalExists)
 	testutil.AssertEqual(t, 0, int(total.(float64))) // No devices, so total should be 0
-
-	success, successExists := response["success"]
+	successCount, successExists := data["success"]
 	testutil.AssertTrue(t, successExists)
-	testutil.AssertEqual(t, 0, int(success.(float64)))
+	testutil.AssertEqual(t, 0, int(successCount.(float64)))
 
-	errors, errorsExists := response["errors"]
+	errors, errorsExists := data["errors"]
 	testutil.AssertTrue(t, errorsExists)
 	testutil.AssertEqual(t, 0, int(errors.(float64)))
 
-	results, resultsExists := response["results"]
+	results, resultsExists := data["results"]
 	testutil.AssertTrue(t, resultsExists)
 	testutil.AssertEqual(t, 0, len(results.([]interface{})))
 }
@@ -1036,21 +1054,23 @@ func TestBulkExportConfigs(t *testing.T) {
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	testutil.AssertNoError(t, err)
+	data, ok := response["data"].(map[string]interface{})
+	testutil.AssertEqual(t, true, ok)
 
-	// Check that response has expected structure
-	total, totalExists := response["total"]
+	// Check that response has expected structure inside data
+	total, totalExists := data["total"]
 	testutil.AssertTrue(t, totalExists)
 	testutil.AssertEqual(t, 0, int(total.(float64))) // No devices, so total should be 0
 
-	success, successExists := response["success"]
+	successCount, successExists := data["success"]
 	testutil.AssertTrue(t, successExists)
-	testutil.AssertEqual(t, 0, int(success.(float64)))
+	testutil.AssertEqual(t, 0, int(successCount.(float64)))
 
-	errors, errorsExists := response["errors"]
+	errors, errorsExists := data["errors"]
 	testutil.AssertTrue(t, errorsExists)
 	testutil.AssertEqual(t, 0, int(errors.(float64)))
 
-	results, resultsExists := response["results"]
+	results, resultsExists := data["results"]
 	testutil.AssertTrue(t, resultsExists)
 	testutil.AssertEqual(t, 0, len(results.([]interface{})))
 }
