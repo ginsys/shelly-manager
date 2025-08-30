@@ -292,9 +292,11 @@ func (ih *ImportHandlers) GetImportResult(w http.ResponseWriter, r *http.Request
 	vars := mux.Vars(r)
 	importID := vars["id"]
 
-	// TODO: Implement import result storage and retrieval
-	ih.logger.Info("Getting import result", "import_id", importID)
-	apiresp.NewResponseWriter(ih.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Import result retrieval not yet implemented", nil)
+	if res, ok := ih.syncEngine.GetImportResult(importID); ok {
+		apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, res)
+		return
+	}
+	apiresp.NewResponseWriter(ih.logger).WriteNotFoundError(w, r, "Import result")
 }
 
 // Helper functions

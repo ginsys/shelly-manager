@@ -53,6 +53,7 @@ func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
 	api.HandleFunc("/export", eh.Export).Methods("POST")
 	api.HandleFunc("/export/{id}", eh.GetExportResult).Methods("GET")
 	api.HandleFunc("/export/preview", eh.PreviewExport).Methods("POST")
+	api.HandleFunc("/export/{id}/download", eh.DownloadExport).Methods("GET")
 
 	// Import endpoints
 	api.HandleFunc("/import", eh.Import).Methods("POST")
@@ -243,38 +244,47 @@ func (eh *SyncHandlers) GetExportResult(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	exportID := vars["id"]
 
-	// TODO: Implement export result storage and retrieval
-	// For now, return a placeholder response
-	eh.logger.Info("Getting export result", "export_id", exportID)
-
-	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Export result retrieval not yet implemented", nil)
+	if res, ok := eh.syncEngine.GetExportResult(exportID); ok {
+		apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, res)
+		return
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, "Export result")
 }
 
 // DownloadBackup serves a backup file for download
 func (eh *SyncHandlers) DownloadBackup(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	backupID := vars["id"]
-
-	// TODO: Implement backup file serving
-	// This should:
-	// 1. Validate the backup ID
-	// 2. Check permissions
-	// 3. Serve the file with appropriate headers
-
-	eh.logger.Info("Downloading backup", "backup_id", backupID)
-
-	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Backup download not yet implemented", nil)
+	eh.serveExportByID(w, r, backupID)
 }
 
 // DownloadGitOpsExport serves a GitOps export for download
 func (eh *SyncHandlers) DownloadGitOpsExport(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	exportID := vars["id"]
+	eh.serveExportByID(w, r, exportID)
+}
 
-	// TODO: Implement GitOps export file serving
-	eh.logger.Info("Downloading GitOps export", "export_id", exportID)
+// DownloadExport serves a generic export file for download
+func (eh *SyncHandlers) DownloadExport(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	exportID := vars["id"]
+	eh.serveExportByID(w, r, exportID)
+}
 
-	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "GitOps export download not yet implemented", nil)
+// serveExportByID fetches an export by ID and serves its file (if available)
+func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, id string) {
+	rw := apiresp.NewResponseWriter(eh.logger)
+	res, ok := eh.syncEngine.GetExportResult(id)
+	if !ok || res == nil {
+		rw.WriteNotFoundError(w, r, "Export result")
+		return
+	}
+	if res.OutputPath == "" {
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "No output file available for this export", nil)
+		return
+	}
+	http.ServeFile(w, r, res.OutputPath)
 }
 
 // Import performs a generic import using any plugin
@@ -310,11 +320,11 @@ func (eh *SyncHandlers) GetImportResult(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	importID := vars["id"]
 
-	// TODO: Implement import result storage and retrieval
-	// For now, return a placeholder response
-	eh.logger.Info("Getting import result", "import_id", importID)
-
-	apiresp.NewResponseWriter(eh.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Import result retrieval not yet implemented", nil)
+	if res, ok := eh.syncEngine.GetImportResult(importID); ok {
+		apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, res)
+		return
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, "Import result")
 }
 
 // Utility functions

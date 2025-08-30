@@ -27,6 +27,10 @@ type SyncEngine struct {
 	dbManager DatabaseManagerInterface
 	logger    *logging.Logger
 	mutex     sync.RWMutex
+
+	// In-memory result stores (recent results for retrieval/download)
+	exportResults map[string]*ExportResult
+	importResults map[string]*ImportResult
 }
 
 // ExportEngine provides backward compatibility
@@ -35,10 +39,28 @@ type ExportEngine = SyncEngine
 // NewSyncEngine creates a new sync engine
 func NewSyncEngine(dbManager DatabaseManagerInterface, logger *logging.Logger) *SyncEngine {
 	return &SyncEngine{
-		plugins:   make(map[string]SyncPlugin),
-		dbManager: dbManager,
-		logger:    logger,
+		plugins:       make(map[string]SyncPlugin),
+		dbManager:     dbManager,
+		logger:        logger,
+		exportResults: make(map[string]*ExportResult),
+		importResults: make(map[string]*ImportResult),
 	}
+}
+
+// GetExportResult retrieves a stored export result by ID
+func (e *SyncEngine) GetExportResult(id string) (*ExportResult, bool) {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	res, ok := e.exportResults[id]
+	return res, ok
+}
+
+// GetImportResult retrieves a stored import result by ID
+func (e *SyncEngine) GetImportResult(id string) (*ImportResult, bool) {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	res, ok := e.importResults[id]
+	return res, ok
 }
 
 // NewExportEngine creates a new export engine (backward compatibility)
@@ -208,6 +230,16 @@ func (e *SyncEngine) Export(ctx context.Context, request ExportRequest) (*Export
 		"records", result.RecordCount,
 	)
 
+	// Store result for later retrieval/download
+	e.mutex.Lock()
+	e.exportResults[result.ExportID] = result
+	// Optional: cap memory usage by trimming old entries (simple heuristic)
+	if len(e.exportResults) > 2000 {
+		// Best-effort cleanup: reset the map when too large
+		e.exportResults = map[string]*ExportResult{result.ExportID: result}
+	}
+	e.mutex.Unlock()
+
 	return result, nil
 }
 
@@ -331,6 +363,14 @@ func (e *SyncEngine) Import(ctx context.Context, request ImportRequest) (*Import
 		"records", result.RecordsImported,
 		"skipped", result.RecordsSkipped,
 	)
+
+	// Store result for later retrieval
+	e.mutex.Lock()
+	e.importResults[result.ImportID] = result
+	if len(e.importResults) > 2000 {
+		e.importResults = map[string]*ImportResult{result.ImportID: result}
+	}
+	e.mutex.Unlock()
 
 	return result, nil
 }
