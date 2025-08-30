@@ -508,3 +508,30 @@ MIT License - See [LICENSE](LICENSE) file for details
 **Minimum Go Version**: 1.21  
 **Container Registry**: ghcr.io/ginsys/shelly-manager  
 **Architecture**: Dual-binary (API server + provisioning agent) with standardized API responses and comprehensive testing
+- CORS & Proxy Settings (Security)
+  - Configure via `security` in config or `SHELLY_SECURITY_*` env keys:
+    - `security.use_proxy_headers`: whether to trust proxy headers for client IP.
+    - `security.trusted_proxies`: list of trusted proxies (IPs/CIDRs) for `X-Forwarded-For` parsing.
+    - `security.cors.allowed_origins`: list of allowed origins (empty = allow all; set explicit origins for production).
+    - `security.cors.allowed_methods`, `security.cors.allowed_headers`, `security.cors.max_age`.
+  - Example (YAML):
+    ```yaml
+    security:
+      use_proxy_headers: true
+      trusted_proxies:
+        - 10.0.0.0/8
+        - 192.168.0.0/16
+      cors:
+        allowed_origins:
+          - https://app.example.com
+        allowed_methods: [GET, POST, PUT, DELETE, OPTIONS]
+        allowed_headers: [Content-Type, Authorization, X-Requested-With]
+        max_age: 86400
+    ```
+  - Example (env):
+    - `SHELLY_SECURITY_USE_PROXY_HEADERS=true`
+    - `SHELLY_SECURITY_TRUSTED_PROXIES=10.0.0.0/8,192.168.0.0/16`
+    - `SHELLY_SECURITY_CORS_ALLOWED_ORIGINS=https://app.example.com`
+    - `SHELLY_SECURITY_CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS`
+    - `SHELLY_SECURITY_CORS_ALLOWED_HEADERS=Content-Type,Authorization,X-Requested-With`
+    - `SHELLY_SECURITY_CORS_MAX_AGE=86400`

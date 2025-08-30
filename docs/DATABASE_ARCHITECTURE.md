@@ -561,3 +561,4 @@ The plugin-based export system enables seamless integration with various home au
 **Last Updated**: 2024-01-19  
 **Next Review**: 2024-04-19  
 **Owner**: Shelly Manager Development Team
+<!-- Migration notes removed for greenfield setup: schema indexes are applied via AutoMigrate on new DBs. -->
