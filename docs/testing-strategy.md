@@ -119,7 +119,7 @@ To migrate existing network tests:
 make test                    # Short mode, ~30s
 
 # Coverage with fast tests  
-make test-coverage          # Short mode with coverage
+make test-coverage          # Short mode with coverage (see coverage.html)
 
 # Full test suite (when needed)
 SHELLY_FORCE_NETWORK_TESTS=1 make test-full  # ~45s

@@ -25,11 +25,18 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
         cache: true
     
-    - name: Install dependencies
-      run: make deps
+    - name: Read golangci-lint version from mise.toml
+      id: gci
+      run: |
+        ver=$(sed -n 's/^golangci-lint = "\([^"]\+\)"/\1/p' mise.toml)
+        if [ -z "$ver" ]; then echo "Failed to read golangci-lint version from mise.toml" && exit 1; fi
+        echo "version=$ver" >> $GITHUB_OUTPUT
     
-    - name: Run tests with coverage
-      run: make test-coverage-ci
+    - name: Install golangci-lint (for make lint-ci)
+      run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v${{ steps.gci.outputs.version }}
+    
+    - name: Run complete CI test suite (parity with Makefile)
+      run: make test-ci
     
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
@@ -107,39 +114,15 @@ jobs:
       shell: cmd
     
     - name: Install dependencies
-      run: make deps
+      run: go mod download && go mod verify
     
-    - name: Run Windows tests
-      run: make test-matrix
-
-  lint:
-    name: Lint Code
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
-    
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-        cache: true
-    
-    - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v8
-      with:
-        version: v2.4.0
-        args: --timeout=5m
-    
-    # Alternative: use make command (requires golangci-lint to be installed)
-    # - name: Run linter
-    #   run: make lint
+    - name: Run Windows tests (race, short)
+      run: go test -v -race -short ./...
 
   build:
     name: Build Binary
     runs-on: ubuntu-latest
-    needs: [test, test-matrix, lint]  # Only depends on Linux/macOS tests, not Windows
+    needs: [test, test-matrix]  # Only depends on Linux/macOS tests, not Windows
     
     steps:
     - name: Checkout code
