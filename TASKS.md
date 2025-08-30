@@ -16,35 +16,41 @@
 
 Focus on functionality and platform consistency prior to enabling authentication/RBAC.
 
-- [ ] 7.1.a: API Response Standardization Sweep (HIGH PRIORITY)
-  - [ ] Replace `http.Error` with standardized `internal/api/response` across handlers
-  - [ ] Ensure `success`, `data/error`, `timestamp`, `request_id` in all responses
-  - [ ] Apply consistent error code catalog per module; update API examples
+- [x] 7.1.a: API Response Standardization Sweep (HIGH PRIORITY) ✅ COMPLETED - 2025-08-26
+  - [x] Replace `http.Error` with standardized `internal/api/response` across handlers
+  - [x] Ensure `success`, `data/error`, `timestamp`, `request_id` in all responses
+  - [x] Apply consistent error code catalog per module; update API examples
+  - Related commits: [81d0d8f](https://github.com/ginsys/shelly-manager/commit/81d0d8f), [aee2c0c](https://github.com/ginsys/shelly-manager/commit/aee2c0c), [ea27e75](https://github.com/ginsys/shelly-manager/commit/ea27e75)
 
-- [ ] 7.1.b: Environment Variable Overrides (HIGH PRIORITY)
-  - [ ] Implement `viper.AutomaticEnv()` with `SHELLY_` prefix and key replacer for nested keys
-  - [ ] Document precedence (env > file > defaults) and full mapping table
-  - [ ] Validate Docker Compose/K8s env compatibility; add deploy examples
+- [x] 7.1.b: Environment Variable Overrides (HIGH PRIORITY) ✅ COMPLETED - 2025-08-26
+  - [x] Implement `viper.AutomaticEnv()` with `SHELLY_` prefix and key replacer for nested keys
+  - [x] Document precedence (env > file > defaults) and full mapping table
+  - [x] Validate Docker Compose/K8s env compatibility; add deploy examples
+  - Related commit: [0096e7d](https://github.com/ginsys/shelly-manager/commit/0096e7d)
 
-- [ ] 7.1.c: Database Constraints & Migrations (MEDIUM PRIORITY)
-  - [ ] Enforce unique index on `devices.mac` to align with upsert-by-MAC semantics
-  - [ ] Add helpful secondary indexes (MAC, status)
-  - [ ] Provide explicit migration notes for SQLite/PostgreSQL/MySQL
+- [x] 7.1.c: Database Constraints & Migrations (MEDIUM PRIORITY) ✅ COMPLETED - 2025-08-26
+  - [x] Enforce unique index on `devices.mac` to align with upsert-by-MAC semantics
+  - [x] Add helpful secondary indexes (MAC, status)
+  - [x] Provide explicit migration notes for SQLite/PostgreSQL/MySQL
+  - Related commit: [101def2](https://github.com/ginsys/shelly-manager/commit/101def2)
 
-- [ ] 7.1.d: Client IP Extraction Behind Proxies (MEDIUM PRIORITY)
-  - [ ] Trusted proxy configuration and `X-Forwarded-For`/`X-Real-IP` parsing
-  - [ ] Ensure rate limiter/monitoring use real client IP
-  - [ ] Document ingress/controller examples
+- [x] 7.1.d: Client IP Extraction Behind Proxies (MEDIUM PRIORITY) ✅ COMPLETED - 2025-08-26
+  - [x] Trusted proxy configuration and `X-Forwarded-For`/`X-Real-IP` parsing
+  - [x] Ensure rate limiter/monitoring use real client IP
+  - [x] Document ingress/controller examples
+  - Related commit: [cf3902f](https://github.com/ginsys/shelly-manager/commit/cf3902f)
 
-- [ ] 7.1.e: CORS/CSP Profiles (MEDIUM PRIORITY)
-  - [ ] Configurable allowed origins; default strict in production
-  - [ ] Introduce nonce-based CSP; begin removing `'unsafe-inline'` where feasible
-  - [ ] Separate dev vs. prod presets; document rollout
+- [x] 7.1.e: CORS/CSP Profiles (MEDIUM PRIORITY) ✅ COMPLETED - 2025-08-26
+  - [x] Configurable allowed origins; default strict in production
+  - [x] Introduce nonce-based CSP; begin removing `'unsafe-inline'` where feasible
+  - [x] Separate dev vs. prod presets; document rollout
+  - Related commits: [d086310](https://github.com/ginsys/shelly-manager/commit/d086310), [a6c4901](https://github.com/ginsys/shelly-manager/commit/a6c4901), [b5ae2e9](https://github.com/ginsys/shelly-manager/commit/b5ae2e9)
 
-- [ ] 7.1.f: WebSocket Hardening (No Auth) (MEDIUM PRIORITY)
-  - [ ] Restrict origin for `/metrics/ws` via config
-  - [ ] Add connection/message rate limiting; heartbeat/idle timeouts
-  - [ ] Document reverse proxy deployment
+- [x] 7.1.f: WebSocket Hardening (No Auth) (MEDIUM PRIORITY) ✅ COMPLETED - 2025-08-26
+  - [x] Restrict origin for `/metrics/ws` via config
+  - [x] Add connection/message rate limiting; heartbeat/idle timeouts
+  - [x] Document reverse proxy deployment
+  - Related commit: [ebd6f62](https://github.com/ginsys/shelly-manager/commit/ebd6f62)
 
 - [ ] 7.2.a: Export/Import Endpoint Readiness (HIGH PRIORITY)
   - [ ] Finalize request/response schemas and examples
@@ -177,6 +183,24 @@ Status: POSTPONED. We will first expand functionality and standardize the API (P
   - [ ] Expose GitOps export/import functionality (8 endpoints) with admin permissions
   - [ ] Add SMA format specification and implementation
   - [ ] Create export plugin management interface with permission controls
+
+  
+  - Progress 2025-08-30
+    - [x] Backend: Export/Import result retrieval endpoints implemented
+      - `GET /api/v1/export/{id}` returns stored export result
+      - `GET /api/v1/import/{id}` returns stored import result
+    - [x] Backend: Export downloads implemented
+      - `GET /api/v1/export/{id}/download` (generic)
+      - `GET /api/v1/export/backup/{id}/download`, `GET /api/v1/export/gitops/{id}/download`
+    - [x] Backend: Export scheduling (in-memory) CRUD + run
+      - `GET/POST /api/v1/export/schedules`
+      - `GET/PUT/DELETE /api/v1/export/schedules/{id}`
+      - `POST /api/v1/export/schedules/{id}/run`
+    - [x] Tests: Added coverage for result retrieval, download, and scheduling CRUD/run
+    - Related commits: [d2c27c3](https://github.com/ginsys/shelly-manager/commit/d2c27c3), [9616898](https://github.com/ginsys/shelly-manager/commit/9616898), [a792f85](https://github.com/ginsys/shelly-manager/commit/a792f85)
+    - [ ] Security: Add RBAC guard (admin-only) and audit logging for export/import/scheduling endpoints
+    - [ ] Security: Restrict file downloads to configured export directory and sanitize paths
+    - [ ] History: Persist export/import history + statistics endpoints
 
 #### **Task Group 7.3: Real-time Features & Advanced Integration WITH Security**
 **Goal**: Enable real-time capabilities and advanced features with security controls
