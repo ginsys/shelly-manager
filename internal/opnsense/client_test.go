@@ -273,6 +273,7 @@ func TestClientTestConnection(t *testing.T) {
 }
 
 func TestClientMakeRequest(t *testing.T) {
+	testutil.SkipIfNoSocketPermissions(t)
 	logger := setupTestLogger(t)
 
 	t.Run("GET Request", func(t *testing.T) {

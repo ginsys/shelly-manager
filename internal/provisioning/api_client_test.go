@@ -78,6 +78,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("RegisterAgent_ServerError", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			if _, err := w.Write([]byte("Internal server error")); err != nil {
@@ -94,6 +95,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("PollTasks_Success", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		expectedTasks := []ProvisioningTask{
 			{
 				ID:     "task-1",
@@ -160,6 +162,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("UpdateTaskStatus_Success", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "PUT", r.Method)
 			assert.Equal(t, "/api/v1/provisioner/tasks/task-123/status", r.URL.Path)
@@ -195,6 +198,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("UpdateTaskStatus_TaskNotFound", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 			if _, err := w.Write([]byte("Task not found")); err != nil {
@@ -213,6 +217,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("TestConnectivity_Success", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "GET", r.Method)
 			assert.Equal(t, "/api/v1/provisioner/health", r.URL.Path)
@@ -243,6 +248,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("SlowServer", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Simulate slow response
 			time.Sleep(200 * time.Millisecond)
@@ -267,6 +273,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("Authentication_Missing", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Check for missing or invalid auth
 			auth := r.Header.Get("Authorization")
@@ -290,6 +297,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("ReportDiscoveredDevices_Success", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		// Create mock server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
