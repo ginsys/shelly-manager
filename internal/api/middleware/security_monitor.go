@@ -488,22 +488,25 @@ func (sm *SecurityMonitor) cleanupOldData() {
 	for {
 		select {
 		case <-ticker.C:
-			cutoff := time.Now().Add(-24 * time.Hour) // Remove data older than 24 hours
-
-			sm.attackMap.Range(func(key, value interface{}) bool {
-				ip := key.(string)
-				info := value.(*AttackInfo)
-
-				// Remove old entries that are not blocked and have no recent activity
-				if !info.Blocked && info.LastSeen.Before(cutoff) {
-					sm.attackMap.Delete(ip)
-				}
-				return true
-			})
+			sm.cleanupOldDataOnce(time.Now().Add(-24 * time.Hour))
 		case <-sm.done:
 			return // Shutdown signal received
 		}
 	}
+}
+
+// cleanupOldDataOnce performs a single-pass cleanup using the provided cutoff.
+// This is separated for testability to avoid blocking ticker loops in tests.
+func (sm *SecurityMonitor) cleanupOldDataOnce(cutoff time.Time) {
+	sm.attackMap.Range(func(key, value interface{}) bool {
+		ip := key.(string)
+		info := value.(*AttackInfo)
+
+		if !info.Blocked && info.LastSeen.Before(cutoff) {
+			sm.attackMap.Delete(ip)
+		}
+		return true
+	})
 }
 
 func isSuspiciousHeaderName(name string) bool {

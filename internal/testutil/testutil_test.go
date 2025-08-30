@@ -166,6 +166,7 @@ func TestTestDevice(t *testing.T) {
 }
 
 func TestMockShellyServer(t *testing.T) {
+	SkipIfNoSocketPermissions(t)
 	server := MockShellyServer()
 	defer server.Close()
 
@@ -257,6 +258,7 @@ func TestMockShellyServer(t *testing.T) {
 }
 
 func TestMockShellyGen2Server(t *testing.T) {
+	SkipIfNoSocketPermissions(t)
 	server := MockShellyGen2Server()
 	defer server.Close()
 
@@ -472,6 +474,7 @@ func TestTestutilIntegration(t *testing.T) {
 	}
 
 	// Test mock servers
+	SkipIfNoSocketPermissions(t)
 	gen1Server := MockShellyServer()
 	defer gen1Server.Close()
 

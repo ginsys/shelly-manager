@@ -54,6 +54,7 @@ func TestNewScanner(t *testing.T) {
 }
 
 func TestScanHost_Gen1Device(t *testing.T) {
+	testutil.SkipIfNoSocketPermissions(t)
 	// Create mock server for Gen1 device
 	server := testutil.MockShellyServer()
 	defer server.Close()
@@ -99,6 +100,7 @@ func TestScanHost_Gen1Device(t *testing.T) {
 }
 
 func TestScanHost_Gen2Device(t *testing.T) {
+	testutil.SkipIfNoSocketPermissions(t)
 	// Create mock server for Gen2 device
 	server := testutil.MockShellyGen2Server()
 	defer server.Close()

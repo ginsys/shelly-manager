@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
 func TestAPIClient(t *testing.T) {
@@ -30,6 +31,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("RegisterAgent_Success", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		// Create mock server
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)

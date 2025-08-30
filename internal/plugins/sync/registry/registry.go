@@ -150,6 +150,9 @@ type DatabaseManagerAdapter struct {
 
 // GetDB returns the database connection as interface{}
 func (a *DatabaseManagerAdapter) GetDB() interface{} {
+	if a == nil || a.Manager == nil {
+		return nil
+	}
 	return a.Manager.GetDB()
 }
 

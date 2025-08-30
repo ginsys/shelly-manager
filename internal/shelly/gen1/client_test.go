@@ -3,6 +3,7 @@ package gen1
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +14,11 @@ import (
 
 // mockGen1Server creates a test server that mimics a Gen1 Shelly device
 func mockGen1Server(t *testing.T) *httptest.Server {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/shelly":

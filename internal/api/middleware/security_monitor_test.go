@@ -557,8 +557,8 @@ func TestDataCleanup(t *testing.T) {
 		attackInfo.FirstSeen = time.Now().Add(-26 * time.Hour) // 26 hours ago
 	}
 
-	// Trigger cleanup manually
-	monitor.cleanupOldData()
+	// Trigger single-pass cleanup (non-blocking)
+	monitor.cleanupOldDataOnce(time.Now().Add(-24 * time.Hour))
 
 	// Data should be removed
 	_, exists = monitor.attackMap.Load(oldIP)

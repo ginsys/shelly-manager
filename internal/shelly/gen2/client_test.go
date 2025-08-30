@@ -3,6 +3,7 @@ package gen2
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -100,6 +101,11 @@ func TestClient_GetIP(t *testing.T) {
 
 // mockGen2Server creates a mock Gen2+ device server
 func mockGen2Server() *httptest.Server {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		panic(err)
+	} else {
+		_ = ln.Close()
+	}
 	mux := http.NewServeMux()
 
 	// Mock Shelly.GetDeviceInfo RPC call
