@@ -49,3 +49,6 @@ logs/
 .DS_Store
 Thumbs.db
 configs/shelly-manager.local.yaml
+
+# Temporary artifacts
+.tmp/
