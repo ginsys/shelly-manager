@@ -12,6 +12,64 @@
 **ROI**: 3x increase in platform capabilities by exposing existing backend investment
 **Risk Level**: Medium (leveraging existing backend functionality)
 
+#### Phase 7 — Pre-Auth Functional Hardening Tasks (Integrate Now)
+
+Focus on functionality and platform consistency prior to enabling authentication/RBAC.
+
+- [ ] 7.1.a: API Response Standardization Sweep (HIGH PRIORITY)
+  - [ ] Replace `http.Error` with standardized `internal/api/response` across handlers
+  - [ ] Ensure `success`, `data/error`, `timestamp`, `request_id` in all responses
+  - [ ] Apply consistent error code catalog per module; update API examples
+
+- [ ] 7.1.b: Environment Variable Overrides (HIGH PRIORITY)
+  - [ ] Implement `viper.AutomaticEnv()` with `SHELLY_` prefix and key replacer for nested keys
+  - [ ] Document precedence (env > file > defaults) and full mapping table
+  - [ ] Validate Docker Compose/K8s env compatibility; add deploy examples
+
+- [ ] 7.1.c: Database Constraints & Migrations (MEDIUM PRIORITY)
+  - [ ] Enforce unique index on `devices.mac` to align with upsert-by-MAC semantics
+  - [ ] Add helpful secondary indexes (MAC, status)
+  - [ ] Provide explicit migration notes for SQLite/PostgreSQL/MySQL
+
+- [ ] 7.1.d: Client IP Extraction Behind Proxies (MEDIUM PRIORITY)
+  - [ ] Trusted proxy configuration and `X-Forwarded-For`/`X-Real-IP` parsing
+  - [ ] Ensure rate limiter/monitoring use real client IP
+  - [ ] Document ingress/controller examples
+
+- [ ] 7.1.e: CORS/CSP Profiles (MEDIUM PRIORITY)
+  - [ ] Configurable allowed origins; default strict in production
+  - [ ] Introduce nonce-based CSP; begin removing `'unsafe-inline'` where feasible
+  - [ ] Separate dev vs. prod presets; document rollout
+
+- [ ] 7.1.f: WebSocket Hardening (No Auth) (MEDIUM PRIORITY)
+  - [ ] Restrict origin for `/metrics/ws` via config
+  - [ ] Add connection/message rate limiting; heartbeat/idle timeouts
+  - [ ] Document reverse proxy deployment
+
+- [ ] 7.2.a: Export/Import Endpoint Readiness (HIGH PRIORITY)
+  - [ ] Finalize request/response schemas and examples
+  - [ ] Add dry-run flags and result summaries consistent with standard response
+
+- [ ] 7.2.b: Notification API Enablement (HIGH PRIORITY)
+  - [ ] Ensure channels/rules/history follow standardized responses
+  - [ ] Add rate-limit guardrails and error codes; verify "test channel" flows
+
+- [ ] 7.2.c: Metrics Endpoint Documentation (MEDIUM PRIORITY)
+  - [ ] Document HTTP metrics and WS message types; add client examples
+  - [ ] Describe production limits and retention knobs
+
+- [ ] 7.3.a: Secrets Management Integration (HIGH PRIORITY)
+  - [ ] Move sensitive config (SMTP, OPNSense) to K8s Secrets; wire Deployment
+  - [ ] Provide Compose `.env` and secret mount guidance
+
+- [ ] 7.3.b: TLS/Proxy Hardening Guides (MEDIUM PRIORITY)
+  - [ ] TLS termination, HSTS enablement, header enforcement at ingress/proxy
+  - [ ] Example manifests (Nginx/Traefik) with strict security headers
+
+- [ ] 7.3.c: Operational Observability (LOW PRIORITY)
+  - [ ] Add `meta.version` and pagination metadata in list endpoints
+  - [ ] Document log fields and request_id propagation for tracing
+
 ### Phase 8: Vue.js Frontend Modernization ⚡ **HIGH PRIORITY**
 **Technical Impact**: Eliminate 70% code duplication, modern SPA architecture
 **Code Reduction**: 9,400+ lines → ~3,500 lines (63% reduction)
@@ -24,7 +82,8 @@
 ### Phase 6.9: Security & Testing Foundation ⚡ **CRITICAL PREREQUISITE**
 **Goal**: Establish security framework and comprehensive testing strategy before modernization begins
 
-#### **Task 6.9.1: Authentication & Authorization Strategy (HIGH PRIORITY)**
+#### **Task 6.9.1: Authentication & Authorization Strategy (HIGH PRIORITY) [POSTPONED]**
+Status: POSTPONED. We will first expand functionality and standardize the API (Phase 7) before enabling auth/RBAC end-to-end. Keep the design work ready but defer implementation until after 7.1/7.2 milestones.
 - [ ] Define RBAC framework for 80+ API endpoints
   - [ ] Map all existing endpoints to permission levels (admin, operator, viewer)
   - [ ] Design role hierarchy and inheritance model
