@@ -59,6 +59,24 @@ jobs:
       with:
         name: test-json-reports-${{ env.GO_VERSION }}
         path: test-reports/
+
+    - name: Install gotestsum (JUnit converter)
+      if: always()
+      run: go install gotest.tools/gotestsum@latest
+
+    - name: Generate JUnit report
+      if: always()
+      run: |
+        set -o pipefail
+        # Re-run in short mode to emit JUnit; do not fail pipeline at this step
+        gotestsum --format standard-verbose --junitfile junit-${{ env.GO_VERSION }}.xml -- -race -short ./... || true
+
+    - name: Upload JUnit report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: junit-report-${{ env.GO_VERSION }}
+        path: junit-${{ env.GO_VERSION }}.xml
     
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
@@ -143,6 +161,23 @@ jobs:
         name: test-json-reports-${{ matrix.os }}-${{ matrix.go-version }}
         path: test-reports/
 
+    - name: Install gotestsum (JUnit converter)
+      if: always()
+      run: go install gotest.tools/gotestsum@latest
+
+    - name: Generate JUnit report (matrix)
+      if: always()
+      run: |
+        set -o pipefail
+        gotestsum --format standard-verbose --junitfile junit-${{ matrix.os }}-${{ matrix.go-version }}.xml -- -race -short ./... || true
+
+    - name: Upload JUnit report (matrix)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: junit-report-${{ matrix.os }}-${{ matrix.go-version }}
+        path: junit-${{ matrix.os }}-${{ matrix.go-version }}.xml
+
   # Separate Windows tests that don't fail the overall workflow
   test-windows:
     name: Windows Tests (Informational)
@@ -182,6 +217,24 @@ jobs:
       with:
         name: windows-logs-${{ matrix.go-version }}
         path: windows-test-${{ matrix.go-version }}.log
+
+    - name: Install gotestsum (JUnit converter)
+      if: always()
+      run: go install gotest.tools/gotestsum@latest
+
+    - name: Generate JUnit report (windows)
+      if: always()
+      run: |
+        set -o pipefail
+        gotestsum --format standard-verbose --junitfile junit-windows-${{ matrix.go-version }}.xml -- -race -short ./... || true
+      shell: bash
+
+    - name: Upload JUnit report (windows)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: junit-report-windows-${{ matrix.go-version }}
+        path: junit-windows-${{ matrix.go-version }}.xml
 
   build:
     name: Build Binary
