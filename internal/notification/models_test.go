@@ -393,7 +393,7 @@ func TestJSONSerialization(t *testing.T) {
 		assert.Equal(t, *event.DeviceID, *unmarshaled.DeviceID)
 		assert.Equal(t, event.Title, unmarshaled.Title)
 		assert.Equal(t, event.Message, unmarshaled.Message)
-		assert.Equal(t, event.Timestamp, unmarshaled.Timestamp)
+		assert.True(t, event.Timestamp.Equal(unmarshaled.Timestamp), "Timestamp should round-trip regardless of location")
 		assert.Equal(t, event.Metadata["key"], unmarshaled.Metadata["key"])
 	})
 }
