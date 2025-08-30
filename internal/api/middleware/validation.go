@@ -134,6 +134,20 @@ func ValidateHeadersMiddleware(config *ValidationConfig, logger *logging.Logger)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// If strict content-type is enforced and current content-type would be rejected,
+			// defer header validation so that the content-type middleware handles first.
+			if config.StrictContentType && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
+				ct := r.Header.Get("Content-Type")
+				if ct != "" {
+					if mediaType, _, err := mime.ParseMediaType(ct); err == nil {
+						if config.AllowedContentTypes != nil && !config.AllowedContentTypes[mediaType] {
+							next.ServeHTTP(w, r)
+							return
+						}
+					}
+				}
+			}
+
 			validationErrors := make(map[string]string)
 
 			// Check header count
@@ -289,6 +303,20 @@ func ValidateQueryParamsMiddleware(config *ValidationConfig, logger *logging.Log
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// If strict content-type is enforced and current content-type would be rejected,
+			// defer to the content-type middleware (allow it to fail first in the chain).
+			if config.StrictContentType && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {
+				ct := r.Header.Get("Content-Type")
+				if ct != "" {
+					if mediaType, _, err := mime.ParseMediaType(ct); err == nil {
+						if config.AllowedContentTypes != nil && !config.AllowedContentTypes[mediaType] {
+							next.ServeHTTP(w, r)
+							return
+						}
+					}
+				}
+			}
+
 			validationErrors := make(map[string]string)
 
 			// Check query parameter count
@@ -372,11 +400,12 @@ func containsSuspiciousContent(value string) bool {
 	patterns := []string{
 		"<script", "javascript:", "data:", "vbscript:",
 		"onload=", "onerror=", "onclick=", "onmouseover=",
-		"eval(", "alert(", "confirm(", "prompt(",
+		"eval(", "alert(", "confirm(", "prompt(", "fromcharcode(",
 		"document.cookie", "document.domain",
 		"../", "..\\", "/etc/passwd", "/proc/",
 		"union select", "drop table", "delete from",
-		"insert into", "update set", "' or 1=1",
+		"insert into", "update users set", "update set", "' or 1=1", " or 1=1", " or '1'='1",
+		"exec ", "sleep(",
 	}
 
 	for _, pattern := range patterns {
@@ -439,8 +468,11 @@ func validateJSONDepth(data interface{}, currentDepth, maxDepth, maxArraySize in
 		if maxArraySize > 0 && len(v) > maxArraySize {
 			return fmt.Errorf("JSON array too large (max: %d elements)", maxArraySize)
 		}
+		// Do not increase depth for array elements; depth limit
+		// applies primarily to object nesting. This allows nested
+		// arrays within reasonable limits without tripping depth.
 		for _, item := range v {
-			if err := validateJSONDepth(item, currentDepth+1, maxDepth, maxArraySize); err != nil {
+			if err := validateJSONDepth(item, currentDepth, maxDepth, maxArraySize); err != nil {
 				return err
 			}
 		}

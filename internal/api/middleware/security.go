@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -218,7 +219,7 @@ func SecurityHeadersMiddleware(config *SecurityConfig, logger *logging.Logger) f
 				w.Header().Set("Expires", "0")
 			}
 
-			// Add security context to request
+			// Add security context to request (typed key to avoid collisions)
 			ctx := context.WithValue(r.Context(), securityNonceKey, nonce)
 			r = r.WithContext(ctx)
 
@@ -296,6 +297,12 @@ func RequestSizeMiddleware(config *SecurityConfig, logger *logging.Logger) func(
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Limit request body size
 			if config.MaxRequestSize > 0 {
+				// If Content-Length is known and exceeds the limit, reject immediately
+				if r.ContentLength > 0 && r.ContentLength > config.MaxRequestSize {
+					w.WriteHeader(http.StatusRequestEntityTooLarge)
+					return
+				}
+				// Otherwise wrap the body to enforce a hard cap during reads
 				r.Body = http.MaxBytesReader(w, r.Body, config.MaxRequestSize)
 			}
 
@@ -483,11 +490,23 @@ func detectSuspiciousRequest(r *http.Request) bool {
 	// Check for common injection patterns in URL
 	path := strings.ToLower(r.URL.Path)
 	query := strings.ToLower(r.URL.RawQuery)
+	// Decode query for better pattern matching (handles %xx encodings)
+	decodedQuery := ""
+	if r.URL.RawQuery != "" {
+		if dq, err := url.QueryUnescape(r.URL.RawQuery); err == nil {
+			decodedQuery = strings.ToLower(dq)
+		}
+	}
+	// Decode path as well in case encoded traversal is present
+	decodedPath := path
+	if dp, err := url.PathUnescape(r.URL.Path); err == nil {
+		decodedPath = strings.ToLower(dp)
+	}
 
 	// SQL injection patterns
 	sqlPatterns := []string{"' or ", " or 1=1", "union select", "drop table", "delete from", "insert into"}
 	for _, pattern := range sqlPatterns {
-		if strings.Contains(path, pattern) || strings.Contains(query, pattern) {
+		if strings.Contains(path, pattern) || strings.Contains(query, pattern) || strings.Contains(decodedQuery, pattern) || strings.Contains(decodedPath, pattern) {
 			return true
 		}
 	}
@@ -495,13 +514,13 @@ func detectSuspiciousRequest(r *http.Request) bool {
 	// XSS patterns
 	xssPatterns := []string{"<script>", "javascript:", "onerror=", "onload=", "eval(", "alert("}
 	for _, pattern := range xssPatterns {
-		if strings.Contains(path, pattern) || strings.Contains(query, pattern) {
+		if strings.Contains(path, pattern) || strings.Contains(query, pattern) || strings.Contains(decodedQuery, pattern) || strings.Contains(decodedPath, pattern) {
 			return true
 		}
 	}
 
 	// Path traversal patterns
-	if strings.Contains(path, "..") || strings.Contains(query, "..") {
+	if strings.Contains(path, "..") || strings.Contains(query, "..") || strings.Contains(decodedQuery, "..") || strings.Contains(decodedPath, "..") {
 		return true
 	}
 
