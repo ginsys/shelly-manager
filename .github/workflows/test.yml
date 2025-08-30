@@ -39,6 +39,26 @@ jobs:
       run: |
         set -o pipefail
         make test-ci 2>&1 | tee ci-test.log
+
+    - name: Run per-package JSON tests (structured logs)
+      run: |
+        set -o pipefail
+        mkdir -p test-reports
+        PKGS=$(go list ./...)
+        for pkg in $PKGS; do
+          safe=$(echo "$pkg" | tr '/.' '__')
+          echo "::group::Testing $pkg (JSON)"
+          # Do not fail the workflow here; structured logs are for diagnostics
+          go test -json -race -short "$pkg" | tee "test-reports/${safe}.jsonl" || true
+          echo "::endgroup::"
+        done
+
+    - name: Upload JSON test reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-json-reports-${{ env.GO_VERSION }}
+        path: test-reports/
     
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5
