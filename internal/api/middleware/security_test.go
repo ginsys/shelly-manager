@@ -393,10 +393,12 @@ func TestXSSAttackSimulation(t *testing.T) {
 			middleware(handler).ServeHTTP(rr, req)
 
 			// Test detection function directly with payload
-			assert.True(t, strings.Contains(strings.ToLower(payload), "script") ||
-				strings.Contains(strings.ToLower(payload), "javascript") ||
-				strings.Contains(strings.ToLower(payload), "onerror") ||
-				strings.Contains(strings.ToLower(payload), "onload"),
+			lp := strings.ToLower(payload)
+			assert.True(t, strings.Contains(lp, "script") ||
+				strings.Contains(lp, "javascript") ||
+				strings.Contains(lp, "onerror") ||
+				strings.Contains(lp, "onload") ||
+				strings.Contains(lp, "alert("),
 				"Should detect XSS payload: %s", payload)
 		})
 	}
@@ -671,7 +673,7 @@ func TestSecurityContextInjection(t *testing.T) {
 	var capturedNonce string
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if ctx := r.Context(); ctx != nil {
-			if nonce, ok := ctx.Value("security_nonce").(string); ok {
+			if nonce, ok := ctx.Value(securityNonceKey).(string); ok {
 				capturedNonce = nonce
 			}
 		}

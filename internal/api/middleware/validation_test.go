@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -473,7 +474,7 @@ func TestValidateQueryParamsMiddleware(t *testing.T) {
 		{
 			name:           "SQL Injection in Query Param",
 			config:         DefaultValidationConfig(),
-			queryString:    "?id=1' OR '1'='1",
+			queryString:    "?id=" + url.QueryEscape("1' OR '1'='1"),
 			expectedStatus: http.StatusBadRequest,
 			description:    "SQL injection attempts in query params should be rejected",
 		},

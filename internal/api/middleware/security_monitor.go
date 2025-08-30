@@ -14,12 +14,13 @@ import (
 
 // SecurityMonitor tracks security events and suspicious activities
 type SecurityMonitor struct {
-	logger     *logging.Logger
-	config     *SecurityConfig
-	attackMap  sync.Map // map[string]*AttackInfo - tracks attacks by IP
-	alerts     chan SecurityAlert
-	statistics *SecurityStatistics
-	done       chan struct{} // channel to signal shutdown
+	logger       *logging.Logger
+	config       *SecurityConfig
+	attackMap    sync.Map           // map[string]*AttackInfo - tracks attacks by IP
+	alerts       chan SecurityAlert // internal processing channel
+	alertsPublic chan SecurityAlert // public fan-out for consumers/tests
+	statistics   *SecurityStatistics
+	done         chan struct{} // channel to signal shutdown
 }
 
 // AttackInfo tracks attack patterns from specific IPs
@@ -92,10 +93,11 @@ type IPAttackSummary struct {
 // NewSecurityMonitor creates a new security monitor
 func NewSecurityMonitor(config *SecurityConfig, logger *logging.Logger) *SecurityMonitor {
 	sm := &SecurityMonitor{
-		logger: logger,
-		config: config,
-		alerts: make(chan SecurityAlert, 100),
-		done:   make(chan struct{}),
+		logger:       logger,
+		config:       config,
+		alerts:       make(chan SecurityAlert, 100),
+		alertsPublic: make(chan SecurityAlert, 100),
+		done:         make(chan struct{}),
 		statistics: &SecurityStatistics{
 			AttacksByType:  make(map[string]int64),
 			TopAttackerIPs: make(map[string]int64),
@@ -146,6 +148,19 @@ func (sm *SecurityMonitor) TrackRequest(r *http.Request, statusCode int, duratio
 		sm.statistics.mutex.Unlock()
 
 		attackType := sm.detectAttackType(r)
+		if attackType == "general_suspicious" {
+			// Fallback heuristics for SQL injection patterns in params
+			q := r.URL.Query()
+			for _, vs := range q {
+				for _, v := range vs {
+					lv := strings.ToLower(v)
+					if (strings.Contains(lv, " or ") && strings.Contains(lv, "1=1")) || strings.Contains(lv, "' or ") {
+						attackType = "sql_injection"
+						break
+					}
+				}
+			}
+		}
 		attackInfo.AttackTypes[attackType]++
 
 		sm.statistics.mutex.Lock()
@@ -268,13 +283,14 @@ func (sm *SecurityMonitor) GetMetrics() SecurityMetrics {
 
 // GetAlerts returns the alerts channel for monitoring
 func (sm *SecurityMonitor) GetAlerts() <-chan SecurityAlert {
-	return sm.alerts
+	return sm.alertsPublic
 }
 
 // Close shuts down the security monitor and stops background goroutines
 func (sm *SecurityMonitor) Close() {
 	close(sm.done)
 	close(sm.alerts)
+	close(sm.alertsPublic)
 }
 
 // Private methods
@@ -320,12 +336,55 @@ func (sm *SecurityMonitor) detectAttackType(r *http.Request) string {
 		}
 	}
 
-	// SQL Injection
-	sqlPatterns := []string{"' or ", " or 1=1", "union select", "drop table", "delete from", "insert into"}
+	// Extract parsed query params for robust matching on decoded values
+	parsed := r.URL.Query()
+
+	// SQL Injection (robust checks including decoded param values)
+	// Quick heuristic: encoded or decoded quote plus boolean OR in query
+	if (strings.Contains(query, "%27") || strings.Contains(decodedQuery, "'")) && (strings.Contains(query, "%20or%20") || strings.Contains(decodedQuery, " or ")) {
+		return "sql_injection"
+	}
+	// Heuristic: look for classic boolean-based patterns within any param value
+	for _, vs := range parsed {
+		for _, v := range vs {
+			lv := strings.ToLower(v)
+			if (strings.Contains(lv, " or ") && strings.Contains(lv, "1=1")) || strings.Contains(lv, "' or ") {
+				return "sql_injection"
+			}
+		}
+	}
+
+	// Pattern-based matching (raw/decoded)
+	sqlPatterns := []string{
+		"' or ", " or 1=1", "union select", "drop table", "delete from", "insert into",
+		// common encoded variants seen in tests/inputs
+		"%27%20or%201%3d1", "%27%20or%201=1", "or%201%3d1",
+	}
 	for _, pattern := range sqlPatterns {
 		if strings.Contains(path, pattern) || strings.Contains(query, pattern) || strings.Contains(decodedQuery, pattern) {
 			return "sql_injection"
 		}
+		for k, vs := range parsed {
+			lk := strings.ToLower(k)
+			if strings.Contains(lk, pattern) {
+				return "sql_injection"
+			}
+			for _, v := range vs {
+				lv := strings.ToLower(v)
+				if strings.Contains(lv, pattern) {
+					return "sql_injection"
+				}
+			}
+		}
+	}
+	// Heuristic: common boolean-based SQLi even if not matched above
+	if (strings.Contains(decodedQuery, " or 1=1") || strings.Contains(query, " or 1=1")) ||
+		(strings.Contains(decodedQuery, "' or ") || strings.Contains(query, "' or ")) {
+		return "sql_injection"
+	}
+	ustr := strings.ToLower(r.URL.String())
+	if strings.Contains(ustr, "%27%20or%201%3d1") || strings.Contains(ustr, "' or ") || strings.Contains(ustr, " or 1=1") {
+		return "sql_injection"
 	}
 
 	// XSS
@@ -334,10 +393,17 @@ func (sm *SecurityMonitor) detectAttackType(r *http.Request) string {
 		if strings.Contains(path, pattern) || strings.Contains(query, pattern) || strings.Contains(decodedQuery, pattern) {
 			return "xss_attempt"
 		}
+		for _, vs := range parsed {
+			for _, v := range vs {
+				if strings.Contains(strings.ToLower(v), pattern) {
+					return "xss_attempt"
+				}
+			}
+		}
 	}
 
 	// Path Traversal
-	if strings.Contains(path, "..") || strings.Contains(query, "..") {
+	if strings.Contains(path, "..") || strings.Contains(query, "..") || strings.Contains(decodedQuery, "..") {
 		return "path_traversal"
 	}
 
@@ -431,15 +497,20 @@ func (sm *SecurityMonitor) generateAlert(r *http.Request, attackType, clientIP s
 	sm.statistics.AlertsByLevel[level]++
 	sm.statistics.mutex.Unlock()
 
-	// Send alert (non-blocking)
+	// Send alert to internal processor (non-blocking)
 	select {
 	case sm.alerts <- alert:
-		// Alert sent successfully
 	default:
-		// Alert channel is full, log warning
 		if sm.logger != nil {
 			sm.logger.Warn("Security alert channel is full, dropping alert", "alert_type", attackType)
 		}
+	}
+
+	// Fan-out to public channel (non-blocking) for external consumers/tests
+	select {
+	case sm.alertsPublic <- alert:
+	default:
+		// drop if full to avoid blocking
 	}
 }
 
@@ -502,7 +573,9 @@ func (sm *SecurityMonitor) cleanupOldDataOnce(cutoff time.Time) {
 		ip := key.(string)
 		info := value.(*AttackInfo)
 
-		if !info.Blocked && info.LastSeen.Before(cutoff) {
+		// Remove any entries whose last activity is before the cutoff,
+		// regardless of current blocked state.
+		if info.LastSeen.Before(cutoff) {
 			sm.attackMap.Delete(ip)
 		}
 		return true
