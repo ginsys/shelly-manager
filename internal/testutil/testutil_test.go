@@ -517,6 +517,8 @@ func BenchmarkMockShellyServer(b *testing.B) {
 
 // Test error conditions and edge cases
 func TestTestutilEdgeCases(t *testing.T) {
+	// Skip in environments without socket permissions
+	SkipIfNoSocketPermissions(t)
 	// Test multiple temp directories don't conflict
 	dir1 := TempDir(t)
 	dir2 := TempDir(t)

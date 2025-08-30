@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,7 +81,9 @@ func TestGetDevices(t *testing.T) {
 
 	// Assert
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Expected application/json Content-Type, got %s", ct)
+	}
 
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
@@ -121,7 +124,9 @@ func TestAddDevice(t *testing.T) {
 
 	// Assert
 	testutil.AssertEqual(t, http.StatusCreated, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Expected application/json Content-Type, got %s", ct)
+	}
 
 	var wrap map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &wrap)
@@ -182,7 +187,9 @@ func TestGetDevice(t *testing.T) {
 
 	// Assert
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Expected application/json Content-Type, got %s", ct)
+	}
 
 	var wrap map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &wrap)
@@ -372,13 +379,18 @@ func TestDiscoverHandler(t *testing.T) {
 
 	// Assert
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Expected application/json Content-Type, got %s", ct)
+	}
 
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	testutil.AssertNoError(t, err)
-
-	status, exists := response["status"]
+	data, ok := response["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected data wrapper in response: %s", w.Body.String())
+	}
+	status, exists := data["status"]
 	if !exists || status != "discovery_started" {
 		t.Errorf("Expected status 'discovery_started', got %v", status)
 	}
@@ -403,7 +415,9 @@ func TestGetProvisioningStatus(t *testing.T) {
 
 	// Assert
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Expected application/json Content-Type, got %s", ct)
+	}
 
 	var response map[string]interface{}
 	err := json.Unmarshal(w.Body.Bytes(), &response)
@@ -728,8 +742,11 @@ func TestGetCurrentDeviceConfig(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.GetCurrentDeviceConfig(w, req)
 
-	// Should get JSON response with success wrapper
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
+	// Should get JSON response (allow charset suffix)
+	ct := w.Header().Get("Content-Type")
+	if !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Expected Content-Type to start with application/json, got %s", ct)
+	}
 
 	// Decode the response to check structure
 	var response map[string]interface{}
@@ -756,10 +773,17 @@ func TestGetConfigTemplates(t *testing.T) {
 
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 
-	// Verify response is valid JSON
-	var templates []interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &templates)
+	// Verify standardized response wrapper with data array
+	var resp map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	testutil.AssertNoError(t, err)
+	if _, ok := resp["success"].(bool); !ok {
+		t.Fatalf("Expected success field in response")
+	}
+	// data should be an array (possibly empty)
+	if _, ok := resp["data"].([]interface{}); !ok {
+		t.Fatalf("Expected data to be an array, got %T", resp["data"])
+	}
 }
 
 func TestCreateConfigTemplate(t *testing.T) {
@@ -968,8 +992,9 @@ func TestGetImportStatus(t *testing.T) {
 	var response map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	testutil.AssertNoError(t, err)
-
-	status, exists := response["status"]
+	data, ok := response["data"].(map[string]interface{})
+	testutil.AssertTrue(t, ok)
+	status, exists := data["status"]
 	testutil.AssertTrue(t, exists)
 	testutil.AssertEqual(t, "not_imported", status) // Device has no config yet, so "not_imported" is correct
 }
@@ -1225,7 +1250,9 @@ func TestGetConfigHistory(t *testing.T) {
 
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 
-	var history []interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &history)
+	var wrap map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &wrap)
 	testutil.AssertNoError(t, err)
+	_, ok := wrap["data"].([]interface{})
+	testutil.AssertTrue(t, ok)
 }

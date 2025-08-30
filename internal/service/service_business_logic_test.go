@@ -241,6 +241,11 @@ func TestShellyService_GetDeviceStatus_NonExistentDevice(t *testing.T) {
 }
 
 func TestShellyService_GetDeviceEnergy(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	server := createMockShellyServer()
 	defer server.Close()
 

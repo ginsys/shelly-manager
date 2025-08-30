@@ -141,8 +141,15 @@ func TestAddDeviceWithValidation(t *testing.T) {
 
 			// If creation was successful, verify the device was created with proper settings
 			if tt.expectedStatus == http.StatusCreated {
+				var wrap map[string]interface{}
+				err := json.Unmarshal(rr.Body.Bytes(), &wrap)
+				require.NoError(t, err)
+				dataMap, ok := wrap["data"].(map[string]interface{})
+				require.True(t, ok, "expected data wrapper")
+
+				dataJSON, _ := json.Marshal(dataMap)
 				var responseDevice database.Device
-				err := json.Unmarshal(rr.Body.Bytes(), &responseDevice)
+				err = json.Unmarshal(dataJSON, &responseDevice)
 				require.NoError(t, err)
 
 				// Verify settings are valid JSON

@@ -327,6 +327,8 @@ func TestScanNetwork_SmallRange(t *testing.T) {
 }
 
 func TestGetDeviceStatus_Gen1(t *testing.T) {
+	// Skip in environments without socket permissions
+	testutil.SkipIfNoSocketPermissions(t)
 	server := testutil.MockShellyServer()
 	defer server.Close()
 

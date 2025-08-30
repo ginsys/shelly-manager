@@ -373,6 +373,11 @@ func TestGen1Client_GetEnergyData(t *testing.T) {
 }
 
 func TestGen1Client_AuthRequired(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check for basic auth
 		user, pass, ok := r.BasicAuth()
@@ -416,6 +421,11 @@ func TestGen1Client_AuthRequired(t *testing.T) {
 }
 
 func TestGen1Client_Retry(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++

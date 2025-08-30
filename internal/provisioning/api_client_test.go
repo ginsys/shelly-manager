@@ -142,6 +142,7 @@ func TestAPIClient(t *testing.T) {
 	})
 
 	t.Run("PollTasks_EmptyResponse", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			if err := json.NewEncoder(w).Encode(map[string]interface{}{

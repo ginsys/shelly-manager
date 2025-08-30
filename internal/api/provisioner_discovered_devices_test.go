@@ -82,9 +82,11 @@ func TestReportDiscoveredDevicesDatabase(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
-		assert.Equal(t, float64(2), response["devices_received"].(float64))
-		assert.Equal(t, float64(2), response["devices_processed"].(float64))
-		assert.Equal(t, float64(2), response["devices_persisted"].(float64))
+		data, ok := response["data"].(map[string]interface{})
+		require.True(t, ok, "expected data wrapper")
+		assert.Equal(t, float64(2), data["devices_received"].(float64))
+		assert.Equal(t, float64(2), data["devices_processed"].(float64))
+		assert.Equal(t, float64(2), data["devices_persisted"].(float64))
 
 		// Verify devices were persisted in database
 		devices, err := dbManager.GetDiscoveredDevices("test-agent-1")
@@ -243,10 +245,12 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
-		assert.Equal(t, float64(3), response["device_count"].(float64))
-		assert.Equal(t, "", response["filtered_by"].(string))
+		data, ok := response["data"].(map[string]interface{})
+		require.True(t, ok, "expected data wrapper")
+		assert.Equal(t, float64(3), data["device_count"].(float64))
+		assert.Equal(t, "", data["filtered_by"].(string))
 
-		devices := response["devices"].([]interface{})
+		devices := data["devices"].([]interface{})
 		assert.Len(t, devices, 3)
 	})
 
@@ -279,10 +283,12 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
-		assert.Equal(t, float64(2), response["device_count"].(float64))
-		assert.Equal(t, "agent-1", response["filtered_by"].(string))
+		data, ok := response["data"].(map[string]interface{})
+		require.True(t, ok, "expected data wrapper")
+		assert.Equal(t, float64(2), data["device_count"].(float64))
+		assert.Equal(t, "agent-1", data["filtered_by"].(string))
 
-		devices := response["devices"].([]interface{})
+		devices := data["devices"].([]interface{})
 		assert.Len(t, devices, 2)
 
 		// Verify all devices belong to agent-1
@@ -321,10 +327,12 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
-		assert.Equal(t, float64(0), response["device_count"].(float64))
-		assert.Equal(t, "non-existent-agent", response["filtered_by"].(string))
+		data, ok := response["data"].(map[string]interface{})
+		require.True(t, ok, "expected data wrapper")
+		assert.Equal(t, float64(0), data["device_count"].(float64))
+		assert.Equal(t, "non-existent-agent", data["filtered_by"].(string))
 
-		devices := response["devices"].([]interface{})
+		devices := data["devices"].([]interface{})
 		assert.Len(t, devices, 0)
 	})
 }
@@ -396,9 +404,11 @@ func TestDiscoveredDevicesDatabaseIntegration(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, response["success"].(bool))
-		assert.Equal(t, float64(1), response["device_count"].(float64))
+		data, ok := response["data"].(map[string]interface{})
+		require.True(t, ok, "expected data wrapper")
+		assert.Equal(t, float64(1), data["device_count"].(float64))
 
-		devices := response["devices"].([]interface{})
+		devices := data["devices"].([]interface{})
 		assert.Len(t, devices, 1)
 
 		device := devices[0].(map[string]interface{})

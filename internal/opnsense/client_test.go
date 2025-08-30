@@ -198,6 +198,7 @@ func TestClientTestConnection(t *testing.T) {
 	})
 
 	t.Run("Connection Failure - Wrong Credentials", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"message": "Unauthorized"}`))

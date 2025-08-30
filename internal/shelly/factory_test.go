@@ -136,6 +136,11 @@ func TestFactory_DetectGeneration_Gen1Device(t *testing.T) {
 }
 
 func TestFactory_DetectGeneration_InvalidResponse(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	// Mock server that returns invalid JSON
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -159,6 +164,11 @@ func TestFactory_DetectGeneration_InvalidResponse(t *testing.T) {
 }
 
 func TestFactory_DetectGeneration_NoResponse(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	// Mock server that returns 404 for all endpoints
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
@@ -175,6 +185,11 @@ func TestFactory_DetectGeneration_NoResponse(t *testing.T) {
 }
 
 func TestFactory_DetectGeneration_EmptyResponse(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
 	// Mock server that returns empty JSON objects
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
