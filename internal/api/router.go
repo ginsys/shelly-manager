@@ -39,6 +39,12 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 
 	// WebSocket endpoint FIRST, without any middleware to preserve Hijacker interface
 	if handler.MetricsHandler != nil {
+		// Optionally restrict WebSocket origins using security config
+		if securityConfig != nil {
+			if hub := handler.MetricsHandler.GetWebSocketHub(); hub != nil {
+				hub.SetAllowedOrigins(securityConfig.CORSAllowedOrigins)
+			}
+		}
 		r.HandleFunc("/metrics/ws", handler.MetricsHandler.HandleWebSocket).Methods("GET")
 	}
 

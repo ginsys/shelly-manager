@@ -14,13 +14,14 @@ import (
 
 // WebSocketHub manages WebSocket connections for real-time metrics
 type WebSocketHub struct {
-	clients    map[*WebSocketClient]bool
-	register   chan *WebSocketClient
-	unregister chan *WebSocketClient
-	broadcast  chan *MetricsUpdate
-	service    *Service
-	logger     *logging.Logger
-	mu         sync.RWMutex
+	clients        map[*WebSocketClient]bool
+	register       chan *WebSocketClient
+	unregister     chan *WebSocketClient
+	broadcast      chan *MetricsUpdate
+	service        *Service
+	logger         *logging.Logger
+	mu             sync.RWMutex
+	allowedOrigins []string
 }
 
 // WebSocketClient represents a connected WebSocket client
@@ -99,12 +100,7 @@ type ResolutionMetrics struct {
 	AverageReviewTime     float64            `json:"average_review_time_seconds"`
 }
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins for now - in production, restrict this
-		return true
-	},
-}
+// historical global upgrader removed; each handler builds its own with proper CheckOrigin.
 
 // NewWebSocketHub creates a new WebSocket hub
 func NewWebSocketHub(service *Service, logger *logging.Logger) *WebSocketHub {
@@ -280,7 +276,27 @@ func (h *WebSocketHub) sendInitialMetrics(client *WebSocketClient) {
 
 // HandleWebSocket handles WebSocket upgrade requests
 func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	// Build an upgrader that enforces allowed origins if configured
+	localUpgrader := websocket.Upgrader{
+		ReadBufferSize:  0,
+		WriteBufferSize: 0,
+		CheckOrigin: func(r *http.Request) bool {
+			if len(h.allowedOrigins) == 0 {
+				return true
+			}
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return false
+			}
+			for _, ao := range h.allowedOrigins {
+				if ao == "*" || ao == origin {
+					return true
+				}
+			}
+			return false
+		},
+	}
+	conn, err := localUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"error":     err.Error(),
@@ -300,6 +316,13 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Start goroutines for handling the connection
 	go client.writePump()
 	go client.readPump()
+}
+
+// SetAllowedOrigins configures the allowed origins for WebSocket connections
+func (h *WebSocketHub) SetAllowedOrigins(origins []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.allowedOrigins = origins
 }
 
 // readPump pumps messages from the WebSocket connection
