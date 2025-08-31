@@ -8,6 +8,9 @@ services:
       - SHELLY_LOGGING_LEVEL=info
       - SHELLY_LOGGING_FORMAT=json
       - GIN_MODE=release
+      # Security & Export (configure via secrets/ENV in production)
+      - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR:-}
     deploy:
       resources:
         limits:

@@ -172,6 +172,9 @@ Admin Authorization (Export/Import):
 - Send `Authorization: Bearer <ADMIN_KEY>` or `X-API-Key: <ADMIN_KEY>` with requests.
 - Optional safe downloads: set `export.output_directory` to restrict served files to that directory.
 
+Secrets & Secure Config:
+- See `docs/SECURITY_SECRETS.md` for Kubernetes Secrets and Docker Compose `.env` examples (`ADMIN_API_KEY`, `EXPORT_OUTPUT_DIR`).
+
 ### Device Management
 - `GET    /api/v1/devices` - List all devices with standardized response format
 - `POST   /api/v1/devices` - Add new device

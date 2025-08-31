@@ -8,6 +8,9 @@ services:
       - SHELLY_LOGGING_LEVEL=debug
       - SHELLY_LOGGING_FORMAT=text
       - GIN_MODE=debug
+      # Security & Export (optional for local development)
+      - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR:-}
     ports:
       - "8080:8080"
       - "9090:9090"  # Prometheus metrics

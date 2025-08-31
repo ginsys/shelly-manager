@@ -84,8 +84,8 @@ Focus on functionality and platform consistency prior to enabling authentication
   - [x] Document event types, payloads, and sample patterns
 
 - [ ] 7.3.a: Secrets Management Integration (HIGH PRIORITY)
-  - [ ] Move sensitive config (SMTP, OPNSense) to K8s Secrets; wire Deployment
-  - [ ] Provide Compose `.env` and secret mount guidance
+  - [x] Move sensitive config (SMTP, OPNSense) to K8s Secrets; wire Deployment (documentation/examples)
+  - [x] Provide Compose `.env` and secret mount guidance; pass ADMIN_API_KEY/EXPORT_OUTPUT_DIR through
 
 - [ ] 7.3.b: TLS/Proxy Hardening Guides (MEDIUM PRIORITY)
   - [ ] TLS termination, HSTS enablement, header enforcement at ingress/proxy
