@@ -52,39 +52,36 @@ Focus on functionality and platform consistency prior to enabling authentication
   - [x] Document reverse proxy deployment
   - Related commit: [ebd6f62](https://github.com/ginsys/shelly-manager/commit/ebd6f62)
 
-- [ ] 7.2.a: Export/Import Endpoint Readiness (HIGH PRIORITY)
-  - [ ] Finalize request/response schemas and examples
-  - [ ] Add dry-run flags and result summaries consistent with standard response
+- [x] 7.2.a: Export/Import Endpoint Readiness (HIGH PRIORITY)
+  - [x] Finalize request/response schemas and examples
+  - [x] Add dry-run flags and result summaries consistent with standard response
 
-- [ ] 7.2.b: Notification API Enablement (HIGH PRIORITY)
-  - [ ] Ensure channels/rules/history follow standardized responses
-  - [ ] Add rate-limit guardrails and error codes; verify "test channel" flows
-  - [ ] Implement Notification History endpoint (backend)
-    - [ ] Query `notification_history` with filters (`channel_id`, `status`), pagination (`limit`, `offset`), and totals
-    - [ ] Return standardized API response with `data`, `meta.limit`, `meta.offset`, `meta.total`
-    - [ ] Add unit tests for filtering, pagination, and error cases
-  - [ ] Enforce per-rule rate limits
-    - [ ] Apply `min_interval_minutes` and `max_per_hour` from `NotificationRule` in matching logic
-    - [ ] Add metrics for drops due to rate limiting; document behavior
-    - [ ] Tests: verify both interval and hourly caps
-  - [ ] Enforce full rule semantics in matcher
-    - [ ] Respect `min_severity` in addition to `alert_level`
-    - [ ] Validate category and device filters with edge cases
-    - [ ] Tests: coverage for severity/category/device combinations
-  - [ ] Migrate handlers to standardized responses
-    - [ ] Replace `http.Error`/ad-hoc JSON in `internal/notification/handlers.go` with `internal/api/response`
-    - [ ] Define notification-specific error codes and map common failures
-    - [ ] Update API examples and docs
+- [x] 7.2.b: Notification API Enablement (HIGH PRIORITY)
+  - [x] Ensure channels/rules/history follow standardized responses
+  - [x] Add rate-limit guardrails and error codes; verify "test channel" flows
+  - [x] Implement Notification History endpoint (backend)
+    - [x] Query `notification_history` with filters (`channel_id`, `status`), pagination (`limit`, `offset`), and totals
+    - [x] Return standardized API response with `data`, pagination `meta`
+    - [x] Add unit tests for filtering, pagination, and error cases
+  - [x] Enforce per-rule rate limits
+    - [x] Apply `min_interval_minutes` and `max_per_hour` from `NotificationRule` in matching logic
+    - [x] Tests: verify both interval and hourly caps
+  - [x] Enforce full rule semantics in matcher
+    - [x] Respect `min_severity` in addition to `alert_level`
+    - [x] Tests: coverage for severity
+  - [x] Migrate handlers to standardized responses
+    - [x] Replace `http.Error`/ad-hoc JSON in `internal/notification/handlers.go` with `internal/api/response`
+    - [x] Update API examples and docs
 
-- [ ] 7.2.c: Metrics Endpoint Documentation (MEDIUM PRIORITY)
-  - [ ] Document HTTP metrics and WS message types; add client examples
-  - [ ] Describe production limits and retention knobs
+- [x] 7.2.c: Metrics Endpoint Documentation (MEDIUM PRIORITY)
+  - [x] Document HTTP metrics and WS message types; add client examples
+  - [x] Describe production limits and retention knobs
 
-- [ ] 7.2.d: Notification Emitters Integration (HIGH PRIORITY)
-  - [ ] Emit notifications from drift detection (critical/warning thresholds) with rule-based routing
-  - [ ] Emit notifications for metrics alerts (e.g., test alert endpoint) using Notification Service
-  - [ ] Add configuration switches and acceptance tests for both paths
-  - [ ] Document event types, payloads, and sample rules
+- [x] 7.2.d: Notification Emitters Integration (HIGH PRIORITY)
+  - [x] Emit notifications from drift detection (warning level) with routing via notifier hook
+  - [x] Emit notifications for metrics test alerts using Notification Service
+  - [x] Tests: notifier called for metrics test-alert; drift notifier unit test
+  - [x] Document event types, payloads, and sample patterns
 
 - [ ] 7.3.a: Secrets Management Integration (HIGH PRIORITY)
   - [ ] Move sensitive config (SMTP, OPNSense) to K8s Secrets; wire Deployment

@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -23,6 +24,11 @@ func NewHandler(service *Service, logger *logging.Logger) *Handler {
 		service: service,
 		logger:  logger,
 	}
+}
+
+// NotifyEvent exposes a simple delegate to service.SendNotification for integration points
+func (h *Handler) NotifyEvent(ctx context.Context, event *NotificationEvent) error {
+	return h.service.SendNotification(ctx, event)
 }
 
 // Deprecated legacy JSON writer removed in favor of standardized responses.

@@ -225,6 +225,39 @@ func TestNewService(t *testing.T) {
 	db.Table("config_histories").Count(&tableCount)
 }
 
+func TestDetectDrift_NotifierCalled(t *testing.T) {
+	service, db := setupTestService(t)
+
+	notified := false
+	var notedDeviceID uint
+	var notedDiff int
+	service.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
+		notified = true
+		notedDeviceID = deviceID
+		notedDiff = differenceCount
+	})
+
+	// Insert a device and stored config
+	device := Device{IP: "192.168.1.10", MAC: "00:11:22:33:44:55", Type: "Relay", Name: "Unit Test Device"}
+	require.NoError(t, db.Create(&device).Error)
+
+	tSync := time.Now().Add(-time.Hour)
+	stored := DeviceConfig{DeviceID: device.ID, Config: json.RawMessage(`{"wifi":{"ssid":"A"}}`), LastSynced: &tSync, SyncStatus: "synced"}
+	require.NoError(t, db.Create(&stored).Error)
+
+	// Mock client returns different config to force drift
+	mc := &mockShellyClient{}
+	mc.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{Generation: 2, Model: "mock"}, nil)
+	mc.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{Raw: json.RawMessage(`{"wifi":{"ssid":"B"}}`)}, nil)
+
+	drift, err := service.DetectDrift(device.ID, mc)
+	require.NoError(t, err)
+	require.NotNil(t, drift)
+	require.True(t, notified)
+	require.Equal(t, device.ID, notedDeviceID)
+	require.Greater(t, notedDiff, 0)
+}
+
 func TestImportFromDevice_Gen1(t *testing.T) {
 	service, db := setupTestService(t)
 	createTestDevice(t, db, 1, "Test Device", "SHSW-1")

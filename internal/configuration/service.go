@@ -22,6 +22,7 @@ type Service struct {
 	logger         *logging.Logger
 	reporter       *Reporter
 	templateEngine *TemplateEngine
+	driftNotifier  func(ctx context.Context, deviceID uint, deviceName string, differenceCount int)
 }
 
 // NewService creates a new configuration service
@@ -51,6 +52,11 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 		reporter:       reporter,
 		templateEngine: templateEngine,
 	}
+}
+
+// SetDriftNotifier sets an optional notifier called when drift is detected
+func (s *Service) SetDriftNotifier(fn func(ctx context.Context, deviceID uint, deviceName string, differenceCount int)) {
+	s.driftNotifier = fn
 }
 
 // ImportFromDevice imports configuration from a physical device
@@ -451,6 +457,12 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 		"differences": len(differences),
 		"component":   "configuration",
 	}).Warn("Configuration drift detected")
+
+	// Emit notification if configured
+	if s.driftNotifier != nil {
+		ctx := context.Background()
+		s.driftNotifier(ctx, deviceID, device.Name, len(differences))
+	}
 
 	return drift, nil
 }

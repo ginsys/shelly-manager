@@ -321,6 +321,24 @@ func startServer() {
 	// Create API handler with service and logger
 	apiHandler := api.NewHandlerWithLogger(dbManager, shellyService, notificationHandler, metricsHandler, logger)
 
+	// Wire integration (7.2.d): emit notifications from configuration drift detection
+	if notificationHandler != nil && apiHandler.ConfigService != nil {
+		apiHandler.ConfigService.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
+			msg := fmt.Sprintf("%d configuration differences detected", differenceCount)
+			_ = notificationHandler.NotifyEvent(ctx, &notification.NotificationEvent{
+				Type:       "drift_detected",
+				AlertLevel: notification.AlertLevelWarning,
+				DeviceID:   &deviceID,
+				DeviceName: deviceName,
+				Title:      "Configuration drift detected",
+				Message:    msg,
+				Timestamp:  time.Now(),
+				Categories: []string{"configuration", "drift"},
+				Metadata:   map[string]interface{}{"difference_count": differenceCount},
+			})
+		})
+	}
+
 	// Wire sync handlers for export/import functionality
 	syncHandlers := api.NewSyncHandlers(syncEngine, logger)
 	apiHandler.ExportHandlers = syncHandlers
@@ -488,6 +506,30 @@ func initApp() {
 				}
 			}()
 		}
+
+		// Wire integration (7.2.d): emit notifications from metrics test alerts
+		if metricsHandler != nil && notificationHandler != nil {
+			metricsHandler.SetNotifier(func(ctx context.Context, alertType, severity, message string) {
+				// Map severity to notification.AlertLevel
+				level := notification.AlertLevelInfo
+				switch severity {
+				case "critical":
+					level = notification.AlertLevelCritical
+				case "warning", "high", "medium":
+					level = notification.AlertLevelWarning
+				}
+				_ = notificationHandler.NotifyEvent(ctx, &notification.NotificationEvent{
+					Type:       alertType,
+					AlertLevel: level,
+					Title:      fmt.Sprintf("Metrics alert: %s", alertType),
+					Message:    message,
+					Timestamp:  time.Now(),
+					Categories: []string{"metrics", "alert"},
+				})
+			})
+		}
+
+		// (moved to startServer where apiHandler is available)
 
 		logger.WithFields(map[string]any{
 			"prometheus_enabled":  cfg.Metrics.PrometheusEnabled,

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,9 +16,10 @@ import (
 
 // Handler handles HTTP requests for metrics operations
 type Handler struct {
-	service *Service
-	logger  *logging.Logger
-	wsHub   *WebSocketHub
+	service  *Service
+	logger   *logging.Logger
+	wsHub    *WebSocketHub
+	notifier func(ctx context.Context, alertType, severity, message string)
 }
 
 // NewHandler creates a new metrics handler
@@ -28,6 +30,11 @@ func NewHandler(service *Service, logger *logging.Logger) *Handler {
 		logger:  logger,
 		wsHub:   hub,
 	}
+}
+
+// SetNotifier sets an optional notifier to emit alerts via external systems
+func (h *Handler) SetNotifier(fn func(ctx context.Context, alertType, severity, message string)) {
+	h.notifier = fn
 }
 
 // GetWebSocketHub returns the WebSocket hub for external use
@@ -201,6 +208,11 @@ func (h *Handler) SendTestAlert(w http.ResponseWriter, r *http.Request) {
 
 	// Broadcast the test alert
 	h.wsHub.BroadcastAlert(alertType, message, severity)
+
+	// Optionally emit notification via notifier
+	if h.notifier != nil {
+		h.notifier(r.Context(), alertType, severity, message)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]string{
