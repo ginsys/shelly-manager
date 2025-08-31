@@ -25,6 +25,14 @@ All notable changes to this project are documented here. The project follows Con
   - `docs/API_NOTIFICATION.md`
   - `docs/METRICS_API.md`
 
+### Metrics (Phase 7.5 backend)
+- WebSocket security for `/metrics/ws` (admin‑key auth via Bearer token or `?token=`) with per‑IP connection limits and origin checks.
+- New admin‑protected summary endpoints:
+  - `GET /metrics/health`, `/metrics/system`, `/metrics/devices`, `/metrics/drift`, `/metrics/notifications`, `/metrics/resolution`.
+- Service uptime seconds added to status/health.
+- Docs: updated `docs/METRICS_API.md` with WS security notes and token client example.
+- Tests: WS auth negative/positive paths; health endpoint auth.
+
 ### Security (Phase 7.3)
 - Admin RBAC guard on export/import/schedules/history/statistics (config: `security.admin_api_key`).
 - Safe download restriction to `export.output_directory` (403 when outside).
