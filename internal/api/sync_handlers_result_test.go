@@ -151,5 +151,69 @@ func TestImportResultRetrieval(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr2.Code, rr2.Body.String())
 }
 
+func TestExportPreviewSummary(t *testing.T) {
+	router, _, _, cleanup := setupSyncTestRouter(t)
+	defer cleanup()
+
+	body := map[string]interface{}{
+		"plugin_name": "mockfile",
+		"format":      "txt",
+		"config":      map[string]interface{}{},
+		"filters":     map[string]interface{}{},
+		"output": map[string]interface{}{
+			"type":        "file",
+			"destination": "",
+		},
+		"options": map[string]interface{}{},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/api/v1/export/preview", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Test)")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	var wrap map[string]interface{}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &wrap))
+	data := wrap["data"].(map[string]interface{})
+	if _, ok := data["preview"].(map[string]interface{}); !ok {
+		t.Fatalf("expected preview in response: %v", data)
+	}
+	if _, ok := data["summary"].(map[string]interface{}); !ok {
+		t.Fatalf("expected summary in response: %v", data)
+	}
+}
+
+func TestImportPreviewSummary(t *testing.T) {
+	router, _, _, cleanup := setupSyncTestRouter(t)
+	defer cleanup()
+
+	body := map[string]interface{}{
+		"plugin_name": "mockfile",
+		"format":      "txt",
+		"source":      map[string]interface{}{"type": "data"},
+		"config":      map[string]interface{}{},
+		"options":     map[string]interface{}{},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/api/v1/import/preview", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Test)")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	var wrap map[string]interface{}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &wrap))
+	data := wrap["data"].(map[string]interface{})
+	if _, ok := data["preview"].(map[string]interface{}); !ok {
+		t.Fatalf("expected preview in response: %v", data)
+	}
+	if _, ok := data["summary"].(map[string]interface{}); !ok {
+		t.Fatalf("expected summary in response: %v", data)
+	}
+}
+
 // retain io import usage to avoid unused import in other build tags
 var _ io.Reader
