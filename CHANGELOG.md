@@ -30,6 +30,7 @@ All notable changes to this project are documented here. The project follows Con
 - Safe download restriction to `export.output_directory` (403 when outside).
 - Persisted export/import history; added history list/detail and statistics endpoints.
 - Tests for RBAC, path restriction, and history endpoints.
+- TLS/Proxy hardening docs: Added `docs/SECURITY_TLS_PROXY.md` with NGINX/Traefik examples (HTTPS redirect, HSTS, headers).
 
 ### Changed
 - README: linked to detailed API docs and changelog.

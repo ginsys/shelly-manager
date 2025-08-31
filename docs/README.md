@@ -20,3 +20,6 @@ This index bundles the primary API docs for Phase 7.2 work. Each page includes e
   
 - Secrets & Secure Config: SECURITY_SECRETS.md
   - Using env vars and Kubernetes Secrets for `ADMIN_API_KEY` and safe export downloads.
+
+- TLS/Proxy Hardening: SECURITY_TLS_PROXY.md
+  - NGINX/Traefik examples for HTTPS enforcement, HSTS, and secure headers.

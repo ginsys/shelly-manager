@@ -88,8 +88,8 @@ Focus on functionality and platform consistency prior to enabling authentication
   - [x] Provide Compose `.env` and secret mount guidance; pass ADMIN_API_KEY/EXPORT_OUTPUT_DIR through
 
 - [ ] 7.3.b: TLS/Proxy Hardening Guides (MEDIUM PRIORITY)
-  - [ ] TLS termination, HSTS enablement, header enforcement at ingress/proxy
-  - [ ] Example manifests (Nginx/Traefik) with strict security headers
+  - [x] TLS termination, HSTS enablement, header enforcement at ingress/proxy
+  - [x] Example manifests (Nginx/Traefik) with strict security headers
 
 - [ ] 7.3.c: Operational Observability (LOW PRIORITY)
   - [ ] Add `meta.version` and pagination metadata in list endpoints

@@ -175,6 +175,9 @@ Admin Authorization (Export/Import):
 Secrets & Secure Config:
 - See `docs/SECURITY_SECRETS.md` for Kubernetes Secrets and Docker Compose `.env` examples (`ADMIN_API_KEY`, `EXPORT_OUTPUT_DIR`).
 
+TLS/Proxy Hardening:
+- See `docs/SECURITY_TLS_PROXY.md` for NGINX/Traefik examples enforcing HTTPS, HSTS, and secure headers.
+
 ### Device Management
 - `GET    /api/v1/devices` - List all devices with standardized response format
 - `POST   /api/v1/devices` - Add new device
