@@ -244,7 +244,13 @@ func (eh *SyncHandlers) PreviewExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, preview)
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, map[string]interface{}{
+		"preview": preview,
+		"summary": map[string]interface{}{
+			"record_count":   preview.RecordCount,
+			"estimated_size": preview.EstimatedSize,
+		},
+	})
 }
 
 // GetExportResult returns the result of an export operation

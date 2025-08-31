@@ -268,6 +268,10 @@ func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Force dry-run + validate-only to avoid side effects
+	importRequest.Options.DryRun = true
+	importRequest.Options.ValidateOnly = true
+
 	// Generate preview by running in dry run mode
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
