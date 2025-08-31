@@ -162,6 +162,11 @@ sudo systemctl start shelly-manager
 
 All API endpoints return standardized responses in the format: `{success: true/false, data/error: ...}`
 
+Detailed API references:
+- Export/Import API: docs/API_EXPORT_IMPORT.md
+- Notification API: docs/API_NOTIFICATION.md
+- Metrics API: docs/METRICS_API.md
+
 ### Device Management
 - `GET    /api/v1/devices` - List all devices with standardized response format
 - `POST   /api/v1/devices` - Add new device
@@ -457,6 +462,7 @@ make test-integration
 - [Development Guide](docs/development.md) (planned)
 - [Repository Guidelines](AGENTS.md)
  - [Tasks & Roadmap](TASKS.md) — single source of truth for ongoing work
+ - [Changelog](CHANGELOG.md)
 
 ## 🤝 Contributing
 
