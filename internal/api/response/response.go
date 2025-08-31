@@ -197,6 +197,13 @@ func (rw *ResponseWriter) WriteSuccess(w http.ResponseWriter, r *http.Request, d
 	}
 
 	response := builder.Success(data)
+	// Ensure version metadata is present for observability
+	if response.Meta == nil {
+		response.Meta = &Metadata{}
+	}
+	if response.Meta.Version == "" {
+		response.Meta.Version = "v1"
+	}
 	rw.writeJSONResponse(w, http.StatusOK, response)
 }
 
@@ -208,6 +215,12 @@ func (rw *ResponseWriter) WriteSuccessWithMeta(w http.ResponseWriter, r *http.Re
 	}
 
 	response := builder.WithMeta(meta).Success(data)
+	if response.Meta == nil {
+		response.Meta = &Metadata{}
+	}
+	if response.Meta.Version == "" {
+		response.Meta.Version = "v1"
+	}
 	rw.writeJSONResponse(w, http.StatusOK, response)
 }
 
@@ -219,6 +232,12 @@ func (rw *ResponseWriter) WriteError(w http.ResponseWriter, r *http.Request, sta
 	}
 
 	response := builder.ErrorWithStatus(code, message, statusCode, details)
+	if response.Meta == nil {
+		response.Meta = &Metadata{}
+	}
+	if response.Meta.Version == "" {
+		response.Meta.Version = "v1"
+	}
 	rw.writeJSONResponse(w, statusCode, response)
 
 	// Log error for monitoring
@@ -344,6 +363,11 @@ func InternalError() *APIResponse {
 // Helper function to extract request ID from context
 func getRequestIDFromContext(r *http.Request) string {
 	if ctx := r.Context(); ctx != nil {
+		// Prefer the request ID set by the logging middleware
+		if rid := logging.GetRequestID(ctx); rid != "" {
+			return rid
+		}
+		// Fallback to local context key if present
 		if requestID, ok := ctx.Value(RequestIDKey).(string); ok {
 			return requestID
 		}

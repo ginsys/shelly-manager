@@ -72,7 +72,59 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"devices": devices})
+	// Pagination params (optional). If page_size not provided, return all items as single page.
+	total := len(devices)
+	pageSize := apiresp.GetQueryParamInt(r, "page_size", 0)
+	page := apiresp.GetQueryParamInt(r, "page", 1)
+	start, end := 0, total
+	if pageSize > 0 {
+		if page < 1 {
+			page = 1
+		}
+		start = (page - 1) * pageSize
+		if start > total {
+			start = total
+		}
+		end = start + pageSize
+		if end > total {
+			end = total
+		}
+	} else {
+		// Single-page default
+		page = 1
+		pageSize = total
+	}
+
+	pageDevices := devices
+	if start != 0 || end != total {
+		pageDevices = devices[start:end]
+	}
+
+	// Build pagination meta
+	totalPages := 1
+	if pageSize > 0 {
+		if total%pageSize == 0 {
+			totalPages = total / pageSize
+		} else {
+			totalPages = (total / pageSize) + 1
+		}
+		if total == 0 {
+			totalPages = 1
+		}
+	}
+	meta := &apiresp.Metadata{
+		Page: &apiresp.PaginationMeta{
+			Page:       page,
+			PageSize:   pageSize,
+			TotalPages: totalPages,
+			HasNext:    page < totalPages,
+			HasPrev:    page > 1,
+		},
+		Count:      intPtr(len(pageDevices)),
+		TotalCount: intPtr(total),
+	}
+
+	h.responseWriter().WriteSuccessWithMeta(w, r, map[string]interface{}{"devices": pageDevices}, meta)
 }
 
 // AddDevice handles POST /api/v1/devices
@@ -181,6 +233,8 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 
 	h.responseWriter().WriteNoContent(w, r)
 }
+
+func intPtr(i int) *int { return &i }
 
 // DiscoverHandler handles POST /api/v1/discover
 func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {

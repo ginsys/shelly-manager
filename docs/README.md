@@ -23,3 +23,6 @@ This index bundles the primary API docs for Phase 7.2 work. Each page includes e
 
 - TLS/Proxy Hardening: SECURITY_TLS_PROXY.md
   - NGINX/Traefik examples for HTTPS enforcement, HSTS, and secure headers.
+
+- Observability: OBSERVABILITY.md
+  - Response meta.version, pagination metadata, request_id propagation, and log fields.

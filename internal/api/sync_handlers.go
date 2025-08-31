@@ -122,11 +122,55 @@ func (eh *SyncHandlers) ListPlugins(w http.ResponseWriter, r *http.Request) {
 	eh.logger.Info("Listing export plugins")
 
 	plugins := eh.syncEngine.ListPlugins()
-	rw := apiresp.NewResponseWriter(eh.logger)
-	rw.WriteSuccess(w, r, map[string]interface{}{
-		"plugins": plugins,
-		"count":   len(plugins),
-	})
+	total := len(plugins)
+	pageSize := apiresp.GetQueryParamInt(r, "page_size", 0)
+	page := apiresp.GetQueryParamInt(r, "page", 1)
+	start, end := 0, total
+	if pageSize > 0 {
+		if page < 1 {
+			page = 1
+		}
+		start = (page - 1) * pageSize
+		if start > total {
+			start = total
+		}
+		end = start + pageSize
+		if end > total {
+			end = total
+		}
+	} else {
+		page = 1
+		pageSize = total
+	}
+	pagePlugins := plugins
+	if start != 0 || end != total {
+		pagePlugins = plugins[start:end]
+	}
+	totalPages := 1
+	if pageSize > 0 {
+		if total%pageSize == 0 {
+			totalPages = total / pageSize
+		} else {
+			totalPages = (total / pageSize) + 1
+		}
+		if total == 0 {
+			totalPages = 1
+		}
+	}
+	meta := &apiresp.Metadata{
+		Page: &apiresp.PaginationMeta{
+			Page:       page,
+			PageSize:   pageSize,
+			TotalPages: totalPages,
+			HasNext:    page < totalPages,
+			HasPrev:    page > 1,
+		},
+		Count:      intPtr(len(pagePlugins)),
+		TotalCount: intPtr(total),
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteSuccessWithMeta(w, r, map[string]interface{}{
+		"plugins": pagePlugins,
+	}, meta)
 }
 
 // GetPlugin returns information about a specific plugin
@@ -392,11 +436,59 @@ func (eh *SyncHandlers) ListSchedules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	schedules := eh.syncEngine.ListSchedules()
-	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, map[string]interface{}{
-		"schedules": schedules,
-		"count":     len(schedules),
-	})
+	total := len(schedules)
+	pageSize := apiresp.GetQueryParamInt(r, "page_size", 0)
+	page := apiresp.GetQueryParamInt(r, "page", 1)
+	start, end := 0, total
+	if pageSize > 0 {
+		if page < 1 {
+			page = 1
+		}
+		start = (page - 1) * pageSize
+		if start > total {
+			start = total
+		}
+		end = start + pageSize
+		if end > total {
+			end = total
+		}
+	} else {
+		page = 1
+		pageSize = total
+	}
+	pageSchedules := schedules
+	if start != 0 || end != total {
+		pageSchedules = schedules[start:end]
+	}
+	totalPages := 1
+	if pageSize > 0 {
+		if total%pageSize == 0 {
+			totalPages = total / pageSize
+		} else {
+			totalPages = (total / pageSize) + 1
+		}
+		if total == 0 {
+			totalPages = 1
+		}
+	}
+	meta := &apiresp.Metadata{
+		Page: &apiresp.PaginationMeta{
+			Page:       page,
+			PageSize:   pageSize,
+			TotalPages: totalPages,
+			HasNext:    page < totalPages,
+			HasPrev:    page > 1,
+		},
+		Count:      intPtr(len(pageSchedules)),
+		TotalCount: intPtr(total),
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteSuccessWithMeta(w, r, map[string]interface{}{
+		"schedules": pageSchedules,
+	}, meta)
 }
+
+// local helper
+// intPtr is defined in handlers.go; duplicate here avoided.
 
 // CreateSchedule creates a new export schedule
 func (eh *SyncHandlers) CreateSchedule(w http.ResponseWriter, r *http.Request) {
