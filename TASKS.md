@@ -59,10 +59,32 @@ Focus on functionality and platform consistency prior to enabling authentication
 - [ ] 7.2.b: Notification API Enablement (HIGH PRIORITY)
   - [ ] Ensure channels/rules/history follow standardized responses
   - [ ] Add rate-limit guardrails and error codes; verify "test channel" flows
+  - [ ] Implement Notification History endpoint (backend)
+    - [ ] Query `notification_history` with filters (`channel_id`, `status`), pagination (`limit`, `offset`), and totals
+    - [ ] Return standardized API response with `data`, `meta.limit`, `meta.offset`, `meta.total`
+    - [ ] Add unit tests for filtering, pagination, and error cases
+  - [ ] Enforce per-rule rate limits
+    - [ ] Apply `min_interval_minutes` and `max_per_hour` from `NotificationRule` in matching logic
+    - [ ] Add metrics for drops due to rate limiting; document behavior
+    - [ ] Tests: verify both interval and hourly caps
+  - [ ] Enforce full rule semantics in matcher
+    - [ ] Respect `min_severity` in addition to `alert_level`
+    - [ ] Validate category and device filters with edge cases
+    - [ ] Tests: coverage for severity/category/device combinations
+  - [ ] Migrate handlers to standardized responses
+    - [ ] Replace `http.Error`/ad-hoc JSON in `internal/notification/handlers.go` with `internal/api/response`
+    - [ ] Define notification-specific error codes and map common failures
+    - [ ] Update API examples and docs
 
 - [ ] 7.2.c: Metrics Endpoint Documentation (MEDIUM PRIORITY)
   - [ ] Document HTTP metrics and WS message types; add client examples
   - [ ] Describe production limits and retention knobs
+
+- [ ] 7.2.d: Notification Emitters Integration (HIGH PRIORITY)
+  - [ ] Emit notifications from drift detection (critical/warning thresholds) with rule-based routing
+  - [ ] Emit notifications for metrics alerts (e.g., test alert endpoint) using Notification Service
+  - [ ] Add configuration switches and acceptance tests for both paths
+  - [ ] Document event types, payloads, and sample rules
 
 - [ ] 7.3.a: Secrets Management Integration (HIGH PRIORITY)
   - [ ] Move sensitive config (SMTP, OPNSense) to K8s Secrets; wire Deployment
