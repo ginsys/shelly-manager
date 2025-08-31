@@ -47,6 +47,16 @@ ws.onmessage = (event) => {
 - Origins are restricted based on server CORS configuration.
 - The server applies per-IP connection limits; excessive connections receive HTTP 429 before upgrade.
 
+Example (browser) with token query param:
+```
+// Prefer wss:// in production
+const token = "<ADMIN_KEY>";
+const ws = new WebSocket(`wss://manager.example.com/metrics/ws?token=${encodeURIComponent(token)}`);
+ws.onopen = () => console.log("connected");
+ws.onmessage = (e) => console.log(JSON.parse(e.data));
+ws.onclose = () => console.log("closed");
+```
+
 ### Message Types (typical)
 
 - Dashboard update:
