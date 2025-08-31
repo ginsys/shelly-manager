@@ -47,6 +47,7 @@ type Service struct {
 	mu                 sync.RWMutex
 	lastCollectionTime time.Time
 	enabled            bool
+	startTime          time.Time
 }
 
 // NewService creates a new metrics service
@@ -56,10 +57,11 @@ func NewService(db *gorm.DB, logger *logging.Logger, registry prometheus.Registe
 	}
 
 	s := &Service{
-		db:       db,
-		logger:   logger,
-		registry: registry,
-		enabled:  true,
+		db:        db,
+		logger:    logger,
+		registry:  registry,
+		enabled:   true,
+		startTime: time.Now(),
 	}
 
 	s.initializePrometheusMetrics()
@@ -69,6 +71,14 @@ func NewService(db *gorm.DB, logger *logging.Logger, registry prometheus.Registe
 	}).Info("Metrics service initialized")
 
 	return s
+}
+
+// GetUptimeSeconds returns seconds since service initialization
+func (s *Service) GetUptimeSeconds() float64 {
+	if s.startTime.IsZero() {
+		return 0
+	}
+	return time.Since(s.startTime).Seconds()
 }
 
 // initializePrometheusMetrics sets up all Prometheus metrics

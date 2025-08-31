@@ -24,6 +24,24 @@ Note: The WebSocket endpoint may be registered at `/metrics/ws` (top-level) and 
 - `POST /metrics/test-alert?type=<t>&severity=<s>`
   - Sends a synthetic alert over WebSocket broadcast for testing dashboards.
 
+- `GET /metrics/health` (admin)
+  - Overall health (enabled, last_collection_time, uptime_seconds).
+
+- `GET /metrics/system` (admin)
+  - SystemStatus block (uptime, metrics enabled, last collection, device counts).
+
+- `GET /metrics/devices` (admin)
+  - DeviceMetrics array for dashboards.
+
+- `GET /metrics/drift` (admin)
+  - DriftMetrics summary: totals, severity/category breakdowns.
+
+- `GET /metrics/notifications` (admin)
+  - NotificationMetrics summary: sent/failed and latency outline.
+
+- `GET /metrics/resolution` (admin)
+  - ResolutionMetrics summary: totals and success rates.
+
 ## WebSocket: `/metrics/ws`
 
 - Connect with standard WebSocket client.

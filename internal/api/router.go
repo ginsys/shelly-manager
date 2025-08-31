@@ -198,6 +198,14 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 		metricsAPI.HandleFunc("/dashboard", handler.MetricsHandler.GetDashboardMetrics).Methods("GET")
 		metricsAPI.HandleFunc("/test-alert", handler.MetricsHandler.SendTestAlert).Methods("POST")
 
+		// Health and summary endpoints (admin-key protected if configured)
+		metricsAPI.HandleFunc("/health", handler.MetricsHandler.GetHealth).Methods("GET")
+		metricsAPI.HandleFunc("/system", handler.MetricsHandler.GetSystemMetrics).Methods("GET")
+		metricsAPI.HandleFunc("/devices", handler.MetricsHandler.GetDevicesMetrics).Methods("GET")
+		metricsAPI.HandleFunc("/drift", handler.MetricsHandler.GetDriftSummary).Methods("GET")
+		metricsAPI.HandleFunc("/notifications", handler.MetricsHandler.GetNotificationSummary).Methods("GET")
+		metricsAPI.HandleFunc("/resolution", handler.MetricsHandler.GetResolutionSummary).Methods("GET")
+
 		// Security metrics endpoint
 		if securityMonitor != nil {
 			metricsAPI.HandleFunc("/security", createSecurityMetricsHandler(securityMonitor, logger)).Methods("GET")
