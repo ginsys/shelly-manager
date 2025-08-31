@@ -374,6 +374,45 @@ func startServer() {
 	// Setup routes with middleware using configured security
 	router := api.SetupRoutesWithSecurity(apiHandler, logger, secCfg, middleware.DefaultValidationConfig())
 
+	// Dev convenience: expose app-config.js to inject API base and (optionally) admin key.
+	// This is enabled only when SHELLY_DEV_EXPOSE_ADMIN_KEY is set.
+	router.HandleFunc("/app-config.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+
+		// Always set default API base to /api/v1 unless overridden by client
+		fmt.Fprintln(w, "window.__API_BASE__ = window.__API_BASE__ || '/api/v1';")
+
+		if v := os.Getenv("SHELLY_DEV_EXPOSE_ADMIN_KEY"); strings.EqualFold(v, "1") || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") {
+			if cfg != nil && cfg.Security.AdminAPIKey != "" {
+				// Serialize as JSON string to safely escape characters
+				if b, err := json.Marshal(cfg.Security.AdminAPIKey); err == nil {
+					fmt.Fprintf(w, "window.__ADMIN_KEY__ = %s;\n", string(b))
+				}
+			}
+		}
+	}).Methods("GET")
+
+	// Root landing page: provide a simple HTML stub to avoid 404 at "/"
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Shelly Manager</title>
+<style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;color:#0f172a}a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}.note{color:#475569}</style>
+</head><body>
+<h1>Shelly Manager</h1>
+<p>API is running. Explore <a href="/api/v1/devices">/api/v1/devices</a> or see docs under <code>docs/</code> in the repo.</p>
+<p class="note">UI note: The new SPA under <code>ui/</code> requires a Vite dev server for TypeScript. For development, run it separately, or open <code>/ui/index.html</code> (uncompiled) for structure only.</p>
+</body></html>`)
+	}).Methods("GET")
+
+	// Serve raw UI files (uncompiled) under /ui/ for development reference
+	if _, err := os.Stat("./ui"); err == nil {
+		fs := http.FileServer(http.Dir("./ui"))
+		router.PathPrefix("/ui/").Handler(http.StripPrefix("/ui/", fs))
+	}
+
 	// Start WebSocket hub if metrics are enabled
 	if metricsHandler != nil {
 		// Configure WS admin key (optional) using same Admin API key

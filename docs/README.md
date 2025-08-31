@@ -17,6 +17,9 @@ This index bundles the primary API docs for Phase 7.2 work. Each page includes e
 
 - API Security Framework: API_SECURITY_FRAMEWORK.md
   - Authentication, authorization, and response standardization used across APIs.
+ 
+- Phase 8 Plan: development/PHASE_8_WEB_UI_PLAN.md
+  - SPA roadmap, milestones, and current progress for the new UI.
   
 - Secrets & Secure Config: SECURITY_SECRETS.md
   - Using env vars and Kubernetes Secrets for `ADMIN_API_KEY` and safe export downloads.

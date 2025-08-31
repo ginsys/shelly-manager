@@ -3,6 +3,8 @@
 ## Current Status Summary
 **Production-Ready Foundation Complete** - The project has a comprehensive dual-binary architecture with substantial backend functionality (80+ endpoints) that requires strategic frontend modernization to maximize user value.
 
+**Phase 8 Kickoff (In Progress)**: New SPA scaffolded under `ui/`; Devices list and detail views implemented. Dev admin-key injection is automatic with `make run` (server serves `/app-config.js`).
+
 **Critical Finding**: Only ~40% of backend endpoints are currently exposed to users through the frontend, representing significant untapped business value in Export/Import, Notification, and Metrics systems.
 
 ## 🚀 **NEW PRIORITY**: Strategic Modernization Plan (Phases 7-8)
@@ -255,10 +257,10 @@ See docs/development/PHASE_8_WEB_UI_PLAN.md for the up‑to‑date plan and stat
 **Goal**: Establish modern frontend architecture with security-first approach
 
 - [ ] **8.1**: Vue.js Development Environment Setup WITH Security Configuration
-  - [ ] Create Vue 3 + TypeScript project with Vite
-  - [ ] Install and configure Quasar UI framework with security hardening
+  - [x] Create Vue 3 + TypeScript project with Vite (scaffold under `ui/`)
+  - [ ] Install and configure Quasar UI framework with security hardening (dependency added; usage pending)
   - [ ] Set up development environment (runs on :3000 during development)
-  - [ ] Establish component architecture and folder structure
+  - [x] Establish component architecture and folder structure (pages/layouts/api)
   - [ ] **NEW**: Configure Content Security Policy (CSP) headers
   - [ ] **NEW**: Set up security linting rules (ESLint security plugins)
   - [ ] **NEW**: Configure HTTPS for development environment
@@ -266,8 +268,9 @@ See docs/development/PHASE_8_WEB_UI_PLAN.md for the up‑to‑date plan and stat
   - **Success Criteria**: Secure development environment with hardened configuration
 
 - [ ] **8.2**: API Integration Layer WITH Authentication
-  - [ ] Create centralized API client with TypeScript types
-  - [ ] Implement authentication token handling and refresh
+  - [x] Create centralized API client with TypeScript types (Axios + typed responses)
+  - [x] Implement interim admin-key handling (Bearer) with dev auto‑injection via `/app-config.js` when `make run`
+  - [ ] Implement token refresh (deferred for RBAC/JWT)
   - [ ] Add secure WebSocket connection management with authentication
   - [ ] Create Pinia stores for state management with security context
   - [ ] **NEW**: Implement JWT token validation and expiry handling
@@ -281,7 +284,7 @@ See docs/development/PHASE_8_WEB_UI_PLAN.md for the up‑to‑date plan and stat
 
 - [ ] **8.3**: Device Management Components WITH Input Validation
   - [ ] Create DeviceCard.vue component (eliminates duplication across all files)
-  - [ ] Implement DeviceList.vue with real-time updates and security filtering
+  - [x] Implement Devices list + detail routes (pagination/search/sort; initial static table)
   - [ ] Build DeviceConfig.vue modal for configuration with input sanitization
   - [ ] Add StatusIndicator.vue for consistent status display with XSS protection
   - [ ] **NEW**: Implement comprehensive input validation and sanitization
@@ -290,7 +293,7 @@ See docs/development/PHASE_8_WEB_UI_PLAN.md for the up‑to‑date plan and stat
   - **Code Reduction**: ~70% of duplicate code eliminated with security best practices
 
 - [ ] **8.4**: Navigation & Layout System WITH Security Headers
-  - [ ] Create unified navigation component with security controls
+  - [x] Create unified navigation component shell (router-link based; route guards pending)
   - [ ] Implement client-side routing with Vue Router and route guards
   - [ ] Build responsive layout with Quasar components and CSP compliance
   - [ ] Add breadcrumb navigation and context preservation with sanitization

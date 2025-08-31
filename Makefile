@@ -32,7 +32,7 @@ build-provisioner:
 
 # Run the main manager application
 run:
-	go run ./cmd/shelly-manager server
+	SHELLY_DEV_EXPOSE_ADMIN_KEY=1 go run ./cmd/shelly-manager server
 
 # Run the provisioner application
 run-provisioner:

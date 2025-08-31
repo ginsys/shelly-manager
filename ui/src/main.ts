@@ -7,7 +7,8 @@ const pinia = createPinia()
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', component: () => import('./pages/DevicesPage.vue') }
+    { path: '/', component: () => import('./pages/DevicesPage.vue') },
+    { path: '/devices/:id', component: () => import('./pages/DeviceDetailPage.vue') }
   ]
 })
 
@@ -15,4 +16,3 @@ createApp(App)
   .use(pinia)
   .use(router)
   .mount('#app')
-

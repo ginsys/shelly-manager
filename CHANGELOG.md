@@ -25,6 +25,12 @@ All notable changes to this project are documented here. The project follows Con
   - `docs/API_NOTIFICATION.md`
   - `docs/METRICS_API.md`
 
+### UI (Phase 8)
+- New SPA scaffolding under `ui/` (Vue 3 + TS + Vite) with layout, router, and typed API layer.
+- Devices list (pagination/search/sort) and Device detail pages.
+- Dev convenience: server serves `/app-config.js` and `make run` auto-injects admin key (when configured) for development.
+- Tests: Vitest unit tests for API layer (mocked) and a Playwright smoke test for Devices page.
+
 ### Metrics (Phase 7.5 backend)
 - WebSocket security for `/metrics/ws` (admin‑key auth via Bearer token or `?token=`) with per‑IP connection limits and origin checks.
 - New admin‑protected summary endpoints:

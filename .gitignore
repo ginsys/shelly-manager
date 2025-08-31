@@ -52,3 +52,6 @@ configs/shelly-manager.local.yaml
 
 # Temporary artifacts
 .tmp/
+
+# UI dev-only runtime config (holds secrets locally)
+ui/public/app-config.js
