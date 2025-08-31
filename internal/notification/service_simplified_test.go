@@ -3,7 +3,11 @@ package notification
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,6 +53,25 @@ func setupSimpleTestService(t *testing.T) (*Service, *gorm.DB, func()) {
 	}
 
 	return service, db, cleanup
+}
+
+// roundTripperFunc allows customizing http.Client behavior in tests
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// fakeHTTPClient returns an http.Client that always returns the given status code
+func fakeHTTPClient(status int) *http.Client {
+	return &http.Client{
+		Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: status,
+				Body:       io.NopCloser(strings.NewReader("ok")),
+				Header:     make(http.Header),
+				Request:    r,
+			}, nil
+		}),
+	}
 }
 
 func TestNotificationService_CreateChannel(t *testing.T) {
@@ -254,4 +277,112 @@ func TestNotificationService_DeleteChannel(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "notification channel not found")
 	})
+}
+
+func TestNotificationService_RateLimitEnforcement(t *testing.T) {
+	service, db, cleanup := setupSimpleTestService(t)
+	defer cleanup()
+
+	// Use webhook with fake HTTP client to avoid network
+	service.httpClient = fakeHTTPClient(200)
+
+	// Create channel
+	cfg, _ := json.Marshal(WebhookConfig{URL: "https://example.com/webhook"})
+	ch := &NotificationChannel{Name: "Webhook", Type: "webhook", Enabled: true, Config: cfg}
+	require.NoError(t, service.CreateChannel(ch))
+
+	// Create rule with max 1 per hour
+	rule := &NotificationRule{
+		Name:               "RL",
+		Enabled:            true,
+		ChannelID:          ch.ID,
+		AlertLevel:         "all",
+		MinIntervalMinutes: 0,
+		MaxPerHour:         1,
+	}
+	require.NoError(t, service.CreateRule(rule))
+
+	// Send two events back-to-back
+	evt := &NotificationEvent{Type: "test", AlertLevel: AlertLevelInfo, Title: "A", Message: "B", Timestamp: time.Now()}
+	require.NoError(t, service.SendNotification(context.Background(), evt))
+	require.NoError(t, service.SendNotification(context.Background(), evt))
+
+	// Only one should be recorded as sent due to rate limit
+	var count int64
+	err := db.Model(&NotificationHistory{}).Where("rule_id = ? AND status = ?", rule.ID, "sent").Count(&count).Error
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+}
+
+func TestNotificationService_MinSeverityEnforcement(t *testing.T) {
+	service, db, cleanup := setupSimpleTestService(t)
+	defer cleanup()
+
+	// Fake HTTP success
+	service.httpClient = fakeHTTPClient(200)
+
+	// Channel
+	cfg, _ := json.Marshal(WebhookConfig{URL: "https://example.com/webhook"})
+	ch := &NotificationChannel{Name: "Webhook2", Type: "webhook", Enabled: true, Config: cfg}
+	require.NoError(t, service.CreateChannel(ch))
+
+	// Rule requiring at least warning
+	rule := &NotificationRule{
+		Name:        "Severity",
+		Enabled:     true,
+		ChannelID:   ch.ID,
+		AlertLevel:  "all",
+		MinSeverity: "warning",
+		MaxPerHour:  100,
+	}
+	require.NoError(t, service.CreateRule(rule))
+
+	// info event should not send
+	evtInfo := &NotificationEvent{Type: "ev", AlertLevel: AlertLevelInfo, Title: "t", Message: "m", Timestamp: time.Now()}
+	require.NoError(t, service.SendNotification(context.Background(), evtInfo))
+
+	// warning event should send
+	evtWarn := &NotificationEvent{Type: "ev", AlertLevel: AlertLevelWarning, Title: "t", Message: "m", Timestamp: time.Now()}
+	require.NoError(t, service.SendNotification(context.Background(), evtWarn))
+
+	var total int64
+	require.NoError(t, db.Model(&NotificationHistory{}).Where("rule_id = ? AND status = ?", rule.ID, "sent").Count(&total).Error)
+	assert.Equal(t, int64(1), total)
+}
+
+func TestNotificationService_GetHistoryFiltersAndPagination(t *testing.T) {
+	service, _, cleanup := setupSimpleTestService(t)
+	defer cleanup()
+
+	// Fake HTTP success
+	service.httpClient = fakeHTTPClient(200)
+
+	// Channel + rule
+	cfg, _ := json.Marshal(WebhookConfig{URL: "https://example.com/webhook"})
+	ch := &NotificationChannel{Name: "Webhook3", Type: "webhook", Enabled: true, Config: cfg}
+	require.NoError(t, service.CreateChannel(ch))
+	rule := &NotificationRule{Name: "HistoryRule", Enabled: true, ChannelID: ch.ID, AlertLevel: "all", MaxPerHour: 100}
+	require.NoError(t, service.CreateRule(rule))
+
+	// Generate 3 sent + 1 failed entries via SendNotification (to ensure associations)
+	evt := &NotificationEvent{Type: "ev", AlertLevel: AlertLevelInfo, Title: "t", Message: "m", Timestamp: time.Now()}
+	require.NoError(t, service.SendNotification(context.Background(), evt))
+	require.NoError(t, service.SendNotification(context.Background(), evt))
+	require.NoError(t, service.SendNotification(context.Background(), evt))
+
+	// Force a failure by switching client to 500
+	service.httpClient = fakeHTTPClient(500)
+	_ = service.SendNotification(context.Background(), evt)
+
+	// List only sent, limit 2, offset 0
+	recs, total, err := service.GetHistory(&ch.ID, "sent", 2, 0)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), total)
+	assert.Len(t, recs, 2)
+
+	// Next page
+	recs2, total2, err := service.GetHistory(&ch.ID, "sent", 2, 2)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), total2)
+	assert.Len(t, recs2, 1)
 }

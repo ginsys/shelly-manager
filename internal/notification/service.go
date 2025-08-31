@@ -338,8 +338,8 @@ func (s *Service) getMatchingRules(event *NotificationEvent) ([]NotificationRule
 
 // ruleMatches checks if a rule matches the event
 func (s *Service) ruleMatches(rule *NotificationRule, event *NotificationEvent) bool {
-	// Check rate limiting
-	if s.isRateLimited(rule.ID) {
+	// Check rate limiting (enforce per-rule settings)
+	if s.isRateLimitedFor(rule) {
 		return false
 	}
 
@@ -368,33 +368,119 @@ func (s *Service) ruleMatches(rule *NotificationRule, event *NotificationEvent) 
 		}
 	}
 
+	// Check minimum severity if set
+	if rule.MinSeverity != "" && !s.meetsMinSeverity(rule.MinSeverity, string(event.AlertLevel)) {
+		return false
+	}
+
 	return true
 }
 
 // isRateLimited checks if a rule is rate limited
-func (s *Service) isRateLimited(ruleID uint) bool {
-	s.rateLimitMu.RLock()
-	defer s.rateLimitMu.RUnlock()
+// isRateLimited (legacy default) removed; use isRateLimitedFor(rule) which reads rule settings.
 
-	state, exists := s.rateLimits[ruleID]
+// isRateLimitedFor enforces per-rule min interval and max per hour if provided
+func (s *Service) isRateLimitedFor(rule *NotificationRule) bool {
+	s.rateLimitMu.RLock()
+	state, exists := s.rateLimits[rule.ID]
+	s.rateLimitMu.RUnlock()
+
+	// If no state yet, not limited
 	if !exists {
 		return false
 	}
 
 	now := time.Now()
 
-	// Reset hourly count if needed
-	if now.After(state.HourlyResetAt) {
-		s.rateLimitMu.RUnlock()
-		s.rateLimitMu.Lock()
-		state.HourlyCount = 0
-		state.HourlyResetAt = now.Add(time.Hour)
-		s.rateLimitMu.Unlock()
-		s.rateLimitMu.RLock()
+	// Enforce min interval (in minutes) if set
+	if rule.MinIntervalMinutes > 0 && !state.LastSentAt.IsZero() {
+		nextAllowed := state.LastSentAt.Add(time.Duration(rule.MinIntervalMinutes) * time.Minute)
+		if now.Before(nextAllowed) {
+			return true
+		}
 	}
 
-	// Check interval and hourly limits
-	return state.HourlyCount >= 10 // Default max per hour
+	// Enforce max per hour if set; otherwise fall back to default behavior handled elsewhere
+	if rule.MaxPerHour > 0 {
+		// Reset hourly if needed
+		s.rateLimitMu.Lock()
+		if now.After(state.HourlyResetAt) {
+			state.HourlyCount = 0
+			state.HourlyResetAt = now.Add(time.Hour)
+		}
+		overLimit := state.HourlyCount >= rule.MaxPerHour
+		s.rateLimitMu.Unlock()
+		if overLimit {
+			return true
+		}
+	}
+
+	return false
+}
+
+// meetsMinSeverity compares event severity to rule minimum
+func (s *Service) meetsMinSeverity(minSeverity, eventSeverity string) bool {
+	rank := func(level string) int {
+		switch strings.ToLower(level) {
+		case "info":
+			return 1
+		case "warning":
+			return 2
+		case "critical":
+			return 3
+		default:
+			return 0
+		}
+	}
+	return rank(eventSeverity) >= rank(minSeverity)
+}
+
+// GetHistory retrieves notification history with optional filters and pagination
+func (s *Service) GetHistory(channelID *uint, status string, limit, offset int) ([]NotificationHistory, int64, error) {
+	var (
+		records []NotificationHistory
+		total   int64
+	)
+
+	q := s.db.Model(&NotificationHistory{})
+	// Count total with filters
+	if channelID != nil {
+		q = q.Where("channel_id = ?", *channelID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to count history: %w", err)
+	}
+
+	// Fetch page of records, newest first, preload basic associations
+	q2 := s.db.Preload("Channel").Preload("Rule").Order("created_at DESC")
+	if channelID != nil {
+		q2 = q2.Where("channel_id = ?", *channelID)
+	}
+	if status != "" {
+		q2 = q2.Where("status = ?", status)
+	}
+	if limit > 0 {
+		q2 = q2.Limit(limit)
+	}
+	if offset > 0 {
+		q2 = q2.Offset(offset)
+	}
+
+	if err := q2.Find(&records).Error; err != nil {
+		return nil, 0, fmt.Errorf("failed to load history: %w", err)
+	}
+
+	// Deserialize arrays if present
+	for i := range records {
+		if len(records[i].AffectedDevicesJSON) > 0 {
+			_ = json.Unmarshal(records[i].AffectedDevicesJSON, &records[i].AffectedDevices)
+		}
+	}
+
+	return records, total, nil
 }
 
 // isInSchedule checks if current time is within rule schedule

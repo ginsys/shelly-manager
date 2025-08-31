@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -24,17 +25,7 @@ func NewHandler(service *Service, logger *logging.Logger) *Handler {
 	}
 }
 
-// writeJSONResponse writes a JSON response and handles encoding errors
-func (h *Handler) writeJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		h.logger.WithFields(map[string]any{
-			"component": "notification",
-			"error":     err,
-		}).Error("Failed to encode JSON response")
-	}
-}
+// Deprecated legacy JSON writer removed in favor of standardized responses.
 
 // CreateChannel handles POST /api/v1/notifications/channels
 func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +35,7 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to decode channel request")
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		apiresp.NewResponseWriter(h.logger).WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -53,11 +44,11 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to create notification channel")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeValidationFailed, "Invalid channel configuration", err.Error())
 		return
 	}
 
-	h.writeJSONResponse(w, channel, http.StatusCreated)
+	apiresp.NewResponseWriter(h.logger).WriteCreated(w, r, channel)
 }
 
 // GetChannels handles GET /api/v1/notifications/channels
@@ -68,14 +59,14 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to get notification channels")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	h.writeJSONResponse(w, map[string]interface{}{
+	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]interface{}{
 		"channels": channels,
 		"total":    len(channels),
-	}, http.StatusOK)
+	})
 }
 
 // UpdateChannel handles PUT /api/v1/notifications/channels/{id}
@@ -83,7 +74,7 @@ func (h *Handler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid channel ID", http.StatusBadRequest)
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid channel ID", nil)
 		return
 	}
 
@@ -93,7 +84,7 @@ func (h *Handler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to decode channel update request")
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		apiresp.NewResponseWriter(h.logger).WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -103,11 +94,11 @@ func (h *Handler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 			"error":      err.Error(),
 			"component":  "notification_api",
 		}).Error("Failed to update notification channel")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeValidationFailed, "Invalid channel update", err.Error())
 		return
 	}
 
-	h.writeJSONResponse(w, map[string]string{"status": "updated"}, http.StatusOK)
+	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]string{"status": "updated"})
 }
 
 // DeleteChannel handles DELETE /api/v1/notifications/channels/{id}
@@ -115,7 +106,7 @@ func (h *Handler) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid channel ID", http.StatusBadRequest)
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid channel ID", nil)
 		return
 	}
 
@@ -125,11 +116,11 @@ func (h *Handler) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 			"error":      err.Error(),
 			"component":  "notification_api",
 		}).Error("Failed to delete notification channel")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeValidationFailed, "Cannot delete channel", err.Error())
 		return
 	}
 
-	h.writeJSONResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
+	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]string{"status": "deleted"})
 }
 
 // CreateRule handles POST /api/v1/notifications/rules
@@ -140,7 +131,7 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to decode rule request")
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		apiresp.NewResponseWriter(h.logger).WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
@@ -149,11 +140,11 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to create notification rule")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeValidationFailed, "Invalid rule configuration", err.Error())
 		return
 	}
 
-	h.writeJSONResponse(w, rule, http.StatusCreated)
+	apiresp.NewResponseWriter(h.logger).WriteCreated(w, r, rule)
 }
 
 // GetRules handles GET /api/v1/notifications/rules
@@ -164,14 +155,14 @@ func (h *Handler) GetRules(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to get notification rules")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	h.writeJSONResponse(w, map[string]interface{}{
+	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]interface{}{
 		"rules": rules,
 		"total": len(rules),
-	}, http.StatusOK)
+	})
 }
 
 // TestChannel handles POST /api/v1/notifications/channels/{id}/test
@@ -179,7 +170,7 @@ func (h *Handler) TestChannel(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channelID, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid channel ID", http.StatusBadRequest)
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid channel ID", nil)
 		return
 	}
 
@@ -189,14 +180,22 @@ func (h *Handler) TestChannel(w http.ResponseWriter, r *http.Request) {
 			"error":      err.Error(),
 			"component":  "notification_api",
 		}).Error("Failed to test notification channel")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// If not found, return 404, otherwise internal error
+		msg := err.Error()
+		code := apiresp.ErrCodeInternalServer
+		status := http.StatusInternalServerError
+		if msg == "notification channel not found" {
+			code = apiresp.ErrCodeNotFound
+			status = http.StatusNotFound
+		}
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, status, code, msg, nil)
 		return
 	}
 
-	h.writeJSONResponse(w, map[string]string{
+	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]string{
 		"status":  "sent",
 		"message": "Test notification sent successfully",
-	}, http.StatusOK)
+	})
 }
 
 // GetHistory handles GET /api/v1/notifications/history
@@ -230,27 +229,41 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	history, total, err := h.getNotificationHistory(channelID, status, limit, offset)
+	history, total, err := h.service.GetHistory(channelID, status, limit, offset)
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"error":     err.Error(),
 			"component": "notification_api",
 		}).Error("Failed to get notification history")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
 		return
 	}
 
-	h.writeJSONResponse(w, map[string]interface{}{
-		"history": history,
-		"total":   total,
-		"limit":   limit,
-		"offset":  offset,
-	}, http.StatusOK)
-}
+	// Translate limit/offset to pagination meta (1-based page)
+	page := 1
+	if limit > 0 {
+		page = (offset / limit) + 1
+	}
+	meta := &apiresp.Metadata{}
+	// include simple counts
+	totalInt := int(total)
+	count := len(history)
+	meta.Count = &count
+	meta.TotalCount = &totalInt
 
-// getNotificationHistory retrieves notification history with filters
-func (h *Handler) getNotificationHistory(channelID *uint, status string, limit, offset int) ([]NotificationHistory, int64, error) {
-	// This would be implemented in the service layer
-	// For now, return empty results
-	return []NotificationHistory{}, 0, nil
+	// also include page meta if limit provided
+	if limit > 0 {
+		totalPages := (totalInt + limit - 1) / limit
+		meta.Page = &apiresp.PaginationMeta{
+			Page:       page,
+			PageSize:   limit,
+			TotalPages: totalPages,
+			HasNext:    page < totalPages,
+			HasPrev:    page > 1,
+		}
+	}
+
+	apiresp.NewResponseWriter(h.logger).WriteSuccessWithMeta(w, r, map[string]interface{}{
+		"history": history,
+	}, meta)
 }
