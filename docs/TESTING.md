@@ -383,6 +383,9 @@ make test-unit      # Fast feedback (11 seconds)
 make test-coverage  # Full coverage report
 ```
 
+### Required Before Commit
+- Run `make test-ci` for local/CI parity (installs deps, runs coverage+race, enforces coverage threshold, and lint). This is the gate used by CI and should pass locally before committing or opening a PR.
+
 ### CI Pipeline Suggestions
 ```yaml
 # Example GitHub Actions

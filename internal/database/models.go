@@ -44,3 +44,33 @@ type DiscoveryUpdate struct {
 	Status   string
 	LastSeen time.Time
 }
+
+// ExportHistory stores audit records for export operations
+type ExportHistory struct {
+	ID           uint      `json:"id" gorm:"primaryKey"`
+	ExportID     string    `json:"export_id" gorm:"uniqueIndex"`
+	PluginName   string    `json:"plugin_name" gorm:"index"`
+	Format       string    `json:"format"`
+	RequestedBy  string    `json:"requested_by"`
+	Success      bool      `json:"success" gorm:"index"`
+	RecordCount  int       `json:"record_count"`
+	FileSize     int64     `json:"file_size"`
+	DurationMs   int64     `json:"duration_ms"`
+	ErrorMessage string    `json:"error_message,omitempty" gorm:"type:text"`
+	CreatedAt    time.Time `json:"created_at" gorm:"index"`
+}
+
+// ImportHistory stores audit records for import operations
+type ImportHistory struct {
+	ID              uint      `json:"id" gorm:"primaryKey"`
+	ImportID        string    `json:"import_id" gorm:"uniqueIndex"`
+	PluginName      string    `json:"plugin_name" gorm:"index"`
+	Format          string    `json:"format"`
+	RequestedBy     string    `json:"requested_by"`
+	Success         bool      `json:"success" gorm:"index"`
+	RecordsImported int       `json:"records_imported"`
+	RecordsSkipped  int       `json:"records_skipped"`
+	DurationMs      int64     `json:"duration_ms"`
+	ErrorMessage    string    `json:"error_message,omitempty" gorm:"type:text"`
+	CreatedAt       time.Time `json:"created_at" gorm:"index"`
+}

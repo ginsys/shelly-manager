@@ -167,6 +167,11 @@ Detailed API references:
 - Notification API: docs/API_NOTIFICATION.md
 - Metrics API: docs/METRICS_API.md
 
+Admin Authorization (Export/Import):
+- Configure `security.admin_api_key` in config to protect export/import (including previews, results, downloads, schedules, history, statistics).
+- Send `Authorization: Bearer <ADMIN_KEY>` or `X-API-Key: <ADMIN_KEY>` with requests.
+- Optional safe downloads: set `export.output_directory` to restrict served files to that directory.
+
 ### Device Management
 - `GET    /api/v1/devices` - List all devices with standardized response format
 - `POST   /api/v1/devices` - Add new device

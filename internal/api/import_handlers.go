@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -15,6 +16,8 @@ import (
 type ImportHandlers struct {
 	syncEngine *sync.SyncEngine
 	logger     *logging.Logger
+
+	adminAPIKey string
 }
 
 // NewImportHandlers creates new import handlers
@@ -23,6 +26,31 @@ func NewImportHandlers(syncEngine *sync.SyncEngine, logger *logging.Logger) *Imp
 		syncEngine: syncEngine,
 		logger:     logger,
 	}
+}
+
+// SetAdminAPIKey sets an optional admin API key for RBAC guarding of sensitive endpoints.
+func (ih *ImportHandlers) SetAdminAPIKey(key string) {
+	ih.adminAPIKey = key
+}
+
+func (ih *ImportHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if ih.adminAPIKey == "" {
+		return true
+	}
+	auth := r.Header.Get("Authorization")
+	xKey := r.Header.Get("X-API-Key")
+	ok := false
+	if strings.HasPrefix(auth, "Bearer ") && strings.TrimPrefix(auth, "Bearer ") == ih.adminAPIKey {
+		ok = true
+	}
+	if !ok && xKey != "" && xKey == ih.adminAPIKey {
+		ok = true
+	}
+	if !ok {
+		apiresp.NewResponseWriter(ih.logger).WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Admin authorization required", nil)
+		return false
+	}
+	return true
 }
 
 // AddImportRoutes adds import routes to the router
@@ -35,7 +63,12 @@ func (ih *ImportHandlers) AddImportRoutes(api *mux.Router) {
 	api.HandleFunc("/import/gitops", ih.ImportGitOps).Methods("POST")
 	api.HandleFunc("/import/gitops/preview", ih.PreviewGitOpsImport).Methods("POST")
 
-	// Generic import endpoints
+	// History & statistics
+	api.HandleFunc("/import/history", ih.ListImportHistory).Methods("GET")
+	api.HandleFunc("/import/history/{id}", ih.GetImportHistory).Methods("GET")
+	api.HandleFunc("/import/statistics", ih.GetImportStatistics).Methods("GET")
+
+	// Generic import endpoints (after history to avoid route collisions)
 	api.HandleFunc("/import", ih.Import).Methods("POST")
 	api.HandleFunc("/import/preview", ih.PreviewImport).Methods("POST")
 	api.HandleFunc("/import/{id}", ih.GetImportResult).Methods("GET")
@@ -43,6 +76,9 @@ func (ih *ImportHandlers) AddImportRoutes(api *mux.Router) {
 
 // RestoreBackup restores a backup file
 func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
 	ih.logger.Info("Restore backup request")
 
 	var requestBody struct {
@@ -81,12 +117,15 @@ func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) 
 		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
-
+	_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
 	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
 }
 
 // ValidateBackup validates a backup file without importing it
 func (ih *ImportHandlers) ValidateBackup(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
 	ih.logger.Info("Validate backup request")
 
 	var requestBody struct {
@@ -130,6 +169,9 @@ func (ih *ImportHandlers) ValidateBackup(w http.ResponseWriter, r *http.Request)
 
 // ImportGitOps imports a GitOps configuration
 func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
 	ih.logger.Info("GitOps import request")
 
 	var requestBody struct {
@@ -168,12 +210,15 @@ func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
 		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
-
+	_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
 	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
 }
 
 // PreviewGitOpsImport generates a preview of GitOps import changes
 func (ih *ImportHandlers) PreviewGitOpsImport(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
 	ih.logger.Info("GitOps import preview request")
 
 	var requestBody struct {
@@ -226,6 +271,9 @@ func (ih *ImportHandlers) PreviewGitOpsImport(w http.ResponseWriter, r *http.Req
 
 // Import performs a generic import using any plugin
 func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
 	ih.logger.Info("Generic import request")
 
 	var importRequest sync.ImportRequest
@@ -253,12 +301,15 @@ func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
-
+	_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
 	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
 }
 
 // PreviewImport generates a preview of what would be imported
 func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
 	ih.logger.Info("Import preview request")
 
 	var importRequest sync.ImportRequest
@@ -293,6 +344,9 @@ func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) 
 
 // GetImportResult returns the result of an import operation
 func (ih *ImportHandlers) GetImportResult(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
 	vars := mux.Vars(r)
 	importID := vars["id"]
 
@@ -314,3 +368,68 @@ func (ih *ImportHandlers) countChangesByType(changes []sync.ImportChange, change
 	}
 	return count
 }
+
+// History & statistics endpoints
+func (ih *ImportHandlers) ListImportHistory(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
+	q := r.URL.Query()
+	page := parseIntDefault(q.Get("page"), 1)
+	pageSize := parseIntDefault(q.Get("page_size"), 20)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	plugin := q.Get("plugin")
+	successParam := q.Get("success")
+	var success *bool
+	if successParam != "" {
+		v := strings.ToLower(successParam)
+		b := v == "true" || v == "1" || v == "yes"
+		success = &b
+	}
+
+	items, total, err := ih.syncEngine.ListImportHistory(r.Context(), page, pageSize, plugin, success)
+	if err != nil {
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		return
+	}
+	builder := apiresp.NewResponseBuilder(ih.logger).WithPagination(page, pageSize, total)
+	resp := builder.Success(map[string]interface{}{"history": items})
+	apiresp.NewResponseWriter(ih.logger).WriteSuccessWithMeta(w, r, resp.Data, resp.Meta)
+}
+
+func (ih *ImportHandlers) GetImportHistory(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	rec, err := ih.syncEngine.GetImportHistory(r.Context(), id)
+	if err != nil {
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		return
+	}
+	if rec == nil {
+		apiresp.NewResponseWriter(ih.logger).WriteNotFoundError(w, r, "Import history")
+		return
+	}
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, rec)
+}
+
+func (ih *ImportHandlers) GetImportStatistics(w http.ResponseWriter, r *http.Request) {
+	if !ih.requireAdmin(w, r) {
+		return
+	}
+	stats, err := ih.syncEngine.GetImportStatistics(r.Context())
+	if err != nil {
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		return
+	}
+	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, stats)
+}
+
+// requesterFrom extracts a best-effort identifier for auditing purposes
+// requesterFrom provided in sync_handlers.go (same package)

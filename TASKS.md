@@ -217,9 +217,9 @@ Status: POSTPONED. We will first expand functionality and standardize the API (P
       - `POST /api/v1/export/schedules/{id}/run`
     - [x] Tests: Added coverage for result retrieval, download, and scheduling CRUD/run
     - Related commits: [d2c27c3](https://github.com/ginsys/shelly-manager/commit/d2c27c3), [9616898](https://github.com/ginsys/shelly-manager/commit/9616898), [a792f85](https://github.com/ginsys/shelly-manager/commit/a792f85)
-    - [ ] Security: Add RBAC guard (admin-only) and audit logging for export/import/scheduling endpoints
-    - [ ] Security: Restrict file downloads to configured export directory and sanitize paths
-    - [ ] History: Persist export/import history + statistics endpoints
+    - [x] Security: Add RBAC guard (admin-only) and audit logging for export/import/scheduling endpoints
+    - [x] Security: Restrict file downloads to configured export directory and sanitize paths
+    - [x] History: Persist export/import history + statistics endpoints
 
 #### **Task Group 7.3: Real-time Features & Advanced Integration WITH Security**
 **Goal**: Enable real-time capabilities and advanced features with security controls

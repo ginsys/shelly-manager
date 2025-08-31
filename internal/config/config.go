@@ -128,7 +128,15 @@ type Config struct {
 			AllowedHeaders []string `mapstructure:"allowed_headers"`
 			MaxAge         int      `mapstructure:"max_age"`
 		} `mapstructure:"cors"`
+		// Simple admin API key for protecting sensitive endpoints until full auth is implemented
+		AdminAPIKey string `mapstructure:"admin_api_key"`
 	} `mapstructure:"security"`
+
+	// Export settings
+	Export struct {
+		// Optional base directory for generated export files. If set, downloads are restricted to this directory.
+		OutputDirectory string `mapstructure:"output_directory"`
+	} `mapstructure:"export"`
 }
 
 // Load loads configuration from file
@@ -289,4 +297,9 @@ func setDefaults() {
 	viper.SetDefault("security.cors.allowed_methods", []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"})
 	viper.SetDefault("security.cors.allowed_headers", []string{"Content-Type", "Authorization", "X-Requested-With"})
 	viper.SetDefault("security.cors.max_age", 86400)
+	// Admin API key disabled by default (empty)
+	viper.SetDefault("security.admin_api_key", "")
+
+	// Export defaults
+	viper.SetDefault("export.output_directory", "")
 }

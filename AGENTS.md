@@ -40,6 +40,16 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 6.9 sec
 - For UI changes in `web/static/`, attach screenshots or brief GIFs.
  - Roadmap: state how the change supports priorities in `./.claude/CLAUDE.md` and the specific items in `TASKS.md` (single source of truth).
 
+### Feature Completion & Commit Hygiene
+- Ship features as complete units. Include code, tests, docs, and wiring before committing the feature.
+- When you modify APIs or behaviors, update in the same commit/PR:
+  - API docs in `docs/` (and `docs/README.md` index),
+  - Root `README.md` usage notes where relevant,
+  - `CHANGELOG.md` entry under Unreleased,
+  - Any config examples in `configs/*.yaml`.
+- Avoid follow‑up “forgot docs/tests” commits. If necessary during review, squash before merge.
+- Keep unrelated refactors out of feature commits. Submit them separately with clear scope.
+
 ## Security & Configuration Tips
 - Do not commit secrets. Use `.env` and `configs/*.yaml`; see `.env.example` for keys (server, DB path, discovery, OPNSense, WiFi defaults).
 - Prefer Docker Compose for local runs that touch networks: `make docker-run`.

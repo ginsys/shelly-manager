@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -429,6 +430,209 @@ func (e *SyncEngine) Shutdown() error {
 
 	e.logger.Info("Export engine shutdown complete")
 	return nil
+}
+
+// SaveExportHistory persists an export operation record for audit/history purposes.
+func (e *SyncEngine) SaveExportHistory(ctx context.Context, request ExportRequest, result *ExportResult, requestedBy string) error {
+	db := e.dbManager.GetDB()
+	if db == nil || result == nil {
+		return nil
+	}
+	var fileSize int64
+	if result.OutputPath != "" {
+		if fi, err := os.Stat(result.OutputPath); err == nil {
+			fileSize = fi.Size()
+		}
+	}
+	rec := &database.ExportHistory{
+		ExportID:    result.ExportID,
+		PluginName:  result.PluginName,
+		Format:      result.Format,
+		RequestedBy: requestedBy,
+		Success:     result.Success,
+		RecordCount: result.RecordCount,
+		FileSize:    fileSize,
+		DurationMs:  result.Duration.Milliseconds(),
+		ErrorMessage: func() string {
+			if len(result.Errors) > 0 {
+				return result.Errors[0]
+			}
+			return ""
+		}(),
+		CreatedAt: time.Now(),
+	}
+	if err := db.WithContext(ctx).Create(rec).Error; err != nil {
+		e.logger.WithFields(map[string]any{"error": err.Error(), "component": "sync_engine"}).Warn("Failed to save export history")
+		return err
+	}
+	return nil
+}
+
+// SaveImportHistory persists an import operation record.
+func (e *SyncEngine) SaveImportHistory(ctx context.Context, request ImportRequest, result *ImportResult, requestedBy string) error {
+	db := e.dbManager.GetDB()
+	if db == nil || result == nil {
+		return nil
+	}
+	rec := &database.ImportHistory{
+		ImportID:        result.ImportID,
+		PluginName:      request.PluginName,
+		Format:          request.Format,
+		RequestedBy:     requestedBy,
+		Success:         result.Success,
+		RecordsImported: result.RecordsImported,
+		RecordsSkipped:  result.RecordsSkipped,
+		DurationMs:      result.Duration.Milliseconds(),
+		ErrorMessage: func() string {
+			if len(result.Errors) > 0 {
+				return result.Errors[0]
+			}
+			return ""
+		}(),
+		CreatedAt: time.Now(),
+	}
+	if err := db.WithContext(ctx).Create(rec).Error; err != nil {
+		e.logger.WithFields(map[string]any{"error": err.Error(), "component": "sync_engine"}).Warn("Failed to save import history")
+		return err
+	}
+	return nil
+}
+
+// ListExportHistory returns paginated export history with optional filters.
+func (e *SyncEngine) ListExportHistory(ctx context.Context, page, pageSize int, plugin string, success *bool) ([]database.ExportHistory, int, error) {
+	db := e.dbManager.GetDB()
+	if db == nil {
+		return []database.ExportHistory{}, 0, nil
+	}
+	var items []database.ExportHistory
+	q := db.WithContext(ctx).Model(&database.ExportHistory{})
+	if plugin != "" {
+		q = q.Where("plugin_name = ?", plugin)
+	}
+	if success != nil {
+		q = q.Where("success = ?", *success)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := q.Order("created_at desc").Limit(pageSize).Offset((page - 1) * pageSize).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, int(total), nil
+}
+
+// GetExportHistory fetches a single export history record by export ID.
+func (e *SyncEngine) GetExportHistory(ctx context.Context, exportID string) (*database.ExportHistory, error) {
+	db := e.dbManager.GetDB()
+	if db == nil {
+		return nil, nil
+	}
+	var rec database.ExportHistory
+	if err := db.WithContext(ctx).Where("export_id = ?", exportID).First(&rec).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+// ExportStatistics provides aggregate statistics for export operations.
+func (e *SyncEngine) GetExportStatistics(ctx context.Context) (map[string]interface{}, error) {
+	db := e.dbManager.GetDB()
+	if db == nil {
+		return map[string]interface{}{"total": 0}, nil
+	}
+	var total int64
+	_ = db.WithContext(ctx).Model(&database.ExportHistory{}).Count(&total).Error
+	var successCnt int64
+	_ = db.WithContext(ctx).Model(&database.ExportHistory{}).Where("success = ?", true).Count(&successCnt).Error
+	// Count by plugin
+	type Row struct {
+		PluginName string
+		Cnt        int64
+	}
+	var rows []Row
+	_ = db.WithContext(ctx).Model(&database.ExportHistory{}).Select("plugin_name, COUNT(*) as cnt").Group("plugin_name").Find(&rows).Error
+	byPlugin := map[string]int64{}
+	for _, r := range rows {
+		byPlugin[r.PluginName] = r.Cnt
+	}
+	return map[string]interface{}{
+		"total":     total,
+		"success":   successCnt,
+		"failure":   total - successCnt,
+		"by_plugin": byPlugin,
+	}, nil
+}
+
+// ListImportHistory returns paginated import history with optional filters.
+func (e *SyncEngine) ListImportHistory(ctx context.Context, page, pageSize int, plugin string, success *bool) ([]database.ImportHistory, int, error) {
+	db := e.dbManager.GetDB()
+	if db == nil {
+		return []database.ImportHistory{}, 0, nil
+	}
+	var items []database.ImportHistory
+	q := db.WithContext(ctx).Model(&database.ImportHistory{})
+	if plugin != "" {
+		q = q.Where("plugin_name = ?", plugin)
+	}
+	if success != nil {
+		q = q.Where("success = ?", *success)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := q.Order("created_at desc").Limit(pageSize).Offset((page - 1) * pageSize).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, int(total), nil
+}
+
+// GetImportHistory fetches a single import history record by import ID.
+func (e *SyncEngine) GetImportHistory(ctx context.Context, importID string) (*database.ImportHistory, error) {
+	db := e.dbManager.GetDB()
+	if db == nil {
+		return nil, nil
+	}
+	var rec database.ImportHistory
+	if err := db.WithContext(ctx).Where("import_id = ?", importID).First(&rec).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+// ImportStatistics provides aggregate statistics for import operations.
+func (e *SyncEngine) GetImportStatistics(ctx context.Context) (map[string]interface{}, error) {
+	db := e.dbManager.GetDB()
+	if db == nil {
+		return map[string]interface{}{"total": 0}, nil
+	}
+	var total int64
+	_ = db.WithContext(ctx).Model(&database.ImportHistory{}).Count(&total).Error
+	var successCnt int64
+	_ = db.WithContext(ctx).Model(&database.ImportHistory{}).Where("success = ?", true).Count(&successCnt).Error
+	type Row struct {
+		PluginName string
+		Cnt        int64
+	}
+	var rows []Row
+	_ = db.WithContext(ctx).Model(&database.ImportHistory{}).Select("plugin_name, COUNT(*) as cnt").Group("plugin_name").Find(&rows).Error
+	byPlugin := map[string]int64{}
+	for _, r := range rows {
+		byPlugin[r.PluginName] = r.Cnt
+	}
+	return map[string]interface{}{
+		"total":     total,
+		"success":   successCnt,
+		"failure":   total - successCnt,
+		"by_plugin": byPlugin,
+	}, nil
 }
 
 // loadExportData loads data from the database based on filters

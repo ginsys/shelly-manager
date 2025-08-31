@@ -25,6 +25,12 @@ All notable changes to this project are documented here. The project follows Con
   - `docs/API_NOTIFICATION.md`
   - `docs/METRICS_API.md`
 
+### Security (Phase 7.3)
+- Admin RBAC guard on export/import/schedules/history/statistics (config: `security.admin_api_key`).
+- Safe download restriction to `export.output_directory` (403 when outside).
+- Persisted export/import history; added history list/detail and statistics endpoints.
+- Tests for RBAC, path restriction, and history endpoints.
+
 ### Changed
 - README: linked to detailed API docs and changelog.
 
@@ -33,4 +39,3 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [0.5.4-alpha] - existing baseline
 - Refer to repository history for prior changes.
-

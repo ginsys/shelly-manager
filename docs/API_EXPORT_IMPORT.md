@@ -22,6 +22,9 @@ This document describes the Export/Import endpoints, request/response schemas an
 - Preview export: `POST /api/v1/export/preview`
 - Get result: `GET /api/v1/export/{id}`
 - Download: `GET /api/v1/export/{id}/download`
+- History: `GET /api/v1/export/history` (pagination: `page`, `page_size`; filters: `plugin`, `success`)
+- History item: `GET /api/v1/export/history/{export_id}`
+- Statistics: `GET /api/v1/export/statistics`
 - Backup export: `POST /api/v1/export/backup`
 - Backup download: `GET /api/v1/export/backup/{id}/download`
 - GitOps export: `POST /api/v1/export/gitops`
@@ -99,6 +102,9 @@ POST /api/v1/export/preview
 - Backup validate: `POST /api/v1/import/backup/validate`
 - GitOps import: `POST /api/v1/import/gitops`
 - GitOps preview: `POST /api/v1/import/gitops/preview`
+- History: `GET /api/v1/import/history` (pagination: `page`, `page_size`; filters: `plugin`, `success`)
+- History item: `GET /api/v1/import/history/{import_id}`
+- Statistics: `GET /api/v1/import/statistics`
 
 ### Request schema (Generic Import)
 
@@ -173,3 +179,13 @@ POST /api/v1/import/preview
 
 Common error codes include `VALIDATION_FAILED`, `INTERNAL_SERVER_ERROR`, and `NOT_FOUND`. Details are provided in `error.details` when safe.
 
+## Security and RBAC
+
+- Admin-only endpoints: All export/import operations, downloads, previews, results, schedules, history and statistics require admin authorization when an admin API key is configured.
+- Provide either header `Authorization: Bearer <ADMIN_KEY>` or `X-API-Key: <ADMIN_KEY>`.
+- If no admin key is configured, endpoints remain open (development mode). Configure `security.admin_api_key` to enable protection.
+
+## Safe Downloads
+
+- To prevent path traversal and accidental exposure, downloads can be restricted to a base directory configured via `export.output_directory`.
+- When set, any requested `output_path` must resolve under this directory; otherwise the API returns `403 FORBIDDEN`.

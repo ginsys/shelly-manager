@@ -55,6 +55,8 @@ func NewManagerWithLogger(config provider.DatabaseConfig, logger *logging.Logger
 	if err := dbProvider.Migrate(
 		&Device{},
 		&DiscoveredDevice{},
+		&ExportHistory{},
+		&ImportHistory{},
 		&notification.NotificationChannel{},
 		&notification.NotificationRule{},
 		&notification.NotificationHistory{},

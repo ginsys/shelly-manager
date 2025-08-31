@@ -341,8 +341,19 @@ func startServer() {
 
 	// Wire sync handlers for export/import functionality
 	syncHandlers := api.NewSyncHandlers(syncEngine, logger)
+	// Protect sensitive endpoints with simple admin key if configured
+	if cfg != nil && cfg.Security.AdminAPIKey != "" {
+		syncHandlers.SetAdminAPIKey(cfg.Security.AdminAPIKey)
+	}
+	// Restrict export downloads to configured directory if provided
+	if cfg != nil && cfg.Export.OutputDirectory != "" {
+		syncHandlers.SetExportBaseDir(cfg.Export.OutputDirectory)
+	}
 	apiHandler.ExportHandlers = syncHandlers
 	apiHandler.ImportHandlers = api.NewImportHandlers(syncEngine, logger)
+	if cfg != nil && cfg.Security.AdminAPIKey != "" {
+		apiHandler.ImportHandlers.SetAdminAPIKey(cfg.Security.AdminAPIKey)
+	}
 
 	// Build security config from application config
 	secCfg := middleware.DefaultSecurityConfig()
