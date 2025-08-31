@@ -376,6 +376,10 @@ func startServer() {
 
 	// Start WebSocket hub if metrics are enabled
 	if metricsHandler != nil {
+		// Configure WS admin key (optional) using same Admin API key
+		if cfg != nil && cfg.Security.AdminAPIKey != "" {
+			metricsHandler.SetAdminAPIKey(cfg.Security.AdminAPIKey)
+		}
 		wsHub := metricsHandler.GetWebSocketHub()
 		if wsHub != nil {
 			logger.WithFields(map[string]any{

@@ -38,6 +38,15 @@ ws.onmessage = (event) => {
 };
 ```
 
+### Security
+
+- When `security.admin_api_key` is configured, the WebSocket requires authentication.
+- Authenticate by:
+  - Header: `Authorization: Bearer <ADMIN_KEY>`, or
+  - Query param: `/metrics/ws?token=<ADMIN_KEY>`
+- Origins are restricted based on server CORS configuration.
+- The server applies per-IP connection limits; excessive connections receive HTTP 429 before upgrade.
+
 ### Message Types (typical)
 
 - Dashboard update:
@@ -69,4 +78,3 @@ ws.onmessage = (event) => {
 - Retention knobs and collection intervals are configured via `metrics.*` in the app config (see `configs/shelly-manager.yaml`).
 - Restrict WebSocket origins via security config when deploying behind proxies.
 - Prometheus scraping should be configured at controlled intervals; consider rate limiting at ingress.
-

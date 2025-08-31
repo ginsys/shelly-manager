@@ -20,6 +20,8 @@ type Handler struct {
 	logger   *logging.Logger
 	wsHub    *WebSocketHub
 	notifier func(ctx context.Context, alertType, severity, message string)
+
+	adminAPIKey string
 }
 
 // NewHandler creates a new metrics handler
@@ -36,6 +38,9 @@ func NewHandler(service *Service, logger *logging.Logger) *Handler {
 func (h *Handler) SetNotifier(fn func(ctx context.Context, alertType, severity, message string)) {
 	h.notifier = fn
 }
+
+// SetAdminAPIKey enables optional admin-key authentication for metrics endpoints (including WebSocket)
+func (h *Handler) SetAdminAPIKey(key string) { h.adminAPIKey = key }
 
 // GetWebSocketHub returns the WebSocket hub for external use
 func (h *Handler) GetWebSocketHub() *WebSocketHub {
@@ -188,6 +193,31 @@ func (h *Handler) GetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
 
 // HandleWebSocket handles WebSocket connections for real-time metrics
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Optional admin key enforcement
+	if h.adminAPIKey != "" {
+		token := r.URL.Query().Get("token")
+		auth := r.Header.Get("Authorization")
+		ok := false
+		if token != "" && token == h.adminAPIKey {
+			ok = true
+		}
+		if !ok && len(auth) > 7 && auth[:7] == "Bearer " && auth[7:] == h.adminAPIKey {
+			ok = true
+		}
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"success": false,
+				"error": map[string]string{
+					"code":    "UNAUTHORIZED",
+					"message": "Admin authorization required",
+				},
+				"timestamp": time.Now().UTC(),
+			})
+			return
+		}
+	}
 	h.wsHub.HandleWebSocket(w, r)
 }
 

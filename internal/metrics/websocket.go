@@ -22,6 +22,10 @@ type WebSocketHub struct {
 	logger         *logging.Logger
 	mu             sync.RWMutex
 	allowedOrigins []string
+
+	// Connection limiting per client IP
+	connCounts     map[string]int
+	connLimitPerIP int
 }
 
 // WebSocketClient represents a connected WebSocket client
@@ -29,6 +33,7 @@ type WebSocketClient struct {
 	hub  *WebSocketHub
 	conn *websocket.Conn
 	send chan *MetricsUpdate
+	ip   string
 }
 
 // MetricsUpdate represents a real-time metrics update
@@ -105,12 +110,14 @@ type ResolutionMetrics struct {
 // NewWebSocketHub creates a new WebSocket hub
 func NewWebSocketHub(service *Service, logger *logging.Logger) *WebSocketHub {
 	return &WebSocketHub{
-		clients:    make(map[*WebSocketClient]bool),
-		register:   make(chan *WebSocketClient),
-		unregister: make(chan *WebSocketClient),
-		broadcast:  make(chan *MetricsUpdate),
-		service:    service,
-		logger:     logger,
+		clients:        make(map[*WebSocketClient]bool),
+		register:       make(chan *WebSocketClient),
+		unregister:     make(chan *WebSocketClient),
+		broadcast:      make(chan *MetricsUpdate),
+		service:        service,
+		logger:         logger,
+		connCounts:     make(map[string]int),
+		connLimitPerIP: 5,
 	}
 }
 
@@ -124,6 +131,9 @@ func (h *WebSocketHub) Run(ctx context.Context) {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			if client.ip != "" {
+				h.connCounts[client.ip]++
+			}
 			h.mu.Unlock()
 
 			h.logger.WithFields(map[string]any{
@@ -139,6 +149,12 @@ func (h *WebSocketHub) Run(ctx context.Context) {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
+			}
+			if client.ip != "" && h.connCounts[client.ip] > 0 {
+				h.connCounts[client.ip]--
+				if h.connCounts[client.ip] == 0 {
+					delete(h.connCounts, client.ip)
+				}
 			}
 			h.mu.Unlock()
 
@@ -296,6 +312,18 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			return false
 		},
 	}
+	// Enforce per-IP connection limit
+	ip := getClientIP(r)
+	if h.connLimitPerIP > 0 {
+		h.mu.RLock()
+		current := h.connCounts[ip]
+		h.mu.RUnlock()
+		if current >= h.connLimitPerIP {
+			http.Error(w, "Too many WebSocket connections from this IP", http.StatusTooManyRequests)
+			return
+		}
+	}
+
 	conn, err := localUpgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.WithFields(map[string]any{
@@ -309,6 +337,7 @@ func (h *WebSocketHub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		hub:  h,
 		conn: conn,
 		send: make(chan *MetricsUpdate, 256),
+		ip:   ip,
 	}
 
 	client.hub.register <- client
@@ -323,6 +352,37 @@ func (h *WebSocketHub) SetAllowedOrigins(origins []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.allowedOrigins = origins
+}
+
+// SetConnectionLimitPerIP configures the maximum concurrent WebSocket connections per client IP
+func (h *WebSocketHub) SetConnectionLimitPerIP(n int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.connLimitPerIP = n
+}
+
+// getClientIP extracts client IP from headers or remote addr
+func getClientIP(r *http.Request) string {
+	if xf := r.Header.Get("X-Forwarded-For"); xf != "" {
+		// Use first IP in the list
+		for i := 0; i < len(xf); i++ {
+			if xf[i] == ',' {
+				return xf[:i]
+			}
+		}
+		return xf
+	}
+	if xr := r.Header.Get("X-Real-IP"); xr != "" {
+		return xr
+	}
+	// Fallback to RemoteAddr (host:port)
+	addr := r.RemoteAddr
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			return addr[:i]
+		}
+	}
+	return addr
 }
 
 // readPump pumps messages from the WebSocket connection

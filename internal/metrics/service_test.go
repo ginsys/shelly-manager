@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -508,5 +509,22 @@ func TestStartUptimeCounterDisabled(t *testing.T) {
 	expectedUptime := initialUptime + 1
 	if newUptime != expectedUptime {
 		t.Errorf("Counter should still work when disabled (ticker doesn't start), was %f, now %f, expected %f", initialUptime, newUptime, expectedUptime)
+	}
+}
+
+// Folded from handlers_security_test.go: verify WS requires admin key when configured
+func TestWebSocketRequiresAdminWhenConfigured(t *testing.T) {
+	logger := logging.GetDefault()
+	svc := NewService(nil, logger, prometheus.NewRegistry())
+	h := NewHandler(svc, logger)
+	h.SetAdminAPIKey("secret")
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/metrics/ws", nil)
+
+	// Should reject without token/header
+	h.HandleWebSocket(rr, req)
+	if rr.Code != 401 {
+		t.Fatalf("expected 401, got %d", rr.Code)
 	}
 }
