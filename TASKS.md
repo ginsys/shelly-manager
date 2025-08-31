@@ -249,6 +249,7 @@ Status: POSTPONED. We will first expand functionality and standardize the API (P
   - **Security Gate**: Provisioning security review for multi-device operations required
 
 ### Phase 8: Vue.js Frontend Modernization ⚡ **HIGH PRIORITY** (Security Enhanced)
+See docs/development/PHASE_8_WEB_UI_PLAN.md for the up‑to‑date plan and status. Note: Delete the legacy UI fully at the start; no parallel maintenance.
 
 #### **Task Group 8.1: Vue.js Foundation WITH Security Configuration (Parallel with Phase 7)**
 **Goal**: Establish modern frontend architecture with security-first approach

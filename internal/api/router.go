@@ -241,9 +241,7 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 		handler.ImportHandlers.AddImportRoutes(api)
 	}
 
-	// Static file serving
-	r.PathPrefix("/web/").Handler(http.StripPrefix("/web/", http.FileServer(http.Dir("./web/static/"))))
-	r.PathPrefix("/").Handler(http.StripPrefix("/", http.FileServer(http.Dir("./web/static/"))))
+	// Static file serving removed (Phase 8): legacy UI is deleted; SPA will be served by the new UI build.
 
 	return r
 }

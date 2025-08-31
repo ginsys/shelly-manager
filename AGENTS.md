@@ -5,7 +5,7 @@
 - `internal/...`: application packages (API, configuration, database, discovery, metrics, notification, opnsense, plugins, service, shelly, sync, testutil).
 - `configs/*.yaml`: runtime configuration examples; `.env.example` for environment variables.
 - `deploy/`: Docker, Docker Compose, Helm, and Kubernetes manifests.
-- `web/static/`: HTML assets for embedded UI.
+- `ui/`: New SPA (Vue 3 + Quasar) replacing the legacy UI.
 - `bin/`: build output; `data/`: local data like `shelly.db` (ignored).
 
 Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 6.9 security/auth → Phase 7 API standardization). For ongoing work and acceptance criteria, treat `TASKS.md` as the single source of truth.
@@ -37,7 +37,7 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 6.9 sec
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commits observed in history: e.g., `feat(database): ...`, `fix(ci): ...`, `docs: ...`, `deps(deps): ...`.
 - PRs must: describe changes, link issues, include tests for behavior, pass `make test-ci` locally, and update `docs/` when touching APIs/architecture.
-- For UI changes in `web/static/`, attach screenshots or brief GIFs.
+- For UI changes in `ui/`, attach screenshots or brief GIFs.
  - Roadmap: state how the change supports priorities in `./.claude/CLAUDE.md` and the specific items in `TASKS.md` (single source of truth).
 
 ### Feature Completion & Commit Hygiene

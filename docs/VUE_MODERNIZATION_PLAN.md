@@ -531,7 +531,7 @@ npm ci --only=production
 npm run build
 
 # Copy built assets to Go static directory
-cp -r dist/* ../web/static/
+cp -r dist/* ../ui/dist/
 
 # Update Go routes to serve SPA
 echo "Updating Go server for SPA routing..."
