@@ -254,4 +254,5 @@ func SetupMetricsRoutes(router *mux.Router, handler *Handler) {
 	// Dashboard endpoints
 	metrics.HandleFunc("/dashboard", handler.GetDashboardMetrics).Methods("GET")
 	metrics.HandleFunc("/ws", handler.HandleWebSocket).Methods("GET")
+	metrics.HandleFunc("/test-alert", handler.SendTestAlert).Methods("POST")
 }
