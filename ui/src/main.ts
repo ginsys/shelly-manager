@@ -12,6 +12,7 @@ const router = createRouter({
     { path: '/export/history', component: () => import('./pages/ExportHistoryPage.vue') }
     ,{ path: '/import/history', component: () => import('./pages/ImportHistoryPage.vue') }
     ,{ path: '/admin', component: () => import('./pages/AdminSettingsPage.vue') }
+    ,{ path: '/stats', component: () => import('./pages/StatsPage.vue') }
   ]
 })
 

@@ -45,4 +45,4 @@ Manual fallback (if using Vite dev server on a different port)
 Next slices (planned):
  - Import History page and store (this commit)
  - Admin key rotation UI affordance (this commit)
- - Combined statistics page/cards and simple charts
+ - Combined statistics page/cards (this commit)

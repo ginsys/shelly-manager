@@ -847,3 +847,5 @@ Comprehensive virtual device management system combining multiple physical Shell
     - [x] UI (chunk 3): Admin key rotation UI (2025-09-02)
       - [x] Admin API client and page to rotate key
       - [x] Runtime key update for subsequent requests
+    - [x] UI (chunk 4): Combined statistics page (2025-09-02)
+      - [x] Stats page with export/import totals/success/failure (cards)
