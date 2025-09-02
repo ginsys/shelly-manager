@@ -2,6 +2,8 @@
 
 This guide describes response metadata (version, pagination), request ID propagation, and log fields to improve traceability.
 
+It also documents baseline health endpoints and Prometheus HTTP metrics exposed by the server.
+
 ## Response Metadata
 
 All responses include a `timestamp`, and now `meta.version` is set by default:
@@ -40,7 +42,9 @@ List endpoints include pagination metadata when `page`/`page_size` are provided;
 ```
 
 Endpoints updated to include pagination support:
-- `GET /api/v1/devices`
+- `GET /api/v1/devices` (single-page default when `page_size` omitted or `0`)
+- `GET /api/v1/export/history` (with `plugin` and `success` filters)
+- `GET /api/v1/import/history` (with `plugin` and `success` filters)
 - `GET /api/v1/export/plugins`
 - `GET /api/v1/export/schedules`
 
@@ -61,3 +65,18 @@ The API response layer and security middleware emit structured logs with:
 
 Security middleware also adds fields for rate limiting, suspicious patterns, and IP blocking with `security_event` classification.
 
+## Health Endpoints
+
+- `GET /healthz`: Liveness. Returns `{ "status": "ok" | "degraded" }`. Degraded if DB check fails, but process is up.
+- `GET /readyz`: Readiness. Returns `503` until core dependencies (DB) are reachable. Success body: `{ "ready": true }`.
+
+These endpoints are unauthenticated and lightweight, suitable for Kubernetes liveness/readiness probes.
+
+## Prometheus HTTP Metrics
+
+The server exposes baseline HTTP metrics via the `/metrics/prometheus` handler. Additional counters/histograms include:
+- `shelly_http_requests_total{method, path, status_code}`
+- `shelly_http_request_duration_seconds{method, path}`
+- `shelly_http_response_size_bytes{method, path}`
+
+Use `metrics.prometheus_enabled: true` in config and scrape `/metrics/prometheus`.

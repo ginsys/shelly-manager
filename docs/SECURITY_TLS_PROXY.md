@@ -45,8 +45,12 @@ spec:
         backend:
           service:
             name: shelly-manager
-            port:
+          port:
               number: 8080
+
+# Optional: long-lived WS timeout for /metrics/ws
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
 ```
 
 Notes:
@@ -111,9 +115,21 @@ Quick checks:
 - Browser DevTools → Network → Response headers.
 - External scanners: securityheaders.com, observatory.mozilla.org.
 
+Kubernetes probes:
+
+```
+livenessProbe:
+  httpGet: { path: /healthz, port: 8080 }
+  initialDelaySeconds: 10
+  periodSeconds: 10
+readinessProbe:
+  httpGet: { path: /readyz, port: 8080 }
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
 ## Operational Guidance
 
 - Start with HSTS `max-age=31536000` and no preload; add `preload` only after subdomains are ready.
 - Keep CSP aligned with the app; if you customize CSP at the proxy, ensure it matches your frontend (Vue migration may tighten CSP).
 - Ensure large enough `proxy-body-size` for export/import payloads when needed.
-

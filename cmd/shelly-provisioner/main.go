@@ -15,6 +15,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
+	"github.com/ginsys/shelly-manager/internal/security/secrets"
 )
 
 // Global variables
@@ -672,6 +673,9 @@ func initApp() {
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
 	}
+
+	// Apply secret overrides (env and *_FILE)
+	secrets.ApplyToConfig(cfg)
 
 	// Initialize logger from config
 	logger, err = logging.New(logging.Config{

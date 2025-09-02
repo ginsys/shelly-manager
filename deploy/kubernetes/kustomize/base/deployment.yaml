@@ -53,17 +53,17 @@ spec:
             cpu: "250m"
         livenessProbe:
           httpGet:
-            path: /api/v1/health
+            path: /healthz
             port: http
-          initialDelaySeconds: 30
-          periodSeconds: 30
+          initialDelaySeconds: 20
+          periodSeconds: 15
           timeoutSeconds: 5
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/v1/ready
+            path: /readyz
             port: http
-          initialDelaySeconds: 10
+          initialDelaySeconds: 5
           periodSeconds: 10
           timeoutSeconds: 3
           failureThreshold: 3

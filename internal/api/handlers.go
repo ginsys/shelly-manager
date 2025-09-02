@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
@@ -30,6 +31,8 @@ type Handler struct {
 	ImportHandlers      *ImportHandlers
 	logger              *logging.Logger
 	securityMonitor     interface{} // Security monitor for metrics (using interface{} to avoid circular imports)
+	// AdminAPIKey provides simple guard for sensitive endpoints until full auth is implemented
+	AdminAPIKey string
 }
 
 // NewHandler creates a new API handler
@@ -52,6 +55,73 @@ func NewHandlerWithLogger(db database.DatabaseInterface, svc *service.ShellyServ
 	}
 }
 
+// SetAdminAPIKey sets the in-memory admin key for guarding sensitive operations.
+func (h *Handler) SetAdminAPIKey(key string) { h.AdminAPIKey = key }
+
+// requireAdmin checks Authorization or X-API-Key against AdminAPIKey.
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if h.AdminAPIKey == "" {
+		return true
+	}
+	auth := r.Header.Get("Authorization")
+	xKey := r.Header.Get("X-API-Key")
+	ok := false
+	if strings.HasPrefix(auth, "Bearer ") && strings.TrimPrefix(auth, "Bearer ") == h.AdminAPIKey {
+		ok = true
+	}
+	if !ok && xKey != "" && xKey == h.AdminAPIKey {
+		ok = true
+	}
+	if !ok {
+		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Admin authorization required", nil)
+		return false
+	}
+	return true
+}
+
+// RotateAdminKey updates the in-memory admin key used by API/WS/export/import handlers.
+// Body: {"new_key": "..."}
+func (h *Handler) RotateAdminKey(w http.ResponseWriter, r *http.Request) {
+	// Require current admin privileges
+	if !h.requireAdmin(w, r) {
+		return
+	}
+	// Parse new key
+	var body struct {
+		NewKey string `json:"new_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+	if strings.TrimSpace(body.NewKey) == "" {
+		h.responseWriter().WriteValidationError(w, r, "new_key is required")
+		return
+	}
+
+	// Update admin key across components
+	h.AdminAPIKey = body.NewKey
+	if h.ExportHandlers != nil {
+		h.ExportHandlers.SetAdminAPIKey(body.NewKey)
+	}
+	if h.ImportHandlers != nil {
+		h.ImportHandlers.SetAdminAPIKey(body.NewKey)
+	}
+	if h.MetricsHandler != nil {
+		h.MetricsHandler.SetAdminAPIKey(body.NewKey)
+	}
+
+	if h.logger != nil {
+		h.logger.WithFields(map[string]any{
+			"component":  "admin",
+			"action":     "rotate_admin_key",
+			"request_id": r.Context().Value("request_id"),
+		}).Info("Admin API key rotated")
+	}
+
+	h.responseWriter().WriteSuccess(w, r, map[string]any{"rotated": true})
+}
+
 // writeJSON writes a JSON response and logs any encoding errors
 func (h *Handler) writeJSON(w http.ResponseWriter, data interface{}) {
 	if err := json.NewEncoder(w).Encode(data); err != nil && h.logger != nil {
@@ -62,6 +132,34 @@ func (h *Handler) writeJSON(w http.ResponseWriter, data interface{}) {
 // responseWriter returns a standardized API response writer
 func (h *Handler) responseWriter() *apiresp.ResponseWriter {
 	return apiresp.NewResponseWriter(h.logger)
+}
+
+// Healthz returns basic liveness: process is up and DB reachable.
+func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
+	type health struct {
+		Status string `json:"status"`
+	}
+	// Basic DB check via lightweight query
+	one := 0
+	dbErr := h.DB.GetDB().Raw("SELECT 1").Scan(&one).Error
+	status := "ok"
+	if dbErr != nil || one != 1 {
+		status = "degraded"
+	}
+	resp := health{Status: status}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// Readyz returns readiness: dependencies available (currently DB).
+func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
+	// Fail if DB not reachable
+	var one int
+	if err := h.DB.GetDB().Raw("SELECT 1").Scan(&one).Error; err != nil || one != 1 {
+		h.responseWriter().WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeServiceUnavailable, "Dependency not ready (database)", nil)
+		return
+	}
+	h.responseWriter().WriteSuccess(w, r, map[string]any{"ready": true})
 }
 
 // GetDevices handles GET /api/v1/devices

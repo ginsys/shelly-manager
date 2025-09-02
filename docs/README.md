@@ -9,6 +9,8 @@ This index bundles the primary API docs for Phase 7.2 work. Each page includes e
 
 - Export/Import API: API_EXPORT_IMPORT.md
   - Export/Import preview endpoints with summaries, dry-run and validate-only semantics, schema notes, history & statistics endpoints, and security (admin key + safe downloads).
+  - Filters: `plugin` (case-sensitive), `success` (true/false/1/0/yes/no). Unknown plugin returns empty results.
+  - Pagination: `page` and `page_size` with defaulting (`page<=0`→1, `page_size>100`→20, non-integer → defaults). Pagination metadata returned in `meta.pagination`.
 
 - Metrics API: METRICS_API.md
   - Prometheus scrape endpoint, status/enable/disable/collect, dashboard websocket, and `/metrics/test-alert` for emitting test alerts.
@@ -22,10 +24,15 @@ This index bundles the primary API docs for Phase 7.2 work. Each page includes e
   - SPA roadmap, milestones, and current progress for the new UI.
   
 - Secrets & Secure Config: SECURITY_SECRETS.md
-  - Using env vars and Kubernetes Secrets for `ADMIN_API_KEY` and safe export downloads.
+  - Using env vars and Kubernetes Secrets for admin key, SMTP/OPNSense credentials, provisioner API key, and safe export downloads (with *_FILE support).
 
 - TLS/Proxy Hardening: SECURITY_TLS_PROXY.md
   - NGINX/Traefik examples for HTTPS enforcement, HSTS, and secure headers.
 
 - Observability: OBSERVABILITY.md
-  - Response meta.version, pagination metadata, request_id propagation, and log fields.
+  - Response `meta.version`, pagination metadata for list endpoints, request_id propagation, and log fields.
+
+## Admin Operations
+
+- Admin Key Rotation
+  - `POST /api/v1/admin/rotate-admin-key` (requires current admin key): rotates in-memory key across API/WS/export/import handlers. Useful for emergency key rotation without restart.

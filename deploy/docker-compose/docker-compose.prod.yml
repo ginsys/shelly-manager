@@ -11,6 +11,10 @@ services:
       # Security & Export (configure via secrets/ENV in production)
       - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR:-}
+      # SMTP/OPNSense via secrets (recommend *_FILE path mounts)
+      # - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password
+      # - SHELLY_OPNSENSE_API_KEY_FILE=/run/secrets/opnsense_key
+      # - SHELLY_OPNSENSE_API_SECRET_FILE=/run/secrets/opnsense_secret
     deploy:
       resources:
         limits:

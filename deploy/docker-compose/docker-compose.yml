@@ -36,6 +36,14 @@ services:
       # Security & Export (secrets and safe downloads)
       - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR:-}
+      # SMTP / OPNSense secrets (prefer *_FILE mounted from Docker secrets)
+      # - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      # - SHELLY_OPNSENSE_API_KEY=${OPNSENSE_API_KEY:-}
+      # - SHELLY_OPNSENSE_API_SECRET=${OPNSENSE_API_SECRET:-}
+      # Or file-based:
+      # - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password
+      # - SHELLY_OPNSENSE_API_KEY_FILE=/run/secrets/opnsense_key
+      # - SHELLY_OPNSENSE_API_SECRET_FILE=/run/secrets/opnsense_secret
       
       # Runtime Configuration
       - GIN_MODE=${GIN_MODE:-release}
@@ -63,6 +71,7 @@ services:
       # API Configuration (connect to manager)
       - SHELLY_API_URL=${API_URL:-http://localhost:8080}
       - SHELLY_API_KEY=${API_KEY:-}
+      # Or read from file: SHELLY_API_KEY_FILE=/run/secrets/api_key
       - SHELLY_API_TIMEOUT=${API_TIMEOUT:-30}
       
       # Provisioning Configuration

@@ -70,8 +70,8 @@ opnsense:
   enabled: false            # Enable OPNSense integration
   host: ""                  # OPNSense host/IP
   port: 443                 # OPNSense API port
-  api_key: ""              # OPNSense API key
-  api_secret: ""           # OPNSense API secret
+  api_key: ""              # OPNSense API key (prefer env/Sec: SHELLY_OPNSENSE_API_KEY or _FILE)
+  api_secret: ""           # OPNSense API secret (SHELLY_OPNSENSE_API_SECRET or _FILE)
   auto_apply: false        # Automatically apply firewall changes
 
 # Main application settings (for agent mode)
@@ -97,7 +97,7 @@ notifications:
     smtp_host: ""           # SMTP server host
     smtp_port: 587          # SMTP server port
     smtp_user: ""           # SMTP username
-    smtp_password: ""       # SMTP password
+    smtp_password: ""       # SMTP password (SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD or _FILE)
     from_address: ""        # From email address
     tls: true              # Use TLS encryption
   
@@ -145,7 +145,7 @@ security:
     allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     allowed_headers: ["Content-Type", "Authorization", "X-Requested-With"]
     max_age: 86400
-  admin_api_key: ""                # Optional: protect export/import endpoints. Set to a strong secret in prod.
+  admin_api_key: ""                # Optional: protect export/import endpoints. Prefer env (SHELLY_SECURITY_ADMIN_API_KEY or _FILE).
 
 # Export subsystem configuration (safe download base directory)
 export:

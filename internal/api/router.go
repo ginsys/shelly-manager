@@ -10,6 +10,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	imetrics "github.com/ginsys/shelly-manager/internal/metrics"
 )
 
 // SetupRoutes configures all API routes
@@ -89,8 +90,23 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	// 11. Standard logging middleware (existing functionality)
 	r.Use(logging.HTTPMiddleware(logger))
 
+	// 12. Prometheus HTTP metrics middleware (baseline observability)
+	if handler != nil {
+		hm := imetrics.NewHTTPMetrics(nil)
+		r.Use(hm.HTTPMiddleware())
+	}
+
+	// Liveness/readiness endpoints
+	if handler != nil {
+		r.HandleFunc("/healthz", handler.Healthz).Methods("GET")
+		r.HandleFunc("/readyz", handler.Readyz).Methods("GET")
+	}
+
 	// API routes
 	api := r.PathPrefix("/api/v1").Subrouter()
+
+	// Admin routes (guarded by simple admin key if configured)
+	api.HandleFunc("/admin/rotate-admin-key", handler.RotateAdminKey).Methods("POST")
 
 	// Device routes
 	api.HandleFunc("/devices", handler.GetDevices).Methods("GET")

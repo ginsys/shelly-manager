@@ -11,6 +11,10 @@ services:
       # Security & Export (optional for local development)
       - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR:-}
+      # Optional secrets for local testing (prefer *_FILE)
+      # - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD=
+      # - SHELLY_OPNSENSE_API_KEY=
+      # - SHELLY_OPNSENSE_API_SECRET=
     ports:
       - "8080:8080"
       - "9090:9090"  # Prometheus metrics

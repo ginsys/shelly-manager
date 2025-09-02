@@ -93,6 +93,13 @@ POST /api/v1/export/preview
 }
 ```
 
+### Query parameters (history)
+
+- `page` (int): 1-based page. Invalid or `<=0` defaults to `1`. Non-integer values default to `1`.
+- `page_size` (int): page size. Values `>100` default to `20`. `0` or omitted returns a single page with all items for endpoints that support it.
+- `plugin` (string): case-sensitive plugin name filter. Unknown names return an empty list.
+- `success` (bool): accepts `true/false`, `1/0`, `yes/no` (case-insensitive). Invalid values are treated as no filter (or may be interpreted as false depending on endpoint implementation; see tests for current behavior).
+
 ## Import
 
 - Generic import: `POST /api/v1/import`
@@ -174,6 +181,10 @@ POST /api/v1/import/preview
   }
 }
 ```
+
+### Query parameters (history)
+
+Same semantics as Export history: `page`, `page_size`, `plugin` (case-sensitive), and `success` value parsing.
 
 ## Error responses
 

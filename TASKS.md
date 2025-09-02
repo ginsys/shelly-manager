@@ -57,6 +57,11 @@ Focus on functionality and platform consistency prior to enabling authentication
 - [x] 7.2.a: Export/Import Endpoint Readiness (HIGH PRIORITY)
   - [x] Finalize request/response schemas and examples
   - [x] Add dry-run flags and result summaries consistent with standard response
+  - [x] Tests: Pagination & filters hardening for history endpoints (2025-09-02)
+    - [x] Pagination meta on page 2 and bounds/defaults (`page<=0`→1, `page_size>100`→20, non-integer defaults)
+    - [x] Filters: `plugin` (case-sensitive) + `success` (true/false/1/0/yes/no)
+    - [x] Unknown plugin returns empty list; RBAC enforced (401 without admin key)
+    - [x] Statistics endpoints validated: totals, success/failure, and `by_plugin` counts
 
 - [x] 7.2.b: Notification API Enablement (HIGH PRIORITY)
   - [x] Ensure channels/rules/history follow standardized responses
@@ -222,6 +227,15 @@ Status: POSTPONED. We will first expand functionality and standardize the API (P
     - [x] Security: Add RBAC guard (admin-only) and audit logging for export/import/scheduling endpoints
     - [x] Security: Restrict file downloads to configured export directory and sanitize paths
     - [x] History: Persist export/import history + statistics endpoints
+    - [x] History: Tests for filters, pagination, defaults, and statistics (2025-09-02)
+
+#### Cross-Cutting Testing Improvements (Phase 7)
+
+- [x] Devices list pagination tests
+  - [x] Pagination meta with page_size/page
+  - [x] Single-page default when page_size omitted/zero
+  - [x] Beyond-total page returns empty set; `meta.version` asserted
+  - [x] Non-integer page/page_size defaulting
 
 #### **Task Group 7.3: Real-time Features & Advanced Integration WITH Security**
 **Goal**: Enable real-time capabilities and advanced features with security controls

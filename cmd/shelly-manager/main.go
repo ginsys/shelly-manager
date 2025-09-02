@@ -26,6 +26,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/opnsense"
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/registry"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
+	"github.com/ginsys/shelly-manager/internal/security/secrets"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
@@ -321,6 +322,11 @@ func startServer() {
 	// Create API handler with service and logger
 	apiHandler := api.NewHandlerWithLogger(dbManager, shellyService, notificationHandler, metricsHandler, logger)
 
+	// Initialize admin key on handler and subcomponents (if configured)
+	if cfg != nil && cfg.Security.AdminAPIKey != "" {
+		apiHandler.SetAdminAPIKey(cfg.Security.AdminAPIKey)
+	}
+
 	// Wire integration (7.2.d): emit notifications from configuration drift detection
 	if notificationHandler != nil && apiHandler.ConfigService != nil {
 		apiHandler.ConfigService.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
@@ -496,6 +502,9 @@ func initApp() {
 	if err != nil {
 		log.Fatal("Failed to load config:", err)
 	}
+
+	// Apply secret overrides (env and *_FILE)
+	secrets.ApplyToConfig(cfg)
 
 	// Initialize logger from config
 	logger, err = logging.New(logging.Config{
