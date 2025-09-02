@@ -10,6 +10,7 @@ const router = createRouter({
     { path: '/', component: () => import('./pages/DevicesPage.vue') },
     { path: '/devices/:id', component: () => import('./pages/DeviceDetailPage.vue') },
     { path: '/export/history', component: () => import('./pages/ExportHistoryPage.vue') }
+    ,{ path: '/import/history', component: () => import('./pages/ImportHistoryPage.vue') }
   ]
 })
 

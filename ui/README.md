@@ -43,6 +43,6 @@ Manual fallback (if using Vite dev server on a different port)
 - Export History page with plugin/success filters and pagination
 
 Next slices (planned):
-- Import History page and store
+- Import History page and store (this commit)
 - Combined statistics page/cards and simple charts
 - Admin key rotation UI affordance

@@ -839,3 +839,8 @@ Comprehensive virtual device management system combining multiple physical Shell
 **Last Updated**: 2025-08-19
 **Status**: All critical development complete, future tasks are optional enhancements
 **Next Review**: When scaling or integration requirements arise
+    - [x] UI (chunk 2): Import History slice implemented (2025-09-02)
+      - [x] API clients for history/statistics (ui/src/api/import.ts)
+      - [x] Pinia store with pagination/filters (ui/src/stores/import.ts)
+      - [x] Import History page with filters/pagination
+      - [x] Tests: API client unit tests (Vitest) for history/statistics
