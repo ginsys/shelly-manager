@@ -20,5 +20,16 @@ describe('import api', () => {
     const stats = await getImportStatistics()
     expect(stats.failure).toBe(2)
   })
+  it('gets import result', async () => {
+    mockedApi.get.mockResolvedValueOnce({ data: { success: true, data: { import_id:'imp-1', plugin_name:'mockfile', format:'txt', success:true }, timestamp: new Date().toISOString() } })
+    const { getImportResult } = await import('./import')
+    const res = await getImportResult('imp-1')
+    expect(res.import_id).toBe('imp-1')
+  })
+  it('previews import', async () => {
+    ;(api as any).post = vi.fn().mockResolvedValue({ data: { success:true, data: { preview: { success:true }, summary: { will_create:1 } }, timestamp: new Date().toISOString() } })
+    const { previewImport } = await import('./import')
+    const res = await previewImport({ plugin_name:'mockfile', format:'txt' })
+    expect(res.summary.will_create).toBe(1)
+  })
 })
-

@@ -27,5 +27,19 @@ describe('export api', () => {
     expect(stats.total).toBe(3)
     expect(stats.by_plugin.mockfile).toBe(3)
   })
+  it('gets export result', async () => {
+    mockedApi.get.mockResolvedValueOnce({ data: { success: true, data: { export_id:'exp-1', plugin_name:'mockfile', format:'txt' }, timestamp: new Date().toISOString() } })
+    const { getExportResult } = await import('./export')
+    const res = await getExportResult('exp-1')
+    expect(res.export_id).toBe('exp-1')
+  })
+  it('previews export', async () => {
+    mockedApi.get.mockReset()
+    mockedApi.get.mockResolvedValueOnce({}) // avoid matching previous mock
+    ;(mockedApi.get as any) = vi.fn() // isolate
+    ;(api as any).post = vi.fn().mockResolvedValue({ data: { success:true, data: { preview: { success:true, record_count: 5 }, summary: { record_count:5 } }, timestamp: new Date().toISOString() } })
+    const { previewExport } = await import('./export')
+    const data = await previewExport({ plugin_name:'mockfile', format:'txt' })
+    expect(data.preview.record_count).toBe(5)
+  })
 })
-

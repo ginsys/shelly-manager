@@ -13,6 +13,9 @@ const router = createRouter({
     ,{ path: '/import/history', component: () => import('./pages/ImportHistoryPage.vue') }
     ,{ path: '/admin', component: () => import('./pages/AdminSettingsPage.vue') }
     ,{ path: '/stats', component: () => import('./pages/StatsPage.vue') }
+    ,{ path: '/export/:id', component: () => import('./pages/ExportDetailPage.vue') }
+    ,{ path: '/import/:id', component: () => import('./pages/ImportDetailPage.vue') }
+    ,{ path: '/metrics', component: () => import('./pages/MetricsDashboardPage.vue') }
   ]
 })
 

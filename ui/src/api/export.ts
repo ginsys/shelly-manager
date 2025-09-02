@@ -53,3 +53,45 @@ export async function getExportStatistics(): Promise<ExportStatistics> {
   return res.data.data
 }
 
+export interface ExportResult {
+  export_id: string
+  plugin_name: string
+  format: string
+  output_path?: string
+  record_count?: number
+  file_size?: number
+  checksum?: string
+  duration?: string
+  warnings?: string[]
+}
+
+export async function getExportResult(id: string): Promise<ExportResult> {
+  const res = await api.get<APIResponse<ExportResult>>(`/export/${id}`)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to load export result')
+  }
+  return res.data.data
+}
+
+export interface ExportRequest {
+  plugin_name: string
+  format: string
+  config?: Record<string, any>
+  filters?: Record<string, any>
+  options?: Record<string, any>
+}
+
+export interface ExportPreview {
+  success: boolean
+  record_count?: number
+  estimated_size?: number
+  warnings?: string[]
+}
+
+export async function previewExport(req: ExportRequest): Promise<{ preview: ExportPreview; summary: any }> {
+  const res = await api.post<APIResponse<{ preview: ExportPreview; summary: any }>>('/export/preview', req)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Preview failed')
+  }
+  return res.data.data
+}

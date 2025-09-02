@@ -4,6 +4,7 @@
 	test-race test-race-short test-race-full \
 	test-coverage test-coverage-short test-coverage-full test-coverage-ci test-coverage-check test-coverage-with-check \
 	test-matrix test-ci \
+	ui-dev ui-build ui-preview \
 	benchmark test-watch example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
 
 BINARY_NAME=shelly-manager
@@ -384,3 +385,21 @@ example-provisioner-scan:
 
 example-provisioner-provision:
 	./$(BUILD_DIR)/$(PROVISIONER_BINARY) provision "MyWiFi" "password123"
+# ==============================================================================
+# UI (Vite) COMMANDS
+# ==============================================================================
+
+# Run the SPA dev server (Vite)
+ui-dev:
+	@echo "Starting Vite dev server for UI..."
+	@cd ui && npm run dev
+
+# Build the SPA to ui/dist
+ui-build:
+	@echo "Building UI with Vite..."
+	@cd ui && npm run build
+
+# Preview the built UI from ui/dist (Vite preview server)
+ui-preview:
+	@echo "Previewing built UI..."
+	@cd ui && npm run preview

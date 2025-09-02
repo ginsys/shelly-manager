@@ -399,24 +399,48 @@ func startServer() {
 		}
 	}).Methods("GET")
 
-	// Root landing page: provide a simple HTML stub to avoid 404 at "/"
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<!doctype html>
+	// Serve UI
+	// 1) If a built SPA exists (ui/dist), serve it at "/" with SPA fallback
+	// 2) Otherwise, provide a minimal landing page and expose raw files under /ui/ for reference
+	if _, err := os.Stat("./ui/dist/index.html"); err == nil {
+		distDir := http.Dir("./ui/dist")
+		fileServer := http.FileServer(distDir)
+
+		// Serve static assets from dist (e.g., /assets/*, /favicon.ico)
+		router.PathPrefix("/assets/").Handler(http.StripPrefix("/", fileServer))
+		router.Handle("/favicon.ico", http.StripPrefix("/", fileServer))
+		router.Handle("/robots.txt", http.StripPrefix("/", fileServer))
+
+		// SPA fallback: for any non-API path, serve index.html
+		router.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := r.URL.Path
+			if strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/metrics") || p == "/app-config.js" {
+				// Let other routes handle these (should have matched earlier)
+				http.NotFound(w, r)
+				return
+			}
+			http.ServeFile(w, r, "./ui/dist/index.html")
+		}))
+	} else {
+		// Root landing page (no built UI available)
+		router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprint(w, `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Shelly Manager</title>
 <style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;color:#0f172a}a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}.note{color:#475569}</style>
 </head><body>
 <h1>Shelly Manager</h1>
 <p>API is running. Explore <a href="/api/v1/devices">/api/v1/devices</a> or see docs under <code>docs/</code> in the repo.</p>
-<p class="note">UI note: The new SPA under <code>ui/</code> requires a Vite dev server for TypeScript. For development, run it separately, or open <code>/ui/index.html</code> (uncompiled) for structure only.</p>
+<p class="note">UI note: Run the SPA with <code>make ui-dev</code> (Vite) or build with <code>make ui-build</code> to serve <code>ui/dist</code> from the Go server.</p>
 </body></html>`)
-	}).Methods("GET")
+		}).Methods("GET")
 
-	// Serve raw UI files (uncompiled) under /ui/ for development reference
-	if _, err := os.Stat("./ui"); err == nil {
-		fs := http.FileServer(http.Dir("./ui"))
-		router.PathPrefix("/ui/").Handler(http.StripPrefix("/ui/", fs))
+		// Serve raw UI files (uncompiled) under /ui/ for development reference
+		if _, err := os.Stat("./ui"); err == nil {
+			fs := http.FileServer(http.Dir("./ui"))
+			router.PathPrefix("/ui/").Handler(http.StripPrefix("/ui/", fs))
+		}
 	}
 
 	// Start WebSocket hub if metrics are enabled
@@ -469,7 +493,7 @@ func startServer() {
 
 	fmt.Printf("Starting server on %s\n", address)
 	fmt.Printf("Web interface: http://%s\n", address)
-	fmt.Printf("Dashboard: http://%s/dashboard.html\n", address)
+	// Note: Legacy dashboard removed. New SPA is served from Vite (dev) or ui/dist (prod).
 	fmt.Printf("API base URL: http://%s/api/v1\n", address)
 
 	if err := http.ListenAndServe(address, router); err != nil {

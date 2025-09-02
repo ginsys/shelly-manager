@@ -7,6 +7,7 @@
       @update:plugin="(v:string)=>{ store.setPlugin(v); store.fetchHistory() }"
       @update:success="(v:boolean|undefined)=>{ store.setSuccess(v); store.fetchHistory() }"
     />
+    <ImportPreviewForm />
     <DataTable
       :rows="store.items"
       :loading="store.loading"
@@ -49,8 +50,8 @@ import { useImportStore } from '@/stores/import'
 import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import FilterBar from '@/components/FilterBar.vue'
+import ImportPreviewForm from '@/components/ImportPreviewForm.vue'
 
 const store = useImportStore()
 onMounted(() => { store.fetchHistory(); store.fetchStats() })
 </script>
-

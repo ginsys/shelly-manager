@@ -849,3 +849,13 @@ Comprehensive virtual device management system combining multiple physical Shell
       - [x] Runtime key update for subsequent requests
     - [x] UI (chunk 4): Combined statistics page (2025-09-02)
       - [x] Stats page with export/import totals/success/failure (cards)
+    - [x] UI (chunk 5): Export/Import detail + preview forms (2025-09-03)
+      - [x] Export/Import result pages and routes
+      - [x] Minimal preview forms embedded in history pages
+      - [x] API clients and unit tests
+    - [x] UI (chunk 6): Metrics dashboard (REST now, WS wiring) (2025-09-03)
+      - [x] Metrics API client and store
+      - [x] Dashboard page with status/health cards; WS connection indicator
+    - [x] UI (chunk 7): Devices store pagination parsing tests (Vitest) + E2E placeholder (2025-09-03)
+      - [x] Non-integer page defaults to 1
+      - [x] Playwright placeholder spec for future CI integration

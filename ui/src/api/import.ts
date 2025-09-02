@@ -53,3 +53,38 @@ export async function getImportStatistics(): Promise<ImportStatistics> {
   return res.data.data
 }
 
+export interface ImportResult {
+  success: boolean
+  import_id: string
+  plugin_name: string
+  format: string
+  records_imported?: number
+  records_skipped?: number
+  duration?: string
+  changes?: any[]
+  warnings?: string[]
+}
+
+export async function getImportResult(id: string): Promise<ImportResult> {
+  const res = await api.get<APIResponse<ImportResult>>(`/import/${id}`)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to load import result')
+  }
+  return res.data.data
+}
+
+export interface ImportRequest {
+  plugin_name: string
+  format: string
+  source?: Record<string, any>
+  config?: Record<string, any>
+  options?: Record<string, any>
+}
+
+export async function previewImport(req: ImportRequest): Promise<{ preview: any; summary: any }> {
+  const res = await api.post<APIResponse<{ preview: any; summary: any }>>('/import/preview', req)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Preview failed')
+  }
+  return res.data.data
+}

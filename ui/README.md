@@ -29,10 +29,19 @@ Dev runtime config (automatic with make run)
 - `ui/index.html` loads `/app-config.js` before the app, so the Axios client picks it up automatically.
 - Safety: the admin key is only exposed when `SHELLY_DEV_EXPOSE_ADMIN_KEY` is set (dev only). Do not enable this in production.
 
-Manual fallback (if using Vite dev server on a different port)
-- If the SPA runs at another origin (e.g., `:3000`) without proxying `/app-config.js` to `:8080`, set in console:
+How to run the SPA (development)
+- Backend: run `make run` in project root (serves API on :8080 and `/app-config.js`).
+- Frontend: run `make ui-dev` (Vite on :5173). The included `vite.config.ts` proxies `/api`, `/metrics`, and `/app-config.js` to :8080, so the app works without extra env.
+- Optional: You can also run directly from `ui/` with `npm run dev`.
+
+Manual fallback (if not using the provided proxy)
+- If you choose not to use the Vite proxy, set at runtime in console:
   - `window.__ADMIN_KEY__ = 'your_key'`
   - `window.__API_BASE__ = 'http://localhost:8080/api/v1'`
+
+Production-like run
+- Build the SPA: `make ui-build` (writes to `ui/dist`).
+- The Go server will auto-serve `ui/dist` at `/` if it exists (no separate web server needed). Use `make run` and open `http://localhost:8080`.
 
 ## Phase 7.3 UI Work (Chunks)
 

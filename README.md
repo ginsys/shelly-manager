@@ -85,13 +85,18 @@ The project is now entering a strategic modernization phase to transform from a 
 # Build the application
 make build
 
-# Start the API server
+# Start the API server (dev)
 make run
 
 # Run provisioning agent (separate binary - planned)
 ./bin/shelly-provisioner --api-url http://api-server:8080
 
-# Access web interface at http://localhost:8080
+# Run the Web UI (Vite dev server)
+make ui-dev
+
+# Access the UI (dev) at http://localhost:5173
+# The API remains available at http://localhost:8080/api/v1
+# If you build the UI (make ui-build), the server serves it at http://localhost:8080
 ```
 
 ## 🛠️ CLI Commands

@@ -7,6 +7,7 @@
       @update:plugin="(v:string)=>{ store.setPlugin(v); store.fetchHistory() }"
       @update:success="(v:boolean|undefined)=>{ store.setSuccess(v); store.fetchHistory() }"
     />
+    <ExportPreviewForm />
     <DataTable
       :rows="store.items"
       :loading="store.loading"
@@ -57,6 +58,7 @@ import { useExportStore } from '@/stores/export'
 import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import FilterBar from '@/components/FilterBar.vue'
+import ExportPreviewForm from '@/components/ExportPreviewForm.vue'
 
 const store = useExportStore()
 onMounted(() => { store.fetchHistory(); store.fetchStats() })
@@ -66,4 +68,3 @@ onMounted(() => { store.fetchHistory(); store.fetchStats() })
 .stats { display:flex; gap:12px; }
 .card { border:1px solid #e5e7eb; padding:8px 12px; border-radius:6px; }
 </style>
-
