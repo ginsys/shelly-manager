@@ -844,3 +844,6 @@ Comprehensive virtual device management system combining multiple physical Shell
       - [x] Pinia store with pagination/filters (ui/src/stores/import.ts)
       - [x] Import History page with filters/pagination
       - [x] Tests: API client unit tests (Vitest) for history/statistics
+    - [x] UI (chunk 3): Admin key rotation UI (2025-09-02)
+      - [x] Admin API client and page to rotate key
+      - [x] Runtime key update for subsequent requests

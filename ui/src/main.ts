@@ -11,6 +11,7 @@ const router = createRouter({
     { path: '/devices/:id', component: () => import('./pages/DeviceDetailPage.vue') },
     { path: '/export/history', component: () => import('./pages/ExportHistoryPage.vue') }
     ,{ path: '/import/history', component: () => import('./pages/ImportHistoryPage.vue') }
+    ,{ path: '/admin', component: () => import('./pages/AdminSettingsPage.vue') }
   ]
 })
 
