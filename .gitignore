@@ -55,3 +55,7 @@ configs/shelly-manager.local.yaml
 
 # UI dev-only runtime config (holds secrets locally)
 ui/public/app-config.js
+
+# UI build and dependencies
+ui/node_modules/
+ui/dist/

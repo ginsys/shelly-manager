@@ -389,13 +389,18 @@ example-provisioner-provision:
 # UI (Vite) COMMANDS
 # ==============================================================================
 
+# Install UI dependencies (npm install / ci)
+ui-deps:
+	@echo "Installing UI dependencies..."
+	@cd ui && if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
 # Run the SPA dev server (Vite)
-ui-dev:
+ui-dev: ui-deps
 	@echo "Starting Vite dev server for UI..."
 	@cd ui && npm run dev
 
 # Build the SPA to ui/dist
-ui-build:
+ui-build: ui-deps
 	@echo "Building UI with Vite..."
 	@cd ui && npm run build
 
