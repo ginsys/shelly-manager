@@ -78,6 +78,14 @@ Focus on functionality and platform consistency prior to enabling authentication
     - [x] Tests: coverage for severity
   - [x] Migrate handlers to standardized responses
     - [x] Replace `http.Error`/ad-hoc JSON in `internal/notification/handlers.go` with `internal/api/response`
+
+## Commit & PR Guidelines
+
+- Use Conventional Commits with concise subjects (≤72 chars) and precise scopes.
+  - Examples: `feat(ui/export): add history slice`, `test(api): add pagination tests`
+  - Keep subjects short; move details to brief bullets in the body.
+  - Prefer focused scopes: `ui/export`, `ui/import`, `ui/metrics`, `docs/tasks`, etc.
+  - Avoid mixing unrelated changes in one commit; keep changes reviewable.
     - [x] Update API examples and docs
 
 - [x] 7.2.c: Metrics Endpoint Documentation (MEDIUM PRIORITY)
