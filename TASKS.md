@@ -227,6 +227,12 @@ Status: POSTPONED. We will first expand functionality and standardize the API (P
     - [x] Security: Add RBAC guard (admin-only) and audit logging for export/import/scheduling endpoints
     - [x] Security: Restrict file downloads to configured export directory and sanitize paths
     - [x] History: Persist export/import history + statistics endpoints
+    - [x] UI (chunk 1): Export History slice implemented (2025-09-02)
+      - [x] API clients for history/statistics (ui/src/api/export.ts)
+      - [x] Pinia store with pagination/filters (ui/src/stores/export.ts)
+      - [x] Shared components: DataTable, PaginationBar, FilterBar
+      - [x] Export History page with filters/pagination
+      - [x] Tests: API client unit tests (Vitest) for history/statistics
     - [x] History: Tests for filters, pagination, defaults, and statistics (2025-09-02)
 
 #### Cross-Cutting Testing Improvements (Phase 7)

@@ -8,7 +8,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: () => import('./pages/DevicesPage.vue') },
-    { path: '/devices/:id', component: () => import('./pages/DeviceDetailPage.vue') }
+    { path: '/devices/:id', component: () => import('./pages/DeviceDetailPage.vue') },
+    { path: '/export/history', component: () => import('./pages/ExportHistoryPage.vue') }
   ]
 })
 
