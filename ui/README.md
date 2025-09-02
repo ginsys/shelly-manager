@@ -51,7 +51,8 @@ Production-like run
 - Shared table/pagination/filter components
 - Export History page with plugin/success filters and pagination
 
-Next slices (planned):
+Next slices:
  - Import History page and store (this commit)
  - Admin key rotation UI affordance (this commit)
  - Combined statistics page/cards (this commit)
+ - Metrics charts via REST polling (this commit) and WS wiring (next)

@@ -28,3 +28,20 @@ export function openMetricsWebSocket(onMessage: (data:any)=>void): WebSocket {
   return ws
 }
 
+export async function getSystemMetrics(): Promise<any> {
+  const res = await api.get<APIResponse<any>>('/metrics/system')
+  if (!res.data.success || !res.data.data) throw new Error(res.data.error?.message || 'Failed to load system metrics')
+  return res.data.data
+}
+
+export async function getDevicesMetrics(): Promise<any> {
+  const res = await api.get<APIResponse<any>>('/metrics/devices')
+  if (!res.data.success || !res.data.data) throw new Error(res.data.error?.message || 'Failed to load devices metrics')
+  return res.data.data
+}
+
+export async function getDriftSummary(): Promise<any> {
+  const res = await api.get<APIResponse<any>>('/metrics/drift')
+  if (!res.data.success || !res.data.data) throw new Error(res.data.error?.message || 'Failed to load drift summary')
+  return res.data.data
+}
