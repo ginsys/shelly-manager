@@ -35,7 +35,10 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 6.9 sec
 - Run `make test-ci` before pushing; inspect `coverage.html` locally when needed.
 
 ## Commit & Pull Request Guidelines
-- Follow Conventional Commits observed in history: e.g., `feat(database): ...`, `fix(ci): ...`, `docs: ...`, `deps(deps): ...`.
+- Follow Conventional Commits with concise subjects (≤72 chars) and precise scopes.
+  - Good: `feat(ui/export): add history slice`, `test(api): add pagination tests`
+  - Avoid stuffing multiple changes in a single subject. Use short bullets in body.
+  - Keep types/scopes focused: ui/export, ui/import, ui/metrics, docs/tasks, etc.
 - PRs must: describe changes, link issues, include tests for behavior, pass `make test-ci` locally, and update `docs/` when touching APIs/architecture.
 - For UI changes in `ui/`, attach screenshots or brief GIFs.
  - Roadmap: state how the change supports priorities in `./.claude/CLAUDE.md` and the specific items in `TASKS.md` (single source of truth).
