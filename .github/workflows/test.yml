@@ -112,7 +112,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go-version: ['1.21', '1.22', '1.23']
+        go-version: ['1.23']
     
     steps:
     - name: Checkout code
@@ -185,7 +185,7 @@ jobs:
     continue-on-error: true  # This prevents Windows failures from failing the workflow
     strategy:
       matrix:
-        go-version: ['1.21', '1.22', '1.23']
+        go-version: ['1.23']
     
     steps:
     - name: Checkout code

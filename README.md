@@ -527,7 +527,7 @@ MIT License - See [LICENSE](LICENSE) file for details
 **Status**: Production-ready with comprehensive testing foundation, security hardening, and advanced configuration normalization  
 **Testing Coverage**: 82.8% database coverage, critical security vulnerabilities resolved, comprehensive test automation  
 **Supported Devices**: Shelly Gen1 & Gen2+ devices with comprehensive configuration support  
-**Minimum Go Version**: 1.21  
+**Minimum Go Version**: 1.23  
 **Container Registry**: ghcr.io/ginsys/shelly-manager  
 **Architecture**: Dual-binary (API server + provisioning agent) with standardized API responses and comprehensive testing
 - CORS & Proxy Settings (Security)

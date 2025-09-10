@@ -267,7 +267,7 @@ The GitHub Actions workflow (`test.yml`) uses these steps:
 
 ### Environment Requirements
 - **CGO_ENABLED=1**: Required for most tests (SQLite database functionality)
-- **Go version**: 1.21+ (as specified in workflows)
+- **Go version**: 1.23+ (as specified in workflows)
 - **Optional tools**: 
   - `entr` for watch mode (`brew install entr`)
   - `golangci-lint 1.60.3` for linting (pinned via `mise.toml`)

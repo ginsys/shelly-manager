@@ -108,7 +108,9 @@
       "Bash(do echo \"=== Commit $commit ===\")",
       "Bash(npx vitest run:*)",
       "Bash(npx playwright test:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(xargs:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
