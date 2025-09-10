@@ -221,6 +221,9 @@ const showBreadcrumb = computed(() => {
   font-weight: 600; 
   margin-right: 24px; 
   font-size: 18px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: fit-content;
 }
 
 /* Navigation */
