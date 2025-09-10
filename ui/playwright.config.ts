@@ -87,22 +87,22 @@ export default defineConfig({
     }
   ],
 
-  // Development server configuration
-  webServer: [
+  // Development server configuration (only for local development)
+  webServer: process.env.CI ? undefined : [
     // Frontend dev server
     {
       command: 'npm run dev',
       port: 5173,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true,
       timeout: 60 * 1000,
     },
     // Backend API server (Docker Compose)
     {
-      command: 'docker-compose -f ../deploy/docker-compose/docker-compose.dev.yml up --build -d',
+      command: 'docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d',
       port: 8080,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true,
       timeout: 120 * 1000,
-      cwd: '../',
+      cwd: '../deploy/docker-compose',
     }
   ],
 

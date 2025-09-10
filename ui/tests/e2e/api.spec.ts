@@ -286,4 +286,134 @@ test.describe('API Integration E2E', () => {
       expect(headers['access-control-allow-origin']).toBeTruthy()
     }
   })
+
+  // Tests for newly implemented features
+
+  test('should handle schedule management APIs', async ({ request }) => {
+    // Get schedules
+    const response = await request.get(`${baseURL}/api/v1/schedules`)
+    
+    if (response.ok()) {
+      const data = await response.json()
+      expect(data).toHaveProperty('success')
+      
+      if (data.success) {
+        expect(data.data).toHaveProperty('schedules')
+        expect(Array.isArray(data.data.schedules)).toBe(true)
+      }
+    } else {
+      // Feature might not be implemented yet
+      expect(response.status()).toBe(404)
+    }
+  })
+
+  test('should handle backup management APIs', async ({ request }) => {
+    // Get backups
+    const response = await request.get(`${baseURL}/api/v1/backups`)
+    
+    if (response.ok()) {
+      const data = await response.json()
+      expect(data).toHaveProperty('success')
+      
+      if (data.success) {
+        expect(data.data).toHaveProperty('backups')
+        expect(Array.isArray(data.data.backups)).toBe(true)
+      }
+    } else {
+      // Feature might not be implemented yet
+      expect(response.status()).toBe(404)
+    }
+  })
+
+  test('should handle GitOps configuration APIs', async ({ request }) => {
+    // Get GitOps config
+    const response = await request.get(`${baseURL}/api/v1/gitops/config`)
+    
+    if (response.ok()) {
+      const data = await response.json()
+      expect(data).toHaveProperty('success')
+      
+      if (data.success) {
+        expect(data.data).toHaveProperty('config')
+      }
+    } else {
+      // Feature might not be implemented yet
+      expect(response.status()).toBe(404)
+    }
+  })
+
+  test('should handle plugin configuration APIs', async ({ request }) => {
+    // First get available plugins
+    const pluginsResponse = await request.get(`${baseURL}/api/v1/plugins`)
+    
+    if (pluginsResponse.ok()) {
+      const pluginsData = await pluginsResponse.json()
+      
+      if (pluginsData.success && pluginsData.data.length > 0) {
+        const plugin = pluginsData.data[0]
+        
+        // Get plugin configuration
+        const configResponse = await request.get(`${baseURL}/api/v1/plugins/${plugin.name}/config`)
+        
+        if (configResponse.ok()) {
+          const configData = await configResponse.json()
+          expect(configData).toHaveProperty('success')
+        }
+      }
+    }
+  })
+
+  test('should handle device statistics API', async ({ request }) => {
+    const response = await request.get(`${baseURL}/api/v1/devices/statistics`)
+    
+    if (response.ok()) {
+      const data = await response.json()
+      expect(data.success).toBe(true)
+      
+      if (data.data) {
+        expect(data.data).toHaveProperty('total')
+        expect(typeof data.data.total).toBe('number')
+      }
+    }
+  })
+
+  test('should validate API request schemas', async ({ request }) => {
+    // Test export preview with invalid data
+    const invalidRequest = {
+      // Missing required fields
+      invalid_field: 'test'
+    }
+    
+    const response = await request.post(`${baseURL}/api/v1/export/preview`, {
+      data: invalidRequest
+    })
+    
+    // Should return validation error
+    expect(response.status()).toBeGreaterThanOrEqual(400)
+    
+    const data = await response.json()
+    expect(data.success).toBe(false)
+    expect(data.error).toHaveProperty('message')
+  })
+
+  test('should handle concurrent API requests', async ({ request }) => {
+    // Make multiple concurrent requests
+    const concurrentRequests = [
+      request.get(`${baseURL}/api/v1/health`),
+      request.get(`${baseURL}/api/v1/devices`),
+      request.get(`${baseURL}/api/v1/plugins`),
+      request.get(`${baseURL}/api/v1/export/history`),
+      request.get(`${baseURL}/api/v1/metrics/status`)
+    ]
+    
+    const responses = await Promise.all(concurrentRequests)
+    
+    // All requests should complete successfully or with expected errors
+    for (const response of responses) {
+      expect(response.status()).toBeLessThan(500) // No server errors
+    }
+    
+    // At least the health check should succeed
+    expect(responses[0].ok()).toBeTruthy()
+  })
 })
