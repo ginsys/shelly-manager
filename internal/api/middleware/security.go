@@ -605,8 +605,9 @@ func IPBlockingMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logg
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientIP := getClientIP(r)
 
-			// Check if IP is blocked
-			if config.EnableIPBlocking && monitor != nil && monitor.IsIPBlocked(clientIP) {
+			// Check if IP is blocked (skip localhost in development)
+			isLocalhost := clientIP == "127.0.0.1" || clientIP == "::1" || clientIP == "localhost"
+			if config.EnableIPBlocking && monitor != nil && !isLocalhost && monitor.IsIPBlocked(clientIP) {
 				if logger != nil && config.LogSecurityEvents {
 					logger.WithFields(map[string]any{
 						"client_ip":      clientIP,

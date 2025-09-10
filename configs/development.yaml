@@ -1,0 +1,28 @@
+# Development configuration for Shelly Manager
+# Temporary config to fix IP blocking issue
+
+# Web server configuration
+server:
+  port: 8081                 # Development port to avoid conflicts
+  host: "127.0.0.1"         # Only bind to localhost for development
+  log_level: "debug"        # Debug logging for development
+
+# Application logging configuration  
+logging:
+  level: "debug"            # Debug level for development
+  format: "text"            # Human readable format
+  output: "stdout"          # Console output
+
+# Database configuration
+database:
+  provider: "sqlite"        # SQLite for development
+  dsn: "data/shelly-dev.db" # Separate development database
+  max_open_conns: 1
+  max_idle_conns: 1
+  log_level: "debug"        # Debug database queries
+
+# Network discovery (reduced scope for development)
+network:
+  discovery_intervals: ["10s"]    # Faster discovery for development
+  subnets: ["127.0.0.0/8"]       # Only localhost subnet for development
+  timeout: 5                     # Short timeout for development

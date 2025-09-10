@@ -66,7 +66,19 @@
   border-radius: 6px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   z-index: 1000;
-  margin-top: 4px;
+  padding-top: 8px;
+  margin-top: -4px;
+}
+
+/* Create invisible bridge to maintain hover state */
+.dropdown-menu::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: transparent;
 }
 
 .nav-dropdown:hover .dropdown-menu {
