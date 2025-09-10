@@ -100,7 +100,9 @@
       "Bash(done)",
       "Read(/home/serge/.claude/**)",
       "Bash(while read branch)",
-      "Bash(do echo \"=== $branch ===\")"
+      "Bash(do echo \"=== $branch ===\")",
+      "Bash(for pr in 18 19 20 21)",
+      "Bash(do echo \"=== PR $pr ===\")"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
