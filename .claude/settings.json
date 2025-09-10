@@ -114,7 +114,9 @@
       "Bash(python3:*)",
       "Bash(docker compose:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

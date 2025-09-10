@@ -266,3 +266,199 @@ export async function getRestoreResult(id: string): Promise<RestoreResult> {
   }
   return res.data.data
 }
+
+// GitOps-specific interfaces and methods
+
+export interface GitOpsExportRequest {
+  name: string
+  description?: string
+  format: 'terraform' | 'ansible' | 'kubernetes' | 'docker-compose' | 'yaml'
+  devices?: number[] // Selected device IDs, empty/null for all
+  repository_structure: 'monorepo' | 'hierarchical' | 'per-device' | 'flat'
+  template_options?: GitOpsTemplateOptions
+  git_config?: GitOpsGitConfig
+  variable_substitution?: Record<string, string>
+  include_secrets?: boolean
+  generate_readme?: boolean
+}
+
+export interface GitOpsTemplateOptions {
+  terraform?: {
+    provider_version?: string
+    module_structure?: 'single' | 'per-device' | 'per-type'
+    include_data_sources?: boolean
+    variable_files?: boolean
+  }
+  ansible?: {
+    playbook_structure?: 'single' | 'per-device' | 'roles'
+    inventory_format?: 'ini' | 'yaml'
+    include_vault?: boolean
+    use_collections?: boolean
+  }
+  kubernetes?: {
+    api_version?: string
+    namespace?: string
+    use_kustomize?: boolean
+    include_rbac?: boolean
+    config_map_structure?: 'single' | 'per-device'
+  }
+  docker_compose?: {
+    version?: string
+    network_mode?: 'bridge' | 'host' | 'custom'
+    include_volumes?: boolean
+    use_profiles?: boolean
+  }
+}
+
+export interface GitOpsGitConfig {
+  repository_url?: string
+  branch?: string
+  commit_message_template?: string
+  author_name?: string
+  author_email?: string
+  use_webhooks?: boolean
+  webhook_secret?: string
+}
+
+export interface GitOpsExportResult {
+  export_id: string
+  name: string
+  format: string
+  repository_structure: string
+  device_count: number
+  file_count: number
+  total_size: number
+  files: GitOpsExportFile[]
+  git_integration?: GitOpsIntegrationStatus
+  warnings?: string[]
+  duration?: string
+}
+
+export interface GitOpsExportFile {
+  path: string
+  name: string
+  size: number
+  type: 'config' | 'template' | 'variable' | 'readme' | 'script'
+  description?: string
+}
+
+export interface GitOpsIntegrationStatus {
+  repository_connected: boolean
+  branch_exists: boolean
+  last_commit?: string
+  webhook_configured: boolean
+  ci_status?: 'passing' | 'failing' | 'unknown'
+}
+
+export interface GitOpsExportItem {
+  id: number
+  export_id: string
+  name: string
+  description?: string
+  format: string
+  repository_structure: string
+  device_count: number
+  file_count: number
+  total_size: number
+  success: boolean
+  error_message?: string
+  created_at: string
+  created_by?: string
+}
+
+export interface ListGitOpsExportsParams {
+  page?: number
+  pageSize?: number
+  format?: string
+  success?: boolean
+}
+
+export interface ListGitOpsExportsResult {
+  items: GitOpsExportItem[]
+  meta?: Metadata
+}
+
+export interface GitOpsExportStatistics {
+  total: number
+  success: number
+  failure: number
+  by_format: Record<string, number>
+  by_structure: Record<string, number>
+  total_files: number
+  total_size: number
+  last_export?: string
+}
+
+export async function createGitOpsExport(req: GitOpsExportRequest): Promise<{ export_id: string }> {
+  const res = await api.post<APIResponse<{ export_id: string }>>('/export/gitops', req)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to create GitOps export')
+  }
+  return res.data.data
+}
+
+export async function getGitOpsExportResult(id: string): Promise<GitOpsExportResult> {
+  const res = await api.get<APIResponse<GitOpsExportResult>>(`/export/gitops/${id}`)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to get GitOps export result')
+  }
+  return res.data.data
+}
+
+export async function downloadGitOpsExport(id: string): Promise<Blob> {
+  const res = await api.get(`/export/gitops/${id}/download`, {
+    responseType: 'blob'
+  })
+  return res.data
+}
+
+export async function listGitOpsExports(params: ListGitOpsExportsParams = {}): Promise<ListGitOpsExportsResult> {
+  const { page = 1, pageSize = 20, format, success } = params
+  const res = await api.get<APIResponse<{ exports: GitOpsExportItem[] }>>('/export/gitops', {
+    params: { page, page_size: pageSize, format, success },
+  })
+  if (!res.data.success) {
+    throw new Error(res.data.error?.message || 'Failed to load GitOps exports')
+  }
+  return { items: res.data.data?.exports || [], meta: res.data.meta }
+}
+
+export async function getGitOpsExportStatistics(): Promise<GitOpsExportStatistics> {
+  const res = await api.get<APIResponse<GitOpsExportStatistics>>('/export/gitops-statistics')
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to load GitOps export statistics')
+  }
+  return res.data.data
+}
+
+export async function deleteGitOpsExport(id: string): Promise<void> {
+  const res = await api.delete<APIResponse<void>>(`/export/gitops/${id}`)
+  if (!res.data.success) {
+    throw new Error(res.data.error?.message || 'Failed to delete GitOps export')
+  }
+}
+
+export interface GitOpsExportPreview {
+  success: boolean
+  file_count?: number
+  estimated_size?: number
+  structure_preview: string[]
+  template_validation: GitOpsTemplateValidation
+  warnings?: string[]
+}
+
+export interface GitOpsTemplateValidation {
+  valid: boolean
+  terraform?: { syntax_valid: boolean; provider_compatible: boolean; warnings?: string[] }
+  ansible?: { syntax_valid: boolean; collection_available: boolean; warnings?: string[] }
+  kubernetes?: { api_valid: boolean; rbac_valid: boolean; warnings?: string[] }
+  docker_compose?: { syntax_valid: boolean; service_valid: boolean; warnings?: string[] }
+}
+
+export async function previewGitOpsExport(req: GitOpsExportRequest): Promise<{ preview: GitOpsExportPreview; summary: any }> {
+  const res = await api.post<APIResponse<{ preview: GitOpsExportPreview; summary: any }>>('/export/gitops-preview', req)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'GitOps preview failed')
+  }
+  return res.data.data
+}
