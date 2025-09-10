@@ -31,7 +31,7 @@ export default defineConfig({
   // Shared settings for all tests
   use: {
     // Base URL for the application
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.CI ? 'http://localhost:5173' : 'http://localhost:5174',
     
     // API endpoint for backend tests
     extraHTTPHeaders: {
@@ -92,7 +92,7 @@ export default defineConfig({
     // Frontend dev server
     {
       command: 'npm run dev',
-      port: 5173,
+      port: 5174,
       reuseExistingServer: true,
       timeout: 60 * 1000,
     },

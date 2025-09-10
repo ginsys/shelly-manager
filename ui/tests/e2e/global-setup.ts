@@ -3,9 +3,11 @@ import { chromium, FullConfig } from '@playwright/test'
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting E2E Test Environment Setup...')
   
-  // Create a browser for setup operations
+  // Create a browser for setup operations with realistic context
   const browser = await chromium.launch()
-  const context = await browser.newContext()
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  })
   const page = await context.newPage()
   
   try {
@@ -32,8 +34,9 @@ async function globalSetup(config: FullConfig) {
     
     // Wait for frontend to be ready
     console.log('⏳ Waiting for frontend...')
+    const frontendUrl = process.env.CI ? 'http://localhost:5173' : 'http://localhost:5174'
     try {
-      await page.goto('http://localhost:5173')
+      await page.goto(frontendUrl)
       await page.waitForLoadState('networkidle', { timeout: 30000 })
       console.log('✅ Frontend ready')
     } catch (error) {
@@ -87,18 +90,24 @@ async function setupTestData(page: any) {
   for (const device of testDevices) {
     try {
       const response = await page.evaluate(async (deviceData) => {
-        const res = await fetch('http://localhost:8080/api/v1/devices', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(deviceData)
-        })
-        return res.ok
+        try {
+          const res = await fetch('http://localhost:8080/api/v1/devices', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(deviceData)
+          })
+          return { ok: res.ok, status: res.status, statusText: res.statusText }
+        } catch (error) {
+          return { ok: false, error: error.message }
+        }
       }, device)
       
-      if (response) {
+      if (response.ok) {
         console.log(`📱 Created test device: ${device.name}`)
+      } else {
+        console.log(`⚠️ Device creation failed for ${device.name}: ${response.status} ${response.statusText || response.error}`)
       }
     } catch (error) {
       console.warn(`⚠️ Could not create test device ${device.name}:`, error)
