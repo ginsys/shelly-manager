@@ -133,15 +133,54 @@ jobs:
 
       - name: Start backend services
         run: |
-          # Start with Docker Compose
-          cd deploy/docker-compose
-          docker compose -f docker-compose.test.yml up -d
+          # Create minimal test config  
+          mkdir -p configs
+          cat > configs/config.yaml << 'EOF'
+          server:
+            port: 8080
+            host: 0.0.0.0
+          database:
+            provider: sqlite
+            path: /tmp/shelly_test.db
+          discovery:
+            enabled: false
+          provisioning:
+            auto: false
+          logging:
+            level: warn
+            format: json
+          metrics:
+            enabled: true
+            port: 9090
+          # Disable rate limiting and security for testing
+          security:
+            rate_limit:
+              enabled: false
+            cors:
+              enabled: true
+              allow_origins: ["*"]
+          EOF
           
-          # Wait for backend to be ready
-          timeout 60s bash -c 'until curl -f http://localhost:8080/healthz; do sleep 2; done'
-        env:
-          COMPOSE_DOCKER_CLI_BUILD: 1
-          DOCKER_BUILDKIT: 1
+          # Start backend directly (faster than Docker in CI)
+          ./bin/shelly-manager serve --config configs/config.yaml > backend.log 2>&1 &
+          BACKEND_PID=$!
+          echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
+          
+          # Wait for backend to be ready with better timeout handling
+          echo "Waiting for backend to start..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8080/healthz 2>/dev/null; then
+              echo "Backend ready after $i seconds"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Backend failed to start after 60 seconds"
+              echo "Backend logs:"
+              cat backend.log || true
+              exit 1
+            fi
+            sleep 1
+          done
 
       - name: Run E2E tests
         working-directory: ui
@@ -178,9 +217,15 @@ jobs:
       - name: Stop backend services
         if: always()
         run: |
-          cd deploy/docker-compose
-          docker compose -f docker-compose.test.yml down -v
-          docker compose -f docker-compose.test.yml rm -f
+          if [ ! -z "$BACKEND_PID" ]; then
+            kill $BACKEND_PID || true
+            echo "Backend stopped"
+          fi
+          # Show backend logs for debugging
+          if [ -f backend.log ]; then
+            echo "=== Backend Logs ==="
+            cat backend.log
+          fi
 
       # Test results are uploaded as artifacts above
       # Playwright HTML report provides better visualization than JSON reporter
@@ -226,7 +271,7 @@ jobs:
           # Build frontend
           cd ui && npm run build && cd ..
           
-          # Create minimal config
+          # Create minimal config with relaxed security for testing
           mkdir -p configs
           cat > configs/config.yaml << EOF
           server:
@@ -238,10 +283,17 @@ jobs:
           discovery:
             enabled: false
           logging:
-            level: info
+            level: warn
           metrics:
             enabled: true
             port: 9090
+          # Disable rate limiting and security for testing
+          security:
+            rate_limit:
+              enabled: false
+            cors:
+              enabled: true
+              allow_origins: ["*"]
           EOF
           
           # Start backend with logging
