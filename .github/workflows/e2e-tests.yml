@@ -301,10 +301,38 @@ jobs:
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
           
-          # Start frontend server
-          npx serve -s ui/dist -l 5173 > frontend.log 2>&1 &
+          # Verify frontend build exists
+          if [ ! -d "ui/dist" ]; then
+            echo "ERROR: Frontend dist directory not found!"
+            echo "Contents of ui directory:"
+            ls -la ui/ || true
+            exit 1
+          fi
+          
+          # Check dist has content
+          if [ -z "$(ls -A ui/dist)" ]; then
+            echo "ERROR: Frontend dist directory is empty!"
+            exit 1
+          fi
+          
+          echo "Frontend dist directory contents:"
+          ls -la ui/dist/
+          
+          # Start frontend server with better error handling
+          cd ui
+          npx serve -s dist -l 5173 > ../frontend.log 2>&1 &
           FRONTEND_PID=$!
+          cd ..
           echo "FRONTEND_PID=$FRONTEND_PID" >> $GITHUB_ENV
+          
+          # Verify serve command started successfully
+          sleep 2
+          if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+            echo "ERROR: Frontend serve command failed to start!"
+            echo "Frontend logs:"
+            cat frontend.log || true
+            exit 1
+          fi
           
           # Wait for backend with improved timeout and diagnostics
           echo "Waiting for backend to start..."
@@ -322,10 +350,26 @@ jobs:
             sleep 1
           done
           
-          # Wait for frontend
+          # Wait for frontend with better health check
           echo "Waiting for frontend to start..."
-          timeout 30s bash -c 'until curl -f http://localhost:5173 2>/dev/null; do sleep 1; done'
-          echo "Frontend ready"
+          for i in {1..30}; do
+            if curl -f http://localhost:5173 2>/dev/null && \
+               curl -s http://localhost:5173 | grep -q "<!doctype html"; then
+              echo "Frontend ready after $i seconds"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Frontend failed to start after 30 seconds"
+              echo "Frontend logs:"
+              cat frontend.log || true
+              echo "Process status:"
+              ps aux | grep serve || true
+              echo "Port status:"
+              netstat -tulpn | grep 5173 || true
+              exit 1
+            fi
+            sleep 1
+          done
 
       - name: Run E2E tests for ${{ matrix.project }}
         working-directory: ui

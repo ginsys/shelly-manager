@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
-import { TestHelpers, testData, createTestFile, cleanupTestFiles } from './helpers/test-helpers'
+import { TestHelpers, testData, createTestFile, cleanupTestFiles } from './fixtures/test-helpers'
 
 test.describe('Export/Import System Integration', () => {
   let helpers: TestHelpers

@@ -29,28 +29,48 @@ async function globalSetup(config: FullConfig) {
     }
     
     if (!backendReady) {
-      console.log('⚠️ Backend not fully ready, continuing with limited functionality')
+      console.error('❌ Backend API is not accessible at http://localhost:8080')
+      console.error('💡 Make sure the backend is running with: go run ./cmd/shelly-manager server')
+      throw new Error('Backend API is not accessible - cannot proceed with tests')
     }
     
     // Wait for frontend to be ready
     console.log('⏳ Waiting for frontend...')
-    const frontendUrl = process.env.CI ? 'http://localhost:5173' : 'http://localhost:5174'
+    const frontendUrl = process.env.CI ? 'http://localhost:5173' : 'http://localhost:5173'
+    let frontendReady = false
     try {
       await page.goto(frontendUrl)
       await page.waitForLoadState('networkidle', { timeout: 30000 })
+      
+      // Verify the page has actual content (try multiple selectors as fallback)
+      const contentSelectors = ['main', '#app', '[data-testid="app"]', 'body > div']
+      let hasContent = false
+      for (const selector of contentSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 })
+          hasContent = true
+          break
+        } catch {
+          // Try next selector
+        }
+      }
+      
+      if (!hasContent) {
+        throw new Error('Frontend loaded but no content found')
+      }
+      
       console.log('✅ Frontend ready')
+      frontendReady = true
     } catch (error) {
-      console.log('⚠️ Frontend may not be ready, tests will use fallback behavior')
+      console.error(`❌ Frontend is not accessible at ${frontendUrl}`)
+      console.error('💡 Make sure the frontend is running with: npm run dev (local) or npx serve dist (CI)')
+      throw new Error(`Frontend is not accessible at ${frontendUrl} - cannot proceed with tests`)
     }
     
-    // Setup test data if backend is available
-    if (backendReady) {
-      console.log('🔧 Setting up test data...')
-      await setupTestData(page)
-      console.log('✅ Test data ready')
-    } else {
-      console.log('⚠️ Skipping test data setup due to backend issues')
-    }
+    // Setup test data (both services are now confirmed ready)
+    console.log('🔧 Setting up test data...')
+    await setupTestData(page)
+    console.log('✅ Test data ready')
     
   } catch (error) {
     console.error('❌ Setup failed:', error)

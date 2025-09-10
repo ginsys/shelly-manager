@@ -1,5 +1,5 @@
 import { test, expect, devices } from '@playwright/test'
-import { TestHelpers } from './helpers/test-helpers'
+import { TestHelpers } from './fixtures/test-helpers'
 
 test.describe('Cross-Browser and Responsive Testing', () => {
   let helpers: TestHelpers

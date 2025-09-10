@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { TestHelpers } from './helpers/test-helpers'
+import { TestHelpers } from './fixtures/test-helpers'
 
 test.describe('Performance Testing', () => {
   let helpers: TestHelpers

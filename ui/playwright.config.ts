@@ -54,25 +54,61 @@ export default defineConfig({
     // Desktop browsers
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { 
+        ...devices['Desktop Chrome'],
+        // Chromium-specific settings
+        launchOptions: {
+          args: ['--disable-dev-shm-usage', '--no-sandbox'],
+        },
+      },
     },
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: { 
+        ...devices['Desktop Firefox'],
+        // Firefox-specific settings
+        launchOptions: {
+          firefoxUserPrefs: {
+            'network.http.speculative-parallel-limit': 0,
+            'network.dns.disableIPv6': true,
+          },
+        },
+        // Longer timeouts for Firefox navigation issues
+        navigationTimeout: 60000,
+        actionTimeout: 30000,
+      },
     },
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: { 
+        ...devices['Desktop Safari'],
+        // WebKit-specific settings
+        launchOptions: {
+          args: ['--disable-web-security'],
+        },
+        // Extra timeouts for WebKit rendering
+        navigationTimeout: 60000,
+        actionTimeout: 30000,
+      },
     },
     
     // Mobile browsers for responsive testing
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: { 
+        ...devices['Pixel 5'],
+        // Mobile Chrome settings
+        actionTimeout: 20000,
+      },
     },
     {
       name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
+      use: { 
+        ...devices['iPhone 12'],
+        // Mobile Safari specific settings
+        navigationTimeout: 60000,
+        actionTimeout: 30000,
+      },
     },
     
     // API testing project
