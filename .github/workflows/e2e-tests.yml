@@ -300,10 +300,8 @@ jobs:
           if [ ! -z "$FRONTEND_PID" ]; then
             kill $FRONTEND_PID || true
           fi
-          # Output logs for debugging if tests failed
-          if [ "${{ failure() }}" = "true" ]; then
-            echo "=== Backend Logs ==="
-            cat backend.log || true
-            echo "=== Frontend Logs ==="
-            cat frontend.log || true
-          fi
+          # Output logs for debugging
+          echo "=== Backend Logs ==="
+          cat backend.log || true
+          echo "=== Frontend Logs ==="
+          cat frontend.log || true
