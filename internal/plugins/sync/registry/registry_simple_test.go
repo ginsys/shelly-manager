@@ -131,11 +131,11 @@ func TestSimplePluginRegistry_RegisterAllPlugins(t *testing.T) {
 
 		// Verify plugins are registered
 		plugins := pluginRegistry.ListPlugins()
-		assert.Len(t, plugins, 3) // backup, gitops, opnsense
+		assert.Len(t, plugins, 4) // backup, gitops, opnsense, sma
 
 		// Verify plugin count
 		count := pluginRegistry.GetPluginCount()
-		assert.Equal(t, 3, count)
+		assert.Equal(t, 4, count)
 	})
 }
 
@@ -249,7 +249,7 @@ func TestSimplePluginRegistry_ListPlugins(t *testing.T) {
 		require.NoError(t, err)
 
 		plugins := pluginRegistry.ListPlugins()
-		assert.Len(t, plugins, 3)
+		assert.Len(t, plugins, 4)
 
 		// Verify plugin info structure
 		for _, plugin := range plugins {
@@ -292,7 +292,7 @@ func TestSimplePluginRegistry_GetPlugins(t *testing.T) {
 		require.NoError(t, err)
 
 		allPlugins := pluginRegistry.GetPlugins()
-		assert.Len(t, allPlugins, 3)
+		assert.Len(t, allPlugins, 4)
 
 		// Verify we have the expected plugins
 		pluginNames := make(map[string]bool)
@@ -319,7 +319,7 @@ func TestSimplePluginRegistry_GetPluginCount(t *testing.T) {
 		require.NoError(t, err)
 
 		count := pluginRegistry.GetPluginCount()
-		assert.Equal(t, 3, count)
+		assert.Equal(t, 4, count)
 	})
 }
 
@@ -331,7 +331,7 @@ func TestSimplePluginRegistry_HealthCheck(t *testing.T) {
 		require.NoError(t, err)
 
 		healthStatuses := pluginRegistry.HealthCheck()
-		assert.Len(t, healthStatuses, 3)
+		assert.Len(t, healthStatuses, 4)
 
 		// Verify all plugins report health status
 		for pluginName, status := range healthStatuses {
@@ -371,7 +371,7 @@ func TestSimplePluginRegistry_RegisterAllPluginsLegacy(t *testing.T) {
 
 		// Should work the same as RegisterAllPlugins
 		count := pluginRegistry.GetPluginCount()
-		assert.Equal(t, 3, count)
+		assert.Equal(t, 4, count)
 	})
 }
 
@@ -426,21 +426,21 @@ func TestSimplePluginRegistry_ConcurrentOperations(t *testing.T) {
 		// Concurrent ListPlugins
 		go func() {
 			plugins := pluginRegistry.ListPlugins()
-			assert.Len(t, plugins, 3)
+			assert.Len(t, plugins, 4)
 			done <- true
 		}()
 
 		// Concurrent GetPluginCount
 		go func() {
 			count := pluginRegistry.GetPluginCount()
-			assert.Equal(t, 3, count)
+			assert.Equal(t, 4, count)
 			done <- true
 		}()
 
 		// Concurrent HealthCheck
 		go func() {
 			health := pluginRegistry.HealthCheck()
-			assert.Len(t, health, 3)
+			assert.Len(t, health, 4)
 			done <- true
 		}()
 

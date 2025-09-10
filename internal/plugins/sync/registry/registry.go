@@ -10,6 +10,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/backup"
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/gitops"
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/opnsense"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/sma"
 )
 
 // PluginRegistry manages the registration of all sync plugins using the generalized system
@@ -34,6 +35,7 @@ func (r *PluginRegistry) RegisterAllPlugins() error {
 		backup.NewGeneralizedPlugin(),
 		gitops.NewGeneralizedPlugin(),
 		opnsense.NewGeneralizedPlugin(),
+		sma.NewGeneralizedPlugin(),
 	}
 
 	var errors []error

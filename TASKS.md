@@ -79,16 +79,17 @@ Last updated: 2025-09-10
 - **Actual Effort**: 4 hours | **Success Criteria**: ✅ Plugin discovery + configuration UI + comprehensive tests
 - **Deliverables**: 5 files (2,160+ lines) with dynamic form generation and complete plugin management
 
-##### **Task 1.6: SMA Format Support**
-- [ ] **Go Expert**: Implement SMA format parser/generator in Go (if needed)
-- [ ] **Frontend JS Expert**: Define SMA format specification in `docs/sma-format.md`
-- [ ] **Frontend JS Expert**: Create `ui/src/utils/sma-parser.ts`
-- [ ] **Frontend JS Expert**: Create `ui/src/utils/sma-generator.ts`
-- [ ] **Frontend JS Expert**: Add SMA option to export forms
-- [ ] **Frontend JS Expert**: Write unit tests for parser/generator
-- [ ] **Test Automation Specialist**: Test SMA format compatibility
-- [ ] **Technical Documentation Architect**: Document SMA format specification
-- **Estimated Effort**: 2-3 hours | **Success Criteria**: SMA format fully supported
+##### **Task 1.6: SMA Format Support** ✅ **COMPLETED** (2025-09-10)
+- [x] **Go Expert**: Implement SMA format parser/generator in Go (comprehensive backend plugin)
+- [x] **Frontend JS Expert**: Define SMA format specification in `docs/sma-format.md`
+- [x] **Frontend JS Expert**: Create `ui/src/utils/sma-parser.ts` (with Gzip and validation)
+- [x] **Frontend JS Expert**: Create `ui/src/utils/sma-generator.ts` (with compression)
+- [x] **Frontend JS Expert**: Add SMA option to export forms (BackupForm integration)
+- [x] **Frontend JS Expert**: Write unit tests for parser/generator (58 tests, 100% pass)
+- [x] **Go Expert**: Test SMA format compatibility (11 Go tests, all passing)
+- [x] **Go Expert**: Document SMA format specification (complete docs/sma-format.md)
+- **Actual Effort**: 3 hours | **Success Criteria**: ✅ SMA format fully supported
+- **Deliverables**: 14 files (5,473+ lines) with complete backend/frontend SMA implementation
 
 ##### **Task 1.7: Navigation and Route Integration**
 - [ ] **Frontend JS Expert**: Update `ui/src/router/index.ts` with new routes
@@ -98,6 +99,27 @@ Last updated: 2025-09-10
 - [ ] **Test Automation Specialist**: Verify navigation integration
 - [ ] **Technical Documentation Architect**: Document navigation structure
 - **Estimated Effort**: 1-2 hours | **Success Criteria**: All features accessible via nav
+
+##### **Task 1.7.5: Review and Fix Failing E2E Tests** ⚡ **HIGH PRIORITY**
+- [ ] **Test Automation Specialist**: Investigate failing GitHub Actions E2E tests
+- [ ] **Test Automation Specialist**: Review test results from https://github.com/ginsys/shelly-manager/actions/runs/17620651210/job/50065277367
+- [ ] **Test Automation Specialist**: Fix CI pipeline configuration issues
+- [ ] **Test Automation Specialist**: Ensure all E2E tests pass in CI environment
+- [ ] **Test Automation Specialist**: Validate test reliability and consistency
+- **Estimated Effort**: 1-2 hours | **Success Criteria**: All E2E tests passing in CI
+- **Business Impact**: CRITICAL - CI pipeline must be stable for ongoing development
+
+##### **Task 1.7.6: Complete UI Testing and Consistency Review** ⚡ **HIGH PRIORITY**
+- [ ] **Frontend JS Expert**: Test all menu items and navigation paths
+- [ ] **Frontend JS Expert**: Verify all forms render correctly without 404 errors
+- [ ] **Frontend JS Expert**: Review UI consistency across all pages
+- [ ] **Frontend JS Expert**: Test Export/Import workflows end-to-end
+- [ ] **Frontend JS Expert**: Verify plugin management UI functionality
+- [ ] **Frontend JS Expert**: Check responsive design on different screen sizes
+- [ ] **Frontend JS Expert**: Fix any broken links or missing pages
+- [ ] **QA Specialist**: Document UI inconsistencies and create fix plan
+- **Estimated Effort**: 2-3 hours | **Success Criteria**: All UI components working, no 404 errors
+- **Business Impact**: CRITICAL - User experience must be polished and consistent
 
 ##### **Task 1.8: Final Integration Testing and Documentation**
 - [ ] **Test Automation Specialist**: Run complete E2E test suite
