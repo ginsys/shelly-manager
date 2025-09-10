@@ -38,7 +38,18 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 		}
 	}
 
-	// WebSocket endpoint FIRST, without any middleware to preserve Hijacker interface
+	// Health endpoints FIRST, with minimal middleware to allow curl health checks
+	// These endpoints need to be accessible without user agent validation for CI/CD
+	if handler != nil {
+		// Create a subrouter for health endpoints with only basic middleware
+		healthRouter := r.PathPrefix("/").Subrouter()
+		healthRouter.Use(logging.RecoveryMiddleware(logger))
+		healthRouter.Use(logging.HTTPMiddleware(logger))
+		healthRouter.HandleFunc("/healthz", handler.Healthz).Methods("GET")
+		healthRouter.HandleFunc("/readyz", handler.Readyz).Methods("GET")
+	}
+
+	// WebSocket endpoint with minimal middleware to preserve Hijacker interface
 	if handler.MetricsHandler != nil {
 		// Optionally restrict WebSocket origins using security config
 		if securityConfig != nil {
@@ -46,64 +57,63 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 				hub.SetAllowedOrigins(securityConfig.CORSAllowedOrigins)
 			}
 		}
-		r.HandleFunc("/metrics/ws", handler.MetricsHandler.HandleWebSocket).Methods("GET")
+		wsRouter := r.PathPrefix("/").Subrouter()
+		wsRouter.Use(logging.RecoveryMiddleware(logger))
+		wsRouter.HandleFunc("/metrics/ws", handler.MetricsHandler.HandleWebSocket).Methods("GET")
 	}
+
+	// Create protected subrouter for all other routes with full security middleware
+	protected := r.PathPrefix("/").Subrouter()
 
 	// Apply security middleware in proper order:
 	// 1. Recovery middleware (catch panics first)
-	r.Use(logging.RecoveryMiddleware(logger))
+	protected.Use(logging.RecoveryMiddleware(logger))
 
 	// 2. IP blocking middleware (block malicious IPs early)
 	if securityConfig.EnableIPBlocking && securityMonitor != nil {
-		r.Use(middleware.IPBlockingMiddleware(securityConfig, securityMonitor, logger))
+		protected.Use(middleware.IPBlockingMiddleware(securityConfig, securityMonitor, logger))
 	}
 
 	// 3. Security monitoring middleware (track all requests)
 	if securityMonitor != nil {
-		r.Use(middleware.MonitoringMiddleware(securityConfig, securityMonitor, logger))
+		protected.Use(middleware.MonitoringMiddleware(securityConfig, securityMonitor, logger))
 	}
 
 	// 4. Security logging middleware (log all requests for monitoring)
-	r.Use(middleware.SecurityLoggingMiddleware(securityConfig, logger))
+	protected.Use(middleware.SecurityLoggingMiddleware(securityConfig, logger))
 
 	// 5. Security headers middleware (set security headers early)
-	r.Use(middleware.SecurityHeadersMiddleware(securityConfig, logger))
+	protected.Use(middleware.SecurityHeadersMiddleware(securityConfig, logger))
 
 	// 6. Request timeout middleware (prevent resource exhaustion)
-	r.Use(middleware.TimeoutMiddleware(securityConfig, logger))
+	protected.Use(middleware.TimeoutMiddleware(securityConfig, logger))
 
 	// 7. Rate limiting middleware (prevent DoS attacks)
-	r.Use(middleware.RateLimitMiddleware(securityConfig, logger))
+	protected.Use(middleware.RateLimitMiddleware(securityConfig, logger))
 
 	// 8. Request size limiting middleware (prevent large payload attacks)
-	r.Use(middleware.RequestSizeMiddleware(securityConfig, logger))
+	protected.Use(middleware.RequestSizeMiddleware(securityConfig, logger))
 
 	// 9. Request validation middleware (validate headers, content types, etc.)
-	r.Use(middleware.ValidateHeadersMiddleware(validationConfig, logger))
-	r.Use(middleware.ValidateContentTypeMiddleware(validationConfig, logger))
-	r.Use(middleware.ValidateQueryParamsMiddleware(validationConfig, logger))
-	r.Use(middleware.ValidateJSONMiddleware(validationConfig, logger))
+	protected.Use(middleware.ValidateHeadersMiddleware(validationConfig, logger))
+	protected.Use(middleware.ValidateContentTypeMiddleware(validationConfig, logger))
+	protected.Use(middleware.ValidateQueryParamsMiddleware(validationConfig, logger))
+	protected.Use(middleware.ValidateJSONMiddleware(validationConfig, logger))
 
 	// 10. Enhanced CORS middleware (security-aware CORS handling)
-	r.Use(enhancedCORSMiddleware(logger, securityConfig))
+	protected.Use(enhancedCORSMiddleware(logger, securityConfig))
 
 	// 11. Standard logging middleware (existing functionality)
-	r.Use(logging.HTTPMiddleware(logger))
+	protected.Use(logging.HTTPMiddleware(logger))
 
 	// 12. Prometheus HTTP metrics middleware (baseline observability)
 	if handler != nil {
 		hm := imetrics.NewHTTPMetrics(nil)
-		r.Use(hm.HTTPMiddleware())
+		protected.Use(hm.HTTPMiddleware())
 	}
 
-	// Liveness/readiness endpoints
-	if handler != nil {
-		r.HandleFunc("/healthz", handler.Healthz).Methods("GET")
-		r.HandleFunc("/readyz", handler.Readyz).Methods("GET")
-	}
-
-	// API routes
-	api := r.PathPrefix("/api/v1").Subrouter()
+	// API routes - use protected subrouter for full security middleware
+	api := protected.PathPrefix("/api/v1").Subrouter()
 
 	// Admin routes (guarded by simple admin key if configured)
 	api.HandleFunc("/admin/rotate-admin-key", handler.RotateAdminKey).Methods("POST")
@@ -186,7 +196,7 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	api.HandleFunc("/devices/{id}/drift-report", handler.GenerateDeviceDriftReport).Methods("POST")
 
 	// Notification routes
-	if handler.NotificationHandler != nil {
+	if handler != nil && handler.NotificationHandler != nil {
 		api.HandleFunc("/notifications/channels", handler.NotificationHandler.CreateChannel).Methods("POST")
 		api.HandleFunc("/notifications/channels", handler.NotificationHandler.GetChannels).Methods("GET")
 		api.HandleFunc("/notifications/channels/{id}", handler.NotificationHandler.UpdateChannel).Methods("PUT")
