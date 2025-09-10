@@ -1,0 +1,23 @@
+server:
+  port: 8080
+  host: 0.0.0.0
+database:
+  provider: sqlite
+  path: /tmp/shelly_test.db
+discovery:
+  enabled: false
+provisioning:
+  auto: false
+logging:
+  level: warn
+  format: json
+metrics:
+  enabled: true
+  port: 9090
+# Disable rate limiting and security for testing
+security:
+  rate_limit:
+    enabled: false
+  cors:
+    enabled: true
+    allow_origins: ["*"]

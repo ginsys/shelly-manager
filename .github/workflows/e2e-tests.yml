@@ -133,7 +133,7 @@ jobs:
 
       - name: Start backend services
         run: |
-          # Create minimal test config  
+          # Create minimal test config that matches our working local config
           mkdir -p configs
           cat > configs/config.yaml << 'EOF'
           server:
@@ -161,8 +161,8 @@ jobs:
               allow_origins: ["*"]
           EOF
           
-          # Start backend directly (faster than Docker in CI)
-          ./bin/shelly-manager serve --config configs/config.yaml > backend.log 2>&1 &
+          # Start backend directly (faster than Docker in CI) - use correct command 'server' not 'serve'
+          ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
           
@@ -296,8 +296,8 @@ jobs:
               allow_origins: ["*"]
           EOF
           
-          # Start backend with logging
-          ./bin/shelly-manager serve --config configs/config.yaml > backend.log 2>&1 &
+          # Start backend with logging - use correct command 'server' not 'serve'
+          ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
           
