@@ -462,3 +462,184 @@ export async function previewGitOpsExport(req: GitOpsExportRequest): Promise<{ p
   }
   return res.data.data
 }
+
+// SMA-specific interfaces and methods
+
+export interface SMAExportRequest {
+  plugin_name: 'sma'
+  format: 'sma'
+  config?: {
+    compression?: boolean
+    compression_level?: number // 1-9
+    include_checksums?: boolean
+  }
+  filters?: {
+    device_ids?: number[]
+    template_ids?: number[]
+    include_discovered?: boolean
+    include_network_settings?: boolean
+    include_plugin_configs?: boolean
+    include_system_settings?: boolean
+  }
+  options?: {
+    export_id?: string
+    created_by?: string
+    export_type?: 'manual' | 'scheduled' | 'api'
+  }
+}
+
+export interface SMAExportResult {
+  export_id: string
+  plugin_name: 'sma'
+  format: 'sma'
+  output_path?: string
+  record_count: number
+  file_size: number
+  checksum?: string
+  compression_ratio?: number
+  original_size?: number
+  metadata: {
+    sma_version: string
+    format_version: string
+    device_count: number
+    template_count: number
+    discovered_device_count: number
+    plugin_config_count: number
+    data_integrity: number // 0-100%
+  }
+  duration?: string
+  warnings?: string[]
+}
+
+export interface SMAImportRequest {
+  file: File
+  options?: {
+    validate_checksums?: boolean
+    validate_structure?: boolean
+    dry_run?: boolean
+    merge_strategy?: 'overwrite' | 'merge' | 'skip'
+    backup_before?: boolean
+    import_sections?: string[] // devices, templates, etc.
+  }
+}
+
+export interface SMAImportResult {
+  import_id: string
+  success: boolean
+  imported_sections: string[]
+  device_count: number
+  template_count: number
+  discovered_device_count: number
+  conflicts?: string[]
+  warnings?: string[]
+  errors?: string[]
+  validation_result: {
+    valid: boolean
+    sma_version: string
+    format_version: string
+    data_integrity: number
+  }
+  duration?: string
+}
+
+export interface SMAPreview {
+  success: boolean
+  validation: {
+    valid: boolean
+    sma_version: string
+    format_version: string
+    errors: string[]
+    warnings: string[]
+    data_integrity: number
+  }
+  summary: {
+    device_count: number
+    template_count: number
+    discovered_device_count: number
+    plugin_config_count: number
+    sections: string[]
+    estimated_import_time: number
+    file_size: number
+    compression_ratio: number
+  }
+  conflicts?: string[]
+  import_preview?: {
+    devices_to_add: number
+    devices_to_update: number
+    templates_to_add: number
+    templates_to_update: number
+    potential_conflicts: string[]
+  }
+}
+
+export async function createSMAExport(req: SMAExportRequest): Promise<{ export_id: string }> {
+  const res = await api.post<APIResponse<{ export_id: string }>>('/export/sma', req)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to create SMA export')
+  }
+  return res.data.data
+}
+
+export async function getSMAExportResult(id: string): Promise<SMAExportResult> {
+  const res = await api.get<APIResponse<SMAExportResult>>(`/export/sma/${id}`)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to get SMA export result')
+  }
+  return res.data.data
+}
+
+export async function downloadSMAExport(id: string): Promise<Blob> {
+  const res = await api.get(`/export/sma/${id}/download`, {
+    responseType: 'blob'
+  })
+  return res.data
+}
+
+export async function previewSMAExport(req: SMAExportRequest): Promise<{ preview: ExportPreview; summary: any }> {
+  const res = await api.post<APIResponse<{ preview: ExportPreview; summary: any }>>('/export/sma-preview', req)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'SMA preview failed')
+  }
+  return res.data.data
+}
+
+export async function importSMAFile(req: SMAImportRequest): Promise<{ import_id: string }> {
+  const formData = new FormData()
+  formData.append('file', req.file)
+  formData.append('options', JSON.stringify(req.options || {}))
+
+  const res = await api.post<APIResponse<{ import_id: string }>>('/import/sma', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to import SMA file')
+  }
+  return res.data.data
+}
+
+export async function getSMAImportResult(id: string): Promise<SMAImportResult> {
+  const res = await api.get<APIResponse<SMAImportResult>>(`/import/sma/${id}`)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to get SMA import result')
+  }
+  return res.data.data
+}
+
+export async function previewSMAFile(file: File, options?: { 
+  validate_checksums?: boolean 
+  validate_structure?: boolean 
+}): Promise<SMAPreview> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('options', JSON.stringify(options || {}))
+
+  const res = await api.post<APIResponse<SMAPreview>>('/import/sma-preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to preview SMA file')
+  }
+  return res.data.data
+}

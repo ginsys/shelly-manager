@@ -61,6 +61,15 @@
         </div>
       </div>
 
+      <!-- SMA-specific configuration -->
+      <SMAConfigForm
+        v-if="formData.format === 'sma'"
+        :device-count="estimatedDeviceCount"
+        :template-count="availableDevices.length"
+        @update:config="handleSMAConfigUpdate"
+        @update:sizeEstimate="handleSMASize"
+      />
+
       <!-- Device Selection -->
       <div class="form-section">
         <h3>Device Selection</h3>
@@ -254,8 +263,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import type { BackupRequest, BackupItem } from '@/api/export'
+import type { BackupRequest, BackupItem, SMAExportRequest } from '@/api/export'
 import type { Device } from '@/api/types'
+import SMAConfigForm from './SMAConfigForm.vue'
 
 const props = defineProps<{
   backup?: BackupItem | null
@@ -289,6 +299,10 @@ const selectedDevices = ref<number[]>([])
 const selectAllDevices = ref(true)
 const confirmPassword = ref('')
 const sizeEstimate = ref(0)
+
+// SMA-specific state
+const smaConfig = ref<Partial<SMAExportRequest> | null>(null)
+const smaSize = ref<{ originalSize: number; compressedSize: number; compressionRatio: number; recordCount: number } | null>(null)
 
 // Validation errors
 const errors = reactive<Record<string, string>>({})
@@ -357,6 +371,12 @@ function validateForm() {
 }
 
 function calculateSizeEstimate() {
+  // Use SMA size estimate if available and format is SMA
+  if (formData.format === 'sma' && smaSize.value) {
+    sizeEstimate.value = smaSize.value.compressedSize
+    return
+  }
+
   // Simple size estimation based on device count and content options
   let baseSize = estimatedDeviceCount.value * 2048 // ~2KB per device base
 
@@ -369,6 +389,16 @@ function calculateSizeEstimate() {
   else if (formData.format === 'sma') baseSize *= 0.7
 
   sizeEstimate.value = Math.max(baseSize, 1024) // Minimum 1KB
+}
+
+// SMA-specific handlers
+function handleSMAConfigUpdate(config: Partial<SMAExportRequest>) {
+  smaConfig.value = config
+}
+
+function handleSMASize(size: { originalSize: number; compressedSize: number; compressionRatio: number; recordCount: number }) {
+  smaSize.value = size
+  calculateSizeEstimate()
 }
 
 function formatFileSize(bytes: number): string {
@@ -386,8 +416,8 @@ function onSubmit() {
     return
   }
   
-  // Prepare the request
-  const request: BackupRequest = {
+  // Prepare the base request
+  let request: BackupRequest = {
     ...formData,
     devices: selectAllDevices.value ? undefined : selectedDevices.value
   }
@@ -397,7 +427,33 @@ function onSubmit() {
     delete request.encryption_password
   }
 
-  emit('submit', request)
+  // If SMA format, merge SMA configuration
+  if (formData.format === 'sma' && smaConfig.value) {
+    // Convert BackupRequest to SMA-compatible format
+    const smaRequest = {
+      plugin_name: 'sma' as const,
+      format: 'sma' as const,
+      config: smaConfig.value.config,
+      filters: {
+        ...smaConfig.value.filters,
+        device_ids: selectAllDevices.value ? undefined : selectedDevices.value
+      },
+      options: {
+        ...smaConfig.value.options,
+        export_type: smaConfig.value.options?.export_type || 'manual'
+      }
+    }
+    
+    // Emit SMA request with backup metadata
+    const enrichedRequest = {
+      ...request,
+      smaConfig: smaRequest
+    }
+    
+    emit('submit', enrichedRequest)
+  } else {
+    emit('submit', request)
+  }
 }
 
 // Watchers
@@ -409,6 +465,15 @@ watch(() => formData.encrypt, (encrypt) => {
   if (!encrypt) {
     formData.encryption_password = ''
     confirmPassword.value = ''
+  }
+})
+
+// Clear SMA config when format changes away from SMA
+watch(() => formData.format, (newFormat) => {
+  if (newFormat !== 'sma') {
+    smaConfig.value = null
+    smaSize.value = null
+    calculateSizeEstimate()
   }
 })
 
