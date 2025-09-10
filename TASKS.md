@@ -54,18 +54,31 @@ Last updated: 2025-09-10
 - **Actual Effort**: 4 hours | **Success Criteria**: ✅ GitOps export with 5 format support + 13 passing tests
 - **Deliverables**: 7 files (1,625+ lines) with complete GitOps workflow + Git integration
 
-##### **Task 1.4: Plugin Management UI**
-- [ ] **Frontend JS Expert**: Create `ui/src/api/plugin.ts` with plugin operations
-- [ ] **Frontend JS Expert**: Create `ui/src/stores/plugin.ts` for plugin state
-- [ ] **Frontend JS Expert**: Create `ui/src/pages/PluginManagementPage.vue`
-- [ ] **Frontend JS Expert**: Create `ui/src/components/PluginSchemaViewer.vue`
-- [ ] **Frontend JS Expert**: Add plugin configuration interface
-- [ ] **Frontend JS Expert**: Write comprehensive tests
+##### **Task 1.4: E2E Testing Infrastructure** ⚡ **URGENT PRIORITY**
+- [ ] **Test Automation Specialist**: Create directory structure `ui/tests/e2e/`
+- [ ] **Test Automation Specialist**: Implement global-setup.ts and global-teardown.ts
+- [ ] **Test Automation Specialist**: Create smoke.spec.ts with basic application tests
+- [ ] **Test Automation Specialist**: Create devices.spec.ts with device management tests
+- [ ] **Test Automation Specialist**: Create api.spec.ts with API endpoint tests
+- [ ] **Test Automation Specialist**: Create fixtures/test-helpers.ts with common utilities
+- [ ] **Test Automation Specialist**: Fix GitHub Actions E2E workflow configuration
+- [ ] **Technical Documentation Architect**: Document E2E testing setup and usage
+- **Estimated Effort**: 3-4 hours | **Success Criteria**: CI passing + 10+ tests
+- **Business Impact**: CRITICAL - Fixes failing CI pipeline and establishes test foundation
+
+##### **Task 1.5: Plugin Management UI** ✅ **COMPLETED** (2025-09-10)
+- [x] **Frontend JS Expert**: Create `ui/src/api/plugin.ts` with plugin operations
+- [x] **Frontend JS Expert**: Create `ui/src/stores/plugin.ts` for plugin state
+- [x] **Frontend JS Expert**: Create `ui/src/pages/PluginManagementPage.vue` (already existed)
+- [x] **Frontend JS Expert**: Create `ui/src/components/PluginConfigForm.vue` (dynamic form generation)
+- [x] **Frontend JS Expert**: Create `ui/src/components/PluginDetailsView.vue` (comprehensive plugin details)
+- [x] **Frontend JS Expert**: Write comprehensive tests (579 lines API tests, 380+ component tests)
 - [ ] **Test Automation Specialist**: Test plugin discovery/config and add E2E tests
 - [ ] **Technical Documentation Architect**: Document plugin system architecture
-- **Estimated Effort**: 3-4 hours | **Success Criteria**: Plugin discovery + configuration UI
+- **Actual Effort**: 4 hours | **Success Criteria**: ✅ Plugin discovery + configuration UI + comprehensive tests
+- **Deliverables**: 5 files (2,160+ lines) with dynamic form generation and complete plugin management
 
-##### **Task 1.5: SMA Format Support**
+##### **Task 1.6: SMA Format Support**
 - [ ] **Go Expert**: Implement SMA format parser/generator in Go (if needed)
 - [ ] **Frontend JS Expert**: Define SMA format specification in `docs/sma-format.md`
 - [ ] **Frontend JS Expert**: Create `ui/src/utils/sma-parser.ts`
@@ -76,7 +89,7 @@ Last updated: 2025-09-10
 - [ ] **Technical Documentation Architect**: Document SMA format specification
 - **Estimated Effort**: 2-3 hours | **Success Criteria**: SMA format fully supported
 
-##### **Task 1.6: Navigation and Route Integration**
+##### **Task 1.7: Navigation and Route Integration**
 - [ ] **Frontend JS Expert**: Update `ui/src/router/index.ts` with new routes
 - [ ] **Frontend JS Expert**: Update `ui/src/layouts/MainLayout.vue` with menu items
 - [ ] **Frontend JS Expert**: Add breadcrumb navigation
@@ -85,7 +98,7 @@ Last updated: 2025-09-10
 - [ ] **Technical Documentation Architect**: Document navigation structure
 - **Estimated Effort**: 1-2 hours | **Success Criteria**: All features accessible via nav
 
-##### **Task 1.7: Final Integration Testing and Documentation**
+##### **Task 1.8: Final Integration Testing and Documentation**
 - [ ] **Test Automation Specialist**: Run complete E2E test suite
 - [ ] **Test Automation Specialist**: Performance testing (<200ms response)
 - [ ] **Test Automation Specialist**: Security validation for sensitive operations
