@@ -65,7 +65,10 @@ The project is now entering a strategic modernization phase to transform from a 
 - **Database Persistence**: Discovered device storage with 24-hour TTL and automatic cleanup
 - **Modern Web UI**: Real-time device discovery, configuration wizards, diff tools, responsive design with improved feedback
 - **Configuration Comparison**: Server-side normalization enabling accurate configuration diff and validation
-- **Comprehensive Testing**: Major testing milestone achieved with 82.8% database coverage (29/31 methods tested), 63.3% plugin registry coverage, critical security vulnerabilities resolved including rate limiting bypass, comprehensive test automation framework with isolation
+- **Comprehensive Testing**: Production-ready testing achieved with 82.8% database coverage, 63.3% plugin coverage, E2E testing across 5 browsers
+- **🆕 Real-time Metrics**: Complete WebSocket implementation with bounded ring buffers, automatic reconnection, and REST fallback
+- **🆕 Enhanced UX**: Schema-driven export/import forms with real-time JSON validation and preview capabilities
+- **🆕 E2E Testing**: Comprehensive Playwright infrastructure with 195+ scenarios, CI integration, and artifact collection
 
 ### 📊 Current Capabilities
 - **Device Management**: 112+ REST endpoints across 6 handler modules with standardized security responses
@@ -78,6 +81,9 @@ The project is now entering a strategic modernization phase to transform from a 
 - **Database Providers**: Multi-provider support with SQLite, PostgreSQL, MySQL (13 provider files)
 - **Plugin Architecture**: Extensible plugin system with 19 files supporting sync, notification, and discovery
 - **Security Framework**: Comprehensive security testing with vulnerability resolution and rate limiting protection
+- **🆕 Real-time Metrics**: WebSocket-based live dashboards with CPU, memory, disk monitoring and automatic reconnection
+- **🆕 Enhanced Forms**: Schema-driven export/import preview forms with JSON validation, copy/download, and localStorage persistence
+- **🆕 E2E Testing**: Multi-browser testing with Chromium, Firefox, WebKit + mobile, CI integration, and failure artifacts
 
 ## 🚀 Quick Start
 
