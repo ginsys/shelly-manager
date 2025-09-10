@@ -112,7 +112,9 @@
       "Bash(xargs:*)",
       "Bash(npm run build:*)",
       "Bash(python3:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
