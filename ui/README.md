@@ -43,6 +43,59 @@ Production-like run
 - Build the SPA: `make ui-build` (writes to `ui/dist`).
 - The Go server will auto-serve `ui/dist` at `/` if it exists (no separate web server needed). Use `make run` and open `http://localhost:8080`.
 
+## End-to-End Testing
+
+The project includes comprehensive E2E testing with Playwright covering 810+ test scenarios.
+
+### Prerequisites
+- Backend server running on port 8080
+- Frontend dev server running on port 5173
+
+### Running E2E Tests
+
+```bash
+# Install Playwright browsers (first time only)
+npm run test:install
+
+# Run all E2E tests
+npm run test:e2e
+
+# Run tests with UI mode (interactive)
+npm run test:e2e:ui
+
+# Run specific test file
+npm run test:e2e -- tests/e2e/smoke.spec.ts
+
+# Run tests in headed mode (see browser)
+npm run test:e2e:headed
+
+# Generate test report
+npm run test:e2e:report
+```
+
+### Test Configuration
+
+Tests are configured in `playwright.config.ts`:
+- **Local development**: Uses `http://localhost:5173` for frontend
+- **CI environment**: Uses `http://localhost:5173` with static build
+- **Backend API**: Always uses `http://localhost:8080/api/v1`
+
+### CI/CD Integration
+
+E2E tests run automatically in GitHub Actions:
+- Builds both backend and frontend
+- Starts services with test configuration
+- Runs tests across multiple browsers (Chrome, Firefox, Safari)
+- Uploads test results and screenshots on failure
+
+### Test Organization
+
+- `tests/e2e/smoke.spec.ts` - Basic application health checks
+- `tests/e2e/api-tests.spec.ts` - API integration testing
+- `tests/e2e/export-import.spec.ts` - Export/Import workflow testing
+- `tests/e2e/performance.spec.ts` - Performance and load testing
+- `tests/e2e/cross-browser.spec.ts` - Cross-browser compatibility
+
 ## Phase 7.3 UI Work (Chunks)
 
 1) Export History slice (this commit)

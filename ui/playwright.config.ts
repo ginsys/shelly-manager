@@ -31,7 +31,7 @@ export default defineConfig({
   // Shared settings for all tests
   use: {
     // Base URL for the application
-    baseURL: process.env.CI ? 'http://localhost:5173' : 'http://localhost:5174',
+    baseURL: process.env.CI ? 'http://localhost:5173' : 'http://localhost:5173',
     
     // API endpoint for backend tests
     extraHTTPHeaders: {
