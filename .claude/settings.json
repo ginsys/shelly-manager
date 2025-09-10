@@ -102,7 +102,13 @@
       "Bash(while read branch)",
       "Bash(do echo \"=== $branch ===\")",
       "Bash(for pr in 18 19 20 21)",
-      "Bash(do echo \"=== PR $pr ===\")"
+      "Bash(do echo \"=== PR $pr ===\")",
+      "Bash(npm run test:*)",
+      "Bash(for commit in c1a38cf 29a5f02 c895f65 b1371cd d791be4 59e64c2 58f8790)",
+      "Bash(do echo \"=== Commit $commit ===\")",
+      "Bash(npx vitest run:*)",
+      "Bash(npx playwright test:*)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
