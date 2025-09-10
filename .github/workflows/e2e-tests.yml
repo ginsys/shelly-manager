@@ -152,7 +152,7 @@ jobs:
           PLAYWRIGHT_HTML_REPORT: ../test-results/playwright-report
           
       - name: Upload test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report
@@ -160,7 +160,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test videos
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-videos
@@ -168,7 +168,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test screenshots
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-screenshots
@@ -257,7 +257,7 @@ jobs:
           CI: true
 
       - name: Upload test artifacts for ${{ matrix.project }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-${{ matrix.project }}-results

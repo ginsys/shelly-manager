@@ -1,9 +1,10 @@
 name: Build and Push Docker Images
 
 on:
-  push:
-    branches: 
-      - main
+  workflow_run:
+    workflows: ["Test"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:  # Allow manual triggering
 
 env:
@@ -14,11 +15,27 @@ jobs:
   build-and-push:
     name: Build and Push Container Images
     runs-on: ubuntu-latest
+    # Only run if tests passed successfully or if manually triggered
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: read
       packages: write
       
     steps:
+      - name: Display workflow trigger info
+        run: |
+          echo "## Docker Build Triggered 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "- **Trigger**: Test workflow completed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "- **Test Workflow**: ${{ github.event.workflow_run.name }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Test Conclusion**: ${{ github.event.workflow_run.conclusion }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Test Run URL**: ${{ github.event.workflow_run.html_url }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Trigger**: Manual workflow dispatch" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
