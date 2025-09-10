@@ -59,3 +59,22 @@ ui/public/app-config.js
 # UI build and dependencies
 ui/node_modules/
 ui/dist/
+
+# UI test artifacts
+ui/test-results/
+ui/playwright-report/
+ui/coverage/
+ui/junit.xml
+ui/test-report.html
+ui/test-report.json
+ui/.nyc_output/
+*.lcov
+
+# Playwright artifacts
+**/playwright-report/
+**/test-results/
+**/.playwright/
+
+# Vitest artifacts
+**/coverage/
+ui/coverage.xml
