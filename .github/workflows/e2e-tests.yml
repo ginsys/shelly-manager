@@ -215,12 +215,16 @@ jobs:
         run: |
           go mod download
           cd ui && npm ci
+          npm install -g serve
           npx playwright install --with-deps ${{ matrix.project }}
 
       - name: Build and start services
         run: |
           # Build backend
           CGO_ENABLED=0 go build -o bin/shelly-manager ./cmd/shelly-manager
+          
+          # Build frontend
+          cd ui && npm run build && cd ..
           
           # Create minimal config
           mkdir -p configs
@@ -234,16 +238,42 @@ jobs:
           discovery:
             enabled: false
           logging:
-            level: error
+            level: info
+          metrics:
+            enabled: true
+            port: 9090
           EOF
           
-          # Start backend
-          ./bin/shelly-manager serve --config configs/config.yaml &
+          # Start backend with logging
+          ./bin/shelly-manager serve --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
           
-          # Wait for backend
-          timeout 30s bash -c 'until curl -f http://localhost:8080/healthz; do sleep 1; done'
+          # Start frontend server
+          npx serve -s ui/dist -l 5173 > frontend.log 2>&1 &
+          FRONTEND_PID=$!
+          echo "FRONTEND_PID=$FRONTEND_PID" >> $GITHUB_ENV
+          
+          # Wait for backend with improved timeout and diagnostics
+          echo "Waiting for backend to start..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8080/healthz 2>/dev/null; then
+              echo "Backend ready after $i seconds"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Backend failed to start after 60 seconds"
+              echo "Backend logs:"
+              cat backend.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+          
+          # Wait for frontend
+          echo "Waiting for frontend to start..."
+          timeout 30s bash -c 'until curl -f http://localhost:5173 2>/dev/null; do sleep 1; done'
+          echo "Frontend ready"
 
       - name: Run E2E tests for ${{ matrix.project }}
         working-directory: ui
@@ -266,4 +296,14 @@ jobs:
         run: |
           if [ ! -z "$BACKEND_PID" ]; then
             kill $BACKEND_PID || true
+          fi
+          if [ ! -z "$FRONTEND_PID" ]; then
+            kill $FRONTEND_PID || true
+          fi
+          # Output logs for debugging if tests failed
+          if [ "${{ failure() }}" = "true" ]; then
+            echo "=== Backend Logs ==="
+            cat backend.log || true
+            echo "=== Frontend Logs ==="
+            cat frontend.log || true
           fi
