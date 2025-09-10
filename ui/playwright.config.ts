@@ -36,6 +36,7 @@ export default defineConfig({
     // API endpoint for backend tests
     extraHTTPHeaders: {
       'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     },
     
     // Collect trace when retrying the failed test
@@ -87,24 +88,8 @@ export default defineConfig({
     }
   ],
 
-  // Development server configuration (only for local development)
-  webServer: process.env.CI ? undefined : [
-    // Frontend dev server
-    {
-      command: 'npm run dev',
-      port: 5174,
-      reuseExistingServer: true,
-      timeout: 60 * 1000,
-    },
-    // Backend API server (Docker Compose)
-    {
-      command: 'docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d',
-      port: 8080,
-      reuseExistingServer: true,
-      timeout: 120 * 1000,
-      cwd: '../deploy/docker-compose',
-    }
-  ],
+  // Development server configuration (disabled - using external services)
+  // webServer: undefined,
 
   // Global setup and teardown
   globalSetup: './tests/e2e/global-setup.ts',

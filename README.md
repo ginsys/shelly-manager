@@ -81,9 +81,136 @@ The project is now entering a strategic modernization phase to transform from a 
 - **Database Providers**: Multi-provider support with SQLite, PostgreSQL, MySQL (13 provider files)
 - **Plugin Architecture**: Extensible plugin system with 19 files supporting sync, notification, and discovery
 - **Security Framework**: Comprehensive security testing with vulnerability resolution and rate limiting protection
+- **🆕 Export/Import System**: Comprehensive SMA format, plugin architecture, scheduled operations, and management UI
+- **🆕 Notification System**: Multi-channel notifications (email, webhook, Slack) with rule engine and rate limiting
 - **🆕 Real-time Metrics**: WebSocket-based live dashboards with CPU, memory, disk monitoring and automatic reconnection
 - **🆕 Enhanced Forms**: Schema-driven export/import preview forms with JSON validation, copy/download, and localStorage persistence
 - **🆕 E2E Testing**: Multi-browser testing with Chromium, Firefox, WebKit + mobile, CI integration, and failure artifacts
+
+## 🔄 Export/Import System
+
+The Shelly Manager includes a comprehensive export/import system that transforms your device management capabilities with complete backup, migration, and infrastructure integration features.
+
+### Core Features
+
+#### 🗃️ SMA (Shelly Management Archive) Format
+- **Complete System Backup**: Full device inventory, configurations, templates, and system settings
+- **Compressed & Versioned**: Gzip compression with forward/backward compatibility
+- **Integrity Verification**: SHA-256 checksums and record count validation
+- **Metadata Rich**: Export context, system information, and audit trails
+
+#### 📤 Advanced Export Capabilities
+- **Multiple Formats**: SMA, Terraform, Ansible, Kubernetes, Docker Compose, JSON, CSV
+- **Export Preview**: Preview operations before execution with record counts and size estimates
+- **Scheduled Exports**: Automated backup scheduling with retention policies
+- **Filter Support**: Export specific devices, templates, or configurations
+- **Download Protection**: Safe download restrictions to prevent path traversal
+
+#### 📥 Intelligent Import System
+- **Validation First**: Comprehensive validation before any changes are applied
+- **Dry Run Mode**: Preview all changes before import execution
+- **Conflict Resolution**: Smart handling of device MAC conflicts and template name collisions
+- **Backup Before Import**: Automatic backup creation before applying changes
+- **Progress Tracking**: Real-time import progress with detailed change reporting
+
+#### 🔧 Plugin Architecture
+- **Extensible System**: Plugin-based architecture for custom export formats
+- **Infrastructure as Code**: Direct export to Terraform, Ansible, and Kubernetes manifests
+- **Container Support**: Docker Compose and Kubernetes deployment configurations
+- **Custom Plugins**: Easy development of custom export/import formats
+
+#### 🔒 Security & Audit
+- **Admin Protection**: All operations protected by admin API key when configured
+- **Audit Trails**: Complete history of all export/import operations
+- **Safe Downloads**: Configurable download restrictions to prevent unauthorized access
+- **Encrypted Support**: Built-in support for encrypted SMA files (future enhancement)
+
+### Usage Examples
+
+#### CLI Export/Import
+```bash
+# Export complete system to SMA format
+./bin/shelly-manager export --format sma --output /backups/
+
+# Export specific devices to Terraform
+./bin/shelly-manager export --format terraform --devices 1,2,3 --output ./infrastructure/
+
+# Import from SMA file with dry run
+./bin/shelly-manager import --format sma --file backup.sma --dry-run
+
+# Import with backup before changes
+./bin/shelly-manager import --format sma --file backup.sma --backup-before
+```
+
+#### API Operations
+```bash
+# Export preview
+curl -X POST http://localhost:8080/api/v1/export/preview \
+  -H "Authorization: Bearer <ADMIN_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"plugin_name": "sma", "format": "sma"}'
+
+# Get export history
+curl -H "Authorization: Bearer <ADMIN_KEY>" \
+  http://localhost:8080/api/v1/export/history?page=1&page_size=20
+
+# Import with validation
+curl -X POST http://localhost:8080/api/v1/import/preview \
+  -H "Authorization: Bearer <ADMIN_KEY>" \
+  -F "file=@backup.sma" \
+  -F 'options={"dry_run": true, "validate_only": true}'
+```
+
+### Configuration
+
+#### Environment Variables
+```bash
+# Admin API key for export/import protection
+SHELLY_SECURITY_ADMIN_API_KEY=your-secure-admin-key
+
+# Safe download directory restriction
+SHELLY_EXPORT_OUTPUT_DIRECTORY=/var/exports/shelly-manager
+
+# Enable scheduled exports
+SHELLY_EXPORT_SCHEDULE_ENABLED=true
+```
+
+#### YAML Configuration
+```yaml
+security:
+  admin_api_key: "${ADMIN_API_KEY}"
+  
+export:
+  output_directory: "/var/exports/shelly-manager"
+  schedule_enabled: true
+  default_format: "sma"
+  compression_enabled: true
+  
+import:
+  validation_enabled: true
+  backup_before_import: true
+  conflict_resolution: "prompt"  # prompt|overwrite|skip
+```
+
+### Integration Scenarios
+
+#### Infrastructure as Code
+- **Terraform**: Export device configurations as Terraform resources
+- **Ansible**: Generate Ansible playbooks for device management
+- **Kubernetes**: Create ConfigMaps and Secrets for K8s deployments
+
+#### Backup & Recovery
+- **Automated Backups**: Scheduled SMA exports with retention policies
+- **Disaster Recovery**: Complete system restoration from SMA archives
+- **Migration**: Move between Shelly Manager instances seamlessly
+
+#### DevOps Integration
+- **CI/CD Pipelines**: Automated export/import in deployment workflows
+- **GitOps**: Version-controlled infrastructure configurations
+- **Monitoring**: Export/import operation metrics and alerting
+
+*For detailed API documentation, see [docs/API_EXPORT_IMPORT.md](docs/API_EXPORT_IMPORT.md)*  
+*For SMA format specification, see [docs/sma-format.md](docs/sma-format.md)*
 
 ## 🚀 Quick Start
 
@@ -118,9 +245,15 @@ make ui-dev
 # Add device manually
 ./bin/shelly-manager add 192.168.1.100 "Living Room Light"
 
-# Export devices (planned)
+# Export operations
+./bin/shelly-manager export --format sma --output /backups/
 ./bin/shelly-manager export --format json > devices.json
 ./bin/shelly-manager export --format csv > devices.csv
+./bin/shelly-manager export --format terraform --devices 1,2,3 --output ./infrastructure/
+
+# Import operations
+./bin/shelly-manager import --format sma --file backup.sma --dry-run
+./bin/shelly-manager import --format sma --file backup.sma --backup-before
 ```
 
 ### Server Operation
@@ -221,6 +354,17 @@ TLS/Proxy Hardening:
 - `GET    /api/v1/export?format=hosts` - Export as hosts file
 - `GET    /api/v1/dhcp/reservations` - Get DHCP reservations
 - `POST   /api/v1/integrations/opnsense/sync` - Sync with OPNSense
+
+### Export/Import System (🆕 Comprehensive Integration)
+- **Export APIs**: `POST /api/v1/export` with preview, history, and statistics
+- **Import APIs**: `POST /api/v1/import` with validation, preview, and dry-run
+- **SMA Format**: New `.sma` format for complete system backups and migration
+- **Plugin System**: Export to Terraform, Ansible, Kubernetes, Docker Compose
+- **Scheduled Operations**: Automated export scheduling with retention policies
+- **Management UI**: Vue.js interface for all export/import operations
+- **Security**: Admin-protected endpoints with audit trails and safe downloads
+
+*See [Export/Import System Documentation](#export-import-system) for comprehensive details.*
 
 ### System
 - `GET    /health` - Health check
