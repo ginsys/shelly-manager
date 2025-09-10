@@ -98,7 +98,9 @@
       "Bash(for file in internal/database/manager.go internal/configuration/scheduler.go internal/notification/handlers.go internal/sync/template_engine.go internal/plugins/registry.go)",
       "Bash(do echo \"=== $file ===\")",
       "Bash(done)",
-      "Read(/home/serge/.claude/**)"
+      "Read(/home/serge/.claude/**)",
+      "Bash(while read branch)",
+      "Bash(do echo \"=== $branch ===\")"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
