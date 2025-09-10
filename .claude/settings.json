@@ -110,7 +110,9 @@
       "Bash(npx playwright test:*)",
       "Bash(npm test:*)",
       "Bash(xargs:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(python3:*)",
+      "Bash(docker compose:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

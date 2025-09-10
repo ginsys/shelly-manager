@@ -6,14 +6,95 @@ Last updated: 2025-09-10
 
 ### **HIGH PRIORITY** - Critical Path Items
 
-#### 1. **Export/Import System Integration** ⚡ **CRITICAL** 
+#### 1. **Export/Import System Integration** ⚡ **CRITICAL** (30% remaining)
+
+**High-Level Goals:**
 - Expose backup creation and scheduling endpoints (13 endpoints) with RBAC
 - Expose GitOps export/import functionality (8 endpoints) with admin permissions
 - Add SMA format specification and implementation
 - Create export plugin management interface with permission controls
 - **Dependencies**: API standardization ✅ COMPLETE
 - **Business Value**: 3x increase in platform capabilities by exposing existing backend investment
-- **Progress**: Backend endpoints complete, UI integration in progress
+- **Progress**: Backend endpoints complete, enhanced preview forms complete
+
+**Detailed Sub-Tasks:**
+
+##### **Task 1.1: Schedule Management UI** ✅ **COMPLETED** (2025-09-10)
+- [x] **Frontend JS Expert**: Create `ui/src/api/schedule.ts` with CRUD operations
+- [x] **Frontend JS Expert**: Create `ui/src/stores/schedule.ts` with Pinia state management  
+- [x] **Frontend JS Expert**: Create `ui/src/pages/ExportSchedulesPage.vue` with list view
+- [x] **Frontend JS Expert**: Create `ui/src/components/ScheduleForm.vue` for create/edit
+- [x] **Frontend JS Expert**: Add schedule execution monitoring UI
+- [x] **Frontend JS Expert**: Write unit tests for API client and store
+- [ ] **Test Automation Specialist**: Add E2E tests for schedule workflows
+- [ ] **Technical Documentation Architect**: Update API docs and user guides
+- **Actual Effort**: 6 hours | **Success Criteria**: ✅ Full CRUD + execution monitoring + 67 passing tests
+- **Deliverables**: 8 files (2,485 lines production code + 956 lines tests)
+
+##### **Task 1.2: Backup Operations UI** 
+- [ ] **Frontend JS Expert**: Extend `ui/src/api/export.ts` with backup methods
+- [ ] **Frontend JS Expert**: Create `ui/src/pages/BackupManagementPage.vue`
+- [ ] **Frontend JS Expert**: Create `ui/src/components/BackupForm.vue` for configuration
+- [ ] **Frontend JS Expert**: Implement backup download interface
+- [ ] **Frontend JS Expert**: Add restore workflow UI
+- [ ] **Frontend JS Expert**: Write unit and integration tests
+- [ ] **Test Automation Specialist**: Test backup/restore flows and add E2E tests
+- [ ] **Technical Documentation Architect**: Document backup/restore procedures
+- **Estimated Effort**: 4-5 hours | **Success Criteria**: Full backup lifecycle UI
+
+##### **Task 1.3: GitOps Export UI**
+- [ ] **Frontend JS Expert**: Extend `ui/src/api/export.ts` with GitOps methods
+- [ ] **Frontend JS Expert**: Create `ui/src/pages/GitOpsExportPage.vue`
+- [ ] **Frontend JS Expert**: Create `ui/src/components/GitOpsConfigForm.vue`
+- [ ] **Frontend JS Expert**: Implement GitOps download interface
+- [ ] **Frontend JS Expert**: Write tests for GitOps functionality
+- [ ] **Test Automation Specialist**: Test GitOps workflows and add E2E tests
+- [ ] **Technical Documentation Architect**: Document GitOps integration
+- **Estimated Effort**: 3-4 hours | **Success Criteria**: GitOps export with config UI
+
+##### **Task 1.4: Plugin Management UI**
+- [ ] **Frontend JS Expert**: Create `ui/src/api/plugin.ts` with plugin operations
+- [ ] **Frontend JS Expert**: Create `ui/src/stores/plugin.ts` for plugin state
+- [ ] **Frontend JS Expert**: Create `ui/src/pages/PluginManagementPage.vue`
+- [ ] **Frontend JS Expert**: Create `ui/src/components/PluginSchemaViewer.vue`
+- [ ] **Frontend JS Expert**: Add plugin configuration interface
+- [ ] **Frontend JS Expert**: Write comprehensive tests
+- [ ] **Test Automation Specialist**: Test plugin discovery/config and add E2E tests
+- [ ] **Technical Documentation Architect**: Document plugin system architecture
+- **Estimated Effort**: 3-4 hours | **Success Criteria**: Plugin discovery + configuration UI
+
+##### **Task 1.5: SMA Format Support**
+- [ ] **Go Expert**: Implement SMA format parser/generator in Go (if needed)
+- [ ] **Frontend JS Expert**: Define SMA format specification in `docs/sma-format.md`
+- [ ] **Frontend JS Expert**: Create `ui/src/utils/sma-parser.ts`
+- [ ] **Frontend JS Expert**: Create `ui/src/utils/sma-generator.ts`
+- [ ] **Frontend JS Expert**: Add SMA option to export forms
+- [ ] **Frontend JS Expert**: Write unit tests for parser/generator
+- [ ] **Test Automation Specialist**: Test SMA format compatibility
+- [ ] **Technical Documentation Architect**: Document SMA format specification
+- **Estimated Effort**: 2-3 hours | **Success Criteria**: SMA format fully supported
+
+##### **Task 1.6: Navigation and Route Integration**
+- [ ] **Frontend JS Expert**: Update `ui/src/router/index.ts` with new routes
+- [ ] **Frontend JS Expert**: Update `ui/src/layouts/MainLayout.vue` with menu items
+- [ ] **Frontend JS Expert**: Add breadcrumb navigation
+- [ ] **Frontend JS Expert**: Test navigation flows
+- [ ] **Test Automation Specialist**: Verify navigation integration
+- [ ] **Technical Documentation Architect**: Document navigation structure
+- **Estimated Effort**: 1-2 hours | **Success Criteria**: All features accessible via nav
+
+##### **Task 1.7: Final Integration Testing and Documentation**
+- [ ] **Test Automation Specialist**: Run complete E2E test suite
+- [ ] **Test Automation Specialist**: Performance testing (<200ms response)
+- [ ] **Test Automation Specialist**: Security validation for sensitive operations
+- [ ] **Technical Documentation Architect**: Update main documentation
+- [ ] **Technical Documentation Architect**: Create migration guide
+- [ ] **Technical Documentation Architect**: Update CHANGELOG.md
+- **Estimated Effort**: 2-3 hours | **Success Criteria**: Production ready
+
+**Total Estimated Effort**: 20-27 hours (4-5 days)
+**Current Status**: Task 1.1 starting
+**Completion Target**: Week of 2025-09-16
 
 #### 2. **Authentication & Authorization Framework** ⚡ **DEFERRED**
 - Define RBAC framework for 80+ API endpoints

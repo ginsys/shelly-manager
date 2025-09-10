@@ -121,7 +121,7 @@ jobs:
               volumes:
                 - ./configs:/app/configs:ro
               healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+                test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
                 interval: 10s
                 timeout: 5s
                 retries: 5
@@ -135,10 +135,10 @@ jobs:
         run: |
           # Start with Docker Compose
           cd deploy/docker-compose
-          docker-compose -f docker-compose.test.yml up -d
+          docker compose -f docker-compose.test.yml up -d
           
           # Wait for backend to be ready
-          timeout 60s bash -c 'until curl -f http://localhost:8080/api/v1/health; do sleep 2; done'
+          timeout 60s bash -c 'until curl -f http://localhost:8080/healthz; do sleep 2; done'
         env:
           COMPOSE_DOCKER_CLI_BUILD: 1
           DOCKER_BUILDKIT: 1
@@ -179,16 +179,11 @@ jobs:
         if: always()
         run: |
           cd deploy/docker-compose
-          docker-compose -f docker-compose.test.yml down -v
-          docker-compose -f docker-compose.test.yml rm -f
+          docker compose -f docker-compose.test.yml down -v
+          docker compose -f docker-compose.test.yml rm -f
 
-      - name: Publish test results
-        uses: dorny/test-reporter@v1
-        if: success() || failure()
-        with:
-          name: E2E Test Results
-          path: ui/test-results/results.json
-          reporter: json
+      # Test results are uploaded as artifacts above
+      # Playwright HTML report provides better visualization than JSON reporter
 
   e2e-tests-matrix:
     timeout-minutes: 30
@@ -248,7 +243,7 @@ jobs:
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
           
           # Wait for backend
-          timeout 30s bash -c 'until curl -f http://localhost:8080/api/v1/health; do sleep 1; done'
+          timeout 30s bash -c 'until curl -f http://localhost:8080/healthz; do sleep 1; done'
 
       - name: Run E2E tests for ${{ matrix.project }}
         working-directory: ui
