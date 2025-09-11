@@ -5,6 +5,9 @@ on:
     branches: [ main, develop ]
     paths:
       - 'ui/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'configs/**'
       - 'internal/**'
       - 'cmd/**'
       - '.github/workflows/e2e-tests.yml'
@@ -12,6 +15,9 @@ on:
     branches: [ main, develop ]
     paths:
       - 'ui/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'configs/**'
       - 'internal/**'
       - 'cmd/**'
       - '.github/workflows/e2e-tests.yml'

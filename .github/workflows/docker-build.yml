@@ -12,11 +12,63 @@ env:
   IMAGE_PREFIX: ginsys
 
 jobs:
+  filter-changes:
+    name: Check relevant file changes
+    runs-on: ubuntu-latest
+    outputs:
+      build_needed: ${{ steps.filter.outputs.docker_relevant }}
+    steps:
+      - name: Checkout repository at triggering ref
+        uses: actions/checkout@v5
+        with:
+          # Use the commit that triggered the Test workflow when workflow_run
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Detect changes relevant to Docker images
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            docker_relevant:
+              paths:
+                - 'deploy/docker/**'
+                - 'go.mod'
+                - 'go.sum'
+                - 'cmd/**'
+                - 'internal/**'
+                - 'configs/**'
+              paths-ignore:
+                - '**/*_test.go'
+                - '.github/**'
+                - 'docs/**'
+                - 'deploy/docker-compose/**'
+                - 'ui/**'
+                - 'web/**'
+                - 'AGENTS.md'
+                - 'README.md'
+                - 'CHANGELOG.md'
+                - 'TASKS.md'
+                - 'CONTRIBUTING.md'
+                - 'LICENSE'
+
+      - name: Summarize change detection
+        run: |
+          if [ "${{ steps.filter.outputs.docker_relevant }}" = "true" ]; then
+            echo "## Docker build eligibility ✅" >> $GITHUB_STEP_SUMMARY
+            echo "Relevant changes detected. Proceeding to build when tests passed." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Docker build skipped ⛔" >> $GITHUB_STEP_SUMMARY
+            echo "No relevant changes (or only tests/docs)." >> $GITHUB_STEP_SUMMARY
+          fi
+
   build-and-push:
     name: Build and Push Container Images
     runs-on: ubuntu-latest
-    # Only run if tests passed successfully or if manually triggered
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    needs: [filter-changes]
+    # Run only if tests passed (workflow_run) and relevant changes detected; allow manual trigger + relevant changes
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch') && needs.filter-changes.outputs.build_needed == 'true' }}
     permissions:
       contents: read
       packages: write
@@ -39,6 +91,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          # Build images from the same commit that passed tests
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           # Fetch full history for accurate timestamps
           fetch-depth: 0
           
