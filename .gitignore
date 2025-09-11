@@ -14,6 +14,7 @@ shelly-test
 
 # Test binary, built with `go test -c`
 *.test
+server.pid
 
 # Output of the go coverage tool
 *.out

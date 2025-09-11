@@ -71,7 +71,7 @@ const routes = [
   
   // Metrics and monitoring
   { 
-    path: '/metrics', 
+    path: '/dashboard', 
     name: 'metrics',
     component: () => Promise.resolve({ template: '<div>Metrics Page</div>' }),
     meta: { title: 'Metrics Dashboard' }
@@ -163,7 +163,7 @@ describe('Navigation Routes Configuration', () => {
     { path: '/export/history', name: 'export-history' },
     { path: '/import/history', name: 'import-history' },
     { path: '/plugins', name: 'plugins' },
-    { path: '/metrics', name: 'metrics' },
+    { path: '/dashboard', name: 'metrics' },
     { path: '/admin', name: 'admin' }
   ]
 
@@ -208,7 +208,7 @@ describe('Navigation Routes Configuration', () => {
     expect(pathPatterns).toContain('/import/history')
     expect(pathPatterns).toContain('/import/:id')
     expect(pathPatterns).toContain('/plugins')
-    expect(pathPatterns).toContain('/metrics')
+    expect(pathPatterns).toContain('/dashboard')
     expect(pathPatterns).toContain('/stats')
     expect(pathPatterns).toContain('/admin')
     expect(pathPatterns).toContain('/:pathMatch(.*)*')

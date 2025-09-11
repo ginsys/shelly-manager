@@ -44,7 +44,7 @@ test.describe('Smoke Tests - Application Health', () => {
       { name: 'import-history', path: '/import/history', title: 'Import History' },
       { name: 'backup-management', path: '/export/backup', title: 'Backup Management' },
       { name: 'gitops-export', path: '/export/gitops', title: 'GitOps Export' },
-      { name: 'metrics', path: '/metrics', title: 'Metrics' },
+      { name: 'metrics', path: '/dashboard', title: 'Metrics' },
       { name: 'admin', path: '/admin', title: 'Admin' }
     ]
 

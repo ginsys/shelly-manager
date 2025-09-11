@@ -115,6 +115,13 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	// API routes - use protected subrouter for full security middleware
 	api := protected.PathPrefix("/api/v1").Subrouter()
 
+	// Handle CORS preflight for any API path with a generic OPTIONS responder.
+	// This ensures cross-origin clients receive proper CORS headers instead of 404.
+	api.PathPrefix("/").Methods("OPTIONS").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The enhanced CORS middleware already set headers; just return 200 OK.
+		w.WriteHeader(http.StatusOK)
+	}))
+
 	// Admin routes (guarded by simple admin key if configured)
 	api.HandleFunc("/admin/rotate-admin-key", handler.RotateAdminKey).Methods("POST")
 

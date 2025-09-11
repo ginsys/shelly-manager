@@ -31,7 +31,7 @@ Dev runtime config (automatic with make run)
 
 How to run the SPA (development)
 - Backend: run `make run` in project root (serves API on :8080 and `/app-config.js`).
-- Frontend: run `make ui-dev` (Vite on :5173). The included `vite.config.ts` proxies `/api`, `/metrics`, and `/app-config.js` to :8080, so the app works without extra env.
+- Frontend: run `make ui-dev` (Vite on :5173). The included `vite.config.ts` proxies `/api`, `/metrics`, and `/app-config.js` to :8080, so the app works without extra env. The Metrics dashboard route is available at `/dashboard` (not `/metrics`), to avoid conflict with backend metrics APIs.
 - Optional: You can also run directly from `ui/` with `npm run dev`.
 
 Manual fallback (if not using the provided proxy)

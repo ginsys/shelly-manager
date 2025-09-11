@@ -59,7 +59,7 @@
         
         <router-link 
           class="nav-link" 
-          to="/metrics"
+          to="/dashboard"
           :class="{ active: $route.name === 'metrics' || $route.name === 'stats' }"
         >
           Metrics
@@ -469,7 +469,7 @@ const showBreadcrumb = computed(() => {
   /* Show only icons on very small screens */
   .nav-link[to="/"] { min-width: 32px; }
   .nav-link[to="/plugins"] { min-width: 32px; }
-  .nav-link[to="/metrics"] { min-width: 32px; }
+  .nav-link[to="/dashboard"] { min-width: 32px; }
   .nav-link[to="/admin"] { min-width: 32px; }
 }
 

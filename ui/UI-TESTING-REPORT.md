@@ -30,7 +30,7 @@ Based on `/src/main.ts`, the following routes are configured:
 
 ### Other Pages
 - ⬜ `/plugins` - PluginManagementPage (name: 'plugins')
-- ⬜ `/metrics` - MetricsDashboardPage (name: 'metrics')
+- ⬜ `/dashboard` - MetricsDashboardPage (name: 'metrics')
 - ⬜ `/stats` - StatsPage (name: 'stats')
 - ⬜ `/admin` - AdminSettingsPage (name: 'admin')
 
@@ -112,10 +112,7 @@ Based on `/src/main.ts`, the following routes are configured:
 **Priority**: HIGH = Blocks user workflow, MEDIUM = UX issue, LOW = Minor polish
 
 ### HIGH PRIORITY Issues
-1. **❌ /metrics route completely inaccessible** - Returns 403 Forbidden
-   - **Impact**: Users cannot access metrics dashboard
-   - **Root Cause**: Backend security restrictions
-   - **Fix**: Configure proper API access for metrics endpoint
+1. Resolved: Metrics dashboard route moved to `/dashboard` (client). Backend `/metrics/*` remains for API/WebSocket.
 
 ### MEDIUM PRIORITY Issues  
 2. **⚠️ Plugin Management shows error messages**
@@ -154,10 +151,9 @@ Based on `/src/main.ts`, the following routes are configured:
 **Based on test results and findings**
 
 ### Immediate Actions (HIGH PRIORITY)
-1. **Fix /metrics route accessibility**
-   - **Action**: Configure backend to allow metrics endpoint access during development
-   - **Alternative**: Create mock data layer for metrics when backend unavailable
-   - **Timeline**: 1-2 hours
+1. Metrics dashboard client route moved to `/dashboard`
+   - **Action**: Use `/dashboard` for the Metrics UI. Backend `/metrics/*` remains reserved for APIs and WebSocket.
+   - **Status**: ✅ Implemented
 
 2. **Resolve brand visibility issue**
    - **Root Cause**: CSS flexbox layout causing brand element to have 0px width/height
@@ -198,7 +194,7 @@ Based on `/src/main.ts`, the following routes are configured:
 - ✅ **Component architecture sound** - All Vue components render without issues
 
 ### Issues Identified & Status
-- ❌ **1 HIGH priority issue**: /metrics route inaccessible (backend security)
+- ✅ Metrics dashboard routing adjusted (use `/dashboard` client route)
 - ⚠️ **2 MEDIUM priority issues**: Brand visibility + Plugin error messages
 - ℹ️ **1 LOW priority issue**: Console error noise (expected during testing)
 

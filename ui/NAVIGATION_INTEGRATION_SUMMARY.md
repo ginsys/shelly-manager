@@ -23,7 +23,7 @@ Successfully completed comprehensive navigation integration for the Shelly Manag
 
 **Other Routes:**
 - `/plugins` → PluginManagementPage (Plugin Management)
-- `/metrics` → MetricsDashboardPage (Metrics Dashboard)
+- `/dashboard` → MetricsDashboardPage (Metrics Dashboard)
 - `/stats` → StatsPage (Statistics)
 - `/admin` → AdminSettingsPage (Admin Settings)
 
@@ -122,7 +122,7 @@ Successfully completed comprehensive navigation integration for the Shelly Manag
 4. **Plugin Management UI** - `/plugins`
 5. **SMA Format Support** - Integrated into backup forms
 6. **Export/Import History** - `/export/history`, `/import/history`
-7. **Metrics Dashboard** - `/metrics`
+7. **Metrics Dashboard** - `/dashboard`
 8. **Admin Settings** - `/admin`
 
 ## Success Criteria Achieved ✅

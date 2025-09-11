@@ -134,6 +134,11 @@ func ValidateHeadersMiddleware(config *ValidationConfig, logger *logging.Logger)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Allow CORS preflight requests to pass without strict validation
+			if r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
 			// If strict content-type is enforced and current content-type would be rejected,
 			// defer header validation so that the content-type middleware handles first.
 			if config.StrictContentType && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch) {

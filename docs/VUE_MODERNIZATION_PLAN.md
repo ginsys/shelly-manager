@@ -316,7 +316,7 @@ const routes = [
     meta: { title: 'Configuration Templates' }
   },
   {
-    path: '/metrics',
+    path: '/dashboard',
     name: 'Metrics',
     component: () => import('@/views/Metrics.vue'),
     meta: { title: 'Analytics Dashboard' }

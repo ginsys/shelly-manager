@@ -13,7 +13,7 @@ const testRoutes = [
   { path: '/export/history', name: 'Export History', shouldContain: 'Export History' },
   { path: '/import/history', name: 'Import History', shouldContain: 'Import History' },
   { path: '/plugins', name: 'Plugin Management', shouldContain: 'Plugin' },
-  { path: '/metrics', name: 'Metrics Dashboard', shouldContain: 'Metrics' },
+  { path: '/dashboard', name: 'Metrics Dashboard', shouldContain: 'Metrics' },
   { path: '/admin', name: 'Admin Settings', shouldContain: 'Admin' }
 ];
 

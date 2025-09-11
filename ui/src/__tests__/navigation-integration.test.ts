@@ -73,7 +73,7 @@ const routes = [
   
   // Metrics and monitoring
   { 
-    path: '/metrics', 
+    path: '/dashboard', 
     name: 'metrics',
     component: { template: '<div>Metrics Page</div>' },
     meta: { title: 'Metrics Dashboard' }
@@ -273,7 +273,7 @@ describe('Navigation Integration', () => {
     { path: '/export/history', name: 'export-history' },
     { path: '/import/history', name: 'import-history' },
     { path: '/plugins', name: 'plugins' },
-    { path: '/metrics', name: 'metrics' },
+    { path: '/dashboard', name: 'metrics' },
     { path: '/admin', name: 'admin' }
   ]
 

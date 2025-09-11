@@ -75,7 +75,7 @@ const router = createRouter({
     
     // Metrics and monitoring
     { 
-      path: '/metrics', 
+      path: '/dashboard', 
       name: 'metrics',
       component: () => import('./pages/MetricsDashboardPage.vue'),
       meta: { title: 'Metrics Dashboard' }
