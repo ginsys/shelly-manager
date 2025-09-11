@@ -62,7 +62,7 @@ jobs:
 
     - name: Install gotestsum (JUnit converter)
       if: always()
-      run: go install gotest.tools/gotestsum@latest
+      run: go install gotest.tools/gotestsum@v1.12.0
 
     - name: Generate JUnit report
       if: always()
@@ -163,7 +163,7 @@ jobs:
 
     - name: Install gotestsum (JUnit converter)
       if: always()
-      run: go install gotest.tools/gotestsum@latest
+      run: go install gotest.tools/gotestsum@v1.12.0
 
     - name: Generate JUnit report (matrix)
       if: always()
@@ -220,7 +220,7 @@ jobs:
 
     - name: Install gotestsum (JUnit converter)
       if: always()
-      run: go install gotest.tools/gotestsum@latest
+      run: go install gotest.tools/gotestsum@v1.12.0
 
     - name: Generate JUnit report (windows)
       if: always()
