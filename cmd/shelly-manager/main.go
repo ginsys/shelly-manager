@@ -377,8 +377,14 @@ func startServer() {
 			secCfg.CORSMaxAge = cfg.Security.CORS.MaxAge
 		}
 	}
+	// Setup validation config based on main configuration
+	valCfg := middleware.DefaultValidationConfig()
+	if cfg != nil {
+		valCfg.TestMode = cfg.Security.ValidationTestMode
+	}
+
 	// Setup routes with middleware using configured security
-	router := api.SetupRoutesWithSecurity(apiHandler, logger, secCfg, middleware.DefaultValidationConfig())
+	router := api.SetupRoutesWithSecurity(apiHandler, logger, secCfg, valCfg)
 
 	// Dev convenience: expose app-config.js to inject API base and (optionally) admin key.
 	// This is enabled only when SHELLY_DEV_EXPOSE_ADMIN_KEY is set.

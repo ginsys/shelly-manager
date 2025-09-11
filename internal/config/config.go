@@ -130,6 +130,8 @@ type Config struct {
 		} `mapstructure:"cors"`
 		// Simple admin API key for protecting sensitive endpoints until full auth is implemented
 		AdminAPIKey string `mapstructure:"admin_api_key"`
+		// Test mode to bypass security validations (for E2E testing)
+		ValidationTestMode bool `mapstructure:"validation_test_mode"`
 	} `mapstructure:"security"`
 
 	// Export settings
@@ -299,6 +301,8 @@ func setDefaults() {
 	viper.SetDefault("security.cors.max_age", 86400)
 	// Admin API key disabled by default (empty)
 	viper.SetDefault("security.admin_api_key", "")
+	// Validation test mode disabled by default (security validations enabled)
+	viper.SetDefault("security.validation_test_mode", false)
 
 	// Export defaults
 	viper.SetDefault("export.output_directory", "")

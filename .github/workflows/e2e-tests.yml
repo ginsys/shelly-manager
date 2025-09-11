@@ -168,7 +168,8 @@ jobs:
           EOF
           
           # Start backend directly (faster than Docker in CI) - use correct command 'server' not 'serve'
-          ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
+          # Enable test mode to bypass User-Agent validation for E2E tests
+          SHELLY_SECURITY_VALIDATION_TEST_MODE=true ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
           
@@ -303,7 +304,8 @@ jobs:
           EOF
           
           # Start backend with logging - use correct command 'server' not 'serve'
-          ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
+          # Enable test mode to bypass User-Agent validation for E2E tests
+          SHELLY_SECURITY_VALIDATION_TEST_MODE=true ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
           

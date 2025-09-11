@@ -38,6 +38,9 @@ type ValidationConfig struct {
 	BlockSuspiciousUserAgents bool
 	BlockSuspiciousHeaders    bool
 
+	// Test mode (bypasses security validations for E2E testing)
+	TestMode bool
+
 	// Logging
 	LogValidationErrors bool
 }
@@ -64,6 +67,7 @@ func DefaultValidationConfig() *ValidationConfig {
 		ForbiddenParams:           []string{"__proto__", "constructor", "prototype"}, // Block prototype pollution
 		BlockSuspiciousUserAgents: true,
 		BlockSuspiciousHeaders:    true,
+		TestMode:                  false, // Default: security validations enabled
 		LogValidationErrors:       true,
 	}
 }
@@ -181,8 +185,8 @@ func ValidateHeadersMiddleware(config *ValidationConfig, logger *logging.Logger)
 					}
 				}
 
-				// Check for suspicious header content
-				if config.BlockSuspiciousHeaders {
+				// Check for suspicious header content (skip in test mode)
+				if !config.TestMode && config.BlockSuspiciousHeaders {
 					for _, value := range values {
 						if containsSuspiciousContent(value) {
 							validationErrors[name] = "Suspicious header content detected"
@@ -199,8 +203,8 @@ func ValidateHeadersMiddleware(config *ValidationConfig, logger *logging.Logger)
 				}
 			}
 
-			// Check user agent if configured
-			if config.BlockSuspiciousUserAgents {
+			// Check user agent if configured (skip in test mode)
+			if !config.TestMode && config.BlockSuspiciousUserAgents {
 				userAgent := r.Header.Get("User-Agent")
 				if isSuspiciousUserAgent(userAgent) {
 					validationErrors["user_agent"] = "Suspicious user agent detected"
