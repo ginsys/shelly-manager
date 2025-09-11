@@ -1,7 +1,15 @@
-import { FullConfig } from '@playwright/test'
+import { FullConfig, request } from '@playwright/test'
 
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting E2E Test Environment Setup...')
+  
+  // Create a request context for API calls
+  const requestContext = await request.newContext({
+    baseURL: 'http://localhost:8080',
+    extraHTTPHeaders: {
+      'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
+    },
+  })
   
   try {
     // Wait for backend to be ready (try multiple endpoints)
@@ -11,8 +19,8 @@ async function globalSetup(config: FullConfig) {
     
     for (const endpoint of healthEndpoints) {
       try {
-        const response = await fetch(`http://localhost:8080${endpoint}`)
-        if (response.ok) {
+        const response = await requestContext.get(endpoint)
+        if (response.ok()) {
           console.log(`✅ Backend ready at ${endpoint}`)
           backendReady = true
           break
@@ -30,18 +38,20 @@ async function globalSetup(config: FullConfig) {
     
     // Setup test data (backend is ready)
     console.log('🔧 Setting up test data...')
-    await setupTestData()
+    await setupTestData(requestContext)
     console.log('✅ Test data ready')
     
   } catch (error) {
     console.error('❌ Setup failed:', error)
     throw error
+  } finally {
+    await requestContext.dispose()
   }
   
   console.log('✨ E2E Test Environment Setup Complete')
 }
 
-async function setupTestData() {
+async function setupTestData(requestContext: any) {
   // Create test devices for export/import testing
   const testDevices = [
     {
@@ -67,19 +77,17 @@ async function setupTestData() {
   // Add devices via API
   for (const device of testDevices) {
     try {
-      const response = await fetch('http://localhost:8080/api/v1/devices', {
-        method: 'POST',
+      const response = await requestContext.post('/api/v1/devices', {
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
         },
-        body: JSON.stringify(device)
+        data: device
       })
       
-      if (response.ok) {
+      if (response.ok()) {
         console.log(`📱 Created test device: ${device.name}`)
       } else {
-        console.log(`⚠️ Device creation failed for ${device.name}: ${response.status} ${response.statusText}`)
+        console.log(`⚠️ Device creation failed for ${device.name}: ${response.status()} ${response.statusText()}`)
       }
     } catch (error) {
       console.warn(`⚠️ Could not create test device ${device.name}:`, error)
