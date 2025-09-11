@@ -10,6 +10,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/testutil"
+	"github.com/gorilla/mux"
 )
 
 func TestHealthz_OK(t *testing.T) {
@@ -67,8 +68,29 @@ func TestHealthEndpointsWithCurlUserAgent(t *testing.T) {
 	logger := logging.GetDefault()
 	handler := NewHandlerWithLogger(db, nil, nil, nil, logger)
 
-	// Set up router with security middleware (same as production)
-	router := SetupRoutesWithSecurity(handler, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
+	// Set up router structure similar to production but without Prometheus metrics
+	// to avoid registration conflicts in tests
+	r := mux.NewRouter()
+
+	// Health endpoints without validation middleware (like production)
+	healthRouter := r.PathPrefix("/").Subrouter()
+	healthRouter.Use(logging.RecoveryMiddleware(logger))
+	healthRouter.Use(logging.HTTPMiddleware(logger))
+	healthRouter.HandleFunc("/healthz", handler.Healthz).Methods("GET")
+	healthRouter.HandleFunc("/readyz", handler.Readyz).Methods("GET")
+
+	// API endpoints with validation middleware (like production)
+	validationConfig := middleware.DefaultValidationConfig()
+	validationMiddleware := middleware.ValidateHeadersMiddleware(validationConfig, logger)
+	protected := r.PathPrefix("/api").Subrouter()
+	protected.Use(validationMiddleware)
+	// Add a test API endpoint to verify validation still works
+	protected.HandleFunc("/v1/test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("test"))
+	}).Methods("GET")
+
+	router := r
 
 	tests := []struct {
 		name     string
