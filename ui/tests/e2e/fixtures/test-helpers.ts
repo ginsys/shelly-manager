@@ -212,6 +212,7 @@ export async function createTestDevice(page: Page, device: typeof TEST_DATA.devi
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
         },
         body: JSON.stringify(deviceData)
       })
@@ -232,7 +233,10 @@ export async function deleteTestDevice(page: Page, deviceId: string): Promise<bo
   try {
     const response = await page.evaluate(async (id) => {
       const res = await fetch(`http://localhost:8080/api/v1/devices/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
+        }
       })
       return { ok: res.ok, status: res.status }
     }, deviceId)

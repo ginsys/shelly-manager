@@ -115,6 +115,7 @@ async function setupTestData(page: any) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
             },
             body: JSON.stringify(deviceData)
           })
