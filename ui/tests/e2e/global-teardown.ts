@@ -27,21 +27,37 @@ async function globalTeardown(config: FullConfig) {
 }
 
 async function cleanupTestData(requestContext: any) {
-  // Remove test devices
-  const testDeviceIds = ['test-device-1', 'test-device-2']
-  
-  for (const deviceId of testDeviceIds) {
-    try {
-      const response = await requestContext.delete(`/api/v1/devices/${deviceId}`)
+  // Remove test devices - we need to get the list first to find the IDs
+  try {
+    // Get all devices
+    const devicesResponse = await requestContext.get('/api/v1/devices')
+    if (devicesResponse.ok()) {
+      const devicesData = await devicesResponse.json()
+      const devices = devicesData.data || []
       
-      if (response.ok() || response.status() === 404) {
-        console.log(`🗑️ Removed test device: ${deviceId}`)
-      } else {
-        console.log(`⚠️ Device cleanup failed for ${deviceId}: ${response.status()}`)
+      // Find test devices by IP address (our test devices use specific IPs)
+      const testDeviceIPs = ['192.168.1.100', '192.168.1.101']
+      const testDevices = devices.filter((device: any) => 
+        testDeviceIPs.includes(device.ip)
+      )
+      
+      // Delete each test device
+      for (const device of testDevices) {
+        try {
+          const deleteResponse = await requestContext.delete(`/api/v1/devices/${device.id}`)
+          
+          if (deleteResponse.ok() || deleteResponse.status() === 404) {
+            console.log(`🗑️ Removed test device: ${device.name} (${device.ip})`)
+          } else {
+            console.log(`⚠️ Device cleanup failed for ${device.name}: ${deleteResponse.status()}`)
+          }
+        } catch (error) {
+          console.warn(`⚠️ Could not remove test device ${device.name}:`, error)
+        }
       }
-    } catch (error) {
-      console.warn(`⚠️ Could not remove test device ${deviceId}:`, error)
     }
+  } catch (error) {
+    console.warn('⚠️ Could not retrieve devices for cleanup:', error)
   }
 }
 

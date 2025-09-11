@@ -53,24 +53,25 @@ async function globalSetup(config: FullConfig) {
 
 async function setupTestData(requestContext: any) {
   // Create test devices for export/import testing
+  // Using the format expected by the API (matching database.Device struct)
   const testDevices = [
     {
-      id: 'test-device-1',
-      name: 'Test Shelly 1',
-      type: 'SHSW-1',
       ip: '192.168.1.100',
-      generation: 1,
-      firmware_version: '20230109-114426/v1.12.1-ga9117d3',
-      mac: 'AA:BB:CC:DD:EE:01'
+      mac: 'AA:BB:CC:DD:EE:01',
+      type: 'Test Shelly 1',
+      name: 'Test Shelly 1', 
+      firmware: '20230109-114426/v1.12.1-ga9117d3',
+      status: 'online',
+      settings: '{"model":"SHSW-1","gen":1,"auth_enabled":false}'
     },
     {
-      id: 'test-device-2', 
-      name: 'Test Shelly Plus 1',
-      type: 'SNSW-001X16EU',
       ip: '192.168.1.101',
-      generation: 2,
-      firmware_version: '0.12.0-beta1',
-      mac: 'AA:BB:CC:DD:EE:02'
+      mac: 'AA:BB:CC:DD:EE:02', 
+      type: 'Test Shelly Plus 1',
+      name: 'Test Shelly Plus 1',
+      firmware: '0.12.0-beta1',
+      status: 'online',
+      settings: '{"model":"SNSW-001X16EU","gen":2,"auth_enabled":false}'
     }
   ]
   
