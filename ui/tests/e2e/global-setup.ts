@@ -57,21 +57,21 @@ async function setupTestData(requestContext: any) {
   const testDevices = [
     {
       ip: '192.168.1.100',
-      mac: 'AA:BB:CC:DD:EE:01',
-      type: 'Test Shelly 1',
-      name: 'Test Shelly 1', 
-      firmware: '20230109-114426/v1.12.1-ga9117d3',
+      mac: 'A4:CF:12:34:56:78',
+      type: 'Smart Plug',
+      name: 'Test Device 1', 
+      firmware: '20231219-134356',
       status: 'online',
-      settings: '{"model":"SHSW-1","gen":1,"auth_enabled":false}'
+      settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
     },
     {
       ip: '192.168.1.101',
-      mac: 'AA:BB:CC:DD:EE:02', 
-      type: 'Test Shelly Plus 1',
-      name: 'Test Shelly Plus 1',
-      firmware: '0.12.0-beta1',
+      mac: 'A4:CF:12:34:56:79', 
+      type: 'Smart Plug',
+      name: 'Test Device 2',
+      firmware: '20231219-134356',
       status: 'online',
-      settings: '{"model":"SNSW-001X16EU","gen":2,"auth_enabled":false}'
+      settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
     }
   ]
   
@@ -89,6 +89,12 @@ async function setupTestData(requestContext: any) {
         console.log(`📱 Created test device: ${device.name}`)
       } else {
         console.log(`⚠️ Device creation failed for ${device.name}: ${response.status()} ${response.statusText()}`)
+        try {
+          const errorBody = await response.text()
+          console.log(`⚠️ Error response: ${errorBody}`)
+        } catch (e) {
+          console.log(`⚠️ Could not read error response: ${e}`)
+        }
       }
     } catch (error) {
       console.warn(`⚠️ Could not create test device ${device.name}:`, error)

@@ -33,7 +33,8 @@ async function cleanupTestData(requestContext: any) {
     const devicesResponse = await requestContext.get('/api/v1/devices')
     if (devicesResponse.ok()) {
       const devicesData = await devicesResponse.json()
-      const devices = devicesData.data || []
+      console.log('🔍 Devices API response structure:', JSON.stringify(devicesData, null, 2))
+      const devices = devicesData.data?.devices || []
       
       // Find test devices by IP address (our test devices use specific IPs)
       const testDeviceIPs = ['192.168.1.100', '192.168.1.101']
@@ -58,6 +59,16 @@ async function cleanupTestData(requestContext: any) {
     }
   } catch (error) {
     console.warn('⚠️ Could not retrieve devices for cleanup:', error)
+    // Log the response if available for debugging
+    if (error && typeof error === 'object' && 'response' in error) {
+      try {
+        const response = (error as any).response
+        console.warn('⚠️ Cleanup error response status:', response?.status?.())
+        console.warn('⚠️ Cleanup error response body:', await response?.text?.())
+      } catch (e) {
+        console.warn('⚠️ Could not read cleanup error response')
+      }
+    }
   }
 }
 
