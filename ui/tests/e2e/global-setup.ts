@@ -1,14 +1,7 @@
-import { chromium, FullConfig } from '@playwright/test'
+import { FullConfig } from '@playwright/test'
 
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting E2E Test Environment Setup...')
-  
-  // Create a browser for setup operations with realistic context
-  const browser = await chromium.launch()
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  })
-  const page = await context.newPage()
   
   try {
     // Wait for backend to be ready (try multiple endpoints)
@@ -18,11 +11,12 @@ async function globalSetup(config: FullConfig) {
     
     for (const endpoint of healthEndpoints) {
       try {
-        await page.goto(`http://localhost:8080${endpoint}`)
-        await page.waitForLoadState('networkidle', { timeout: 10000 })
-        console.log(`✅ Backend ready at ${endpoint}`)
-        backendReady = true
-        break
+        const response = await fetch(`http://localhost:8080${endpoint}`)
+        if (response.ok) {
+          console.log(`✅ Backend ready at ${endpoint}`)
+          backendReady = true
+          break
+        }
       } catch (error) {
         console.log(`⏳ Endpoint ${endpoint} not ready, trying next...`)
       }
@@ -34,56 +28,20 @@ async function globalSetup(config: FullConfig) {
       throw new Error('Backend API is not accessible - cannot proceed with tests')
     }
     
-    // Wait for frontend to be ready
-    console.log('⏳ Waiting for frontend...')
-    const frontendUrl = process.env.CI ? 'http://localhost:5173' : 'http://localhost:5173'
-    let frontendReady = false
-    try {
-      await page.goto(frontendUrl)
-      await page.waitForLoadState('networkidle', { timeout: 30000 })
-      
-      // Verify the page has actual content (try multiple selectors as fallback)
-      const contentSelectors = ['main', '#app', '[data-testid="app"]', 'body > div']
-      let hasContent = false
-      for (const selector of contentSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 5000 })
-          hasContent = true
-          break
-        } catch {
-          // Try next selector
-        }
-      }
-      
-      if (!hasContent) {
-        throw new Error('Frontend loaded but no content found')
-      }
-      
-      console.log('✅ Frontend ready')
-      frontendReady = true
-    } catch (error) {
-      console.error(`❌ Frontend is not accessible at ${frontendUrl}`)
-      console.error('💡 Make sure the frontend is running with: npm run dev (local) or npx serve dist (CI)')
-      throw new Error(`Frontend is not accessible at ${frontendUrl} - cannot proceed with tests`)
-    }
-    
-    // Setup test data (both services are now confirmed ready)
+    // Setup test data (backend is ready)
     console.log('🔧 Setting up test data...')
-    await setupTestData(page)
+    await setupTestData()
     console.log('✅ Test data ready')
     
   } catch (error) {
     console.error('❌ Setup failed:', error)
     throw error
-  } finally {
-    await context.close()
-    await browser.close()
   }
   
   console.log('✨ E2E Test Environment Setup Complete')
 }
 
-async function setupTestData(page: any) {
+async function setupTestData() {
   // Create test devices for export/import testing
   const testDevices = [
     {
@@ -109,26 +67,19 @@ async function setupTestData(page: any) {
   // Add devices via API
   for (const device of testDevices) {
     try {
-      const response = await page.evaluate(async (deviceData) => {
-        try {
-          const res = await fetch('http://localhost:8080/api/v1/devices', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
-            },
-            body: JSON.stringify(deviceData)
-          })
-          return { ok: res.ok, status: res.status, statusText: res.statusText }
-        } catch (error) {
-          return { ok: false, error: error.message }
-        }
-      }, device)
+      const response = await fetch('http://localhost:8080/api/v1/devices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
+        },
+        body: JSON.stringify(device)
+      })
       
       if (response.ok) {
         console.log(`📱 Created test device: ${device.name}`)
       } else {
-        console.log(`⚠️ Device creation failed for ${device.name}: ${response.status} ${response.statusText || response.error}`)
+        console.log(`⚠️ Device creation failed for ${device.name}: ${response.status} ${response.statusText}`)
       }
     } catch (error) {
       console.warn(`⚠️ Could not create test device ${device.name}:`, error)
