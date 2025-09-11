@@ -24,7 +24,7 @@ on:
 
 jobs:
   e2e-tests:
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     
     services:
@@ -237,7 +237,7 @@ jobs:
       # Playwright HTML report provides better visualization than JSON reporter
 
   e2e-tests-matrix:
-    timeout-minutes: 30
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     
     strategy:

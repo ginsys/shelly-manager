@@ -66,11 +66,11 @@ test.describe('API Integration Tests', () => {
       const newDevice = {
         ip: '192.168.1.201',
         mac: 'FF:EE:DD:CC:BB:AA',
-        type: 'Test Device',
+        type: 'Smart Plug',
         name: 'API Test Device',
-        firmware: 'test-version',
+        firmware: '20231219-134356',
         status: 'online',
-        settings: JSON.stringify({ model: 'TEST-API', gen: 1 })
+        settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
       }
       
       const response = await request.post(`${baseURL}/api/v1/devices`, {
@@ -78,10 +78,15 @@ test.describe('API Integration Tests', () => {
         data: newDevice
       })
       
+      if (!response.ok()) {
+        const errorText = await response.text()
+        console.log(`Device creation failed with status ${response.status()}: ${errorText}`)
+      }
       expect(response.ok()).toBe(true)
       expect(response.status()).toBe(201)
       
       const data = await response.json()
+      console.log('Device creation response:', JSON.stringify(data, null, 2))
       expect(data).toHaveProperty('success', true)
       expect(data.data).toHaveProperty('id')
       
@@ -95,11 +100,11 @@ test.describe('API Integration Tests', () => {
       const newDevice = {
         ip: '192.168.1.202',
         mac: 'FF:EE:DD:CC:BB:AB',
-        type: 'Test Device',
+        type: 'Smart Plug',
         name: 'API Update Test Device',
-        firmware: 'test-version',
+        firmware: '20231219-134356',
         status: 'online',
-        settings: JSON.stringify({ model: 'TEST-UPDATE', gen: 1 })
+        settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
       }
       
       const createResponse = await request.post(`${baseURL}/api/v1/devices`, {
@@ -137,11 +142,11 @@ test.describe('API Integration Tests', () => {
       const newDevice = {
         ip: '192.168.1.203',
         mac: 'FF:EE:DD:CC:BB:AC',
-        type: 'Test Device',
+        type: 'Smart Plug',
         name: 'API Delete Test Device',
-        firmware: 'test-version',
+        firmware: '20231219-134356',
         status: 'online',
-        settings: JSON.stringify({ model: 'TEST-DELETE', gen: 1 })
+        settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
       }
       
       const createResponse = await request.post(`${baseURL}/api/v1/devices`, {
@@ -205,11 +210,11 @@ test.describe('API Integration Tests', () => {
           {
             ip: '192.168.1.210',
             mac: 'AA:BB:CC:DD:EE:F0',
-            type: 'Import Test Device',
+            type: 'Smart Plug',
             name: 'api-import-test-device',
-            firmware: 'test-version',
+            firmware: '20231219-134356',
             status: 'offline',
-            settings: JSON.stringify({ model: 'IMPORT-TEST', gen: 1 })
+            settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
           }
         ],
         metadata: {
@@ -344,7 +349,7 @@ test.describe('API Integration Tests', () => {
           name: `load-test-device-${i}`,
           firmware: 'test-version',
           status: 'offline',
-          settings: JSON.stringify({ model: 'LOAD-TEST', gen: 1 })
+          settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
         })),
         metadata: {
           version: '1.0',
