@@ -3,12 +3,14 @@ package middleware
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -793,6 +795,175 @@ func TestValidationMiddlewareChaining(t *testing.T) {
 		assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code,
 			"Invalid request should be rejected at first failing validation")
 	})
+}
+
+// TestValidateJSONMiddleware_BodyRestoration specifically tests that the request body
+// is properly restored after JSON validation, which is critical for E2E tests
+func TestValidateJSONMiddleware_BodyRestoration(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
+	config := DefaultValidationConfig()
+
+	tests := []struct {
+		name        string
+		requestBody string
+		description string
+	}{
+		{
+			name:        "Simple JSON Body Restoration",
+			requestBody: `{"name": "test", "value": 123}`,
+			description: "Simple JSON body should be readable by subsequent handlers",
+		},
+		{
+			name:        "Complex JSON Body Restoration",
+			requestBody: `{"user": {"name": "John", "age": 30}, "items": [1, 2, 3], "active": true}`,
+			description: "Complex JSON body should be readable by subsequent handlers",
+		},
+		{
+			name:        "Large JSON Body Restoration",
+			requestBody: `{"data": "` + strings.Repeat("x", 1000) + `", "items": [` + strings.Repeat("1,", 99) + `1]}`,
+			description: "Large JSON body should be readable by subsequent handlers",
+		},
+		{
+			name:        "Empty JSON Object",
+			requestBody: `{}`,
+			description: "Empty JSON object should be readable by subsequent handlers",
+		},
+		{
+			name:        "JSON Array",
+			requestBody: `[{"id": 1}, {"id": 2}, {"id": 3}]`,
+			description: "JSON array should be readable by subsequent handlers",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			middleware := ValidateJSONMiddleware(config, logger)
+
+			// Handler that reads the body to verify it's been restored
+			var capturedBody string
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				bodyBytes, err := io.ReadAll(r.Body)
+				assert.NoError(t, err, "Should be able to read body after validation")
+				capturedBody = string(bodyBytes)
+				w.WriteHeader(http.StatusOK)
+			})
+
+			req := httptest.NewRequest("POST", "/api/v1/test", strings.NewReader(tt.requestBody))
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+			middleware(handler).ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusOK, rr.Code, "Validation should pass for valid JSON")
+			assert.Equal(t, tt.requestBody, capturedBody, tt.description)
+		})
+	}
+}
+
+// TestValidateJSONMiddleware_MultipleReads tests that the body can be read multiple times
+// This is important for middleware chains where multiple handlers might need to read the body
+func TestValidateJSONMiddleware_MultipleReads(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
+	config := DefaultValidationConfig()
+	requestBody := `{"name": "test", "value": 123}`
+
+	middleware := ValidateJSONMiddleware(config, logger)
+
+	readCount := 0
+	var capturedBodies []string
+
+	// Handler that reads the body multiple times
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// First read
+		bodyBytes1, err1 := io.ReadAll(r.Body)
+		assert.NoError(t, err1, "First read should succeed")
+		capturedBodies = append(capturedBodies, string(bodyBytes1))
+		readCount++
+
+		// Restore body for second read
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes1))
+
+		// Second read
+		bodyBytes2, err2 := io.ReadAll(r.Body)
+		assert.NoError(t, err2, "Second read should succeed")
+		capturedBodies = append(capturedBodies, string(bodyBytes2))
+		readCount++
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/test", strings.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	middleware(handler).ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code, "Validation should pass")
+	assert.Equal(t, 2, readCount, "Handler should have performed two reads")
+	assert.Equal(t, requestBody, capturedBodies[0], "First read should get original body")
+	assert.Equal(t, requestBody, capturedBodies[1], "Second read should get original body")
+}
+
+// TestValidateJSONMiddleware_InvalidJSONNoBodyRestoration tests that invalid JSON
+// doesn't restore the body (since the request is rejected)
+func TestValidateJSONMiddleware_InvalidJSONNoBodyRestoration(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
+	config := DefaultValidationConfig()
+
+	middleware := ValidateJSONMiddleware(config, logger)
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("POST", "/api/v1/test", strings.NewReader(`{"invalid": json`))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	middleware(handler).ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code, "Invalid JSON should be rejected")
+	assert.False(t, handlerCalled, "Handler should not be called for invalid JSON")
+}
+
+// TestValidateJSONMiddleware_BodyRestorationPerformance tests that body restoration
+// doesn't significantly impact performance
+func TestValidateJSONMiddleware_BodyRestorationPerformance(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text", Output: "stdout"})
+	config := DefaultValidationConfig()
+
+	middleware := ValidateJSONMiddleware(config, logger)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate reading the body
+		_, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Test with different body sizes
+	bodySizes := []int{100, 1000, 10000, 100000}
+
+	for _, size := range bodySizes {
+		t.Run(fmt.Sprintf("BodySize_%d", size), func(t *testing.T) {
+			jsonData := `{"data": "` + strings.Repeat("x", size-15) + `"}`
+
+			start := time.Now()
+
+			req := httptest.NewRequest("POST", "/api/v1/test", strings.NewReader(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+			middleware(handler).ServeHTTP(rr, req)
+
+			duration := time.Since(start)
+
+			assert.Equal(t, http.StatusOK, rr.Code, "Request should succeed")
+			assert.Less(t, duration.Milliseconds(), int64(100),
+				"Body restoration should complete within 100ms for size %d", size)
+		})
+	}
 }
 
 func BenchmarkValidationMiddleware(b *testing.B) {

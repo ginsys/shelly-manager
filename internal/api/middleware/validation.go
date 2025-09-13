@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"strconv"
@@ -254,15 +256,32 @@ func ValidateJSONMiddleware(config *ValidationConfig, logger *logging.Logger) fu
 			limitedReader := http.MaxBytesReader(w, r.Body, 10*1024*1024) // 10MB limit
 			r.Body = limitedReader
 
+			// Read the entire body to validate JSON and restore it for subsequent handlers
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				if logger != nil && config.LogValidationErrors {
+					logger.WithFields(map[string]any{
+						"method":           r.Method,
+						"path":             r.URL.Path,
+						"client_ip":        getClientIP(r),
+						"error":            err.Error(),
+						"component":        "validation",
+						"validation_error": "body_read_error",
+					}).Warn("Failed to read request body")
+				}
+
+				respWriter.WriteValidationError(w, r, map[string]string{
+					"json": "Failed to read request body: " + err.Error(),
+				})
+				return
+			}
+
+			// Restore the body for subsequent handlers
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
 			// Try to decode JSON to validate syntax
 			var rawJSON interface{}
-			decoder := json.NewDecoder(r.Body)
-
-			// Set decoder limits
-			// Note: Go's json package doesn't have a direct depth limit,
-			// but we can validate after decoding if config.MaxJSONDepth > 0
-
-			if err := decoder.Decode(&rawJSON); err != nil {
+			if err := json.Unmarshal(bodyBytes, &rawJSON); err != nil {
 				if logger != nil && config.LogValidationErrors {
 					logger.WithFields(map[string]any{
 						"method":           r.Method,
