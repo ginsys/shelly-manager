@@ -12,11 +12,11 @@ export default defineConfig({
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
   
-  // Retry on CI only
-  retries: process.env.CI ? 2 : 0,
+  // Retry on CI only - reduced to 1 for faster execution
+  retries: process.env.CI ? 1 : 0,
   
-  // Opt out of parallel tests on CI
-  workers: process.env.CI ? 1 : undefined,
+  // Enable parallel tests on CI for faster execution
+  workers: process.env.CI ? 4 : undefined,
   
   // Reporter to use
   reporter: [
@@ -73,9 +73,9 @@ export default defineConfig({
             'network.dns.disableIPv6': true,
           },
         },
-        // Longer timeouts for Firefox navigation issues
-        navigationTimeout: 60000,
-        actionTimeout: 30000,
+        // Optimized timeouts for faster execution
+        navigationTimeout: 30000,
+        actionTimeout: 15000,
       },
     },
     {
@@ -86,9 +86,9 @@ export default defineConfig({
         launchOptions: {
           args: ['--disable-web-security'],
         },
-        // Extra timeouts for WebKit rendering
-        navigationTimeout: 60000,
-        actionTimeout: 30000,
+        // Optimized timeouts for faster execution
+        navigationTimeout: 30000,
+        actionTimeout: 15000,
       },
     },
     

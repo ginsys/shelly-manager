@@ -93,18 +93,18 @@ export const TEST_DATA = {
 /**
  * Wait for page to be ready and network idle with browser-specific handling
  */
-export async function waitForPageReady(page: Page, timeout = 30000): Promise<void> {
+export async function waitForPageReady(page: Page, timeout = 15000): Promise<void> {
   // Get browser name for specific handling
   const browserName = page.context().browser()?.browserType().name() || 'unknown'
   
-  // Different timeout strategies for different browsers
-  const adjustedTimeout = browserName === 'webkit' ? timeout * 1.5 : timeout
+  // Reduced timeout strategies for different browsers
+  const adjustedTimeout = browserName === 'webkit' ? timeout * 1.2 : timeout
   
   try {
     await page.waitForLoadState('networkidle', { timeout: adjustedTimeout })
   } catch (error) {
     console.warn(`Network idle timeout for ${browserName}, continuing with domcontentloaded`)
-    await page.waitForLoadState('domcontentloaded', { timeout: 10000 })
+    await page.waitForLoadState('domcontentloaded', { timeout: 5000 })
   }
   
   // Try multiple selectors as fallback for different browsers
@@ -113,7 +113,7 @@ export async function waitForPageReady(page: Page, timeout = 30000): Promise<voi
   
   for (const selector of contentSelectors) {
     try {
-      await page.waitForSelector(selector, { timeout: 10000 })
+      await page.waitForSelector(selector, { timeout: 5000 })
       contentFound = true
       break
     } catch {
@@ -124,23 +124,23 @@ export async function waitForPageReady(page: Page, timeout = 30000): Promise<voi
   if (!contentFound) {
     console.warn(`No main content selector found for ${browserName}, checking for any content`)
     // Last resort: just check if body has content
-    await page.waitForFunction(() => document.body && document.body.children.length > 0, { timeout: 10000 })
+    await page.waitForFunction(() => document.body && document.body.children.length > 0, { timeout: 5000 })
   }
   
   // Wait for any loading spinners to disappear
   try {
-    await page.waitForSelector(SELECTORS.loadingSpinner, { state: 'hidden', timeout: 5000 })
+    await page.waitForSelector(SELECTORS.loadingSpinner, { state: 'hidden', timeout: 3000 })
   } catch {
     // Ignore if no spinner found
   }
   
-  // Browser-specific additional waits
+  // Browser-specific additional waits (reduced)
   if (browserName === 'webkit') {
     // WebKit sometimes needs extra time for rendering
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(500)
   } else if (browserName === 'firefox') {
     // Firefox sometimes has timing issues with navigation
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(250)
   }
 }
 
@@ -357,12 +357,12 @@ export class TestHelpers {
   async navigateToPage(path: string): Promise<void> {
     const baseUrl = 'http://localhost:5173' // Use consistent port
     await this.page.goto(`${baseUrl}${path}`)
-    await this.page.waitForLoadState('networkidle')
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 })
   }
 
   async measurePageLoadTime(): Promise<number> {
     const startTime = Date.now()
-    await this.page.waitForLoadState('networkidle')
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 })
     return Date.now() - startTime
   }
 

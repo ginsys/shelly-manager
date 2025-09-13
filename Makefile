@@ -4,7 +4,7 @@
 	test-race test-race-short test-race-full \
 	test-coverage test-coverage-short test-coverage-full test-coverage-ci test-coverage-check test-coverage-with-check \
 	test-matrix test-ci \
-	ui-dev ui-build ui-preview \
+	ui-dev ui-build ui-preview test-e2e \
 	benchmark test-watch example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
 
 BINARY_NAME=shelly-manager
@@ -408,3 +408,7 @@ ui-build: ui-deps
 ui-preview:
 	@echo "Previewing built UI..."
 	@cd ui && npm run preview
+
+# Run E2E tests with fresh database
+test-e2e:
+	@./scripts/test-e2e.sh

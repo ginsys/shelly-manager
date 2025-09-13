@@ -1,7 +1,19 @@
 import { FullConfig, request } from '@playwright/test'
+import * as fs from 'fs'
 
 async function globalSetup(config: FullConfig) {
   console.log('🚀 Starting E2E Test Environment Setup...')
+  
+  // Delete existing test database to ensure fresh start
+  const testDbPath = '/tmp/shelly_test.db'
+  try {
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath)
+      console.log('🗑️ Deleted existing test database')
+    }
+  } catch (error) {
+    console.warn('⚠️ Could not delete test database:', error)
+  }
   
   // Create a request context for API calls
   const requestContext = await request.newContext({

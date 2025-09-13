@@ -73,11 +73,13 @@ test.describe('API Integration Tests', () => {
     })
 
     test('POST /api/v1/devices should create new device', async ({ request }) => {
+      const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+      const randomIp = `192.168.1.${150 + Math.floor(Math.random() * 50)}`
       const newDevice = {
-        ip: '192.168.1.201',
-        mac: 'FF:EE:DD:CC:BB:AA',
+        ip: randomIp,
+        mac: `FF:EE:DD:CC:BB:${uniqueId.substr(-2).toUpperCase()}`,
         type: 'Smart Plug',
-        name: 'API Test Device',
+        name: `API Test Device ${uniqueId}`,
         firmware: '20231219-134356',
         status: 'online',
         settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
@@ -98,23 +100,26 @@ test.describe('API Integration Tests', () => {
       const data = await response.json()
       console.log('Device creation response:', JSON.stringify(data, null, 2))
       expect(data).toHaveProperty('success', true)
-      expect(data).toHaveProperty('id')
-      expect(data.id).toBeDefined()
-      expect(data.id).not.toBeNull()
+      expect(data).toHaveProperty('data')
+      expect(data.data).toHaveProperty('id')
+      expect(data.data.id).toBeDefined()
+      expect(data.data.id).not.toBeNull()
       
       // Clean up: delete created device
-      const deviceId = data.id
+      const deviceId = data.data.id
       expect(deviceId).toBeTruthy()
       await request.delete(`${baseURL}/api/v1/devices/${deviceId}`, { headers })
     })
 
     test('PUT /api/v1/devices/{id} should update device', async ({ request }) => {
       // First create a test device
+      const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+      const randomIp = `192.168.2.${150 + Math.floor(Math.random() * 50)}`
       const newDevice = {
-        ip: '192.168.1.202',
-        mac: 'FF:EE:DD:CC:BB:AB',
+        ip: randomIp,
+        mac: `FF:EE:DD:CC:BB:${uniqueId.substr(-2).toUpperCase()}`,
         type: 'Smart Plug',
-        name: 'API Update Test Device',
+        name: `API Update Test Device ${uniqueId}`,
         firmware: '20231219-134356',
         status: 'online',
         settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
@@ -126,11 +131,12 @@ test.describe('API Integration Tests', () => {
       })
       const createData = await createResponse.json()
       expect(createData).toHaveProperty('success', true)
-      expect(createData).toHaveProperty('id')
-      expect(createData.id).toBeDefined()
-      expect(createData.id).not.toBeNull()
+      expect(createData).toHaveProperty('data')
+      expect(createData.data).toHaveProperty('id')
+      expect(createData.data.id).toBeDefined()
+      expect(createData.data.id).not.toBeNull()
       
-      const deviceId = createData.id
+      const deviceId = createData.data.id
       expect(deviceId).toBeTruthy()
       
       // Update the device
@@ -158,11 +164,13 @@ test.describe('API Integration Tests', () => {
 
     test('DELETE /api/v1/devices/{id} should delete device', async ({ request }) => {
       // First create a test device
+      const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+      const randomIp = `192.168.3.${150 + Math.floor(Math.random() * 50)}`
       const newDevice = {
-        ip: '192.168.1.203',
-        mac: 'FF:EE:DD:CC:BB:AC',
+        ip: randomIp,
+        mac: `FF:EE:DD:CC:BB:${uniqueId.substr(-2).toUpperCase()}`,
         type: 'Smart Plug',
-        name: 'API Delete Test Device',
+        name: `API Delete Test Device ${uniqueId}`,
         firmware: '20231219-134356',
         status: 'online',
         settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
@@ -174,11 +182,12 @@ test.describe('API Integration Tests', () => {
       })
       const createData = await createResponse.json()
       expect(createData).toHaveProperty('success', true)
-      expect(createData).toHaveProperty('id')
-      expect(createData.id).toBeDefined()
-      expect(createData.id).not.toBeNull()
+      expect(createData).toHaveProperty('data')
+      expect(createData.data).toHaveProperty('id')
+      expect(createData.data.id).toBeDefined()
+      expect(createData.data.id).not.toBeNull()
       
-      const deviceId = createData.id
+      const deviceId = createData.data.id
       expect(deviceId).toBeTruthy()
       
       // Delete the device
@@ -230,13 +239,15 @@ test.describe('API Integration Tests', () => {
 
   test.describe('Import API', () => {
     test('POST /api/v1/import/devices should import valid data', async ({ request }) => {
+      const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+      const randomIp = `192.168.4.${150 + Math.floor(Math.random() * 50)}`
       const importData = {
         devices: [
           {
-            ip: '192.168.1.210',
-            mac: 'AA:BB:CC:DD:EE:F0',
+            ip: randomIp,
+            mac: `AA:BB:CC:DD:EE:${uniqueId.substr(-2).toUpperCase()}`,
             type: 'Smart Plug',
-            name: 'api-import-test-device',
+            name: `api-import-test-device-${uniqueId}`,
             firmware: '20231219-134356',
             status: 'offline',
             settings: '{"model":"SHPLG-S","gen":1,"auth_enabled":true}'
@@ -270,7 +281,7 @@ test.describe('API Integration Tests', () => {
       expect(devicesData.data).toHaveProperty('devices')
       expect(Array.isArray(devicesData.data.devices)).toBe(true)
       
-      const importedDevice = devicesData.data.devices.find((d: any) => d.name === 'api-import-test-device')
+      const importedDevice = devicesData.data.devices.find((d: any) => d.name === `api-import-test-device-${uniqueId}`)
       
       expect(importedDevice).toBeTruthy()
       
