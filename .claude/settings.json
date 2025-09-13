@@ -133,7 +133,8 @@
       "Bash(env CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...)",
       "Bash(env CGO_ENABLED=1 go test -race -short -coverprofile=coverage.out -covermode=atomic ./...)",
       "Bash(CGO_ENABLED=1 go test -v -race -short ./internal/api)",
-      "Bash(CGO_ENABLED=1 go test -v -race -short ./internal/api -run \"TestHealthEndpointsWithCurlUserAgent\")"
+      "Bash(CGO_ENABLED=1 go test -v -race -short ./internal/api -run \"TestHealthEndpointsWithCurlUserAgent\")",
+      "Bash(CGO_ENABLED=0 go build -o bin/test-manager ./cmd/shelly-manager)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
