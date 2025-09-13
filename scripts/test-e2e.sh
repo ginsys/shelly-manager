@@ -39,7 +39,17 @@ echo "Backend started with PID: $BACKEND_PID"
 # Function to cleanup on exit
 cleanup() {
     echo "Cleaning up..."
-    if kill -0 $BACKEND_PID 2>/dev/null; then
+    if [ ! -z "$FRONTEND_PID" ] && kill -0 $FRONTEND_PID 2>/dev/null; then
+        echo "Stopping frontend server (PID: $FRONTEND_PID)..."
+        kill $FRONTEND_PID
+        sleep 1
+        # Force kill if still running
+        if kill -0 $FRONTEND_PID 2>/dev/null; then
+            echo "Force killing frontend..."
+            kill -9 $FRONTEND_PID
+        fi
+    fi
+    if [ ! -z "$BACKEND_PID" ] && kill -0 $BACKEND_PID 2>/dev/null; then
         echo "Stopping backend server (PID: $BACKEND_PID)..."
         kill $BACKEND_PID
         sleep 2
@@ -66,6 +76,36 @@ for i in $(seq 1 30); do
         echo "Backend failed to start after 30 seconds"
         echo "Backend logs:"
         cat backend.log || true
+        exit 1
+    fi
+    sleep 1
+done
+
+# Build frontend
+echo "Building frontend..."
+cd ui
+npm run build
+cd ..
+
+# Start frontend server
+echo "Starting frontend server..."
+cd ui
+npm run preview -- --port 5173 > ../frontend.log 2>&1 &
+FRONTEND_PID=$!
+cd ..
+echo "Frontend started with PID: $FRONTEND_PID"
+
+# Wait for frontend to be ready
+echo "Waiting for frontend to start..."
+for i in $(seq 1 30); do
+    if curl -f http://localhost:5173 >/dev/null 2>&1; then
+        echo "Frontend ready after $i seconds"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "Frontend failed to start after 30 seconds"
+        echo "Frontend logs:"
+        cat frontend.log || true
         exit 1
     fi
     sleep 1
