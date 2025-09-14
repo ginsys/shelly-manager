@@ -1,5 +1,9 @@
 name: E2E Tests
 
+# Optimized E2E Testing Strategy:
+# - Pull Requests: Fast development tests (Chromium only, ~10-15 minutes)
+# - Main/Develop: Comprehensive tests (all browsers, ~45+ minutes)
+
 on:
   push:
     branches: [ main, develop ]
@@ -23,8 +27,10 @@ on:
       - '.github/workflows/e2e-tests.yml'
 
 jobs:
-  e2e-tests:
-    timeout-minutes: 30
+  # Fast development E2E tests for Pull Requests (10-15 minutes target)
+  e2e-dev:
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     
     services:
@@ -189,9 +195,9 @@ jobs:
             sleep 1
           done
 
-      - name: Run E2E tests
+      - name: Run E2E tests (Development - Fast)
         working-directory: ui
-        run: npm run test:e2e
+        run: npm run test:e2e:dev
         env:
           # Playwright configuration
           CI: true
@@ -237,14 +243,11 @@ jobs:
       # Test results are uploaded as artifacts above
       # Playwright HTML report provides better visualization than JSON reporter
 
-  e2e-tests-matrix:
-    timeout-minutes: 45
+  # Comprehensive E2E tests for main/release branches (45+ minutes)
+  e2e-comprehensive:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    timeout-minutes: 60
     runs-on: ubuntu-latest
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [chromium, firefox, webkit]
         
     steps:
       - name: Checkout repository
@@ -286,7 +289,7 @@ jobs:
             host: 0.0.0.0
           database:
             provider: sqlite
-            path: /tmp/test_${{ matrix.project }}.db
+            path: /tmp/shelly_comprehensive.db
           discovery:
             enabled: false
           logging:
@@ -379,17 +382,17 @@ jobs:
             sleep 1
           done
 
-      - name: Run E2E tests for ${{ matrix.project }}
+      - name: Run E2E tests (Comprehensive - All Browsers)
         working-directory: ui
-        run: npx playwright test --project=${{ matrix.project }}
+        run: npm run test:e2e
         env:
           CI: true
 
-      - name: Upload test artifacts for ${{ matrix.project }}
+      - name: Upload test artifacts
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-${{ matrix.project }}-results
+          name: playwright-comprehensive-results
           path: |
             ui/test-results/
             ui/playwright-report/

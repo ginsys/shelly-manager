@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -269,13 +270,20 @@ func (rw *ResponseWriter) WriteNotFoundError(w http.ResponseWriter, r *http.Requ
 func (rw *ResponseWriter) WriteInternalError(w http.ResponseWriter, r *http.Request, err error) {
 	// Log the actual error for debugging
 	if rw.logger != nil {
-		rw.logger.WithFields(map[string]any{
+		// In test mode, also log as warning to ensure visibility
+		logFields := map[string]any{
 			"method":     r.Method,
 			"path":       r.URL.Path,
 			"error":      err.Error(),
 			"request_id": getRequestIDFromContext(r),
 			"component":  "api_response",
-		}).Error("Internal server error")
+		}
+		rw.logger.WithFields(logFields).Error("Internal server error")
+
+		// Also log as warning in test mode for better visibility
+		if os.Getenv("SHELLY_SECURITY_VALIDATION_TEST_MODE") == "true" {
+			rw.logger.WithFields(logFields).Warn("Internal server error (test mode visibility)")
+		}
 	}
 
 	// Don't expose internal error details to clients

@@ -1,7 +1,7 @@
 <template>
-  <main style="padding:16px">
+  <main style="padding:16px" data-testid="backup-management-page">
     <div class="page-header">
-      <h1>Backup Management</h1>
+      <h1 data-testid="page-title">Backup Management</h1>
       <button class="primary-button" @click="showCreateForm = true">
         💾 Create Backup
       </button>
@@ -359,10 +359,23 @@ const restoreError = ref('')
 
 // Initialize
 onMounted(() => {
-  fetchBackups()
-  fetchStatistics()
-  fetchAvailableDevices()
+  // Load data asynchronously without blocking page render
+  loadInitialData()
 })
+
+/**
+ * Load initial data in parallel (non-blocking)
+ */
+function loadInitialData() {
+  // Fire and forget - don't block UI rendering
+  Promise.all([
+    fetchBackups().catch(err => console.warn('Failed to fetch backups:', err)),
+    fetchStatistics().catch(err => console.warn('Failed to fetch statistics:', err)),
+    fetchAvailableDevices().catch(err => console.warn('Failed to fetch devices:', err))
+  ]).catch(err => {
+    console.warn('Some data failed to load:', err)
+  })
+}
 
 /**
  * Fetch backups list with current filters

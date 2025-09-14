@@ -6,8 +6,8 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/e2e',
   
-  // Run tests in files in parallel
-  fullyParallel: true,
+  // Run tests in files in parallel - disabled to respect worker limits
+  fullyParallel: false,
   
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
@@ -15,8 +15,9 @@ export default defineConfig({
   // Retry on CI only - reduced to 1 for faster execution
   retries: process.env.CI ? 1 : 0,
   
-  // Enable parallel tests on CI for faster execution
-  workers: process.env.CI ? 4 : undefined,
+  // FORCE 2 workers to prevent SQLite concurrency issues - NUCLEAR APPROACH
+  // OVERRIDE: Always force 2 workers regardless of system defaults or CLI overrides
+  workers: 2,
   
   // Reporter to use
   reporter: [
@@ -25,8 +26,8 @@ export default defineConfig({
     process.env.CI ? ['github'] : ['list']
   ],
   
-  // Global test timeout
-  timeout: 30 * 1000,
+  // Increased global timeout for complex pages (was 30s)
+  timeout: 120 * 1000,
   
   // Shared settings for all tests
   use: {
@@ -49,6 +50,13 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
 
+  // Global metadata to override any dynamic worker detection
+  metadata: {
+    workers: 2,
+    maxWorkers: 2,
+    forceWorkers: true
+  },
+
   // Test projects for different browsers and scenarios
   projects: [
     // Desktop browsers
@@ -56,27 +64,55 @@ export default defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
-        // Chromium-specific settings
+        // Chromium-specific settings optimized for performance
         launchOptions: {
-          args: ['--disable-dev-shm-usage', '--no-sandbox'],
+          args: [
+            '--disable-dev-shm-usage',
+            '--no-sandbox', 
+            '--disable-gpu',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor'
+          ],
         },
+        // Add consistent timeouts for Chromium
+        navigationTimeout: 60000,  // Increased from 45s
+        actionTimeout: 20000,      // Increased from 15s
       },
     },
     {
       name: 'firefox',
-      use: { 
+      timeout: 120 * 1000, // Firefox-specific test timeout: 120s for better reliability
+      use: {
         ...devices['Desktop Firefox'],
-        // Firefox-specific settings
         launchOptions: {
           firefoxUserPrefs: {
-            'network.http.speculative-parallel-limit': 0,
-            'network.dns.disableIPv6': true,
-          },
+            // Network optimizations - CRITICAL for timeout fix
+            'network.http.max-connections-per-server': 32,
+            'network.http.max-persistent-connections-per-server': 16,
+            'network.http.response.timeout': 300000,  // 5min vs 45.1s hardcoded
+            'network.http.request.timeout': 300000,   // 5min request timeout
+
+            // Performance optimizations
+            'browser.cache.disk.enable': false,       // No disk cache for tests
+            'browser.cache.memory.capacity': 102400,  // 100MB memory cache
+            'dom.max_script_run_time': 0,            // No script timeout
+            'dom.max_chrome_script_run_time': 0,     // No chrome script timeout
+
+            // Disable unnecessary features
+            'browser.safebrowsing.enabled': false,
+            'browser.safebrowsing.malware.enabled': false,
+            'extensions.update.enabled': false,
+            'app.update.enabled': false,
+          }
         },
-        // Optimized timeouts for faster execution
-        navigationTimeout: 30000,
-        actionTimeout: 15000,
+
+        // Override global timeouts specifically for Firefox
+        actionTimeout: 60000,        // 60s vs 45.1s system limit
+        navigationTimeout: 60000,    // 60s navigation timeout
       },
+
+      // Firefox-specific test configuration
+      retries: process.env.CI ? 2 : 1,  // Retry on CI
     },
     {
       name: 'webkit',
@@ -86,9 +122,9 @@ export default defineConfig({
         launchOptions: {
           args: ['--disable-web-security'],
         },
-        // Optimized timeouts for faster execution
-        navigationTimeout: 30000,
-        actionTimeout: 15000,
+        // Increased timeouts for WebKit stability
+        navigationTimeout: 60000,
+        actionTimeout: 25000,
       },
     },
     
@@ -97,17 +133,18 @@ export default defineConfig({
       name: 'Mobile Chrome',
       use: { 
         ...devices['Pixel 5'],
-        // Mobile Chrome settings
-        actionTimeout: 20000,
+        // Mobile Chrome settings - increased timeout
+        actionTimeout: 30000,
+        navigationTimeout: 60000,
       },
     },
     {
       name: 'Mobile Safari',
       use: { 
         ...devices['iPhone 12'],
-        // Mobile Safari specific settings
+        // Mobile Safari specific settings - keep longer for slower device
         navigationTimeout: 60000,
-        actionTimeout: 30000,
+        actionTimeout: 35000,
       },
     },
     

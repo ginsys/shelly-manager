@@ -1,0 +1,102 @@
+{
+  "plugins": [
+    {
+      "id": "home-assistant",
+      "name": "Home Assistant MQTT",
+      "type": "sync",
+      "enabled": true,
+      "status": "active",
+      "version": "1.0.0",
+      "description": "Export device configurations to Home Assistant via MQTT discovery",
+      "config": {
+        "mqtt_broker": "homeassistant.local:1883",
+        "discovery_prefix": "homeassistant",
+        "retain_messages": true,
+        "qos": 1
+      },
+      "last_run": "2025-09-14T10:00:00Z",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T10:00:00Z"
+    },
+    {
+      "id": "openhab",
+      "name": "OpenHAB Things",
+      "type": "sync",
+      "enabled": false,
+      "status": "disabled",
+      "version": "1.0.0",
+      "description": "Export device configurations to OpenHAB Things format",
+      "config": {
+        "output_format": "things",
+        "include_channels": true,
+        "group_by_type": false
+      },
+      "last_run": null,
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T09:00:00Z"
+    },
+    {
+      "id": "email-notifications",
+      "name": "Email Notifications",
+      "type": "notification",
+      "enabled": true,
+      "status": "active",
+      "version": "1.0.0",
+      "description": "Send email notifications for device events",
+      "config": {
+        "smtp_server": "smtp.example.com:587",
+        "username": "notifications@example.com",
+        "use_tls": true,
+        "recipients": ["admin@example.com"]
+      },
+      "last_run": "2025-09-14T09:45:00Z",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T09:45:00Z"
+    },
+    {
+      "id": "webhook",
+      "name": "Webhook Notifications",
+      "type": "notification",
+      "enabled": false,
+      "status": "disabled",
+      "version": "1.0.0",
+      "description": "Send HTTP webhooks for device events",
+      "config": {
+        "url": "https://api.example.com/webhooks/shelly",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer token123"
+        }
+      },
+      "last_run": null,
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T09:00:00Z"
+    },
+    {
+      "id": "network-discovery",
+      "name": "Network Discovery",
+      "type": "discovery",
+      "enabled": true,
+      "status": "active",
+      "version": "1.0.0",
+      "description": "Discover Shelly devices on the local network",
+      "config": {
+        "scan_interval": 300,
+        "network_ranges": ["192.168.1.0/24", "10.0.1.0/24"],
+        "timeout": 5000
+      },
+      "last_run": "2025-09-14T10:02:00Z",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T10:02:00Z"
+    }
+  ],
+  "total": 5,
+  "enabled": 3,
+  "disabled": 2,
+  "types": {
+    "sync": 2,
+    "notification": 2,
+    "discovery": 1
+  }
+}

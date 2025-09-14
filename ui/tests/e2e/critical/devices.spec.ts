@@ -7,7 +7,7 @@ import {
   SELECTORS,
   TEST_DATA,
   verifyApiResponse
-} from './fixtures/test-helpers'
+} from '../fixtures/test-helpers.js'
 
 test.describe('Device Management E2E', () => {
   

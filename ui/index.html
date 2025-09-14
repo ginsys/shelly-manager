@@ -4,6 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shelly Manager</title>
+    
+    <!-- Performance optimizations for faster loading -->
+    <link rel="preconnect" href="http://localhost:8080" />
+    <link rel="dns-prefetch" href="http://localhost:8080" />
+
+    <!-- Preload critical resources -->
+    <link rel="modulepreload" href="/src/main.ts" />
+    <link rel="preload" href="/src/App.vue" as="script" />
+
+    <!-- DNS prefetch for potential external resources -->
+    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net" />
+
+    <!-- Additional preconnections for test environments -->
+    <link rel="preconnect" href="http://localhost:5173" />
+    
+    <!-- Firefox-specific optimizations -->
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light" />
+    
     <!-- CSP: no inline scripts/styles; this file should be served with strict CSP headers. -->
   </head>
   <body>

@@ -208,14 +208,22 @@ export const usePluginStore = defineStore('plugin', {
 
   actions: {
     /**
-     * Fetch all plugins and categories
+     * Fetch all plugins and categories with optimized loading
      */
     async fetchPlugins(category?: string) {
       this.loading = true
       this.error = ''
       
       try {
-        const result: ListPluginsResult = await listPlugins(category)
+        // Set timeout for API call to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Plugin loading timeout')), 8000)
+        )
+        
+        const apiPromise = listPlugins(category)
+        
+        const result: ListPluginsResult = await Promise.race([apiPromise, timeoutPromise]) as ListPluginsResult
+        
         this.plugins = result.plugins
         this.categories = result.categories
         this.meta = result.meta

@@ -1,0 +1,77 @@
+{
+  "devices": [
+    {
+      "id": 1,
+      "name": "Test Device 1",
+      "type": "SHSW-1",
+      "ip": "192.168.1.100",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "firmware": "20230913-114336/v1.14.0-gcb84623",
+      "status": "online",
+      "last_seen": "2025-09-14T10:00:00Z",
+      "settings": "{\"relay\":0,\"default_state\":\"off\",\"btn_type\":\"momentary\",\"auto_on\":0.00,\"auto_off\":0.00}",
+      "sync_status": "synced",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T10:00:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Test Device 2",
+      "type": "SHSW-25",
+      "ip": "192.168.1.101",
+      "mac": "AA:BB:CC:DD:EE:02",
+      "firmware": "20230913-114255/v1.14.0-gcb84623",
+      "status": "online",
+      "last_seen": "2025-09-14T10:01:00Z",
+      "settings": "{\"relays\":[{\"ison\":false,\"has_timer\":false,\"timer_started\":0,\"timer_duration\":0,\"timer_remaining\":0,\"source\":\"input\"}]}",
+      "sync_status": "pending",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T10:01:00Z"
+    },
+    {
+      "id": 3,
+      "name": "Test Dimmer",
+      "type": "SHDM-1",
+      "ip": "192.168.1.102",
+      "mac": "AA:BB:CC:DD:EE:03",
+      "firmware": "20230913-114336/v1.14.0-gcb84623",
+      "status": "offline",
+      "last_seen": "2025-09-14T09:30:00Z",
+      "settings": "{\"lights\":[{\"ison\":true,\"brightness\":75,\"transition\":1000}]}",
+      "sync_status": "error",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T09:30:00Z"
+    },
+    {
+      "id": 4,
+      "name": "Test Door Sensor",
+      "type": "SHDW-2",
+      "ip": "192.168.1.103",
+      "mac": "AA:BB:CC:DD:EE:04",
+      "firmware": "20230913-114336/v1.14.0-gcb84623",
+      "status": "online",
+      "last_seen": "2025-09-14T10:02:00Z",
+      "settings": "{\"sensor\":{\"state\":\"close\",\"is_valid\":true},\"bat\":{\"voltage\":3.1,\"level\":62}}",
+      "sync_status": "synced",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T10:02:00Z"
+    },
+    {
+      "id": 5,
+      "name": "Test Plug S",
+      "type": "SHPLG-S",
+      "ip": "192.168.1.104",
+      "mac": "AA:BB:CC:DD:EE:05",
+      "firmware": "20230913-114336/v1.14.0-gcb84623",
+      "status": "online",
+      "last_seen": "2025-09-14T10:03:00Z",
+      "settings": "{\"relay\":{\"ison\":true,\"has_timer\":false,\"overpower\":false},\"meters\":[{\"power\":45.2,\"is_valid\":true,\"timestamp\":1726312983,\"counters\":[0.123,0.456,0.789],\"total\":1.368}]}",
+      "sync_status": "synced",
+      "created_at": "2025-09-14T09:00:00Z",
+      "updated_at": "2025-09-14T10:03:00Z"
+    }
+  ],
+  "total": 5,
+  "page": 1,
+  "per_page": 50
+}

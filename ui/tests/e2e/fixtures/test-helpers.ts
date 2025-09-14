@@ -1,7 +1,9 @@
 import { Page, expect } from '@playwright/test'
+import { setupFixtures, setupMinimalFixtures, setupComprehensiveFixtures } from '../../fixtures/fixture-helper.js'
 
 /**
  * Test helper utilities for Shelly Manager E2E tests
+ * Enhanced with fixture support for reduced API calls
  */
 
 // Common selectors
@@ -91,56 +93,102 @@ export const TEST_DATA = {
 } as const
 
 /**
- * Wait for page to be ready and network idle with browser-specific handling
+ * Set up test environment with fixtures (for smoke tests)
+ * Uses minimal fixtures to reduce setup time
  */
-export async function waitForPageReady(page: Page, timeout = 15000): Promise<void> {
+export async function setupTestEnvironment(page: Page, useFixtures = true): Promise<void> {
+  if (useFixtures) {
+    await setupMinimalFixtures(page)
+  }
+}
+
+/**
+ * Set up comprehensive test environment with fixtures (for integration tests)
+ * Uses full fixtures with error simulation
+ */
+export async function setupComprehensiveTestEnvironment(page: Page, useFixtures = true): Promise<void> {
+  if (useFixtures) {
+    await setupComprehensiveFixtures(page)
+  }
+}
+
+/**
+ * Wait for page to be ready with optimized loading detection
+ */
+export async function waitForPageReady(page: Page, timeout = 8000): Promise<void> {
   // Get browser name for specific handling
   const browserName = page.context().browser()?.browserType().name() || 'unknown'
   
-  // Reduced timeout strategies for different browsers
-  const adjustedTimeout = browserName === 'webkit' ? timeout * 1.2 : timeout
+  // Step 1: Wait for DOM content to load (fast)
+  await page.waitForLoadState('domcontentloaded', { timeout: 3000 })
   
-  try {
-    await page.waitForLoadState('networkidle', { timeout: adjustedTimeout })
-  } catch (error) {
-    console.warn(`Network idle timeout for ${browserName}, continuing with domcontentloaded`)
-    await page.waitForLoadState('domcontentloaded', { timeout: 5000 })
-  }
+  // Step 2: Wait for main app structure to be present
+  const appSelectors = ['#app', 'main', '[data-testid="app"]', '.q-layout', 'body > div:first-child']
+  let appFound = false
   
-  // Try multiple selectors as fallback for different browsers
-  const contentSelectors = ['main', '#app', '[data-testid="app"]', 'body > div', '.q-layout']
-  let contentFound = false
-  
-  for (const selector of contentSelectors) {
+  for (const selector of appSelectors) {
     try {
-      await page.waitForSelector(selector, { timeout: 5000 })
-      contentFound = true
+      await page.waitForSelector(selector, { timeout: 2000, state: 'attached' })
+      appFound = true
       break
     } catch {
       // Try next selector
     }
   }
   
-  if (!contentFound) {
-    console.warn(`No main content selector found for ${browserName}, checking for any content`)
-    // Last resort: just check if body has content
-    await page.waitForFunction(() => document.body && document.body.children.length > 0, { timeout: 5000 })
+  if (!appFound) {
+    console.warn(`App structure not found for ${browserName}, using fallback`)
+    await page.waitForFunction(() => document.body && document.body.children.length > 0, { timeout: 2000 })
   }
   
-  // Wait for any loading spinners to disappear
+  // Step 3: Wait for initial content rendering (avoid network idle)
   try {
-    await page.waitForSelector(SELECTORS.loadingSpinner, { state: 'hidden', timeout: 3000 })
+    // Look for page-specific content indicators rather than waiting for all network activity
+    const contentIndicators = [
+      'h1', 'h2', '[data-testid="page-title"]', 
+      '.page-header', '.stats-section', '.filters-section',
+      '.q-table', '.plugin-grid', '.device-grid',
+      '[data-testid="plugin-list"]', '[data-testid="device-list"]',
+      '[data-testid="empty-state"]', '.no-plugins', '.no-devices'
+    ]
+    
+    // Wait for any content indicator to appear
+    await page.locator(contentIndicators.join(', ')).first().waitFor({ 
+      timeout: 4000, 
+      state: 'visible' 
+    })
   } catch {
-    // Ignore if no spinner found
+    console.warn(`Content indicators timeout for ${browserName}, checking for loading completion`)
+    
+    // Fallback: wait for loading states to complete
+    try {
+      await page.waitForFunction(() => {
+        // Check if loading spinners are gone
+        const spinners = document.querySelectorAll('.q-spinner, .loading, [data-loading="true"]')
+        if (spinners.length > 0) return false
+        
+        // Check if there's any visible content
+        const content = document.querySelector('h1, h2, .q-table, .plugin-grid, .device-grid, .stats-section')
+        return content !== null
+      }, { timeout: 3000 })
+    } catch {
+      // Ultimate fallback: just ensure DOM is ready
+      console.warn(`Loading detection failed for ${browserName}, using basic DOM ready check`)
+    }
   }
   
-  // Browser-specific additional waits (reduced)
+  // Step 4: Wait for any explicit loading spinners to disappear (optional)
+  try {
+    await page.waitForSelector(SELECTORS.loadingSpinner, { state: 'hidden', timeout: 1000 })
+  } catch {
+    // Loading spinner might not exist, which is fine
+  }
+  
+  // Step 5: Minimal browser-specific wait (much reduced)
   if (browserName === 'webkit') {
-    // WebKit sometimes needs extra time for rendering
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(200) // Reduced from 500ms
   } else if (browserName === 'firefox') {
-    // Firefox sometimes has timing issues with navigation
-    await page.waitForTimeout(250)
+    await page.waitForTimeout(100) // Reduced from 250ms
   }
 }
 

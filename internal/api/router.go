@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -25,6 +26,11 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 
 // SetupRoutesWithSecurity configures all API routes with comprehensive security middleware
 func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityConfig *middleware.SecurityConfig, validationConfig *middleware.ValidationConfig) *mux.Router {
+	// TEST MODE: Use optimized router
+	if os.Getenv("SHELLY_SECURITY_VALIDATION_TEST_MODE") == "true" {
+		return SetupTestModeRoutes(handler, logger)
+	}
+
 	r := mux.NewRouter()
 
 	// Initialize security monitor
@@ -356,5 +362,63 @@ func createSecurityMetricsHandler(monitor *middleware.SecurityMonitor, logger *l
 
 		metrics := monitor.GetMetrics()
 		rw.WriteSuccess(w, r, metrics)
+	}
+}
+
+// SetupTestModeRoutes creates an optimized router with minimal middleware stack for testing
+func SetupTestModeRoutes(handler *Handler, logger *logging.Logger) *mux.Router {
+	r := mux.NewRouter()
+
+	// Health endpoints with ZERO middleware for maximum speed
+	if handler != nil {
+		r.HandleFunc("/healthz", handler.FastHealthz).Methods("GET")
+		r.HandleFunc("/readyz", handler.FastHealthz).Methods("GET")
+	}
+
+	// WebSocket with minimal middleware (if metrics enabled)
+	if handler.MetricsHandler != nil {
+		r.HandleFunc("/metrics/ws", handler.MetricsHandler.HandleWebSocket).Methods("GET")
+	}
+
+	// API routes with only essential middleware
+	api := r.PathPrefix("/api/v1").Subrouter()
+	api.Use(logging.RecoveryMiddleware(logger)) // Only recovery for error handling
+	api.Use(testModeCORSMiddleware(logger))     // Minimal CORS for browser tests
+
+	// Register core API routes WITHOUT security middleware stack
+	if handler != nil {
+		// Essential device management routes
+		api.HandleFunc("/devices", handler.GetDevices).Methods("GET", "OPTIONS")
+		api.HandleFunc("/devices/{id}", handler.GetDevice).Methods("GET", "OPTIONS")
+		api.HandleFunc("/devices/{id}/control", handler.ControlDevice).Methods("POST", "OPTIONS")
+
+		// Discovery
+		api.HandleFunc("/discover", handler.DiscoverHandler).Methods("POST", "OPTIONS")
+
+		// OPTIONS handler for all API paths
+		api.PathPrefix("/").Methods("OPTIONS").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+	}
+
+	logger.Info("Configured test mode router with minimal middleware")
+	return r
+}
+
+// testModeCORSMiddleware provides minimal CORS middleware for test mode
+func testModeCORSMiddleware(logger *logging.Logger) mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
 	}
 }

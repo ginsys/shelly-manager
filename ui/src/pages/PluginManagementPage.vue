@@ -1,7 +1,7 @@
 <template>
-  <main style="padding: 16px">
+  <main style="padding: 16px" data-testid="plugin-management-page">
     <div class="page-header">
-      <h1>Plugin Management</h1>
+      <h1 data-testid="page-title">Plugin Management</h1>
       <div class="header-actions">
         <button 
           class="refresh-button" 
@@ -120,12 +120,13 @@
         </div>
 
         <!-- Plugin Grid -->
-        <div class="plugins-grid">
+        <div class="plugins-grid" data-testid="plugin-list">
           <div 
             v-for="plugin in categoryPlugins" 
             :key="plugin.name"
             class="plugin-card"
             :class="getPluginStatusClass(plugin.status)"
+            :data-testid="`plugin-card-${plugin.name}`"
           >
             <!-- Plugin Header -->
             <div class="plugin-header">
@@ -266,7 +267,7 @@
     </div>
 
     <!-- Empty State -->
-    <div v-if="!loading && filteredPlugins.length === 0" class="empty-state">
+    <div v-if="!loading && filteredPlugins.length === 0" class="empty-state" data-testid="empty-state">
       <div class="empty-icon">📦</div>
       <h3>No Plugins Found</h3>
       <p v-if="searchQuery || selectedCategory || statusFilter">
@@ -283,24 +284,38 @@
     <!-- Plugin Configuration Modal -->
     <div v-if="showConfigModal" class="modal-overlay" @click="closeConfigModal">
       <div class="modal-content config-modal" @click.stop>
-        <PluginConfigForm
-          v-if="configModalPlugin"
-          :plugin="configModalPlugin"
-          @close="closeConfigModal"
-          @saved="handleConfigSaved"
-        />
+        <Suspense>
+          <template #default>
+            <PluginConfigForm
+              v-if="configModalPlugin"
+              :plugin="configModalPlugin"
+              @close="closeConfigModal"
+              @saved="handleConfigSaved"
+            />
+          </template>
+          <template #fallback>
+            <div class="modal-loading">Loading configuration form...</div>
+          </template>
+        </Suspense>
       </div>
     </div>
 
     <!-- Plugin Details Modal -->
     <div v-if="showDetailsModal" class="modal-overlay" @click="closeDetailsModal">
       <div class="modal-content details-modal" @click.stop>
-        <PluginDetailsView
-          v-if="detailsModalPlugin"
-          :plugin="detailsModalPlugin"
-          @close="closeDetailsModal"
-          @configure="openConfigFromDetails"
-        />
+        <Suspense>
+          <template #default>
+            <PluginDetailsView
+              v-if="detailsModalPlugin"
+              :plugin="detailsModalPlugin"
+              @close="closeDetailsModal"
+              @configure="openConfigFromDetails"
+            />
+          </template>
+          <template #fallback>
+            <div class="modal-loading">Loading plugin details...</div>
+          </template>
+        </Suspense>
       </div>
     </div>
 
@@ -313,15 +328,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, defineAsyncComponent } from 'vue'
 import { usePluginStore } from '@/stores/plugin'
 import { 
   getPluginCategoryInfo,
   formatPluginStatus,
   type Plugin
 } from '@/api/plugin'
-import PluginConfigForm from '@/components/PluginConfigForm.vue'
-import PluginDetailsView from '@/components/PluginDetailsView.vue'
+
+// Lazy load heavy form components
+const PluginConfigForm = defineAsyncComponent(() => import('@/components/PluginConfigForm.vue'))
+const PluginDetailsView = defineAsyncComponent(() => import('@/components/PluginDetailsView.vue'))
 
 // Store
 const pluginStore = usePluginStore()
@@ -353,21 +370,21 @@ const message = reactive({
   type: 'success' as 'success' | 'error' 
 })
 
-// Initialize
+// Initialize with non-blocking data loading
 onMounted(() => {
+  // Load data asynchronously without blocking page render
   refreshData()
 })
 
 /**
- * Refresh all plugin data
+ * Refresh all plugin data (non-blocking)
  */
-async function refreshData() {
-  try {
-    await pluginStore.refresh()
-    showMessage('Plugin list refreshed successfully', 'success')
-  } catch (err: any) {
+function refreshData() {
+  // Fire and forget - don't block UI rendering
+  pluginStore.refresh().catch(err => {
+    console.warn('Plugin refresh failed:', err)
     showMessage(err.message || 'Failed to refresh plugin list', 'error')
-  }
+  })
 }
 
 /**
@@ -1048,6 +1065,16 @@ function showMessage(text: string, type: 'success' | 'error') {
 .details-modal {
   width: 100%;
   max-width: 700px;
+}
+
+.modal-loading {
+  padding: 60px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-style: italic;
+  min-height: 200px;
 }
 
 .message {

@@ -4,7 +4,8 @@
 	test-race test-race-short test-race-full \
 	test-coverage test-coverage-short test-coverage-full test-coverage-ci test-coverage-check test-coverage-with-check \
 	test-matrix test-ci \
-	ui-dev ui-build ui-preview test-e2e \
+	ui-dev ui-build ui-preview test-e2e test-e2e-dev test-e2e-dev-ui test-e2e-dev-headed test-smoke validate-integration \
+	test-quick test-critical test-unit-fast test-full-fast test-ci-fast test-e2e-parallel test-env-smoke test-env-integration test-comprehensive \
 	benchmark test-watch example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
 
 BINARY_NAME=shelly-manager
@@ -409,6 +410,92 @@ ui-preview:
 	@echo "Previewing built UI..."
 	@cd ui && npm run preview
 
-# Run E2E tests with fresh database
+# Run E2E tests with fresh database (all browsers)
 test-e2e:
 	@./scripts/test-e2e.sh
+
+# Run E2E tests with development configuration (Chromium-only, 10-15 min target)
+test-e2e-dev:
+	@echo "Running E2E tests with development configuration (Chromium-only)..."
+	@echo "Expected runtime: 10-15 minutes (vs 4+ hours for full browser suite)"
+	@./scripts/test-e2e.sh dev
+
+# Run E2E tests with development configuration in UI mode (interactive debugging)
+test-e2e-dev-ui:
+	@echo "Starting E2E tests in UI mode with development configuration..."
+	@cd ui && npm run test:e2e:dev:ui
+
+# Run E2E tests with development configuration in headed mode (visible browser)
+test-e2e-dev-headed:
+	@echo "Running E2E tests in headed mode with development configuration..."
+	@cd ui && npm run test:e2e:dev:headed
+
+# Run smoke tests for quick feedback (essential tests only)
+test-smoke:
+	@./scripts/test-smoke.sh
+
+# Validate E2E integration pipeline after configuration changes
+validate-integration:
+	@./scripts/validate-integration.sh
+
+# ==============================================================================
+# OPTIMIZED TEST TARGETS (E2E Performance Improvements)
+# ==============================================================================
+
+# Quick test suite (smoke + critical tests, optimized for speed)
+test-quick:
+	@echo "Running quick test suite (smoke + critical tests)..."
+	@cd ui && npm run test:e2e:quick
+
+# Critical path tests only (most important functionality)
+test-critical:
+	@echo "Running critical path tests..."
+	@cd ui && npm run test:e2e:critical
+
+# Database-optimized unit tests (uses in-memory SQLite with GORM optimizations)
+test-unit-fast:
+	@echo "Running unit tests with database optimizations..."
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./internal/...
+
+# Full optimized test suite (all tests with performance optimizations)
+test-full-fast:
+	@echo "Running full optimized test suite..."
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -timeout=3m ./...
+
+# Fast CI test suite (optimized for CI environments)
+test-ci-fast:
+	@echo "Running fast CI test suite with all optimizations..."
+	@echo "Step 1/4: Installing dependencies..."
+	$(MAKE) deps
+	@echo "Step 2/4: Running optimized tests with coverage..."
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...
+	@echo "Step 3/4: Checking coverage threshold..."
+	$(MAKE) test-coverage-check
+	@echo "Step 4/4: Running linting..."
+	$(MAKE) lint-ci
+	@echo "✅ All fast CI tests passed! Ready to commit."
+
+# E2E tests with parallel execution and browser optimizations
+test-e2e-parallel:
+	@echo "Running E2E tests with parallel execution..."
+	@cd ui && PLAYWRIGHT_WORKERS=2 npx playwright test --workers=2
+
+# Test runner for different environments
+test-env-smoke:
+	@echo "Running smoke tests for environment validation..."
+	@./scripts/test-smoke.sh
+
+test-env-integration:
+	@echo "Running integration validation..."
+	@./scripts/validate-integration.sh
+
+# Comprehensive test with all optimizations enabled
+test-comprehensive:
+	@echo "Running comprehensive test suite with all optimizations..."
+	@echo "=== Backend Tests (Optimized) ==="
+	$(MAKE) test-unit-fast
+	@echo "=== E2E Tests (Parallel) ==="
+	$(MAKE) test-e2e-parallel
+	@echo "=== Smoke Tests ==="
+	$(MAKE) test-smoke
+	@echo "✅ All comprehensive tests completed!"

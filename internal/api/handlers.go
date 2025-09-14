@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
@@ -151,6 +152,21 @@ func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// FastHealthz - Optimized health endpoint for test mode
+func (h *Handler) FastHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+
+	// Minimal JSON response for speed
+	response := fmt.Sprintf(`{"status":"ok","timestamp":"%s","mode":"test"}`,
+		time.Now().Format(time.RFC3339))
+	if _, err := w.Write([]byte(response)); err != nil {
+		// Log error but don't change response status as headers already sent
+		h.logger.Error("Failed to write FastHealthz response", "error", err)
+	}
+}
+
 // Readyz returns readiness: dependencies available (currently DB).
 func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
 	// Fail if DB not reachable
@@ -240,6 +256,31 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.DB.AddDevice(&device); err != nil {
+		// Enhanced error logging for debugging test issues
+		h.logger.WithFields(map[string]any{
+			"error":       err.Error(),
+			"device_ip":   device.IP,
+			"device_mac":  device.MAC,
+			"device_type": device.Type,
+			"settings":    device.Settings,
+			"component":   "api",
+			"operation":   "add_device",
+			"request_id":  r.Context().Value("request_id"),
+		}).Error("AddDevice operation failed with detailed context")
+
+		// Check if it's a unique constraint violation and return appropriate error
+		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") ||
+			strings.Contains(strings.ToLower(err.Error()), "constraint failed") {
+			if strings.Contains(strings.ToLower(err.Error()), "ip") {
+				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this IP address already exists", nil)
+			} else if strings.Contains(strings.ToLower(err.Error()), "mac") {
+				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this MAC address already exists", nil)
+			} else {
+				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device already exists", nil)
+			}
+			return
+		}
+
 		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}

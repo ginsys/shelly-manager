@@ -19,25 +19,61 @@
         <h3>System Metrics 
           <span v-if="store.isRealtimeActive" class="realtime-badge">LIVE</span>
         </h3>
-        <LineChart :options="systemOptions" />
+        <Suspense>
+          <template #default>
+            <LineChart v-if="chartsLoaded" :options="systemOptions" />
+          </template>
+          <template #fallback>
+            <div class="chart-loading">Loading chart...</div>
+          </template>
+        </Suspense>
       </div>
       <div class="panel">
         <h3>Devices</h3>
-        <BarChart :options="devicesOptions" />
+        <Suspense>
+          <template #default>
+            <BarChart v-if="chartsLoaded" :options="devicesOptions" />
+          </template>
+          <template #fallback>
+            <div class="chart-loading">Loading chart...</div>
+          </template>
+        </Suspense>
       </div>
       <div class="panel">
         <h3>Drift</h3>
-        <BarChart :options="driftOptions" />
+        <Suspense>
+          <template #default>
+            <BarChart v-if="chartsLoaded" :options="driftOptions" />
+          </template>
+          <template #fallback>
+            <div class="chart-loading">Loading chart...</div>
+          </template>
+        </Suspense>
       </div>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, ref } from 'vue'
+import { onMounted, onUnmounted, computed, ref, defineAsyncComponent } from 'vue'
 import { useMetricsStore } from '@/stores/metrics'
-import LineChart from '@/components/charts/LineChart.vue'
-import BarChart from '@/components/charts/BarChart.vue'
+
+// Lazy load chart components only when needed with loading states
+const LineChart = defineAsyncComponent({
+  loader: () => import('@/components/charts/LineChart.vue'),
+  loadingComponent: { template: '<div class="chart-loading">Loading chart...</div>' },
+  delay: 200,              // 200ms delay before showing spinner
+  timeout: 5000,           // 5s timeout for loading
+})
+
+const BarChart = defineAsyncComponent({
+  loader: () => import('@/components/charts/BarChart.vue'),
+  loadingComponent: { template: '<div class="chart-loading">Loading chart...</div>' },
+  delay: 200,
+  timeout: 5000,
+})
+
+const chartsLoaded = ref(true) // Allow charts to render when loaded
 
 const store = useMetricsStore()
 const currentTime = ref(Date.now())
@@ -220,6 +256,16 @@ function formatLastMessage(timestamp: number): string {
   margin-bottom: 12px;
   display: flex;
   align-items: center;
+}
+
+/* Chart loading state */
+.chart-loading {
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-style: italic;
 }
 
 /* Responsive design */

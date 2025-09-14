@@ -11,7 +11,7 @@ import {
 test.describe('Plugin Management E2E', () => {
   
   test.beforeEach(async ({ page }) => {
-    await page.goto('/plugin-management')
+    await page.goto('/plugins')
     await waitForPageReady(page)
   })
 

@@ -1,0 +1,82 @@
+{
+  "exports": [
+    {
+      "id": 1,
+      "plugin_id": "home-assistant",
+      "plugin_name": "Home Assistant MQTT",
+      "status": "completed",
+      "started_at": "2025-09-14T10:00:00Z",
+      "completed_at": "2025-09-14T10:00:15Z",
+      "duration_ms": 15000,
+      "device_count": 5,
+      "success_count": 5,
+      "error_count": 0,
+      "output_size": 2048,
+      "output_path": "/exports/ha-mqtt-20250914-100000.yaml",
+      "errors": [],
+      "metadata": {
+        "format": "yaml",
+        "compression": "none",
+        "checksum": "sha256:abc123def456"
+      }
+    },
+    {
+      "id": 2,
+      "plugin_id": "home-assistant",
+      "plugin_name": "Home Assistant MQTT",
+      "status": "completed",
+      "started_at": "2025-09-14T09:30:00Z",
+      "completed_at": "2025-09-14T09:30:12Z",
+      "duration_ms": 12000,
+      "device_count": 4,
+      "success_count": 4,
+      "error_count": 0,
+      "output_size": 1856,
+      "output_path": "/exports/ha-mqtt-20250914-093000.yaml",
+      "errors": [],
+      "metadata": {
+        "format": "yaml",
+        "compression": "none",
+        "checksum": "sha256:def456ghi789"
+      }
+    },
+    {
+      "id": 3,
+      "plugin_id": "openhab",
+      "plugin_name": "OpenHAB Things",
+      "status": "failed",
+      "started_at": "2025-09-14T09:00:00Z",
+      "completed_at": "2025-09-14T09:00:05Z",
+      "duration_ms": 5000,
+      "device_count": 5,
+      "success_count": 0,
+      "error_count": 5,
+      "output_size": 0,
+      "output_path": null,
+      "errors": [
+        {
+          "device_id": 1,
+          "device_name": "Test Device 1",
+          "error": "Template rendering failed: invalid syntax"
+        },
+        {
+          "device_id": 2,
+          "device_name": "Test Device 2",
+          "error": "Template rendering failed: invalid syntax"
+        }
+      ],
+      "metadata": {
+        "format": "things",
+        "compression": "none"
+      }
+    }
+  ],
+  "total": 3,
+  "stats": {
+    "completed": 2,
+    "failed": 1,
+    "total_devices": 14,
+    "total_success": 9,
+    "total_errors": 5
+  }
+}

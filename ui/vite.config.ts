@@ -10,9 +10,55 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core Vue ecosystem
+          'vendor-vue': ['vue', 'vue-router', 'pinia'],
+
+          // Large charting library - separate chunk
+          'charts': ['echarts'],
+
+          // Utility libraries
+          'vendor-utils': ['axios', 'pako', 'crypto-browserify'],
+
+          // UI framework
+          'vendor-ui': ['quasar'],
+        }
+      },
+
+      // External dependencies for development (CDN)
+      external: process.env.NODE_ENV === 'development' ? ['echarts'] : []
+    },
+
+    // Stricter size limits
+    chunkSizeWarningLimit: 300,  // Down from 500KB default
+
+    // Enhanced minification
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,      // Remove console.log
+        drop_debugger: true,     // Remove debugger statements
+        pure_funcs: ['console.log', 'console.warn'], // Remove specific calls
+      },
+      mangle: {
+        safari10: true,          // Safari compatibility
+      },
+    },
+
+    // Source map optimization
+    sourcemap: process.env.NODE_ENV === 'development' ? true : false,
+  },
+
+  // Development server optimizations
   server: {
     port: 5173,
     strictPort: false,
+    warmup: {
+      clientFiles: ['./src/main.ts', './src/App.vue'],
+    },
     proxy: {
       // Proxy API to Go backend for dev
       '/api': {
@@ -32,8 +78,17 @@ export default defineConfig({
       },
     },
   },
+
+  // Dependency optimization
+  optimizeDeps: {
+    include: ['vue', 'vue-router', 'pinia', 'axios'],
+    exclude: ['echarts'], // Large library - load separately
+  },
   preview: {
-    port: 4173,
+    port: 5173,  // FIXED: Match Playwright expected port
+    strictPort: false,
+    // Enable CORS for E2E testing
+    cors: true,
   },
 })
 

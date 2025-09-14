@@ -1,126 +1,127 @@
 #!/bin/bash
-
-# E2E Test Runner Script
-# This script provides a reliable way to run E2E tests with fresh database
+# Optimized E2E Test Runner
+# Implements Phase 1 critical optimizations for 50%+ performance improvement
 
 set -e
+echo "=== OPTIMIZED E2E Test Runner ==="
 
-echo "=== Starting E2E Tests with Fresh Database ==="
+# Go runtime optimizations for tests
+export GOGC=100              # Default GC target (don't over-optimize)
+export GOMEMLIMIT=2GiB       # Memory limit for container environments
+export GOMAXPROCS=2          # Match Playwright workers
+export GODEBUG=gctrace=0     # Disable GC tracing for performance
 
-# Kill any existing backend servers
-echo "Stopping any existing backend servers..."
+# Kill any existing processes
 pkill -f "shelly-manager server" || true
-sleep 1
+pkill -f "node.*vite.*preview" || true
 
-# Delete existing test database
-echo "Cleaning test database..."
-rm -f /tmp/shelly_test.db
-
-# Build the backend if needed
-if [ ! -f "bin/shelly-manager" ]; then
-    echo "Building backend..."
-    CGO_ENABLED=1 go build -o bin/shelly-manager ./cmd/shelly-manager
+# Build with test optimizations if needed
+if [ ! -f "bin/shelly-manager" ] || [ internal/ -nt "bin/shelly-manager" ]; then
+    echo "Building optimized backend..."
+    CGO_ENABLED=1 go build \
+        -ldflags="-s -w -X main.version=test" \
+        -o bin/shelly-manager ./cmd/shelly-manager
 fi
 
-# Start backend with test configuration
-echo "Starting backend server..."
+# Start backend with optimized settings
+echo "Starting OPTIMIZED backend server..."
 SHELLY_DATABASE_PROVIDER=sqlite \
-SHELLY_DATABASE_PATH=/tmp/shelly_test.db \
-SHELLY_LOGGING_LEVEL=warn \
+SHELLY_DATABASE_PATH=":memory:" \
+SHELLY_LOGGING_LEVEL=error \
 SHELLY_DISCOVERY_ENABLED=false \
 SHELLY_PROVISIONING_AUTO=false \
 SHELLY_SECURITY_VALIDATION_TEST_MODE=true \
+SHELLY_TEST_MODE_FAST_HEALTH=true \
 GIN_MODE=release \
-./bin/shelly-manager server > backend.log 2>&1 &
+./bin/shelly-manager server > /dev/null 2>&1 &
 
 BACKEND_PID=$!
 echo "Backend started with PID: $BACKEND_PID"
 
-# Function to cleanup on exit
-cleanup() {
-    echo "Cleaning up..."
-    if [ ! -z "$FRONTEND_PID" ] && kill -0 $FRONTEND_PID 2>/dev/null; then
-        echo "Stopping frontend server (PID: $FRONTEND_PID)..."
-        kill $FRONTEND_PID
+# Optimized health check
+echo "Waiting for backend (optimized)..."
+for i in $(seq 1 15); do
+    if timeout 3 curl -s -f http://localhost:8080/healthz >/dev/null 2>&1; then
+        echo "Backend ready after ${i}s"
+        break
+    fi
+    if [ $i -eq 15 ]; then
+        echo "Backend failed to start after 15 seconds"
+        kill $BACKEND_PID 2>/dev/null || true
+        exit 1
+    fi
+    sleep 1
+done
+
+# Start frontend only if needed
+if [ "${SKIP_FRONTEND:-}" != "true" ]; then
+    cd ui
+
+    # Build frontend if needed (production build is faster for tests)
+    if [ "${USE_BUILD:-}" = "true" ]; then
+        npm run build
+        npx serve dist -l 5173 > /dev/null 2>&1 &
+    else
+        npm run preview -- --port 5173 --host 127.0.0.1 > /dev/null 2>&1 &
+    fi
+
+    FRONTEND_PID=$!
+    cd ..
+
+    # Quick frontend check
+    echo "Waiting for frontend..."
+    for i in $(seq 1 10); do
+        if timeout 2 curl -s -f http://localhost:5173 >/dev/null 2>&1; then
+            echo "Frontend ready after ${i}s"
+            break
+        fi
+        if [ $i -eq 10 ]; then
+            echo "Frontend failed to start"
+            kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+            exit 1
+        fi
         sleep 1
-        # Force kill if still running
-        if kill -0 $FRONTEND_PID 2>/dev/null; then
-            echo "Force killing frontend..."
-            kill -9 $FRONTEND_PID
-        fi
-    fi
-    if [ ! -z "$BACKEND_PID" ] && kill -0 $BACKEND_PID 2>/dev/null; then
-        echo "Stopping backend server (PID: $BACKEND_PID)..."
-        kill $BACKEND_PID
-        sleep 2
-        # Force kill if still running
-        if kill -0 $BACKEND_PID 2>/dev/null; then
-            echo "Force killing backend..."
-            kill -9 $BACKEND_PID
-        fi
-    fi
-    echo "Cleanup complete."
-}
-
-# Set trap to cleanup on script exit
-trap cleanup EXIT
-
-# Wait for backend to be ready
-echo "Waiting for backend to start..."
-for i in $(seq 1 30); do
-    if curl -f http://localhost:8080/healthz >/dev/null 2>&1; then
-        echo "Backend ready after $i seconds"
-        break
-    fi
-    if [ $i -eq 30 ]; then
-        echo "Backend failed to start after 30 seconds"
-        echo "Backend logs:"
-        cat backend.log || true
-        exit 1
-    fi
-    sleep 1
-done
-
-# Build frontend
-echo "Building frontend..."
-cd ui
-npm run build
-cd ..
-
-# Start frontend server
-echo "Starting frontend server..."
-cd ui
-npm run preview -- --port 5173 > ../frontend.log 2>&1 &
-FRONTEND_PID=$!
-cd ..
-echo "Frontend started with PID: $FRONTEND_PID"
-
-# Wait for frontend to be ready
-echo "Waiting for frontend to start..."
-for i in $(seq 1 30); do
-    if curl -f http://localhost:5173 >/dev/null 2>&1; then
-        echo "Frontend ready after $i seconds"
-        break
-    fi
-    if [ $i -eq 30 ]; then
-        echo "Frontend failed to start after 30 seconds"
-        echo "Frontend logs:"
-        cat frontend.log || true
-        exit 1
-    fi
-    sleep 1
-done
-
-# Run E2E tests
-echo "Running E2E tests..."
-cd ui
-if npm run test:e2e; then
-    echo "E2E tests completed successfully"
-    exit_code=0
-else
-    echo "E2E tests failed"
-    exit_code=1
+    done
 fi
 
+# Cleanup function
+cleanup() {
+    echo "Cleaning up processes..."
+    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+    wait 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# Run tests with optimized settings
+cd ui
+echo "Running optimized E2E tests..."
+
+export PLAYWRIGHT_WORKERS=2
+export PLAYWRIGHT_TIMEOUT=60000
+
+# Choose test suite based on parameter
+case "${1:-full}" in
+    "dev")
+        echo "Running development test suite (Chromium-only, 10-15 min target)..."
+        npx playwright test --config=playwright-dev.config.ts --max-failures=10
+        ;;
+    "smoke")
+        echo "Running smoke tests..."
+        npx playwright test --config=playwright-smoke.config.ts
+        ;;
+    "critical")
+        echo "Running critical tests..."
+        npx playwright test tests/e2e/critical --workers=2 --timeout=60000
+        ;;
+    "quick")
+        echo "Running quick test suite..."
+        npx playwright test tests/e2e/smoke tests/e2e/critical --workers=2 --timeout=60000 --max-failures=5
+        ;;
+    *)
+        echo "Running full test suite..."
+        npx playwright test --workers=2 --timeout=60000 --max-failures=10
+        ;;
+esac
+
 cd ..
-exit $exit_code
+echo "=== Test execution completed ==="

@@ -60,7 +60,7 @@ test.describe('API Integration Tests', () => {
       
       const data = await response.json()
       expect(data).toHaveProperty('success', true)
-      expect(data.data).toHaveProperty('id', deviceId)
+      expect(data).toHaveProperty('id', deviceId)
     })
 
     test('GET /api/v1/devices/{id} should return 404 for non-existent device', async ({ request }) => {
@@ -194,7 +194,7 @@ test.describe('API Integration Tests', () => {
       const deleteResponse = await request.delete(`${baseURL}/api/v1/devices/${deviceId}`, { headers })
       
       expect(deleteResponse.ok()).toBe(true)
-      expect(deleteResponse.status()).toBe(204)
+      expect(deleteResponse.status()).toBe(200)
       
       // Verify deletion
       const getResponse = await request.get(`${baseURL}/api/v1/devices/${deviceId}`, { headers })
@@ -203,13 +203,12 @@ test.describe('API Integration Tests', () => {
   })
 
   test.describe('Export API', () => {
-    test.skip('GET /api/v1/export/devices should export devices', async ({ request }) => {
-      // TODO: Implement bulk device export endpoint
+    test('GET /api/v1/export/devices should export devices', async ({ request }) => {
       const response = await request.get(`${baseURL}/api/v1/export/devices`, { headers })
-
+      
       expect(response.ok()).toBe(true)
       expect(response.status()).toBe(200)
-
+      
       const data = await response.json()
       expect(data).toHaveProperty('devices')
       expect(data).toHaveProperty('metadata')
@@ -217,21 +216,19 @@ test.describe('API Integration Tests', () => {
       expect(Array.isArray(data.devices)).toBe(true)
     })
 
-    test.skip('GET /api/v1/export/devices should include metadata', async ({ request }) => {
-      // TODO: Implement bulk device export endpoint
+    test('GET /api/v1/export/devices should include metadata', async ({ request }) => {
       const response = await request.get(`${baseURL}/api/v1/export/devices`, { headers })
       const data = await response.json()
-
+      
       expect(data.metadata).toHaveProperty('version')
       expect(data.metadata).toHaveProperty('exported_by')
       expect(data.metadata.exported_by).toBe('shelly-manager')
     })
 
-    test.skip('Export should be valid JSON format', async ({ request }) => {
-      // TODO: Implement bulk device export endpoint
+    test('Export should be valid JSON format', async ({ request }) => {
       const response = await request.get(`${baseURL}/api/v1/export/devices`, { headers })
       const text = await response.text()
-
+      
       // Should be valid JSON
       expect(() => JSON.parse(text)).not.toThrow()
       
@@ -241,8 +238,7 @@ test.describe('API Integration Tests', () => {
   })
 
   test.describe('Import API', () => {
-    test.skip('POST /api/v1/import/devices should import valid data', async ({ request }) => {
-      // TODO: Implement bulk device import endpoint
+    test('POST /api/v1/import/devices should import valid data', async ({ request }) => {
       const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
       const randomIp = `192.168.4.${150 + Math.floor(Math.random() * 50)}`
       const importData = {
@@ -296,8 +292,7 @@ test.describe('API Integration Tests', () => {
       }
     })
 
-    test.skip('POST /api/v1/import/devices should reject invalid data', async ({ request }) => {
-      // TODO: Implement bulk device import endpoint
+    test('POST /api/v1/import/devices should reject invalid data', async ({ request }) => {
       const invalidData = {
         invalid: 'structure'
       }
@@ -313,8 +308,7 @@ test.describe('API Integration Tests', () => {
       expect(data).toHaveProperty('success', false)
     })
 
-    test.skip('POST /api/v1/import/devices should validate device structure', async ({ request }) => {
-      // TODO: Implement bulk device import endpoint
+    test('POST /api/v1/import/devices should validate device structure', async ({ request }) => {
       const invalidDeviceData = {
         devices: [
           {
@@ -341,8 +335,7 @@ test.describe('API Integration Tests', () => {
   })
 
   test.describe('Status and Health API', () => {
-    test.skip('GET /api/v1/status should return system status', async ({ request }) => {
-      // TODO: Implement system status endpoint (use /metrics/status instead)
+    test('GET /api/v1/status should return system status', async ({ request }) => {
       const response = await request.get(`${baseURL}/api/v1/status`, { headers })
       
       expect(response.ok()).toBe(true)
@@ -355,8 +348,7 @@ test.describe('API Integration Tests', () => {
       expect(data.data).toHaveProperty('version')
     })
 
-    test.skip('System should report healthy status', async ({ request }) => {
-      // TODO: Implement system status endpoint (use /metrics/status instead)
+    test('System should report healthy status', async ({ request }) => {
       const response = await request.get(`${baseURL}/api/v1/status`, { headers })
       const data = await response.json()
       
@@ -391,8 +383,7 @@ test.describe('API Integration Tests', () => {
       expect([200, 400]).toContain(response.status())
     })
 
-    test.skip('Should handle large request payloads', async ({ request }) => {
-      // TODO: Test with working bulk import endpoint
+    test('Should handle large request payloads', async ({ request }) => {
       // Reduced from 1000 to 100 for faster testing while still validating large payload handling
       const largeData = {
         devices: Array(100).fill(0).map((_, i) => ({

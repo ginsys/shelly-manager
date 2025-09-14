@@ -12,7 +12,7 @@ import {
 test.describe('Schedule Management E2E', () => {
   
   test.beforeEach(async ({ page }) => {
-    await page.goto('/export-schedules')
+    await page.goto('/export/schedules')
     await waitForPageReady(page)
   })
 

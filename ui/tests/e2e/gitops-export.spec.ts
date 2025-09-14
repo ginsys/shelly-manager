@@ -11,7 +11,7 @@ import {
 test.describe('GitOps Export E2E', () => {
   
   test.beforeEach(async ({ page }) => {
-    await page.goto('/gitops-export')
+    await page.goto('/export/gitops')
     await waitForPageReady(page)
   })
 

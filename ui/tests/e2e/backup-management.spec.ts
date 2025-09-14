@@ -11,7 +11,7 @@ import {
 test.describe('Backup Management E2E', () => {
   
   test.beforeEach(async ({ page }) => {
-    await page.goto('/backup-management')
+    await page.goto('/export/backup')
     await waitForPageReady(page)
   })
 

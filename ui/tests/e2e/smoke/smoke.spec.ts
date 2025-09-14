@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { waitForPageReady, navigateToPage, SELECTORS } from './fixtures/test-helpers'
+import { waitForPageReady, navigateToPage, SELECTORS } from '../fixtures/test-helpers.js'
 
 test.describe('Smoke Tests - Application Health', () => {
   
