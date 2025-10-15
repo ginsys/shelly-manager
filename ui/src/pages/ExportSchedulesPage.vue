@@ -2,9 +2,9 @@
   <main style="padding:16px">
     <div class="page-header">
       <h1>Export Schedules</h1>
-      <button class="primary-button" @click="showCreateForm = true">
+      <router-link class="primary-button" to="/export/backup?schedule=1#create-backup">
         ➕ Create Schedule
-      </button>
+      </router-link>
     </div>
 
     <!-- Schedule Statistics -->

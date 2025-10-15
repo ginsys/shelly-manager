@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,6 +28,11 @@ type DatabaseManagerInterface interface {
 type BackupPlugin struct {
 	dbManager DatabaseManagerInterface
 	logger    *logging.Logger
+}
+
+// SetDatabaseManager injects the database manager dependency.
+func (b *BackupPlugin) SetDatabaseManager(dbManager DatabaseManagerInterface) {
+	b.dbManager = dbManager
 }
 
 // NewPlugin creates a new backup plugin (for registry)
@@ -50,8 +56,8 @@ func (b *BackupPlugin) Info() sync.PluginInfo {
 		Author:      "Shelly Manager Team",
 		License:     "MIT",
 		SupportedFormats: []string{
-			"sma",    // Shelly Manager Archive
-			"tar.gz", // Compressed tar archive
+			// Single-file provider snapshot. Compression is controlled via config (gzip on/off)
+			"sqlite",
 		},
 		Tags:     []string{"backup", "database", "system"},
 		Category: sync.CategoryBackup,
@@ -66,12 +72,18 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 			"output_path": {
 				Type:        "string",
 				Description: "Directory path for backup files",
-				Default:     "/var/backups/shelly-manager",
+				Default:     "./data/backups",
 			},
 			"compression": {
 				Type:        "boolean",
 				Description: "Enable gzip compression for backup files",
 				Default:     true,
+			},
+			"compression_algo": {
+				Type:        "string",
+				Description: "Compression algorithm to use when compression is enabled (gzip|zip)",
+				Default:     "gzip",
+				Enum:        []interface{}{"gzip", "zip"},
 			},
 			"include_discovered": {
 				Type:        "boolean",
@@ -132,12 +144,17 @@ func (b *BackupPlugin) ValidateConfig(config map[string]interface{}) error {
 func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config sync.ExportConfig) (*sync.ExportResult, error) {
 	startTime := time.Now()
 
-	b.logger.Info("Starting backup export",
-		"format", config.Format,
-		"devices", len(data.Devices),
-	)
+	if b != nil && b.logger != nil {
+		b.logger.Info("Starting backup export",
+			"format", config.Format,
+			"devices", len(data.Devices),
+		)
+	}
 
 	// Get backup provider from database manager
+	if b == nil || b.dbManager == nil {
+		return nil, fmt.Errorf("backup plugin is not initialized with a database manager")
+	}
 	dbProvider := b.dbManager.GetProvider()
 	backupProvider, ok := dbProvider.(provider.BackupProvider)
 	if !ok {
@@ -147,7 +164,7 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	// Parse configuration
 	outputPath, _ := config.Config["output_path"].(string)
 	if outputPath == "" {
-		outputPath = "/tmp/shelly-backups"
+		outputPath = "./data/backups"
 	}
 
 	compression, _ := config.Config["compression"].(bool)
@@ -158,6 +175,9 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
+		if b.logger != nil {
+			b.logger.WithFields(map[string]any{"path": outputPath, "error": err}).Error("Failed to create output directory for backup")
+		}
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -166,13 +186,18 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	timestamp := time.Now().Format("20060102-150405")
 
 	var filename string
-	switch config.Format {
-	case "sma":
-		filename = fmt.Sprintf("shelly-backup-%s-%s.sma", timestamp, backupID)
-	case "tar.gz":
-		filename = fmt.Sprintf("shelly-backup-%s-%s.tar.gz", timestamp, backupID)
-	default:
-		return nil, fmt.Errorf("unsupported format: %s", config.Format)
+	if compression {
+		algo := "gzip"
+		if v, ok := config.Config["compression_algo"].(string); ok && v != "" {
+			algo = strings.ToLower(v)
+		}
+		if algo == "zip" {
+			filename = fmt.Sprintf("shelly-backup-%s-%s.sqlite.zip", timestamp, backupID)
+		} else {
+			filename = fmt.Sprintf("shelly-backup-%s-%s.sqlite.gz", timestamp, backupID)
+		}
+	} else {
+		filename = fmt.Sprintf("shelly-backup-%s-%s.sqlite", timestamp, backupID)
 	}
 
 	backupPath := filepath.Join(outputPath, filename)
@@ -213,36 +238,71 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	var checksum string
 	if fileInfo != nil {
 		fileSize = fileInfo.Size()
-		checksum, _ = b.calculateChecksum(backupPath)
+		if sum, sumErr := b.calculateChecksum(backupPath); sumErr != nil {
+			if b.logger != nil {
+				b.logger.Warn("Failed to calculate checksum for backup file", "error", sumErr)
+			}
+		} else {
+			checksum = sum
+		}
 	}
 
-	b.logger.Info("Backup export completed",
-		"path", backupPath,
-		"size", fileSize,
-		"duration", backupResult.Duration,
-		"records", backupResult.RecordCount,
-	)
+	if b != nil && b.logger != nil {
+		b.logger.Info("Backup export completed",
+			"path", backupPath,
+			"size", fileSize,
+			"duration", backupResult.Duration,
+			"records", backupResult.RecordCount,
+		)
+	}
 
+	// Resolve provider name safely
+	providerName := "unknown"
+	if b.dbManager != nil && b.dbManager.GetProvider() != nil {
+		providerName = b.dbManager.GetProvider().Name()
+	}
+	// Logical records as device count if provider doesn't report
+	logicalRecords := len(data.Devices)
+	if backupResult.RecordCount > 0 {
+		logicalRecords = int(backupResult.RecordCount)
+	}
+	md := map[string]interface{}{
+		"backup_id":   backupResult.BackupID,
+		"backup_type": string(backupResult.BackupType),
+		"table_count": backupResult.TableCount,
+		"provider":    providerName,
+		"compressed":  compression,
+	}
+	if v, ok := config.Config["name"].(string); ok && v != "" {
+		md["name"] = v
+	}
+	if v, ok := config.Config["description"].(string); ok && v != "" {
+		md["description"] = v
+	}
+	var warnings []string
+	switch strings.ToLower(config.Format) {
+	case "json", "yaml", "zip":
+		warnings = append(warnings, fmt.Sprintf("%s format not supported for SQLite; created SQLite DB copy instead", strings.ToUpper(config.Format)))
+	}
 	return &sync.ExportResult{
 		Success:     true,
 		OutputPath:  backupPath,
-		RecordCount: int(backupResult.RecordCount),
+		RecordCount: logicalRecords,
 		FileSize:    fileSize,
 		Checksum:    checksum,
 		Duration:    time.Since(startTime),
-		Warnings:    backupResult.Warnings,
-		Metadata: map[string]interface{}{
-			"backup_id":   backupResult.BackupID,
-			"backup_type": string(backupResult.BackupType),
-			"table_count": backupResult.TableCount,
-			"provider":    b.dbManager.GetProvider().Name(),
-			"compressed":  compression,
-		},
+		Warnings:    append(backupResult.Warnings, warnings...),
+		Metadata:    md,
 	}, nil
 }
 
 // Preview generates a preview of what would be backed up
 func (b *BackupPlugin) Preview(ctx context.Context, data *sync.ExportData, config sync.ExportConfig) (*sync.PreviewResult, error) {
+	// Resolve provider name safely
+	providerName := "unknown"
+	if b != nil && b.dbManager != nil && b.dbManager.GetProvider() != nil {
+		providerName = b.dbManager.GetProvider().Name()
+	}
 	// Get rough size estimates
 	deviceCount := len(data.Devices)
 	configCount := len(data.Configurations)
@@ -269,7 +329,7 @@ func (b *BackupPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 - Compression: %v
 - Estimated Size: %d bytes`,
 		deviceCount, configCount, templateCount, discoveredCount,
-		b.dbManager.GetProvider().Name(), compression, estimatedSize)
+		providerName, compression, estimatedSize)
 
 	return &sync.PreviewResult{
 		Success:       true,
@@ -324,9 +384,14 @@ func (b *BackupPlugin) Cleanup() error {
 func (b *BackupPlugin) RestoreBackup(ctx context.Context, backupPath string, options map[string]interface{}) (*sync.ImportResult, error) {
 	startTime := time.Now()
 
-	b.logger.Info("Starting backup restore", "path", backupPath)
+	if b != nil && b.logger != nil {
+		b.logger.Info("Starting backup restore", "path", backupPath)
+	}
 
 	// Get backup provider from database manager
+	if b == nil || b.dbManager == nil {
+		return nil, fmt.Errorf("backup plugin is not initialized with a database manager")
+	}
 	dbProvider := b.dbManager.GetProvider()
 	backupProvider, ok := dbProvider.(provider.BackupProvider)
 	if !ok {
@@ -335,6 +400,9 @@ func (b *BackupPlugin) RestoreBackup(ctx context.Context, backupPath string, opt
 
 	// Validate backup file exists
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		if b.logger != nil {
+			b.logger.Warn("Backup file does not exist", "path", backupPath)
+		}
 		return nil, fmt.Errorf("backup file does not exist: %s", backupPath)
 	}
 
@@ -364,13 +432,20 @@ func (b *BackupPlugin) RestoreBackup(ctx context.Context, backupPath string, opt
 		}, fmt.Errorf("restore failed: %s", restoreResult.Error)
 	}
 
-	b.logger.Info("Backup restore completed",
-		"path", backupPath,
-		"tables_restored", len(restoreResult.TablesRestored),
-		"records_restored", restoreResult.RecordsRestored,
-		"duration", restoreResult.Duration,
-	)
+	if b != nil && b.logger != nil {
+		b.logger.Info("Backup restore completed",
+			"path", backupPath,
+			"tables_restored", len(restoreResult.TablesRestored),
+			"records_restored", restoreResult.RecordsRestored,
+			"duration", restoreResult.Duration,
+		)
+	}
 
+	// Resolve provider name safely
+	providerName := "unknown"
+	if b.dbManager != nil && b.dbManager.GetProvider() != nil {
+		providerName = b.dbManager.GetProvider().Name()
+	}
 	return &sync.ImportResult{
 		Success:         true,
 		RecordsImported: int(restoreResult.RecordsRestored),
@@ -379,7 +454,7 @@ func (b *BackupPlugin) RestoreBackup(ctx context.Context, backupPath string, opt
 		Metadata: map[string]interface{}{
 			"restore_id":      restoreResult.RestoreID,
 			"tables_restored": restoreResult.TablesRestored,
-			"provider":        b.dbManager.GetProvider().Name(),
+			"provider":        providerName,
 			"dry_run":         dryRun,
 		},
 		CreatedAt: time.Now(),
@@ -388,9 +463,14 @@ func (b *BackupPlugin) RestoreBackup(ctx context.Context, backupPath string, opt
 
 // ValidateBackup validates a backup file
 func (b *BackupPlugin) ValidateBackup(ctx context.Context, backupPath string) (*provider.ValidationResult, error) {
-	b.logger.Info("Validating backup file", "path", backupPath)
+	if b != nil && b.logger != nil {
+		b.logger.Info("Validating backup file", "path", backupPath)
+	}
 
 	// Get backup provider
+	if b == nil || b.dbManager == nil {
+		return nil, fmt.Errorf("backup plugin is not initialized with a database manager")
+	}
 	dbProvider := b.dbManager.GetProvider()
 	backupProvider, ok := dbProvider.(provider.BackupProvider)
 	if !ok {

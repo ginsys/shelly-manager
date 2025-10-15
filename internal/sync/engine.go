@@ -60,6 +60,39 @@ func (e *SyncEngine) GetExportResult(id string) (*ExportResult, bool) {
 	return res, ok
 }
 
+// DeleteExport removes an export record from memory and history; optionally removes the file.
+func (e *SyncEngine) DeleteExport(ctx context.Context, exportID string, removeFile bool) error {
+	// Attempt to get in-memory result for path info
+	var path string
+	if res, ok := e.GetExportResult(exportID); ok && res != nil {
+		path = res.OutputPath
+	} else {
+		// Try history for path
+		if db := e.dbManager.GetDB(); db != nil {
+			var rec database.ExportHistory
+			if err := db.WithContext(ctx).Where("export_id = ?", exportID).First(&rec).Error; err == nil {
+				path = rec.FilePath
+			}
+		}
+	}
+
+	// Remove file if requested
+	if removeFile && path != "" {
+		_ = os.Remove(path)
+	}
+
+	// Delete DB history
+	if db := e.dbManager.GetDB(); db != nil {
+		_ = db.WithContext(ctx).Where("export_id = ?", exportID).Delete(&database.ExportHistory{}).Error
+	}
+
+	// Remove from in-memory map
+	e.mutex.Lock()
+	delete(e.exportResults, exportID)
+	e.mutex.Unlock()
+	return nil
+}
+
 // GetImportResult retrieves a stored import result by ID
 func (e *SyncEngine) GetImportResult(id string) (*ImportResult, bool) {
 	e.mutex.RLock()
@@ -445,13 +478,30 @@ func (e *SyncEngine) SaveExportHistory(ctx context.Context, request ExportReques
 		}
 	}
 	rec := &database.ExportHistory{
-		ExportID:    result.ExportID,
-		PluginName:  result.PluginName,
-		Format:      result.Format,
+		ExportID:   result.ExportID,
+		PluginName: result.PluginName,
+		Format:     result.Format,
+		Name: func() string {
+			if request.Config != nil {
+				if v, ok := request.Config["name"].(string); ok {
+					return v
+				}
+			}
+			return ""
+		}(),
+		Description: func() string {
+			if request.Config != nil {
+				if v, ok := request.Config["description"].(string); ok {
+					return v
+				}
+			}
+			return ""
+		}(),
 		RequestedBy: requestedBy,
 		Success:     result.Success,
 		RecordCount: result.RecordCount,
 		FileSize:    fileSize,
+		FilePath:    result.OutputPath,
 		DurationMs:  result.Duration.Milliseconds(),
 		ErrorMessage: func() string {
 			if len(result.Errors) > 0 {

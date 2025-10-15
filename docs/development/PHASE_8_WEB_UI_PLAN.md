@@ -85,7 +85,7 @@ Note: We can postpone 6) to reduce risk and decide after first screens.
   - Added Axios client, typed responses, and folder structure.
   - Quasar in `package.json` (components migration planned; not used yet).
 - 8.2 Auth + API typing — In Progress
-  - Interim admin key supported automatically in dev via `/app-config.js` (enabled by `make run`).
+  - Interim admin key supported automatically in dev via `/app-config.js` (enabled by `make start` or `make run`).
   - Hand-typed API models for devices; more endpoints to follow.
 - 8.3 Devices + Config — Started
   - Devices list (pagination/search/sort) and detail routes implemented.
@@ -97,7 +97,7 @@ Note: We can postpone 6) to reduce risk and decide after first screens.
 - Legacy UI fully removed; static serving removed from router.
 - SPA scaffolded; `MainLayout` added; routes: `/` (Devices), `/devices/:id` (Detail).
 - API client with `listDevices` and `getDevice`; types in `ui/src/api/types.ts`.
-- Dev convenience: server serves `/app-config.js`; `make run` exposes admin key for dev only.
+- Dev convenience: server serves `/app-config.js`; `make start` (or `make run`) exposes admin key for dev only.
 - Tests: Vitest unit for API (mocked), Playwright smoke for Devices page.
 
 ## Next Steps

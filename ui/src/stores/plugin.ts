@@ -100,33 +100,35 @@ export const usePluginStore = defineStore('plugin', {
     /**
      * Get plugins grouped by category
      */
-    pluginsByCategory: (state) => {
+    pluginsByCategory(state): Record<string, Plugin[]> {
       const groups: Record<string, Plugin[]> = {}
-      
-      for (const plugin of state.filteredPlugins) {
+
+      // Use the filteredPlugins getter to populate categories
+      const list = (this as any).filteredPlugins as Plugin[]
+      for (const plugin of list) {
         if (!groups[plugin.category]) {
           groups[plugin.category] = []
         }
         groups[plugin.category].push(plugin)
       }
-      
+
       // Sort plugins within each category
       for (const category in groups) {
         groups[category].sort((a, b) => {
           // Sort by status first (configured > available > error > unavailable)
           const statusOrder = { ready: 0, 'not-configured': 1, disabled: 2, error: 3, unavailable: 4 }
-          const aStatus = this.getPluginStatusClass(a.status)
-          const bStatus = this.getPluginStatusClass(b.status)
-          
+          const aStatus = (this as any).getPluginStatusClass(a.status) as string
+          const bStatus = (this as any).getPluginStatusClass(b.status) as string
+
           if (statusOrder[aStatus as keyof typeof statusOrder] !== statusOrder[bStatus as keyof typeof statusOrder]) {
             return (statusOrder[aStatus as keyof typeof statusOrder] || 5) - (statusOrder[bStatus as keyof typeof statusOrder] || 5)
           }
-          
+
           // Then by display name
           return a.display_name.localeCompare(b.display_name)
         })
       }
-      
+
       return groups
     },
 

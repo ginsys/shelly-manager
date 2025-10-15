@@ -200,9 +200,12 @@ import:
 - **Kubernetes**: Create ConfigMaps and Secrets for K8s deployments
 
 #### Backup & Recovery
-- **Automated Backups**: Scheduled SMA exports with retention policies
-- **Disaster Recovery**: Complete system restoration from SMA archives
-- **Migration**: Move between Shelly Manager instances seamlessly
+- **Provider Snapshots (Backup page)**: Create raw database snapshots from the current provider. For SQLite:
+  - Compression Off → single file: `*.sqlite`
+  - Compression On  → single file: `*.sqlite.gz`
+  - No `.tar.gz` container; single-file outputs only.
+- **Content Exports (Content Exports page)**: JSON, YAML, and SMA content exports live under `/export/content`.
+- **Disaster Recovery**: Use backups for DB-level restore; use SMA for full content migration between instances.
 
 #### DevOps Integration
 - **CI/CD Pipelines**: Automated export/import in deployment workflows
@@ -215,21 +218,20 @@ import:
 ## 🚀 Quick Start
 
 ```bash
-# Build the application
+# Build the application (both binaries)
 make build
 
-# Start the API server (dev)
-make run
+# Start server and auto-build UI if needed (recommended)
+make start
 
-# Run provisioning agent (separate binary - planned)
-./bin/shelly-provisioner --api-url http://api-server:8080
-
-# Run the Web UI (Vite dev server)
-make ui-dev
-
-# Access the UI (dev) at http://localhost:5173
-# The API remains available at http://localhost:8080/api/v1
-# If you build the UI (make ui-build), the server serves it at http://localhost:8080
+# Alternative dev workflow
+# - Start API server only (no UI build):
+#   make run
+# - Run the UI dev server (hot reload) separately:
+#   make ui-dev  # UI at http://localhost:5173
+#   # API at http://localhost:8080/api/v1
+# - Build the UI once so the server serves ui/dist:
+#   make ui-build  # then browse http://localhost:8080
 ```
 
 ## 🛠️ CLI Commands

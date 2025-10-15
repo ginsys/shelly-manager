@@ -305,7 +305,8 @@ const showBreadcrumb = computed(() => {
   background: transparent;
 }
 
-.nav-dropdown:hover .dropdown-menu {
+.nav-dropdown:hover .dropdown-menu,
+.dropdown-menu:hover {
   display: block;
   animation: fadeIn 0.15s ease-out;
 }

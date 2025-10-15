@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,6 +123,30 @@ func (m *MockDatabaseManager) GetDB() interface{} {
 
 func (m *MockDatabaseManager) Close() error {
 	return nil
+}
+
+func TestBackupExporter_ExportWithoutDBManager(t *testing.T) {
+	exporter := NewBackupExporter(nil)
+	if err := exporter.Initialize(logging.GetDefault()); err != nil {
+		t.Logf("Failed to initialize exporter: %v", err)
+	}
+
+	// Minimal export data
+	data := &sync.ExportData{Timestamp: time.Now()}
+	cfg := sync.ExportConfig{Format: "sma", Config: map[string]interface{}{}}
+
+	ctx := context.Background()
+	result, err := exporter.Export(ctx, data, cfg)
+
+	if err == nil {
+		t.Fatalf("expected error when dbManager is nil, got nil")
+	}
+	if result != nil {
+		t.Fatalf("expected nil result on error, got: %+v", result)
+	}
+	if err != nil && (len(err.Error()) == 0 || !strings.Contains(err.Error(), "database manager")) {
+		t.Errorf("unexpected error message: %v", err)
+	}
 }
 
 func TestBackupExporter_Info(t *testing.T) {

@@ -34,6 +34,8 @@ type Handler struct {
 	securityMonitor     interface{} // Security monitor for metrics (using interface{} to avoid circular imports)
 	// AdminAPIKey provides simple guard for sensitive endpoints until full auth is implemented
 	AdminAPIKey string
+	// Version/banner support
+	serverStartedAt time.Time
 }
 
 // NewHandler creates a new API handler
@@ -53,6 +55,7 @@ func NewHandlerWithLogger(db database.DatabaseInterface, svc *service.ShellyServ
 		MetricsHandler:      metricsHandler,
 		ConfigService:       configService,
 		logger:              logger,
+		serverStartedAt:     time.Now(),
 	}
 }
 
@@ -165,6 +168,22 @@ func (h *Handler) FastHealthz(w http.ResponseWriter, r *http.Request) {
 		// Log error but don't change response status as headers already sent
 		h.logger.Error("Failed to write FastHealthz response", "error", err)
 	}
+}
+
+// Version returns minimal API version/build info for UI mismatch banner
+func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
+	resp := map[string]any{
+		"api_version":       "dev",
+		"server_started_at": h.serverStartedAt.Format(time.RFC3339),
+	}
+	// Try to include database provider info if available
+	if mgr, ok := h.DB.(interface{ GetProviderInfo() (string, string) }); ok {
+		name, ver := mgr.GetProviderInfo()
+		resp["database_provider_name"] = name
+		resp["database_provider_version"] = ver
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(apiresp.Success(resp))
 }
 
 // Readyz returns readiness: dependencies available (currently DB).

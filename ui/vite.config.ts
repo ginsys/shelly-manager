@@ -1,9 +1,18 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+import { execSync } from 'node:child_process'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: (() => {
+    let gitSha = process.env.GIT_SHA || 'dev'
+    try { if (!process.env.GIT_SHA) gitSha = execSync('git rev-parse --short HEAD').toString().trim() } catch {}
+    const buildTime = new Date().toISOString()
+    return {
+      __UI_BUILD__: JSON.stringify({ git_sha: gitSha, build_time: buildTime })
+    }
+  })(),
   plugins: [vue()],
   resolve: {
     alias: {
@@ -91,4 +100,3 @@ export default defineConfig({
     cors: true,
   },
 })
-

@@ -23,8 +23,11 @@ import (
 	"github.com/ginsys/shelly-manager/internal/plugins"
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/backup"
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/gitops"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/jsonexport"
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/opnsense"
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/registry"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/sma"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/yamlexport"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
 	"github.com/ginsys/shelly-manager/internal/security/secrets"
 	"github.com/ginsys/shelly-manager/internal/service"
@@ -669,6 +672,9 @@ func initApp() {
 		backup.NewPlugin(),
 		gitops.NewPlugin(),
 		opnsense.NewPlugin(),
+		sma.NewPlugin(),
+		jsonexport.NewPlugin(),
+		yamlexport.NewPlugin(),
 	}
 
 	for _, plugin := range syncPlugins {
@@ -684,6 +690,19 @@ func initApp() {
 				"component": "sync_engine",
 			}).Info("Plugin registered with sync engine")
 		}
+	}
+
+	// Inject database manager into the backup plugin registered in the sync engine
+	if p, err := syncEngine.GetPlugin("backup"); err == nil {
+		if bp, ok := p.(*backup.BackupPlugin); ok {
+			// Use the existing adapter to satisfy backup.DatabaseManagerInterface
+			bp.SetDatabaseManager(&registry.DatabaseManagerAdapter{Manager: dbManager})
+			logger.WithFields(map[string]any{"component": "sync_engine", "plugin": "backup"}).Info("Database manager injected into backup plugin")
+		} else {
+			logger.WithFields(map[string]any{"component": "sync_engine", "plugin": "backup"}).Warn("Registered backup plugin is not *backup.BackupPlugin; cannot inject DB manager")
+		}
+	} else if err != nil {
+		logger.WithFields(map[string]any{"component": "sync_engine", "plugin": "backup", "error": err.Error()}).Warn("Backup plugin not found for DB manager injection")
 	}
 
 	// Register backup plugin with database manager for enhanced functionality

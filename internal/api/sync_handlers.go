@@ -7,12 +7,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/sync"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // SyncHandlers provides HTTP handlers for sync operations (export/import)
@@ -93,6 +96,23 @@ func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
 	api.HandleFunc("/export/backup", eh.CreateBackup).Methods("POST")
 	api.HandleFunc("/export/backup/{id}", eh.GetExportResult).Methods("GET")
 	api.HandleFunc("/export/backup/{id}/download", eh.DownloadBackup).Methods("GET")
+	api.HandleFunc("/export/backup/{id}", eh.DeleteBackup).Methods("DELETE")
+
+	// Backward/alias routes for UI compatibility with expected payload shapes
+	api.HandleFunc("/export/backups", eh.ListBackupsCompat).Methods("GET")
+	api.HandleFunc("/export/backup-statistics", eh.GetBackupStatisticsCompat).Methods("GET")
+
+	// JSON export endpoints
+	api.HandleFunc("/export/json", eh.CreateJSONExport).Methods("POST")
+	api.HandleFunc("/export/json/{id}/download", eh.DownloadExport).Methods("GET")
+
+	// SMA export endpoints
+	api.HandleFunc("/export/sma", eh.CreateSMAExport).Methods("POST")
+	api.HandleFunc("/export/sma/{id}/download", eh.DownloadExport).Methods("GET")
+
+	// YAML export endpoints (single-file content export)
+	api.HandleFunc("/export/yaml", eh.CreateYAMLExport).Methods("POST")
+	api.HandleFunc("/export/yaml/{id}/download", eh.DownloadExport).Methods("GET")
 
 	api.HandleFunc("/export/gitops", eh.CreateGitOpsExport).Methods("POST")
 	api.HandleFunc("/export/gitops/{id}/download", eh.DownloadGitOpsExport).Methods("GET")
@@ -121,8 +141,8 @@ func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
 func (eh *SyncHandlers) ListPlugins(w http.ResponseWriter, r *http.Request) {
 	eh.logger.Info("Listing export plugins")
 
-	plugins := eh.syncEngine.ListPlugins()
-	total := len(plugins)
+	infos := eh.syncEngine.ListPlugins()
+	total := len(infos)
 	pageSize := apiresp.GetQueryParamInt(r, "page_size", 0)
 	page := apiresp.GetQueryParamInt(r, "page", 1)
 	start, end := 0, total
@@ -142,10 +162,62 @@ func (eh *SyncHandlers) ListPlugins(w http.ResponseWriter, r *http.Request) {
 		page = 1
 		pageSize = total
 	}
-	pagePlugins := plugins
+	pageInfos := infos
 	if start != 0 || end != total {
-		pagePlugins = plugins[start:end]
+		pageInfos = infos[start:end]
 	}
+
+	type pluginStatus struct {
+		Available  bool   `json:"available"`
+		Configured bool   `json:"configured"`
+		Enabled    bool   `json:"enabled"`
+		Error      string `json:"error,omitempty"`
+		LastUsed   string `json:"last_used,omitempty"`
+	}
+	type pluginDTO struct {
+		Name         string       `json:"name"`
+		DisplayName  string       `json:"display_name"`
+		Description  string       `json:"description"`
+		Version      string       `json:"version"`
+		Category     string       `json:"category"`
+		Capabilities []string     `json:"capabilities"`
+		Status       pluginStatus `json:"status"`
+	}
+
+	dtos := make([]pluginDTO, 0, len(pageInfos))
+	categoriesCount := map[string]int{}
+	for _, pi := range pageInfos {
+		display := pi.Name
+		if display == "" {
+			display = pi.Description
+		}
+		dto := pluginDTO{
+			Name:         pi.Name,
+			DisplayName:  display,
+			Description:  pi.Description,
+			Version:      pi.Version,
+			Category:     string(pi.Category),
+			Capabilities: pi.SupportedFormats,
+			Status:       pluginStatus{Available: true, Configured: true, Enabled: true},
+		}
+		dtos = append(dtos, dto)
+		categoriesCount[dto.Category]++
+	}
+
+	type categoryDTO struct {
+		Name        string `json:"name"`
+		DisplayName string `json:"display_name"`
+		Description string `json:"description"`
+		PluginCount int    `json:"plugin_count"`
+		Plugins     []any  `json:"plugins"`
+	}
+	cats := make([]categoryDTO, 0, len(categoriesCount))
+	for name, count := range categoriesCount {
+		// Simple display: Title case using x/text/cases
+		disp := cases.Title(language.Und).String(name)
+		cats = append(cats, categoryDTO{Name: name, DisplayName: disp, Description: "", PluginCount: count, Plugins: nil})
+	}
+
 	totalPages := 1
 	if pageSize > 0 {
 		if total%pageSize == 0 {
@@ -158,18 +230,13 @@ func (eh *SyncHandlers) ListPlugins(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	meta := &apiresp.Metadata{
-		Page: &apiresp.PaginationMeta{
-			Page:       page,
-			PageSize:   pageSize,
-			TotalPages: totalPages,
-			HasNext:    page < totalPages,
-			HasPrev:    page > 1,
-		},
-		Count:      intPtr(len(pagePlugins)),
-		TotalCount: intPtr(total),
+		Page:  &apiresp.PaginationMeta{Page: page, PageSize: pageSize, TotalPages: totalPages, HasNext: page < totalPages, HasPrev: page > 1},
+		Count: intPtr(len(dtos)), TotalCount: intPtr(total),
 	}
+
 	apiresp.NewResponseWriter(eh.logger).WriteSuccessWithMeta(w, r, map[string]interface{}{
-		"plugins": pagePlugins,
+		"plugins":    dtos,
+		"categories": cats,
 	}, meta)
 }
 
@@ -219,9 +286,13 @@ func (eh *SyncHandlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	eh.logger.Info("Creating backup export")
 
 	var requestBody struct {
-		Config  map[string]interface{} `json:"config"`
-		Filters sync.ExportFilters     `json:"filters"`
-		Options sync.ExportOptions     `json:"options"`
+		Name        string                 `json:"name"`
+		Description string                 `json:"description"`
+		Format      string                 `json:"format"`
+		Devices     []uint                 `json:"devices"`
+		Config      map[string]interface{} `json:"config"`
+		Filters     sync.ExportFilters     `json:"filters"`
+		Options     sync.ExportOptions     `json:"options"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -230,21 +301,49 @@ func (eh *SyncHandlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize and enrich config
+	if requestBody.Config == nil {
+		requestBody.Config = map[string]interface{}{}
+	}
+	if requestBody.Name != "" {
+		requestBody.Config["name"] = requestBody.Name
+	}
+	if requestBody.Description != "" {
+		requestBody.Config["description"] = requestBody.Description
+	}
+	// Apply device filters if provided
+	if len(requestBody.Devices) > 0 {
+		requestBody.Filters.DeviceIDs = requestBody.Devices
+	}
 	// Create export request
 	exportRequest := sync.ExportRequest{
 		PluginName: "backup",
-		Format:     "sma", // Default to Shelly Manager Archive format
-		Config:     requestBody.Config,
-		Filters:    requestBody.Filters,
-		Output: sync.OutputConfig{
-			Type: "file",
-		},
+		Format: func() string {
+			if requestBody.Format != "" {
+				return requestBody.Format
+			}
+			return "sma"
+		}(),
+		Config:  requestBody.Config,
+		Filters: requestBody.Filters,
+		Output:  sync.OutputConfig{Type: "file"},
 		Options: requestBody.Options,
 	}
 
 	// Perform the export
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
+		// Map unsupported operation to 501 for clearer UX
+		msg := err.Error()
+		if strings.Contains(msg, "does not support backup operations") {
+			apiresp.NewResponseWriter(eh.logger).WriteError(
+				w, r, http.StatusNotImplemented,
+				apiresp.ErrCodeNotImplemented,
+				"Backup not supported by current database provider",
+				map[string]any{"detail": msg},
+			)
+			return
+		}
 		eh.logger.Error("Backup export failed", "error", err)
 		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
 		return
@@ -288,6 +387,108 @@ func (eh *SyncHandlers) CreateGitOpsExport(w http.ResponseWriter, r *http.Reques
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
 		eh.logger.Error("GitOps export failed", "error", err)
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		return
+	}
+	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
+}
+
+// CreateJSONExport creates a JSON content export (not DB snapshot)
+func (eh *SyncHandlers) CreateJSONExport(w http.ResponseWriter, r *http.Request) {
+	if !eh.requireAdmin(w, r) {
+		return
+	}
+	eh.logger.Info("Creating JSON export")
+	var requestBody struct {
+		Config  map[string]interface{} `json:"config"`
+		Filters sync.ExportFilters     `json:"filters"`
+		Options sync.ExportOptions     `json:"options"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		eh.logger.Error("Invalid request body", "error", err)
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
+		return
+	}
+	exportRequest := sync.ExportRequest{
+		PluginName: "json",
+		Format:     "json",
+		Config:     requestBody.Config,
+		Filters:    requestBody.Filters,
+		Output:     sync.OutputConfig{Type: "file"},
+		Options:    requestBody.Options,
+	}
+	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
+	if err != nil {
+		eh.logger.Error("JSON export failed", "error", err)
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		return
+	}
+	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
+}
+
+// CreateSMAExport creates a new SMA archive export
+func (eh *SyncHandlers) CreateSMAExport(w http.ResponseWriter, r *http.Request) {
+	if !eh.requireAdmin(w, r) {
+		return
+	}
+	eh.logger.Info("Creating SMA export")
+	var requestBody struct {
+		Config  map[string]interface{} `json:"config"`
+		Filters sync.ExportFilters     `json:"filters"`
+		Options sync.ExportOptions     `json:"options"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		eh.logger.Error("Invalid request body", "error", err)
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
+		return
+	}
+	exportRequest := sync.ExportRequest{
+		PluginName: "sma",
+		Format:     "sma",
+		Config:     requestBody.Config,
+		Filters:    requestBody.Filters,
+		Output:     sync.OutputConfig{Type: "file"},
+		Options:    requestBody.Options,
+	}
+	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
+	if err != nil {
+		eh.logger.Error("SMA export failed", "error", err)
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		return
+	}
+	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
+}
+
+// CreateYAMLExport creates a single-file YAML content export
+func (eh *SyncHandlers) CreateYAMLExport(w http.ResponseWriter, r *http.Request) {
+	if !eh.requireAdmin(w, r) {
+		return
+	}
+	eh.logger.Info("Creating YAML export")
+	var requestBody struct {
+		Config  map[string]interface{} `json:"config"`
+		Filters sync.ExportFilters     `json:"filters"`
+		Options sync.ExportOptions     `json:"options"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		eh.logger.Error("Invalid request body", "error", err)
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
+		return
+	}
+	exportRequest := sync.ExportRequest{
+		PluginName: "yaml",
+		Format:     "yaml",
+		Config:     requestBody.Config,
+		Filters:    requestBody.Filters,
+		Output:     sync.OutputConfig{Type: "file"},
+		Options:    requestBody.Options,
+	}
+	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
+	if err != nil {
+		eh.logger.Error("YAML export failed", "error", err)
 		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
 		return
 	}
@@ -403,11 +604,45 @@ func (eh *SyncHandlers) DownloadExport(w http.ResponseWriter, r *http.Request) {
 	eh.serveExportByID(w, r, exportID)
 }
 
+// DeleteBackup deletes a backup export record and its file
+func (eh *SyncHandlers) DeleteBackup(w http.ResponseWriter, r *http.Request) {
+	if !eh.requireAdmin(w, r) {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	if id == "" {
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Missing export ID")
+		return
+	}
+	// Remove both history and file
+	_ = eh.syncEngine.DeleteExport(r.Context(), id, true)
+	apiresp.NewResponseWriter(eh.logger).WriteNoContent(w, r)
+}
+
 // serveExportByID fetches an export by ID and serves its file (if available)
 func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, id string) {
 	rw := apiresp.NewResponseWriter(eh.logger)
 	res, ok := eh.syncEngine.GetExportResult(id)
 	if !ok || res == nil {
+		// Fallback to persisted history for file path
+		if rec, err := eh.syncEngine.GetExportHistory(r.Context(), id); err == nil && rec != nil {
+			if rec.FilePath != "" {
+				if eh.exportBaseDir != "" {
+					absBase, _ := filepath.Abs(eh.exportBaseDir)
+					absFile, _ := filepath.Abs(rec.FilePath)
+					rel, err := filepath.Rel(absBase, absFile)
+					if err != nil || strings.HasPrefix(rel, "..") {
+						rw.WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "Download path not allowed", nil)
+						return
+					}
+				}
+				// Set a helpful filename for download
+				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(rec.FilePath)))
+				setContentTypeForPath(w, rec.FilePath)
+				http.ServeFile(w, r, rec.FilePath)
+				return
+			}
+		}
 		rw.WriteNotFoundError(w, r, "Export result")
 		return
 	}
@@ -425,7 +660,32 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
+	// Set download filename and content type
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(res.OutputPath)))
+	setContentTypeForPath(w, res.OutputPath)
 	http.ServeFile(w, r, res.OutputPath)
+}
+
+// setContentTypeForPath sets Content-Type header based on file extension for better UX
+func setContentTypeForPath(w http.ResponseWriter, path string) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".gz":
+		w.Header().Set("Content-Type", "application/gzip")
+	case ".zip":
+		w.Header().Set("Content-Type", "application/zip")
+	case ".json":
+		w.Header().Set("Content-Type", "application/json")
+	case ".yaml", ".yml":
+		w.Header().Set("Content-Type", "application/yaml")
+	case ".sma":
+		// SMA is a gzip-compressed archive format
+		w.Header().Set("Content-Type", "application/gzip")
+	case ".sqlite":
+		w.Header().Set("Content-Type", "application/octet-stream")
+	default:
+		// leave default; http.ServeFile may infer
+	}
 }
 
 // Scheduling handlers
@@ -679,6 +939,127 @@ func (eh *SyncHandlers) GetExportStatistics(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, stats)
+}
+
+// ListBackupsCompat provides a compatibility layer for UI expecting { backups: [...] }
+func (eh *SyncHandlers) ListBackupsCompat(w http.ResponseWriter, r *http.Request) {
+	if !eh.requireAdmin(w, r) {
+		return
+	}
+	q := r.URL.Query()
+	page := parseIntDefault(q.Get("page"), 1)
+	pageSize := parseIntDefault(q.Get("page_size"), 20)
+	successParam := q.Get("success")
+	var success *bool
+	if successParam != "" {
+		v := strings.ToLower(successParam)
+		b := v == "true" || v == "1" || v == "yes"
+		success = &b
+	}
+	formatFilter := strings.ToLower(strings.TrimSpace(q.Get("format")))
+
+	items, total, err := eh.syncEngine.ListExportHistory(r.Context(), page, pageSize, "backup", success)
+	if err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		return
+	}
+	// Map to UI BackupItem shape
+	type BackupItem struct {
+		ID          uint      `json:"id"`
+		BackupID    string    `json:"backup_id"`
+		Name        string    `json:"name"`
+		Description string    `json:"description,omitempty"`
+		Format      string    `json:"format"`
+		DeviceCount int       `json:"device_count"`
+		FileSize    int64     `json:"file_size,omitempty"`
+		Checksum    string    `json:"checksum,omitempty"`
+		Encrypted   bool      `json:"encrypted"`
+		Success     bool      `json:"success"`
+		Error       string    `json:"error_message,omitempty"`
+		CreatedAt   time.Time `json:"created_at"`
+		CreatedBy   string    `json:"created_by,omitempty"`
+	}
+	backups := make([]BackupItem, 0, len(items))
+	for _, it := range items {
+		if formatFilter != "" && strings.ToLower(it.Format) != formatFilter {
+			continue
+		}
+		backups = append(backups, BackupItem{
+			ID:       it.ID,
+			BackupID: it.ExportID,
+			Name: func() string {
+				if it.Name != "" {
+					return it.Name
+				}
+				return "backup"
+			}(),
+			Format:      it.Format,
+			DeviceCount: it.RecordCount,
+			FileSize:    it.FileSize,
+			Encrypted:   false,
+			Success:     it.Success,
+			Error:       it.ErrorMessage,
+			CreatedAt:   it.CreatedAt,
+			CreatedBy:   it.RequestedBy,
+		})
+	}
+	builder := apiresp.NewResponseBuilder(eh.logger).WithPagination(page, pageSize, total)
+	resp := builder.Success(map[string]interface{}{"backups": backups})
+	apiresp.NewResponseWriter(eh.logger).WriteSuccessWithMeta(w, r, resp.Data, resp.Meta)
+}
+
+// GetBackupStatisticsCompat returns backup-only statistics in expected UI shape
+func (eh *SyncHandlers) GetBackupStatisticsCompat(w http.ResponseWriter, r *http.Request) {
+	if !eh.requireAdmin(w, r) {
+		return
+	}
+	// Aggregate over a reasonable window; iterate pages to collect all backup history
+	page := 1
+	pageSize := 200
+	totalSize := int64(0)
+	totalCount := 0
+	successCount := 0
+	byFormat := map[string]int{}
+	var last time.Time
+
+	for {
+		items, total, err := eh.syncEngine.ListExportHistory(r.Context(), page, pageSize, "backup", nil)
+		if err != nil {
+			apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+			return
+		}
+		for _, it := range items {
+			totalCount++
+			if it.Success {
+				successCount++
+			}
+			totalSize += it.FileSize
+			byFormat[strings.ToLower(it.Format)]++
+			if it.CreatedAt.After(last) {
+				last = it.CreatedAt
+			}
+		}
+		// Break when we've covered all items or no more pages
+		if page*pageSize >= total || len(items) == 0 {
+			break
+		}
+		page++
+		if page > 50 { // safety cap
+			break
+		}
+	}
+	failureCount := totalCount - successCount
+	data := map[string]interface{}{
+		"total":      totalCount,
+		"success":    successCount,
+		"failure":    failureCount,
+		"total_size": totalSize,
+		"by_format":  byFormat,
+	}
+	if !last.IsZero() {
+		data["last_backup"] = last.Format(time.RFC3339)
+	}
+	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, data)
 }
 
 func parseIntDefault(s string, def int) int {

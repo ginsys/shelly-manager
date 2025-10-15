@@ -1,8 +1,1142 @@
 # Shelly Manager - Development Tasks & Progress
 
-Last updated: 2025-09-10
+Last updated: 2025-10-16
 
 ## 📋 **OPEN TASKS** (High → Medium → Low Priority)
+
+---
+
+## 🔥 **HIGHEST PRIORITY - BLOCKS COMMIT** - Export/Import System Consolidation Fixes
+
+**Context**: Consolidation of backup and export plugins into a unified system with JSON/YAML export formats and ZIP compression support. Expert review (Backend, Frontend, QA, Documentation, Go) identified critical issues that MUST be resolved before committing staged and unstaged changes.
+
+**Timeline**:
+- **Phase 1 (CRITICAL)**: ~2 hours - Must complete before commit
+- **Phase 2 (RECOMMENDED)**: 2-3 hours - Can be done after commit
+
+**Business Impact**: Prevents technical debt accumulation and ensures maintainable, testable codebase from day one. This is a hobbyist project - focus on practical fixes, avoid over-engineering.
+
+---
+
+### **Phase 1: Critical Pre-Commit Fixes** ⚡ **BLOCKS COMMIT** (~2 hours)
+
+**Success Criteria**: All issues resolved, tests passing, code formatted, commit-ready state achieved
+
+#### **Task 1.1: Code Formatting** ⚡ **REQUIRED**
+- [ ] **Go Expert**: Run `go fmt ./...` to fix indentation issues across all Go files
+
+  **Files Affected**:
+  - `internal/api/sync_handlers.go` (mixed spaces/tabs)
+  - Multiple files with inconsistent formatting
+
+  **Implementation Steps**:
+  ```bash
+  # 1. Run formatter
+  go fmt ./...
+
+  # 2. Verify changes
+  git diff
+
+  # 3. Ensure only formatting changes (no logic changes)
+  git add -p  # Stage only formatting changes if mixed with other work
+  ```
+
+  **Validation**:
+  - `go fmt ./...` shows no changes when run again
+  - `git diff` shows only whitespace/indentation changes
+  - CI formatting check will pass
+
+  **Success Criteria**: Clean `go fmt` output, no formatting noise in diffs
+
+  **Effort**: 5 minutes
+  **Risk**: Low - Automated tool, no logic changes
+  **Dependencies**: None
+
+#### **Task 1.2: Replace Deprecated strings.Title()** ⚡ **REQUIRED**
+- [ ] **Go Expert**: Replace deprecated `strings.Title()` in `internal/api/sync_handlers.go`
+
+  **File**: `internal/api/sync_handlers.go` (line ~207)
+
+  **Issue**: Using deprecated function that will be removed in future Go versions
+
+  **Implementation Steps**:
+  ```go
+  // 1. Add helper function at top of file (after imports)
+  // capitalize converts the first character to uppercase for simple plugin names
+  // For hobbyist project: simple ASCII handling is sufficient
+  func capitalize(s string) string {
+      if len(s) == 0 {
+          return s
+      }
+      return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
+  }
+
+  // 2. Find and replace usage (line ~207)
+  // BEFORE:
+  disp := strings.Title(name)
+
+  // AFTER:
+  disp := capitalize(name)
+  ```
+
+  **Alternative** (if Unicode support needed later):
+  ```go
+  import "golang.org/x/text/cases"
+  import "golang.org/x/text/language"
+
+  // Add to struct or package-level
+  var titleCaser = cases.Title(language.English)
+
+  // Usage
+  disp := titleCaser.String(name)
+  ```
+
+  **Validation**:
+  - Build succeeds: `go build ./cmd/shelly-manager`
+  - No deprecation warnings in output
+  - Plugin names still display correctly (test with API call)
+  - Run tests: `go test ./internal/api/...`
+
+  **Success Criteria**: No deprecation warnings, plugin names display correctly
+
+  **Effort**: 15 minutes
+  **Risk**: Low - Simple replacement with clear semantics
+  **Dependencies**: None
+
+#### **Task 1.3: Create JSON Export Plugin Tests** ⚡ **REQUIRED**
+- [ ] **Go Expert**: Create `internal/plugins/sync/jsonexport/json_test.go`
+
+  **File**: `internal/plugins/sync/jsonexport/json_test.go` (NEW)
+
+  **Test Coverage Goal**: >60% of json.go
+
+  **Implementation** (Complete test file):
+  ```go
+  package jsonexport
+
+  import (
+      "context"
+      "encoding/json"
+      "os"
+      "path/filepath"
+      "testing"
+
+      "github.com/ginsys/shelly-manager/internal/logging"
+      "github.com/ginsys/shelly-manager/internal/sync"
+  )
+
+  func TestPlugin_Metadata(t *testing.T) {
+      p := NewPlugin()
+
+      if p.Name() != "json" {
+          t.Errorf("Expected name 'json', got '%s'", p.Name())
+      }
+
+      if p.Type() != sync.PluginTypeExport {
+          t.Errorf("Expected type PluginTypeExport, got %v", p.Type())
+      }
+
+      if p.Version() == "" {
+          t.Error("Expected non-empty version")
+      }
+  }
+
+  func TestPlugin_Export_Success(t *testing.T) {
+      p := NewPlugin()
+      if err := p.Initialize(logging.GetDefault()); err != nil {
+          t.Fatalf("Initialize failed: %v", err)
+      }
+
+      // Test data
+      data := &sync.ExportData{
+          Devices: []sync.DeviceData{
+              {ID: "test-device-1", Name: "Test Device", Type: "shelly1"},
+          },
+          Templates: []sync.TemplateData{
+              {ID: "test-template", Name: "Test Template"},
+          },
+      }
+
+      // Temp directory for output
+      tmpDir := t.TempDir()
+
+      config := sync.ExportConfig{
+          Format: "json",
+          Config: map[string]interface{}{
+              "output_path": tmpDir,
+              "pretty":      true,
+          },
+      }
+
+      result, err := p.Export(context.Background(), data, config)
+      if err != nil {
+          t.Fatalf("Export failed: %v", err)
+      }
+
+      // Verify file exists
+      if _, err := os.Stat(result.OutputPath); os.IsNotExist(err) {
+          t.Errorf("Output file not created: %s", result.OutputPath)
+      }
+
+      // Verify JSON structure
+      content, err := os.ReadFile(result.OutputPath)
+      if err != nil {
+          t.Fatalf("Failed to read output file: %v", err)
+      }
+
+      var envelope map[string]interface{}
+      if err := json.Unmarshal(content, &envelope); err != nil {
+          t.Fatalf("Output is not valid JSON: %v", err)
+      }
+
+      // Verify structure
+      if _, ok := envelope["devices"]; !ok {
+          t.Error("Expected 'devices' field in JSON output")
+      }
+      if _, ok := envelope["templates"]; !ok {
+          t.Error("Expected 'templates' field in JSON output")
+      }
+  }
+
+  func TestPlugin_Export_Compression(t *testing.T) {
+      tests := []struct {
+          name           string
+          compressionAlgo string
+          expectExt      string
+      }{
+          {"gzip compression", "gzip", ".json.gz"},
+          {"zip compression", "zip", ".json.zip"},
+          {"no compression", "none", ".json"},
+          {"default to none", "", ".json"},
+      }
+
+      for _, tt := range tests {
+          t.Run(tt.name, func(t *testing.T) {
+              p := NewPlugin()
+              p.Initialize(logging.GetDefault())
+
+              data := &sync.ExportData{
+                  Devices: []sync.DeviceData{{ID: "test"}},
+              }
+
+              tmpDir := t.TempDir()
+              config := sync.ExportConfig{
+                  Format: "json",
+                  Config: map[string]interface{}{
+                      "output_path":      tmpDir,
+                      "compression_algo": tt.compressionAlgo,
+                  },
+              }
+
+              result, err := p.Export(context.Background(), data, config)
+              if err != nil {
+                  t.Fatalf("Export failed: %v", err)
+              }
+
+              // Verify file extension
+              ext := filepath.Ext(result.OutputPath)
+              if tt.compressionAlgo == "zip" {
+                  ext = filepath.Ext(result.OutputPath[:len(result.OutputPath)-len(ext)]) + ext
+              }
+              if ext != tt.expectExt {
+                  t.Errorf("Expected extension %s, got %s", tt.expectExt, ext)
+              }
+
+              // Verify file exists
+              if _, err := os.Stat(result.OutputPath); os.IsNotExist(err) {
+                  t.Errorf("Output file not created: %s", result.OutputPath)
+              }
+          })
+      }
+  }
+
+  func TestPlugin_Export_InvalidPath(t *testing.T) {
+      p := NewPlugin()
+      p.Initialize(logging.GetDefault())
+
+      data := &sync.ExportData{
+          Devices: []sync.DeviceData{{ID: "test"}},
+      }
+
+      config := sync.ExportConfig{
+          Format: "json",
+          Config: map[string]interface{}{
+              "output_path": "/nonexistent/invalid/path",
+          },
+      }
+
+      _, err := p.Export(context.Background(), data, config)
+      if err == nil {
+          t.Error("Expected error for invalid path, got nil")
+      }
+  }
+  ```
+
+  **Validation**:
+  ```bash
+  # Run tests
+  go test -v ./internal/plugins/sync/jsonexport/
+
+  # Check coverage
+  go test -cover ./internal/plugins/sync/jsonexport/
+  # Target: >60% coverage
+
+  # Run with race detector
+  go test -race ./internal/plugins/sync/jsonexport/
+  ```
+
+  **Success Criteria**: 4+ passing tests, >60% coverage of json.go, no race conditions
+
+  **Effort**: 45 minutes
+  **Risk**: Medium - New test file, must ensure proper mocking
+  **Dependencies**: Task 1.1 (formatting)
+  **Reference**: `internal/plugins/sync/backup/backup_test.go` for patterns
+
+#### **Task 1.4: Create YAML Export Plugin Tests** ⚡ **REQUIRED**
+- [ ] **Go Expert**: Create `internal/plugins/sync/yamlexport/yaml_test.go`
+
+  **File**: `internal/plugins/sync/yamlexport/yaml_test.go` (NEW)
+
+  **Test Coverage Goal**: >60% of yaml.go
+
+  **Implementation** (Complete test file - similar to JSON):
+  ```go
+  package yamlexport
+
+  import (
+      "context"
+      "os"
+      "path/filepath"
+      "testing"
+
+      "github.com/ginsys/shelly-manager/internal/logging"
+      "github.com/ginsys/shelly-manager/internal/sync"
+      "gopkg.in/yaml.v3"
+  )
+
+  func TestPlugin_Metadata(t *testing.T) {
+      p := NewPlugin()
+
+      if p.Name() != "yaml" {
+          t.Errorf("Expected name 'yaml', got '%s'", p.Name())
+      }
+
+      if p.Type() != sync.PluginTypeExport {
+          t.Errorf("Expected type PluginTypeExport, got %v", p.Type())
+      }
+
+      if p.Version() == "" {
+          t.Error("Expected non-empty version")
+      }
+  }
+
+  func TestPlugin_Export_Success(t *testing.T) {
+      p := NewPlugin()
+      if err := p.Initialize(logging.GetDefault()); err != nil {
+          t.Fatalf("Initialize failed: %v", err)
+      }
+
+      // Test data
+      data := &sync.ExportData{
+          Devices: []sync.DeviceData{
+              {ID: "test-device-1", Name: "Test Device", Type: "shelly1"},
+          },
+          Templates: []sync.TemplateData{
+              {ID: "test-template", Name: "Test Template"},
+          },
+      }
+
+      // Temp directory for output
+      tmpDir := t.TempDir()
+
+      config := sync.ExportConfig{
+          Format: "yaml",
+          Config: map[string]interface{}{
+              "output_path": tmpDir,
+          },
+      }
+
+      result, err := p.Export(context.Background(), data, config)
+      if err != nil {
+          t.Fatalf("Export failed: %v", err)
+      }
+
+      // Verify file exists
+      if _, err := os.Stat(result.OutputPath); os.IsNotExist(err) {
+          t.Errorf("Output file not created: %s", result.OutputPath)
+      }
+
+      // Verify YAML structure
+      content, err := os.ReadFile(result.OutputPath)
+      if err != nil {
+          t.Fatalf("Failed to read output file: %v", err)
+      }
+
+      var envelope map[string]interface{}
+      if err := yaml.Unmarshal(content, &envelope); err != nil {
+          t.Fatalf("Output is not valid YAML: %v", err)
+      }
+
+      // Verify structure
+      if _, ok := envelope["devices"]; !ok {
+          t.Error("Expected 'devices' field in YAML output")
+      }
+      if _, ok := envelope["templates"]; !ok {
+          t.Error("Expected 'templates' field in YAML output")
+      }
+  }
+
+  func TestPlugin_Export_Compression(t *testing.T) {
+      tests := []struct {
+          name           string
+          compressionAlgo string
+          expectExt      string
+      }{
+          {"gzip compression", "gzip", ".yaml.gz"},
+          {"zip compression", "zip", ".yaml.zip"},
+          {"no compression", "none", ".yaml"},
+          {"default to none", "", ".yaml"},
+      }
+
+      for _, tt := range tests {
+          t.Run(tt.name, func(t *testing.T) {
+              p := NewPlugin()
+              p.Initialize(logging.GetDefault())
+
+              data := &sync.ExportData{
+                  Devices: []sync.DeviceData{{ID: "test"}},
+              }
+
+              tmpDir := t.TempDir()
+              config := sync.ExportConfig{
+                  Format: "yaml",
+                  Config: map[string]interface{}{
+                      "output_path":      tmpDir,
+                      "compression_algo": tt.compressionAlgo,
+                  },
+              }
+
+              result, err := p.Export(context.Background(), data, config)
+              if err != nil {
+                  t.Fatalf("Export failed: %v", err)
+              }
+
+              // Verify file extension
+              ext := filepath.Ext(result.OutputPath)
+              if tt.compressionAlgo == "zip" {
+                  ext = filepath.Ext(result.OutputPath[:len(result.OutputPath)-len(ext)]) + ext
+              }
+              if ext != tt.expectExt {
+                  t.Errorf("Expected extension %s, got %s", tt.expectExt, ext)
+              }
+
+              // Verify file exists
+              if _, err := os.Stat(result.OutputPath); os.IsNotExist(err) {
+                  t.Errorf("Output file not created: %s", result.OutputPath)
+              }
+          })
+      }
+  }
+
+  func TestPlugin_Export_InvalidPath(t *testing.T) {
+      p := NewPlugin()
+      p.Initialize(logging.GetDefault())
+
+      data := &sync.ExportData{
+          Devices: []sync.DeviceData{{ID: "test"}},
+      }
+
+      config := sync.ExportConfig{
+          Format: "yaml",
+          Config: map[string]interface{}{
+              "output_path": "/nonexistent/invalid/path",
+          },
+      }
+
+      _, err := p.Export(context.Background(), data, config)
+      if err == nil {
+          t.Error("Expected error for invalid path, got nil")
+      }
+  }
+  ```
+
+  **Validation**:
+  ```bash
+  # Run tests
+  go test -v ./internal/plugins/sync/yamlexport/
+
+  # Check coverage
+  go test -cover ./internal/plugins/sync/yamlexport/
+  # Target: >60% coverage
+
+  # Run with race detector
+  go test -race ./internal/plugins/sync/yamlexport/
+  ```
+
+  **Success Criteria**: 4+ passing tests, >60% coverage of yaml.go, no race conditions
+
+  **Effort**: 45 minutes
+  **Risk**: Medium - New test file, YAML validation slightly more complex than JSON
+  **Dependencies**: Task 1.1 (formatting)
+  **Reference**: `internal/plugins/sync/backup/backup_test.go` for patterns
+
+#### **Task 1.5: Fix Router-Link Button Misuse** ⚡ **REQUIRED** (Accessibility)
+- [ ] **Frontend JS Expert**: Fix button misuse in `ui/src/pages/ExportSchedulesPage.vue`
+
+  **File**: `ui/src/pages/ExportSchedulesPage.vue`
+
+  **Issue**: Using `<router-link class="primary-button">` instead of proper button with router navigation
+
+  **Implementation**:
+  ```vue
+  <!-- BEFORE (incorrect - accessibility issue) -->
+  <router-link
+    class="primary-button"
+    to="/export/backup?schedule=1#create-backup"
+  >
+    ➕ Create Schedule
+  </router-link>
+
+  <!-- AFTER (correct - proper button semantics) -->
+  <button
+    class="primary-button"
+    @click="navigateToScheduleCreation"
+  >
+    ➕ Create Schedule
+  </button>
+
+  <!-- Add to <script setup> section -->
+  <script setup>
+  import { useRouter } from 'vue-router'
+
+  const router = useRouter()
+
+  function navigateToScheduleCreation() {
+    router.push('/export/backup?schedule=1#create-backup')
+  }
+  </script>
+  ```
+
+  **Why This Matters**:
+  - Screen readers announce "button" not "link" (correct semantics)
+  - Keyboard users get proper button behavior (Space key works)
+  - Follows WCAG 2.1 accessibility guidelines
+
+  **Validation**:
+  - Click button - should navigate correctly
+  - Press Space key on focused button - should activate
+  - Screen reader test: Should announce as "button Create Schedule"
+  - Lighthouse accessibility audit: No "button inside link" warnings
+
+  **Success Criteria**: Navigation works, accessibility audit passes
+
+  **Effort**: 10 minutes
+  **Risk**: Low - Direct router API usage
+  **Dependencies**: None
+  **Accessibility Impact**: Fixes semantic HTML violation, improves screen reader UX
+
+---
+
+### **Phase 2: Post-Commit Improvements** (2-3 hours)
+
+**Success Criteria**: Code duplication eliminated, maintainability improved, documentation updated
+
+#### **Task 2.1: Extract Duplicate Helper Functions** (Code Quality)
+- [ ] **Go Expert**: Extract duplicate helpers to `internal/plugins/sync/helpers.go`
+
+  **File**: `internal/plugins/sync/helpers.go` (NEW)
+
+  **Functions to Extract**:
+  1. `fileSHA256(path string) (string, error)` - Currently duplicated 3x
+  2. `writeGzip(path string, data []byte) error` - Currently duplicated 3x
+  3. `writeZipSingle(path, entryName string, data []byte) error` - Currently duplicated 3x
+
+  **Implementation** (Complete new file):
+  ```go
+  package sync
+
+  import (
+      "archive/zip"
+      "compress/gzip"
+      "crypto/sha256"
+      "fmt"
+      "io"
+      "os"
+  )
+
+  // FileSHA256 calculates the SHA-256 checksum of a file.
+  // Returns hex-encoded string of the checksum.
+  func FileSHA256(path string) (string, error) {
+      f, err := os.Open(path)
+      if err != nil {
+          return "", fmt.Errorf("open file: %w", err)
+      }
+      defer f.Close()
+
+      h := sha256.New()
+      if _, err := io.Copy(h, f); err != nil {
+          return "", fmt.Errorf("hash file: %w", err)
+      }
+
+      return fmt.Sprintf("%x", h.Sum(nil)), nil
+  }
+
+  // WriteGzip compresses data using gzip and writes to path.
+  // For hobbyist project: best compression level is fine.
+  func WriteGzip(path string, data []byte) error {
+      f, err := os.Create(path)
+      if err != nil {
+          return fmt.Errorf("create file: %w", err)
+      }
+      defer f.Close()
+
+      gz := gzip.NewWriter(f)
+      defer gz.Close()
+
+      if _, err := gz.Write(data); err != nil {
+          return fmt.Errorf("write gzip: %w", err)
+      }
+
+      if err := gz.Close(); err != nil {
+          return fmt.Errorf("close gzip: %w", err)
+      }
+
+      return f.Sync()
+  }
+
+  // WriteZipSingle creates a ZIP archive with a single file entry.
+  // entryName is the name of the file inside the ZIP.
+  func WriteZipSingle(path, entryName string, data []byte) error {
+      f, err := os.Create(path)
+      if err != nil {
+          return fmt.Errorf("create file: %w", err)
+      }
+      defer f.Close()
+
+      zw := zip.NewWriter(f)
+      defer zw.Close()
+
+      w, err := zw.Create(entryName)
+      if err != nil {
+          return fmt.Errorf("create zip entry: %w", err)
+      }
+
+      if _, err := w.Write(data); err != nil {
+          return fmt.Errorf("write zip entry: %w", err)
+      }
+
+      if err := zw.Close(); err != nil {
+          return fmt.Errorf("close zip: %w", err)
+      }
+
+      return f.Sync()
+  }
+  ```
+
+  **Files to Update** (remove duplicates, add import):
+  ```go
+  // 1. internal/plugins/sync/jsonexport/json.go
+  // - Remove: fileSHA256, writeGzip, writeZipSingle functions
+  // - Add import: "github.com/ginsys/shelly-manager/internal/sync"
+  // - Replace calls: fileSHA256(...) → sync.FileSHA256(...)
+  //                  writeGzip(...) → sync.WriteGzip(...)
+  //                  writeZipSingle(...) → sync.WriteZipSingle(...)
+
+  // 2. internal/plugins/sync/yamlexport/yaml.go
+  // - Same changes as above
+
+  // 3. internal/plugins/sync/backup/backup.go (if has duplicates)
+  // - Same changes as above
+  ```
+
+  **Validation**:
+  ```bash
+  # 1. Run all plugin tests
+  go test ./internal/plugins/sync/...
+
+  # 2. Verify no duplicates
+  grep -r "func fileSHA256" internal/plugins/sync/
+  # Should only show: internal/plugins/sync/helpers.go
+
+  # 3. Build succeeds
+  go build ./cmd/shelly-manager
+  ```
+
+  **Success Criteria**: All plugins use shared helpers, no duplicate implementations, tests pass
+
+  **Effort**: 60 minutes
+  **Risk**: Low - Pure extraction, no logic changes
+  **Dependencies**: Phase 1 complete (commit)
+  **Testing**: Existing tests should still pass after refactor
+
+#### **Task 2.2: Fix Defer/Close Pattern in Compression Functions** (Bug Fix)
+- [ ] **Go Expert**: Fix resource leak in compression helper functions
+
+  **File**: `internal/plugins/sync/helpers.go` (after Task 2.1 extraction)
+
+  **Issue**: File handles not properly closed before error returns
+
+  **Implementation**:
+  ```go
+  // BEFORE (Task 2.1 version - INCORRECT defer pattern)
+  func WriteGzip(path string, data []byte) error {
+      f, err := os.Create(path)
+      if err != nil {
+          return fmt.Errorf("create file: %w", err)
+      }
+      defer f.Close()  // ✅ OK - deferred after successful Create
+
+      gz := gzip.NewWriter(f)
+      defer gz.Close()  // ✅ OK - deferred after successful NewWriter
+
+      if _, err := gz.Write(data); err != nil {
+          return fmt.Errorf("write gzip: %w", err)
+      }
+
+      // ❌ PROBLEM: Explicit close before defer executes
+      if err := gz.Close(); err != nil {
+          return fmt.Errorf("close gzip: %w", err)
+      }
+
+      return f.Sync()
+  }
+
+  // AFTER (CORRECT - rely on defer only)
+  func WriteGzip(path string, data []byte) error {
+      f, err := os.Create(path)
+      if err != nil {
+          return fmt.Errorf("create file: %w", err)
+      }
+      defer f.Close()
+
+      gz := gzip.NewWriter(f)
+      defer gz.Close()
+
+      if _, err := gz.Write(data); err != nil {
+          return fmt.Errorf("write gzip: %w", err)
+      }
+
+      // Let defer handle gz.Close()
+      // Sync ensures writes are flushed
+      return f.Sync()
+  }
+  ```
+
+  **Same fix for WriteZipSingle**:
+  ```go
+  // BEFORE (INCORRECT)
+  func WriteZipSingle(path, entryName string, data []byte) error {
+      f, err := os.Create(path)
+      if err != nil {
+          return fmt.Errorf("create file: %w", err)
+      }
+      defer f.Close()
+
+      zw := zip.NewWriter(f)
+      defer zw.Close()
+
+      w, err := zw.Create(entryName)
+      if err != nil {
+          return fmt.Errorf("create zip entry: %w", err)
+      }
+
+      if _, err := w.Write(data); err != nil {
+          return fmt.Errorf("write zip entry: %w", err)
+      }
+
+      // ❌ PROBLEM: Explicit close before defer
+      if err := zw.Close(); err != nil {
+          return fmt.Errorf("close zip: %w", err)
+      }
+
+      return f.Sync()
+  }
+
+  // AFTER (CORRECT)
+  func WriteZipSingle(path, entryName string, data []byte) error {
+      f, err := os.Create(path)
+      if err != nil {
+          return fmt.Errorf("create file: %w", err)
+      }
+      defer f.Close()
+
+      zw := zip.NewWriter(f)
+      defer zw.Close()
+
+      w, err := zw.Create(entryName)
+      if err != nil {
+          return fmt.Errorf("create zip entry: %w", err)
+      }
+
+      if _, err := w.Write(data); err != nil {
+          return fmt.Errorf("write zip entry: %w", err)
+      }
+
+      // Let defer handle zw.Close()
+      return f.Sync()
+  }
+  ```
+
+  **Why This Matters**:
+  - Prevents double-close (defer + explicit close)
+  - Simpler code, easier to maintain
+  - Standard Go idiom
+
+  **Validation**:
+  ```bash
+  # Run tests with race detector
+  go test -race ./internal/plugins/sync/...
+
+  # Verify no resource leaks
+  go test -v ./internal/plugins/sync/jsonexport/ -run TestPlugin_Export
+
+  # Manual test: Create large export, verify file is complete
+  ```
+
+  **Success Criteria**: Tests pass with -race flag, no resource leak warnings
+
+  **Effort**: 20 minutes
+  **Risk**: Low - Standard Go idiom correction
+  **Dependencies**: Task 2.1 (helpers extracted)
+
+#### **Task 2.3: Update README Documentation** (Documentation)
+- [ ] **Technical Documentation Architect**: Document new export formats in `README.md`
+
+  **File**: `README.md`
+
+  **Location**: After "Features" section, before "Installation" section
+
+  **Implementation** (Add new section):
+  ```markdown
+  ## Export Formats
+
+  Shelly Manager supports multiple export formats for backing up and sharing device configurations:
+
+  ### Database Backup (`.db`)
+  - **Use Case**: Full system backup including all data
+  - **Format**: SQLite database file
+  - **Compression**: GZIP or ZIP
+  - **Best For**: Disaster recovery, system migration
+
+  ### JSON Export (`.json`)
+  - **Use Case**: Structured data export for processing
+  - **Format**: JSON with devices, templates, and metadata
+  - **Compression**: None, GZIP, or ZIP
+  - **Best For**: API integration, data analysis, automation
+  - **Example**:
+    ```bash
+    curl -X POST http://localhost:8080/api/v1/export/json \
+      -H "Authorization: Bearer $API_KEY" \
+      -d '{"compression_algo": "gzip"}'
+    ```
+
+  ### YAML Export (`.yaml`)
+  - **Use Case**: Human-readable configuration export
+  - **Format**: YAML with devices and templates
+  - **Compression**: None, GZIP, or ZIP
+  - **Best For**: GitOps workflows, manual review, documentation
+  - **Example**:
+    ```bash
+    curl -X POST http://localhost:8080/api/v1/export/yaml \
+      -H "Authorization: Bearer $API_KEY" \
+      -d '{"compression_algo": "none"}'
+    ```
+
+  ### SMA Archive (`.sma`)
+  - **Use Case**: Shelly Manager Archive format
+  - **Format**: Multi-format archive with metadata
+  - **Compression**: Built-in compression
+  - **Best For**: Complete exports with all formats included
+
+  ### Compression Options
+
+  | Algorithm | File Size | Speed | Use Case |
+  |-----------|-----------|-------|----------|
+  | `none` | Largest | Fastest | Small datasets, local storage |
+  | `gzip` | Medium | Medium | General purpose, good balance |
+  | `zip` | Medium | Medium | Windows compatibility |
+
+  **Note**: For hobbyist use, GZIP is recommended for most scenarios.
+  ```
+
+  **Validation**:
+  - Markdown renders correctly on GitHub
+  - Links work (if any added)
+  - Examples are accurate and tested
+
+  **Success Criteria**: Users understand all available export options
+
+  **Effort**: 30 minutes
+  **Risk**: None - Documentation only
+  **Dependencies**: Phase 1 complete (features working)
+
+#### **Task 2.4: Add API Documentation** (Documentation)
+- [ ] **Technical Documentation Architect**: Document export endpoints in `docs/API_EXPORT_IMPORT.md`
+
+  **File**: `docs/API_EXPORT_IMPORT.md`
+
+  **Implementation** (Add to existing document):
+  ```markdown
+  ## Export Endpoints
+
+  ### Create JSON Export
+
+  **Endpoint**: `POST /api/v1/export/json`
+
+  **Request Body**:
+  ```json
+  {
+    "config": {
+      "output_path": "/path/to/exports",
+      "compression_algo": "gzip",  // Options: "none", "gzip", "zip"
+      "pretty": true                // Pretty-print JSON (recommended)
+    },
+    "filters": {
+      "device_ids": ["device1", "device2"],  // Optional: specific devices
+      "include_templates": true               // Optional: include templates
+    }
+  }
+  ```
+
+  **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "export_id": "exp_abc123",
+      "format": "json",
+      "output_path": "/path/to/exports/export_2025-10-16_12-30-00.json.gz",
+      "size_bytes": 15420,
+      "checksum": "sha256:abc123...",
+      "created_at": "2025-10-16T12:30:00Z"
+    },
+    "timestamp": "2025-10-16T12:30:00Z"
+  }
+  ```
+
+  ### Create YAML Export
+
+  **Endpoint**: `POST /api/v1/export/yaml`
+
+  **Request Body**: Same as JSON export (see above)
+
+  **Response**: Same structure as JSON export
+
+  ### Download Export
+
+  **Endpoint**: `GET /api/v1/export/{export_id}/download`
+
+  **Response Headers**:
+  - `Content-Type`: `application/json`, `application/x-yaml`, etc.
+  - `Content-Disposition`: `attachment; filename="export_2025-10-16.json.gz"`
+
+  **Response**: Binary file download
+
+  ### Compression Options
+
+  Set `compression_algo` in the config:
+  - `"none"` - No compression (fastest, largest file)
+  - `"gzip"` - GZIP compression (recommended, good balance)
+  - `"zip"` - ZIP compression (Windows-friendly)
+
+  **Example with cURL**:
+  ```bash
+  # Create GZIP-compressed JSON export
+  curl -X POST http://localhost:8080/api/v1/export/json \
+    -H "Authorization: Bearer $API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "config": {
+        "compression_algo": "gzip",
+        "pretty": true
+      }
+    }'
+
+  # Download export
+  EXPORT_ID="exp_abc123"
+  curl -H "Authorization: Bearer $API_KEY" \
+    "http://localhost:8080/api/v1/export/${EXPORT_ID}/download" \
+    -o export.json.gz
+  ```
+  ```
+
+  **Validation**:
+  - Test all examples with actual API
+  - Verify JSON syntax is valid
+  - Check that response schemas match implementation
+
+  **Success Criteria**: Developers can integrate with export API without reading source code
+
+  **Effort**: 45 minutes
+  **Risk**: None - Documentation only
+  **Dependencies**: Phase 1 complete (API working)
+
+#### **Task 2.5: Add Code Comments for Compression** (Documentation)
+- [ ] **Go Expert**: Add explanatory comments to compression functions
+
+  **Files**:
+  - `internal/plugins/sync/helpers.go` (after Task 2.1)
+  - `internal/api/sync_handlers.go`
+
+  **Implementation**:
+  ```go
+  // In helpers.go - enhance function documentation
+
+  // FileSHA256 calculates the SHA-256 checksum of a file.
+  // Returns hex-encoded string of the checksum.
+  //
+  // Use Case: Verify export integrity, detect file changes
+  // For hobbyist project: SHA-256 provides good balance of speed and security
+  //
+  // Example:
+  //   checksum, err := FileSHA256("/path/to/export.json")
+  //   if err != nil { return err }
+  //   fmt.Printf("Export checksum: %s\n", checksum)
+  func FileSHA256(path string) (string, error) {
+      // ... existing code ...
+  }
+
+  // WriteGzip compresses data using gzip and writes to path.
+  //
+  // Use Case: Reduce file size for JSON/YAML exports (typically 70-80% reduction)
+  // Compression level: Best (level 9) - acceptable for hobbyist use
+  //
+  // Example:
+  //   data := []byte(`{"devices": [...]}`)
+  //   err := WriteGzip("/tmp/export.json.gz", data)
+  func WriteGzip(path string, data []byte) error {
+      // ... existing code ...
+  }
+
+  // WriteZipSingle creates a ZIP archive with a single file entry.
+  // entryName is the name of the file inside the ZIP.
+  //
+  // Use Case: Windows-friendly compression, better for multiple files (future)
+  // Note: For single files, GZIP is more efficient. Use ZIP for Windows compatibility.
+  //
+  // Example:
+  //   data := []byte(`{"devices": [...]}`)
+  //   err := WriteZipSingle("/tmp/export.zip", "export.json", data)
+  func WriteZipSingle(path, entryName string, data []byte) error {
+      // ... existing code ...
+  }
+  ```
+
+  ```go
+  // In sync_handlers.go - add comment for compression query parameter
+
+  // CreateJSONExport creates a JSON export with optional compression.
+  //
+  // Compression options (via config.compression_algo):
+  //   - "none": No compression (fastest, largest file)
+  //   - "gzip": GZIP compression (recommended, 70-80% size reduction)
+  //   - "zip":  ZIP compression (Windows-friendly, similar to gzip)
+  //
+  // Default: "none" for compatibility
+  func (eh *SyncHandlers) CreateJSONExport(w http.ResponseWriter, r *http.Request) {
+      // ... existing code ...
+  }
+  ```
+
+  **Validation**:
+  - Run `go doc` to verify documentation displays correctly
+  - Code review: Check that comments are helpful and accurate
+  - Verify examples compile and make sense
+
+  **Success Criteria**: Code is self-documenting for future maintainers
+
+  **Effort**: 20 minutes
+  **Risk**: None - Documentation only
+  **Dependencies**: Task 2.1 (helpers extracted)
+
+---
+
+## 📊 **Consolidation Fixes - Success Metrics**
+
+### Phase 1 (Critical) Validation Checklist
+- [ ] **All Go files formatted**: `go fmt ./...` shows no changes
+- [ ] **No deprecation warnings**: `go build ./...` completes cleanly
+- [ ] **JSON plugin tests passing**: `go test ./internal/plugins/sync/jsonexport/...` PASS (4+ tests)
+- [ ] **YAML plugin tests passing**: `go test ./internal/plugins/sync/yamlexport/...` PASS (4+ tests)
+- [ ] **Test coverage adequate**: Both plugins >60% coverage
+- [ ] **Accessibility audit passing**: No button-inside-link violations in Vue components
+- [ ] **CI ready**: `make test-ci` passes without failures
+- [ ] **Race detector clean**: `go test -race ./...` passes without warnings
+
+### Phase 2 (Improvements) Validation Checklist
+- [ ] **Code duplication eliminated**: No duplicate helper functions across plugins
+- [ ] **Grep verification**: `grep -r "func fileSHA256" internal/plugins/sync/` shows only helpers.go
+- [ ] **Resource leaks fixed**: `go test -race` passes without warnings
+- [ ] **Documentation complete**: README and API docs updated with export formats
+- [ ] **Code comments added**: All public functions have Go doc comments
+- [ ] **Examples tested**: All code examples in docs are tested and work
+
+---
+
+## 🛡️ **Risk Mitigation**
+
+### Critical Risks (Phase 1)
+- **Risk**: Test creation might reveal bugs in new plugins
+  - **Mitigation**: Use backup_test.go as proven template, focus on smoke tests
+  - **Fallback**: If bugs found, defer commit and fix issues first before proceeding
+
+- **Risk**: strings.Title() replacement might change behavior
+  - **Mitigation**: Create capitalize() function with explicit semantics, test with API call
+  - **Fallback**: If behavior critical, keep strings.Title() temporarily, add TODO comment
+
+- **Risk**: Router-link fix might break navigation
+  - **Mitigation**: Test all navigation paths after change, verify router configuration
+  - **Fallback**: Revert to current implementation if issues found, add accessibility skip rule
+
+### Non-Critical Risks (Phase 2)
+- **Risk**: Helper extraction might break existing functionality
+  - **Mitigation**: Run full test suite after each extraction step, verify all plugins work
+  - **Rollback**: Git revert if tests fail, investigate breakage before re-attempting
+
+- **Risk**: Documentation might become outdated quickly
+  - **Mitigation**: Add documentation review to PR checklist
+  - **Maintenance**: Update docs in same PR as feature changes going forward
+
+---
+
+## 📝 **Notes**
+
+**Commit Strategy**:
+- **Phase 1**: Single atomic commit after all critical fixes complete
+  - Message: `fix: export/import consolidation - critical pre-commit fixes`
+  - Include: Formatting, deprecation fix, new tests, accessibility fix
+- **Phase 2**: Separate commits for each improvement
+  - `refactor: extract duplicate compression helpers`
+  - `fix: correct defer/close pattern in compression functions`
+  - `docs: add export format documentation to README`
+  - `docs: document export API endpoints`
+
+**Testing Strategy**:
+- Run `make test-ci` after Phase 1 completion
+- Run `go test -race ./...` after Phase 2.1 and 2.2
+- Manual testing of export endpoints with curl after Phase 1
+- Test all documented examples during Phase 2.3 and 2.4
+
+**Backward Compatibility**:
+- All changes maintain existing API contracts
+- No breaking changes to plugin interface
+- Existing backup functionality preserved
+- New compression options are opt-in (default behavior unchanged)
+
+**Hobbyist Project Approach**:
+- Focus on practical fixes, avoid over-engineering
+- Simple solutions preferred (e.g., basic capitalize() instead of Unicode library)
+- Tests focus on smoke testing and basic coverage (not exhaustive edge cases)
+- Documentation is helpful but concise (not enterprise-level detail)
+
+---
+
+**Estimated Total Effort**: 4-5 hours (2h critical + 2-3h improvements)
+**Blocking Priority**: Phase 1 MUST complete before commit
+**Recommended Priority**: Phase 2 should complete within 1 week
+**Last Updated**: 2025-10-16
+
+---
 
 ### **HIGH PRIORITY** - Critical Path Items
 
