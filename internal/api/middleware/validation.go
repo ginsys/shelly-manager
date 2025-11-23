@@ -452,14 +452,25 @@ func isSuspiciousUserAgent(userAgent string) bool {
 
 	lower := strings.ToLower(userAgent)
 
-	// Common bot/scanner patterns
+	// Allow common legitimate user agents first
+	legitimatePatterns := []string{
+		"mozilla/", "chrome/", "safari/", "firefox/", "edge/", "opera/",
+		"axios/", "node-fetch", "fetch", "okhttp", "apache-httpclient",
+		"curl/", "wget/", "python-requests", "go-http-client", // Allow standard HTTP clients
+	}
+
+	for _, pattern := range legitimatePatterns {
+		if strings.Contains(lower, pattern) {
+			return false // Explicitly allow these
+		}
+	}
+
+	// Only block actual attack/scanning tools
 	suspiciousPatterns := []string{
 		"sqlmap", "nikto", "nessus", "openvas",
 		"burpsuite", "nmap", "masscan", "zap",
 		"w3af", "skipfish", "arachni", "wpscan",
 		"dirbuster", "dirb", "gobuster", "ffuf",
-		"python-requests", "curl/", "wget/",
-		"scanner", "bot", "crawler", "spider",
 	}
 
 	for _, pattern := range suspiciousPatterns {
@@ -468,8 +479,8 @@ func isSuspiciousUserAgent(userAgent string) bool {
 		}
 	}
 
-	// Check for unusually short or long user agents
-	if len(userAgent) < 10 || len(userAgent) > 500 {
+	// More lenient length check - allow 5-1000 characters
+	if len(userAgent) < 5 || len(userAgent) > 1000 {
 		return true
 	}
 
