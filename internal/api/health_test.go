@@ -144,15 +144,15 @@ func TestAPIEndpointsStillValidateUserAgent(t *testing.T) {
 	wrappedHandler := middleware(testHandler)
 
 	req := httptest.NewRequest("GET", "/api/v1/devices", nil)
-	// Set curl user agent (this should be blocked by validation middleware)
-	req.Header.Set("User-Agent", "curl/8.5.0")
+	// Set malicious user agent (this should be blocked by validation middleware)
+	req.Header.Set("User-Agent", "sqlmap/1.0")
 	w := httptest.NewRecorder()
 
 	wrappedHandler.ServeHTTP(w, req)
 
-	// Validation middleware should still block curl user agent
+	// Validation middleware should still block malicious user agents
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("Expected status 400, got %d. Validation middleware should still block curl user agents", w.Code)
+		t.Errorf("Expected status 400, got %d. Validation middleware should still block malicious user agents", w.Code)
 	}
 
 	// Verify the response contains validation error

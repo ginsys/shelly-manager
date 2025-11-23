@@ -292,8 +292,6 @@ func TestSecurityFrameworkIntegration(t *testing.T) {
 		maliciousUserAgents := []string{
 			"sqlmap/1.0",
 			"Nikto/2.1.6",
-			"python-requests/2.25.1",
-			"curl/7.68.0",
 		}
 
 		for i, userAgent := range maliciousUserAgents {

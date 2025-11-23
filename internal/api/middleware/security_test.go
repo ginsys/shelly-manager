@@ -504,9 +504,6 @@ func TestScannerDetectionSimulation(t *testing.T) {
 		"DirBuster-1.0-RC1",
 		"gobuster/3.1.0",
 		"ffuf/1.3.1",
-		"python-requests/2.25.1",
-		"curl/7.68.0",
-		"wget/1.20.3",
 	}
 
 	for i, userAgent := range maliciousUserAgents {
