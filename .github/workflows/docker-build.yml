@@ -19,7 +19,7 @@ jobs:
       build_needed: ${{ steps.filter.outputs.docker_relevant }}
     steps:
       - name: Checkout repository at triggering ref
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # Use the commit that triggered the Test workflow when workflow_run
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
@@ -89,7 +89,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           # Build images from the same commit that passed tests
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
