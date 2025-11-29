@@ -53,6 +53,8 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 		healthRouter.Use(logging.HTTPMiddleware(logger))
 		healthRouter.HandleFunc("/healthz", handler.Healthz).Methods("GET")
 		healthRouter.HandleFunc("/readyz", handler.Readyz).Methods("GET")
+		// Version endpoint used by UI to detect mismatches
+		healthRouter.HandleFunc("/version", handler.Version).Methods("GET")
 	}
 
 	// WebSocket endpoint with minimal middleware to preserve Hijacker interface

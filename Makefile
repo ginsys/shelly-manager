@@ -36,6 +36,25 @@ build-provisioner:
 run:
 	SHELLY_DEV_EXPOSE_ADMIN_KEY=1 go run ./cmd/shelly-manager server
 
+# One command to refresh UI if needed, then run server
+.PHONY: start
+start:
+	@echo "Checking if UI build is up to date..."
+	@if [ ! -f ui/dist/index.html ]; then \
+			echo "UI dist missing; building UI..."; \
+			$(MAKE) ui-build; \
+		else \
+			DIST_TS=$$(stat -c %Y ui/dist/index.html 2>/dev/null || stat -f %m ui/dist/index.html); \
+			CHANGED=$$(find ui/src ui/index.html ui/vite.config.ts ui/package.json ui/package-lock.json -type f -newermt @$${DIST_TS} | head -n 1); \
+			if [ -n "$$CHANGED" ]; then \
+				echo "UI sources changed since last build; rebuilding UI..."; \
+				$(MAKE) ui-build; \
+			else \
+				echo "UI is up to date."; \
+			fi; \
+		fi
+	$(MAKE) run
+
 # Run the provisioner application
 run-provisioner:
 	go run ./cmd/shelly-provisioner status

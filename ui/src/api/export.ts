@@ -168,6 +168,33 @@ export async function createBackup(req: BackupRequest): Promise<{ backup_id: str
   return res.data.data
 }
 
+// Content export: JSON
+export async function createJSONExport(config: Record<string, any> = {}, filters: Record<string, any> = {}, options: Record<string, any> = {}) {
+  const res = await api.post<APIResponse<any>>('/export/json', { config, filters, options })
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to create JSON export')
+  }
+  return res.data.data
+}
+
+// Content export: YAML (single file)
+export async function createYAMLExport(config: Record<string, any> = {}, filters: Record<string, any> = {}, options: Record<string, any> = {}) {
+  const res = await api.post<APIResponse<any>>('/export/yaml', { config, filters, options })
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to create YAML export')
+  }
+  return res.data.data
+}
+
+// Content export: SMA
+export async function createSMAExport(config: Record<string, any> = {}, filters: Record<string, any> = {}, options: Record<string, any> = {}) {
+  const res = await api.post<APIResponse<any>>('/export/sma', { config, filters, options })
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to create SMA export')
+  }
+  return res.data.data
+}
+
 export async function getBackupResult(id: string): Promise<BackupResult> {
   const res = await api.get<APIResponse<BackupResult>>(`/export/backup/${id}`)
   if (!res.data.success || !res.data.data) {
@@ -181,6 +208,34 @@ export async function downloadBackup(id: string): Promise<Blob> {
     responseType: 'blob'
   })
   return res.data
+}
+
+export async function downloadBackupWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
+  const res = await api.get(`/export/backup/${id}/download`, { responseType: 'blob' })
+  const cd = (res.headers?.['content-disposition'] || res.headers?.['Content-Disposition']) as string | undefined
+  let filename: string | undefined
+  if (cd) {
+    const match = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+    filename = decodeURIComponent((match?.[1] || match?.[2] || '').trim()) || undefined
+  }
+  return { blob: res.data, filename }
+}
+
+// Generic export download (content or backup)
+export async function downloadExport(id: string): Promise<Blob> {
+  const res = await api.get(`/export/${id}/download`, { responseType: 'blob' })
+  return res.data
+}
+
+export async function downloadExportWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
+  const res = await api.get(`/export/${id}/download`, { responseType: 'blob' })
+  const cd = (res.headers?.['content-disposition'] || res.headers?.['Content-Disposition']) as string | undefined
+  let filename: string | undefined
+  if (cd) {
+    const match = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+    filename = decodeURIComponent((match?.[1] || match?.[2] || '').trim()) || undefined
+  }
+  return { blob: res.data, filename }
 }
 
 export async function listBackups(params: ListBackupsParams = {}): Promise<ListBackupsResult> {
@@ -203,9 +258,16 @@ export async function getBackupStatistics(): Promise<BackupStatistics> {
 }
 
 export async function deleteBackup(id: string): Promise<void> {
-  const res = await api.delete<APIResponse<void>>(`/export/backup/${id}`)
-  if (!res.data.success) {
-    throw new Error(res.data.error?.message || 'Failed to delete backup')
+  const res = await api.delete(`/export/backup/${id}`)
+  // Accept 204 No Content or any 2xx
+  if (res.status === 204) return
+  const data = res.data as APIResponse<void> | undefined
+  if (data && data.success === false) {
+    throw new Error(data.error?.message || 'Failed to delete backup')
+  }
+  // If no body, assume success on 2xx
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error('Failed to delete backup')
   }
 }
 
@@ -572,13 +634,7 @@ export interface SMAPreview {
   }
 }
 
-export async function createSMAExport(req: SMAExportRequest): Promise<{ export_id: string }> {
-  const res = await api.post<APIResponse<{ export_id: string }>>('/export/sma', req)
-  if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'Failed to create SMA export')
-  }
-  return res.data.data
-}
+// (deduplicated) createSMAExport is defined once in this file
 
 export async function getSMAExportResult(id: string): Promise<SMAExportResult> {
   const res = await api.get<APIResponse<SMAExportResult>>(`/export/sma/${id}`)

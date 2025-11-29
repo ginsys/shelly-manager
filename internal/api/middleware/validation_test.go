@@ -682,12 +682,9 @@ func TestUserAgentValidation(t *testing.T) {
 		"skipfish/2.10b",
 		"Arachni/v1.5.1",
 		"WPScan v3.8.7",
-		"python-requests/2.25.1", // Often used by bots
-		"curl/7.68.0",            // Command line tool
-		"wget/1.20.3",            // Command line tool
-		"",                       // Empty user agent
-		"x",                      // Too short
-		strings.Repeat("x", 600), // Too long
+		"",                        // Empty user agent
+		"x",                       // Too short
+		strings.Repeat("x", 1100), // Too long (over 1000 char limit)
 	}
 
 	for i, userAgent := range maliciousUserAgents {

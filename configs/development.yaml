@@ -1,28 +1,55 @@
-# Development configuration for Shelly Manager
-# Temporary config to fix IP blocking issue
+# Development Configuration
+# This configuration is optimized for local development
 
-# Web server configuration
 server:
-  port: 8081                 # Development port to avoid conflicts
-  host: "127.0.0.1"         # Only bind to localhost for development
-  log_level: "debug"        # Debug logging for development
+  host: "0.0.0.0"
+  port: 8080
 
-# Application logging configuration  
-logging:
-  level: "debug"            # Debug level for development
-  format: "text"            # Human readable format
-  output: "stdout"          # Console output
-
-# Database configuration
 database:
-  provider: "sqlite"        # SQLite for development
-  dsn: "data/shelly-dev.db" # Separate development database
-  max_open_conns: 1
-  max_idle_conns: 1
-  log_level: "debug"        # Debug database queries
+  provider: sqlite
+  path: data/shelly-dev.db
 
-# Network discovery (reduced scope for development)
-network:
-  discovery_intervals: ["10s"]    # Faster discovery for development
-  subnets: ["127.0.0.0/8"]       # Only localhost subnet for development
-  timeout: 5                     # Short timeout for development
+logging:
+  level: debug
+  format: json
+  output: stdout
+
+discovery:
+  enabled: false
+  networks: []
+
+provisioning:
+  auto: false
+
+metrics:
+  enabled: true
+  prometheus_enabled: true
+  collection_interval: 60
+
+notifications:
+  email:
+    smtp_host: ""
+    smtp_port: 587
+    smtp_user: ""
+    smtp_password: ""
+    from_address: "noreply@localhost"
+    tls: true
+
+security:
+  # Relaxed validation for development
+  validation_test_mode: false  # Keep false to test real validation, but with permissive User-Agent
+  admin_api_key: "dev-admin-key-12345"  # Change this for your environment
+  use_proxy_headers: false
+  trusted_proxies: []
+  cors:
+    allowed_origins: ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
+    allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+    allowed_headers: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"]
+    max_age: 86400
+
+export:
+  output_directory: ./data/exports
+  
+import:
+  upload_directory: ./data/imports
+  max_file_size: 104857600  # 100MB

@@ -2,10 +2,169 @@
   <main style="padding:16px" data-testid="backup-management-page">
     <div class="page-header">
       <h1 data-testid="page-title">Backup Management</h1>
-      <button class="primary-button" @click="showCreateForm = true">
-        💾 Create Backup
-      </button>
     </div>
+
+    <!-- In-page Create Backup Panel -->
+    <section id="create-backup" class="create-section">
+      <h2>Create Backup or Content Export</h2>
+      <div class="grid-2">
+        <div class="form-field">
+          <label class="field-label">Create Type</label>
+          <select v-model="createType" class="form-select">
+            <option value="backup">Backup (Provider Snapshot)</option>
+            <option value="json">Content Export: JSON</option>
+            <option value="yaml">Content Export: YAML</option>
+            <option value="sma">Content Export: SMA</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="field-label">Run Mode</label>
+          <select v-model="runMode" class="form-select">
+            <option value="now">Run Now</option>
+            <option value="schedule">Schedule</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-field">
+          <label class="field-label">Name</label>
+          <input v-model="createName" class="form-input" placeholder="e.g. Pre-maintenance snapshot" />
+        </div>
+        <div class="form-field">
+          <label class="field-label">Description</label>
+          <input v-model="createDesc" class="form-input" placeholder="Optional description" />
+        </div>
+      </div>
+      <!-- Backup options -->
+      <div class="grid-2" v-if="createType === 'backup'">
+        <div class="form-field">
+          <label class="field-label">Compression</label>
+          <select v-model="createCompression" class="form-select">
+            <option value="none">None</option>
+            <option value="gzip">Gzip</option>
+            <option value="zip">Zip</option>
+          </select>
+          <div class="field-help" v-if="providerName">
+            Database: {{ providerName }} {{ providerVersion }}
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="field-label">Output Directory</label>
+          <input v-model="createOutputDir" class="form-input" placeholder="./data/backups" />
+        </div>
+      </div>
+
+      <!-- Schedule options -->
+      <div class="grid-2" v-if="runMode === 'schedule'">
+        <div class="form-field">
+          <label class="field-label">Schedule Interval</label>
+          <select v-model="schedulePreset" class="form-select" @change="applyIntervalPreset">
+            <option value="">Custom…</option>
+            <option value="15 minutes">Every 15 minutes</option>
+            <option value="1 hour">Every hour</option>
+            <option value="6 hours">Every 6 hours</option>
+            <option value="24 hours">Daily</option>
+          </select>
+          <input v-model="scheduleInterval" class="form-input" placeholder="e.g. 1 hour, 24 hours" style="margin-top:8px" />
+          <div class="field-help">Use format like "15 minutes", "1 hour", or "1 day".</div>
+        </div>
+        <div class="form-field">
+          <label class="field-label">Enabled</label>
+          <select v-model="scheduleEnabled" class="form-select">
+            <option :value="true">Enabled</option>
+            <option :value="false">Disabled</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Content export options -->
+      <div class="grid-2" v-if="createType === 'json'">
+        <div class="form-field">
+          <label class="field-label">JSON Options</label>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="jsonOptions.pretty" />
+            <span>Pretty-print JSON</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="jsonOptions.include_discovered" />
+            <span>Include discovered devices</span>
+          </label>
+          <label class="field-label" style="margin-top:8px">Compression</label>
+          <select v-model="jsonCompression" class="form-select">
+            <option value="none">None</option>
+            <option value="gzip">Gzip</option>
+            <option value="zip">Zip</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="field-label">Output Directory</label>
+          <input v-model="exportOutputDir" class="form-input" placeholder="./data/exports" />
+        </div>
+      </div>
+      <div class="grid-2" v-if="createType === 'yaml'">
+        <div class="form-field">
+          <label class="field-label">YAML Options</label>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="yamlOptions.include_discovered" />
+            <span>Include discovered devices</span>
+          </label>
+          <label class="field-label" style="margin-top:8px">Compression</label>
+          <select v-model="yamlCompression" class="form-select">
+            <option value="none">None</option>
+            <option value="gzip">Gzip</option>
+            <option value="zip">Zip</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label class="field-label">Output Directory</label>
+          <input v-model="exportOutputDir" class="form-input" placeholder="./data/exports" />
+        </div>
+      </div>
+      <div class="grid-2" v-if="createType === 'sma'">
+        <div class="form-field">
+          <label class="field-label">SMA Options</label>
+          <div class="grid-2">
+            <div>
+              <label class="field-label">Compression level (1-9)</label>
+              <input class="form-input" type="number" min="1" max="9" v-model.number="smaOptions.compression_level" />
+            </div>
+          </div>
+          <div class="grid-2">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="smaOptions.include_discovered" />
+              <span>Include discovered devices</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="smaOptions.include_network_settings" />
+              <span>Include network settings</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="smaOptions.include_plugin_configs" />
+              <span>Include plugin configurations</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="smaOptions.include_system_settings" />
+              <span>Include system settings</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="smaOptions.exclude_sensitive" />
+              <span>Exclude sensitive data</span>
+            </label>
+          </div>
+          <div class="field-help">SMA exports are compressed archives with integrity data suitable for full content migration.</div>
+        </div>
+        <div class="form-field">
+          <label class="field-label">Output Directory</label>
+          <input v-model="exportOutputDir" class="form-input" placeholder="./data/exports" />
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="primary-button" :disabled="createSubmitting" @click="createBackupPanel">
+          {{ createSubmitting ? 'Creating...' : 'Create' }}
+        </button>
+        <span v-if="createError2" class="form-error" style="margin-left:12px"><strong>Error:</strong> {{ createError2 }}</span>
+      </div>
+    </section>
 
     <!-- Backup Statistics -->
     <section class="stats-section">
@@ -126,8 +285,8 @@
               :disabled="downloading === row.backup_id"
               title="Download backup"
             >
-              <span v-if="downloading === row.backup_id">⏳</span>
-              <span v-else>📥</span>
+              <span v-if="downloading === row.backup_id">⏳ Downloading...</span>
+              <span v-else>⬇ Download</span>
             </button>
             <button 
               v-if="row.success"
@@ -135,7 +294,7 @@
               @click="startRestore(row)"
               title="Restore from backup"
             >
-              📤
+              ↩ Restore
             </button>
             <button 
               class="action-btn delete-btn" 
@@ -149,6 +308,41 @@
       </template>
     </DataTable>
 
+    <!-- Content Exports Table -->
+    <section style="margin-top:24px">
+      <h2>Content Exports (JSON / YAML / SMA)</h2>
+      <DataTable
+        :rows="contentExports"
+        :loading="false"
+        :error="''"
+        :cols="6"
+        :rowKey="(row: any) => row.export_id"
+      >
+        <template #header>
+          <th>Plugin</th>
+          <th>Format</th>
+          <th>Records</th>
+          <th>Size</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </template>
+        <template #row="{ row }">
+          <td>{{ row.plugin_name }}</td>
+          <td><span class="format-badge">{{ row.format?.toUpperCase?.() || row.plugin_name?.toUpperCase?.() }}</span></td>
+          <td>{{ row.record_count ?? '—' }}</td>
+          <td>
+            <span v-if="row.file_size">{{ formatFileSize(row.file_size) }}</span>
+            <span v-else class="no-data">—</span>
+          </td>
+          <td>{{ formatDate(row.created_at) }}</td>
+          <td>
+            <button class="action-btn download-btn" @click="downloadContent(row.export_id)">⬇ Download</button>
+          </td>
+        </template>
+      </DataTable>
+    </section>
+
+
     <!-- Pagination -->
     <PaginationBar
       v-if="meta?.pagination"
@@ -159,18 +353,7 @@
       @update:page="(p: number) => { currentPage = p; fetchBackups() }"
     />
 
-    <!-- Create Backup Form Modal -->
-    <div v-if="showCreateForm" class="modal-overlay" @click="closeCreateModal">
-      <div class="modal-content" @click.stop>
-        <BackupForm
-          :available-devices="availableDevices"
-          :loading="createLoading"
-          :error="createError"
-          @submit="handleCreateBackup"
-          @cancel="closeCreateModal"
-        />
-      </div>
-    </div>
+    <!-- (removed modal-based backup creation; using in-page create panel) -->
 
     <!-- Restore Modal -->
     <div v-if="showRestoreModal" class="modal-overlay" @click="closeRestoreModal">
@@ -295,20 +478,26 @@ import {
   listBackups, 
   getBackupStatistics, 
   createBackup, 
+  createJSONExport,
+  createYAMLExport,
+  createSMAExport,
   deleteBackup, 
-  downloadBackup as downloadBackupFile,
+  downloadBackupWithName,
+  downloadExportWithName,
   previewRestore,
   executeRestore,
   type BackupRequest, 
   type BackupItem, 
   type BackupStatistics,
-  type RestoreRequest,
-  type RestorePreview
-} from '@/api/export'
+    type RestoreRequest,
+    type RestorePreview
+  } from '@/api/export'
+  import { createSchedule, parseInterval, type ExportScheduleRequest } from '@/api/schedule'
+  import { useRoute } from 'vue-router'
+import api from '@/api/client'
 import type { Device, Metadata } from '@/api/types'
 import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
-import BackupForm from '@/components/BackupForm.vue'
 
 // State
 const backups = ref<BackupItem[]>([])
@@ -321,6 +510,25 @@ const statistics = ref<BackupStatistics>({
 })
 const availableDevices = ref<Device[]>([])
 const meta = ref<Metadata>()
+const contentExports = ref<any[]>([])
+// Create Export state
+const showCreateForm = ref(false)
+const createFormat = ref<'json' | 'yaml' | 'sma'>('json')
+const outputDir = ref('./data/exports')
+  const jsonOptions = reactive({ pretty: true, include_discovered: true })
+  const yamlOptions = reactive({ include_discovered: true })
+  const jsonCompression = ref<'none'|'gzip'|'zip'>('none')
+  const yamlCompression = ref<'none'|'gzip'|'zip'>('none')
+const smaOptions = reactive({
+  compression_level: 6,
+  include_discovered: true,
+  include_network_settings: false,
+  include_plugin_configs: true,
+  include_system_settings: true,
+  exclude_sensitive: true,
+})
+const createLoading = ref(false)
+const createError = ref('')
 const loading = ref(false)
 const error = ref('')
 
@@ -333,16 +541,29 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 
 // UI State
-const showCreateForm = ref(false)
-const showRestoreModal = ref(false)
-const createLoading = ref(false)
-const createError = ref('')
+  const showRestoreModal = ref(false)
 const downloading = ref('')
 const deleteConfirm = ref<BackupItem | null>(null)
-const message = reactive({ 
-  text: '', 
-  type: 'success' as 'success' | 'error' 
-})
+  const message = reactive({ 
+    text: '', 
+    type: 'success' as 'success' | 'error' 
+  })
+
+  // In-page create backup state
+  const runMode = ref<'now' | 'schedule'>('now')
+  const createType = ref<'backup' | 'json' | 'yaml' | 'sma'>('backup')
+  const createName = ref('')
+  const createDesc = ref('')
+  const createCompression = ref<'none' | 'gzip' | 'zip'>('gzip')
+  const createOutputDir = ref('./data/backups')
+  const exportOutputDir = ref('./data/exports')
+  const scheduleEnabled = ref(true)
+  const scheduleInterval = ref('24 hours')
+  const schedulePreset = ref('24 hours')
+  const createSubmitting = ref(false)
+  const createError2 = ref('')
+  const providerName = ref('')
+  const providerVersion = ref('')
 
 // Restore state
 const restoreBackup = ref<BackupItem | null>(null)
@@ -371,7 +592,8 @@ function loadInitialData() {
   Promise.all([
     fetchBackups().catch(err => console.warn('Failed to fetch backups:', err)),
     fetchStatistics().catch(err => console.warn('Failed to fetch statistics:', err)),
-    fetchAvailableDevices().catch(err => console.warn('Failed to fetch devices:', err))
+    fetchAvailableDevices().catch(err => console.warn('Failed to fetch devices:', err)),
+    fetchContentExports().catch(err => console.warn('Failed to fetch content exports:', err)),
   ]).catch(err => {
     console.warn('Some data failed to load:', err)
   })
@@ -401,6 +623,72 @@ async function fetchBackups() {
   }
 }
 
+// Fetch content exports (JSON, YAML, SMA)
+async function fetchContentExports() {
+  try {
+    const [jsonList, yamlList, smaList] = await Promise.all([
+      // Reuse export history API via UI helper
+      // Using direct API to filter by plugin
+      api.get('/export/history', { params: { page: 1, page_size: 50, plugin: 'json' } }),
+      api.get('/export/history', { params: { page: 1, page_size: 50, plugin: 'yaml' } }),
+      api.get('/export/history', { params: { page: 1, page_size: 50, plugin: 'sma' } }),
+    ])
+    const extract = (res: any) => (res.data?.data?.history || []).map((x: any) => ({
+      id: x.id,
+      export_id: x.export_id,
+      plugin_name: x.plugin_name,
+      format: x.format,
+      record_count: x.record_count,
+      file_size: x.file_size,
+      created_at: x.created_at,
+      success: x.success,
+    }))
+    contentExports.value = [
+      ...extract(jsonList),
+      ...extract(yamlList),
+      ...extract(smaList),
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  } catch (err) {
+    console.error('Failed to fetch content exports:', err)
+    contentExports.value = []
+  }
+}
+
+function closeCreateModal() {
+  showCreateForm.value = false
+  createError.value = ''
+}
+
+async function createExport() {
+  createLoading.value = true
+  createError.value = ''
+  try {
+    if (createFormat.value === 'json') {
+      await createJSONExport({ output_path: outputDir.value, ...jsonOptions })
+    } else if (createFormat.value === 'yaml') {
+      await createYAMLExport({ output_path: outputDir.value, ...yamlOptions })
+    } else {
+      await createSMAExport(
+        { output_path: outputDir.value, compression_level: smaOptions.compression_level, include_checksums: true },
+        {
+          include_discovered: smaOptions.include_discovered,
+          include_network_settings: smaOptions.include_network_settings,
+          include_plugin_configs: smaOptions.include_plugin_configs,
+          include_system_settings: smaOptions.include_system_settings,
+        },
+        {}
+      )
+    }
+    showMessage('Export created successfully', 'success')
+    closeCreateModal()
+    await fetchContentExports()
+  } catch (err: any) {
+    createError.value = err.message || 'Failed to create export'
+  } finally {
+    createLoading.value = false
+  }
+}
+
 /**
  * Fetch backup statistics
  */
@@ -417,15 +705,15 @@ async function fetchStatistics() {
  */
 async function fetchAvailableDevices() {
   try {
-    // This would normally come from a devices API
-    // For now, using mock data consistent with the form
-    availableDevices.value = [
-      { id: 1, ip: '192.168.1.100', mac: 'aa:bb:cc:dd:ee:01', type: 'shelly1', name: 'Living Room Switch', firmware: '1.14.0', status: 'online', last_seen: new Date().toISOString() },
-      { id: 2, ip: '192.168.1.101', mac: 'aa:bb:cc:dd:ee:02', type: 'shelly25', name: 'Kitchen Roller', firmware: '1.14.0', status: 'online', last_seen: new Date().toISOString() },
-      { id: 3, ip: '192.168.1.102', mac: 'aa:bb:cc:dd:ee:03', type: 'shellyplug', name: 'Office Plug', firmware: '1.14.0', status: 'offline', last_seen: new Date().toISOString() }
-    ]
+    const res = await api.get('/devices', { params: { page_size: 1000 } })
+    if (res.data && res.data.success && res.data.data && res.data.data.devices) {
+      availableDevices.value = res.data.data.devices
+    } else {
+      availableDevices.value = []
+    }
   } catch (err) {
     console.error('Failed to load devices:', err)
+    availableDevices.value = []
   }
 }
 
@@ -444,25 +732,121 @@ async function refreshData() {
 /**
  * Handle backup creation
  */
-async function handleCreateBackup(request: BackupRequest) {
-  createLoading.value = true
-  createError.value = ''
-  
+function scrollToCreate() {
+  const el = document.getElementById('create-backup')
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function createBackupPanel() {
+  createSubmitting.value = true
+  createError2.value = ''
   try {
-    const result = await createBackup(request)
-    showMessage(`Backup "${request.name}" created successfully`, 'success')
-    closeCreateModal()
-    
-    // Refresh the list to show new backup
-    await fetchBackups()
-    await fetchStatistics()
-    
-    // Optionally start polling for the backup result
-    pollBackupResult(result.backup_id)
+    // Build a unified ExportRequest for scheduling when needed
+    const buildRequest = () => {
+      const base: any = { plugin_name: '', format: '', config: {}, filters: {}, options: {} }
+      if (createType.value === 'backup') {
+        base.plugin_name = 'backup'
+        base.format = 'sqlite'
+        base.config = {
+          output_path: createOutputDir.value,
+          compression: createCompression.value !== 'none',
+          compression_algo: createCompression.value === 'zip' ? 'zip' : 'gzip',
+          name: createName.value,
+          description: createDesc.value,
+        }
+      } else if (createType.value === 'json') {
+        base.plugin_name = 'json'
+        base.format = 'json'
+        base.config = { output_path: exportOutputDir.value, ...jsonOptions }
+      } else if (createType.value === 'yaml') {
+        base.plugin_name = 'yaml'
+        base.format = 'yaml'
+        base.config = { output_path: exportOutputDir.value, ...yamlOptions }
+      } else if (createType.value === 'sma') {
+        base.plugin_name = 'sma'
+        base.format = 'sma'
+        base.config = { output_path: exportOutputDir.value, compression_level: smaOptions.compression_level, include_checksums: true }
+        base.filters = {
+          include_discovered: smaOptions.include_discovered,
+          include_network_settings: smaOptions.include_network_settings,
+          include_plugin_configs: smaOptions.include_plugin_configs,
+          include_system_settings: smaOptions.include_system_settings,
+        }
+      }
+      return base
+    }
+
+    if (runMode.value === 'schedule') {
+      // Create schedule instead of running immediately
+      const req = buildRequest()
+      const seconds = parseInterval(scheduleInterval.value)
+      const sched: ExportScheduleRequest = {
+        name: createName.value || `${createType.value} schedule`,
+        interval_sec: seconds,
+        enabled: !!scheduleEnabled.value,
+        request: req,
+      }
+      await createSchedule(sched)
+      showMessage('Schedule created successfully', 'success')
+    } else {
+      // Immediate run paths (reuse specific endpoints for consistency)
+      if (createType.value === 'backup') {
+        const payload: any = {
+          name: createName.value,
+          description: createDesc.value,
+          format: 'sqlite',
+          config: { 
+            output_path: createOutputDir.value,
+            compression: createCompression.value !== 'none',
+            compression_algo: createCompression.value === 'zip' ? 'zip' : 'gzip',
+          },
+        }
+        await createBackup(payload)
+        showMessage(`Backup "${createName.value || 'snapshot'}" created successfully`, 'success')
+        await Promise.all([fetchBackups(), fetchStatistics()])
+    } else if (createType.value === 'json') {
+      await createJSONExport({ 
+        output_path: exportOutputDir.value, 
+        ...jsonOptions,
+        compression: jsonCompression.value !== 'none',
+        compression_algo: jsonCompression.value === 'zip' ? 'zip' : 'gzip',
+      })
+      showMessage('JSON export created successfully', 'success')
+      await fetchContentExports()
+    } else if (createType.value === 'yaml') {
+      await createYAMLExport({ 
+        output_path: exportOutputDir.value, 
+        ...yamlOptions,
+        compression: yamlCompression.value !== 'none',
+        compression_algo: yamlCompression.value === 'zip' ? 'zip' : 'gzip',
+      })
+      showMessage('YAML export created successfully', 'success')
+      await fetchContentExports()
+    } else if (createType.value === 'sma') {
+        await createSMAExport(
+          { output_path: exportOutputDir.value, compression_level: smaOptions.compression_level, include_checksums: true },
+          {
+            include_discovered: smaOptions.include_discovered,
+            include_network_settings: smaOptions.include_network_settings,
+            include_plugin_configs: smaOptions.include_plugin_configs,
+            include_system_settings: smaOptions.include_system_settings,
+          },
+          {}
+        )
+        showMessage('SMA export created successfully', 'success')
+        await fetchContentExports()
+      }
+    }
   } catch (err: any) {
-    createError.value = err.message || 'Failed to create backup'
+    createError2.value = err.message || 'Failed to create backup'
   } finally {
-    createLoading.value = false
+    createSubmitting.value = false
+  }
+}
+
+function applyIntervalPreset() {
+  if (schedulePreset.value) {
+    scheduleInterval.value = schedulePreset.value
   }
 }
 
@@ -492,13 +876,13 @@ async function downloadBackup(backupId: string, backupName: string) {
   downloading.value = backupId
   
   try {
-    const blob = await downloadBackupFile(backupId)
+    const { blob, filename } = await downloadBackupWithName(backupId)
     
     // Create download link
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${backupName}-${backupId}.zip`
+    a.download = filename || `${backupName}-${backupId}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -597,14 +981,6 @@ async function performDelete() {
 }
 
 /**
- * Close create modal
- */
-function closeCreateModal() {
-  showCreateForm.value = false
-  createError.value = ''
-}
-
-/**
  * Close restore modal
  */
 function closeRestoreModal() {
@@ -645,8 +1021,48 @@ function formatFileSize(bytes: number): string {
 /**
  * Format date
  */
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleString()
+  function formatDate(dateString: string): string {
+    return new Date(dateString).toLocaleString()
+  }
+
+  const route = useRoute()
+
+  // Fetch provider info to label backup formats appropriately
+  onMounted(async () => {
+    try {
+      const res = await api.get('/version')
+      const data = res.data?.data
+      if (data) {
+        providerName.value = data.database_provider_name || ''
+        providerVersion.value = data.database_provider_version || ''
+      }
+    } catch {}
+
+    // Handle deep-linking to schedule creation
+    const q = route.query as any
+    if (q && (q.schedule === '1' || q.schedule === 'true')) {
+      runMode.value = 'schedule'
+      if (q.type && ['backup','json','yaml','sma'].includes(String(q.type))) {
+        createType.value = q.type
+      }
+      scrollToCreate()
+    }
+  })
+
+// Download a content export (JSON/YAML/SMA)
+async function downloadContent(id: string) {
+  try {
+    const { blob, filename } = await downloadExportWithName(id)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || `export-${id}`
+    a.click()
+    URL.revokeObjectURL(url)
+    showMessage('Export downloaded successfully', 'success')
+  } catch (err: any) {
+    showMessage(err.message || 'Failed to download export', 'error')
+  }
 }
 </script>
 
@@ -755,6 +1171,17 @@ function formatDate(dateString: string): string {
   background: white;
   font-size: 0.875rem;
 }
+
+/* In-page create backup panel styles */
+.create-section { 
+  margin-bottom: 24px; 
+  padding: 16px; 
+  background: #f9fafb; 
+  border: 1px solid #e5e7eb; 
+  border-radius: 6px 
+}
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
+.form-actions { margin-top: 12px; display:flex; align-items:center; gap: 8px }
 
 .filter-actions {
   margin-left: auto;

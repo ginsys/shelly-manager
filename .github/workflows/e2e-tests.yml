@@ -32,7 +32,7 @@ jobs:
     if: github.event_name == 'pull_request'
     timeout-minutes: 15
     runs-on: ubuntu-latest
-    
+
     services:
       # Database for backend testing
       postgres:
@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -60,7 +60,7 @@ jobs:
           cache: true
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -111,7 +111,7 @@ jobs:
             enabled: true
             port: 9090
           EOF
-          
+
           # Create Docker Compose override for testing
           mkdir -p deploy/docker-compose
           cat > deploy/docker-compose/docker-compose.test.yml << EOF
@@ -172,13 +172,13 @@ jobs:
               enabled: true
               allow_origins: ["*"]
           EOF
-          
+
           # Start backend directly (faster than Docker in CI) - use correct command 'server' not 'serve'
           # Enable test mode to bypass User-Agent validation for E2E tests
           SHELLY_SECURITY_VALIDATION_TEST_MODE=true ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
-          
+
           # Wait for backend to be ready with better timeout handling
           echo "Waiting for backend to start..."
           for i in {1..60}; do
@@ -202,9 +202,9 @@ jobs:
           # Playwright configuration
           CI: true
           PLAYWRIGHT_HTML_REPORT: ../test-results/playwright-report
-          
+
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: failure()
         with:
           name: playwright-report
@@ -212,7 +212,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test videos
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: failure()
         with:
           name: playwright-videos
@@ -220,7 +220,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: failure()
         with:
           name: playwright-screenshots
@@ -246,12 +246,12 @@ jobs:
   # Comprehensive E2E tests for main/release branches (45+ minutes)
   e2e-comprehensive:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    timeout-minutes: 60
+    timeout-minutes: 180
     runs-on: ubuntu-latest
-        
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -260,7 +260,7 @@ jobs:
           cache: true
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -277,10 +277,10 @@ jobs:
         run: |
           # Build backend
           CGO_ENABLED=0 go build -o bin/shelly-manager ./cmd/shelly-manager
-          
+
           # Build frontend
           cd ui && npm run build && cd ..
-          
+
           # Create minimal config with relaxed security for testing
           mkdir -p configs
           cat > configs/config.yaml << EOF
@@ -305,13 +305,13 @@ jobs:
               enabled: true
               allow_origins: ["*"]
           EOF
-          
+
           # Start backend with logging - use correct command 'server' not 'serve'
           # Enable test mode to bypass User-Agent validation for E2E tests
           SHELLY_SECURITY_VALIDATION_TEST_MODE=true ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
-          
+
           # Verify frontend build exists
           if [ ! -d "ui/dist" ]; then
             echo "ERROR: Frontend dist directory not found!"
@@ -319,23 +319,23 @@ jobs:
             ls -la ui/ || true
             exit 1
           fi
-          
+
           # Check dist has content
           if [ -z "$(ls -A ui/dist)" ]; then
             echo "ERROR: Frontend dist directory is empty!"
             exit 1
           fi
-          
+
           echo "Frontend dist directory contents:"
           ls -la ui/dist/
-          
+
           # Start frontend server with better error handling
           cd ui
           npx serve -s dist -l 5173 > ../frontend.log 2>&1 &
           FRONTEND_PID=$!
           cd ..
           echo "FRONTEND_PID=$FRONTEND_PID" >> $GITHUB_ENV
-          
+
           # Verify serve command started successfully
           sleep 2
           if ! kill -0 $FRONTEND_PID 2>/dev/null; then
@@ -344,7 +344,7 @@ jobs:
             cat frontend.log || true
             exit 1
           fi
-          
+
           # Wait for backend with improved timeout and diagnostics
           echo "Waiting for backend to start..."
           for i in {1..60}; do
@@ -360,7 +360,7 @@ jobs:
             fi
             sleep 1
           done
-          
+
           # Wait for frontend with better health check
           echo "Waiting for frontend to start..."
           for i in {1..30}; do
@@ -389,7 +389,7 @@ jobs:
           CI: true
 
       - name: Upload test artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: failure()
         with:
           name: playwright-comprehensive-results

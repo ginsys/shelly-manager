@@ -28,6 +28,7 @@ const router = createRouter({
       component: () => import('./pages/ExportSchedulesPage.vue'),
       meta: { title: 'Schedule Management', category: 'export' }
     },
+    // Consolidated: content exports are integrated into Backups & Exports page
     { 
       path: '/export/backup', 
       name: 'export-backup',

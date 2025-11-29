@@ -51,10 +51,13 @@ type ExportHistory struct {
 	ExportID     string    `json:"export_id" gorm:"uniqueIndex"`
 	PluginName   string    `json:"plugin_name" gorm:"index"`
 	Format       string    `json:"format"`
+	Name         string    `json:"name" gorm:"type:text"`
+	Description  string    `json:"description" gorm:"type:text"`
 	RequestedBy  string    `json:"requested_by"`
 	Success      bool      `json:"success" gorm:"index"`
 	RecordCount  int       `json:"record_count"`
 	FileSize     int64     `json:"file_size"`
+	FilePath     string    `json:"file_path,omitempty" gorm:"type:text"`
 	DurationMs   int64     `json:"duration_ms"`
 	ErrorMessage string    `json:"error_message,omitempty" gorm:"type:text"`
 	CreatedAt    time.Time `json:"created_at" gorm:"index"`

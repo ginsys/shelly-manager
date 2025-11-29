@@ -6,6 +6,9 @@ const runtimeBase: string | undefined = (globalThis as any)?.window?.__API_BASE_
 export const api = axios.create({
   baseURL: env.VITE_API_BASE || runtimeBase || '/api/v1',
   timeout: 10000,
+  headers: {
+    'User-Agent': 'Shelly-Manager-UI/1.0 (axios)',
+  },
 })
 
 // Inject bearer admin key if provided (interim auth)

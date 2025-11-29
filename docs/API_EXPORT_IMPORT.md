@@ -200,3 +200,28 @@ Common error codes include `VALIDATION_FAILED`, `INTERNAL_SERVER_ERROR`, and `NO
 
 - To prevent path traversal and accidental exposure, downloads can be restricted to a base directory configured via `export.output_directory`.
 - When set, any requested `output_path` must resolve under this directory; otherwise the API returns `403 FORBIDDEN`.
+### Backup export (Provider snapshot)
+
+The Backup plugin performs a raw database snapshot via the active DB provider.
+
+- SQLite behavior:
+  - `config.compression = false` → output file `*.sqlite`
+  - `config.compression = true`  → output file `*.sqlite.gz`
+  - No `.tar.gz` container; single-file outputs only.
+
+Request example (SQLite):
+
+```
+POST /api/v1/export/backup
+{
+  "name": "Pre-maintenance snapshot",
+  "description": "DB snapshot before changes",
+  "format": "sqlite",
+  "config": {
+    "output_path": "./data/backups",
+    "compression": true
+  }
+}
+```
+
+Note: JSON/YAML/SMA live under “Content Exports” and use the generic export endpoints. The Backup endpoint is for provider-level snapshots only.
