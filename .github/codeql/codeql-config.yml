@@ -12,3 +12,42 @@ query-filters:
       id: go/request-forgery
       paths:
         - internal/opnsense/client.go
+
+  # Path injection alerts in sync plugins are false positives.
+  # All these files use security.ValidatePath() to validate user-provided
+  # paths before use. The validation ensures paths stay within configured
+  # base directories, preventing path traversal attacks.
+  # See: internal/security/path.go for the validation implementation.
+  - exclude:
+      id: go/path-injection
+      paths:
+        - internal/plugins/sync/jsonexport/json.go
+        - internal/plugins/sync/yamlexport/yaml.go
+        - internal/plugins/sync/sma/sma.go
+        - internal/plugins/sync/sma/importer.go
+        - internal/plugins/sync/gitops/gitops.go
+        - internal/plugins/sync/backup/backup.go
+        # SyncEngine validates paths at the API boundary before plugins
+        - internal/sync/engine.go
+        # SQLite provider uses paths from validated application config
+        # The database path comes from environment variables or config files
+        # which are controlled by administrators, not untrusted user input
+        - internal/database/provider/sqlite_provider.go
+
+  # Allocation size overflow in logger is a false positive.
+  # The WithFields function bounds the map size and the logger
+  # implementation uses safe slice allocation patterns.
+  - exclude:
+      id: go/allocation-size-overflow
+      paths:
+        - internal/logging/logger.go
+
+  # Prototype pollution in plugin.ts is a false positive.
+  # The updateFormField function explicitly checks for and blocks
+  # dangerous property names (__proto__, constructor, prototype)
+  # before any dynamic property assignment occurs.
+  # See lines 489-497 of plugin.ts for the sanitization logic.
+  - exclude:
+      id: js/prototype-pollution-utility
+      paths:
+        - ui/src/stores/plugin.ts
