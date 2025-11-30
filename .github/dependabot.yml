@@ -6,6 +6,16 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
+    groups:
+      # Group all golang.org/x/* packages together to catch Go version conflicts
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+      # Group other production dependencies
+      production-deps:
+        dependency-type: "production"
+        exclude-patterns:
+          - "golang.org/x/*"
     open-pull-requests-limit: 10
     reviewers:
       - "ginsys"
@@ -15,7 +25,36 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
-    
+
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+    groups:
+      # Group vite ecosystem to prevent version conflicts
+      vite-ecosystem:
+        patterns:
+          - "vite"
+          - "vitest"
+          - "@vitejs/*"
+          - "@vitest/*"
+      # Group playwright packages
+      playwright:
+        patterns:
+          - "@playwright/*"
+          - "playwright"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "ginsys"
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

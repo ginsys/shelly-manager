@@ -79,9 +79,28 @@ if [[ -f mise.toml ]]; then
 fi
 
 # Run go mod tidy to ensure consistency
+# Use GOTOOLCHAIN=local to prevent go from auto-switching to a newer version
 echo ""
 echo "Running go mod tidy..."
-go mod tidy
+GOTOOLCHAIN=local go mod tidy
+
+# Verify go mod tidy didn't change the Go version (dependency compatibility check)
+ACTUAL_GO=$(grep "^go " go.mod | awk '{print $2}')
+if [[ "$ACTUAL_GO" != "$MAJOR_MINOR" ]]; then
+    echo ""
+    echo "ERROR: go mod tidy changed Go version from $MAJOR_MINOR to $ACTUAL_GO"
+    echo ""
+    echo "This means a dependency requires Go $ACTUAL_GO. Options:"
+    echo "  1. Upgrade to Go $ACTUAL_GO instead"
+    echo "  2. Downgrade the incompatible dependency"
+    echo ""
+    echo "To find which dependency requires the newer version:"
+    echo "  go list -m -f '{{.Path}} requires {{.GoVersion}}' all 2>/dev/null | grep -E 'requires 1\\.(2[4-9]|[3-9])'"
+    echo ""
+    echo "Reverting go.mod changes..."
+    git checkout go.mod go.sum 2>/dev/null || true
+    exit 1
+fi
 
 echo ""
 echo "Done! Go version updated to ${NEW_VERSION}"
