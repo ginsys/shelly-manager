@@ -1,38 +1,100 @@
-# Shelly Manager Docs Index
+# Shelly Manager Documentation
 
-This index bundles the primary API docs for Phase 7.2 work. Each page includes endpoints, payload models, and example flows.
+## Directory Structure
 
-## API Docs
+```
+docs/
+├── api/                 # API reference documentation
+├── guides/              # User guides and tutorials
+├── features/            # Architecture and feature specifications
+├── security/            # Security documentation
+├── testing/             # Testing documentation
+└── development/         # Developer documentation (internal)
+```
 
-- Notification API: API_NOTIFICATION.md
-  - Endpoints for channels, rules, test sends, and history with pagination. Includes rate limits and `min_severity` behavior.
+---
 
-- Export/Import API: API_EXPORT_IMPORT.md
-  - Export/Import preview endpoints with summaries, dry-run and validate-only semantics, schema notes, history & statistics endpoints, and security (admin key + safe downloads).
-  - Filters: `plugin` (case-sensitive), `success` (true/false/1/0/yes/no). Unknown plugin returns empty results.
-  - Pagination: `page` and `page_size` with defaulting (`page<=0`→1, `page_size>100`→20, non-integer → defaults). Pagination metadata returned in `meta.pagination`.
+## API Reference (`api/`)
 
-- Metrics API: METRICS_API.md
-  - Prometheus scrape endpoint, status/enable/disable/collect, dashboard websocket, and `/metrics/test-alert` for emitting test alerts.
+| Document | Description |
+|----------|-------------|
+| [api-overview.md](api/api-overview.md) | Comprehensive overview of all 112+ API endpoints |
+| [openapi.yaml](api/openapi.yaml) | OpenAPI 3.1 specification for code generation |
+| [API_EXPORT_IMPORT.md](api/API_EXPORT_IMPORT.md) | Export/Import API with pagination, filters, dry-run |
+| [API_NOTIFICATION.md](api/API_NOTIFICATION.md) | Notification channels, rules, and history API |
+| [METRICS_API.md](api/METRICS_API.md) | Prometheus metrics, WebSocket, and dashboard API |
 
-## Related
+---
 
-- API Security Framework: API_SECURITY_FRAMEWORK.md
-  - Authentication, authorization, and response standardization used across APIs.
- 
-- Phase 8 Plan: development/PHASE_8_WEB_UI_PLAN.md
-  - SPA roadmap, milestones, and current progress for the new UI.
-  
-- Secrets & Secure Config: SECURITY_SECRETS.md
-  - Using env vars and Kubernetes Secrets for admin key, SMTP/OPNSense credentials, provisioner API key, and safe export downloads (with *_FILE support).
+## User Guides (`guides/`)
 
-- TLS/Proxy Hardening: SECURITY_TLS_PROXY.md
-  - NGINX/Traefik examples for HTTPS enforcement, HSTS, and secure headers.
+| Document | Description |
+|----------|-------------|
+| [export-import-system.md](guides/export-import-system.md) | Complete guide to export/import functionality |
+| [ui-guide.md](guides/ui-guide.md) | Web UI navigation and features guide |
+| [sma-format.md](guides/sma-format.md) | SMA (Shelly Manager Archive) format specification |
 
-- Observability: OBSERVABILITY.md
-  - Response `meta.version`, pagination metadata for list endpoints, request_id propagation, and log fields.
+---
 
-## Admin Operations
+## Architecture & Features (`features/`)
 
-- Admin Key Rotation
-  - `POST /api/v1/admin/rotate-admin-key` (requires current admin key): rotates in-memory key across API/WS/export/import handlers. Useful for emergency key rotation without restart.
+| Document | Description |
+|----------|-------------|
+| [DATABASE_ARCHITECTURE.md](features/DATABASE_ARCHITECTURE.md) | Multi-provider database abstraction (SQLite, PostgreSQL, MySQL) |
+| [DEVICE_CONFIGURATION_ARCHITECTURE.md](features/DEVICE_CONFIGURATION_ARCHITECTURE.md) | Capability-based device configuration system |
+| [EXPORT_PLUGIN_SPECIFICATION.md](features/EXPORT_PLUGIN_SPECIFICATION.md) | Export plugin architecture and development |
+| [BACKUP_FORMAT_SPECIFICATION.md](features/BACKUP_FORMAT_SPECIFICATION.md) | Detailed SMA backup format internals |
+| [PLUGIN_ARCHITECTURE_IMPLEMENTATION.md](features/PLUGIN_ARCHITECTURE_IMPLEMENTATION.md) | Plugin registry and extensibility system |
+
+---
+
+## Security (`security/`)
+
+| Document | Description |
+|----------|-------------|
+| [API_SECURITY_FRAMEWORK.md](security/API_SECURITY_FRAMEWORK.md) | Security middleware, rate limiting, attack detection |
+| [SECURITY_SECRETS.md](security/SECURITY_SECRETS.md) | Environment variables, K8s secrets, credential management |
+| [SECURITY_TLS_PROXY.md](security/SECURITY_TLS_PROXY.md) | NGINX/Traefik TLS termination and hardening |
+| [OBSERVABILITY.md](security/OBSERVABILITY.md) | Logging, request IDs, response metadata |
+
+---
+
+## Testing (`testing/`)
+
+| Document | Description |
+|----------|-------------|
+| [TESTING.md](testing/TESTING.md) | Test commands, coverage, and CI/CD integration |
+| [testing-strategy.md](testing/testing-strategy.md) | Network test isolation and safety patterns |
+| [E2E_DEVELOPMENT_CONFIG.md](testing/E2E_DEVELOPMENT_CONFIG.md) | Optimized E2E test configuration |
+| [E2E_TEST_OPTIMIZATION_PLAN.md](testing/E2E_TEST_OPTIMIZATION_PLAN.md) | E2E performance optimization strategy |
+| [TEST_COVERAGE_IMPROVEMENT.md](testing/TEST_COVERAGE_IMPROVEMENT.md) | Test coverage achievements and metrics |
+
+---
+
+## Developer Documentation (`development/`)
+
+Internal documentation for contributors:
+
+### API Internals
+- `api-response-standardization.md` - JSON response format standard
+- `api-security-architecture.md` - 11-layer security middleware
+- `api-security-configuration.md` - Environment-specific security config
+- `api-security-features.md` - Attack protection patterns
+- `api-security-monitoring.md` - Threat detection and incident response
+
+### Database Providers
+- `mysql-provider-*.md` (4 files) - MySQL provider documentation
+- `postgresql-*.md` (7 files) - PostgreSQL provider documentation
+
+### Planning
+- `PHASE_8_WEB_UI_PLAN.md` - Vue 3 SPA modernization roadmap
+
+---
+
+## Quick Links
+
+- **Admin Key Rotation**: `POST /api/v1/admin/rotate-admin-key`
+- **Health Check**: `GET /healthz`
+- **Readiness**: `GET /readyz`
+- **Prometheus Metrics**: `GET /metrics/prometheus`
+- **WebSocket Metrics**: `GET /metrics/ws`
