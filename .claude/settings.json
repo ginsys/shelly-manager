@@ -159,7 +159,9 @@
       "Bash(CGO_ENABLED=1 go build:*)",
       "Bash(jq:*)",
       "Bash(CGO_ENABLED=1 go test:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(npm view:*)",
+      "WebFetch(domain:vitest.dev)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

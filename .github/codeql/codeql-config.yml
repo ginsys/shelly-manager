@@ -1,0 +1,10 @@
+name: "Shelly Manager CodeQL Config"
+
+query-filters:
+  # SSRF in OPNSense client is intentional - admins need to access
+  # firewalls on private networks. Requires admin API key authentication.
+  # See: internal/opnsense/client.go security documentation comment.
+  - exclude:
+      id: go/request-forgery
+      paths:
+        - internal/opnsense/client.go

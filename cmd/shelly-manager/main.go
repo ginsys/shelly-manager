@@ -667,6 +667,22 @@ func initApp() {
 	// Initialize sync engine and register plugins with it
 	syncEngine = sync.NewSyncEngine(dbManager, logger)
 
+	// Configure base directories for path traversal protection (if set)
+	if cfg.Sync.ImportBaseDir != "" {
+		syncEngine.SetImportBaseDir(cfg.Sync.ImportBaseDir)
+		logger.WithFields(map[string]any{
+			"import_base_dir": cfg.Sync.ImportBaseDir,
+			"component":       "sync_engine",
+		}).Info("Import base directory configured for path validation")
+	}
+	if cfg.Sync.ExportBaseDir != "" {
+		syncEngine.SetExportBaseDir(cfg.Sync.ExportBaseDir)
+		logger.WithFields(map[string]any{
+			"export_base_dir": cfg.Sync.ExportBaseDir,
+			"component":       "sync_engine",
+		}).Info("Export base directory configured for path validation")
+	}
+
 	// Register sync plugins directly with the sync engine using the old interface
 	syncPlugins := []sync.SyncPlugin{
 		backup.NewPlugin(),

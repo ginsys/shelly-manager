@@ -485,23 +485,32 @@ export const usePluginStore = defineStore('plugin', {
      * Update form field value
      */
     updateFormField(field: string, value: any) {
-      // Handle nested field updates (e.g., 'auth.username')
+      // Security: Block prototype pollution attacks
+      // Reject dangerous property names that could pollute Object.prototype
+      const dangerousKeys = ['__proto__', 'constructor', 'prototype']
       const fieldParts = field.split('.')
-      
+
+      // Check if any part of the field path is dangerous
+      if (fieldParts.some(part => dangerousKeys.includes(part))) {
+        console.warn('Blocked potential prototype pollution attempt:', field)
+        return
+      }
+
       if (fieldParts.length === 1) {
         this.configFormData[field] = value
       } else {
         // Create nested object structure
         let current = this.configFormData
         for (let i = 0; i < fieldParts.length - 1; i++) {
-          if (!current[fieldParts[i]]) {
-            current[fieldParts[i]] = {}
+          const part = fieldParts[i]
+          if (!Object.prototype.hasOwnProperty.call(current, part)) {
+            current[part] = {}
           }
-          current = current[fieldParts[i]]
+          current = current[part]
         }
         current[fieldParts[fieldParts.length - 1]] = value
       }
-      
+
       // Revalidate configuration
       this.validateConfiguration()
     },

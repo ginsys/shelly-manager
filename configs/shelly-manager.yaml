@@ -150,3 +150,8 @@ security:
 # Export subsystem configuration (safe download base directory)
 export:
   output_directory: ""              # Optional base dir for generated files. If set, downloads are restricted here.
+
+# Sync subsystem configuration (path traversal protection for import/export)
+sync:
+  import_base_dir: ""               # Optional: restrict file imports to this directory
+  export_base_dir: ""               # Optional: restrict file exports to this directory

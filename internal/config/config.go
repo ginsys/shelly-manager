@@ -139,6 +139,16 @@ type Config struct {
 		// Optional base directory for generated export files. If set, downloads are restricted to this directory.
 		OutputDirectory string `mapstructure:"output_directory"`
 	} `mapstructure:"export"`
+
+	// Sync settings (import/export base directories for path traversal protection)
+	Sync struct {
+		// ImportBaseDir restricts file imports to paths within this directory.
+		// If empty, no restriction is applied.
+		ImportBaseDir string `mapstructure:"import_base_dir"`
+		// ExportBaseDir restricts file exports to paths within this directory.
+		// If empty, no restriction is applied.
+		ExportBaseDir string `mapstructure:"export_base_dir"`
+	} `mapstructure:"sync"`
 }
 
 // Load loads configuration from file
@@ -306,4 +316,8 @@ func setDefaults() {
 
 	// Export defaults
 	viper.SetDefault("export.output_directory", "")
+
+	// Sync defaults (path restriction disabled by default)
+	viper.SetDefault("sync.import_base_dir", "")
+	viper.SetDefault("sync.export_base_dir", "")
 }

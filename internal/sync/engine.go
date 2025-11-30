@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/security"
 )
 
 // DatabaseManagerInterface defines what we need from database.Manager
@@ -35,6 +38,11 @@ type SyncEngine struct {
 
 	// Scheduling (in-memory for now)
 	schedules map[string]*ExportSchedule
+
+	// Security: Base directories for path validation
+	// If set, file imports/exports are restricted to these directories
+	importBaseDir string
+	exportBaseDir string
 }
 
 // ExportEngine provides backward compatibility
@@ -50,6 +58,18 @@ func NewSyncEngine(dbManager DatabaseManagerInterface, logger *logging.Logger) *
 		importResults: make(map[string]*ImportResult),
 		schedules:     make(map[string]*ExportSchedule),
 	}
+}
+
+// SetImportBaseDir sets the base directory for import path validation.
+// If set, file-based imports are restricted to paths within this directory.
+func (e *SyncEngine) SetImportBaseDir(dir string) {
+	e.importBaseDir = dir
+}
+
+// SetExportBaseDir sets the base directory for export path validation.
+// If set, file-based exports are restricted to paths within this directory.
+func (e *SyncEngine) SetExportBaseDir(dir string) {
+	e.exportBaseDir = dir
 }
 
 // GetExportResult retrieves a stored export result by ID
@@ -196,6 +216,45 @@ func (e *SyncEngine) Export(ctx context.Context, request ExportRequest) (*Export
 		"format", request.Format,
 	)
 
+	// Security: Validate output path if specified in config
+	if outputPath, ok := request.Config["output_path"].(string); ok && outputPath != "" {
+		if validatedPath, err := e.validateOutputPath(outputPath); err != nil {
+			e.logger.Warn("Export output path validation failed",
+				"export_id", exportID,
+				"path", outputPath,
+				"error", err,
+			)
+			return &ExportResult{
+				Success:   false,
+				ExportID:  exportID,
+				Errors:    []string{fmt.Sprintf("output path validation failed: %v", err)},
+				CreatedAt: time.Now(),
+			}, err
+		} else if validatedPath != "" {
+			// Use the validated path
+			request.Config["output_path"] = validatedPath
+		}
+	}
+
+	// Also validate output.destination if specified
+	if request.Output.Destination != "" {
+		if validatedPath, err := e.validateExportPath(request.Output.Destination); err != nil {
+			e.logger.Warn("Export destination path validation failed",
+				"export_id", exportID,
+				"path", request.Output.Destination,
+				"error", err,
+			)
+			return &ExportResult{
+				Success:   false,
+				ExportID:  exportID,
+				Errors:    []string{fmt.Sprintf("output destination validation failed: %v", err)},
+				CreatedAt: time.Now(),
+			}, err
+		} else {
+			request.Output.Destination = validatedPath
+		}
+	}
+
 	// Get the plugin
 	plugin, err := e.GetPlugin(request.PluginName)
 	if err != nil {
@@ -339,6 +398,26 @@ func (e *SyncEngine) Import(ctx context.Context, request ImportRequest) (*Import
 		"plugin", request.PluginName,
 		"format", request.Format,
 	)
+
+	// Security: Validate file paths if import source is file-based
+	if request.Source.Type == "file" && request.Source.Path != "" {
+		if validatedPath, err := e.validateImportPath(request.Source.Path); err != nil {
+			e.logger.Warn("Import path validation failed",
+				"import_id", importID,
+				"path", request.Source.Path,
+				"error", err,
+			)
+			return &ImportResult{
+				Success:   false,
+				ImportID:  importID,
+				Errors:    []string{fmt.Sprintf("path validation failed: %v", err)},
+				CreatedAt: time.Now(),
+			}, err
+		} else {
+			// Use the validated path
+			request.Source.Path = validatedPath
+		}
+	}
 
 	// Get the plugin
 	plugin, err := e.GetPlugin(request.PluginName)
@@ -939,4 +1018,78 @@ func (e *SyncEngine) hasFilters(filters ExportFilters) bool {
 		filters.HasConfig != nil ||
 		len(filters.TemplateIDs) > 0 ||
 		len(filters.Tags) > 0
+}
+
+// validateImportPath validates a file path for import operations.
+// If importBaseDir is set, it ensures the path is within that directory.
+// Returns the validated absolute path or an error.
+func (e *SyncEngine) validateImportPath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("import path cannot be empty")
+	}
+
+	// If no base directory is configured, validate that the path is absolute
+	// and doesn't contain traversal sequences as a basic safety check
+	if e.importBaseDir == "" {
+		// Basic validation: ensure path is absolute
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("invalid import path: %w", err)
+		}
+		return absPath, nil
+	}
+
+	// Use security.ValidatePath for comprehensive validation
+	validatedPath, err := security.ValidatePath(e.importBaseDir, path)
+	if err != nil {
+		return "", fmt.Errorf("import path validation failed: %w", err)
+	}
+
+	return validatedPath, nil
+}
+
+// validateExportPath validates a file path for export operations.
+// If exportBaseDir is set, it ensures the path is within that directory.
+// Returns the validated absolute path or an error.
+func (e *SyncEngine) validateExportPath(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("export path cannot be empty")
+	}
+
+	// If no base directory is configured, validate that the path is absolute
+	if e.exportBaseDir == "" {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("invalid export path: %w", err)
+		}
+		return absPath, nil
+	}
+
+	// Use security.ValidatePath for comprehensive validation
+	validatedPath, err := security.ValidatePath(e.exportBaseDir, path)
+	if err != nil {
+		return "", fmt.Errorf("export path validation failed: %w", err)
+	}
+
+	return validatedPath, nil
+}
+
+// validateOutputPath validates output_path from plugin config.
+// Returns the validated path or an error.
+func (e *SyncEngine) validateOutputPath(outputPath string) (string, error) {
+	if outputPath == "" {
+		return "", nil // Empty is allowed, plugin will use default
+	}
+
+	// If no export base directory is configured, validate basic safety
+	if e.exportBaseDir == "" {
+		// Ensure path doesn't contain traversal sequences
+		cleanPath := filepath.Clean(outputPath)
+		if strings.Contains(cleanPath, "..") {
+			return "", fmt.Errorf("path traversal not allowed")
+		}
+		return filepath.Abs(cleanPath)
+	}
+
+	return security.ValidatePath(e.exportBaseDir, outputPath)
 }

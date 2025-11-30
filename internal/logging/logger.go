@@ -130,9 +130,22 @@ func (l *Logger) Close() error {
 
 // WithFields adds structured fields to the logger
 func (l *Logger) WithFields(fields map[string]any) *Logger {
-	args := make([]any, 0, len(fields)*2)
+	// Limit the number of fields to prevent allocation overflow
+	// CodeQL: go/allocation-size-overflow - fixed by capping capacity
+	const maxFields = 1000
+	numFields := len(fields)
+	if numFields > maxFields {
+		numFields = maxFields
+	}
+
+	args := make([]any, 0, numFields*2)
+	count := 0
 	for k, v := range fields {
+		if count >= maxFields {
+			break
+		}
 		args = append(args, k, v)
+		count++
 	}
 
 	return &Logger{

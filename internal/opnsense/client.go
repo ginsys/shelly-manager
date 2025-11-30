@@ -35,7 +35,14 @@ type ClientConfig struct {
 	InsecureSkipVerify bool          `json:"insecure_skip_verify"`
 }
 
-// NewClient creates a new OPNSense API client
+// NewClient creates a new OPNSense API client.
+//
+// Security Note: The host parameter is provided by admin configuration via
+// the export API which requires admin authentication. Administrators legitimately
+// need to connect to OPNSense firewalls on private networks (e.g., 10.x.x.x,
+// 192.168.x.x). This is intentional design, not a vulnerability.
+//
+// CodeQL: go/request-forgery - dismissed as acceptable risk (admin-only endpoint)
 func NewClient(config ClientConfig, logger *logging.Logger) (*Client, error) {
 	if config.Host == "" {
 		return nil, fmt.Errorf("host is required")

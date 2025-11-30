@@ -38,11 +38,10 @@ on:
 
 jobs:
   # Fast E2E tests for both PRs and pushes (~10-15 minutes)
-  # Non-blocking: failures don't prevent PR merges (flaky tests being fixed)
+  # E2E tests block PR merges - flakiness issues have been resolved
   e2e-dev:
     timeout-minutes: 20
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - name: Checkout repository

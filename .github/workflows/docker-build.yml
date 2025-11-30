@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:  # Allow manual triggering
 
+# Security: Explicitly declare minimum required permissions
+# CodeQL: actions/missing-workflow-permissions - fixed
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ginsys
