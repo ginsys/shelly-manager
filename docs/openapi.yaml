@@ -1,0 +1,2787 @@
+openapi: 3.1.0
+info:
+  title: Shelly Manager API
+  description: |
+    Comprehensive API for managing Shelly smart home devices.
+
+    Features include:
+    - Device discovery and management
+    - Configuration templates and drift detection
+    - Export/Import in multiple formats (JSON, YAML, SMA, GitOps)
+    - Real-time metrics via WebSocket
+    - Multi-channel notifications
+    - Provisioner agent management
+  version: 1.0.0
+  contact:
+    name: Shelly Manager
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://shelly.example.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health and readiness endpoints
+  - name: Devices
+    description: Device management operations
+  - name: Configuration
+    description: Device configuration management
+  - name: Templates
+    description: Configuration templates
+  - name: Drift
+    description: Configuration drift detection
+  - name: Export
+    description: Export and backup operations
+  - name: Import
+    description: Import and restore operations
+  - name: Notifications
+    description: Notification channels and rules
+  - name: Metrics
+    description: Metrics and monitoring
+  - name: Provisioning
+    description: Device discovery and provisioning
+  - name: Admin
+    description: Administrative operations
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    # Common Response Wrapper
+    APIResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          $ref: '#/components/schemas/APIError'
+        meta:
+          $ref: '#/components/schemas/Metadata'
+        timestamp:
+          type: string
+          format: date-time
+        request_id:
+          type: string
+
+    APIError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - BAD_REQUEST
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - METHOD_NOT_ALLOWED
+            - CONFLICT
+            - VALIDATION_FAILED
+            - RATE_LIMIT_EXCEEDED
+            - REQUEST_TOO_LARGE
+            - INTERNAL_SERVER_ERROR
+            - DEVICE_NOT_FOUND
+            - DEVICE_OFFLINE
+            - CONFIGURATION_ERROR
+            - TEMPLATE_ERROR
+        message:
+          type: string
+        details:
+          type: object
+
+    Metadata:
+      type: object
+      properties:
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        count:
+          type: integer
+        total_count:
+          type: integer
+        version:
+          type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+        has_next:
+          type: boolean
+        has_previous:
+          type: boolean
+
+    # Device Models
+    Device:
+      type: object
+      properties:
+        id:
+          type: integer
+        ip:
+          type: string
+          format: ipv4
+        mac:
+          type: string
+          pattern: '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+        type:
+          type: string
+          example: SHSW-1
+        name:
+          type: string
+        firmware:
+          type: string
+        status:
+          type: string
+          enum: [online, offline, unknown]
+        last_seen:
+          type: string
+          format: date-time
+        settings:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - mac
+
+    DeviceCreate:
+      type: object
+      properties:
+        ip:
+          type: string
+          format: ipv4
+        mac:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        firmware:
+          type: string
+        settings:
+          type: object
+      required:
+        - mac
+
+    DeviceUpdate:
+      type: object
+      properties:
+        ip:
+          type: string
+          format: ipv4
+        name:
+          type: string
+        firmware:
+          type: string
+        settings:
+          type: object
+
+    DeviceControl:
+      type: object
+      properties:
+        action:
+          type: string
+          example: toggle
+        params:
+          type: object
+      required:
+        - action
+
+    # Configuration Models
+    DeviceConfig:
+      type: object
+      properties:
+        id:
+          type: integer
+        device_id:
+          type: integer
+        template_id:
+          type: integer
+        config:
+          type: object
+        last_synced:
+          type: string
+          format: date-time
+        sync_status:
+          type: string
+          enum: [synced, pending, error, drift]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # Template Models
+    ConfigTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        device_type:
+          type: string
+        generation:
+          type: integer
+          enum: [0, 1, 2]
+        config:
+          type: object
+        variables:
+          type: object
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ConfigTemplateCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        device_type:
+          type: string
+        generation:
+          type: integer
+        config:
+          type: object
+        variables:
+          type: object
+        is_default:
+          type: boolean
+      required:
+        - name
+        - config
+
+    ApplyTemplateRequest:
+      type: object
+      properties:
+        template_id:
+          type: integer
+        variables:
+          type: object
+      required:
+        - template_id
+
+    PreviewTemplateRequest:
+      type: object
+      properties:
+        template:
+          type: string
+        variables:
+          type: object
+      required:
+        - template
+
+    # Drift Models
+    ConfigDrift:
+      type: object
+      properties:
+        device_id:
+          type: integer
+        device_name:
+          type: string
+        last_synced:
+          type: string
+          format: date-time
+        drift_detected:
+          type: string
+          format: date-time
+        differences:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigDifference'
+        requires_action:
+          type: boolean
+
+    ConfigDifference:
+      type: object
+      properties:
+        path:
+          type: string
+        expected:
+          type: object
+        actual:
+          type: object
+        type:
+          type: string
+          enum: [added, removed, modified]
+        severity:
+          type: string
+          enum: [critical, warning, info]
+        category:
+          type: string
+          enum: [security, network, device, system, metadata]
+        description:
+          type: string
+        impact:
+          type: string
+        suggestion:
+          type: string
+
+    DriftSchedule:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        cron:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # Export/Import Models
+    ExportRequest:
+      type: object
+      properties:
+        plugin_name:
+          type: string
+          enum: [json, yaml, sma, gitops]
+        format:
+          type: string
+        config:
+          type: object
+        filters:
+          $ref: '#/components/schemas/ExportFilters'
+        output:
+          $ref: '#/components/schemas/OutputConfig'
+        options:
+          $ref: '#/components/schemas/ExportOptions'
+
+    ExportFilters:
+      type: object
+      properties:
+        device_ids:
+          type: array
+          items:
+            type: integer
+        device_types:
+          type: array
+          items:
+            type: string
+        time_range:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+
+    OutputConfig:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [file, webhook, database]
+        path:
+          type: string
+
+    ExportOptions:
+      type: object
+      properties:
+        compression:
+          type: string
+          enum: [gzip, zip, none]
+        include_metadata:
+          type: boolean
+        encryption:
+          type: object
+          properties:
+            algorithm:
+              type: string
+            key_path:
+              type: string
+
+    ExportResult:
+      type: object
+      properties:
+        id:
+          type: string
+        plugin_name:
+          type: string
+        format:
+          type: string
+        output_path:
+          type: string
+        file_size:
+          type: integer
+          format: int64
+        record_count:
+          type: integer
+        duration_ms:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [pending, success, failed]
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    ImportRequest:
+      type: object
+      properties:
+        plugin_name:
+          type: string
+        format:
+          type: string
+        source:
+          $ref: '#/components/schemas/ImportSource'
+        config:
+          type: object
+        options:
+          $ref: '#/components/schemas/ImportOptions'
+
+    ImportSource:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [file, webhook, database]
+        path:
+          type: string
+        url:
+          type: string
+
+    ImportOptions:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+        validate_only:
+          type: boolean
+        skip_errors:
+          type: boolean
+
+    ImportResult:
+      type: object
+      properties:
+        id:
+          type: string
+        plugin_name:
+          type: string
+        format:
+          type: string
+        records_imported:
+          type: integer
+        records_skipped:
+          type: integer
+        records_deleted:
+          type: integer
+        status:
+          type: string
+          enum: [success, partial, failed]
+        errors:
+          type: array
+          items:
+            type: string
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportChange'
+        duration_ms:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+
+    ImportChange:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [create, update, delete]
+        entity:
+          type: string
+        id:
+          type: string
+        before:
+          type: object
+        after:
+          type: object
+
+    BackupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        format:
+          type: string
+          default: sma
+        devices:
+          type: array
+          items:
+            type: integer
+        config:
+          type: object
+        filters:
+          $ref: '#/components/schemas/ExportFilters'
+        options:
+          $ref: '#/components/schemas/ExportOptions'
+
+    ExportSchedule:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        cron:
+          type: string
+        plugin_name:
+          type: string
+        format:
+          type: string
+        config:
+          type: object
+        last_run_at:
+          type: string
+          format: date-time
+        next_run_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    # Notification Models
+    NotificationChannel:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [email, webhook, slack, discord]
+        enabled:
+          type: boolean
+        config:
+          type: object
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    NotificationChannelCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [email, webhook, slack, discord]
+        enabled:
+          type: boolean
+          default: true
+        config:
+          type: object
+        description:
+          type: string
+      required:
+        - name
+        - type
+        - config
+
+    NotificationRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        channel_id:
+          type: integer
+        alert_level:
+          type: string
+          enum: [critical, warning, info, all]
+        min_severity:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+        device_filter:
+          type: object
+        min_interval_minutes:
+          type: integer
+        max_per_hour:
+          type: integer
+        schedule_enabled:
+          type: boolean
+        schedule_start:
+          type: string
+        schedule_end:
+          type: string
+        schedule_days:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # Provisioner Models
+    ProvisionerAgent:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        last_seen:
+          type: string
+          format: date-time
+        capabilities:
+          type: array
+          items:
+            type: string
+
+    ProvisioningTask:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        device_id:
+          type: integer
+        agent_id:
+          type: string
+        config:
+          type: object
+        result:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DiscoverRequest:
+      type: object
+      properties:
+        network:
+          type: string
+        import_config:
+          type: boolean
+
+    # Metrics Models
+    DashboardMetrics:
+      type: object
+      properties:
+        devices_online:
+          type: integer
+        devices_offline:
+          type: integer
+        drift_detected:
+          type: integer
+        recent_exports:
+          type: integer
+        recent_imports:
+          type: integer
+        notifications_sent:
+          type: integer
+
+    # Health Models
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, unhealthy]
+
+    VersionInfo:
+      type: object
+      properties:
+        version:
+          type: string
+        build:
+          type: string
+        go_version:
+          type: string
+
+paths:
+  # Health Endpoints
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      operationId: healthz
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      operationId: readyz
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /version:
+    get:
+      tags: [Health]
+      summary: Get API version
+      operationId: getVersion
+      responses:
+        '200':
+          description: Version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionInfo'
+
+  # Device Endpoints
+  /api/v1/devices:
+    get:
+      tags: [Devices]
+      summary: List all devices
+      operationId: listDevices
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of devices
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          devices:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Device'
+
+    post:
+      tags: [Devices]
+      summary: Add a new device
+      operationId: addDevice
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreate'
+      responses:
+        '201':
+          description: Device created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Device'
+
+  /api/v1/devices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    get:
+      tags: [Devices]
+      summary: Get a device by ID
+      operationId: getDevice
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Device details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Device'
+        '404':
+          description: Device not found
+
+    put:
+      tags: [Devices]
+      summary: Update a device
+      operationId: updateDevice
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceUpdate'
+      responses:
+        '200':
+          description: Device updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Device'
+
+    delete:
+      tags: [Devices]
+      summary: Delete a device
+      operationId: deleteDevice
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '204':
+          description: Device deleted
+
+  /api/v1/devices/{id}/control:
+    post:
+      tags: [Devices]
+      summary: Control a device
+      operationId: controlDevice
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceControl'
+      responses:
+        '200':
+          description: Control action executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/status:
+    get:
+      tags: [Devices]
+      summary: Get device status
+      operationId: getDeviceStatus
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Device status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/energy:
+    get:
+      tags: [Devices]
+      summary: Get device energy metrics
+      operationId: getDeviceEnergy
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Energy metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Configuration Endpoints
+  /api/v1/devices/{id}/config:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    get:
+      tags: [Configuration]
+      summary: Get device configuration
+      operationId: getDeviceConfig
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Device configuration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeviceConfig'
+
+    put:
+      tags: [Configuration]
+      summary: Update device configuration
+      operationId: updateDeviceConfig
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/current:
+    get:
+      tags: [Configuration]
+      summary: Get current live configuration from device
+      operationId: getCurrentDeviceConfig
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Current device configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/drift:
+    get:
+      tags: [Drift]
+      summary: Detect configuration drift
+      operationId: detectConfigDrift
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Drift detection result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ConfigDrift'
+
+  /api/v1/devices/{id}/config/apply-template:
+    post:
+      tags: [Templates]
+      summary: Apply template to device
+      operationId: applyConfigTemplate
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyTemplateRequest'
+      responses:
+        '200':
+          description: Template applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/history:
+    get:
+      tags: [Configuration]
+      summary: Get configuration history
+      operationId: getConfigHistory
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Configuration history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Template Endpoints
+  /api/v1/config/templates:
+    get:
+      tags: [Templates]
+      summary: List configuration templates
+      operationId: listTemplates
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ConfigTemplate'
+
+    post:
+      tags: [Templates]
+      summary: Create a configuration template
+      operationId: createTemplate
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigTemplateCreate'
+      responses:
+        '201':
+          description: Template created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ConfigTemplate'
+
+  /api/v1/config/templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    put:
+      tags: [Templates]
+      summary: Update a template
+      operationId: updateTemplate
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigTemplateCreate'
+      responses:
+        '200':
+          description: Template updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ConfigTemplate'
+
+    delete:
+      tags: [Templates]
+      summary: Delete a template
+      operationId: deleteTemplate
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '204':
+          description: Template deleted
+
+  /api/v1/configuration/preview-template:
+    post:
+      tags: [Templates]
+      summary: Preview template rendering
+      operationId: previewTemplate
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewTemplateRequest'
+      responses:
+        '200':
+          description: Template preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/configuration/validate-template:
+    post:
+      tags: [Templates]
+      summary: Validate template syntax
+      operationId: validateTemplate
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                template:
+                  type: string
+              required:
+                - template
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Drift Detection Endpoints
+  /api/v1/config/drift-schedules:
+    get:
+      tags: [Drift]
+      summary: List drift detection schedules
+      operationId: listDriftSchedules
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of schedules
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DriftSchedule'
+
+    post:
+      tags: [Drift]
+      summary: Create drift detection schedule
+      operationId: createDriftSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriftSchedule'
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DriftSchedule'
+
+  /api/v1/config/drift-schedules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    get:
+      tags: [Drift]
+      summary: Get drift schedule
+      operationId: getDriftSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Schedule details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DriftSchedule'
+
+    put:
+      tags: [Drift]
+      summary: Update drift schedule
+      operationId: updateDriftSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriftSchedule'
+      responses:
+        '200':
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+    delete:
+      tags: [Drift]
+      summary: Delete drift schedule
+      operationId: deleteDriftSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '204':
+          description: Schedule deleted
+
+  /api/v1/config/drift-schedules/{id}/toggle:
+    post:
+      tags: [Drift]
+      summary: Toggle drift schedule enabled state
+      operationId: toggleDriftSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Schedule toggled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/config/drift-reports:
+    get:
+      tags: [Drift]
+      summary: Get drift reports
+      operationId: getDriftReports
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Drift reports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/config/drift-trends:
+    get:
+      tags: [Drift]
+      summary: Get drift trends
+      operationId: getDriftTrends
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Drift trends
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Bulk Operations
+  /api/v1/config/bulk-import:
+    post:
+      tags: [Configuration]
+      summary: Bulk import configurations
+      operationId: bulkImportConfigs
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device_ids:
+                  type: array
+                  items:
+                    type: integer
+                config:
+                  type: object
+      responses:
+        '200':
+          description: Bulk import result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/config/bulk-export:
+    post:
+      tags: [Configuration]
+      summary: Bulk export configurations
+      operationId: bulkExportConfigs
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Bulk export result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/config/bulk-drift-detect:
+    post:
+      tags: [Drift]
+      summary: Bulk drift detection
+      operationId: bulkDetectDrift
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Bulk drift detection result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Export Endpoints
+  /api/v1/export/plugins:
+    get:
+      tags: [Export]
+      summary: List export plugins
+      operationId: listExportPlugins
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of plugins
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/export/plugins/{name}:
+    get:
+      tags: [Export]
+      summary: Get export plugin details
+      operationId: getExportPlugin
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/export/plugins/{name}/schema:
+    get:
+      tags: [Export]
+      summary: Get plugin configuration schema
+      operationId: getExportPluginSchema
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plugin schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/export/backup:
+    post:
+      tags: [Export]
+      summary: Create backup
+      operationId: createBackup
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupRequest'
+      responses:
+        '200':
+          description: Backup created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportResult'
+
+  /api/v1/export/backup/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags: [Export]
+      summary: Get backup details
+      operationId: getBackup
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Backup details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+    delete:
+      tags: [Export]
+      summary: Delete backup
+      operationId: deleteBackup
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '204':
+          description: Backup deleted
+
+  /api/v1/export/backup/{id}/download:
+    get:
+      tags: [Export]
+      summary: Download backup file
+      operationId: downloadBackup
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Backup file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/export:
+    post:
+      tags: [Export]
+      summary: Generic export
+      operationId: createExport
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Export created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportResult'
+
+  /api/v1/export/preview:
+    post:
+      tags: [Export]
+      summary: Preview export
+      operationId: previewExport
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Export preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/export/{id}:
+    get:
+      tags: [Export]
+      summary: Get export result
+      operationId: getExportResult
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Export result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportResult'
+
+  /api/v1/export/{id}/download:
+    get:
+      tags: [Export]
+      summary: Download export file
+      operationId: downloadExport
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Export file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/export/schedules:
+    get:
+      tags: [Export]
+      summary: List export schedules
+      operationId: listExportSchedules
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Export schedules
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ExportSchedule'
+
+    post:
+      tags: [Export]
+      summary: Create export schedule
+      operationId: createExportSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportSchedule'
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportSchedule'
+
+  /api/v1/export/schedules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      tags: [Export]
+      summary: Get export schedule
+      operationId: getExportSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Schedule details
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportSchedule'
+
+    put:
+      tags: [Export]
+      summary: Update export schedule
+      operationId: updateExportSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportSchedule'
+      responses:
+        '200':
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+    delete:
+      tags: [Export]
+      summary: Delete export schedule
+      operationId: deleteExportSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '204':
+          description: Schedule deleted
+
+  /api/v1/export/schedules/{id}/run:
+    post:
+      tags: [Export]
+      summary: Run export schedule manually
+      operationId: runExportSchedule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Schedule run initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/export/history:
+    get:
+      tags: [Export]
+      summary: List export history
+      operationId: listExportHistory
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Export history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/export/statistics:
+    get:
+      tags: [Export]
+      summary: Get export statistics
+      operationId: getExportStatistics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Export statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Import Endpoints
+  /api/v1/import/backup:
+    post:
+      tags: [Import]
+      summary: Restore from backup
+      operationId: restoreBackup
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                backup_path:
+                  type: string
+                config:
+                  type: object
+                options:
+                  $ref: '#/components/schemas/ImportOptions'
+      responses:
+        '200':
+          description: Restore result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ImportResult'
+
+  /api/v1/import/backup/validate:
+    post:
+      tags: [Import]
+      summary: Validate backup file
+      operationId: validateBackup
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                backup_path:
+                  type: string
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/import:
+    post:
+      tags: [Import]
+      summary: Generic import
+      operationId: createImport
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRequest'
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ImportResult'
+
+  /api/v1/import/preview:
+    post:
+      tags: [Import]
+      summary: Preview import
+      operationId: previewImport
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRequest'
+      responses:
+        '200':
+          description: Import preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/import/{id}:
+    get:
+      tags: [Import]
+      summary: Get import result
+      operationId: getImportResult
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ImportResult'
+
+  /api/v1/import/history:
+    get:
+      tags: [Import]
+      summary: List import history
+      operationId: listImportHistory
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Import history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/import/statistics:
+    get:
+      tags: [Import]
+      summary: Get import statistics
+      operationId: getImportStatistics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Import statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Notification Endpoints
+  /api/v1/notifications/channels:
+    get:
+      tags: [Notifications]
+      summary: List notification channels
+      operationId: listNotificationChannels
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of channels
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NotificationChannel'
+
+    post:
+      tags: [Notifications]
+      summary: Create notification channel
+      operationId: createNotificationChannel
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationChannelCreate'
+      responses:
+        '201':
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NotificationChannel'
+
+  /api/v1/notifications/channels/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+
+    put:
+      tags: [Notifications]
+      summary: Update notification channel
+      operationId: updateNotificationChannel
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationChannelCreate'
+      responses:
+        '200':
+          description: Channel updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+    delete:
+      tags: [Notifications]
+      summary: Delete notification channel
+      operationId: deleteNotificationChannel
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '204':
+          description: Channel deleted
+
+  /api/v1/notifications/channels/{id}/test:
+    post:
+      tags: [Notifications]
+      summary: Test notification channel
+      operationId: testNotificationChannel
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/notifications/rules:
+    get:
+      tags: [Notifications]
+      summary: List notification rules
+      operationId: listNotificationRules
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of rules
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NotificationRule'
+
+    post:
+      tags: [Notifications]
+      summary: Create notification rule
+      operationId: createNotificationRule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRule'
+      responses:
+        '201':
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NotificationRule'
+
+  /api/v1/notifications/history:
+    get:
+      tags: [Notifications]
+      summary: Get notification history
+      operationId: getNotificationHistory
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Notification history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Metrics Endpoints
+  /metrics/prometheus:
+    get:
+      tags: [Metrics]
+      summary: Prometheus metrics endpoint
+      operationId: getPrometheusMetrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /metrics/status:
+    get:
+      tags: [Metrics]
+      summary: Get metrics collection status
+      operationId: getMetricsStatus
+      responses:
+        '200':
+          description: Metrics status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /metrics/enable:
+    post:
+      tags: [Metrics]
+      summary: Enable metrics collection
+      operationId: enableMetrics
+      responses:
+        '200':
+          description: Metrics enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /metrics/disable:
+    post:
+      tags: [Metrics]
+      summary: Disable metrics collection
+      operationId: disableMetrics
+      responses:
+        '200':
+          description: Metrics disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /metrics/dashboard:
+    get:
+      tags: [Metrics]
+      summary: Get dashboard metrics
+      operationId: getDashboardMetrics
+      responses:
+        '200':
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DashboardMetrics'
+
+  /metrics/ws:
+    get:
+      tags: [Metrics]
+      summary: WebSocket for real-time metrics
+      operationId: metricsWebSocket
+      description: |
+        WebSocket endpoint for real-time metrics streaming.
+        Connect using a WebSocket client to receive live updates.
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+  /metrics/health:
+    get:
+      tags: [Metrics]
+      summary: Get metrics system health
+      operationId: getMetricsHealth
+      responses:
+        '200':
+          description: Metrics health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /metrics/system:
+    get:
+      tags: [Metrics]
+      summary: Get system metrics
+      operationId: getSystemMetrics
+      responses:
+        '200':
+          description: System metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /metrics/devices:
+    get:
+      tags: [Metrics]
+      summary: Get device metrics
+      operationId: getDeviceMetrics
+      responses:
+        '200':
+          description: Device metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /metrics/drift:
+    get:
+      tags: [Metrics]
+      summary: Get drift summary
+      operationId: getDriftMetrics
+      responses:
+        '200':
+          description: Drift metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /metrics/security:
+    get:
+      tags: [Metrics]
+      summary: Get security metrics
+      operationId: getSecurityMetrics
+      responses:
+        '200':
+          description: Security metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Provisioning Endpoints
+  /api/v1/discover:
+    post:
+      tags: [Provisioning]
+      summary: Discover devices on network
+      operationId: discoverDevices
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoverRequest'
+      responses:
+        '200':
+          description: Discovery results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/provisioning/status:
+    get:
+      tags: [Provisioning]
+      summary: Get provisioning status
+      operationId: getProvisioningStatus
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Provisioning status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/provisioning/provision:
+    post:
+      tags: [Provisioning]
+      summary: Provision discovered devices
+      operationId: provisionDevices
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                devices:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Provisioning result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/provisioner/agents:
+    get:
+      tags: [Provisioning]
+      summary: List provisioner agents
+      operationId: listProvisionerAgents
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProvisionerAgent'
+
+  /api/v1/provisioner/agents/register:
+    post:
+      tags: [Provisioning]
+      summary: Register provisioner agent
+      operationId: registerProvisionerAgent
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionerAgent'
+      responses:
+        '201':
+          description: Agent registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/provisioner/agents/{id}/tasks:
+    get:
+      tags: [Provisioning]
+      summary: Poll tasks for agent
+      operationId: pollAgentTasks
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent tasks
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProvisioningTask'
+
+  /api/v1/provisioner/tasks:
+    get:
+      tags: [Provisioning]
+      summary: List provisioning tasks
+      operationId: listProvisioningTasks
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Provisioning tasks
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProvisioningTask'
+
+    post:
+      tags: [Provisioning]
+      summary: Create provisioning task
+      operationId: createProvisioningTask
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningTask'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProvisioningTask'
+
+  /api/v1/provisioner/tasks/{id}/status:
+    put:
+      tags: [Provisioning]
+      summary: Update task status
+      operationId: updateTaskStatus
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, running, completed, failed]
+                result:
+                  type: object
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/provisioner/discovered-devices:
+    get:
+      tags: [Provisioning]
+      summary: Get discovered devices
+      operationId: getDiscoveredDevices
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Discovered devices
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+    post:
+      tags: [Provisioning]
+      summary: Report discovered devices
+      operationId: reportDiscoveredDevices
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                devices:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Device'
+      responses:
+        '200':
+          description: Devices reported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/provisioner/health:
+    get:
+      tags: [Provisioning]
+      summary: Provisioner health check
+      operationId: getProvisionerHealth
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  # DHCP Endpoint
+  /api/v1/dhcp/reservations:
+    get:
+      tags: [Admin]
+      summary: Get DHCP reservations
+      operationId: getDhcpReservations
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: DHCP reservations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  # Admin Endpoints
+  /api/v1/admin/rotate-admin-key:
+    post:
+      tags: [Admin]
+      summary: Rotate admin API key
+      operationId: rotateAdminKey
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                new_key:
+                  type: string
+              required:
+                - new_key
+      responses:
+        '200':
+          description: Key rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
