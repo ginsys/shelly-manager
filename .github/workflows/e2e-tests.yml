@@ -1,5 +1,8 @@
 name: E2E Tests
 
+permissions:
+  contents: read
+
 # E2E Testing Strategy:
 # - Pull Requests: Fast development tests (Chromium only, ~10-15 minutes)
 # - Push to main/develop: Same fast development tests for quick feedback

@@ -45,6 +45,25 @@ updates:
         patterns:
           - "@playwright/*"
           - "playwright"
+      # Group Vue ecosystem
+      vue-ecosystem:
+        patterns:
+          - "vue"
+          - "vue-router"
+          - "@vue/*"
+          - "pinia"
+      # Group charting libraries
+      charting:
+        patterns:
+          - "echarts"
+          - "chart*"
+      # Group dev tooling
+      dev-tooling:
+        patterns:
+          - "typescript"
+          - "terser"
+          - "jsdom"
+          - "autoprefixer"
     open-pull-requests-limit: 5
     reviewers:
       - "ginsys"
@@ -61,6 +80,11 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
+    groups:
+      # Group all GitHub Actions together
+      all-actions:
+        patterns:
+          - "*"
     open-pull-requests-limit: 5
     reviewers:
       - "ginsys"

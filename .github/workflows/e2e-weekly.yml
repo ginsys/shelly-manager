@@ -1,5 +1,8 @@
 name: E2E Tests (Weekly Comprehensive)
 
+permissions:
+  contents: read
+
 # Comprehensive E2E tests run weekly on Sunday at 2 AM UTC
 # Tests all browsers: Chromium, Firefox, WebKit
 # Duration: ~45+ minutes

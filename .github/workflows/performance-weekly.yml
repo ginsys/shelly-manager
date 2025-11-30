@@ -1,5 +1,8 @@
 name: Performance Tests (Weekly)
 
+permissions:
+  contents: read
+
 # Weekly performance and benchmark tests
 # Runs Saturday 3 AM UTC to catch performance regressions
 
