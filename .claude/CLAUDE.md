@@ -85,6 +85,30 @@ internal/
 - Run `make upgrade-go-version VERSION=X.Y.Z` to upgrade Go version everywhere
 - CI validates Go version consistency before running tests
 
+## 📋 Task Management
+
+All development tasks are tracked in the `tasks/` folder. See [tasks/README.md](../tasks/README.md) for the full index.
+
+**Priority-based Numbering**:
+- **100-199**: CRITICAL - Blocks Commit
+- **200-299**: HIGH - Post-Commit Required
+- **300-399**: MEDIUM - Important Features
+- **400-499**: LOW - Enhancement & Polish
+- **500-599**: DEFERRED - Future Work
+
+**Working on Tasks**:
+1. Before starting work, update the task status to `in-progress`
+2. Update success criteria checkboxes as you complete each item
+3. When done, move the task file to `tasks/archive/` with `done-` prefix
+4. Update `tasks/README.md` to reflect the new status
+5. Keep task content accurate - update implementation details if approach changes
+
+**Creating New Tasks**:
+1. Choose appropriate priority range (100s, 200s, etc.)
+2. Use next available number in that range (leave gaps for insertion)
+3. Follow the template in `tasks/README.md`
+4. Add entry to the index table in `tasks/README.md`
+
 ## 🎯 Success Metrics & Targets
 
 ### Phase 7 Targets
@@ -116,6 +140,7 @@ internal/
 
 ---
 
-**Last Updated**: 2025-09-10  
-**Status**: Phase 6.9 COMPLETED - Major feature implementations achieved  
+**Last Updated**: 2025-11-30
+**Status**: Phase 6.9 COMPLETED - Major feature implementations achieved
 **Next Action**: Complete Phase 7.1 (Export/Import integration) → Begin Phase 7.2 (Notifications)
+**Task Tracking**: See `tasks/` folder for individual task files with priority-based numbering
