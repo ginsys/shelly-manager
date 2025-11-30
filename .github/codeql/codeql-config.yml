@@ -1,5 +1,9 @@
 name: "Shelly Manager CodeQL Config"
 
+# Include custom model extensions for security sanitizers
+model-extensions:
+  - .github/codeql/extensions/security-sanitizers.yml
+
 query-filters:
   # SSRF in OPNSense client is intentional - admins need to access
   # firewalls on private networks. Requires admin API key authentication.

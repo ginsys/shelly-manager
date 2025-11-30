@@ -1,0 +1,36 @@
+# CodeQL model extensions for Shelly Manager
+# Defines custom sanitizers and sinks for security analysis
+
+extensions:
+  - addsTo:
+      pack: codeql/go-all
+      extensible: sourceModel
+    data: []
+
+  - addsTo:
+      pack: codeql/go-all
+      extensible: sinkModel
+    data: []
+
+  - addsTo:
+      pack: codeql/go-all
+      extensible: summaryModel
+    data:
+      # security.ValidatePath sanitizes path traversal attacks
+      # Input: (baseDir, userPath) -> Output: validated absolute path
+      # The function ensures the resolved path is within baseDir
+      - ["github.com/ginsys/shelly-manager/internal/security", "", False, "ValidatePath", "", "Argument[1]", "ReturnValue[0]", "taint", "manual"]
+
+      # security.ValidatePathWithSymlinks also sanitizes paths with symlink resolution
+      - ["github.com/ginsys/shelly-manager/internal/security", "", False, "ValidatePathWithSymlinks", "", "Argument[1]", "ReturnValue[0]", "taint", "manual"]
+
+      # security.SanitizeFilename removes dangerous characters from filenames
+      - ["github.com/ginsys/shelly-manager/internal/security", "", False, "SanitizeFilename", "", "Argument[0]", "ReturnValue", "taint", "manual"]
+
+  - addsTo:
+      pack: codeql/go-all
+      extensible: neutralModel
+    data:
+      # Mark ValidatePath as a barrier/sanitizer for path injection
+      - ["github.com/ginsys/shelly-manager/internal/security", "", False, "ValidatePath", "", "path-injection", "manual"]
+      - ["github.com/ginsys/shelly-manager/internal/security", "", False, "ValidatePathWithSymlinks", "", "path-injection", "manual"]
