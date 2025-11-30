@@ -30,7 +30,7 @@
     "pako": "^2.1.0",
     "pinia": "^2.1.7",
     "quasar": "^2.15.0",
-    "vue": "^3.4.0",
+    "vue": "^3.5.25",
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
