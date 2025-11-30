@@ -76,8 +76,14 @@ internal/
 ## 🛠️ Development Standards
 
 **Testing**: Always run `make test-ci` before commits (matches GitHub Actions exactly)
-**Quality**: Run `go fmt ./...` before all commits
+**Quality**: Run `make fix` to format code and auto-fix lint issues
 **Architecture**: Maintain dual-binary separation, structured logging, comprehensive error handling
+
+**Go Version Management**:
+- `.go-version` is the single source of truth for Go version
+- Run `make check-go-version` to validate consistency across all files
+- Run `make upgrade-go-version VERSION=X.Y.Z` to upgrade Go version everywhere
+- CI validates Go version consistency before running tests
 
 ## 🎯 Success Metrics & Targets
 

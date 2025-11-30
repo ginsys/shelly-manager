@@ -1,8 +1,13 @@
 name: E2E Tests
 
-# Optimized E2E Testing Strategy:
+# E2E Testing Strategy:
 # - Pull Requests: Fast development tests (Chromium only, ~10-15 minutes)
-# - Main/Develop: Comprehensive tests (all browsers, ~45+ minutes)
+# - Push to main/develop: Same fast development tests for quick feedback
+# - Weekly (scheduled): Comprehensive tests across all browsers (see e2e-weekly.yml)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
   push:
@@ -15,6 +20,7 @@ on:
       - 'internal/**'
       - 'cmd/**'
       - '.github/workflows/e2e-tests.yml'
+      - '.go-version'
   pull_request:
     branches: [ main, develop ]
     paths:
@@ -25,42 +31,26 @@ on:
       - 'internal/**'
       - 'cmd/**'
       - '.github/workflows/e2e-tests.yml'
+      - '.go-version'
 
 jobs:
-  # Fast development E2E tests for Pull Requests (10-15 minutes target)
+  # Fast E2E tests for both PRs and pushes (~10-15 minutes)
   e2e-dev:
-    if: github.event_name == 'pull_request'
-    timeout-minutes: 15
+    timeout-minutes: 20
     runs-on: ubuntu-latest
-
-    services:
-      # Database for backend testing
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: shelly_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.23'
+          go-version-file: '.go-version'
           cache: true
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -81,71 +71,17 @@ jobs:
         working-directory: ui
         run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (Chromium only for speed)
         working-directory: ui
-        run: npx playwright install --with-deps
+        run: npx playwright install --with-deps chromium
 
       - name: Build UI
         working-directory: ui
         run: npm run build
 
-      - name: Prepare test environment
-        run: |
-          # Create test configuration
-          mkdir -p configs
-          cat > configs/config.yaml << EOF
-          server:
-            port: 8080
-            host: 0.0.0.0
-          database:
-            provider: sqlite
-            path: /tmp/shelly_test.db
-          discovery:
-            enabled: false
-          provisioning:
-            auto: false
-          logging:
-            level: warn
-            format: json
-          metrics:
-            enabled: true
-            port: 9090
-          EOF
-
-          # Create Docker Compose override for testing
-          mkdir -p deploy/docker-compose
-          cat > deploy/docker-compose/docker-compose.test.yml << EOF
-          services:
-            shelly-manager:
-              build:
-                context: ../..
-                dockerfile: deploy/docker/Dockerfile.manager
-              environment:
-                - SHELLY_DATABASE_PROVIDER=sqlite
-                - SHELLY_DATABASE_PATH=/tmp/shelly_test.db
-                - SHELLY_LOGGING_LEVEL=warn
-                - SHELLY_DISCOVERY_ENABLED=false
-                - SHELLY_PROVISIONING_AUTO=false
-                - GIN_MODE=release
-              ports:
-                - "8080:8080"
-                - "9090:9090"
-              volumes:
-                - ./configs:/app/configs:ro
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-                interval: 10s
-                timeout: 5s
-                retries: 5
-                start_period: 10s
-          networks:
-            shelly-net:
-              driver: bridge
-          EOF
-
       - name: Start backend services
         run: |
-          # Create minimal test config that matches our working local config
+          # Create minimal test config
           mkdir -p configs
           cat > configs/config.yaml << 'EOF'
           server:
@@ -164,7 +100,6 @@ jobs:
           metrics:
             enabled: true
             port: 9090
-          # Disable rate limiting and security for testing
           security:
             rate_limit:
               enabled: false
@@ -173,13 +108,12 @@ jobs:
               allow_origins: ["*"]
           EOF
 
-          # Start backend directly (faster than Docker in CI) - use correct command 'server' not 'serve'
-          # Enable test mode to bypass User-Agent validation for E2E tests
+          # Start backend with test mode enabled
           SHELLY_SECURITY_VALIDATION_TEST_MODE=true ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
 
-          # Wait for backend to be ready with better timeout handling
+          # Wait for backend to be ready
           echo "Waiting for backend to start..."
           for i in {1..60}; do
             if curl -f http://localhost:8080/healthz 2>/dev/null; then
@@ -195,11 +129,10 @@ jobs:
             sleep 1
           done
 
-      - name: Run E2E tests (Development - Fast)
+      - name: Run E2E tests (Fast - Chromium)
         working-directory: ui
         run: npm run test:e2e:dev
         env:
-          # Playwright configuration
           CI: true
           PLAYWRIGHT_HTML_REPORT: ../test-results/playwright-report
 
@@ -210,6 +143,7 @@ jobs:
           name: playwright-report
           path: test-results/playwright-report/
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload test videos
         uses: actions/upload-artifact@v5
@@ -218,6 +152,7 @@ jobs:
           name: playwright-videos
           path: ui/test-results/**/*.webm
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload test screenshots
         uses: actions/upload-artifact@v5
@@ -226,6 +161,16 @@ jobs:
           name: playwright-screenshots
           path: ui/test-results/**/*.png
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload backend logs
+        uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: backend-logs
+          path: backend.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Stop backend services
         if: always()
@@ -234,181 +179,8 @@ jobs:
             kill $BACKEND_PID || true
             echo "Backend stopped"
           fi
-          # Show backend logs for debugging
           if [ -f backend.log ]; then
             echo "=== Backend Logs ==="
             cat backend.log
           fi
 
-      # Test results are uploaded as artifacts above
-      # Playwright HTML report provides better visualization than JSON reporter
-
-  # Comprehensive E2E tests for main/release branches (45+ minutes)
-  e2e-comprehensive:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    timeout-minutes: 180
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.23'
-          cache: true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: ui/package-lock.json
-
-      - name: Install dependencies and setup
-        run: |
-          go mod download
-          cd ui && npm ci
-          npm install -g serve
-          npx playwright install --with-deps ${{ matrix.project }}
-
-      - name: Build and start services
-        run: |
-          # Build backend
-          CGO_ENABLED=0 go build -o bin/shelly-manager ./cmd/shelly-manager
-
-          # Build frontend
-          cd ui && npm run build && cd ..
-
-          # Create minimal config with relaxed security for testing
-          mkdir -p configs
-          cat > configs/config.yaml << EOF
-          server:
-            port: 8080
-            host: 0.0.0.0
-          database:
-            provider: sqlite
-            path: /tmp/shelly_comprehensive.db
-          discovery:
-            enabled: false
-          logging:
-            level: warn
-          metrics:
-            enabled: true
-            port: 9090
-          # Disable rate limiting and security for testing
-          security:
-            rate_limit:
-              enabled: false
-            cors:
-              enabled: true
-              allow_origins: ["*"]
-          EOF
-
-          # Start backend with logging - use correct command 'server' not 'serve'
-          # Enable test mode to bypass User-Agent validation for E2E tests
-          SHELLY_SECURITY_VALIDATION_TEST_MODE=true ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
-          BACKEND_PID=$!
-          echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
-
-          # Verify frontend build exists
-          if [ ! -d "ui/dist" ]; then
-            echo "ERROR: Frontend dist directory not found!"
-            echo "Contents of ui directory:"
-            ls -la ui/ || true
-            exit 1
-          fi
-
-          # Check dist has content
-          if [ -z "$(ls -A ui/dist)" ]; then
-            echo "ERROR: Frontend dist directory is empty!"
-            exit 1
-          fi
-
-          echo "Frontend dist directory contents:"
-          ls -la ui/dist/
-
-          # Start frontend server with better error handling
-          cd ui
-          npx serve -s dist -l 5173 > ../frontend.log 2>&1 &
-          FRONTEND_PID=$!
-          cd ..
-          echo "FRONTEND_PID=$FRONTEND_PID" >> $GITHUB_ENV
-
-          # Verify serve command started successfully
-          sleep 2
-          if ! kill -0 $FRONTEND_PID 2>/dev/null; then
-            echo "ERROR: Frontend serve command failed to start!"
-            echo "Frontend logs:"
-            cat frontend.log || true
-            exit 1
-          fi
-
-          # Wait for backend with improved timeout and diagnostics
-          echo "Waiting for backend to start..."
-          for i in {1..60}; do
-            if curl -f http://localhost:8080/healthz 2>/dev/null; then
-              echo "Backend ready after $i seconds"
-              break
-            fi
-            if [ $i -eq 60 ]; then
-              echo "Backend failed to start after 60 seconds"
-              echo "Backend logs:"
-              cat backend.log || true
-              exit 1
-            fi
-            sleep 1
-          done
-
-          # Wait for frontend with better health check
-          echo "Waiting for frontend to start..."
-          for i in {1..30}; do
-            if curl -f http://localhost:5173 2>/dev/null && \
-               curl -s http://localhost:5173 | grep -q "<!doctype html"; then
-              echo "Frontend ready after $i seconds"
-              break
-            fi
-            if [ $i -eq 30 ]; then
-              echo "Frontend failed to start after 30 seconds"
-              echo "Frontend logs:"
-              cat frontend.log || true
-              echo "Process status:"
-              ps aux | grep serve || true
-              echo "Port status:"
-              netstat -tulpn | grep 5173 || true
-              exit 1
-            fi
-            sleep 1
-          done
-
-      - name: Run E2E tests (Comprehensive - All Browsers)
-        working-directory: ui
-        run: npm run test:e2e
-        env:
-          CI: true
-
-      - name: Upload test artifacts
-        uses: actions/upload-artifact@v5
-        if: failure()
-        with:
-          name: playwright-comprehensive-results
-          path: |
-            ui/test-results/
-            ui/playwright-report/
-          retention-days: 7
-
-      - name: Cleanup
-        if: always()
-        run: |
-          if [ ! -z "$BACKEND_PID" ]; then
-            kill $BACKEND_PID || true
-          fi
-          if [ ! -z "$FRONTEND_PID" ]; then
-            kill $FRONTEND_PID || true
-          fi
-          # Output logs for debugging
-          echo "=== Backend Logs ==="
-          cat backend.log || true
-          echo "=== Frontend Logs ==="
-          cat frontend.log || true

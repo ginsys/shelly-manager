@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -20,6 +21,17 @@ import (
 // Reuse mockSyncPlugin from sync_handlers_result_test.go via package scope
 
 func TestRotateAdminKey_AuthAndPropagation(t *testing.T) {
+	// This test requires the production router (not test-mode) to verify
+	// authentication and key propagation work correctly with full middleware.
+	// Temporarily unset test mode so SetupRoutesWithSecurity returns production router.
+	origTestMode := os.Getenv("SHELLY_SECURITY_VALIDATION_TEST_MODE")
+	os.Unsetenv("SHELLY_SECURITY_VALIDATION_TEST_MODE")
+	defer func() {
+		if origTestMode != "" {
+			os.Setenv("SHELLY_SECURITY_VALIDATION_TEST_MODE", origTestMode)
+		}
+	}()
+
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
 

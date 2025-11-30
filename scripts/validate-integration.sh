@@ -49,11 +49,11 @@ validate_database() {
     fi
 }
 
-# Function to check port availability
+# Function to check port availability (uses ss for portability)
 check_port() {
     local port="$1"
     local service="$2"
-    if netstat -tuln 2>/dev/null | grep ":$port " > /dev/null; then
+    if ss -tuln 2>/dev/null | grep ":$port " > /dev/null; then
         log "Port $port ($service) is in use"
     else
         log "Port $port ($service) is available"

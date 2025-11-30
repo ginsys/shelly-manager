@@ -375,6 +375,8 @@ func SetupTestModeRoutes(handler *Handler, logger *logging.Logger) *mux.Router {
 	if handler != nil {
 		r.HandleFunc("/healthz", handler.FastHealthz).Methods("GET")
 		r.HandleFunc("/readyz", handler.FastHealthz).Methods("GET")
+		// Version endpoint for UI parity
+		r.HandleFunc("/version", handler.Version).Methods("GET")
 	}
 
 	// WebSocket with minimal middleware (if metrics enabled)
@@ -391,6 +393,7 @@ func SetupTestModeRoutes(handler *Handler, logger *logging.Logger) *mux.Router {
 	if handler != nil {
 		// Essential device management routes
 		api.HandleFunc("/devices", handler.GetDevices).Methods("GET", "OPTIONS")
+		api.HandleFunc("/devices", handler.AddDevice).Methods("POST", "OPTIONS")
 		api.HandleFunc("/devices/{id}", handler.GetDevice).Methods("GET", "OPTIONS")
 		api.HandleFunc("/devices/{id}/control", handler.ControlDevice).Methods("POST", "OPTIONS")
 
@@ -413,7 +416,7 @@ func testModeCORSMiddleware(logger *logging.Logger) mux.MiddlewareFunc {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)

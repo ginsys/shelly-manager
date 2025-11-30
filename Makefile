@@ -1,12 +1,10 @@
-.PHONY: build build-manager build-provisioner run run-provisioner clean docker-build docker-build-manager docker-build-provisioner docker-run docker-run-prod docker-stop docker-logs docker-pull docker-dev docker-clean dev-setup deps deps-tidy \
-	lint lint-fix format format-check hooks-install hooks-uninstall \
-	test test-unit test-integration test-full test-full-short \
-	test-race test-race-short test-race-full \
-	test-coverage test-coverage-short test-coverage-full test-coverage-ci test-coverage-check test-coverage-with-check \
-	test-matrix test-ci \
-	ui-dev ui-build ui-preview test-e2e test-e2e-dev test-e2e-dev-ui test-e2e-dev-headed test-smoke validate-integration \
-	test-quick test-critical test-unit-fast test-full-fast test-ci-fast test-e2e-parallel test-env-smoke test-env-integration test-comprehensive \
-	benchmark test-watch example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
+.PHONY: help build build-manager build-provisioner run run-provisioner clean docker-build docker-build-manager docker-build-provisioner docker-run docker-run-prod docker-stop docker-logs docker-pull docker-dev docker-clean dev-setup deps deps-tidy \
+	lint fix hooks-install hooks-uninstall \
+	test test-unit test-integration test-race test-security test-all test-extra \
+	test-coverage test-coverage-ci test-coverage-check \
+	test-ci check-go-version upgrade-go-version \
+	ui-dev ui-build ui-preview test-e2e test-e2e-dev test-e2e-dev-ui test-smoke validate-integration \
+	benchmark example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
 
 BINARY_NAME=shelly-manager
 PROVISIONER_BINARY=shelly-provisioner
@@ -16,6 +14,127 @@ REGISTRY=ghcr.io/ginsys
 MANAGER_IMAGE=shelly-manager
 PROVISIONER_IMAGE=shelly-provisioner
 DOCKER_TAG=latest
+
+# Color definitions for help output
+CYAN := \033[1;36m
+WHITE := \033[1;37m
+YELLOW := \033[0;33m
+GREEN := \033[0;32m
+NC := \033[0m
+
+# ==============================================================================
+# HELP (default target)
+# ==============================================================================
+
+help:
+	@echo ""
+	@echo "$(CYAN)Shelly Manager - Makefile Targets$(NC)"
+	@echo "$(CYAN)==================================$(NC)"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "$(CYAN)BUILD$(NC)"
+	@echo "  $(WHITE)build$(NC)               Build both binaries $(YELLOW)→ build-manager, build-provisioner$(NC)"
+	@echo "  $(WHITE)build-manager$(NC)       Build the manager binary"
+	@echo "  $(WHITE)build-provisioner$(NC)   Build the provisioner binary"
+	@echo ""
+	@echo "$(CYAN)RUN$(NC)"
+	@echo "  $(WHITE)run$(NC)                 Run the manager server (dev mode)"
+	@echo "  $(WHITE)start$(NC)               Build UI if needed, then run server $(YELLOW)→ ui-build?, run$(NC)"
+	@echo "  $(WHITE)run-provisioner$(NC)     Run the provisioner status command"
+	@echo ""
+	@echo "$(CYAN)GO VERSION MANAGEMENT$(NC)"
+	@echo "  $(WHITE)check-go-version$(NC)    Validate Go version consistency across project"
+	@echo "  $(WHITE)upgrade-go-version$(NC)  Upgrade Go version (usage: make upgrade-go-version VERSION=X.Y.Z)"
+	@echo ""
+	@echo "$(CYAN)TESTING$(NC)"
+	@echo "  $(WHITE)test$(NC)                Run basic tests (fast mode, skips network tests)"
+	@echo "  $(WHITE)test-all$(NC)            Run all local tests (Go+UI+security+lint, ~2-3 min)"
+	@echo "  $(WHITE)test-extra$(NC)          Run network tests, E2E, benchmarks (~10-15 min)"
+	@echo "  $(WHITE)test-unit$(NC)           Run unit tests only (internal packages)"
+	@echo "  $(WHITE)test-integration$(NC)    Run integration tests (cmd packages)"
+	@echo "  $(WHITE)test-race$(NC)           Run tests with race detection"
+	@echo "  $(WHITE)test-security$(NC)       Run security tests with production settings"
+	@echo ""
+	@echo "$(CYAN)COVERAGE$(NC)"
+	@echo "  $(WHITE)test-coverage$(NC)       Run tests with coverage report (generates coverage.html)"
+	@echo "  $(WHITE)test-coverage-ci$(NC)    Run tests with coverage for CI (race + atomic)"
+	@echo "  $(WHITE)test-coverage-check$(NC) Check coverage threshold (27.5% minimum)"
+	@echo ""
+	@echo "$(CYAN)CI$(NC)"
+	@echo "  $(WHITE)test-ci$(NC)             Complete CI test suite $(YELLOW)→ check-go-version, deps, test-coverage-ci, test-coverage-check, lint$(NC)"
+	@echo ""
+	@echo "$(CYAN)LINTING & QUALITY$(NC)"
+	@echo "  $(WHITE)lint$(NC)                Run go vet + golangci-lint"
+	@echo "  $(WHITE)fix$(NC)                 Auto-fix formatting and lint issues"
+	@echo ""
+	@echo "$(CYAN)GIT HOOKS$(NC)"
+	@echo "  $(WHITE)hooks-install$(NC)       Install pre-commit hook for formatting/linting"
+	@echo "  $(WHITE)hooks-uninstall$(NC)     Remove pre-commit hook"
+	@echo ""
+	@echo "$(CYAN)BENCHMARKS$(NC)"
+	@echo "  $(WHITE)benchmark$(NC)           Run benchmark tests"
+	@echo ""
+	@echo "$(CYAN)DEPENDENCIES$(NC)"
+	@echo "  $(WHITE)deps$(NC)                Download and verify Go modules"
+	@echo "  $(WHITE)deps-tidy$(NC)           Download and tidy Go modules"
+	@echo ""
+	@echo "$(CYAN)DOCKER$(NC)"
+	@echo "  $(WHITE)docker-build$(NC)             Build both Docker images $(YELLOW)→ docker-build-manager, docker-build-provisioner$(NC)"
+	@echo "  $(WHITE)docker-build-manager$(NC)     Build manager Docker image"
+	@echo "  $(WHITE)docker-build-provisioner$(NC) Build provisioner Docker image"
+	@echo "  $(WHITE)docker-run$(NC)          Run with Docker Compose (development)"
+	@echo "  $(WHITE)docker-run-prod$(NC)     Run with Docker Compose (production)"
+	@echo "  $(WHITE)docker-stop$(NC)         Stop Docker Compose"
+	@echo "  $(WHITE)docker-logs$(NC)         View Docker Compose logs"
+	@echo "  $(WHITE)docker-pull$(NC)         Pull latest images from registry"
+	@echo "  $(WHITE)docker-dev$(NC)          Build and run locally $(YELLOW)→ docker-build, docker-run$(NC)"
+	@echo "  $(WHITE)docker-clean$(NC)        Clean up Docker containers and images"
+	@echo ""
+	@echo "$(CYAN)DEVELOPMENT & SETUP$(NC)"
+	@echo "  $(WHITE)dev-setup$(NC)           Initial development setup $(YELLOW)→ hooks-install$(NC)"
+	@echo "  $(WHITE)clean$(NC)               Clean build artifacts and test outputs"
+	@echo "  $(WHITE)clean-all$(NC)           Aggressive cleanup including Go caches $(YELLOW)→ clean$(NC)"
+	@echo ""
+	@echo "$(CYAN)UI (VITE)$(NC)"
+	@echo "  $(WHITE)ui-deps$(NC)             Install UI dependencies"
+	@echo "  $(WHITE)ui-dev$(NC)              Run Vite dev server $(YELLOW)→ ui-deps$(NC)"
+	@echo "  $(WHITE)ui-build$(NC)            Build UI to ui/dist $(YELLOW)→ ui-deps$(NC)"
+	@echo "  $(WHITE)ui-preview$(NC)          Preview built UI"
+	@echo ""
+	@echo "$(CYAN)E2E TESTING$(NC)"
+	@echo "  $(WHITE)test-e2e$(NC)            Run E2E tests (all browsers)"
+	@echo "  $(WHITE)test-e2e-dev$(NC)        Run E2E tests (Chromium-only, faster)"
+	@echo "  $(WHITE)test-e2e-dev-ui$(NC)     Run E2E tests in UI mode (interactive)"
+	@echo "  $(WHITE)test-smoke$(NC)          Run smoke tests for quick feedback"
+	@echo "  $(WHITE)validate-integration$(NC) Validate E2E integration pipeline"
+	@echo ""
+	@echo "$(CYAN)CLI EXAMPLES$(NC)"
+	@echo "  $(WHITE)example-list$(NC)        List devices"
+	@echo "  $(WHITE)example-discover$(NC)    Discover devices on network"
+	@echo "  $(WHITE)example-provision$(NC)   Provision devices"
+	@echo "  $(WHITE)example-provisioner-status$(NC)    Show provisioner status"
+	@echo "  $(WHITE)example-provisioner-scan$(NC)      Scan for access points"
+	@echo "  $(WHITE)example-provisioner-provision$(NC) Provision with WiFi (usage: make ... SSID=x PASS=y)"
+	@echo ""
+	@echo "$(CYAN)RECOMMENDED WORKFLOWS$(NC)"
+	@echo "  test-all           $(YELLOW)→$(NC) Recommended before every commit"
+	@echo "  test-extra         $(YELLOW)→$(NC) Network/E2E tests (combine with test-all for full coverage)"
+	@echo ""
+	@echo "$(CYAN)DEPENDENCY OVERVIEW$(NC)"
+	@echo "  build              $(YELLOW)→$(NC) build-manager, build-provisioner"
+	@echo "  start              $(YELLOW)→$(NC) ui-build (if needed) $(YELLOW)→$(NC) ui-deps $(YELLOW)→$(NC) run"
+	@echo "  test-ci            $(YELLOW)→$(NC) check-go-version $(YELLOW)→$(NC) deps $(YELLOW)→$(NC) test-coverage-ci $(YELLOW)→$(NC) test-coverage-check $(YELLOW)→$(NC) lint"
+	@echo "  test-coverage      $(YELLOW)→$(NC) generates coverage.out, coverage.html"
+	@echo "  test-coverage-ci   $(YELLOW)→$(NC) generates coverage.out, coverage.html"
+	@echo "  test-coverage-check $(YELLOW)→$(NC) requires coverage.out"
+	@echo "  docker-build       $(YELLOW)→$(NC) docker-build-manager, docker-build-provisioner"
+	@echo "  docker-dev         $(YELLOW)→$(NC) docker-build $(YELLOW)→$(NC) docker-run"
+	@echo "  dev-setup          $(YELLOW)→$(NC) hooks-install"
+	@echo "  clean-all          $(YELLOW)→$(NC) clean"
+	@echo "  ui-dev             $(YELLOW)→$(NC) ui-deps"
+	@echo "  ui-build           $(YELLOW)→$(NC) ui-deps"
+	@echo ""
 
 # ==============================================================================
 # BUILD COMMANDS
@@ -60,68 +179,58 @@ run-provisioner:
 	go run ./cmd/shelly-provisioner status
 
 # ==============================================================================
+# GO VERSION MANAGEMENT
+# ==============================================================================
+
+# Check Go version consistency across all project files
+check-go-version:
+	@./scripts/check-go-version.sh
+
+# Upgrade Go version in all project files (usage: make upgrade-go-version VERSION=1.24.0)
+upgrade-go-version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Usage: make upgrade-go-version VERSION=1.24.0"; \
+		exit 1; \
+	fi
+	@./scripts/upgrade-go-version.sh $(VERSION)
+
+# ==============================================================================
 # BASIC TEST COMMANDS
 # ==============================================================================
 
-# Run basic tests (fast mode, skips network tests)
+# Run basic tests (fast mode, skips network tests, test mode enabled)
 test:
-	CGO_ENABLED=1 go test -v -short ./...
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./...
 
 # Run unit tests only (internal packages)
 test-unit:
-	CGO_ENABLED=1 go test -v -short ./internal/...
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./internal/...
 
 # Run integration tests (cmd packages)
 test-integration:
-	CGO_ENABLED=1 go test -v -short ./cmd/...
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./cmd/...
 
-# Run full test suite including network tests (slower, with timeout)
-test-full:
-	CGO_ENABLED=1 go test -v -timeout=5m ./...
-
-# Run full test suite with short flag (faster, skips network tests)
-test-full-short:
-	CGO_ENABLED=1 go test -v -short -timeout=5m ./...
-
-# ==============================================================================
-# RACE DETECTION TESTS
-# ==============================================================================
-
-# Run tests with race detection (short mode, default)
+# Run tests with race detection
 test-race:
-	CGO_ENABLED=1 go test -v -short -race ./...
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -race ./...
 
-# Run tests with race detection (short mode, explicit)
-test-race-short:
-	CGO_ENABLED=1 go test -v -short -race ./...
-
-# Run full tests with race detection (including network tests, with timeout)
-test-race-full:
-	CGO_ENABLED=1 go test -v -race -timeout=10m ./...
+# Run security-focused tests WITHOUT test mode (validates actual security behavior)
+test-security:
+	@echo "Running security tests with production-like security settings..."
+	CGO_ENABLED=1 go test -v -short -run "Security|Auth|Validation" ./...
 
 # ==============================================================================
 # COVERAGE TESTS
 # ==============================================================================
 
-# Run tests with coverage report (short mode)
+# Run tests with coverage report (local development)
 test-coverage:
-	CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
-# Run tests with coverage report (short mode, explicit)
-test-coverage-short:
-	CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "Short coverage report generated: coverage.html"
-
-# Run full coverage including network tests (with timeout)
-test-coverage-full:
-	CGO_ENABLED=1 go test -v -timeout=5m -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
-	@echo "Full coverage report generated: coverage.html"
-
 # Run tests with coverage for CI (race detection + atomic mode)
+# NOTE: Does NOT use test mode - runs against full security router to test all routes
 test-coverage-ci:
 	CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...
 	go tool cover -html=coverage.out -o coverage.html
@@ -140,78 +249,90 @@ test-coverage-check:
 	fi; \
 	echo "Coverage $${COVERAGE}% meets threshold $${THRESHOLD}%"
 
-# Generate coverage and check threshold in one step
-test-coverage-with-check: test-coverage-ci test-coverage-check
-
 # ==============================================================================
-# CI/MATRIX TESTS
+# CI TESTS
 # ==============================================================================
-
-# Run matrix tests (race detection, short mode)
-test-matrix:
-	@echo "Running matrix tests with race detection and short mode..."
-	@if [ "$(shell uname)" = "Darwin" ] && [ "$(shell go version | grep -o 'go1\.22')" = "go1.22" ]; then \
-		echo "macOS Go 1.22 detected - suppressing linker warnings"; \
-		CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-w" go test -v -race -short ./...; \
-	else \
-		CGO_ENABLED=1 go test -v -race -short ./...; \
-	fi
 
 # Complete CI test suite - matches GitHub Actions test.yml workflow exactly
 # This is the most important test to run locally before committing
 test-ci:
 	@echo "Running complete CI test suite (matches GitHub Actions)..."
-	@echo "Step 1/4: Installing dependencies..."
+	@echo "Step 1/5: Validating Go version consistency..."
+	$(MAKE) check-go-version
+	@echo "Step 2/5: Installing dependencies..."
 	$(MAKE) deps
-	@echo "Step 2/4: Running tests with coverage and race detection..."
+	@echo "Step 3/5: Running tests with coverage and race detection..."
 	$(MAKE) test-coverage-ci
-	@echo "Step 3/4: Checking coverage threshold..."
+	@echo "Step 4/5: Checking coverage threshold..."
 	$(MAKE) test-coverage-check
-	@echo "Step 4/4: Running linting..."
-	$(MAKE) lint-ci
+	@echo "Step 5/5: Running linting..."
+	$(MAKE) lint
 	@echo "✅ All CI tests passed! Ready to commit."
+
+# ==============================================================================
+# COMPREHENSIVE LOCAL TEST TARGETS
+# ==============================================================================
+
+# Run all important tests locally (fast, no network, ~2-3 min)
+# Use this before committing - covers Go, UI, security, lint
+test-all:
+	@echo "=== Running comprehensive local tests (~2-3 min) ==="
+	@echo ""
+	@echo "Step 1/6: Validating Go version..."
+	$(MAKE) check-go-version
+	@echo ""
+	@echo "Step 2/6: Running Go tests with race detection + coverage..."
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -race -short -coverprofile=coverage.out -covermode=atomic ./...
+	@echo ""
+	@echo "Step 3/6: Running security tests (production settings)..."
+	$(MAKE) test-security
+	@echo ""
+	@echo "Step 4/6: Running frontend unit tests (vitest)..."
+	cd ui && npx vitest run --coverage
+	@echo ""
+	@echo "Step 5/6: Running Go lint..."
+	$(MAKE) lint
+	@echo ""
+	@echo "Step 6/6: Checking coverage threshold..."
+	$(MAKE) test-coverage-check
+	@echo ""
+	@echo "✅ All local tests passed!"
+
+# Run network tests, E2E, and benchmarks (~10-15 min)
+# Use separately or combine with test-all: make test-all test-extra
+test-extra:
+	@echo "=== Running extra tests (network, E2E, benchmarks) ==="
+	@echo ""
+	@echo "Step 1/3: Running Go tests with network (no -short flag)..."
+	CGO_ENABLED=1 go test -race -timeout=10m ./...
+	@echo ""
+	@echo "Step 2/3: Running E2E tests (Chromium only)..."
+	$(MAKE) test-e2e-dev
+	@echo ""
+	@echo "Step 3/3: Running benchmarks..."
+	$(MAKE) benchmark
+	@echo ""
+	@echo "✅ Extra tests passed!"
 
 # ==============================================================================
 # LINTING AND QUALITY
 # ==============================================================================
 
-# Run comprehensive linting (gofmt, go vet, golangci-lint)
+# Run comprehensive linting (go vet + golangci-lint) - used by CI
 lint:
-	@echo "Running go fmt..."
-	go fmt ./...
 	@echo "Running go vet..."
 	go vet ./...
 	@echo "Running golangci-lint..."
 	golangci-lint run --timeout=5m
 
-# Run golangci-lint exactly as CI does (requires golangci-lint to be installed)
-lint-ci:
-	@echo "Running golangci-lint (same as CI)..."
-	golangci-lint run --timeout=5m
-
-# Run golangci-lint (requires golangci-lint to be installed)
-lint-fix:
-	@echo "Running golangci-lint with auto-fix..."
-	golangci-lint run --fix
-
-# Format code (gofmt + goimports)
-format:
+# Fix all auto-fixable issues (format + lint fixes)
+fix:
 	@echo "Running go fmt..."
 	go fmt ./...
 	@echo "Running goimports..."
-	goimports -w .
-
-# Check if code is properly formatted
-format-check:
-	@echo "Checking if code is properly formatted..."
-	@UNFORMATTED=$$(gofmt -l .); \
-	if [ -n "$$UNFORMATTED" ]; then \
-		echo "The following files are not properly formatted:"; \
-		echo "$$UNFORMATTED"; \
-		echo "Please run 'make format' to fix them."; \
-		exit 1; \
-	fi
-	@echo "All files are properly formatted."
+	goimports -w . 2>/dev/null || echo "goimports not installed, skipping"
+	@echo "Running golangci-lint with auto-fix..."
+	golangci-lint run --fix --timeout=5m
 
 # Install git pre-commit hook for automatic formatting
 hooks-install:
@@ -262,7 +383,7 @@ hooks-install:
 	@echo '' >> .git/hooks/pre-commit
 	@echo '# Run complete lint suite (same as CI)' >> .git/hooks/pre-commit
 	@echo 'echo -e "$${YELLOW}Running complete lint suite (same as CI)...$${NC}"' >> .git/hooks/pre-commit
-	@echo 'if ! make lint-ci; then' >> .git/hooks/pre-commit
+	@echo 'if ! make lint; then' >> .git/hooks/pre-commit
 	@echo '    echo -e "$${RED}Linting failed. Please fix issues before committing.$${NC}"' >> .git/hooks/pre-commit
 	@echo '    exit 1' >> .git/hooks/pre-commit
 	@echo 'fi' >> .git/hooks/pre-commit
@@ -285,11 +406,7 @@ hooks-uninstall:
 
 # Run benchmarks (fast mode)
 benchmark:
-	CGO_ENABLED=1 go test -v -short -bench=. ./...
-
-# Watch mode for tests (requires entr: brew install entr)
-test-watch:
-	find . -name "*.go" | entr -c make test-unit
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -bench=. ./...
 
 # ==============================================================================
 # DEPENDENCY MANAGEMENT
@@ -300,9 +417,8 @@ deps:
 	go mod download
 	go mod verify
 
-# Install dependencies and tidy
+# Tidy dependencies (download + cleanup unused)
 deps-tidy:
-	go mod download
 	go mod tidy
 
 # ==============================================================================
@@ -404,7 +520,11 @@ example-provisioner-scan:
 	./$(BUILD_DIR)/$(PROVISIONER_BINARY) scan-ap
 
 example-provisioner-provision:
-	./$(BUILD_DIR)/$(PROVISIONER_BINARY) provision "MyWiFi" "password123"
+	@if [ -z "$(SSID)" ] || [ -z "$(PASS)" ]; then \
+		echo "Usage: make example-provisioner-provision SSID=YourNetwork PASS=YourPassword"; \
+		exit 1; \
+	fi
+	./$(BUILD_DIR)/$(PROVISIONER_BINARY) provision "$(SSID)" "$(PASS)"
 # ==============================================================================
 # UI (Vite) COMMANDS
 # ==============================================================================
@@ -444,11 +564,6 @@ test-e2e-dev-ui:
 	@echo "Starting E2E tests in UI mode with development configuration..."
 	@cd ui && npm run test:e2e:dev:ui
 
-# Run E2E tests with development configuration in headed mode (visible browser)
-test-e2e-dev-headed:
-	@echo "Running E2E tests in headed mode with development configuration..."
-	@cd ui && npm run test:e2e:dev:headed
-
 # Run smoke tests for quick feedback (essential tests only)
 test-smoke:
 	@./scripts/test-smoke.sh
@@ -456,65 +571,3 @@ test-smoke:
 # Validate E2E integration pipeline after configuration changes
 validate-integration:
 	@./scripts/validate-integration.sh
-
-# ==============================================================================
-# OPTIMIZED TEST TARGETS (E2E Performance Improvements)
-# ==============================================================================
-
-# Quick test suite (smoke + critical tests, optimized for speed)
-test-quick:
-	@echo "Running quick test suite (smoke + critical tests)..."
-	@cd ui && npm run test:e2e:quick
-
-# Critical path tests only (most important functionality)
-test-critical:
-	@echo "Running critical path tests..."
-	@cd ui && npm run test:e2e:critical
-
-# Database-optimized unit tests (uses in-memory SQLite with GORM optimizations)
-test-unit-fast:
-	@echo "Running unit tests with database optimizations..."
-	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./internal/...
-
-# Full optimized test suite (all tests with performance optimizations)
-test-full-fast:
-	@echo "Running full optimized test suite..."
-	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -timeout=3m ./...
-
-# Fast CI test suite (optimized for CI environments)
-test-ci-fast:
-	@echo "Running fast CI test suite with all optimizations..."
-	@echo "Step 1/4: Installing dependencies..."
-	$(MAKE) deps
-	@echo "Step 2/4: Running optimized tests with coverage..."
-	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...
-	@echo "Step 3/4: Checking coverage threshold..."
-	$(MAKE) test-coverage-check
-	@echo "Step 4/4: Running linting..."
-	$(MAKE) lint-ci
-	@echo "✅ All fast CI tests passed! Ready to commit."
-
-# E2E tests with parallel execution and browser optimizations
-test-e2e-parallel:
-	@echo "Running E2E tests with parallel execution..."
-	@cd ui && PLAYWRIGHT_WORKERS=2 npx playwright test --workers=2
-
-# Test runner for different environments
-test-env-smoke:
-	@echo "Running smoke tests for environment validation..."
-	@./scripts/test-smoke.sh
-
-test-env-integration:
-	@echo "Running integration validation..."
-	@./scripts/validate-integration.sh
-
-# Comprehensive test with all optimizations enabled
-test-comprehensive:
-	@echo "Running comprehensive test suite with all optimizations..."
-	@echo "=== Backend Tests (Optimized) ==="
-	$(MAKE) test-unit-fast
-	@echo "=== E2E Tests (Parallel) ==="
-	$(MAKE) test-e2e-parallel
-	@echo "=== Smoke Tests ==="
-	$(MAKE) test-smoke
-	@echo "✅ All comprehensive tests completed!"

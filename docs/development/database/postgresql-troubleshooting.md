@@ -33,8 +33,8 @@ telnet postgres-host 5432
 # or
 nc -zv postgres-host 5432
 
-# Check if PostgreSQL is listening
-netstat -tlnp | grep 5432
+# Check if PostgreSQL is listening (use ss; netstat may not be available)
+ss -tlnp | grep 5432
 ```
 
 **3. Check PostgreSQL Configuration**

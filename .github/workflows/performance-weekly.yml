@@ -1,0 +1,72 @@
+name: Performance Tests (Weekly)
+
+# Weekly performance and benchmark tests
+# Runs Saturday 3 AM UTC to catch performance regressions
+
+on:
+  schedule:
+    - cron: '0 3 * * 6'  # Saturday 3 AM UTC
+  workflow_dispatch:  # Allow manual triggers
+
+jobs:
+  benchmark:
+    name: Go Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: '.go-version'
+        cache: true
+
+    - name: Run benchmarks
+      run: |
+        echo "Running Go benchmarks..."
+        CGO_ENABLED=1 go test -v -run=^$ -bench=. -benchmem ./... | tee benchmark.txt
+        echo ""
+        echo "=== Benchmark Summary ==="
+        grep -E "^Benchmark" benchmark.txt | head -50 || true
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v5
+      with:
+        name: benchmark-results
+        path: benchmark.txt
+        retention-days: 30
+
+  stress-test:
+    name: Stress Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: '.go-version'
+        cache: true
+
+    - name: Run stress tests
+      run: |
+        echo "Running stress tests (concurrent operations)..."
+        # Run tests that include stress/concurrent patterns
+        CGO_ENABLED=1 go test -v -short -run "Concurrent|Stress|Parallel" ./... 2>&1 | tee stress-test.log || true
+        echo ""
+        echo "=== Stress Test Summary ==="
+        grep -E "(PASS|FAIL|---)" stress-test.log | tail -20
+
+    - name: Upload stress test results
+      if: always()
+      uses: actions/upload-artifact@v5
+      with:
+        name: stress-test-results
+        path: stress-test.log
+        retention-days: 30

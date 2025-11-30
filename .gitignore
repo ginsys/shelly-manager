@@ -79,3 +79,4 @@ ui/.nyc_output/
 # Vitest artifacts
 **/coverage/
 ui/coverage.xml
+node_modules/

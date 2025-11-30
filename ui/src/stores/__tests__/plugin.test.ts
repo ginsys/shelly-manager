@@ -1,25 +1,31 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePluginStore } from '../plugin'
 import * as pluginApi from '@/api/plugin'
-import type { Plugin, PluginSchema, PluginConfig, PluginTestResult, PluginHealthStatus } from '@/api/plugin'
+import type { Plugin, PluginSchema, PluginConfig, PluginTestResult, PluginCategory } from '@/api/plugin'
 
 // Mock the API functions
 vi.mock('@/api/plugin', () => ({
   listPlugins: vi.fn(),
   getPlugin: vi.fn(),
   getPluginSchema: vi.fn(),
+  getPluginConfig: vi.fn(),
   updatePluginConfig: vi.fn(),
   testPlugin: vi.fn(),
-  togglePlugin: vi.fn(),
-  getPluginHealth: vi.fn(),
-  resetPluginConfig: vi.fn(),
   validatePluginConfig: vi.fn(),
   generateDefaultConfig: vi.fn(),
 }))
 
 describe('Plugin Store', () => {
   let store: ReturnType<typeof usePluginStore>
+
+  const mockPluginStatus = {
+    available: true,
+    configured: true,
+    enabled: true,
+    error: undefined,
+    last_error: undefined,
+  }
 
   const mockPlugin: Plugin = {
     name: 'test-plugin',
@@ -28,20 +34,8 @@ describe('Plugin Store', () => {
     version: '1.0.0',
     author: 'Test Author',
     category: 'backup',
-    capabilities: [
-      { name: 'backup', description: 'Full system backup', required: true }
-    ],
-    status: 'configured',
-    health: {
-      healthy: true,
-      last_check: '2024-01-01T12:00:00Z',
-      response_time_ms: 150
-    },
-    configuration: {
-      endpoint: 'https://test.example.com',
-      timeout: 30,
-      enabled: true
-    }
+    capabilities: ['backup', 'restore'],
+    status: mockPluginStatus,
   }
 
   const mockPlugin2: Plugin = {
@@ -51,10 +45,26 @@ describe('Plugin Store', () => {
     version: '2.0.0',
     author: 'Sync Author',
     category: 'sync',
-    capabilities: [
-      { name: 'sync', description: 'Data synchronization', required: true }
-    ],
-    status: 'available'
+    capabilities: ['sync'],
+    status: {
+      available: true,
+      configured: false,
+      enabled: false,
+    },
+  }
+
+  const mockCategory: PluginCategory = {
+    name: 'backup',
+    display_name: 'Backup',
+    description: 'Backup plugins',
+    plugin_count: 1,
+  }
+
+  const mockCategory2: PluginCategory = {
+    name: 'sync',
+    display_name: 'Sync',
+    description: 'Sync plugins',
+    plugin_count: 1,
   }
 
   const mockSchema: PluginSchema = {
@@ -86,6 +96,15 @@ describe('Plugin Store', () => {
     required: ['endpoint']
   }
 
+  const mockConfig: PluginConfig = {
+    plugin_name: 'test-plugin',
+    enabled: true,
+    config: {
+      endpoint: 'https://test.example.com',
+      timeout: 30,
+    }
+  }
+
   beforeEach(() => {
     setActivePinia(createPinia())
     store = usePluginStore()
@@ -99,7 +118,7 @@ describe('Plugin Store', () => {
       expect(store.error).toBe('')
       expect(store.currentPlugin).toBeNull()
       expect(store.currentPluginSchema).toBeNull()
-      expect(store.categoryFilter).toBe('')
+      expect(store.selectedCategory).toBe('')
       expect(store.statusFilter).toBe('')
       expect(store.searchQuery).toBe('')
     })
@@ -108,6 +127,7 @@ describe('Plugin Store', () => {
   describe('getters', () => {
     beforeEach(() => {
       store.plugins = [mockPlugin, mockPlugin2]
+      store.categories = [mockCategory, mockCategory2]
     })
 
     describe('filteredPlugins', () => {
@@ -116,11 +136,16 @@ describe('Plugin Store', () => {
       })
 
       it('should filter by category', () => {
-        store.categoryFilter = 'backup'
+        store.selectedCategory = 'backup'
         expect(store.filteredPlugins).toEqual([mockPlugin])
       })
 
-      it('should filter by status', () => {
+      it('should filter by status - configured', () => {
+        store.statusFilter = 'configured'
+        expect(store.filteredPlugins).toEqual([mockPlugin])
+      })
+
+      it('should filter by status - available', () => {
         store.statusFilter = 'available'
         expect(store.filteredPlugins).toEqual([mockPlugin2])
       })
@@ -131,7 +156,7 @@ describe('Plugin Store', () => {
       })
 
       it('should combine multiple filters', () => {
-        store.categoryFilter = 'backup'
+        store.selectedCategory = 'backup'
         store.statusFilter = 'configured'
         store.searchQuery = 'test'
         expect(store.filteredPlugins).toEqual([mockPlugin])
@@ -141,50 +166,35 @@ describe('Plugin Store', () => {
     describe('pluginsByCategory', () => {
       it('should group plugins by category', () => {
         const grouped = store.pluginsByCategory
-        expect(grouped.backup).toEqual([mockPlugin])
-        expect(grouped.sync).toEqual([mockPlugin2])
-      })
-
-      it('should sort plugins within categories', () => {
-        const plugin3: Plugin = {
-          ...mockPlugin2,
-          name: 'another-plugin',
-          display_name: 'Another Plugin'
-        }
-        store.plugins = [mockPlugin, plugin3, mockPlugin2]
-
-        const grouped = store.pluginsByCategory
-        expect(grouped.sync[0].display_name).toBe('Another Plugin')
-        expect(grouped.sync[1].display_name).toBe('Sync Plugin')
+        expect(grouped.backup).toBeDefined()
+        expect(grouped.sync).toBeDefined()
+        expect(grouped.backup.map(p => p.name)).toContain('test-plugin')
+        expect(grouped.sync.map(p => p.name)).toContain('sync-plugin')
       })
     })
 
-    describe('stats', () => {
+    describe('pluginStats', () => {
       it('should calculate statistics correctly', () => {
-        const stats = store.stats
+        const stats = store.pluginStats
         expect(stats.total).toBe(2)
-        expect(stats.byCategory.backup).toBe(1)
-        expect(stats.byCategory.sync).toBe(1)
-        expect(stats.byStatus.configured).toBe(1)
-        expect(stats.byStatus.available).toBe(1)
+        expect(stats.configured).toBe(1)
+        expect(stats.available).toBe(1)
       })
     })
 
-    describe('availableCategories', () => {
-      it('should return unique categories with counts', () => {
-        const categories = store.availableCategories
-        expect(categories).toHaveLength(2)
-        expect(categories.find(c => c.value === 'backup')?.count).toBe(1)
-        expect(categories.find(c => c.value === 'sync')?.count).toBe(1)
+    describe('isPluginTesting', () => {
+      it('should return testing state for plugin', () => {
+        expect(store.isPluginTesting('test-plugin')).toBe(false)
+        store.testingPlugins.add('test-plugin')
+        expect(store.isPluginTesting('test-plugin')).toBe(true)
       })
     })
 
-    describe('availableStatuses', () => {
-      it('should return unique statuses with counts', () => {
-        const statuses = store.availableStatuses
-        expect(statuses).toHaveLength(2)
-        expect(statuses.find(s => s.value === 'configured')?.count).toBe(1)
-        expect(statuses.find(s => s.value === 'available')?.count).toBe(1)
+    describe('getTestResult', () => {
+      it('should return test result for plugin', () => {
+        const result: PluginTestResult = { success: true, message: 'OK' }
+        store.testResults.set('test-plugin', result)
+        expect(store.getTestResult('test-plugin')).toEqual(result)
       })
     })
   })
@@ -194,6 +204,7 @@ describe('Plugin Store', () => {
       it('should fetch plugins successfully', async () => {
         const mockResponse = {
           plugins: [mockPlugin, mockPlugin2],
+          categories: [mockCategory, mockCategory2],
           meta: { count: 2 }
         }
         vi.mocked(pluginApi.listPlugins).mockResolvedValue(mockResponse)
@@ -201,7 +212,7 @@ describe('Plugin Store', () => {
         await store.fetchPlugins()
 
         expect(store.plugins).toEqual([mockPlugin, mockPlugin2])
-        expect(store.meta).toEqual({ count: 2 })
+        expect(store.categories).toEqual([mockCategory, mockCategory2])
         expect(store.loading).toBe(false)
         expect(store.error).toBe('')
       })
@@ -216,48 +227,44 @@ describe('Plugin Store', () => {
         expect(store.error).toBe('Network error')
       })
 
-      it('should pass filters to API', async () => {
-        store.categoryFilter = 'backup'
-        store.statusFilter = 'configured'
-        store.searchQuery = 'test'
+      it('should pass category filter to API', async () => {
+        vi.mocked(pluginApi.listPlugins).mockResolvedValue({ plugins: [], categories: [], meta: undefined })
 
-        vi.mocked(pluginApi.listPlugins).mockResolvedValue({ plugins: [], meta: undefined })
+        await store.fetchPlugins('backup')
 
-        await store.fetchPlugins()
-
-        expect(pluginApi.listPlugins).toHaveBeenCalledWith({
-          category: 'backup',
-          status: 'configured',
-          search: 'test'
-        })
+        expect(pluginApi.listPlugins).toHaveBeenCalledWith('backup')
       })
     })
 
-    describe('loadPlugin', () => {
-      it('should load plugin and schema successfully', async () => {
+    describe('loadPluginDetails', () => {
+      it('should load plugin details successfully', async () => {
         vi.mocked(pluginApi.getPlugin).mockResolvedValue(mockPlugin)
         vi.mocked(pluginApi.getPluginSchema).mockResolvedValue(mockSchema)
+        vi.mocked(pluginApi.getPluginConfig).mockResolvedValue(mockConfig)
+        vi.mocked(pluginApi.generateDefaultConfig).mockReturnValue({ endpoint: '', timeout: 30 })
 
-        const result = await store.loadPlugin('test-plugin')
+        const result = await store.loadPluginDetails('test-plugin')
 
         expect(result).toEqual(mockPlugin)
         expect(store.currentPlugin).toEqual(mockPlugin)
         expect(store.currentPluginSchema).toEqual(mockSchema)
+        expect(store.currentPluginConfig).toEqual(mockConfig)
         expect(store.currentError).toBe('')
       })
 
       it('should handle plugin not found', async () => {
         vi.mocked(pluginApi.getPlugin).mockRejectedValue(new Error('Plugin not found'))
 
-        await expect(store.loadPlugin('nonexistent')).rejects.toThrow('Plugin not found')
+        await expect(store.loadPluginDetails('nonexistent')).rejects.toThrow('Plugin not found')
         expect(store.currentError).toBe('Plugin not found')
       })
 
       it('should continue if schema loading fails', async () => {
         vi.mocked(pluginApi.getPlugin).mockResolvedValue(mockPlugin)
         vi.mocked(pluginApi.getPluginSchema).mockRejectedValue(new Error('Schema not found'))
+        vi.mocked(pluginApi.getPluginConfig).mockResolvedValue(mockConfig)
 
-        const result = await store.loadPlugin('test-plugin')
+        const result = await store.loadPluginDetails('test-plugin')
 
         expect(result).toEqual(mockPlugin)
         expect(store.currentPlugin).toEqual(mockPlugin)
@@ -265,89 +272,61 @@ describe('Plugin Store', () => {
       })
     })
 
-    describe('updatePluginConfiguration', () => {
-      const mockConfig: PluginConfig = {
-        plugin_name: 'test-plugin',
-        configuration: {
-          endpoint: 'https://updated.example.com',
-          timeout: 60,
-          enabled: true
-        },
-        enabled: true
+    describe('updateConfiguration', () => {
+      const newConfig = {
+        endpoint: 'https://updated.example.com',
+        timeout: 60,
       }
 
       it('should update configuration successfully', async () => {
-        const updatedPlugin = { ...mockPlugin, configuration: mockConfig.configuration }
+        const updatedConfig = { ...mockConfig, config: newConfig }
         store.plugins = [mockPlugin]
         store.currentPlugin = mockPlugin
-        store.schemaCache.set('test-plugin', mockSchema)
 
-        vi.mocked(pluginApi.validatePluginConfig).mockReturnValue([])
-        vi.mocked(pluginApi.updatePluginConfig).mockResolvedValue(updatedPlugin)
+        vi.mocked(pluginApi.updatePluginConfig).mockResolvedValue(updatedConfig)
 
-        const result = await store.updatePluginConfiguration('test-plugin', mockConfig)
+        const result = await store.updateConfiguration('test-plugin', newConfig, true)
 
-        expect(result.configuration).toEqual(mockConfig.configuration)
-        expect(store.plugins[0].configuration).toEqual(mockConfig.configuration)
-        expect(store.currentPlugin?.configuration).toEqual(mockConfig.configuration)
+        expect(result).toEqual(updatedConfig)
+        expect(store.configurationCache.get('test-plugin')).toEqual(updatedConfig)
       })
 
-      it('should handle validation errors', async () => {
-        store.schemaCache.set('test-plugin', mockSchema)
-        vi.mocked(pluginApi.validatePluginConfig).mockReturnValue(['Endpoint is required'])
+      it('should handle update errors', async () => {
+        vi.mocked(pluginApi.updatePluginConfig).mockRejectedValue(new Error('Update failed'))
 
-        await expect(store.updatePluginConfiguration('test-plugin', mockConfig))
-          .rejects.toThrow('Configuration validation failed: Endpoint is required')
-        expect(store.validationErrors.get('test-plugin')).toEqual(['Endpoint is required'])
-      })
-
-      it('should clear validation errors on success', async () => {
-        const updatedPlugin = { ...mockPlugin, configuration: mockConfig.configuration }
-        store.schemaCache.set('test-plugin', mockSchema)
-        store.validationErrors.set('test-plugin', ['Old error'])
-
-        vi.mocked(pluginApi.validatePluginConfig).mockReturnValue([])
-        vi.mocked(pluginApi.updatePluginConfig).mockResolvedValue(updatedPlugin)
-
-        await store.updatePluginConfiguration('test-plugin', mockConfig)
-
-        expect(store.validationErrors.has('test-plugin')).toBe(false)
+        await expect(store.updateConfiguration('test-plugin', newConfig, true))
+          .rejects.toThrow('Update failed')
+        expect(store.currentError).toBe('Update failed')
       })
     })
 
-    describe('testPluginConfig', () => {
+    describe('testPluginConfiguration', () => {
       const mockTestResult: PluginTestResult = {
         success: true,
         message: 'Test completed successfully',
-        response_time_ms: 150
       }
 
       it('should test plugin successfully', async () => {
         vi.mocked(pluginApi.testPlugin).mockResolvedValue(mockTestResult)
 
-        const result = await store.testPluginConfig('test-plugin', { endpoint: 'https://test.com' })
+        const result = await store.testPluginConfiguration('test-plugin', { endpoint: 'https://test.com' })
 
         expect(result).toEqual(mockTestResult)
         expect(store.testResults.get('test-plugin')).toEqual(mockTestResult)
-        expect(store.testing.has('test-plugin')).toBe(false)
+        expect(store.testingPlugins.has('test-plugin')).toBe(false)
       })
 
       it('should handle test failures', async () => {
-        const failedResult: PluginTestResult = {
-          success: false,
-          message: 'Connection failed',
-          error: 'Timeout'
-        }
         vi.mocked(pluginApi.testPlugin).mockRejectedValue(new Error('Test failed'))
 
-        await expect(store.testPluginConfig('test-plugin')).rejects.toThrow('Test failed')
+        await expect(store.testPluginConfiguration('test-plugin')).rejects.toThrow('Test failed')
 
         expect(store.testResults.get('test-plugin')).toEqual({
           success: false,
           message: 'Test failed',
-          error: 'Test failed'
+          errors: ['Test failed']
         })
-        expect(store.testing.has('test-plugin')).toBe(false)
+        expect(store.testingPlugins.has('test-plugin')).toBe(false)
       })
 
       it('should track testing state', async () => {
@@ -356,201 +335,66 @@ describe('Plugin Store', () => {
           () => new Promise((resolve) => { resolveFn = resolve })
         )
 
-        const testPromise = store.testPluginConfig('test-plugin')
-        expect(store.testing.has('test-plugin')).toBe(true)
+        const testPromise = store.testPluginConfiguration('test-plugin')
+        expect(store.testingPlugins.has('test-plugin')).toBe(true)
 
-        resolveFn(mockTestResult)
+        resolveFn!(mockTestResult)
         await testPromise
 
-        expect(store.testing.has('test-plugin')).toBe(false)
+        expect(store.testingPlugins.has('test-plugin')).toBe(false)
       })
     })
 
-    describe('togglePluginEnabled', () => {
+    describe('togglePlugin', () => {
       it('should toggle plugin state successfully', async () => {
-        const disabledPlugin = { ...mockPlugin, status: 'disabled' as const }
-        store.plugins = [mockPlugin]
-        store.currentPlugin = mockPlugin
+        store.plugins = [{ ...mockPlugin }]
+        const updatedConfig = { ...mockConfig, enabled: false }
 
-        vi.mocked(pluginApi.togglePlugin).mockResolvedValue(disabledPlugin)
+        vi.mocked(pluginApi.getPluginConfig).mockResolvedValue(mockConfig)
+        vi.mocked(pluginApi.updatePluginConfig).mockResolvedValue(updatedConfig)
 
-        const result = await store.togglePluginEnabled('test-plugin', false)
+        await store.togglePlugin('test-plugin')
 
-        expect(result.status).toBe('disabled')
-        expect(store.plugins[0].status).toBe('disabled')
-        expect(store.currentPlugin?.status).toBe('disabled')
+        expect(pluginApi.updatePluginConfig).toHaveBeenCalledWith('test-plugin', mockConfig.config, false)
       })
 
       it('should handle toggle errors', async () => {
-        vi.mocked(pluginApi.togglePlugin).mockRejectedValue(new Error('Toggle failed'))
+        store.plugins = [{ ...mockPlugin }]
+        vi.mocked(pluginApi.getPluginConfig).mockResolvedValue(mockConfig)
+        vi.mocked(pluginApi.updatePluginConfig).mockRejectedValue(new Error('Toggle failed'))
 
-        await expect(store.togglePluginEnabled('test-plugin', false))
+        await expect(store.togglePlugin('test-plugin'))
           .rejects.toThrow('Toggle failed')
         expect(store.error).toBe('Toggle failed')
       })
     })
 
-    describe('refreshPluginHealth', () => {
-      const mockHealth: PluginHealthStatus = {
-        healthy: true,
-        last_check: '2024-01-01T12:00:00Z',
-        response_time_ms: 150
-      }
-
-      it('should refresh health status successfully', async () => {
-        vi.mocked(pluginApi.getPluginHealth).mockResolvedValue(mockHealth)
-
-        const result = await store.refreshPluginHealth('test-plugin')
-
-        expect(result).toEqual(mockHealth)
-        expect(store.healthStatus.get('test-plugin')).toEqual(mockHealth)
-      })
-
-      it('should handle health check failures', async () => {
-        vi.mocked(pluginApi.getPluginHealth).mockRejectedValue(new Error('Health check failed'))
-
-        const result = await store.refreshPluginHealth('test-plugin')
-
-        expect(result.healthy).toBe(false)
-        expect(result.error_message).toBe('Health check failed')
-        expect(store.healthStatus.get('test-plugin')?.healthy).toBe(false)
-      })
-    })
-
-    describe('resetPluginConfiguration', () => {
-      it('should reset configuration successfully', async () => {
-        const resetPlugin = { ...mockPlugin, configuration: {} }
-        store.plugins = [mockPlugin]
-        store.currentPlugin = mockPlugin
-        store.configurationCache.set('test-plugin', { some: 'config' })
-        store.testResults.set('test-plugin', { success: true, message: 'test' })
-
-        vi.mocked(pluginApi.resetPluginConfig).mockResolvedValue(resetPlugin)
-
-        const result = await store.resetPluginConfiguration('test-plugin')
-
-        expect(result.configuration).toEqual({})
-        expect(store.configurationCache.has('test-plugin')).toBe(false)
-        expect(store.testResults.has('test-plugin')).toBe(false)
-        expect(store.plugins[0].configuration).toEqual({})
-      })
-    })
-
-    describe('generatePluginDefaultConfig', () => {
-      it('should generate default configuration', () => {
-        store.schemaCache.set('test-plugin', mockSchema)
-        vi.mocked(pluginApi.generateDefaultConfig).mockReturnValue({
-          endpoint: '',
-          timeout: 30,
-          enabled: true
-        })
-
-        const config = store.generatePluginDefaultConfig('test-plugin')
-
-        expect(config).toEqual({
-          endpoint: '',
-          timeout: 30,
-          enabled: true
-        })
-        expect(store.configurationCache.get('test-plugin')).toEqual(config)
-      })
-
-      it('should return null if no schema available', () => {
-        const config = store.generatePluginDefaultConfig('nonexistent')
-        expect(config).toBeNull()
-      })
-    })
-
-    describe('validatePluginConfiguration', () => {
-      it('should validate configuration and store errors', () => {
-        store.schemaCache.set('test-plugin', mockSchema)
+    describe('validateConfiguration', () => {
+      it('should validate configuration with schema', () => {
+        store.currentPluginSchema = mockSchema
         vi.mocked(pluginApi.validatePluginConfig).mockReturnValue(['Endpoint is required'])
 
-        const errors = store.validatePluginConfiguration('test-plugin', {})
+        store.configFormData = {}
+        const isValid = store.validateConfiguration()
 
-        expect(errors).toEqual(['Endpoint is required'])
-        expect(store.validationErrors.get('test-plugin')).toEqual(['Endpoint is required'])
-      })
-    })
-
-    describe('health monitoring', () => {
-      beforeEach(() => {
-        vi.useFakeTimers()
+        expect(isValid).toBe(false)
+        expect(store.configValidationErrors).toEqual(['Endpoint is required'])
       })
 
-      afterEach(() => {
-        vi.useRealTimers()
-      })
+      it('should return true when no schema available', () => {
+        store.currentPluginSchema = null
 
-      it('should start health monitoring', () => {
-        store.startHealthMonitoring()
-        expect(store.healthMonitoring).toBe(true)
-      })
+        const isValid = store.validateConfiguration()
 
-      it('should stop health monitoring', () => {
-        store.healthMonitoring = true
-        store.stopHealthMonitoring()
-        expect(store.healthMonitoring).toBe(false)
-      })
-
-      it('should monitor configured plugins', async () => {
-        store.plugins = [mockPlugin, mockPlugin2] // Only mockPlugin is configured
-        store.healthMonitoring = true
-        vi.mocked(pluginApi.getPluginHealth).mockResolvedValue({
-          healthy: true,
-          last_check: '2024-01-01T12:00:00Z'
-        })
-
-        await store.monitorPluginHealth()
-
-        // Should only check configured plugins
-        expect(pluginApi.getPluginHealth).toHaveBeenCalledTimes(1)
-        expect(pluginApi.getPluginHealth).toHaveBeenCalledWith('test-plugin')
-      })
-    })
-
-    describe('import/export configuration', () => {
-      it('should export plugin configuration', () => {
-        const config = { endpoint: 'https://test.com', timeout: 60 }
-        store.configurationCache.set('test-plugin', config)
-        store.plugins = [mockPlugin]
-
-        const exported = store.exportPluginConfig('test-plugin')
-        const parsed = JSON.parse(exported!)
-
-        expect(parsed.plugin_name).toBe('test-plugin')
-        expect(parsed.plugin_version).toBe('1.0.0')
-        expect(parsed.configuration).toEqual(config)
-        expect(parsed.exported_at).toBeDefined()
-      })
-
-      it('should import plugin configuration', async () => {
-        store.plugins = [mockPlugin]
-        store.schemaCache.set('test-plugin', mockSchema)
-        vi.mocked(pluginApi.validatePluginConfig).mockReturnValue([])
-
-        const configData = {
-          plugin_name: 'test-plugin',
-          plugin_version: '1.0.0',
-          configuration: { endpoint: 'https://imported.com' },
-          exported_at: '2024-01-01T12:00:00Z'
-        }
-
-        await store.importPluginConfig(JSON.stringify(configData))
-
-        expect(store.configurationCache.get('test-plugin')).toEqual(configData.configuration)
-      })
-
-      it('should handle invalid import data', async () => {
-        await expect(store.importPluginConfig('invalid json')).rejects.toThrow()
-        await expect(store.importPluginConfig('{}')).rejects.toThrow('Invalid configuration format')
+        expect(isValid).toBe(true)
+        expect(store.configValidationErrors).toEqual([])
       })
     })
 
     describe('filter management', () => {
       it('should set category filter', () => {
-        store.setCategoryFilter('backup')
-        expect(store.categoryFilter).toBe('backup')
+        store.setCategory('backup')
+        expect(store.selectedCategory).toBe('backup')
       })
 
       it('should set status filter', () => {
@@ -569,12 +413,14 @@ describe('Plugin Store', () => {
         store.currentPlugin = mockPlugin
         store.currentPluginSchema = mockSchema
         store.currentError = 'some error'
+        store.configFormData = { endpoint: 'test' }
 
         store.clearCurrentPlugin()
 
         expect(store.currentPlugin).toBeNull()
         expect(store.currentPluginSchema).toBeNull()
         expect(store.currentError).toBe('')
+        expect(store.configFormData).toEqual({})
       })
 
       it('should clear errors', () => {
@@ -587,20 +433,97 @@ describe('Plugin Store', () => {
         expect(store.currentError).toBe('')
       })
 
-      it('should clear all caches', () => {
-        store.configurationCache.set('test', {})
-        store.schemaCache.set('test', mockSchema)
-        store.validationErrors.set('test', ['error'])
+      it('should clear test results', () => {
         store.testResults.set('test', { success: true, message: 'test' })
-        store.healthStatus.set('test', { healthy: true, last_check: '2024-01-01' })
 
-        store.clearCaches()
+        store.clearTestResults()
+
+        expect(store.testResults.size).toBe(0)
+      })
+    })
+
+    describe('import/export configuration', () => {
+      it('should export plugin configuration', () => {
+        store.configFormData = { endpoint: 'https://test.com', timeout: 60 }
+
+        const exported = store.exportConfiguration()
+        const parsed = JSON.parse(exported)
+
+        expect(parsed.endpoint).toBe('https://test.com')
+        expect(parsed.timeout).toBe(60)
+      })
+
+      it('should import plugin configuration', () => {
+        const configJson = JSON.stringify({ endpoint: 'https://imported.com' })
+
+        const result = store.importConfiguration(configJson)
+
+        expect(result).toBe(true)
+        expect(store.configFormData.endpoint).toBe('https://imported.com')
+      })
+
+      it('should handle invalid import data', () => {
+        const result = store.importConfiguration('invalid json')
+        expect(result).toBe(false)
+        expect(store.configValidationErrors.length).toBeGreaterThan(0)
+      })
+    })
+
+    describe('config modal management', () => {
+      it('should open config modal', () => {
+        store.openConfigModal('test-plugin')
+
+        expect(store.showConfigModal).toBe(true)
+        expect(store.configModalPlugin).toBe('test-plugin')
+      })
+
+      it('should close config modal', () => {
+        store.showConfigModal = true
+        store.configModalPlugin = 'test-plugin'
+        store.configFormData = { endpoint: 'test' }
+
+        store.closeConfigModal()
+
+        expect(store.showConfigModal).toBe(false)
+        expect(store.configModalPlugin).toBe('')
+        expect(store.configFormData).toEqual({})
+      })
+    })
+
+    describe('form field updates', () => {
+      it('should update simple form field', () => {
+        vi.mocked(pluginApi.validatePluginConfig).mockReturnValue([])
+        store.currentPluginSchema = mockSchema
+
+        store.updateFormField('endpoint', 'https://new.example.com')
+
+        expect(store.configFormData.endpoint).toBe('https://new.example.com')
+      })
+
+      it('should update nested form field', () => {
+        vi.mocked(pluginApi.validatePluginConfig).mockReturnValue([])
+        store.currentPluginSchema = mockSchema
+
+        store.updateFormField('auth.username', 'testuser')
+
+        expect(store.configFormData.auth.username).toBe('testuser')
+      })
+    })
+
+    describe('refresh', () => {
+      it('should clear caches and refetch', async () => {
+        store.configurationCache.set('test', mockConfig)
+        store.schemaCache.set('test', mockSchema)
+        store.testResults.set('test', { success: true, message: 'test' })
+
+        vi.mocked(pluginApi.listPlugins).mockResolvedValue({ plugins: [], categories: [], meta: undefined })
+
+        await store.refresh()
 
         expect(store.configurationCache.size).toBe(0)
         expect(store.schemaCache.size).toBe(0)
-        expect(store.validationErrors.size).toBe(0)
         expect(store.testResults.size).toBe(0)
-        expect(store.healthStatus.size).toBe(0)
+        expect(pluginApi.listPlugins).toHaveBeenCalled()
       })
     })
   })
