@@ -26,11 +26,8 @@ test.describe('Smoke API Tests', () => {
     expect(data).toHaveProperty('success')
   })
 
-  test('status API responds', async ({ request }) => {
-    const response = await request.get(`${baseURL}/api/v1/status`, { headers })
-    expect(response.ok()).toBe(true)
-
-    const data = await response.json()
-    expect(data).toHaveProperty('success', true)
+  test('healthz endpoint responds', async ({ request }) => {
+    const response = await request.get(`${baseURL}/healthz`, { headers })
+    expect([200, 204]).toContain(response.status())
   })
 })
