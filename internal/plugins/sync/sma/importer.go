@@ -11,12 +11,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
 // ImportFromFile imports data from an SMA file
 func (s *SMAPlugin) ImportFromFile(ctx context.Context, filePath string, config sync.ImportConfig) (*sync.ImportResult, error) {
 	s.logger.Info("Starting SMA import from file", "path", filePath)
+
+	// Validate file path against base directory to prevent path traversal
+	if s.baseDir != "" {
+		validatedPath, err := security.ValidatePath(s.baseDir, filePath)
+		if err != nil {
+			return nil, fmt.Errorf("path validation failed: %w", err)
+		}
+		filePath = validatedPath
+	}
 
 	// Validate file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {

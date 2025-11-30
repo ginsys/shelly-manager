@@ -15,12 +15,14 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
 // Plugin implements a simple YAML content export (not a DB snapshot)
 type Plugin struct {
-	logger *logging.Logger
+	logger  *logging.Logger
+	baseDir string // Base directory for path validation
 }
 
 func NewPlugin() sync.SyncPlugin { return &Plugin{} }
@@ -55,11 +57,22 @@ func (p *Plugin) ConfigSchema() sync.ConfigSchema {
 
 func (p *Plugin) ValidateConfig(config map[string]interface{}) error {
 	if v, ok := config["output_path"].(string); ok && v != "" {
+		// Validate path is within allowed base directory
+		if p.baseDir != "" {
+			if _, err := security.ValidatePath(p.baseDir, v); err != nil {
+				return fmt.Errorf("invalid output_path: %w", err)
+			}
+		}
 		if err := os.MkdirAll(v, 0755); err != nil {
 			return fmt.Errorf("invalid output_path: %w", err)
 		}
 	}
 	return nil
+}
+
+// SetBaseDir sets the base directory for path validation
+func (p *Plugin) SetBaseDir(baseDir string) {
+	p.baseDir = baseDir
 }
 
 // yamlEnvelope mirrors the JSON exporter structure
@@ -85,13 +98,23 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 		algo = v
 	}
 
+	// Validate output path against base directory to prevent path traversal
+	if p.baseDir != "" {
+		validatedPath, err := security.ValidatePath(p.baseDir, outputPath)
+		if err != nil {
+			return nil, fmt.Errorf("path validation failed: %w", err)
+		}
+		outputPath = validatedPath
+	}
+
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	exportID := uuid.New().String()[:8]
 	ts := time.Now().Format("20060102-150405")
-	baseName := fmt.Sprintf("shelly-export-%s-%s.yaml", ts, exportID)
+	// Sanitize the filename components to prevent injection
+	baseName := fmt.Sprintf("shelly-export-%s-%s.yaml", security.SanitizeFilename(ts), security.SanitizeFilename(exportID))
 	path := filepath.Join(outputPath, baseName)
 
 	env := yamlEnvelope{

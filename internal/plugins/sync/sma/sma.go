@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
@@ -24,7 +25,8 @@ const (
 
 // SMAPlugin implements the SyncPlugin interface for SMA format operations
 type SMAPlugin struct {
-	logger *logging.Logger
+	logger  *logging.Logger
+	baseDir string // Base directory for path validation
 }
 
 // NewPlugin creates a new SMA plugin (for registry)
@@ -187,6 +189,12 @@ func (s *SMAPlugin) ConfigSchema() sync.ConfigSchema {
 func (s *SMAPlugin) ValidateConfig(config map[string]interface{}) error {
 	if outputPath, exists := config["output_path"]; exists {
 		if path, ok := outputPath.(string); ok {
+			// Validate path is within allowed base directory
+			if s.baseDir != "" {
+				if _, err := security.ValidatePath(s.baseDir, path); err != nil {
+					return fmt.Errorf("invalid output_path: %w", err)
+				}
+			}
 			// Check if directory exists or can be created
 			if err := os.MkdirAll(path, 0755); err != nil {
 				return fmt.Errorf("invalid output_path: cannot create directory %s: %w", path, err)
@@ -207,6 +215,11 @@ func (s *SMAPlugin) ValidateConfig(config map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+// SetBaseDir sets the base directory for path validation
+func (s *SMAPlugin) SetBaseDir(baseDir string) {
+	s.baseDir = baseDir
 }
 
 // Export creates an SMA archive from the provided data
@@ -237,15 +250,24 @@ func (s *SMAPlugin) Export(ctx context.Context, data *sync.ExportData, config sy
 	includeSystemSettings, _ := config.Config["include_system_settings"].(bool)
 	excludeSensitive, _ := config.Config["exclude_sensitive"].(bool)
 
+	// Validate output path against base directory to prevent path traversal
+	if s.baseDir != "" {
+		validatedPath, err := security.ValidatePath(s.baseDir, outputPath)
+		if err != nil {
+			return nil, fmt.Errorf("path validation failed: %w", err)
+		}
+		outputPath = validatedPath
+	}
+
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Generate unique filename
+	// Generate unique filename with sanitized components
 	exportID := uuid.New().String()[:8]
 	timestamp := time.Now().Format("20060102-150405")
-	filename := fmt.Sprintf("shelly-archive-%s-%s.sma", timestamp, exportID)
+	filename := fmt.Sprintf("shelly-archive-%s-%s.sma", security.SanitizeFilename(timestamp), security.SanitizeFilename(exportID))
 	archivePath := filepath.Join(outputPath, filename)
 
 	// Create SMA archive structure

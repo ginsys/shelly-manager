@@ -146,6 +146,19 @@ func (e *SyncEngine) RegisterPlugin(plugin SyncPlugin) error {
 		return fmt.Errorf("failed to initialize plugin %s: %w", info.Name, err)
 	}
 
+	// If the plugin supports path restrictions, set the base directory
+	// This prevents path traversal attacks by restricting file operations
+	if prp, ok := plugin.(PathRestrictedPlugin); ok {
+		// Use export base dir as the default for plugins (they primarily export)
+		if e.exportBaseDir != "" {
+			prp.SetBaseDir(e.exportBaseDir)
+			e.logger.Debug("Set base directory for plugin",
+				"plugin", info.Name,
+				"base_dir", e.exportBaseDir,
+			)
+		}
+	}
+
 	e.plugins[info.Name] = plugin
 	e.logger.Info("Registered export plugin",
 		"name", info.Name,

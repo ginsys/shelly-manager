@@ -34,6 +34,14 @@ type SyncPlugin interface {
 // ExportPlugin defines the interface for all export plugins (backward compatibility)
 type ExportPlugin = SyncPlugin
 
+// PathRestrictedPlugin is an optional interface that plugins can implement
+// to support base directory restrictions for path validation.
+// This prevents path traversal attacks by ensuring all file operations
+// are restricted to a configured base directory.
+type PathRestrictedPlugin interface {
+	SetBaseDir(baseDir string)
+}
+
 // PluginInfo provides metadata about a plugin
 type PluginInfo struct {
 	Name             string         `json:"name"`
