@@ -113,82 +113,51 @@ export async function setupComprehensiveTestEnvironment(page: Page, useFixtures 
 }
 
 /**
- * Wait for page to be ready with optimized loading detection
+ * Wait for page to be ready - simplified, deterministic approach
+ * Avoids race conditions by using explicit element waits
  */
-export async function waitForPageReady(page: Page, timeout = 8000): Promise<void> {
-  // Get browser name for specific handling
-  const browserName = page.context().browser()?.browserType().name() || 'unknown'
-  
-  // Step 1: Wait for DOM content to load (fast)
-  await page.waitForLoadState('domcontentloaded', { timeout: 3000 })
-  
-  // Step 2: Wait for main app structure to be present
-  const appSelectors = ['#app', 'main', '[data-testid="app"]', '.q-layout', 'body > div:first-child']
-  let appFound = false
-  
-  for (const selector of appSelectors) {
-    try {
-      await page.waitForSelector(selector, { timeout: 2000, state: 'attached' })
-      appFound = true
-      break
-    } catch {
-      // Try next selector
-    }
-  }
-  
-  if (!appFound) {
-    console.warn(`App structure not found for ${browserName}, using fallback`)
-    await page.waitForFunction(() => document.body && document.body.children.length > 0, { timeout: 2000 })
-  }
-  
-  // Step 3: Wait for initial content rendering (avoid network idle)
+export async function waitForPageReady(page: Page, timeout = 10000): Promise<void> {
+  // Step 1: Wait for DOM to be ready
+  await page.waitForLoadState('domcontentloaded', { timeout: timeout / 2 })
+
+  // Step 2: Wait for Vue app to mount - use specific selector
+  const appSelector = '#app, [data-testid="app"], .q-layout'
+  await page.locator(appSelector).first().waitFor({
+    state: 'attached',
+    timeout: timeout / 2
+  })
+
+  // Step 3: Wait for loading spinners to disappear (if any exist)
+  const spinner = page.locator('.q-spinner, .loading, [data-loading="true"]')
   try {
-    // Look for page-specific content indicators rather than waiting for all network activity
-    const contentIndicators = [
-      'h1', 'h2', '[data-testid="page-title"]', 
-      '.page-header', '.stats-section', '.filters-section',
-      '.q-table', '.plugin-grid', '.device-grid',
-      '[data-testid="plugin-list"]', '[data-testid="device-list"]',
-      '[data-testid="empty-state"]', '.no-plugins', '.no-devices'
-    ]
-    
-    // Wait for any content indicator to appear
-    await page.locator(contentIndicators.join(', ')).first().waitFor({ 
-      timeout: 4000, 
-      state: 'visible' 
+    // Only wait if spinners are visible
+    if (await spinner.count() > 0) {
+      await spinner.first().waitFor({ state: 'hidden', timeout: timeout / 2 })
+    }
+  } catch {
+    // Spinners may not exist or may have already disappeared
+  }
+
+  // Step 4: Wait for any page content to be visible
+  // This confirms the page has actually rendered something useful
+  const contentSelector = [
+    'h1', 'h2',
+    '[data-testid="page-title"]',
+    '[data-testid="device-list"]',
+    '[data-testid="plugin-list"]',
+    '[data-testid="empty-state"]',
+    '.q-table',
+    '.q-card'
+  ].join(', ')
+
+  try {
+    await page.locator(contentSelector).first().waitFor({
+      state: 'visible',
+      timeout: timeout / 2
     })
   } catch {
-    console.warn(`Content indicators timeout for ${browserName}, checking for loading completion`)
-    
-    // Fallback: wait for loading states to complete
-    try {
-      await page.waitForFunction(() => {
-        // Check if loading spinners are gone
-        const spinners = document.querySelectorAll('.q-spinner, .loading, [data-loading="true"]')
-        if (spinners.length > 0) return false
-        
-        // Check if there's any visible content
-        const content = document.querySelector('h1, h2, .q-table, .plugin-grid, .device-grid, .stats-section')
-        return content !== null
-      }, { timeout: 3000 })
-    } catch {
-      // Ultimate fallback: just ensure DOM is ready
-      console.warn(`Loading detection failed for ${browserName}, using basic DOM ready check`)
-    }
-  }
-  
-  // Step 4: Wait for any explicit loading spinners to disappear (optional)
-  try {
-    await page.waitForSelector(SELECTORS.loadingSpinner, { state: 'hidden', timeout: 1000 })
-  } catch {
-    // Loading spinner might not exist, which is fine
-  }
-  
-  // Step 5: Minimal browser-specific wait (much reduced)
-  if (browserName === 'webkit') {
-    await page.waitForTimeout(200) // Reduced from 500ms
-  } else if (browserName === 'firefox') {
-    await page.waitForTimeout(100) // Reduced from 250ms
+    // Page may not have expected content yet, continue anyway
+    console.warn('Page content not detected within timeout, continuing...')
   }
 }
 

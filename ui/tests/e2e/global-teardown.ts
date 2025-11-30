@@ -1,29 +1,53 @@
 import { FullConfig, request } from '@playwright/test'
+import * as fs from 'fs'
+
+const BACKEND_URL = 'http://localhost:8080'
+const REQUEST_TIMEOUT_MS = 5000
 
 async function globalTeardown(config: FullConfig) {
-  console.log('🧹 Starting E2E Test Environment Teardown...')
-  
-  // Create a request context for API calls
+  console.log('Starting E2E Test Environment Teardown...')
+
+  // Create a request context for API calls with explicit timeout
   const requestContext = await request.newContext({
-    baseURL: 'http://localhost:8080',
+    baseURL: BACKEND_URL,
     extraHTTPHeaders: {
       'User-Agent': 'Playwright-E2E-Test/1.0 (Compatible; Testing)',
     },
+    timeout: REQUEST_TIMEOUT_MS,
   })
-  
+
   try {
     // Clean up test data
-    console.log('🗑️ Cleaning up test data...')
+    console.log('Cleaning up test data...')
     await cleanupTestData(requestContext)
-    console.log('✅ Test data cleaned')
-    
+    console.log('Test data cleaned')
+
   } catch (error) {
-    console.warn('⚠️ Teardown had issues:', error)
+    // Teardown failures should not fail the test suite
+    console.warn('Teardown had issues:', error instanceof Error ? error.message : error)
   } finally {
     await requestContext.dispose()
   }
-  
-  console.log('✨ E2E Test Environment Teardown Complete')
+
+  // Clean up test database file
+  cleanupTestDatabase()
+
+  console.log('E2E Test Environment Teardown Complete')
+}
+
+/**
+ * Clean up test database file
+ */
+function cleanupTestDatabase() {
+  const testDbPath = '/tmp/shelly_test.db'
+  try {
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath)
+      console.log('Test database cleaned up')
+    }
+  } catch (error) {
+    console.warn('Could not delete test database:', error)
+  }
 }
 
 async function cleanupTestData(requestContext: any) {

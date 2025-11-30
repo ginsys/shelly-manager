@@ -1,26 +1,27 @@
 <template>
-  <div class="page">
+  <div class="page" data-testid="devices-page">
     <div class="toolbar">
-      <h1 class="title">Devices</h1>
+      <h1 class="title" data-testid="page-title">Devices</h1>
       <div class="spacer" />
       <input
         class="search"
         v-model="search"
         type="text"
         placeholder="Search (name, IP, MAC, type)"
+        data-testid="device-search"
       />
-      <select v-model.number="pageSize" class="select">
+      <select v-model.number="pageSize" class="select" data-testid="page-size-select">
         <option :value="10">10</option>
         <option :value="25">25</option>
         <option :value="50">50</option>
       </select>
     </div>
 
-    <div class="card">
-      <div v-if="loading" class="state">Loading...</div>
-      <div v-else-if="error" class="state error">{{ error }}</div>
+    <div class="card" data-testid="device-list">
+      <div v-if="loading" class="state" data-testid="loading-state">Loading...</div>
+      <div v-else-if="error" class="state error" data-testid="error-state">{{ error }}</div>
 
-      <table v-else class="table">
+      <table v-else class="table" data-testid="devices-table">
         <thead>
           <tr>
             <th @click="toggleSort('name')">Name <SortIcon :field="'name'" :sort="sort" /></th>
@@ -33,30 +34,30 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="d in pagedSortedFiltered" :key="d.id">
+          <tr v-for="d in pagedSortedFiltered" :key="d.id" data-testid="device-row">
             <td>
-              <router-link :to="`/devices/${d.id}`" class="rowlink">{{ d.name || '-' }}</router-link>
+              <router-link :to="`/devices/${d.id}`" class="rowlink" data-testid="device-link">{{ d.name || '-' }}</router-link>
             </td>
             <td>{{ d.ip || '-' }}</td>
             <td class="mono">{{ d.mac }}</td>
             <td>{{ d.type }}</td>
             <td>
-              <span :class="['chip', d.status]">{{ d.status || 'unknown' }}</span>
+              <span :class="['chip', d.status]" data-testid="device-status">{{ d.status || 'unknown' }}</span>
             </td>
             <td>{{ formatDate(d.last_seen) }}</td>
             <td class="mono small">{{ d.firmware || '-' }}</td>
           </tr>
           <tr v-if="pagedSortedFiltered.length === 0">
-            <td colspan="7" class="state">No devices found</td>
+            <td colspan="7" class="state" data-testid="empty-state">No devices found</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <div class="pagination">
-      <button class="btn" :disabled="page <= 1" @click="prevPage">Prev</button>
+    <div class="pagination" data-testid="pagination">
+      <button class="btn" :disabled="page <= 1" @click="prevPage" data-testid="prev-page">Prev</button>
       <span>Page {{ page }} / {{ totalPages || 1 }}</span>
-      <button class="btn" :disabled="!hasNext" @click="nextPage">Next</button>
+      <button class="btn" :disabled="!hasNext" @click="nextPage" data-testid="next-page">Next</button>
     </div>
   </div>
 </template>

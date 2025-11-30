@@ -1,8 +1,8 @@
 <template>
-  <div class="layout-root">
-    <header class="topbar">
-      <div class="brand">Shelly Manager</div>
-      <nav class="nav">
+  <div class="layout-root" data-testid="app">
+    <header class="topbar" data-testid="header">
+      <div class="brand" data-testid="brand">Shelly Manager</div>
+      <nav class="nav" data-testid="navigation">
         <router-link 
           class="nav-link" 
           to="/"
@@ -98,7 +98,7 @@
       </div>
     </nav>
     
-    <main class="content">
+    <main class="content" data-testid="main-content">
       <router-view />
     </main>
   </div>

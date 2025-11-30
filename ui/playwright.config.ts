@@ -12,12 +12,12 @@ export default defineConfig({
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
   
-  // Retry on CI only - reduced to 1 for faster execution
-  retries: process.env.CI ? 1 : 0,
-  
-  // FORCE 2 workers to prevent SQLite concurrency issues - NUCLEAR APPROACH
-  // OVERRIDE: Always force 2 workers regardless of system defaults or CLI overrides
-  workers: 2,
+  // Retry on CI only
+  retries: process.env.CI ? 2 : 0,
+
+  // SQLite requires serial execution (single writer) - use 1 worker
+  // This prevents database lock contention that causes flaky tests
+  workers: 1,
   
   // Reporter to use
   reporter: [
@@ -26,8 +26,8 @@ export default defineConfig({
     process.env.CI ? ['github'] : ['list']
   ],
   
-  // Increased global timeout for complex pages (was 30s)
-  timeout: 120 * 1000,
+  // Global test timeout - 60s is sufficient with proper waits
+  timeout: 60 * 1000,
   
   // Shared settings for all tests
   use: {
@@ -50,12 +50,6 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
 
-  // Global metadata to override any dynamic worker detection
-  metadata: {
-    workers: 2,
-    maxWorkers: 2,
-    forceWorkers: true
-  },
 
   // Test projects for different browsers and scenarios
   projects: [
@@ -173,9 +167,9 @@ export default defineConfig({
 
   // Test expectations
   expect: {
-    // Maximum time expect() should wait for the condition to be met
-    timeout: 10 * 1000,
-    
+    // Reduced timeout forces explicit waits - catches flaky selectors faster
+    timeout: 5 * 1000,
+
     // Take screenshot when assertion fails
     toHaveScreenshot: {
       mode: 'only-on-failure',
