@@ -36,6 +36,7 @@ Within each level:
 | 221 | [Defer/Close Pattern Fix](221-defer-close-pattern-fix.md) | not-started |
 | 231 | [README Export Documentation](231-readme-export-documentation.md) | partial |
 | 241 | [Code Comments Compression](241-code-comments-compression.md) | not-started |
+| 251 | [Reusable WebSocket Client](251-reusable-websocket-client.md) | not-started |
 
 ### MEDIUM (300s) - Important Features
 
@@ -44,6 +45,19 @@ Within each level:
 | 311 | [Notification UI Implementation](311-notification-ui-implementation.md) | not-started |
 | 321 | [Provisioning UI Integration](321-provisioning-ui-integration.md) | not-started |
 | 331 | [Secrets Management K8s](331-secrets-management-k8s.md) | partial |
+| 341 | [Device Management API Integration](341-device-management-api-integration.md) | not-started |
+| 342 | [Device Configuration UI](342-device-configuration-ui.md) | not-started |
+| 343 | [Configuration Templates UI](343-configuration-templates-ui.md) | not-started |
+| 344 | [Typed Configuration UI](344-typed-configuration-ui.md) | not-started |
+| 345 | [Drift Detection UI](345-drift-detection-ui.md) | not-started |
+| 346 | [Bulk Operations UI](346-bulk-operations-ui.md) | not-started |
+| 347 | [Advanced Metrics Integration](347-advanced-metrics-integration.md) | not-started |
+| 351 | [Break Up Large Page Components](351-break-up-large-page-components.md) | not-started |
+| 352 | [Schema-Driven Form Component](352-schema-driven-form-component.md) | not-started |
+| 354 | [Improve Error Messages](354-improve-error-messages.md) | not-started |
+| 355 | [Page Component Unit Tests](355-page-component-unit-tests.md) | not-started |
+| 361 | [Remove StatsPage](361-remove-statspage.md) | not-started |
+| 362 | [Complete DeviceDetailPage](362-complete-devicedetailpage.md) | not-started |
 
 ### LOW (400s) - Enhancement & Polish
 
