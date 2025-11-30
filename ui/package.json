@@ -39,9 +39,9 @@
     "@vitejs/plugin-vue": "^5.0.0",
     "@vitest/coverage-v8": "^1.6.1",
     "@vue/test-utils": "^2.4.6",
-    "jsdom": "^26.1.0",
-    "terser": "^5.44.0",
-    "typescript": "^5.4.0",
+    "jsdom": "^27.2.0",
+    "terser": "^5.44.1",
+    "typescript": "^5.9.3",
     "vite": "^5.4.21",
     "vitest": "^1.6.0"
   }
