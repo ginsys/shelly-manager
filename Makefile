@@ -486,6 +486,13 @@ clean:
 	rm -f coverage_*.out *_coverage.out
 	# CI/JUnit and logs
 	rm -f junit-*.xml ci-test.log matrix-test-*.log windows-test-*.log
+	# Root-level log files and server artifacts (including hidden)
+	rm -f *.log .*.log server.pid
+	# Stray database files in cmd directory (from test runs)
+	rm -rf cmd/shelly-manager/data/
+	# UI test artifacts (playwright reports, test results, coverage)
+	rm -rf ui/playwright-report/ ui/test-results/ ui/coverage/
+	rm -f ui/junit.xml ui/test-report.html ui/test-report.json ui/coverage.xml
 	# Temporary folders used by local tooling and CI downloads
 	rm -rf .tmp/ tmp/
 
