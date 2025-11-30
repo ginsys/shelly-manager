@@ -1,5 +1,7 @@
 import { Page, expect } from '@playwright/test'
 import { setupFixtures, setupMinimalFixtures, setupComprehensiveFixtures } from '../../fixtures/fixture-helper.js'
+import * as fs from 'fs'
+import * as path from 'path'
 
 /**
  * Test helper utilities for Shelly Manager E2E tests
@@ -482,8 +484,6 @@ export const testData = {
 }
 
 export async function createTestFile(content: string, filename: string): Promise<string> {
-  const fs = require('fs')
-  const path = require('path')
   const tmpDir = '/tmp'
   const filePath = path.join(tmpDir, filename)
   fs.writeFileSync(filePath, content)
@@ -491,7 +491,6 @@ export async function createTestFile(content: string, filename: string): Promise
 }
 
 export async function cleanupTestFiles(files: string[]): Promise<void> {
-  const fs = require('fs')
   files.forEach(file => {
     try {
       fs.unlinkSync(file)
