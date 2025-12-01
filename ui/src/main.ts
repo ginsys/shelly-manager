@@ -122,6 +122,32 @@ const router = createRouter({
       meta: { title: 'Notification History', category: 'notifications' }
     },
 
+    // Provisioning
+    {
+      path: '/provisioning',
+      name: 'provisioning-dashboard',
+      component: () => import('./pages/ProvisioningDashboardPage.vue'),
+      meta: { title: 'Provisioning Dashboard', category: 'provisioning' }
+    },
+    {
+      path: '/provisioning/tasks',
+      name: 'provisioning-tasks',
+      component: () => import('./pages/ProvisioningTasksPage.vue'),
+      meta: { title: 'Provisioning Tasks', category: 'provisioning' }
+    },
+    {
+      path: '/provisioning/tasks/:id',
+      name: 'provisioning-task-detail',
+      component: () => import('./pages/ProvisioningTaskDetailPage.vue'),
+      meta: { title: 'Task Details', category: 'provisioning' }
+    },
+    {
+      path: '/provisioning/agents',
+      name: 'provisioning-agents',
+      component: () => import('./pages/ProvisioningAgentsPage.vue'),
+      meta: { title: 'Provisioning Agents', category: 'provisioning' }
+    },
+
     // 404 handler - must be last
     {
       path: '/:pathMatch(.*)*',
