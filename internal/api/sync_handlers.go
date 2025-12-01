@@ -395,6 +395,14 @@ func (eh *SyncHandlers) CreateGitOpsExport(w http.ResponseWriter, r *http.Reques
 }
 
 // CreateJSONExport creates a JSON content export (not DB snapshot)
+// CreateJSONExport creates a JSON export with optional compression.
+//
+// Compression options (via config.compression_algo):
+//   - "none": No compression (fastest, largest file)
+//   - "gzip": GZIP compression (recommended general purpose)
+//   - "zip":  ZIP compression (Windows-friendly)
+//
+// If config.compression is false or missing, raw .json is written.
 func (eh *SyncHandlers) CreateJSONExport(w http.ResponseWriter, r *http.Request) {
 	if !eh.requireAdmin(w, r) {
 		return

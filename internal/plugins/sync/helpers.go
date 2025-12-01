@@ -11,6 +11,15 @@ import (
 
 // FileSHA256 calculates the SHA-256 checksum of a file.
 // Returns hex-encoded string of the checksum.
+//
+// Use Case: Verify export integrity, detect file changes.
+// For hobbyist projects, SHA-256 provides a good balance of speed and security.
+//
+// Example:
+//
+//	checksum, err := FileSHA256("/path/to/export.json")
+//	if err != nil { return err }
+//	fmt.Printf("Export checksum: %s\n", checksum)
 func FileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -27,7 +36,14 @@ func FileSHA256(path string) (string, error) {
 }
 
 // WriteGzip compresses data using gzip and writes to path.
-// For hobbyist project: best compression level is fine.
+//
+// Use Case: Reduce file size for JSON/YAML exports (typically 70–80% reduction).
+// Compression level uses the default configured by gzip.NewWriter (suitable balance).
+//
+// Example:
+//
+//	data := []byte(`{"devices": [...]}`)
+//	_ = WriteGzip("/tmp/export.json.gz", data)
 func WriteGzip(path string, data []byte) error {
 	f, err := os.Create(path)
 	if err != nil {
@@ -48,6 +64,14 @@ func WriteGzip(path string, data []byte) error {
 
 // WriteZipSingle creates a ZIP archive with a single file entry.
 // entryName is the name of the file inside the ZIP.
+//
+// Use Case: Windows-friendly compression; consider for multi-file archives.
+// Note: For single files, gzip is often more efficient; use ZIP for compatibility.
+//
+// Example:
+//
+//	data := []byte(`{"devices": [...]}`)
+//	_ = WriteZipSingle("/tmp/export.zip", "export.json", data)
 func WriteZipSingle(path, entryName string, data []byte) error {
 	f, err := os.Create(path)
 	if err != nil {
