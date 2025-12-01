@@ -35,15 +35,13 @@ func WriteGzip(path string, data []byte) error {
 	defer f.Close()
 
 	gz := gzip.NewWriter(f)
+	defer gz.Close()
+
 	if _, err := gz.Write(data); err != nil {
-		_ = gz.Close()
 		return fmt.Errorf("failed to write gzip: %w", err)
 	}
 
-	if err := gz.Close(); err != nil {
-		return fmt.Errorf("failed to close gzip: %w", err)
-	}
-
+	// Let defer handle gz.Close()
 	return f.Sync()
 }
 
@@ -57,21 +55,18 @@ func WriteZipSingle(path string, entryName string, data []byte) error {
 	defer f.Close()
 
 	zw := zip.NewWriter(f)
+	defer zw.Close()
+
 	hdr := &zip.FileHeader{Name: entryName, Method: zip.Deflate}
 	w, err := zw.CreateHeader(hdr)
 	if err != nil {
-		_ = zw.Close()
 		return fmt.Errorf("failed to create zip entry: %w", err)
 	}
 
 	if _, err := w.Write(data); err != nil {
-		_ = zw.Close()
 		return fmt.Errorf("failed to write zip entry: %w", err)
 	}
 
-	if err := zw.Close(); err != nil {
-		return fmt.Errorf("failed to close zip: %w", err)
-	}
-
+	// Let defer handle zw.Close()
 	return f.Sync()
 }
