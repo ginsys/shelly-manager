@@ -109,3 +109,33 @@ Next slices:
  - Admin key rotation UI affordance (this commit)
  - Combined statistics page/cards (this commit)
  - Metrics charts via REST polling (this commit) and WS wiring (next)
+
+## Configuration
+
+### Development
+
+Create `.env.development.local`:
+
+```env
+VITE_API_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080
+VITE_ENABLE_DEVTOOLS=true
+```
+
+### Production
+
+Create `.env.production.local`:
+
+```env
+VITE_API_URL=/api
+VITE_WS_URL=wss://shelly.example.com
+VITE_ENABLE_DEVTOOLS=false
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend API base URL | `/api` |
+| `VITE_WS_URL` | WebSocket server URL | Auto-detected |
+| `VITE_ENABLE_DEVTOOLS` | Enable Vue devtools | `false` |
