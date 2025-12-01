@@ -71,7 +71,7 @@ ui/
 | Form component duplication | Code reuse | ExportPreviewForm, ImportPreviewForm, SMAConfigForm, GitOpsConfigForm |
 | Limited unit tests | Test coverage | Most page components lack isolated tests |
 | Generic error messages | User experience | "Failed to load devices" lacks context |
-| WebSocket coupling | Reusability | Metrics store tightly coupled, not reusable |
+| WebSocket coupling | Reusability | Metrics store tightly coupled, not reusable — Resolved by introducing reusable `useWebSocket` composable (ui/src/composables/useWebSocket.ts). |
 
 ---
 
