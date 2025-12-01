@@ -2,9 +2,7 @@ package backup
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	psync "github.com/ginsys/shelly-manager/internal/plugins/sync"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
@@ -238,7 +237,7 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	var checksum string
 	if fileInfo != nil {
 		fileSize = fileInfo.Size()
-		if sum, sumErr := b.calculateChecksum(backupPath); sumErr != nil {
+		if sum, sumErr := psync.FileSHA256(backupPath); sumErr != nil {
 			if b.logger != nil {
 				b.logger.Warn("Failed to calculate checksum for backup file", "error", sumErr)
 			}
@@ -480,23 +479,4 @@ func (b *BackupPlugin) ValidateBackup(ctx context.Context, backupPath string) (*
 	return backupProvider.ValidateBackup(ctx, backupPath)
 }
 
-// calculateChecksum calculates SHA256 checksum of a file
-func (b *BackupPlugin) calculateChecksum(filePath string) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			// Log but continue - file is still usable
-			_ = err
-		}
-	}()
-
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
-}
+// checksum helper moved to internal/plugins/sync/helpers.go

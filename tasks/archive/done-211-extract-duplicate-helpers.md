@@ -1,7 +1,8 @@
 # Extract Duplicate Helper Functions
 
 **Priority**: HIGH - Post-Commit Required
-**Status**: not-started
+**Status**: completed
+**Completed**: 2025-12-01
 **Effort**: 60 minutes
 
 ## Context
@@ -10,10 +11,10 @@ The export plugins (JSON, YAML, backup) contain duplicate helper functions for f
 
 ## Success Criteria
 
-- [ ] All plugins use shared helpers
-- [ ] No duplicate implementations
-- [ ] Tests pass
-- [ ] `grep -r "func fileSHA256" internal/plugins/sync/` shows only helpers.go
+- [x] All plugins use shared helpers
+- [x] No duplicate implementations
+- [x] Tests pass
+- [x] `grep -r "func fileSHA256" internal/plugins/sync/` shows only helpers.go
 
 ## Implementation
 
