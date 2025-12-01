@@ -6,6 +6,7 @@ metadata:
 
 resources:
 - configmap.yaml
+- secrets.yaml
 - service.yaml
 - deployment.yaml
 - pvc.yaml
