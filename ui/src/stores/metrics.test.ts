@@ -48,10 +48,10 @@ class MockWebSocket {
 vi.mock('@/api/metrics', () => ({
   getMetricsStatus: vi.fn().mockResolvedValue({ enabled: true, uptime_seconds: 3600 }),
   getMetricsHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
-  getSystemMetrics: vi.fn().mockResolvedValue({ 
-    cpu: 25, 
-    memory: 60, 
-    timestamp: '2023-01-01T00:00:00Z' 
+  getSystemMetrics: vi.fn().mockResolvedValue({
+    cpu: 25,
+    memory: 60,
+    timestamp: '2023-01-01T00:00:00Z'
   }),
   getDevicesMetrics: vi.fn().mockResolvedValue({ device1: 10, device2: 20 }),
   getDriftSummary: vi.fn().mockResolvedValue({ drift1: 5 }),
@@ -68,6 +68,19 @@ vi.mock('@/api/metrics', () => ({
   })
 }))
 
+// Set MockWebSocket as global WebSocket
+global.WebSocket = MockWebSocket as any
+
+// Track WebSocket instances for testing
+let wsInstances: MockWebSocket[] = []
+const OriginalMockWebSocket = MockWebSocket
+global.WebSocket = class extends OriginalMockWebSocket {
+  constructor(url: string) {
+    super(url)
+    wsInstances.push(this)
+  }
+} as any
+
 // Mock requestAnimationFrame
 global.requestAnimationFrame = vi.fn((cb) => setTimeout(cb, 16))
 global.cancelAnimationFrame = vi.fn()
@@ -78,6 +91,7 @@ describe('useMetricsStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     store = useMetricsStore()
+    wsInstances = []
     vi.clearAllMocks()
     vi.clearAllTimers()
     vi.useFakeTimers()
@@ -87,6 +101,11 @@ describe('useMetricsStore', () => {
     vi.useRealTimers()
     store.cleanup()
   })
+
+  // Helper to get the current WebSocket instance
+  function getWebSocket(): MockWebSocket | null {
+    return wsInstances.length > 0 ? wsInstances[wsInstances.length - 1] : null
+  }
 
   describe('WebSocket state management', () => {
     it('initializes with disconnected state', () => {
@@ -110,20 +129,20 @@ describe('useMetricsStore', () => {
     it('handles WebSocket messages correctly', async () => {
       store.connectWS()
       await vi.advanceTimersByTimeAsync(20)
-      
+
       const testMessage: WSMessage = {
         type: 'system',
         data: { cpu: 50, memory: 75, timestamp: '2023-01-01T00:01:00Z' },
         timestamp: '2023-01-01T00:01:00Z'
       }
-      
+
       // Simulate receiving message
-      const ws = store._ws as any
-      ws.simulateMessage(testMessage)
-      
+      const ws = getWebSocket()
+      ws?.simulateMessage(testMessage)
+
       // Wait for requestAnimationFrame
       await vi.advanceTimersByTimeAsync(20)
-      
+
       expect(store.system).toBeTruthy()
       expect(store.system?.cpu).toEqual([50])
       expect(store.system?.memory).toEqual([75])
@@ -133,17 +152,17 @@ describe('useMetricsStore', () => {
     it('handles unknown message types gracefully', async () => {
       store.connectWS()
       await vi.advanceTimersByTimeAsync(20)
-      
+
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      
+
       const testMessage = {
         type: 'unknown',
         data: { test: 'data' },
         timestamp: '2023-01-01T00:01:00Z'
       }
-      
-      const ws = store._ws as any
-      ws.simulateMessage(testMessage)
+
+      const ws = getWebSocket()
+      ws?.simulateMessage(testMessage)
       
       await vi.advanceTimersByTimeAsync(20)
       
