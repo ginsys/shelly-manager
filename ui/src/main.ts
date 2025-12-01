@@ -89,13 +89,39 @@ const router = createRouter({
     },
     
     // Admin
-    { 
-      path: '/admin', 
+    {
+      path: '/admin',
       name: 'admin',
       component: () => import('./pages/AdminSettingsPage.vue'),
       meta: { title: 'Admin Settings' }
     },
-    
+
+    // Notifications
+    {
+      path: '/notifications/channels',
+      name: 'notification-channels',
+      component: () => import('./pages/NotificationChannelsPage.vue'),
+      meta: { title: 'Notification Channels', category: 'notifications' }
+    },
+    {
+      path: '/notifications/channels/:id',
+      name: 'notification-channel-detail',
+      component: () => import('./pages/NotificationChannelDetailPage.vue'),
+      meta: { title: 'Channel Details', category: 'notifications' }
+    },
+    {
+      path: '/notifications/rules',
+      name: 'notification-rules',
+      component: () => import('./pages/NotificationRulesPage.vue'),
+      meta: { title: 'Notification Rules', category: 'notifications' }
+    },
+    {
+      path: '/notifications/history',
+      name: 'notification-history',
+      component: () => import('./pages/NotificationHistoryPage.vue'),
+      meta: { title: 'Notification History', category: 'notifications' }
+    },
+
     // 404 handler - must be last
     {
       path: '/:pathMatch(.*)*',
