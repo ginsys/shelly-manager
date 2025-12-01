@@ -1,7 +1,8 @@
 # Devices UI Refactor
 
 **Priority**: LOW - Enhancement
-**Status**: not-started
+**Status**: completed
+**Completed**: 2025-12-01
 **Effort**: 6-8 hours
 
 ## Context
@@ -10,11 +11,11 @@ The devices pages could benefit from consolidation and improved UX. This is an o
 
 ## Success Criteria
 
-- [ ] Devices pages consolidated on `ui/src/stores/devices.ts`
-- [ ] Error and empty states unified
-- [ ] Column toggles added
-- [ ] Page size controls added
-- [ ] Code duplication reduced
+- [x] Devices pages consolidated on `ui/src/stores/devices.ts`
+- [x] Error and empty states unified
+- [x] Column toggles added
+- [x] Page size controls added
+- [x] Code duplication reduced
 
 ## Implementation
 

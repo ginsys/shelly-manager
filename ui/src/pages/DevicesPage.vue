@@ -5,66 +5,73 @@
       <div class="spacer" />
       <input
         class="search"
-        v-model="search"
+        v-model="store.search"
         type="text"
         placeholder="Search (name, IP, MAC, type)"
         data-testid="device-search"
       />
-      <select v-model.number="pageSize" class="select" data-testid="page-size-select">
+      <ColumnToggle :columns="availableColumns" v-model:modelValue="columnsModel" />
+      <select v-model.number="pageSizeModel" class="select" data-testid="page-size-select">
         <option :value="10">10</option>
         <option :value="25">25</option>
         <option :value="50">50</option>
+        <option :value="100">100</option>
       </select>
     </div>
 
     <div class="card" data-testid="device-list">
       <div v-if="loading" class="state" data-testid="loading-state">Loading...</div>
-      <div v-else-if="error" class="state error" data-testid="error-state">{{ error }}</div>
+      <ErrorState v-else-if="error" data-testid="error-state" title="Failed to load devices" :message="error" :retryable="true" @retry="fetchData" />
 
       <table v-else class="table" data-testid="devices-table">
         <thead>
           <tr>
-            <th @click="toggleSort('name')">Name <SortIcon :field="'name'" :sort="sort" /></th>
-            <th @click="toggleSort('ip')">IP <SortIcon :field="'ip'" :sort="sort" /></th>
-            <th @click="toggleSort('mac')">MAC <SortIcon :field="'mac'" :sort="sort" /></th>
-            <th @click="toggleSort('type')">Type <SortIcon :field="'type'" :sort="sort" /></th>
-            <th @click="toggleSort('status')">Status <SortIcon :field="'status'" :sort="sort" /></th>
-            <th @click="toggleSort('last_seen')">Last Seen <SortIcon :field="'last_seen'" :sort="sort" /></th>
-            <th>Firmware</th>
+            <th v-if="store.columns.name" @click="toggleSort('name')">Name <SortIcon :field="'name'" :sort="sort" /></th>
+            <th v-if="store.columns.ip" @click="toggleSort('ip')">IP <SortIcon :field="'ip'" :sort="sort" /></th>
+            <th v-if="store.columns.mac" @click="toggleSort('mac')">MAC <SortIcon :field="'mac'" :sort="sort" /></th>
+            <th v-if="store.columns.type" @click="toggleSort('type')">Type <SortIcon :field="'type'" :sort="sort" /></th>
+            <th v-if="store.columns.status" @click="toggleSort('status')">Status <SortIcon :field="'status'" :sort="sort" /></th>
+            <th v-if="store.columns.last_seen" @click="toggleSort('last_seen')">Last Seen <SortIcon :field="'last_seen'" :sort="sort" /></th>
+            <th v-if="store.columns.firmware">Firmware</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="d in pagedSortedFiltered" :key="d.id" data-testid="device-row">
-            <td>
+            <td v-if="store.columns.name">
               <router-link :to="`/devices/${d.id}`" class="rowlink" data-testid="device-link">{{ d.name || '-' }}</router-link>
             </td>
-            <td>{{ d.ip || '-' }}</td>
-            <td class="mono">{{ d.mac }}</td>
-            <td>{{ d.type }}</td>
-            <td>
+            <td v-if="store.columns.ip">{{ d.ip || '-' }}</td>
+            <td v-if="store.columns.mac" class="mono">{{ d.mac }}</td>
+            <td v-if="store.columns.type">{{ d.type }}</td>
+            <td v-if="store.columns.status">
               <span :class="['chip', d.status]" data-testid="device-status">{{ d.status || 'unknown' }}</span>
             </td>
-            <td>{{ formatDate(d.last_seen) }}</td>
-            <td class="mono small">{{ d.firmware || '-' }}</td>
+            <td v-if="store.columns.last_seen">{{ formatDate(d.last_seen) }}</td>
+            <td v-if="store.columns.firmware" class="mono small">{{ d.firmware || '-' }}</td>
           </tr>
           <tr v-if="pagedSortedFiltered.length === 0">
-            <td colspan="7" class="state" data-testid="empty-state">No devices found</td>
+            <td :colspan="visibleColumnCount" class="state" data-testid="empty-state">
+              <EmptyState title="No devices found" message="Try adjusting your filters or search." />
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
 
     <div class="pagination" data-testid="pagination">
-      <button class="btn" :disabled="page <= 1" @click="prevPage" data-testid="prev-page">Prev</button>
-      <span>Page {{ page }} / {{ totalPages || 1 }}</span>
+      <button class="btn" :disabled="store.page <= 1" @click="prevPage" data-testid="prev-page">Prev</button>
+      <span>Page {{ store.page }} / {{ totalPages || 1 }}</span>
       <button class="btn" :disabled="!hasNext" @click="nextPage" data-testid="next-page">Next</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { listDevices } from '../api/devices'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useDevicesStore } from '@/stores/devices'
+import ErrorState from '@/components/shared/ErrorState.vue'
+import EmptyState from '@/components/shared/EmptyState.vue'
+import ColumnToggle from '@/components/shared/ColumnToggle.vue'
 import type { Device } from '../api/types'
 
 // Local sort descriptor
@@ -72,21 +79,17 @@ type Sort = { field: keyof Device | 'last_seen'; dir: 'asc' | 'desc' } | null
 
 const loading = ref(false)
 const error = ref<string | null>(null)
-const items = ref<Device[]>([])
-const page = ref(1)
-const pageSize = ref(25)
 const totalPages = ref<number | null>(null)
 const hasNext = ref(false)
-const search = ref('')
 const sort = ref<Sort>(null)
+const store = useDevicesStore()
 
 async function fetchData() {
   loading.value = true
   error.value = null
   try {
-    const { items: list, meta } = await listDevices({ page: page.value, pageSize: pageSize.value })
-    items.value = list
-    const p = meta?.pagination
+    await store.fetch()
+    const p = store.meta?.pagination
     totalPages.value = p?.total_pages ?? null
     hasNext.value = !!p?.has_next
   } catch (e: any) {
@@ -96,11 +99,12 @@ async function fetchData() {
   }
 }
 
-onMounted(fetchData)
-watch([page, pageSize], fetchData)
+onMounted(() => { store.initializeFromStorage(); fetchData() })
+watch(() => store.page, fetchData)
+watch(() => store.pageSize, fetchData)
 
-function prevPage() { if (page.value > 1) page.value -= 1 }
-function nextPage() { if (hasNext.value) page.value += 1 }
+function prevPage() { if (store.page > 1) store.page -= 1 }
+function nextPage() { if (hasNext.value) store.page += 1 }
 
 function toggleSort(field: Sort['field']) {
   if (!sort.value || sort.value.field !== field) {
@@ -118,9 +122,9 @@ function formatDate(iso?: string) {
 }
 
 const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return items.value
-  return items.value.filter(d => {
+  const q = store.search.trim().toLowerCase()
+  if (!q) return store.items as Device[]
+  return (store.items as Device[]).filter(d => {
     return (
       (d.name || '').toLowerCase().includes(q) ||
       (d.ip || '').toLowerCase().includes(q) ||
@@ -150,6 +154,29 @@ const sorted = computed(() => {
 // The backend already returns a page slice; but we keep local guard in case of future changes
 const pagedSortedFiltered = computed(() => sorted.value)
 
+// Column toggle wiring
+const availableColumns = [
+  { key: 'name', label: 'Name' },
+  { key: 'ip', label: 'IP' },
+  { key: 'mac', label: 'MAC' },
+  { key: 'type', label: 'Type' },
+  { key: 'status', label: 'Status' },
+  { key: 'last_seen', label: 'Last Seen' },
+  { key: 'firmware', label: 'Firmware' },
+] as const
+
+const columnsModel = computed({
+  get: () => store.columns,
+  set: (v) => store.setColumns(v),
+})
+
+const pageSizeModel = computed({
+  get: () => store.pageSize,
+  set: (v: number) => store.setPageSize(v),
+})
+
+const visibleColumnCount = computed(() => Object.values(store.columns).filter(Boolean).length || 1)
+
 </script>
 
 <script lang="ts">
@@ -171,6 +198,7 @@ export default {
 .spacer { flex: 1; }
 .search { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 260px; }
 .select { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.toolbar :deep(.column-toggle) { position: relative }
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
 .state { padding: 16px; text-align: center; color: #64748b; }
 .state.error { color: #b91c1c; }
