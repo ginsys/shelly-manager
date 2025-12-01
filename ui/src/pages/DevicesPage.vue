@@ -3,6 +3,9 @@
     <div class="toolbar">
       <h1 class="title" data-testid="page-title">Devices</h1>
       <div class="spacer" />
+      <button class="primary-button" @click="showCreateDialog = true" data-testid="add-device-btn">
+        + Add Device
+      </button>
       <input
         class="search"
         v-model="search"
@@ -31,6 +34,7 @@
             <th @click="toggleSort('status')">Status <SortIcon :field="'status'" :sort="sort" /></th>
             <th @click="toggleSort('last_seen')">Last Seen <SortIcon :field="'last_seen'" :sort="sort" /></th>
             <th>Firmware</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -46,9 +50,17 @@
             </td>
             <td>{{ formatDate(d.last_seen) }}</td>
             <td class="mono small">{{ d.firmware || '-' }}</td>
+            <td>
+              <div class="actions">
+                <button class="action-btn" @click="handleControl(d.id, 'on')" title="Turn On">ON</button>
+                <button class="action-btn" @click="handleControl(d.id, 'off')" title="Turn Off">OFF</button>
+                <button class="action-btn" @click="handleEdit(d)" title="Edit">✏️</button>
+                <button class="action-btn danger" @click="handleDelete(d.id)" title="Delete">🗑️</button>
+              </div>
+            </td>
           </tr>
           <tr v-if="pagedSortedFiltered.length === 0">
-            <td colspan="7" class="state" data-testid="empty-state">No devices found</td>
+            <td colspan="8" class="state" data-testid="empty-state">No devices found</td>
           </tr>
         </tbody>
       </table>
@@ -59,13 +71,28 @@
       <span>Page {{ page }} / {{ totalPages || 1 }}</span>
       <button class="btn" :disabled="!hasNext" @click="nextPage" data-testid="next-page">Next</button>
     </div>
+
+    <!-- Create/Edit Dialog -->
+    <div v-if="showCreateDialog || showEditDialog" class="modal-overlay" @click.self="closeDialogs">
+      <div class="modal">
+        <h2>{{ showEditDialog ? 'Edit Device' : 'Add New Device' }}</h2>
+        <DeviceForm
+          ref="deviceFormRef"
+          :device="editingDevice"
+          :isEdit="showEditDialog"
+          @submit="handleFormSubmit"
+          @cancel="closeDialogs"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { listDevices } from '../api/devices'
+import { listDevices, createDevice, updateDevice, deleteDevice, controlDevice } from '../api/devices'
 import type { Device } from '../api/types'
+import DeviceForm from '../components/devices/DeviceForm.vue'
 
 // Local sort descriptor
 type Sort = { field: keyof Device | 'last_seen'; dir: 'asc' | 'desc' } | null
@@ -79,6 +106,10 @@ const totalPages = ref<number | null>(null)
 const hasNext = ref(false)
 const search = ref('')
 const sort = ref<Sort>(null)
+const showCreateDialog = ref(false)
+const showEditDialog = ref(false)
+const editingDevice = ref<Device | null>(null)
+const deviceFormRef = ref<InstanceType<typeof DeviceForm> | null>(null)
 
 async function fetchData() {
   loading.value = true
@@ -150,6 +181,52 @@ const sorted = computed(() => {
 // The backend already returns a page slice; but we keep local guard in case of future changes
 const pagedSortedFiltered = computed(() => sorted.value)
 
+function closeDialogs() {
+  showCreateDialog.value = false
+  showEditDialog.value = false
+  editingDevice.value = null
+  deviceFormRef.value?.reset()
+}
+
+function handleEdit(device: Device) {
+  editingDevice.value = device
+  showEditDialog.value = true
+}
+
+async function handleFormSubmit(data: Partial<Device>) {
+  try {
+    if (showEditDialog.value && editingDevice.value) {
+      await updateDevice(editingDevice.value.id, data)
+    } else {
+      await createDevice(data)
+    }
+    closeDialogs()
+    await fetchData()
+  } catch (e: any) {
+    deviceFormRef.value?.setError(e?.message || 'Operation failed')
+  }
+}
+
+async function handleDelete(id: number) {
+  if (!confirm('Are you sure you want to delete this device?')) return
+  try {
+    await deleteDevice(id)
+    await fetchData()
+  } catch (e: any) {
+    alert('Failed to delete device: ' + (e?.message || 'Unknown error'))
+  }
+}
+
+async function handleControl(id: number, action: string) {
+  try {
+    await controlDevice(id, action)
+    // Optionally refresh device status
+    setTimeout(fetchData, 500)
+  } catch (e: any) {
+    alert('Failed to control device: ' + (e?.message || 'Unknown error'))
+  }
+}
+
 </script>
 
 <script lang="ts">
@@ -188,4 +265,12 @@ export default {
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .rowlink { color: #2563eb; text-decoration: none; }
 .rowlink:hover { text-decoration: underline; }
+.primary-button { padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.actions { display: flex; gap: 4px; }
+.action-btn { padding: 4px 8px; font-size: 12px; background: #e5e7eb; border: none; border-radius: 4px; cursor: pointer; }
+.action-btn.danger { background: #fee2e2; color: #991b1b; }
+.action-btn:hover { opacity: 0.8; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: white; padding: 24px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+.modal h2 { margin-top: 0; }
 </style>
