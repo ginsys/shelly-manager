@@ -173,6 +173,38 @@ shelly-provisioner:
 - Dropped Linux capabilities
 - Security contexts enforced
 
+### Secrets Management
+- Use Kubernetes Secrets for sensitive values (SMTP, OPNSense, Admin API key).
+- Base Kustomize includes `secrets.yaml` (create your own values before applying).
+
+Example (env refs in Deployment):
+
+```
+env:
+  - name: SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: shelly-manager-secrets
+        key: SMTP_PASSWORD
+  - name: SHELLY_OPNSENSE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: shelly-manager-secrets
+        key: OPNSENSE_API_KEY
+  - name: SHELLY_OPNSENSE_API_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: shelly-manager-secrets
+        key: OPNSENSE_API_SECRET
+  - name: SHELLY_SECURITY_ADMIN_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: shelly-manager-secrets
+        key: ADMIN_API_KEY
+```
+
+See also: `docs/security/SECURITY_SECRETS.md` for broader guidance and the `*_FILE` pattern.
+
 ---
 
 ## 📈 Monitoring & Observability

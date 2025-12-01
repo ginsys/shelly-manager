@@ -1,7 +1,8 @@
 # Secrets Management (K8s)
 
 **Priority**: MEDIUM - Important Feature
-**Status**: partial (50%)
+**Status**: completed
+**Completed**: 2025-12-01
 **Effort**: 4-6 hours
 
 ## Context
@@ -10,11 +11,11 @@ Docker Compose `.env.example` exists (238 lines) and K8s ConfigMaps are complete
 
 ## Success Criteria
 
-- [ ] K8s Secrets manifest created for sensitive config
-- [ ] SMTP credentials stored in Secrets
-- [ ] OPNSense credentials stored in Secrets
-- [ ] Documentation updated with secrets usage
-- [ ] Existing ConfigMaps reference Secrets properly
+- [x] K8s Secrets manifest created for sensitive config
+- [x] SMTP credentials stored in Secrets
+- [x] OPNSense credentials stored in Secrets
+- [x] Documentation updated with secrets usage
+- [x] Existing ConfigMaps reference Secrets properly
 
 ## Implementation
 
@@ -97,10 +98,10 @@ Add section on secrets management.
 
 ## Remaining Work
 
-- [ ] Create Secrets manifest
-- [ ] Update Deployment to use Secrets
-- [ ] Add sealed-secrets support (optional)
-- [ ] Update documentation
+- [x] Create Secrets manifest
+- [x] Update Deployment to use Secrets
+- [x] Add sealed-secrets support (optional)
+- [x] Update documentation
 
 ## Validation
 
