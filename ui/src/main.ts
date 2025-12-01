@@ -81,12 +81,6 @@ const router = createRouter({
       component: () => import('./pages/MetricsDashboardPage.vue'),
       meta: { title: 'Metrics Dashboard' }
     },
-    { 
-      path: '/stats', 
-      name: 'stats',
-      component: () => import('./pages/StatsPage.vue'),
-      meta: { title: 'Statistics' }
-    },
     
     // Admin
     { 

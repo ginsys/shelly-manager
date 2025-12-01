@@ -11,7 +11,6 @@ const routes = [
   { path: '/import/history', name: 'import-history', title: 'Import History' },
   { path: '/plugins', name: 'plugins', title: 'Plugin Management' },
   { path: '/dashboard', name: 'metrics', title: 'Metrics Dashboard' },
-  { path: '/stats', name: 'stats', title: 'Statistics' },
   { path: '/admin', name: 'admin', title: 'Admin Settings' }
 ];
 

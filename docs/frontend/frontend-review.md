@@ -104,7 +104,7 @@ ui/
 | **Import History** | `/import/history` | View past imports with filtering | Active |
 | **Plugins** | `/plugins` | Browse, configure, and test plugins | Active |
 | **Metrics Dashboard** | `/dashboard` | Real-time system metrics with WebSocket | Active |
-| **Stats** | `/stats` | Statistics view | **Unreachable** |
+<!-- Removed: Stats page was an unreachable stub; route deleted -->
 | **Admin** | `/admin` | Admin key rotation | Active |
 
 ### 2.3 Key User Flows
@@ -137,7 +137,7 @@ Create Backup → Select devices/format → Preview → Create → (later) Resto
 
 | Page | Route | Issue | Recommendation |
 |------|-------|-------|----------------|
-| **StatsPage.vue** | `/stats` | Route exists but no navigation link | Add to menu or remove |
+| (none) | — | No orphaned routes remain | Resolved |
 
 ### 3.2 Component Status
 
@@ -418,8 +418,8 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 ### Low Priority
 6. **Server-side search** - Current client-side filtering won't scale
 7. **API type generation** - Consider OpenAPI/TypeScript code generation
-8. **Complete stub pages** - DeviceDetailPage, StatsPage need implementation
-9. **Remove or link StatsPage** - Currently unreachable via navigation
+8. **Complete stub pages** - DeviceDetailPage needs implementation
+<!-- StatsPage removal completed; no longer applicable -->
 
 ---
 
@@ -524,7 +524,7 @@ After completing these tasks:
 | Lines per Page Component | 1,625 max | <500 max |
 | Form Duplication | ~4,000 lines | ~1,500 lines |
 | Page Component Test Coverage | ~20% | ~80% |
-| Unreachable Routes | 1 | 0 |
+| Unreachable Routes | 0 | 0 |
 
 ### 7.7 API Coverage Breakdown
 
@@ -562,7 +562,6 @@ After completing all tasks, projected endpoint coverage:
 | ImportHistoryPage.vue | 57 | Import history |
 | AdminSettingsPage.vue | 45 | Admin functions |
 | ExportDetailPage.vue | 43 | Export details (stub) |
-| StatsPage.vue | 38 | Statistics (stub) |
 | DeviceDetailPage.vue | 34 | Device details (stub) |
 
 ### API Modules
