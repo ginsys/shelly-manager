@@ -1,13 +1,9 @@
 package jsonexport
 
 import (
-	"archive/zip"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -147,13 +143,13 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 		switch algo {
 		case "zip":
 			zipPath := filepath.Join(outputPath, fmt.Sprintf("shelly-export-%s-%s.json.zip", ts, exportID))
-			if err := writeZipSingle(zipPath, baseName, buf); err != nil {
+			if err := sync.WriteZipSingle(zipPath, baseName, buf); err != nil {
 				return nil, err
 			}
 			path = zipPath
 		default: // gzip
 			gzPath := filepath.Join(outputPath, fmt.Sprintf("shelly-export-%s-%s.json.gz", ts, exportID))
-			if err := writeGzip(gzPath, buf); err != nil {
+			if err := sync.WriteGzip(gzPath, buf); err != nil {
 				return nil, err
 			}
 			path = gzPath
@@ -165,7 +161,7 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 	}
 
 	fi, _ := os.Stat(path)
-	sum, _ := fileSHA256(path)
+	sum, _ := sync.FileSHA256(path)
 
 	if p.logger != nil {
 		p.logger.Info("JSON export completed", "path", path, "size", func() int64 {
@@ -212,57 +208,3 @@ func (p *Plugin) Capabilities() sync.PluginCapabilities {
 
 func (p *Plugin) Initialize(logger *logging.Logger) error { p.logger = logger; return nil }
 func (p *Plugin) Cleanup() error                          { return nil }
-
-// helpers
-func writeGzip(path string, data []byte) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer f.Close()
-	gz := gzip.NewWriter(f)
-	if _, err := gz.Write(data); err != nil {
-		_ = gz.Close()
-		return fmt.Errorf("failed to write gzip: %w", err)
-	}
-	if err := gz.Close(); err != nil {
-		return fmt.Errorf("failed to close gzip: %w", err)
-	}
-	return f.Sync()
-}
-
-func writeZipSingle(path string, entryName string, data []byte) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer f.Close()
-	zw := zip.NewWriter(f)
-	hdr := &zip.FileHeader{Name: entryName, Method: zip.Deflate}
-	w, err := zw.CreateHeader(hdr)
-	if err != nil {
-		_ = zw.Close()
-		return fmt.Errorf("failed to create zip entry: %w", err)
-	}
-	if _, err := w.Write(data); err != nil {
-		_ = zw.Close()
-		return fmt.Errorf("failed to write zip entry: %w", err)
-	}
-	if err := zw.Close(); err != nil {
-		return fmt.Errorf("failed to close zip: %w", err)
-	}
-	return f.Sync()
-}
-
-func fileSHA256(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
