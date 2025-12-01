@@ -1,0 +1,28 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: shelly-manager
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`shelly.example.com`)
+      kind: Rule
+      services:
+        - name: shelly-manager
+          port: 8080
+      middlewares:
+        - name: security-headers
+  tls:
+    certResolver: letsencrypt
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+spec:
+  headers:
+    stsSeconds: 63072000
+    stsIncludeSubdomains: true
+    stsPreload: true
+
