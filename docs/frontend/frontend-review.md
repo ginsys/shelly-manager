@@ -1,22 +1,23 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Last Updated:** 2025-12-02
-**Status:** Production-ready for export/import/plugins/templates; overall API exposure ~30%
+**Status:** Production-ready for export/import/plugins/templates/typed-config; overall API exposure ~36%
 **Next Review:** After Phase 7 completion
 
 ---
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 34 Vue components (18 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 30% of backend API functionality (42/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 37 Vue components (18 pages + 1 layout + 18 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 36% of backend API functionality (50/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
-- 34 Vue components (18 pages + 1 layout + 15 reusable components)
-- 11 API modules with 71 actively used endpoint functions
-- 7 Pinia stores for state management
+- 37 Vue components (18 pages + 1 layout + 18 reusable components)
+- 12 API modules with 79 actively used endpoint functions
+- 8 Pinia stores for state management
 - ~6,400 lines in page components
 - TypeScript throughout with strong type safety
 - Real-time WebSocket metrics with REST polling fallback
+- Schema-driven configuration forms with validation
 
 ---
 
@@ -162,7 +163,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Device Configuration | 11 | 11 | 0 | 100% |
 | Capability Config | 5 | 0 | 5 | 0% |
 | Configuration Templates | 8 | 8 | 0 | 100% |
-| Typed Configuration | 8 | 0 | 8 | 0% |
+| Typed Configuration | 8 | 8 | 0 | 100% |
 | Bulk Operations | 4 | 0 | 4 | 0% |
 | Drift Detection Schedules | 7 | 0 | 7 | 0% |
 | Drift Reporting | 4 | 0 | 4 | 0% |
@@ -177,9 +178,9 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **42** | **96** | **30%** |
+| **TOTAL** | **138** | **50** | **88** | **36%** |
 
-### 4.3 Used Endpoints (42 total)
+### 4.3 Used Endpoints (50 total)
 
 #### Devices (2 endpoints)
 | Endpoint | Method | Purpose |
@@ -198,6 +199,18 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/configuration/preview-template` | POST | Preview template rendering with variables |
 | `/configuration/validate-template` | POST | Validate template syntax |
 | `/configuration/template-examples` | GET | Get example templates |
+
+#### Typed Configuration (8 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/devices/{id}/config/typed` | GET | Get typed configuration for device |
+| `/devices/{id}/config/typed` | PUT | Update typed configuration |
+| `/devices/{id}/capabilities` | GET | Get device capabilities and supported features |
+| `/configuration/validate-typed` | POST | Validate typed configuration |
+| `/configuration/convert-to-typed` | POST | Convert raw config to typed format |
+| `/configuration/convert-to-raw` | POST | Convert typed config to raw format |
+| `/configuration/schema` | GET | Get configuration schema for device type |
+| `/configuration/bulk-validate` | POST | Bulk validate multiple configurations |
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |
