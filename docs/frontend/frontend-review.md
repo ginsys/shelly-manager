@@ -96,7 +96,7 @@ ui/
 | Page | Route | Purpose | Status |
 |------|-------|---------|--------|
 | **Devices** | `/` | Main landing - list all managed devices | Active |
-| **Device Detail** | `/devices/{id}` | View individual device configuration | Stub |
+| **Device Detail** | `/devices/{id}` | View device details, status, energy, controls | Active |
 | **Schedule Management** | `/export/schedules` | Create/edit recurring export schedules | Active |
 | **Backup Management** | `/export/backup` | Create backups, restore from backups | Active |
 | **GitOps Export** | `/export/gitops` | IaC exports (Terraform, Ansible, K8s) | Active |
@@ -562,7 +562,7 @@ After completing all tasks, projected endpoint coverage:
 | ImportHistoryPage.vue | 57 | Import history |
 | AdminSettingsPage.vue | 45 | Admin functions |
 | ExportDetailPage.vue | 43 | Export details (stub) |
-| DeviceDetailPage.vue | 34 | Device details (stub) |
+| DeviceDetailPage.vue | 286 | Device details |
 
 ### API Modules
 | File | Functions | Purpose |

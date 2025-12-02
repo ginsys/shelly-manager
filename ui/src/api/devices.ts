@@ -90,3 +90,13 @@ export async function getDeviceEnergy(id: number | string): Promise<DeviceEnergy
   }
   return res.data.data
 }
+
+// Device capabilities
+export type DeviceCapabilities = Record<string, boolean>
+export async function getDeviceCapabilities(id: number | string): Promise<DeviceCapabilities> {
+  const res = await api.get<APIResponse<DeviceCapabilities>>(`/devices/${id}/capabilities`)
+  if (!res.data.success || !res.data.data) {
+    throw new Error(res.data.error?.message || 'Failed to get device capabilities')
+  }
+  return res.data.data
+}

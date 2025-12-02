@@ -57,7 +57,7 @@ Within each level:
 | 354 | [Improve Error Messages](354-improve-error-messages.md) | not-started |
 | 355 | [Page Component Unit Tests](355-page-component-unit-tests.md) | not-started |
 | 361 | [Remove StatsPage](361-remove-statspage.md) | not-started |
-| 362 | [Complete DeviceDetailPage](362-complete-devicedetailpage.md) | not-started |
+| 362 | [Complete DeviceDetailPage](archive/done-362-complete-devicedetailpage.md) | completed |
 
 ### LOW (400s) - Enhancement & Polish
 
