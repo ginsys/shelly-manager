@@ -36,7 +36,7 @@ Within each level:
 | 221 | [Defer/Close Pattern Fix](221-defer-close-pattern-fix.md) | not-started |
 | 231 | [README Export Documentation](231-readme-export-documentation.md) | partial |
 | 241 | [Code Comments Compression](241-code-comments-compression.md) | not-started |
-| 251 | [Reusable WebSocket Client](251-reusable-websocket-client.md) | not-started |
+| 251 | [Reusable WebSocket Client](archive/done-251-reusable-websocket-client.md) | completed |
 
 ### MEDIUM (300s) - Important Features
 
