@@ -45,7 +45,7 @@ Within each level:
 | 311 | [Notification UI Implementation](311-notification-ui-implementation.md) | not-started |
 | 321 | [Provisioning UI Integration](321-provisioning-ui-integration.md) | not-started |
 | 331 | [Secrets Management K8s](331-secrets-management-k8s.md) | partial |
-| 341 | [Device Management API Integration](341-device-management-api-integration.md) | not-started |
+| 341 | [Device Management API Integration](archive/done-341-device-management-api-integration.md) | completed |
 | 342 | [Device Configuration UI](342-device-configuration-ui.md) | not-started |
 | 343 | [Configuration Templates UI](343-configuration-templates-ui.md) | not-started |
 | 344 | [Typed Configuration UI](344-typed-configuration-ui.md) | not-started |

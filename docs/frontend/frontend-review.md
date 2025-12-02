@@ -158,7 +158,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 
 | Category | Total Endpoints | Used | Unused | Coverage |
 |----------|-----------------|------|--------|----------|
-| Device Management | 8 | 2 | 6 | 25% |
+| Device Management | 8 | 5 | 3 | 62% |
 | Device Configuration | 11 | 0 | 11 | 0% |
 | Capability Config | 5 | 0 | 5 | 0% |
 | Configuration Templates | 8 | 0 | 8 | 0% |
@@ -179,13 +179,16 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Health/Version | 3 | 1 | 2 | 33% |
 | **TOTAL** | **138** | **23** | **115** | **17%** |
 
-### 4.3 Used Endpoints (23 total)
+### 4.3 Used Endpoints (26 total)
 
-#### Devices (2 endpoints)
+#### Devices (5 endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/devices` | GET | List all devices with pagination |
 | `/devices/{id}` | GET | Get device details |
+| `/devices` | POST | Create device |
+| `/devices/{id}` | PUT | Update device |
+| `/devices/{id}` | DELETE | Delete device |
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |
