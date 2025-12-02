@@ -14,13 +14,25 @@ const router = createRouter({
       component: () => import('./pages/DevicesPage.vue'),
       meta: { title: 'Devices' }
     },
-    { 
-      path: '/devices/:id', 
+    {
+      path: '/devices/:id',
       name: 'device-detail',
       component: () => import('./pages/DeviceDetailPage.vue'),
       meta: { title: 'Device Details' }
     },
-    
+    {
+      path: '/devices/:id/config',
+      name: 'device-config',
+      component: () => import('./pages/DeviceConfigPage.vue'),
+      meta: { title: 'Device Configuration' }
+    },
+    {
+      path: '/devices/:id/config/history',
+      name: 'device-config-history',
+      component: () => import('./pages/DeviceConfigHistoryPage.vue'),
+      meta: { title: 'Configuration History' }
+    },
+
     // Export & Import routes
     { 
       path: '/export/schedules', 

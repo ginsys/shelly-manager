@@ -8,12 +8,12 @@
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 29 Vue components (13 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 17% of backend API functionality (23/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 31 Vue components (15 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 25% of backend API functionality (34/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
-- 29 Vue components (13 pages + 1 layout + 15 reusable components)
-- 9 API modules with 52 actively used endpoint functions
-- 5 Pinia stores for state management
+- 31 Vue components (15 pages + 1 layout + 15 reusable components)
+- 10 API modules with 63 actively used endpoint functions
+- 6 Pinia stores for state management
 - ~5,600 lines in page components
 - TypeScript throughout with strong type safety
 - Real-time WebSocket metrics with REST polling fallback
@@ -158,8 +158,8 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 
 | Category | Total Endpoints | Used | Unused | Coverage |
 |----------|-----------------|------|--------|----------|
-| Device Management | 8 | 2 | 6 | 25% |
-| Device Configuration | 11 | 0 | 11 | 0% |
+| Device Management | 8 | 8 | 0 | 100% |
+| Device Configuration | 11 | 11 | 0 | 100% |
 | Capability Config | 5 | 0 | 5 | 0% |
 | Configuration Templates | 8 | 0 | 8 | 0% |
 | Typed Configuration | 8 | 0 | 8 | 0% |
@@ -291,7 +291,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 - `GET /api/v1/devices/{id}/status` - Get device status
 - `GET /api/v1/devices/{id}/energy` - Get energy metrics
 
-#### Device Configuration (11 unused)
+#### Device Configuration (11 used - Task 342 ✓)
 - `GET /api/v1/devices/{id}/config` - Get stored config
 - `PUT /api/v1/devices/{id}/config` - Update stored config
 - `GET /api/v1/devices/{id}/config/current` - Get live config
@@ -520,7 +520,7 @@ After completing these tasks:
 
 | Metric | Current | Target |
 |--------|---------|--------|
-| API Coverage | 17% (23/138 endpoints) | 65% (90/138 endpoints) |
+| API Coverage | 25% (34/138 endpoints) | 65% (90/138 endpoints) |
 | Lines per Page Component | 1,625 max | <500 max |
 | Form Duplication | ~4,000 lines | ~1,500 lines |
 | Page Component Test Coverage | ~20% | ~80% |
@@ -532,8 +532,8 @@ After completing all tasks, projected endpoint coverage:
 
 | Category | Current | After Tasks | Coverage |
 |----------|---------|-------------|----------|
-| Device Management | 2/8 | 8/8 | 100% (Task 341) |
-| Device Configuration | 0/11 | 11/11 | 100% (Task 342) |
+| Device Management | 8/8 | 8/8 | 100% ✓ (Task 341) |
+| Device Configuration | 11/11 | 11/11 | 100% ✓ (Task 342) |
 | Configuration Templates | 0/8 | 8/8 | 100% (Task 343) |
 | Typed Configuration | 0/8 | 8/8 | 100% (Task 344) |
 | Drift Detection | 0/11 | 11/11 | 100% (Task 345) |
