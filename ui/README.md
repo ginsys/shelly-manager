@@ -43,6 +43,38 @@ Production-like run
 - Build the SPA: `make ui-build` (writes to `ui/dist`).
 - The Go server will auto-serve `ui/dist` at `/` if it exists (no separate web server needed). Use `make run` and open `http://localhost:8080`.
 
+## Configuration
+
+### Development
+
+For local development with custom backend configuration, create `.env.development.local`:
+
+```env
+VITE_API_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080
+VITE_ENABLE_DEVTOOLS=true
+```
+
+### Production
+
+For production deployments, create `.env.production.local`:
+
+```env
+VITE_API_URL=/api
+VITE_WS_URL=wss://shelly.example.com
+VITE_ENABLE_DEVTOOLS=false
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend API base URL | `/api` |
+| `VITE_WS_URL` | WebSocket server URL | Auto-detected from API URL |
+| `VITE_ENABLE_DEVTOOLS` | Enable Vue devtools | `false` |
+
+**Note**: The default setup with `make run` and `make ui-dev` handles configuration automatically via `/app-config.js` injection. Manual `.env` files are only needed for custom deployments.
+
 ## End-to-End Testing
 
 The project includes comprehensive E2E testing with Playwright covering 810+ test scenarios.

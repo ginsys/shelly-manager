@@ -80,3 +80,137 @@ The server exposes baseline HTTP metrics via the `/metrics/prometheus` handler. 
 - `shelly_http_response_size_bytes{method, path}`
 
 Use `metrics.prometheus_enabled: true` in config and scrape `/metrics/prometheus`.
+
+## Real-Time Metrics via WebSocket
+
+Shelly Manager provides real-time metrics updates via WebSocket connection for live dashboard monitoring.
+
+### Connection
+
+Connect to the WebSocket endpoint:
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/api/v1/metrics/ws')
+
+ws.onopen = () => {
+  console.log('WebSocket connected')
+}
+
+ws.onmessage = (event) => {
+  const metrics = JSON.parse(event.data)
+  console.log('Received metrics:', metrics)
+}
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error)
+  // Fallback to REST polling
+}
+
+ws.onclose = (event) => {
+  console.log('WebSocket closed:', event.code, event.reason)
+  // Implement reconnection logic if needed
+}
+```
+
+For authenticated connections, pass the admin key as a query parameter:
+
+```javascript
+const adminKey = 'your-admin-key'
+const ws = new WebSocket(`ws://localhost:8080/api/v1/metrics/ws?token=${encodeURIComponent(adminKey)}`)
+```
+
+### Message Format
+
+The WebSocket sends periodic metrics updates in JSON format:
+
+```json
+{
+  "type": "system",
+  "data": {
+    "cpu": 15.2,
+    "memory": 45.8,
+    "disk": 62.3,
+    "timestamp": "2025-01-15T10:30:00Z"
+  },
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+```
+
+```json
+{
+  "type": "devices",
+  "data": {
+    "total": 25,
+    "online": 23,
+    "offline": 2
+  },
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+```
+
+```json
+{
+  "type": "drift",
+  "data": {
+    "total_drifts": 3,
+    "unresolved": 2,
+    "resolved": 1
+  },
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+```
+
+### Update Frequency
+
+- Metrics are broadcast every 5 seconds by default
+- System metrics (CPU, memory, disk) update every 5s
+- Device counts update on change or every 30s
+- Drift summaries update on change or every 60s
+
+### Automatic Failover
+
+The UI automatically falls back to REST polling if WebSocket connection fails:
+
+- **Initial connection timeout**: 5 seconds
+- **Reconnection attempts**: 3 attempts with exponential backoff
+- **Backoff delays**: 1s, 2s, 4s
+- **Fallback polling interval**: 30 seconds via REST API
+- **Heartbeat timeout**: 30 seconds of no messages triggers reconnection
+
+### WebSocket Lifecycle
+
+1. **Connection**: Client connects to `/api/v1/metrics/ws`
+2. **Authentication**: Token validated (if provided)
+3. **Streaming**: Server sends periodic metric updates
+4. **Heartbeat**: Implicit via regular messages (30s timeout)
+5. **Disconnection**: Clean close on client disconnect or server shutdown
+6. **Reconnection**: Client implements exponential backoff on connection loss
+
+### Error Handling
+
+WebSocket close codes:
+
+- `1000`: Normal closure - client disconnect
+- `1006`: Abnormal closure - connection lost (trigger reconnect)
+- `1008`: Policy violation - authentication failed
+- `1011`: Internal error - server error (trigger reconnect)
+
+### Production Considerations
+
+For production deployments with TLS:
+
+```javascript
+const ws = new WebSocket('wss://shelly.example.com/api/v1/metrics/ws')
+```
+
+Ensure your reverse proxy (nginx, traefik) supports WebSocket upgrades:
+
+```nginx
+location /api/v1/metrics/ws {
+    proxy_pass http://shelly-manager:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 86400;  # 24 hours
+}
+```
