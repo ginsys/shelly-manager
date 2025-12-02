@@ -1,18 +1,18 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Last Updated:** 2025-12-02
-**Status:** Production-ready for export/import/plugins/templates/typed-config/drift; overall API exposure ~44%
+**Status:** Production-ready for export/import/plugins/templates/typed-config/drift/bulk; overall API exposure ~47%
 **Next Review:** After Phase 7 completion
 
 ---
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 40 Vue components (21 pages + 1 layout + 18 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 44% of backend API functionality (61/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 47% of backend API functionality (65/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
-- 40 Vue components (21 pages + 1 layout + 18 reusable components)
-- 13 API modules with 90 actively used endpoint functions
+- 41 Vue components (21 pages + 1 layout + 19 reusable components)
+- 14 API modules with 94 actively used endpoint functions
 - 9 Pinia stores for state management
 - ~6,400 lines in page components
 - TypeScript throughout with strong type safety
@@ -164,7 +164,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Capability Config | 5 | 0 | 5 | 0% |
 | Configuration Templates | 8 | 8 | 0 | 100% |
 | Typed Configuration | 8 | 8 | 0 | 100% |
-| Bulk Operations | 4 | 0 | 4 | 0% |
+| Bulk Operations | 4 | 4 | 0 | 100% |
 | Drift Detection Schedules | 7 | 7 | 0 | 100% |
 | Drift Reporting | 4 | 4 | 0 | 100% |
 | Export/Backup | 21 | 21 | 0 | 100% |
@@ -178,9 +178,9 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **61** | **77** | **44%** |
+| **TOTAL** | **138** | **65** | **73** | **47%** |
 
-### 4.3 Used Endpoints (61 total)
+### 4.3 Used Endpoints (65 total)
 
 #### Devices (2 endpoints)
 | Endpoint | Method | Purpose |
@@ -226,6 +226,14 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/config/drift-trends` | GET | Get drift trends over time period |
 | `/config/drift-trends/{id}/resolve` | POST | Resolve a drift report |
 | `/devices/{id}/drift-report` | POST | Generate drift report for a device |
+
+#### Bulk Operations (4 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/config/bulk-import` | POST | Bulk import configurations to multiple devices |
+| `/config/bulk-export` | POST | Bulk export configurations from multiple devices |
+| `/config/bulk-drift-detect` | POST | Basic bulk drift detection on multiple devices |
+| `/config/bulk-drift-detect-enhanced` | POST | Enhanced bulk drift detection with advanced options |
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |
