@@ -1,19 +1,19 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Last Updated:** 2025-12-02
-**Status:** Production-ready for export/import/plugins/templates/typed-config; overall API exposure ~36%
+**Status:** Production-ready for export/import/plugins/templates/typed-config/drift; overall API exposure ~44%
 **Next Review:** After Phase 7 completion
 
 ---
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 37 Vue components (18 pages + 1 layout + 18 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 36% of backend API functionality (50/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 40 Vue components (21 pages + 1 layout + 18 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 44% of backend API functionality (61/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
-- 37 Vue components (18 pages + 1 layout + 18 reusable components)
-- 12 API modules with 79 actively used endpoint functions
-- 8 Pinia stores for state management
+- 40 Vue components (21 pages + 1 layout + 18 reusable components)
+- 13 API modules with 90 actively used endpoint functions
+- 9 Pinia stores for state management
 - ~6,400 lines in page components
 - TypeScript throughout with strong type safety
 - Real-time WebSocket metrics with REST polling fallback
@@ -165,8 +165,8 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Configuration Templates | 8 | 8 | 0 | 100% |
 | Typed Configuration | 8 | 8 | 0 | 100% |
 | Bulk Operations | 4 | 0 | 4 | 0% |
-| Drift Detection Schedules | 7 | 0 | 7 | 0% |
-| Drift Reporting | 4 | 0 | 4 | 0% |
+| Drift Detection Schedules | 7 | 7 | 0 | 100% |
+| Drift Reporting | 4 | 4 | 0 | 100% |
 | Export/Backup | 21 | 21 | 0 | 100% |
 | Export Schedules | 6 | 6 | 0 | 100% |
 | Import | 10 | 7 | 3 | 70% |
@@ -178,9 +178,9 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **50** | **88** | **36%** |
+| **TOTAL** | **138** | **61** | **77** | **44%** |
 
-### 4.3 Used Endpoints (50 total)
+### 4.3 Used Endpoints (61 total)
 
 #### Devices (2 endpoints)
 | Endpoint | Method | Purpose |
@@ -211,6 +211,21 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/configuration/convert-to-raw` | POST | Convert typed config to raw format |
 | `/configuration/schema` | GET | Get configuration schema for device type |
 | `/configuration/bulk-validate` | POST | Bulk validate multiple configurations |
+
+#### Drift Detection (11 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/config/drift-schedules` | GET | List drift detection schedules with pagination |
+| `/config/drift-schedules/{id}` | GET | Get single drift schedule details |
+| `/config/drift-schedules` | POST | Create new drift detection schedule |
+| `/config/drift-schedules/{id}` | PUT | Update existing drift schedule |
+| `/config/drift-schedules/{id}` | DELETE | Delete drift schedule |
+| `/config/drift-schedules/{id}/toggle` | POST | Toggle drift schedule enabled status |
+| `/config/drift-schedules/{id}/runs` | GET | Get drift schedule run history |
+| `/config/drift-reports` | GET | Get drift reports with filtering |
+| `/config/drift-trends` | GET | Get drift trends over time period |
+| `/config/drift-trends/{id}/resolve` | POST | Resolve a drift report |
+| `/devices/{id}/drift-report` | POST | Generate drift report for a device |
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |

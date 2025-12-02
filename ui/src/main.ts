@@ -53,6 +53,26 @@ const router = createRouter({
       meta: { title: 'Template Details' }
     },
 
+    // Drift Detection
+    {
+      path: '/drift/schedules',
+      name: 'drift-schedules',
+      component: () => import('./pages/DriftSchedulesPage.vue'),
+      meta: { title: 'Drift Detection Schedules', category: 'drift' }
+    },
+    {
+      path: '/drift/reports',
+      name: 'drift-reports',
+      component: () => import('./pages/DriftReportsPage.vue'),
+      meta: { title: 'Drift Reports', category: 'drift' }
+    },
+    {
+      path: '/drift/trends',
+      name: 'drift-trends',
+      component: () => import('./pages/DriftTrendsPage.vue'),
+      meta: { title: 'Drift Trends', category: 'drift' }
+    },
+
     // Export & Import routes
     { 
       path: '/export/schedules', 
