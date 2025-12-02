@@ -70,19 +70,13 @@ const routes = [
   },
   
   // Metrics and monitoring
-  { 
-    path: '/dashboard', 
+  {
+    path: '/dashboard',
     name: 'metrics',
     component: () => Promise.resolve({ template: '<div>Metrics Page</div>' }),
     meta: { title: 'Metrics Dashboard' }
   },
-  { 
-    path: '/stats', 
-    name: 'stats',
-    component: () => Promise.resolve({ template: '<div>Stats Page</div>' }),
-    meta: { title: 'Statistics' }
-  },
-  
+
   // Admin
   { 
     path: '/admin', 
@@ -131,7 +125,6 @@ describe('Navigation Routes Configuration', () => {
     // Other routes
     expect(routeNames).toContain('plugins')
     expect(routeNames).toContain('metrics')
-    expect(routeNames).toContain('stats')
     expect(routeNames).toContain('admin')
     expect(routeNames).toContain('not-found')
   })
@@ -209,13 +202,12 @@ describe('Navigation Routes Configuration', () => {
     expect(pathPatterns).toContain('/import/:id')
     expect(pathPatterns).toContain('/plugins')
     expect(pathPatterns).toContain('/dashboard')
-    expect(pathPatterns).toContain('/stats')
     expect(pathPatterns).toContain('/admin')
     expect(pathPatterns).toContain('/:pathMatch(.*)*')
   })
 
   it('should categorize routes correctly for navigation menu', () => {
-    const mainRoutes = ['devices', 'plugins', 'metrics', 'stats', 'admin']
+    const mainRoutes = ['devices', 'plugins', 'metrics', 'admin']
     const exportRoutes = ['export-schedules', 'export-backup', 'export-gitops', 'export-history', 'export-detail']
     const importRoutes = ['import-history', 'import-detail']
     const detailRoutes = ['device-detail', 'export-detail', 'import-detail']

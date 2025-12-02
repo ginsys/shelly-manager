@@ -75,19 +75,13 @@ const router = createRouter({
     },
     
     // Metrics and monitoring
-    { 
-      path: '/dashboard', 
+    {
+      path: '/dashboard',
       name: 'metrics',
       component: () => import('./pages/MetricsDashboardPage.vue'),
       meta: { title: 'Metrics Dashboard' }
     },
-    { 
-      path: '/stats', 
-      name: 'stats',
-      component: () => import('./pages/StatsPage.vue'),
-      meta: { title: 'Statistics' }
-    },
-    
+
     // Admin
     {
       path: '/admin',
