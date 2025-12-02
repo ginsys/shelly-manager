@@ -1,20 +1,20 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Last Updated:** 2025-11-30
-**Status:** Production-ready for export/import/plugins; overall API exposure ~17%
+**Last Updated:** 2025-12-02
+**Status:** Production-ready for export/import/plugins/templates; overall API exposure ~30%
 **Next Review:** After Phase 7 completion
 
 ---
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 31 Vue components (15 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 25% of backend API functionality (34/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 34 Vue components (18 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 30% of backend API functionality (42/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
-- 31 Vue components (15 pages + 1 layout + 15 reusable components)
-- 10 API modules with 63 actively used endpoint functions
-- 6 Pinia stores for state management
-- ~5,600 lines in page components
+- 34 Vue components (18 pages + 1 layout + 15 reusable components)
+- 11 API modules with 71 actively used endpoint functions
+- 7 Pinia stores for state management
+- ~6,400 lines in page components
 - TypeScript throughout with strong type safety
 - Real-time WebSocket metrics with REST polling fallback
 
@@ -161,7 +161,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Device Management | 8 | 8 | 0 | 100% |
 | Device Configuration | 11 | 11 | 0 | 100% |
 | Capability Config | 5 | 0 | 5 | 0% |
-| Configuration Templates | 8 | 0 | 8 | 0% |
+| Configuration Templates | 8 | 8 | 0 | 100% |
 | Typed Configuration | 8 | 0 | 8 | 0% |
 | Bulk Operations | 4 | 0 | 4 | 0% |
 | Drift Detection Schedules | 7 | 0 | 7 | 0% |
@@ -177,15 +177,27 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **23** | **115** | **17%** |
+| **TOTAL** | **138** | **42** | **96** | **30%** |
 
-### 4.3 Used Endpoints (23 total)
+### 4.3 Used Endpoints (42 total)
 
 #### Devices (2 endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/devices` | GET | List all devices with pagination |
 | `/devices/{id}` | GET | Get device details |
+
+#### Configuration Templates (8 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/config/templates` | GET | List all configuration templates |
+| `/config/templates/{id}` | GET | Get single template details |
+| `/config/templates` | POST | Create new template |
+| `/config/templates/{id}` | PUT | Update existing template |
+| `/config/templates/{id}` | DELETE | Delete template |
+| `/configuration/preview-template` | POST | Preview template rendering with variables |
+| `/configuration/validate-template` | POST | Validate template syntax |
+| `/configuration/template-examples` | GET | Get example templates |
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |

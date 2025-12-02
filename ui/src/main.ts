@@ -33,6 +33,26 @@ const router = createRouter({
       meta: { title: 'Configuration History' }
     },
 
+    // Configuration Templates
+    {
+      path: '/templates',
+      name: 'templates',
+      component: () => import('./pages/TemplatesPage.vue'),
+      meta: { title: 'Configuration Templates' }
+    },
+    {
+      path: '/templates/examples',
+      name: 'template-examples',
+      component: () => import('./pages/TemplateExamplesPage.vue'),
+      meta: { title: 'Template Examples' }
+    },
+    {
+      path: '/templates/:id',
+      name: 'template-detail',
+      component: () => import('./pages/TemplateDetailPage.vue'),
+      meta: { title: 'Template Details' }
+    },
+
     // Export & Import routes
     { 
       path: '/export/schedules', 
