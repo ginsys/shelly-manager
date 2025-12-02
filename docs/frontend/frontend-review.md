@@ -1,18 +1,18 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Last Updated:** 2025-12-02
-**Status:** Production-ready for export/import/plugins/templates/typed-config/drift/bulk; overall API exposure ~47%
+**Status:** Production-ready for export/import/plugins/templates/typed-config/drift/bulk/metrics; overall API exposure ~54%
 **Next Review:** After Phase 7 completion
 
 ---
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 47% of backend API functionality (65/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 54% of backend API functionality (74/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
 - 41 Vue components (21 pages + 1 layout + 19 reusable components)
-- 14 API modules with 94 actively used endpoint functions
+- 14 API modules with 103 actively used endpoint functions
 - 9 Pinia stores for state management
 - ~6,400 lines in page components
 - TypeScript throughout with strong type safety
@@ -171,16 +171,16 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Export Schedules | 6 | 6 | 0 | 100% |
 | Import | 10 | 7 | 3 | 70% |
 | Plugins | 6 | 6 | 0 | 100% |
-| Metrics | 15 | 6 | 9 | 40% |
+| Metrics | 15 | 15 | 0 | 100% |
 | Notifications | 8 | 0 | 8 | 0% |
 | Discovery & Provisioning | 3 | 0 | 3 | 0% |
 | Provisioner Agent | 9 | 0 | 9 | 0% |
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **65** | **73** | **47%** |
+| **TOTAL** | **138** | **74** | **64** | **54%** |
 
-### 4.3 Used Endpoints (65 total)
+### 4.3 Used Endpoints (74 total)
 
 #### Devices (2 endpoints)
 | Endpoint | Method | Purpose |
@@ -309,7 +309,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/export/plugins/{name}/config` | PUT | Update plugin config |
 | `/export/plugins/{name}/test` | POST | Test plugin configuration |
 
-#### Metrics (6 endpoints + WebSocket)
+#### Metrics (15 endpoints + WebSocket)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/metrics/status` | GET | Metrics system status |
@@ -318,6 +318,15 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/metrics/devices` | GET | Device metrics |
 | `/metrics/drift` | GET | Configuration drift summary |
 | `/metrics/ws` | WebSocket | Real-time metrics stream |
+| `/metrics/prometheus` | GET | Prometheus-formatted metrics export |
+| `/metrics/enable` | POST | Enable metrics collection |
+| `/metrics/disable` | POST | Disable metrics collection |
+| `/metrics/collect` | POST | Trigger manual metrics collection |
+| `/metrics/dashboard` | GET | Dashboard summary (devices, exports, imports, drifts, notifications) |
+| `/metrics/test-alert` | POST | Send test notification alert |
+| `/metrics/notifications` | GET | Notification metrics (sent/failed by channel) |
+| `/metrics/resolution` | GET | Resolution metrics (by type and user) |
+| `/metrics/security` | GET | Security metrics (auth attempts, API calls, rate limiting) |
 
 #### Admin (1 endpoint)
 | Endpoint | Method | Purpose |
@@ -329,7 +338,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 |----------|--------|---------|
 | `/version` | GET | API/server version info |
 
-### 4.4 Unused Endpoints by Category (89 total)
+### 4.4 Unused Endpoints by Category (64 total)
 
 #### Device Management (6 unused)
 - `POST /api/v1/devices` - Create device
@@ -409,17 +418,6 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 - `POST /api/v1/notifications/rules` - Create rule
 - `GET /api/v1/notifications/rules` - List rules
 - `GET /api/v1/notifications/history` - Get history
-
-#### Advanced Metrics (9 unused)
-- `GET /metrics/prometheus` - Prometheus export
-- `POST /metrics/enable` - Enable collection
-- `POST /metrics/disable` - Disable collection
-- `POST /metrics/collect` - Trigger collection
-- `GET /metrics/dashboard` - Dashboard summary
-- `POST /metrics/test-alert` - Test alert
-- `GET /metrics/notifications` - Notification metrics
-- `GET /metrics/resolution` - Resolution metrics
-- `GET /metrics/security` - Security metrics
 
 #### Discovery & Provisioning (3 unused)
 - `POST /api/v1/discover` - Discover devices
