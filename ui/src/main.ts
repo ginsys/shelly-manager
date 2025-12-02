@@ -20,6 +20,12 @@ const router = createRouter({
       component: () => import('./pages/DeviceDetailPage.vue'),
       meta: { title: 'Device Details' }
     },
+    { 
+      path: '/devices/:id/config', 
+      name: 'device-config',
+      component: () => import('./pages/DeviceConfigPage.vue'),
+      meta: { title: 'Device Configuration' }
+    },
     
     // Export & Import routes
     { 

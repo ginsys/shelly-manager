@@ -159,7 +159,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Category | Total Endpoints | Used | Unused | Coverage |
 |----------|-----------------|------|--------|----------|
 | Device Management | 8 | 5 | 3 | 62% |
-| Device Configuration | 11 | 0 | 11 | 0% |
+| Device Configuration | 11 | 10 | 1 | 91% |
 | Capability Config | 5 | 0 | 5 | 0% |
 | Configuration Templates | 8 | 0 | 8 | 0% |
 | Typed Configuration | 8 | 0 | 8 | 0% |
@@ -179,7 +179,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Health/Version | 3 | 1 | 2 | 33% |
 | **TOTAL** | **138** | **23** | **115** | **17%** |
 
-### 4.3 Used Endpoints (26 total)
+### 4.3 Used Endpoints (27 total)
 
 #### Devices (5 endpoints)
 | Endpoint | Method | Purpose |
@@ -588,3 +588,16 @@ After completing all tasks, projected endpoint coverage:
 | useExportStore | Export history & SMA operations |
 | useImportStore | Import history & SMA operations |
 | usePluginStore | Plugin state management |
+#### Device Configuration (10 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/devices/{id}/config` | GET | Get stored config |
+| `/devices/{id}/config/current` | GET | Get live config |
+| `/devices/{id}/config/current/normalized` | GET | Get normalized live config |
+| `/devices/{id}/config/typed/normalized` | GET | Get typed normalized config |
+| `/devices/{id}/config/import` | POST | Import config to device |
+| `/devices/{id}/config/status` | GET | Get import status |
+| `/devices/{id}/config/export` | POST | Export config from device |
+| `/devices/{id}/config/drift` | GET | Detect configuration drift |
+| `/devices/{id}/config/history` | GET | Get config history |
+| `/devices/{id}/config/apply-template` | POST | Apply template to device |
