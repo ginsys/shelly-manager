@@ -1,31 +1,3 @@
-<template>
-  <GitOpsExportView :vm="vm" />
-</template>
-
-<script setup lang="ts">
-import { onMounted } from 'vue'
-import type { GitOpsExportRequest } from '@/api/export'
-import PaginationBar from '@/components/PaginationBar.vue'
-import GitOpsFilters from '@/components/gitops/GitOpsFilters.vue'
-import GitOpsExportList from '@/components/gitops/GitOpsExportList.vue'
-import GitOpsStatistics from '@/components/gitops/GitOpsStatistics.vue'
-import GitOpsIntegrationStatus from '@/components/gitops/GitOpsIntegrationStatus.vue'
-import GitOpsCreateModal from '@/components/gitops/GitOpsCreateModal.vue'
-import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
-import MessageBanner from '@/components/shared/MessageBanner.vue'
-import { formatFileSize, formatDate, formatLabel, structureLabel, getFileIcon } from '@/utils/format'
-import GitOpsPreviewModal from '@/components/gitops/GitOpsPreviewModal.vue'
-import { useGitOpsExports } from '@/composables/useGitOpsExports'
-import GitOpsExportView from '@/components/gitops/GitOpsExportView.vue'
-
-const vm = useGitOpsExports()
-
-onMounted(() => { vm.fetchExports(); vm.fetchStatistics(); vm.fetchAvailableDevices(); vm.fetchIntegrationStatus() })
-
-function formatClass(format: string): string { return `format-${format.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}` }
-</script>
-
-<style scoped src="../styles/pages/gitops.css">
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -681,4 +653,3 @@ function formatClass(format: string): string { return `format-${format.replace(/
     grid-template-columns: 1fr;
   }
 }
-</style>

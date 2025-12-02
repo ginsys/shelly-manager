@@ -1,7 +1,7 @@
 # Break Up Large Page Components
 
 **Priority**: HIGH - Code Quality
-**Status**: not-started
+**Status**: in-progress
 **Effort**: 13 hours (with 1.3x buffer)
 
 ## Context
@@ -13,8 +13,12 @@ Three page components exceed 1,000 lines of code, making them difficult to maint
 ## Success Criteria
 
 - [ ] BackupManagementPage.vue reduced from 1,625 to <500 lines
+- [x] Extract backup statistics into `components/backup/BackupStatistics.vue`
 - [ ] GitOpsExportPage.vue reduced from 1,351 to <500 lines
 - [ ] PluginManagementPage.vue reduced from 1,151 to <500 lines
+- [x] Extract plugin card into `components/plugins/PluginCard.vue`
+- [x] Extract plugin modals into `components/plugins/PluginConfigModal.vue` and `PluginDetailsModal.vue`
+ - [x] Extract plugin filters into `components/plugins/PluginFilters.vue`
 - [ ] All existing functionality preserved
 - [ ] E2E tests pass without modification
 - [ ] Type safety maintained

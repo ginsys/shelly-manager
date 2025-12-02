@@ -41,53 +41,15 @@
     </section>
 
     <!-- Filters and Search -->
-    <section class="filters-section">
-      <div class="filter-row">
-        <div class="filter-group">
-          <label class="filter-label">Category:</label>
-          <select 
-            v-model="selectedCategory" 
-            @change="pluginStore.setCategory($event.target.value)" 
-            class="filter-select"
-          >
-            <option value="">All Categories</option>
-            <option 
-              v-for="category in categories" 
-              :key="category.name" 
-              :value="category.name"
-            >
-              {{ getPluginCategoryInfo(category.name).display_name }} ({{ category.plugin_count }})
-            </option>
-          </select>
-        </div>
-
-        <div class="filter-group">
-          <label class="filter-label">Status:</label>
-          <select 
-            v-model="statusFilter" 
-            @change="pluginStore.setStatusFilter($event.target.value)" 
-            class="filter-select"
-          >
-            <option value="">All Statuses</option>
-            <option value="configured">Configured & Enabled</option>
-            <option value="available">Available (Not Configured)</option>
-            <option value="disabled">Configured & Disabled</option>
-            <option value="error">Error</option>
-          </select>
-        </div>
-
-        <div class="filter-group search-group">
-          <label class="filter-label">Search:</label>
-          <input
-            v-model="searchQuery"
-            @input="pluginStore.setSearchQuery($event.target.value)"
-            type="text"
-            placeholder="Search plugins, capabilities..."
-            class="search-input"
-          />
-        </div>
-      </div>
-    </section>
+    <PluginFilters
+      :categories="categories"
+      :selected-category="selectedCategory"
+      :status-filter="statusFilter"
+      :search-query="searchQuery"
+      @update:selected-category="onSetCategory"
+      @update:status-filter="onSetStatus"
+      @update:search-query="onSetSearch"
+    />
 
     <!-- Error Display -->
     <div v-if="error" class="error-alert">
@@ -120,149 +82,18 @@
         </div>
 
         <!-- Plugin Grid -->
-        <div class="plugins-grid" data-testid="plugin-list">
-          <div 
-            v-for="plugin in categoryPlugins" 
-            :key="plugin.name"
-            class="plugin-card"
-            :class="getPluginStatusClass(plugin.status)"
-            :data-testid="`plugin-card-${plugin.name}`"
-          >
-            <!-- Plugin Header -->
-            <div class="plugin-header">
-              <div class="plugin-title">
-                <h3>{{ plugin.display_name }}</h3>
-                <span class="plugin-version">v{{ plugin.version }}</span>
-              </div>
-              
-              <div class="plugin-status">
-                <span 
-                  class="status-indicator"
-                  :class="getPluginStatusClass(plugin.status)"
-                  :title="formatPluginStatus(plugin.status).text"
-                >
-                  {{ formatPluginStatus(plugin.status).icon }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Plugin Description -->
-            <p class="plugin-description">{{ plugin.description }}</p>
-
-            <!-- Plugin Capabilities -->
-            <div class="plugin-capabilities">
-              <span 
-                v-for="capability in plugin.capabilities.slice(0, 3)" 
-                :key="capability"
-                class="capability-badge"
-              >
-                {{ capability }}
-              </span>
-              <span 
-                v-if="plugin.capabilities.length > 3" 
-                class="capability-badge more"
-              >
-                +{{ plugin.capabilities.length - 3 }} more
-              </span>
-            </div>
-
-            <!-- Plugin Health (if available) -->
-            <div v-if="plugin.health" class="plugin-health">
-              <div class="health-indicator" :class="{ healthy: plugin.health.healthy }">
-                {{ plugin.health.healthy ? '💚' : '💔' }}
-                <span class="health-text">
-                  {{ plugin.health.healthy ? 'Healthy' : 'Issues Detected' }}
-                </span>
-              </div>
-              
-              <div v-if="plugin.health.issues?.length" class="health-issues">
-                <div class="issues-summary">
-                  ⚠️ {{ plugin.health.issues.length }} issue{{ plugin.health.issues.length !== 1 ? 's' : '' }}
-                </div>
-              </div>
-            </div>
-
-            <!-- Error Display -->
-            <div v-if="plugin.status.error" class="plugin-error">
-              <span class="error-icon">⚠️</span>
-              <span class="error-text">{{ plugin.status.error }}</span>
-            </div>
-
-            <!-- Test Result Display -->
-            <div v-if="getTestResult(plugin.name)" class="test-result">
-              <div 
-                class="test-indicator"
-                :class="{ success: getTestResult(plugin.name)?.success, error: !getTestResult(plugin.name)?.success }"
-              >
-                <span class="test-icon">
-                  {{ getTestResult(plugin.name)?.success ? '✅' : '❌' }}
-                </span>
-                <span class="test-text">
-                  Test: {{ getTestResult(plugin.name)?.success ? 'Passed' : 'Failed' }}
-                  <span v-if="getTestResult(plugin.name)?.duration_ms">
-                    ({{ getTestResult(plugin.name)?.duration_ms }}ms)
-                  </span>
-                </span>
-              </div>
-              
-              <div v-if="getTestResult(plugin.name)?.message" class="test-message">
-                {{ getTestResult(plugin.name)?.message }}
-              </div>
-            </div>
-
-            <!-- Plugin Actions -->
-            <div class="plugin-actions">
-              <button
-                v-if="plugin.status.available"
-                class="action-button configure-btn"
-                @click="openConfigModal(plugin)"
-                :disabled="currentLoading"
-              >
-                ⚙️ {{ plugin.status.configured ? 'Reconfigure' : 'Configure' }}
-              </button>
-
-              <button
-                v-if="plugin.status.configured"
-                class="action-button toggle-btn"
-                :class="{ enabled: plugin.status.enabled }"
-                @click="togglePlugin(plugin)"
-                :disabled="currentLoading"
-              >
-                {{ plugin.status.enabled ? '⏸️ Disable' : '▶️ Enable' }}
-              </button>
-
-              <button
-                v-if="plugin.status.available"
-                class="action-button test-btn"
-                @click="testPlugin(plugin)"
-                :disabled="isPluginTesting(plugin.name) || currentLoading"
-              >
-                <span v-if="isPluginTesting(plugin.name)">⏳</span>
-                <span v-else>🧪</span>
-                Test
-              </button>
-
-              <button
-                class="action-button details-btn"
-                @click="viewPluginDetails(plugin)"
-              >
-                👁️ Details
-              </button>
-            </div>
-
-            <!-- Last Used Info -->
-            <div v-if="plugin.status.last_used" class="plugin-metadata">
-              <span class="metadata-item">
-                Last used: {{ formatDate(plugin.status.last_used) }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Empty State for Category -->
-        <div v-if="categoryPlugins.length === 0" class="empty-category">
-          <p>No plugins found in this category matching current filters.</p>
-        </div>
+        <PluginCategorySection
+          :category-name="categoryName"
+          :plugins="categoryPlugins"
+          :current-loading="currentLoading"
+          :is-testing="isPluginTesting"
+          :get-test-result="getTestResult"
+          :status-class="getPluginStatusClass"
+          @open-config="openConfigModal"
+          @toggle="togglePlugin"
+          @test="testPlugin"
+          @view-details="viewPluginDetails"
+        />
       </div>
     </div>
 
@@ -281,64 +112,36 @@
       </button>
     </div>
 
-    <!-- Plugin Configuration Modal -->
-    <div v-if="showConfigModal" class="modal-overlay" @click="closeConfigModal">
-      <div class="modal-content config-modal" @click.stop>
-        <Suspense>
-          <template #default>
-            <PluginConfigForm
-              v-if="configModalPlugin"
-              :plugin="configModalPlugin"
-              @close="closeConfigModal"
-              @saved="handleConfigSaved"
-            />
-          </template>
-          <template #fallback>
-            <div class="modal-loading">Loading configuration form...</div>
-          </template>
-        </Suspense>
-      </div>
-    </div>
-
-    <!-- Plugin Details Modal -->
-    <div v-if="showDetailsModal" class="modal-overlay" @click="closeDetailsModal">
-      <div class="modal-content details-modal" @click.stop>
-        <Suspense>
-          <template #default>
-            <PluginDetailsView
-              v-if="detailsModalPlugin"
-              :plugin="detailsModalPlugin"
-              @close="closeDetailsModal"
-              @configure="openConfigFromDetails"
-            />
-          </template>
-          <template #fallback>
-            <div class="modal-loading">Loading plugin details...</div>
-          </template>
-        </Suspense>
-      </div>
-    </div>
+    <!-- Plugin Modals -->
+    <PluginConfigModal
+      v-if="showConfigModal"
+      :plugin="configModalPlugin"
+      @close="closeConfigModal"
+      @saved="handleConfigSaved"
+    />
+    <PluginDetailsModal
+      v-if="showDetailsModal"
+      :plugin="detailsModalPlugin"
+      @close="closeDetailsModal"
+      @configure="openConfigFromDetails"
+    />
 
     <!-- Success/Error Messages -->
-    <div v-if="message.text" :class="['message', message.type]">
-      {{ message.text }}
-      <button class="message-close" @click="message.text = ''">✖</button>
-    </div>
+    <MessageBanner v-if="message.text" :text="message.text" :type="message.type" @close="message.text = ''" />
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, defineAsyncComponent } from 'vue'
 import { usePluginStore } from '@/stores/plugin'
-import { 
-  getPluginCategoryInfo,
-  formatPluginStatus,
-  type Plugin
-} from '@/api/plugin'
+import { formatPluginStatus, type Plugin } from '@/api/plugin'
 
-// Lazy load heavy form components
-const PluginConfigForm = defineAsyncComponent(() => import('@/components/PluginConfigForm.vue'))
-const PluginDetailsView = defineAsyncComponent(() => import('@/components/PluginDetailsView.vue'))
+import PluginCard from '@/components/plugins/PluginCard.vue'
+import PluginConfigModal from '@/components/plugins/PluginConfigModal.vue'
+import PluginDetailsModal from '@/components/plugins/PluginDetailsModal.vue'
+import PluginFilters from '@/components/plugins/PluginFilters.vue'
+import MessageBanner from '@/components/shared/MessageBanner.vue'
+import PluginCategorySection from '@/components/plugins/PluginCategorySection.vue'
 
 // Store
 const pluginStore = usePluginStore()
@@ -357,6 +160,10 @@ const currentLoading = computed(() => pluginStore.currentLoading)
 const selectedCategory = ref('')
 const statusFilter = ref('')
 const searchQuery = ref('')
+
+function onSetCategory(v: string) { selectedCategory.value = v; pluginStore.setCategory(v) }
+function onSetStatus(v: string) { statusFilter.value = v; pluginStore.setStatusFilter(v) }
+function onSetSearch(v: string) { searchQuery.value = v; pluginStore.setSearchQuery(v) }
 
 // Modal state
 const showConfigModal = ref(false)
@@ -512,7 +319,7 @@ function showMessage(text: string, type: 'success' | 'error') {
 }
 </script>
 
-<style scoped>
+<style scoped src="../styles/pages/plugins.css">
 .page-header {
   display: flex;
   justify-content: space-between;

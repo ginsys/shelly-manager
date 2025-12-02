@@ -52,7 +52,7 @@ Within each level:
 | 345 | [Drift Detection UI](345-drift-detection-ui.md) | not-started |
 | 346 | [Bulk Operations UI](346-bulk-operations-ui.md) | not-started |
 | 347 | [Advanced Metrics Integration](347-advanced-metrics-integration.md) | not-started |
-| 351 | [Break Up Large Page Components](351-break-up-large-page-components.md) | not-started |
+| 351 | [Break Up Large Page Components](351-break-up-large-page-components.md) | in-progress |
 | 352 | [Schema-Driven Form Component](352-schema-driven-form-component.md) | not-started |
 | 354 | [Improve Error Messages](354-improve-error-messages.md) | not-started |
 | 355 | [Page Component Unit Tests](355-page-component-unit-tests.md) | not-started |
