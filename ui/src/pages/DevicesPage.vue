@@ -40,7 +40,7 @@
         <tbody>
           <tr v-for="d in pagedSortedFiltered" :key="d.id" data-testid="device-row">
             <td v-if="store.columns.name">
-              <router-link :to="`/devices/${d.id}`" class="rowlink" data-testid="device-link">{{ d.name || '-' }}</router-link>
+              <router-link :to="`/devices/${d.id}`" class="rowlink" data-testid="device-link" :aria-label="`View details for ${d.name || d.ip || d.mac}`">{{ d.name || '-' }}</router-link>
             </td>
             <td v-if="store.columns.ip">{{ d.ip || '-' }}</td>
             <td v-if="store.columns.mac" class="mono">{{ d.mac }}</td>

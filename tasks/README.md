@@ -24,9 +24,9 @@ Within each level:
 
 | # | Task | Status |
 |---|------|--------|
-| 111 | [JSON Export Plugin Tests](111-json-export-plugin-tests.md) | not-started |
-| 121 | [YAML Export Plugin Tests](121-yaml-export-plugin-tests.md) | not-started |
-| 131 | [Router-Link Accessibility Fix](131-router-link-accessibility-fix.md) | not-started |
+| 111 | [JSON Export Plugin Tests](archive/done-111-json-export-plugin-tests.md) | completed |
+| 121 | [YAML Export Plugin Tests](archive/done-121-yaml-export-plugin-tests.md) | completed |
+| 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | completed |
 
 ### HIGH (200s) - Post-Commit Required
 

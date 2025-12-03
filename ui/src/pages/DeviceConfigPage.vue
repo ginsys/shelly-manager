@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="toolbar">
-      <router-link class="btn" :to="`/devices/${id}`">← Back</router-link>
+      <router-link class="btn" :to="`/devices/${id}`" aria-label="Back to device">← Back</router-link>
       <h1 class="title">Device Configuration</h1>
       <div class="spacer" />
       <button class="btn" @click="load('stored')" :disabled="busy">Stored</button>

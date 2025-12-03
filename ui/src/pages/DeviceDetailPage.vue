@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="toolbar">
-      <router-link class="btn" to="/">← Back</router-link>
+      <router-link class="btn" to="/" aria-label="Back to devices">← Back</router-link>
       <h1 class="title">Device Details</h1>
       <div class="spacer" />
 
@@ -9,7 +9,7 @@
       <button class="btn" :disabled="actionBusy || !d.id" @click="doControl('off')">Power Off</button>
       <button class="btn warn" :disabled="actionBusy || !d.id" @click="doControl('restart')">Restart</button>
       <button class="btn" :disabled="editOpen || !d.id" @click="openEdit()">Edit</button>
-      <router-link class="btn" v-if="d.id" :to="`/devices/${d.id}/config`">Config</router-link>
+      <router-link class="btn" v-if="d.id" :to="`/devices/${d.id}/config`" aria-label="View device configuration">Config</router-link>
     </div>
 
     <div class="card" v-if="loading">

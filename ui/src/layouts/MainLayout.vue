@@ -7,6 +7,8 @@
           class="nav-link" 
           to="/"
           :class="{ active: $route.name === 'devices' }"
+          :aria-current="$route.name === 'devices' ? 'page' : null"
+          aria-label="Devices"
         >
           Devices
         </router-link>
@@ -21,19 +23,19 @@
           <div class="dropdown-menu">
             <div class="dropdown-section">
               <div class="dropdown-section-title">Export</div>
-              <router-link class="dropdown-item" to="/export/schedules">
+              <router-link class="dropdown-item" to="/export/schedules" role="menuitem" aria-label="Schedule Management">
                 <span class="dropdown-icon">📅</span>
                 Schedule Management
               </router-link>
-              <router-link class="dropdown-item" to="/export/backup">
+              <router-link class="dropdown-item" to="/export/backup" role="menuitem" aria-label="Backup Management">
                 <span class="dropdown-icon">💾</span>
                 Backup Management
               </router-link>
-              <router-link class="dropdown-item" to="/export/gitops">
+              <router-link class="dropdown-item" to="/export/gitops" role="menuitem" aria-label="GitOps Export">
                 <span class="dropdown-icon">🔄</span>
                 GitOps Export
               </router-link>
-              <router-link class="dropdown-item" to="/export/history">
+              <router-link class="dropdown-item" to="/export/history" role="menuitem" aria-label="Export History">
                 <span class="dropdown-icon">📋</span>
                 Export History
               </router-link>
@@ -41,7 +43,7 @@
             <div class="dropdown-divider"></div>
             <div class="dropdown-section">
               <div class="dropdown-section-title">Import</div>
-              <router-link class="dropdown-item" to="/import/history">
+              <router-link class="dropdown-item" to="/import/history" role="menuitem" aria-label="Import History">
                 <span class="dropdown-icon">📥</span>
                 Import History
               </router-link>
@@ -53,6 +55,8 @@
           class="nav-link" 
           to="/plugins"
           :class="{ active: $route.name === 'plugins' }"
+          :aria-current="$route.name === 'plugins' ? 'page' : null"
+          aria-label="Plugins"
         >
           Plugins
         </router-link>
@@ -61,6 +65,8 @@
           class="nav-link" 
           to="/dashboard"
           :class="{ active: $route.name === 'metrics' || $route.name === 'stats' }"
+          :aria-current="($route.name === 'metrics' || $route.name === 'stats') ? 'page' : null"
+          aria-label="Metrics"
         >
           Metrics
         </router-link>
@@ -69,6 +75,8 @@
           class="nav-link" 
           to="/admin"
           :class="{ active: $route.name === 'admin' }"
+          :aria-current="$route.name === 'admin' ? 'page' : null"
+          aria-label="Admin"
         >
           Admin
         </router-link>
@@ -78,7 +86,7 @@
     <!-- Breadcrumb Navigation -->
     <nav class="breadcrumb" v-if="showBreadcrumb">
       <div class="breadcrumb-container">
-        <router-link class="breadcrumb-item" to="/">
+        <router-link class="breadcrumb-item" to="/" aria-label="Home">
           <span class="breadcrumb-icon">🏠</span>
           Home
         </router-link>
