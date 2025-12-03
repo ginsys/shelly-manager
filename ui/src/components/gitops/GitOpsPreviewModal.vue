@@ -61,13 +61,10 @@
 </template>
 
 <script setup lang="ts">
+import { formatFileSize, formatLabel, structureLabel, getFileIcon } from '@/utils/format'
+
 defineProps<{ item: any | null; data: any | null; downloadingId?: string | null }>()
 defineEmits<{ close: []; download: [string, string] }>()
-
-function formatFileSize(bytes: number): string { if (!bytes) return '—'; if (bytes < 1024) return `${bytes} B`; const u=['KB','MB','GB','TB']; let i=-1; do { bytes=bytes/1024; i++ } while (bytes >= 1024 && i < u.length-1); return `${bytes.toFixed(1)} ${u[i]}` }
-function formatLabel(format: string): string { return (format || '').toUpperCase() }
-function structureLabel(structure: string): string { return (structure || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
-function getFileIcon(type: string): string { return type === 'dir' ? '📁' : type === 'yaml' ? '🧾' : type === 'json' ? '🧾' : type === 'tf' ? '📜' : '📄' }
 </script>
 
 <style scoped>
@@ -92,4 +89,3 @@ function getFileIcon(type: string): string { return type === 'dir' ? '📁' : ty
 .primary-button { background: #0ea5e9; color: #fff; border: 1px solid #0ea5e9; border-radius: 6px; padding: 6px 12px }
 .secondary-button { background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px }
 </style>
-

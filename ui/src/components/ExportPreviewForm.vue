@@ -182,6 +182,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { previewExport, type ExportRequest } from '@/api/export'
+import { formatFileSize } from '@/utils/format'
 
 // Plugin schema type for form generation
 interface PluginField {
@@ -413,13 +414,7 @@ function clearPreview() {
   errorMessage.value = ''
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
+// Use shared formatter from utils/format
 
 // Watch for form changes to sync with JSON editor
 watch(formData, () => {

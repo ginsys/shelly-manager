@@ -327,6 +327,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatFileSize } from '@/utils/format'
 import { ref, reactive, computed } from 'vue'
 import { useImportStore } from '@/stores/import'
 import type { SMAImportRequest, SMAPreview } from '@/api/export'
@@ -463,13 +464,7 @@ async function executeImport() {
   }
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
+// Use shared formatter from utils/format
 
 function formatSectionName(section: string): string {
   const names: Record<string, string> = {

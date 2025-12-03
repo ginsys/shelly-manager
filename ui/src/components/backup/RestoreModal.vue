@@ -84,6 +84,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { formatFileSize } from '@/utils/format'
 const props = defineProps<{ 
   backup: any | null
   options: { include_settings: boolean; include_schedules: boolean; include_metrics: boolean; dry_run: boolean }
@@ -103,14 +105,7 @@ function onToggle(key: keyof typeof props.options, e: Event) {
   emit('update:options', next)
 }
 
-function formatFileSize(bytes: number): string {
-  if (!bytes) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let i = -1
-  do { bytes = bytes / 1024; i++ } while (bytes >= 1024 && i < units.length - 1)
-  return `${bytes.toFixed(1)} ${units[i]}`
-}
+// Use shared formatter from utils/format
 </script>
 
 <style scoped>
@@ -132,4 +127,3 @@ function formatFileSize(bytes: number): string {
 .primary-button { background: #0ea5e9; color: #fff; border: 1px solid #0ea5e9; border-radius: 6px; padding: 6px 12px }
 .secondary-button { background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px }
 </style>
-

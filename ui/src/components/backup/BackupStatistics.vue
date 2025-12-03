@@ -10,15 +10,9 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ stats: { total?: number; success?: number; failure?: number; total_size?: number } }>()
+import { formatFileSize } from '@/utils/format'
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let i = -1
-  do { bytes = bytes / 1024; i++ } while (bytes >= 1024 && i < units.length - 1)
-  return `${bytes.toFixed(1)} ${units[i]}`
-}
+defineProps<{ stats: { total?: number; success?: number; failure?: number; total_size?: number } }>()
 </script>
 
 <style scoped>
@@ -30,4 +24,3 @@ function formatFileSize(bytes: number): string {
 .stat-value.success { color: #059669 }
 .stat-value.failure { color: #dc2626 }
 </style>
-

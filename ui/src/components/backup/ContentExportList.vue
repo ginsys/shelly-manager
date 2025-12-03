@@ -29,22 +29,10 @@
 
 <script setup lang="ts">
 import DataTable from '@/components/DataTable.vue'
+import { formatFileSize, formatDate } from '@/utils/format'
 
 defineProps<{ rows: any[] }>()
 defineEmits<{ download: [string] }>()
-
-function formatFileSize(bytes?: number): string {
-  if (!bytes) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let i = -1
-  do { bytes = (bytes || 0) / 1024; i++ } while ((bytes || 0) >= 1024 && i < units.length - 1)
-  return `${bytes.toFixed(1)} ${units[i]}`
-}
-function formatDate(iso?: string) {
-  if (!iso) return '—'
-  try { return new Date(iso).toLocaleString() } catch { return iso }
-}
 </script>
 
 <style scoped>
@@ -54,4 +42,3 @@ function formatDate(iso?: string) {
 .action-btn { padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 4px; background: #fff; font-size: .75rem; cursor: pointer }
 .download-btn:hover { background: #f0f9ff; border-color: #0ea5e9; color: #0369a1 }
 </style>
-

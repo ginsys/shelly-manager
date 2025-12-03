@@ -57,15 +57,12 @@
 
 <script setup lang="ts">
 import DataTable from '@/components/DataTable.vue'
+import { formatLabel, structureLabel, formatFileSize, formatDate } from '@/utils/format'
 
 defineProps<{ rows: any[]; loading: boolean; error?: string | null }>()
 defineEmits<{ preview: [any]; download: [string]; delete: [any] }>()
 
-function formatLabel(f: string) { return (f || '').toUpperCase() }
-function structureLabel(s: string) { return (s || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 function formatClass(f: string) { return (f || '').replace(/\s+/g, '-') }
-function formatFileSize(bytes?: number): string { if (!bytes) return '—'; if (bytes < 1024) return `${bytes} B`; const u=['KB','MB','GB','TB']; let i=-1; do { bytes=(bytes||0)/1024; i++ } while ((bytes||0) >= 1024 && i < u.length-1); return `${bytes.toFixed(1)} ${u[i]}` }
-function formatDate(iso?: string) { if (!iso) return '—'; try { return new Date(iso).toLocaleString() } catch { return iso } }
 </script>
 
 <style scoped>
