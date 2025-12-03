@@ -50,7 +50,6 @@ Within each level:
 | 345 | [Drift Detection UI](345-drift-detection-ui.md) | not-started |
 | 346 | [Bulk Operations UI](346-bulk-operations-ui.md) | not-started |
 | 347 | [Advanced Metrics Integration](347-advanced-metrics-integration.md) | not-started |
-| 352 | [Schema-Driven Form Component](352-schema-driven-form-component.md) | not-started |
 | 354 | [Improve Error Messages](354-improve-error-messages.md) | not-started |
 | 355 | [Page Component Unit Tests](355-page-component-unit-tests.md) | not-started |
 | 361 | [Remove StatsPage](361-remove-statspage.md) | not-started |
@@ -85,6 +84,7 @@ Completed tasks are moved to [archive/](archive/).
 | 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-03 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
 | 351 | [Break Up Large Page Components](archive/done-351-break-up-large-page-components.md) | 2025-12-03 |
+| 352 | [Schema-Driven Form Component](archive/done-352-schema-driven-form-component.md) | 2025-12-03 |
 
 ---
 
