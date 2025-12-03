@@ -87,7 +87,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref, reactive, computed } from 'vue'
+import { useError } from '@/composables/useError'
 import {
   listGitOpsExports,
   getGitOpsExportStatistics,
@@ -127,7 +128,8 @@ const integrationStatus = ref<GitOpsIntegrationStatus | null>(null)
 const availableDevices = ref<Device[]>([])
 const meta = ref<Metadata>()
 const loading = ref(false)
-const error = ref('')
+const { error: errorObj, hasError, setError, clearError } = useError()
+const error = computed(() => errorObj.value?.message || '')
 
 // Filters
 const filters = reactive({
@@ -164,8 +166,8 @@ onMounted(() => {
  */
 async function fetchExports() {
   loading.value = true
-  error.value = ''
-  
+  clearError()
+
   try {
     const result = await listGitOpsExports({
       page: currentPage.value,
@@ -173,11 +175,11 @@ async function fetchExports() {
       format: filters.format || undefined,
       success: filters.success
     })
-    
+
     exports.value = result.items
     meta.value = result.meta
   } catch (err: any) {
-    error.value = err.message || 'Failed to load GitOps exports'
+    setError(err, { action: 'Loading GitOps exports', resource: 'GitOps Export' })
   } finally {
     loading.value = false
   }

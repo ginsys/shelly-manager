@@ -96,15 +96,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue'
-import { 
-  listBackups, 
-  getBackupStatistics, 
-  createBackup, 
+import { onMounted, ref, reactive, computed } from 'vue'
+import { useError } from '@/composables/useError'
+import {
+  listBackups,
+  getBackupStatistics,
+  createBackup,
   createJSONExport,
   createYAMLExport,
   createSMAExport,
-  deleteBackup, 
+  deleteBackup,
   downloadBackupWithName,
   downloadExportWithName,
   previewRestore,
@@ -160,7 +161,8 @@ const smaOptions = reactive({
 const createLoading = ref(false)
 const createError = ref('')
 const loading = ref(false)
-const error = ref('')
+const { error: errorObj, hasError, setError, clearError } = useError()
+const error = computed(() => errorObj.value?.message || '')
 
 // Filters
 const filters = reactive({
@@ -234,8 +236,8 @@ function loadInitialData() {
  */
 async function fetchBackups() {
   loading.value = true
-  error.value = ''
-  
+  clearError()
+
   try {
     const result = await listBackups({
       page: currentPage.value,
@@ -243,11 +245,11 @@ async function fetchBackups() {
       format: filters.format || undefined,
       success: filters.success
     })
-    
+
     backups.value = result.items
     meta.value = result.meta
   } catch (err: any) {
-    error.value = err.message || 'Failed to load backups'
+    setError(err, { action: 'Loading backups', resource: 'Backup' })
   } finally {
     loading.value = false
   }
