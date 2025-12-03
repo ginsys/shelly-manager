@@ -176,6 +176,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, computed, ref, defineAsyncComponent } from 'vue'
 import { useMetricsStore } from '@/stores/metrics'
+import { useError } from '@/composables/useError'
 import {
   enableMetrics,
   disableMetrics,
@@ -212,13 +213,16 @@ const chartsLoaded = ref(true) // Allow charts to render when loaded
 const store = useMetricsStore()
 const currentTime = ref(Date.now())
 
+// Error handling with structured context
+const { error: errorObj, hasError, setError, clearError } = useError()
+const error = computed(() => errorObj.value?.message || null)
+
 // Advanced metrics state
 const dashboardSummary = ref<DashboardSummary | null>(null)
 const notificationMetrics = ref<NotificationMetrics | null>(null)
 const resolutionMetrics = ref<ResolutionMetrics | null>(null)
 const securityMetrics = ref<SecurityMetrics | null>(null)
 const loading = ref(false)
-const error = ref<string | null>(null)
 
 // Update current time every second for relative timestamps
 const timeInterval = setInterval(() => {
@@ -241,7 +245,7 @@ onUnmounted(() => {
 // Fetch all advanced metrics
 async function fetchAdvancedMetrics() {
   loading.value = true
-  error.value = null
+  clearError()
   try {
     const [summary, notifications, resolution, security] = await Promise.all([
       getDashboardSummary(),
@@ -253,8 +257,8 @@ async function fetchAdvancedMetrics() {
     notificationMetrics.value = notifications
     resolutionMetrics.value = resolution
     securityMetrics.value = security
-  } catch (e: any) {
-    error.value = e?.message || 'Failed to load advanced metrics'
+  } catch (err) {
+    setError(err, { action: 'Loading advanced metrics', resource: 'Dashboard metrics' })
   } finally {
     loading.value = false
   }
