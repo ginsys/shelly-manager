@@ -22,7 +22,14 @@
 
     <div class="card" data-testid="device-list">
       <div v-if="loading" class="state" data-testid="loading-state">Loading...</div>
-      <ErrorState v-else-if="error" data-testid="error-state" title="Failed to load devices" :message="error" :retryable="true" @retry="fetchData" />
+      <ErrorDisplay
+        v-else-if="hasError"
+        data-testid="error-state"
+        :error="appError!"
+        title="Failed to load devices"
+        @retry="fetchData"
+        @dismiss="clearError"
+      />
 
       <table v-else class="table" data-testid="devices-table">
         <thead>
@@ -125,16 +132,17 @@ import { formatDate } from '@/utils/format'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useDevicesStore } from '@/stores/devices'
 import { createDevice, updateDevice, deleteDevice } from '@/api/devices'
-import ErrorState from '@/components/shared/ErrorState.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 import ColumnToggle from '@/components/shared/ColumnToggle.vue'
 import type { Device } from '../api/types'
+import { useError } from '@/composables/useError'
 
 // Local sort descriptor
 type Sort = { field: keyof Device | 'last_seen'; dir: 'asc' | 'desc' } | null
 
 const loading = ref(false)
-const error = ref<string | null>(null)
+const { error: appError, hasError, setError, clearError } = useError()
 const totalPages = ref<number | null>(null)
 const hasNext = ref(false)
 const sort = ref<Sort>(null)
@@ -149,14 +157,14 @@ const formError = ref<string | null>(null)
 
 async function fetchData() {
   loading.value = true
-  error.value = null
+  clearError()
   try {
     await store.fetch()
     const p = store.meta?.pagination
     totalPages.value = p?.total_pages ?? null
     hasNext.value = !!p?.has_next
   } catch (e: any) {
-    error.value = e?.message || 'Failed to load devices'
+    setError(e, { action: 'Loading devices', resource: 'devices' })
   } finally {
     loading.value = false
   }

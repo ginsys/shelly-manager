@@ -70,7 +70,7 @@ ui/
 | Large page components (1000+ lines) | Maintainability | BackupManagementPage (1,625), GitOpsExportPage (1,351), PluginManagementPage (1,151) |
 | Form component duplication | Code reuse | ExportPreviewForm, ImportPreviewForm, SMAConfigForm, GitOpsConfigForm |
 | Limited unit tests | Test coverage | Most page components lack isolated tests |
-| Generic error messages | User experience | "Failed to load devices" lacks context |
+| Generic error messages | User experience | Resolved: standardized `ErrorDisplay` + `useError` with codes, context, retry |
 | WebSocket coupling | Reusability | Metrics store tightly coupled, not reusable — Resolved by introducing reusable `useWebSocket` composable (ui/src/composables/useWebSocket.ts). |
 
 ---
@@ -481,7 +481,7 @@ These tasks address technical debt identified in the review.
 | 251 | Extract Reusable WebSocket Client | HIGH | 8h | Create generic WebSocket composable (`useWebSocket.ts`) from metrics store implementation. Support reconnection, heartbeat, message typing, and connection status. Make WebSocket features reusable for future real-time features (notifications, provisioning status). **Related Issues:** WebSocket coupling in metrics store. **Foundation for:** Tasks 311, 321, 345. |
 | 351 | Break Up Large Page Components | HIGH | 13h | Refactor 3 large page components: BackupManagementPage (1,607 lines), GitOpsExportPage (1,351 lines), PluginManagementPage (970 lines after initial extractions). Extract logical sections (cards, dialogs, forms) into child components. Target: <500 lines per page component. **Related Issues:** Large page components, Maintainability. **Coordinate with:** Task 352, 354. |
 | 352 | Create Schema-Driven Form Component | MEDIUM | 10h | Extract common form rendering logic from ExportPreviewForm, ImportPreviewForm, SMAConfigForm, and GitOpsConfigForm into a generic `SchemaForm.vue` component. Reduce form duplication significantly. **Related Issues:** Form component duplication. **Phase 8 Reference:** Section 5 - Configuration typed forms. **Depends on:** Task 351. |
-| 354 | Improve Error Messages | LOW | 5h | Replace generic error messages ("Failed to load devices") with contextual messages including error codes, suggested actions, and retry options. Create `ErrorDisplay.vue` component with standardized error presentation. **Related Issues:** Generic error messages, User experience. **Coordinate with:** Task 351. |
+| 354 | Improve Error Messages | DONE | 5h | Replaced generic errors with contextual messages using `ErrorDisplay.vue` and `useError` composable. Added Axios interceptor to preserve backend error payload. Updated Devices and Plugin Management pages; added unit tests. |
 | 355 | Add Page Component Unit Tests | LOW | 16h | Add Vitest unit tests for complex page components lacking coverage: BackupManagementPage, GitOpsExportPage, PluginManagementPage, ExportSchedulesPage. Focus on state management, form validation, and API interaction mocking. **Related Issues:** Limited unit tests. **Phase 8 Reference:** Section 6 - Unit: Vitest + Testing Library. **After:** Task 351. |
 
 ### 7.3 Navigation & UX Tasks

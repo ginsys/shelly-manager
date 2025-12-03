@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { AxiosError } from 'axios'
 
 const env: any = (import.meta as any)?.env || {}
 const runtimeBase: string | undefined = (globalThis as any)?.window?.__API_BASE__
@@ -21,5 +22,19 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Preserve backend error structure for downstream handling
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError & { appError?: any }) => {
+    try {
+      const data: any = (error.response as any)?.data
+      if (data?.error) {
+        ;(error as any).appError = data.error
+      }
+    } catch {}
+    return Promise.reject(error)
+  }
+)
 
 export default api

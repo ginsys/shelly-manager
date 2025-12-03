@@ -52,11 +52,13 @@
     />
 
     <!-- Error Display -->
-    <div v-if="error" class="error-alert">
-      <span class="error-icon">⚠️</span>
-      {{ error }}
-      <button class="error-dismiss" @click="pluginStore.clearErrors()">✖</button>
-    </div>
+    <ErrorDisplay
+      v-if="hasError"
+      :error="appError!"
+      title="Failed to load plugins"
+      @retry="refreshData"
+      @dismiss="clearError"
+    />
 
     <!-- Loading State -->
     <div v-if="loading" class="loading-section">
@@ -142,6 +144,8 @@ import PluginConfigModal from '@/components/plugins/PluginConfigModal.vue'
 import PluginDetailsModal from '@/components/plugins/PluginDetailsModal.vue'
 import PluginFilters from '@/components/plugins/PluginFilters.vue'
 import MessageBanner from '@/components/shared/MessageBanner.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { useError } from '@/composables/useError'
 import PluginCategorySection from '@/components/plugins/PluginCategorySection.vue'
 
 // Store
@@ -154,7 +158,7 @@ const filteredPlugins = computed(() => pluginStore.filteredPlugins)
 const pluginsByCategory = computed(() => pluginStore.pluginsByCategory)
 const pluginStats = computed(() => pluginStore.pluginStats)
 const loading = computed(() => pluginStore.loading)
-const error = computed(() => pluginStore.error)
+const { error: appError, hasError, setError, clearError } = useError()
 const currentLoading = computed(() => pluginStore.currentLoading)
 
 // Reactive filters
@@ -191,7 +195,7 @@ function refreshData() {
   // Fire and forget - don't block UI rendering
   pluginStore.refresh().catch(err => {
     console.warn('Plugin refresh failed:', err)
-    showMessage(err.message || 'Failed to refresh plugin list', 'error')
+    setError(err, { action: 'Loading plugins' })
   })
 }
 
