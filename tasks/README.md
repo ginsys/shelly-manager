@@ -57,8 +57,17 @@ Completed tasks are moved to [archive/](archive/).
 | 102 | [strings.Title Deprecation](archive/done-102-strings-title-deprecation.md) | 2025-11-30 |
 | 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-03 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
+| 347 | [Advanced Metrics Integration](archive/done-347-advanced-metrics-integration.md) | 2025-11-30 |
 | 351 | [Break Up Large Page Components](archive/done-351-break-up-large-page-components.md) | 2025-12-03 |
 | 352 | [Schema-Driven Form Component](archive/done-352-schema-driven-form-component.md) | 2025-12-03 |
+| 354 | [Improve Error Messages](archive/done-354-improve-error-messages.md) | 2025-12-03 |
+| 355 | [Page Component Unit Tests](archive/done-355-page-component-unit-tests.md) | 2025-12-03 |
+| 361 | [Remove StatsPage](archive/done-361-remove-statspage.md) | 2025-12-02 |
+| 362 | [Complete DeviceDetailPage](archive/done-362-complete-devicedetailpage.md) | 2025-11-30 |
+| 411 | [Devices UI Refactor](archive/done-411-devices-ui-refactor.md) | 2025-11-30 |
+| 421 | [TLS/Proxy Hardening Guides](archive/done-421-tls-proxy-hardening-guides.md) | 2025-11-30 |
+| 431 | [Operational Observability](archive/done-431-operational-observability.md) | 2025-11-30 |
+| 441 | [Documentation Polish](archive/done-441-documentation-polish.md) | 2025-11-30 |
 
 ---
 
