@@ -49,17 +49,26 @@ Object.defineProperty(URL, 'revokeObjectURL', {
 })
 
 // Mock document methods
+const originalCreateElement = document.createElement.bind(document)
 Object.defineProperty(document, 'createElement', {
   writable: true,
   value: vi.fn((tagName: string) => {
-    const mockElement = {
-      href: '',
-      download: '',
-      click: vi.fn(),
-      appendChild: vi.fn(),
-      removeChild: vi.fn()
+    // For simple cases (like link elements for download), return a mock
+    if (tagName === 'a') {
+      const mockElement = {
+        href: '',
+        download: '',
+        click: vi.fn(),
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+        setAttribute: vi.fn(),
+        getAttribute: vi.fn(),
+        removeAttribute: vi.fn()
+      }
+      return mockElement
     }
-    return mockElement
+    // For everything else, use real createElement to avoid attribute issues
+    return originalCreateElement(tagName)
   })
 })
 
