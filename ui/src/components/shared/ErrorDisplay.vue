@@ -19,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { AppError } from '@/types/errors'
 
 const props = defineProps<{
@@ -48,4 +49,3 @@ const title = computed(() => props.title || 'Operation Failed')
 .btn.primary { background: #3b82f6; border-color: #3b82f6; color: #fff }
 .btn:disabled { opacity: .6; cursor: not-allowed }
 </style>
-

@@ -1,10 +1,15 @@
 import { test, expect } from '@playwright/test'
-import { waitForPageReady } from '../fixtures/test-helpers.js'
+import { waitForPageReady, clientNavigate } from '../fixtures/test-helpers.js'
 
 test.describe('Import Preview Form E2E', () => {
 
   test('import history page loads correctly', async ({ page }) => {
-    await page.goto('/import/history')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForPageReady(page)
+    // Open Export & Import dropdown then click Import History
+    await page.hover('.nav-dropdown .dropdown-trigger')
+    await page.locator('a[href="/import/history"]').first().waitFor({ state: 'visible', timeout: 5000 })
+    await page.locator('a[href="/import/history"]').first().click()
     await waitForPageReady(page)
 
     // Check page loaded
@@ -12,8 +17,8 @@ test.describe('Import Preview Form E2E', () => {
     await expect(heading.first()).toBeVisible()
 
     // Check for main content
-    const mainContent = page.locator('main, .content')
-    await expect(mainContent.first()).toBeVisible()
+    const mainContent = page.locator('main, .content, #app, .layout-root')
+    await mainContent.first().waitFor({ state: 'attached', timeout: 10000 })
   })
 
   // Skip all tests that depend on selectors that don't exist

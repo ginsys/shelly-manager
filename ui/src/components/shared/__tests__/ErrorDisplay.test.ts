@@ -8,6 +8,7 @@ describe('ErrorDisplay', () => {
         title: 'Failed to load',
         error: { code: 'UNAUTHORIZED', message: 'Unauthorized', retryable: false },
       },
+      attachTo: document.body,
     })
     expect(wrapper.text()).toContain('Failed to load')
     expect(wrapper.text()).toContain('[UNAUTHORIZED]')
@@ -20,6 +21,7 @@ describe('ErrorDisplay', () => {
         title: 'Oops',
         error: { code: 'NETWORK_ERROR', message: 'Network error', retryable: true },
       },
+      attachTo: document.body,
     })
     const retryBtn = wrapper.find('button.btn.primary')
     expect(retryBtn.exists()).toBe(true)
@@ -33,10 +35,10 @@ describe('ErrorDisplay', () => {
         title: 'Oops',
         error: { code: 'UNKNOWN', message: 'Unknown' },
       },
+      attachTo: document.body,
     })
     await wrapper.findAll('button.btn')[0].trigger('click')
     // First button is Dismiss when retryable is false
     expect(wrapper.emitted('dismiss')).toBeTruthy()
   })
 })
-

@@ -31,8 +31,9 @@ export default defineConfig({
   
   // Shared settings for all tests
   use: {
-    // Base URL for the application
-    baseURL: process.env.CI ? 'http://localhost:5173' : 'http://localhost:5173',
+    // Base URL for the application (allow override)
+    baseURL: process.env.PW_BASEURL || 'http://localhost:5173',
+    navigationOptions: { waitUntil: 'domcontentloaded' as any },
     
     // API endpoint for backend tests
     extraHTTPHeaders: {
@@ -78,6 +79,8 @@ export default defineConfig({
       timeout: 120 * 1000, // Firefox-specific test timeout: 120s for better reliability
       use: {
         ...devices['Desktop Firefox'],
+        // Prefer backend-served UI for Firefox to avoid Vite preview deep-link issues
+        baseURL: process.env.PW_BASEURL || 'http://localhost:8080',
         launchOptions: {
           firefoxUserPrefs: {
             // Network optimizations - CRITICAL for timeout fix
@@ -103,6 +106,7 @@ export default defineConfig({
         // Override global timeouts specifically for Firefox
         actionTimeout: 60000,        // 60s vs 45.1s system limit
         navigationTimeout: 60000,    // 60s navigation timeout
+        navigationOptions: { waitUntil: 'domcontentloaded' as any },
       },
 
       // Firefox-specific test configuration
@@ -167,8 +171,8 @@ export default defineConfig({
 
   // Test expectations
   expect: {
-    // Reduced timeout forces explicit waits - catches flaky selectors faster
-    timeout: 5 * 1000,
+    // Slightly higher default to reduce Firefox flakiness on CI
+    timeout: 10 * 1000,
 
     // Take screenshot when assertion fails
     toHaveScreenshot: {

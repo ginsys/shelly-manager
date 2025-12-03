@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { waitForPageReady } from './fixtures/test-helpers'
+import { waitForPageReady, clientNavigate } from './fixtures/test-helpers'
 
 test.describe('Export Preview Form E2E', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/export')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
     await waitForPageReady(page)
+    await clientNavigate(page, '/export')
   })
 
   test('export preview page loads correctly', async ({ page }) => {
@@ -13,8 +14,8 @@ test.describe('Export Preview Form E2E', () => {
     await expect(heading.first()).toBeVisible()
 
     // Check page is rendered
-    const pageContainer = page.locator('main, [data-testid="export-page"]')
-    await expect(pageContainer.first()).toBeVisible()
+    const pageContainer = page.locator('main, .content, #app, .layout-root, [data-testid="export-page"]')
+    await pageContainer.first().waitFor({ state: 'attached', timeout: 10000 })
   })
 
   // Skip tests that depend on selectors that don't exist

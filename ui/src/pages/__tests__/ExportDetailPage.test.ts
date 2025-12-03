@@ -21,7 +21,7 @@ describe('ExportDetailPage', () => {
     // On retry, succeed
     getExportResult.mockResolvedValueOnce({ export_id: 'exp-123', plugin_name: 'json', format: 'json' })
 
-    const wrapper = mount(ExportDetailPage)
+    const wrapper = mount(ExportDetailPage, { attachTo: document.body })
     await flushPromises()
 
     // Error display is shown
@@ -38,4 +38,3 @@ describe('ExportDetailPage', () => {
     expect(wrapper.find('[data-testid="error-display"]').exists()).toBe(false)
   })
 })
-

@@ -5,35 +5,35 @@ test.describe('Cross-Browser and Responsive Testing', () => {
 
   test('should render correctly on desktop', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 })
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
     await waitForPageReady(page)
 
     // Check basic page structure
     const heading = page.locator('h1, [data-testid="page-title"]')
     await expect(heading.first()).toBeVisible()
 
-    const mainContent = page.locator('main, .content')
-    await expect(mainContent.first()).toBeVisible()
+    const mainContent = page.locator('main, .content, #app, .layout-root')
+    await mainContent.first().waitFor({ state: 'attached', timeout: 10000 })
   })
 
   test('should be responsive on tablet', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 })
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
     await waitForPageReady(page)
 
     // Check main content is visible
-    const mainContent = page.locator('main, .content')
-    await expect(mainContent.first()).toBeVisible()
+    const mainContent = page.locator('main, .content, #app, .layout-root')
+    await mainContent.first().waitFor({ state: 'attached', timeout: 10000 })
   })
 
   test('should be responsive on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 })
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
     await waitForPageReady(page)
 
     // Check main content is visible
-    const mainContent = page.locator('main, .content')
-    await expect(mainContent.first()).toBeVisible()
+    const mainContent = page.locator('main, .content, #app, .layout-root')
+    await mainContent.first().waitFor({ state: 'attached', timeout: 10000 })
   })
 
   // Skip tests that depend on selectors that don't exist

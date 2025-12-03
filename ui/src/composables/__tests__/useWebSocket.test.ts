@@ -9,7 +9,12 @@ class WSStub {
   onclose: ((ev: any) => any) | null = null
   onerror: ((ev: any) => any) | null = null
   sent: any[] = []
-  constructor(url: string) { this.url = url; setTimeout(() => { this.readyState = 1; this.onopen?.({}) }, 0) }
+  constructor(url: string) {
+    this.url = url;
+    ;(global as any).WebSocket.instances = (global as any).WebSocket.instances || []
+    ;(global as any).WebSocket.instances.push(this)
+    setTimeout(() => { this.readyState = 1; this.onopen?.({}) }, 0)
+  }
   send(data: any) { this.sent.push(data) }
   close() { this.readyState = 3; this.onclose?.({ code: 1000 }) }
 }
@@ -28,9 +33,8 @@ describe('useWebSocket', async () => {
     await vi.runAllTimersAsync()
     expect(status.value).toBe('open')
     // simulate message
-    const ws = (global as any).WebSocket.instances?.[0] || null
-    // Fallback: manually trigger using stub
-    ;(WSStub as any).prototype.onmessage?.call({} as any, { data: JSON.stringify({ hello: 'world' }) })
+    const ws = (global as any).WebSocket.instances?.[0]
+    ws?.onmessage?.({ data: JSON.stringify({ hello: 'world' }) })
     expect(messages[0].hello).toBe('world')
   })
 
@@ -42,4 +46,3 @@ describe('useWebSocket', async () => {
     expect(true).toBe(true)
   })
 })
-

@@ -15,6 +15,13 @@ export GODEBUG=gctrace=0     # Disable GC tracing for performance
 pkill -f "shelly-manager server" || true
 pkill -f "node.*vite.*preview" || true
 
+# Prefer backend-served UI for Firefox runs to avoid SPA deep-linking quirks
+if [ "${PW_PROJECT:-}" = "firefox" ]; then
+  export SKIP_FRONTEND=true
+  export PW_BASEURL=http://localhost:8080
+  echo "Firefox project detected: using backend-hosted UI at $PW_BASEURL (SKIP_FRONTEND=${SKIP_FRONTEND})"
+fi
+
 # Build with test optimizations if needed
 if [ ! -f "bin/shelly-manager" ] || [ internal/ -nt "bin/shelly-manager" ]; then
     echo "Building optimized backend..."
@@ -53,35 +60,33 @@ for i in $(seq 1 15); do
     sleep 1
 done
 
-# Start frontend only if needed
+# Start frontend only if needed (optionally serve UI via backend)
 if [ "${SKIP_FRONTEND:-}" != "true" ]; then
     cd ui
 
-    # Build frontend if needed (production build is faster for tests)
     # Ensure dependencies are installed (non-interactive)
     if [ ! -d node_modules ]; then
         npm ci
     fi
 
-    if [ "${USE_BUILD:-}" = "true" ]; then
-        npm run build
-        # Serve the built assets using Vite preview to avoid installing extra tools
-        npm run preview -- --port 5173 --host 127.0.0.1 > /dev/null 2>&1 &
-    else
-        npm run preview -- --port 5173 --host 127.0.0.1 > /dev/null 2>&1 &
-    fi
+    # Always build once to ensure vite preview has dist/ available
+    VITE_API_BASE=http://localhost:8080/api/v1 VITE_WS_URL=ws://localhost:8080 npm run build
+    # Provide runtime app-config.js for UI to pick up base URLs
+    echo "window.__API_BASE__='http://localhost:8080/api/v1'; window.__ADMIN_KEY__='dev-admin-key';" > dist/app-config.js
+    # Serve the built assets using Vite preview (fast, no extra deps)
+    npm run preview -- --port 5173 --host localhost > /dev/null 2>&1 &
 
     FRONTEND_PID=$!
     cd ..
 
     # Quick frontend check
     echo "Waiting for frontend..."
-    for i in $(seq 1 10); do
+    for i in $(seq 1 20); do
         if timeout 2 curl -s -f http://localhost:5173 >/dev/null 2>&1; then
             echo "Frontend ready after ${i}s"
             break
         fi
-        if [ $i -eq 10 ]; then
+        if [ $i -eq 20 ]; then
             echo "Frontend failed to start"
             kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
             exit 1
@@ -105,27 +110,37 @@ echo "Running optimized E2E tests..."
 export PLAYWRIGHT_WORKERS=2
 export PLAYWRIGHT_TIMEOUT=60000
 
+# Optional Playwright args (e.g., PW_PROJECT=firefox)
+PW_ARGS=""
+if [ -n "${PW_PROJECT:-}" ]; then
+  PW_ARGS="--project=${PW_PROJECT}"
+fi
+
+# Ensure Playwright browsers are installed (non-interactive)
+echo "Ensuring Playwright browsers are installed..."
+npm run test:install --silent || npx playwright install --with-deps
+
 # Choose test suite based on parameter
 case "${1:-full}" in
     "dev")
         echo "Running development test suite (Chromium-only, 10-15 min target)..."
-        npx playwright test --config=playwright-dev.config.ts --max-failures=10
+        npx playwright test --config=playwright-dev.config.ts --max-failures=10 ${PW_ARGS}
         ;;
     "smoke")
         echo "Running smoke tests..."
-        npx playwright test --config=playwright-smoke.config.ts
+        npx playwright test --config=playwright-smoke.config.ts ${PW_ARGS}
         ;;
     "critical")
         echo "Running critical tests..."
-        npx playwright test tests/e2e/critical --workers=2 --timeout=60000
+        npx playwright test tests/e2e/critical --workers=2 --timeout=60000 ${PW_ARGS}
         ;;
     "quick")
         echo "Running quick test suite..."
-        npx playwright test tests/e2e/smoke tests/e2e/critical --workers=2 --timeout=60000 --max-failures=5
+        npx playwright test tests/e2e/smoke tests/e2e/critical --workers=2 --timeout=60000 --max-failures=5 ${PW_ARGS}
         ;;
     *)
         echo "Running full test suite..."
-        npx playwright test --workers=2 --timeout=60000 --max-failures=10
+        npx playwright test --workers=2 --timeout=60000 --max-failures=10 ${PW_ARGS}
         ;;
 esac
 

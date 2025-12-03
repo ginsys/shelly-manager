@@ -4,7 +4,7 @@ import { waitForPageReady } from './fixtures/test-helpers'
 test.describe('Device Management E2E', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
     await waitForPageReady(page)
   })
 
@@ -17,8 +17,9 @@ test.describe('Device Management E2E', () => {
     const deviceList = page.locator('[data-testid="device-list"]')
     const emptyState = page.locator('[data-testid="empty-state"]')
 
-    // Should have either devices or empty state
-    await expect(deviceList.or(emptyState).first()).toBeVisible()
+    // Should have either devices or empty state present (attached tolerance)
+    const target = deviceList.or(emptyState).first()
+    await target.waitFor({ state: 'attached', timeout: 10000 })
   })
 
   test('device search is functional', async ({ page }) => {

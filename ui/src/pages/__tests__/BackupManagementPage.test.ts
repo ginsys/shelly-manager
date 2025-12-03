@@ -1,4 +1,6 @@
-import { mount, flushPromises } from '@vue/test-utils'
+import { shallowMount, flushPromises } from '@vue/test-utils'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }))
 import BackupManagementPage from '@/pages/BackupManagementPage.vue'
 
 const fetchBackups = vi.fn()
@@ -69,16 +71,13 @@ vi.mock('@/composables/useBackups', () => ({
 
 describe('BackupManagementPage', () => {
   it('shows ErrorDisplay and retries fetchBackups', async () => {
-    const wrapper = mount(BackupManagementPage)
+    const wrapper = shallowMount(BackupManagementPage, { attachTo: document.body })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="error-display"]').exists()).toBe(true)
-    const retry = wrapper.find('button.btn.primary')
-    if (retry.exists()) {
-      await retry.trigger('click')
-      await flushPromises()
-    }
+    expect(wrapper.findComponent(ErrorDisplay).exists()).toBe(true)
+    const ed = wrapper.findComponent(ErrorDisplay)
+    ed.vm.$emit('retry')
+    await flushPromises()
     expect(fetchBackups).toHaveBeenCalled()
   })
 })
-

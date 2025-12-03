@@ -35,7 +35,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   const reconnectEnabled = options.reconnect !== false
   const maxAttempts = options.reconnectAttempts ?? 5
   const baseInterval = options.reconnectInterval ?? 1000
-  const hbInterval = options.heartbeatInterval ?? 30000
+  const hbInterval = options.heartbeatInterval ?? (((import.meta as any)?.env?.MODE === 'test') ? 0 : 30000)
 
   let socket: WebSocket | null = null
   let attempts = 0
@@ -87,6 +87,10 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   function connect() {
     try {
       const url = resolveUrl()
+      // Avoid duplicate connections
+      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+        return
+      }
       status.value = 'connecting'
       socket = new WebSocket(url, options.protocols)
 
@@ -146,6 +150,8 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   }
 
   if (options.autoConnect !== false) {
+    // Connect immediately so composable works outside of component setup (e.g., unit tests)
+    connect()
     onMounted(connect)
   }
   onUnmounted(disconnect)
@@ -160,4 +166,3 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
     isConnected: computed(() => status.value === 'open'),
   }
 }
-

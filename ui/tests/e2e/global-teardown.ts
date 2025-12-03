@@ -19,8 +19,15 @@ async function globalTeardown(config: FullConfig) {
   try {
     // Clean up test data
     console.log('Cleaning up test data...')
-    await cleanupTestData(requestContext)
-    console.log('Test data cleaned')
+
+    // First, verify backend is reachable; if not, skip cleanup gracefully
+    const backendReady = await waitForBackendBriefly(requestContext)
+    if (!backendReady) {
+      console.warn('⚠️ Backend not reachable during teardown; skipping API cleanup')
+    } else {
+      await cleanupTestData(requestContext)
+      console.log('Test data cleaned')
+    }
 
   } catch (error) {
     // Teardown failures should not fail the test suite
@@ -33,6 +40,23 @@ async function globalTeardown(config: FullConfig) {
   cleanupTestDatabase()
 
   console.log('E2E Test Environment Teardown Complete')
+}
+
+/**
+ * Brief health probe to avoid noisy teardown failures when backend exited early
+ */
+async function waitForBackendBriefly(requestContext: any): Promise<boolean> {
+  const endpoints = ['/healthz', '/api/v1/health', '/ping']
+  for (let i = 0; i < 5; i++) {
+    for (const ep of endpoints) {
+      try {
+        const res = await requestContext.get(ep)
+        if (res.ok()) return true
+      } catch {}
+    }
+    await new Promise(r => setTimeout(r, 500))
+  }
+  return false
 }
 
 /**

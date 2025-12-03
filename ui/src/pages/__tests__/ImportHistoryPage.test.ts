@@ -1,4 +1,5 @@
-import { mount, flushPromises } from '@vue/test-utils'
+import { shallowMount, flushPromises } from '@vue/test-utils'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import ImportHistoryPage from '@/pages/ImportHistoryPage.vue'
 
 const fetchHistory = vi.fn()
@@ -22,15 +23,12 @@ vi.mock('@/stores/import', () => ({
 
 describe('ImportHistoryPage', () => {
   it('shows ErrorDisplay and retries fetchHistory', async () => {
-    const wrapper = mount(ImportHistoryPage)
+    const wrapper = shallowMount(ImportHistoryPage, { attachTo: document.body })
     await flushPromises()
-    expect(wrapper.find('[data-testid=\"error-display\"]').exists()).toBe(true)
-    const retry = wrapper.find('button.btn.primary')
-    if (retry.exists()) {
-      await retry.trigger('click')
-      await flushPromises()
-    }
+    expect(wrapper.findComponent(ErrorDisplay).exists()).toBe(true)
+    const ed = wrapper.findComponent(ErrorDisplay)
+    ed.vm.$emit('retry')
+    await flushPromises()
     expect(fetchHistory).toHaveBeenCalled()
   })
 })
-

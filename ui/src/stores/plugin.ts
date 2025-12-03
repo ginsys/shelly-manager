@@ -292,8 +292,10 @@ export const usePluginStore = defineStore('plugin', {
         this.schemaCache.set(name, schema)
         return schema
       } catch (e) {
-        // Schema is optional, don't throw
-        console.warn(`Failed to load schema for plugin ${name}:`, e)
+        // Schema is optional, don't throw; reduce noise during unit tests
+        if ((import.meta as any)?.env?.MODE !== 'test') {
+          console.warn(`Failed to load schema for plugin ${name}:`, e)
+        }
         return null
       }
     },

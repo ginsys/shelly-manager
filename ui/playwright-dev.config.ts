@@ -36,8 +36,8 @@ export default defineConfig({
 
   // Shared settings optimized for development
   use: {
-    // Base URL for the application
-    baseURL: 'http://localhost:5173',
+    // Base URL for the application (allow override for dev runs)
+    baseURL: process.env.PW_BASEURL || 'http://localhost:5173',
 
     // Optimized HTTP headers for API tests
     extraHTTPHeaders: {

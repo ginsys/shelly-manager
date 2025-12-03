@@ -9,9 +9,7 @@
     <link rel="preconnect" href="http://localhost:8080" />
     <link rel="dns-prefetch" href="http://localhost:8080" />
 
-    <!-- Preload critical resources -->
-    <link rel="modulepreload" href="/src/main.ts" />
-    <link rel="preload" href="/src/App.vue" as="script" />
+    <!-- Preload critical resources (handled by Vite in dev; use built assets in preview) -->
 
     <!-- DNS prefetch for potential external resources -->
     <link rel="dns-prefetch" href="//fonts.googleapis.com" />
@@ -28,6 +26,8 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- Runtime configuration for preview/prod (provided by backend or e2e runner) -->
+    <script src="/app-config.js"></script>
     <!-- Dev convenience script removed from production build to avoid Vite bundling issues -->
     <script type="module" src="/src/main.ts"></script>
   </body>

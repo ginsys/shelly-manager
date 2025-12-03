@@ -1,4 +1,5 @@
-import { mount, flushPromises } from '@vue/test-utils'
+import { shallowMount, flushPromises } from '@vue/test-utils'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import DevicesPage from '@/pages/DevicesPage.vue'
 
 const fetch = vi.fn()
@@ -31,10 +32,10 @@ describe('DevicesPage', () => {
     fetch.mockRejectedValueOnce(new Error('Failed to load devices'))
     fetch.mockResolvedValueOnce(undefined)
 
-    const wrapper = mount(DevicesPage)
+    const wrapper = shallowMount(DevicesPage, { attachTo: document.body })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="error-display"]').exists()).toBe(true)
+    expect(wrapper.findComponent(ErrorDisplay).exists()).toBe(true)
 
     // Retry via the ErrorDisplay retry button
     const retry = wrapper.find('button.btn.primary')
@@ -50,4 +51,3 @@ describe('DevicesPage', () => {
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 })
-

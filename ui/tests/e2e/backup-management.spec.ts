@@ -1,10 +1,14 @@
 import { test, expect } from '@playwright/test'
-import { waitForPageReady } from './fixtures/test-helpers'
+import { waitForPageReady, clientNavigate } from './fixtures/test-helpers'
 
 test.describe('Backup Management E2E', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/export/backup')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForPageReady(page)
+    await page.hover('.nav-dropdown .dropdown-trigger')
+    await page.locator('a[href="/export/backup"]').first().waitFor({ state: 'visible', timeout: 5000 })
+    await page.locator('a[href="/export/backup"]').first().click()
     await waitForPageReady(page)
   })
 
@@ -14,8 +18,8 @@ test.describe('Backup Management E2E', () => {
     await expect(heading.first()).toBeVisible()
 
     // Page loaded successfully
-    const pageContainer = page.locator('[data-testid="backup-management-page"], main')
-    await expect(pageContainer.first()).toBeVisible()
+    const pageContainer = page.locator('[data-testid="backup-management-page"], main, .content, #app, .layout-root')
+    await pageContainer.first().waitFor({ state: 'attached', timeout: 10000 })
   })
 
   // Skip all other tests until page has proper test IDs

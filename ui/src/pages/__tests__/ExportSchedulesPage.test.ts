@@ -1,4 +1,5 @@
-import { mount, flushPromises } from '@vue/test-utils'
+import { shallowMount, flushPromises } from '@vue/test-utils'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import ExportSchedulesPage from '@/pages/ExportSchedulesPage.vue'
 
 const fetchSchedules = vi.fn()
@@ -24,19 +25,17 @@ vi.mock('@/stores/schedule', () => ({
 
 describe('ExportSchedulesPage', () => {
   it('shows ErrorDisplay and retries fetchSchedules', async () => {
-    const wrapper = mount(ExportSchedulesPage, {
+    const wrapper = shallowMount(ExportSchedulesPage, {
       global: {
         stubs: { ScheduleFilterBar: { template: '<div />' }, DataTable: { template: '<div />' } },
       },
+      attachTo: document.body,
     })
     await flushPromises()
-    expect(wrapper.find('[data-testid="error-display"]').exists()).toBe(true)
-    const retry = wrapper.find('button.btn.primary')
-    if (retry.exists()) {
-      await retry.trigger('click')
-      await flushPromises()
-    }
+    expect(wrapper.findComponent(ErrorDisplay).exists()).toBe(true)
+    const ed = wrapper.findComponent(ErrorDisplay)
+    ed.vm.$emit('retry')
+    await flushPromises()
     expect(fetchSchedules).toHaveBeenCalled()
   })
 })
-

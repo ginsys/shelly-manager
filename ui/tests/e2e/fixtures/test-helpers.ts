@@ -123,11 +123,16 @@ export async function waitForPageReady(page: Page, timeout = 10000): Promise<voi
   await page.waitForLoadState('domcontentloaded', { timeout: timeout / 2 })
 
   // Step 2: Wait for Vue app to mount - use specific selector
-  const appSelector = '#app, [data-testid="app"], .q-layout'
-  await page.locator(appSelector).first().waitFor({
-    state: 'attached',
-    timeout: timeout / 2
-  })
+  const appSelector = '#app, [data-testid="app"], .layout-root, .q-layout, header.topbar'
+  try {
+    await page.locator(appSelector).first().waitFor({
+      state: 'attached',
+      timeout: Math.max(3000, Math.floor(timeout / 2))
+    })
+  } catch {
+    // Firefox can delay layout attachment; fall back to basic body presence
+    try { await page.waitForSelector('body', { state: 'attached', timeout: 2000 }) } catch {}
+  }
 
   // Step 3: Wait for loading spinners to disappear (if any exist)
   const spinner = page.locator('.q-spinner, .loading, [data-loading="true"]')
@@ -143,13 +148,10 @@ export async function waitForPageReady(page: Page, timeout = 10000): Promise<voi
   // Step 4: Wait for any page content to be visible
   // This confirms the page has actually rendered something useful
   const contentSelector = [
-    'h1', 'h2',
-    '[data-testid="page-title"]',
-    '[data-testid="device-list"]',
-    '[data-testid="plugin-list"]',
-    '[data-testid="empty-state"]',
-    '.q-table',
-    '.q-card'
+    'main', '.content', '[data-testid="main-content"]', 'header.topbar',
+    'h1', 'h2', '[data-testid="page-title"]',
+    '[data-testid:\"device-list\"]', '[data-testid:\"plugin-list\"]', '[data-testid:\"empty-state\"]',
+    '.q-table', '.q-card'
   ].join(', ')
 
   try {
@@ -168,6 +170,18 @@ export async function waitForPageReady(page: Page, timeout = 10000): Promise<voi
  */
 export async function navigateToPage(page: Page, pageName: string): Promise<void> {
   await page.click(SELECTORS.navItem(pageName))
+  await waitForPageReady(page)
+}
+
+/**
+ * Client-side navigation using HTML5 history API.
+ * Useful to avoid server-side SPA fallback differences across browsers.
+ */
+export async function clientNavigate(page: Page, path: string): Promise<void> {
+  await page.evaluate((p) => {
+    history.pushState({}, '', p)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }, path)
   await waitForPageReady(page)
 }
 

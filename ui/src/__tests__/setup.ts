@@ -48,27 +48,5 @@ Object.defineProperty(URL, 'revokeObjectURL', {
   value: vi.fn()
 })
 
-// Mock document methods
-Object.defineProperty(document, 'createElement', {
-  writable: true,
-  value: vi.fn((tagName: string) => {
-    const mockElement = {
-      href: '',
-      download: '',
-      click: vi.fn(),
-      appendChild: vi.fn(),
-      removeChild: vi.fn()
-    }
-    return mockElement
-  })
-})
-
-Object.defineProperty(document.body, 'appendChild', {
-  writable: true,
-  value: vi.fn()
-})
-
-Object.defineProperty(document.body, 'removeChild', {
-  writable: true,
-  value: vi.fn()
-})
+// Keep real DOM creation & body methods for Vue mount stability.
+// If a test needs to mock an anchor element explicitly, mock it locally within that test.

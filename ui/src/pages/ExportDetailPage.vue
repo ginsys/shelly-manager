@@ -37,6 +37,7 @@ const base = (window as any).__API_BASE__ || '/api/v1'
 const downloadUrl = `${base}/export/${id}/download`
 
 async function load() {
+  error.value = ''
   try { data.value = await getExportResult(id) }
   catch (e:any) { error.value = e?.message || 'Failed to load result' }
 }

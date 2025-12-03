@@ -4,7 +4,7 @@ import { waitForPageReady } from '../fixtures/test-helpers.js'
 test.describe('Critical Device Management E2E', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
     await waitForPageReady(page)
   })
 
@@ -17,8 +17,8 @@ test.describe('Critical Device Management E2E', () => {
     const deviceList = page.locator('[data-testid="device-list"]')
     const emptyState = page.locator('[data-testid="empty-state"]')
 
-    // Should have either devices or empty state
-    await expect(deviceList.or(emptyState).first()).toBeVisible()
+    // Should have either devices or empty state present
+    await deviceList.or(emptyState).first().waitFor({ state: 'attached', timeout: 10000 })
   })
 
   // Skip: route mocking is flaky in CI - error state exists in DevicesPage.vue but

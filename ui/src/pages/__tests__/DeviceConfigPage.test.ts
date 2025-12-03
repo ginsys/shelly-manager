@@ -1,4 +1,5 @@
-import { mount, flushPromises } from '@vue/test-utils'
+import { shallowMount, flushPromises } from '@vue/test-utils'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import DeviceConfigPage from '@/pages/DeviceConfigPage.vue'
 
 const getStoredConfig = vi.fn()
@@ -31,7 +32,7 @@ describe('DeviceConfigPage', () => {
     getStoredConfig.mockRejectedValueOnce(new Error('Failed to load configuration'))
     getStoredConfig.mockResolvedValueOnce({ example: true })
 
-    const wrapper = mount(DeviceConfigPage)
+    const wrapper = shallowMount(DeviceConfigPage, { attachTo: document.body })
 
     // Click the Stored button to trigger load
     const btn = wrapper.findAll('button.btn').find(b => b.text().includes('Stored'))
@@ -40,7 +41,7 @@ describe('DeviceConfigPage', () => {
     await flushPromises()
 
     // ErrorDisplay appears
-    expect(wrapper.find('[data-testid="error-display"]').exists()).toBe(true)
+    expect(wrapper.findComponent(ErrorDisplay).exists()).toBe(true)
 
     // Click Retry
     const retry = wrapper.find('button.btn.primary')
@@ -53,4 +54,3 @@ describe('DeviceConfigPage', () => {
     expect(wrapper.find('[data-testid="error-display"]').exists()).toBe(false)
   })
 })
-

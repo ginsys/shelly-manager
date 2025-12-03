@@ -16,7 +16,7 @@ describe('AdminSettingsPage', () => {
     // First call fails
     rotateAdminKey.mockRejectedValueOnce(new Error('Rotation failed'))
 
-    const wrapper = mount(AdminSettingsPage)
+    const wrapper = mount(AdminSettingsPage, { attachTo: document.body })
 
     // Enter key and submit
     const input = wrapper.find('input')
@@ -46,4 +46,3 @@ describe('AdminSettingsPage', () => {
     expect(wrapper.text()).toContain('Admin key rotated')
   })
 })
-

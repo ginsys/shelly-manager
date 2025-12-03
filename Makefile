@@ -287,9 +287,9 @@ test-all:
 	@echo "Step 3/6: Running security tests (production settings)..."
 	$(MAKE) test-security
 	@echo ""
-	@echo "Step 4/6: Running frontend unit tests (vitest)..."
+	@echo "Step 4/6: Running frontend unit tests (vitest, non-interactive)..."
 	$(MAKE) ui-deps
-	cd ui && npm run test -- --coverage
+	cd ui && npm run test -- --coverage --run
 	@echo ""
 	@echo "Step 5/6: Running Go lint..."
 	$(MAKE) lint
