@@ -32,6 +32,13 @@
         <td>{{ row.record_count ?? '-' }}</td>
       </template>
     </DataTable>
+    <ErrorDisplay
+      v-if="store.error && !store.loading"
+      :error="{ code: 'EXPORT_HISTORY_FAILED', message: store.error, retryable: true }"
+      title="Failed to load export history"
+      @retry="store.fetchHistory"
+      @dismiss="() => (store.error = '')"
+    />
     <PaginationBar
       v-if="store.meta?.pagination"
       :page="store.meta.pagination.page"
@@ -59,6 +66,7 @@ import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import ExportPreviewForm from '@/components/ExportPreviewForm.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 
 const store = useExportStore()
 onMounted(() => { store.fetchHistory(); store.fetchStats() })

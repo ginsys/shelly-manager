@@ -1,7 +1,13 @@
 <template>
   <main style="padding:16px">
     <h1>Import Result</h1>
-    <div v-if="error" class="err">{{ error }}</div>
+    <ErrorDisplay
+      v-if="error"
+      :error="{ code: 'IMPORT_RESULT_FAILED', message: error, retryable: true }"
+      title="Failed to load import result"
+      @retry="load"
+      @dismiss="() => (error = '')"
+    />
     <div v-else-if="!data">Loading…</div>
     <div v-else class="grid">
       <div class="card"><strong>ID:</strong> {{ data.import_id }}</div>
@@ -17,13 +23,16 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getImportResult } from '@/api/import'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 const route = useRoute()
 const id = String(route.params.id)
 const data = ref<any>(null)
 const error = ref('')
-onMounted(async () => {
-  try { data.value = await getImportResult(id) } catch (e:any) { error.value = e?.message || 'Failed to load result' }
-})
+async function load() {
+  try { data.value = await getImportResult(id) }
+  catch (e:any) { error.value = e?.message || 'Failed to load result' }
+}
+onMounted(load)
 </script>
 
 <style scoped>
@@ -31,4 +40,3 @@ onMounted(async () => {
 .card { border:1px solid #e5e7eb; padding:12px; border-radius:6px }
 .err { color:#b91c1c }
 </style>
-

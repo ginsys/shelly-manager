@@ -65,6 +65,13 @@
     />
 
     <MessageBanner v-if="vm.message.text" :text="vm.message.text" :type="vm.message.type" @close="vm.message.text = ''" />
+    <ErrorDisplay
+      v-if="vm.error && !vm.loading"
+      :error="{ code: 'EXPORT_LIST_FAILED', message: vm.error, retryable: true }"
+      title="Failed to load GitOps exports"
+      @retry="vm.fetchExports"
+      @dismiss="() => (vm.error = '')"
+    />
   </main>
 </template>
 
@@ -78,7 +85,7 @@ import GitOpsCreateModal from '@/components/gitops/GitOpsCreateModal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import MessageBanner from '@/components/shared/MessageBanner.vue'
 import GitOpsPreviewModal from '@/components/gitops/GitOpsPreviewModal.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 
 defineProps<{ vm: any }>()
 </script>
-

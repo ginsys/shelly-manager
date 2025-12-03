@@ -68,6 +68,14 @@
       @refresh="refreshData"
     />
 
+    <ErrorDisplay
+      v-if="error && !loading"
+      :error="{ code: 'BACKUP_LIST_FAILED', message: error, retryable: true }"
+      title="Failed to load backups"
+      @retry="fetchBackups"
+      @dismiss="() => (error = '')"
+    />
+
     <!-- Backups Table -->
     <BackupList
       :rows="backups"
@@ -136,6 +144,7 @@ import ContentExportList from '@/components/backup/ContentExportList.vue'
 import RestoreModal from '@/components/backup/RestoreModal.vue'
 import ConfirmDialog from '@/components/shared/ConfirmDialog.vue'
 import MessageBanner from '@/components/shared/MessageBanner.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useBackups } from '@/composables/useBackups'
 
 const {

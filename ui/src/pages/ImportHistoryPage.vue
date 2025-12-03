@@ -32,6 +32,13 @@
         <td>{{ row.records_imported ?? '-' }}</td>
       </template>
     </DataTable>
+    <ErrorDisplay
+      v-if="store.error && !store.loading"
+      :error="{ code: 'IMPORT_HISTORY_FAILED', message: store.error, retryable: true }"
+      title="Failed to load import history"
+      @retry="store.fetchHistory"
+      @dismiss="() => (store.error = '')"
+    />
     <PaginationBar
       v-if="store.meta?.pagination"
       :page="store.meta.pagination.page"
@@ -51,6 +58,7 @@ import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import FilterBar from '@/components/FilterBar.vue'
 import ImportPreviewForm from '@/components/ImportPreviewForm.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 
 const store = useImportStore()
 onMounted(() => { store.fetchHistory(); store.fetchStats() })
