@@ -61,6 +61,13 @@ Shelly Manager supports multiple export formats for backing up and sharing devic
 - Compression: Built-in compression
 - Best For: Complete exports with all formats included
 
+### GitOps / Infrastructure as Code
+- Use Case: Generate configuration for infra tools
+- Formats: Terraform, Ansible, Kubernetes, Docker Compose
+- Output: Readable file structure for repos/CI
+- Best For: GitOps workflows and automation
+- Guide: See Export/Import Guide (below)
+
 ### Compression Options
 
 | Algorithm | File Size | Speed | Use Case |
@@ -126,10 +133,11 @@ docker-compose up -d
 REST API with standardized `{success: true/false, data/error}` responses.
 
 See documentation:
-- [Export/Import API](docs/API_EXPORT_IMPORT.md)
-- [Notification API](docs/API_NOTIFICATION.md)
-- [Metrics API](docs/METRICS_API.md)
-- [SMA Format](docs/sma-format.md)
+- [Export/Import API](docs/api/API_EXPORT_IMPORT.md)
+- [Notification API](docs/api/API_NOTIFICATION.md)
+- [Metrics API](docs/api/METRICS_API.md)
+- [Export/Import Guide](docs/guides/export-import-system.md)
+- [SMA Format](docs/guides/sma-format.md)
 
 ## Configuration
 
