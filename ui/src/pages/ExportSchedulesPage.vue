@@ -123,6 +123,13 @@
         </td>
       </template>
     </DataTable>
+    <ErrorDisplay
+      v-if="store.error && !store.loading"
+      :error="{ code: 'SCHEDULES_LOAD_FAILED', message: store.error, retryable: true }"
+      title="Failed to load schedules"
+      @retry="store.fetchSchedules"
+      @dismiss="() => (store.error = '')"
+    />
 
     <!-- Pagination -->
     <PaginationBar
@@ -178,6 +185,7 @@ import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import ScheduleFilterBar from '@/components/ScheduleFilterBar.vue'
 import ScheduleForm from '@/components/ScheduleForm.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 
 const store = useScheduleStore()
 const router = useRouter()

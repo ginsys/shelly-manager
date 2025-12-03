@@ -13,7 +13,13 @@
     <div class="grid">
       <div class="card">
         <div class="card-title">Viewer</div>
-        <div v-if="error" class="state error">{{ error }}</div>
+        <ErrorDisplay
+          v-if="error"
+          :error="{ code: 'DEVICE_CONFIG_FAILED', message: error, retryable: true }"
+          title="Failed to load configuration"
+          @retry="loadConfig('stored')"
+          @dismiss="() => (error = '')"
+        />
         <div v-else-if="busy" class="state">Loading…</div>
         <pre v-else-if="payload" class="viewer">{{ pretty(payload) }}</pre>
         <div v-else class="state">Choose a source to view configuration</div>
@@ -64,7 +70,13 @@
 
       <div class="card">
         <div class="card-title">History</div>
-        <div v-if="historyError" class="state error">{{ historyError }}</div>
+        <ErrorDisplay
+          v-if="historyError"
+          :error="{ code: 'CONFIG_HISTORY_FAILED', message: historyError, retryable: true }"
+          title="Failed to load history"
+          @retry="fetchHistory"
+          @dismiss="() => (historyError = '')"
+        />
         <div class="history" v-else>
           <button class="btn" @click="loadHistory" :disabled="busy">Refresh</button>
           <ul class="list" v-if="history.length">
@@ -81,6 +93,7 @@
 
 <script setup lang="ts">
 import { formatDate } from '@/utils/format'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getStoredConfig, updateStoredConfig, getLiveConfig, getLiveConfigNormalized, getTypedNormalizedConfig, importConfig, getImportStatus, exportConfig, detectDrift, getConfigHistory, applyTemplate, type ImportStatus, type DriftStatus, type ConfigHistoryItem } from '@/api/deviceConfig'

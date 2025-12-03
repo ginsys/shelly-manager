@@ -16,7 +16,12 @@
       <div class="state">Loading...</div>
     </div>
     <div class="card" v-else-if="error">
-      <div class="state error">{{ error }}</div>
+      <ErrorDisplay
+        :error="{ code: 'DEVICE_LOAD_FAILED', message: error, retryable: true }"
+        title="Failed to load device"
+        @retry="fetchDevice"
+        @dismiss="() => (error = '')"
+      />
     </div>
 
     <div v-else class="grid">
@@ -95,6 +100,7 @@ import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevic
 import { getStoredConfig, getLiveConfig, getLiveConfigNormalized, getTypedNormalizedConfig } from '../api/deviceConfig'
 import type { Device } from '../api/types'
 import { formatDate } from '@/utils/format'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 
 const route = useRoute()
 const loading = ref(false)
