@@ -481,11 +481,10 @@ func (s *SQLiteProvider) gzipFile(src, dst string) error {
 	}
 	defer func() { _ = out.Close() }()
 	gz := gzip.NewWriter(out)
-	defer func() { _ = gz.Close() }()
 	if _, err := io.Copy(gz, in); err != nil {
 		return err
 	}
-	// Ensure writers flush
+	// Ensure writers flush via Close; rely on deferred file close
 	if err := gz.Close(); err != nil {
 		return err
 	}
@@ -501,7 +500,6 @@ func (s *SQLiteProvider) zipFile(src, dst string) error {
 	defer func() { _ = out.Close() }()
 
 	zw := zip.NewWriter(out)
-	defer func() { _ = zw.Close() }()
 
 	// Create header for the source file
 	info, err := os.Stat(src)

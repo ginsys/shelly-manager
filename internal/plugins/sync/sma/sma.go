@@ -361,14 +361,7 @@ func (s *SMAPlugin) Export(ctx context.Context, data *sync.ExportData, config sy
 		return nil, fmt.Errorf("failed to write compressed data: %w", err)
 	}
 
-	// Close gzip writer to ensure all data is written
-	if err := gzipWriter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
-	}
-
-	if err := file.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close archive file: %w", err)
-	}
+	// Let deferred closers handle finalization
 
 	// Get final file info
 	fileInfo, err := os.Stat(archivePath)
