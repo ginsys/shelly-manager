@@ -58,9 +58,15 @@ if [ "${SKIP_FRONTEND:-}" != "true" ]; then
     cd ui
 
     # Build frontend if needed (production build is faster for tests)
+    # Ensure dependencies are installed (non-interactive)
+    if [ ! -d node_modules ]; then
+        npm ci
+    fi
+
     if [ "${USE_BUILD:-}" = "true" ]; then
         npm run build
-        npx serve dist -l 5173 > /dev/null 2>&1 &
+        # Serve the built assets using Vite preview to avoid installing extra tools
+        npm run preview -- --port 5173 --host 127.0.0.1 > /dev/null 2>&1 &
     else
         npm run preview -- --port 5173 --host 127.0.0.1 > /dev/null 2>&1 &
     fi

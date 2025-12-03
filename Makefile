@@ -288,7 +288,8 @@ test-all:
 	$(MAKE) test-security
 	@echo ""
 	@echo "Step 4/6: Running frontend unit tests (vitest)..."
-	cd ui && npx vitest run --coverage
+	$(MAKE) ui-deps
+	cd ui && npm run test -- --coverage
 	@echo ""
 	@echo "Step 5/6: Running Go lint..."
 	$(MAKE) lint
