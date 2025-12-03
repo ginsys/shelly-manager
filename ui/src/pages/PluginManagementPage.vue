@@ -133,6 +133,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, defineAsyncComponent } from 'vue'
+import { formatDate } from '@/utils/format'
 import { usePluginStore } from '@/stores/plugin'
 import { formatPluginStatus, type Plugin } from '@/api/plugin'
 
@@ -297,9 +298,7 @@ function getTestResult(name: string) {
 /**
  * Format date for display
  */
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleString()
-}
+// Use shared formatter from utils/format
 
 /**
  * Show message

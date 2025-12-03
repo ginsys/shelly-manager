@@ -94,6 +94,7 @@ import { useRoute } from 'vue-router'
 import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevice, getDeviceCapabilities, type DeviceAction } from '../api/devices'
 import { getStoredConfig, getLiveConfig, getLiveConfigNormalized, getTypedNormalizedConfig } from '../api/deviceConfig'
 import type { Device } from '../api/types'
+import { formatDate } from '@/utils/format'
 
 const route = useRoute()
 const loading = ref(false)
@@ -122,10 +123,7 @@ const editOpen = ref(false)
 const editName = ref('')
 const saving = ref(false)
 
-function formatDate(iso?: string) {
-  if (!iso) return '-'
-  try { return new Date(iso).toLocaleString() } catch { return iso }
-}
+// Use shared formatter from utils/format
 function formatNum(v?: number) {
   if (v === undefined || v === null) return '-'
   try { return Number(v).toFixed(2) } catch { return String(v) }

@@ -121,6 +121,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDate } from '@/utils/format'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useDevicesStore } from '@/stores/devices'
 import { createDevice, updateDevice, deleteDevice } from '@/api/devices'
@@ -178,10 +179,7 @@ function toggleSort(field: Sort['field']) {
   }
 }
 
-function formatDate(iso?: string) {
-  if (!iso) return '-'
-  try { return new Date(iso).toLocaleString() } catch { return iso }
-}
+// Use shared formatter from utils/format
 
 const filtered = computed(() => {
   const q = store.search.trim().toLowerCase()

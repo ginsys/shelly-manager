@@ -80,6 +80,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDate } from '@/utils/format'
 import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getStoredConfig, updateStoredConfig, getLiveConfig, getLiveConfigNormalized, getTypedNormalizedConfig, importConfig, getImportStatus, exportConfig, detectDrift, getConfigHistory, applyTemplate, type ImportStatus, type DriftStatus, type ConfigHistoryItem } from '@/api/deviceConfig'
@@ -105,7 +106,7 @@ const templateVars = ref('')
 const applyMsg = ref('')
 
 function pretty(v: unknown) { try { return JSON.stringify(v, null, 2) } catch { return String(v) } }
-function formatDate(iso?: string) { if (!iso) return '-'; try { return new Date(iso).toLocaleString() } catch { return iso } }
+// Use shared formatter from utils/format
 
 async function load(which: 'stored' | 'live' | 'normalized' | 'typed') {
   busy.value = true

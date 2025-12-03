@@ -73,6 +73,8 @@
 </template>
 
 <script setup lang="ts">
+import { formatDate } from '@/utils/format'
+import { computed } from 'vue'
 import type { Plugin } from '@/api/plugin'
 
 const props = defineProps<{
@@ -102,9 +104,7 @@ const cardStateClass = computed(() => {
   return ''
 })
 
-function formatDate(dateString: string) {
-  try { return new Date(dateString).toLocaleString() } catch { return dateString }
-}
+// Use shared formatDate from utils/format
 </script>
 
 <style scoped>
