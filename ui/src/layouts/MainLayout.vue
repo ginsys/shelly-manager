@@ -3,72 +3,87 @@
     <header class="topbar" data-testid="header">
       <div class="brand" data-testid="brand">Shelly Manager</div>
       <nav class="nav" data-testid="navigation">
-        <router-link 
-          class="nav-link" 
+        <router-link
+          class="nav-link"
           to="/"
           :class="{ active: $route.name === 'devices' }"
+          :aria-current="$route.name === 'devices' ? 'page' : undefined"
         >
           Devices
         </router-link>
         
         <div class="nav-dropdown">
-          <span 
+          <button
+            type="button"
             class="nav-link dropdown-trigger"
             :class="{ active: $route.meta.category === 'export' || $route.meta.category === 'import' }"
+            :aria-expanded="isDropdownOpen"
+            @click="toggleDropdown"
+            @keydown.escape="closeDropdown"
+            @blur="closeDropdown"
           >
             Export & Import
-          </span>
-          <div class="dropdown-menu">
+          </button>
+          <div
+            class="dropdown-menu"
+            role="menu"
+            :aria-hidden="!isDropdownOpen"
+            v-show="isDropdownOpen"
+            @mouseleave="closeDropdown"
+          >
             <div class="dropdown-section">
               <div class="dropdown-section-title">Export</div>
-              <router-link class="dropdown-item" to="/export/schedules">
-                <span class="dropdown-icon">📅</span>
+              <router-link class="dropdown-item" to="/export/schedules" role="menuitem">
+                <span class="dropdown-icon" aria-hidden="true">📅</span>
                 Schedule Management
               </router-link>
-              <router-link class="dropdown-item" to="/export/backup">
-                <span class="dropdown-icon">💾</span>
+              <router-link class="dropdown-item" to="/export/backup" role="menuitem">
+                <span class="dropdown-icon" aria-hidden="true">💾</span>
                 Backup Management
               </router-link>
-              <router-link class="dropdown-item" to="/export/gitops">
-                <span class="dropdown-icon">🔄</span>
+              <router-link class="dropdown-item" to="/export/gitops" role="menuitem">
+                <span class="dropdown-icon" aria-hidden="true">🔄</span>
                 GitOps Export
               </router-link>
-              <router-link class="dropdown-item" to="/export/history">
-                <span class="dropdown-icon">📋</span>
+              <router-link class="dropdown-item" to="/export/history" role="menuitem">
+                <span class="dropdown-icon" aria-hidden="true">📋</span>
                 Export History
               </router-link>
             </div>
             <div class="dropdown-divider"></div>
             <div class="dropdown-section">
               <div class="dropdown-section-title">Import</div>
-              <router-link class="dropdown-item" to="/import/history">
-                <span class="dropdown-icon">📥</span>
+              <router-link class="dropdown-item" to="/import/history" role="menuitem">
+                <span class="dropdown-icon" aria-hidden="true">📥</span>
                 Import History
               </router-link>
             </div>
           </div>
         </div>
         
-        <router-link 
-          class="nav-link" 
+        <router-link
+          class="nav-link"
           to="/plugins"
           :class="{ active: $route.name === 'plugins' }"
+          :aria-current="$route.name === 'plugins' ? 'page' : undefined"
         >
           Plugins
         </router-link>
-        
-        <router-link 
-          class="nav-link" 
+
+        <router-link
+          class="nav-link"
           to="/dashboard"
           :class="{ active: $route.name === 'metrics' || $route.name === 'stats' }"
+          :aria-current="$route.name === 'metrics' || $route.name === 'stats' ? 'page' : undefined"
         >
           Metrics
         </router-link>
-        
-        <router-link 
-          class="nav-link" 
+
+        <router-link
+          class="nav-link"
           to="/admin"
           :class="{ active: $route.name === 'admin' }"
+          :aria-current="$route.name === 'admin' ? 'page' : undefined"
         >
           Admin
         </router-link>
@@ -76,10 +91,10 @@
     </header>
     
     <!-- Breadcrumb Navigation -->
-    <nav class="breadcrumb" v-if="showBreadcrumb">
+    <nav class="breadcrumb" v-if="showBreadcrumb" aria-label="Breadcrumb">
       <div class="breadcrumb-container">
         <router-link class="breadcrumb-item" to="/">
-          <span class="breadcrumb-icon">🏠</span>
+          <span class="breadcrumb-icon" aria-hidden="true">🏠</span>
           Home
         </router-link>
         <template v-for="(crumb, index) in breadcrumbs" :key="index">
@@ -105,10 +120,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+
+// Dropdown state for accessibility
+const isDropdownOpen = ref(false)
+
+function toggleDropdown() {
+  isDropdownOpen.value = !isDropdownOpen.value
+}
+
+function closeDropdown() {
+  isDropdownOpen.value = false
+}
 
 // Breadcrumb configuration
 const breadcrumbs = computed(() => {
@@ -262,7 +288,12 @@ const showBreadcrumb = computed(() => {
 }
 
 .dropdown-trigger {
+  /* Reset button styling for accessibility */
+  background: none;
+  border: none;
   cursor: pointer;
+  font: inherit;
+  padding: 8px 16px;
   display: flex;
   align-items: center;
   user-select: none;

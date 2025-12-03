@@ -22,11 +22,9 @@ Within each level:
 
 ### CRITICAL (100s) - Blocks Commit
 
-| # | Task | Status |
-|---|------|--------|
-| 111 | [JSON Export Plugin Tests](111-json-export-plugin-tests.md) | not-started |
-| 121 | [YAML Export Plugin Tests](121-yaml-export-plugin-tests.md) | not-started |
-| 131 | [Router-Link Accessibility Fix](131-router-link-accessibility-fix.md) | not-started |
+**No open critical tasks**
+
+**Note**: Tasks 111 (JSON Export Plugin Tests) and 121 (YAML Export Plugin Tests) were removed from this list as comprehensive tests already exist with 80.8% and 79.4% coverage respectively. All tests pass.
 
 ### HIGH (200s) - Post-Commit Required
 
@@ -84,6 +82,7 @@ Completed tasks are moved to [archive/](archive/).
 |---|------|-----------|
 | 101 | [Code Formatting](archive/done-101-code-formatting.md) | 2025-11-30 |
 | 102 | [strings.Title Deprecation](archive/done-102-strings-title-deprecation.md) | 2025-11-30 |
+| 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-03 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
 | 351 | [Break Up Large Page Components](archive/done-351-break-up-large-page-components.md) | 2025-12-03 |
 
