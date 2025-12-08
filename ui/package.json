@@ -36,13 +36,13 @@
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@types/pako": "^2.0.0",
-    "@vitejs/plugin-vue": "^5.0.0",
-    "@vitest/coverage-v8": "^1.6.1",
+    "@vitejs/plugin-vue": "^6.0.2",
+    "@vitest/coverage-v8": "^4.0.15",
     "@vue/test-utils": "^2.4.6",
     "jsdom": "^27.2.0",
     "terser": "^5.44.1",
     "typescript": "^5.9.3",
-    "vite": "^5.4.21",
+    "vite": "^7.2.7",
     "vitest": "^1.6.0"
   }
 }
