@@ -36,7 +36,7 @@ jobs:
         grep -E "^Benchmark" benchmark.txt | head -50 || true
 
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: benchmark-results
         path: benchmark.txt
@@ -68,7 +68,7 @@ jobs:
 
     - name: Upload stress test results
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: stress-test-results
         path: stress-test.log

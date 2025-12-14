@@ -95,7 +95,7 @@ jobs:
 
     - name: Upload JSON test reports
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: test-json-reports
         path: test-reports/
@@ -112,7 +112,7 @@ jobs:
 
     - name: Upload JUnit report
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: junit-report
         path: junit.xml
@@ -128,7 +128,7 @@ jobs:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Upload coverage artifact
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: coverage-report
         path: |
@@ -137,7 +137,7 @@ jobs:
 
     - name: Upload test logs artifact
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: ci-test-logs
         path: ci-test.log
@@ -170,7 +170,7 @@ jobs:
 
     - name: Upload coverage
       if: always()
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: vitest-coverage
         path: ui/coverage/
@@ -215,7 +215,7 @@ jobs:
         ./bin/shelly-manager version || ./bin/shelly-manager --version || echo "Version command not implemented"
 
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: shelly-manager-binary
         path: bin/shelly-manager
