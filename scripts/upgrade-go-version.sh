@@ -86,9 +86,15 @@ GOTOOLCHAIN=local go mod tidy
 
 # Verify go mod tidy didn't change the Go version (dependency compatibility check)
 ACTUAL_GO=$(grep "^go " go.mod | awk '{print $2}')
-if [[ "$ACTUAL_GO" != "$MAJOR_MINOR" ]]; then
+ACTUAL_MAJOR_MINOR="${ACTUAL_GO%.*}"
+# Handle case where go.mod has X.Y format without patch (e.g., 1.23)
+if [[ "$ACTUAL_MAJOR_MINOR" == "$ACTUAL_GO" ]]; then
+    # No patch version, use as-is
+    ACTUAL_MAJOR_MINOR="$ACTUAL_GO"
+fi
+if [[ "$ACTUAL_MAJOR_MINOR" != "$MAJOR_MINOR" ]]; then
     echo ""
-    echo "ERROR: go mod tidy changed Go version from $MAJOR_MINOR to $ACTUAL_GO"
+    echo "ERROR: go mod tidy changed Go version from $MAJOR_MINOR to $ACTUAL_MAJOR_MINOR (go.mod: $ACTUAL_GO)"
     echo ""
     echo "This means a dependency requires Go $ACTUAL_GO. Options:"
     echo "  1. Upgrade to Go $ACTUAL_GO instead"
