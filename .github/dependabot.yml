@@ -16,6 +16,18 @@ updates:
         dependency-type: "production"
         exclude-patterns:
           - "golang.org/x/*"
+    # TEMPORARY: Ignore major updates for golang.org/x/* packages
+    # These packages often require newer Go versions (e.g., x/text v0.31.0 requires Go 1.24.0)
+    #
+    # WHEN TO REMOVE: When upgrading to Go 1.24.x
+    # - Update .go-version to 1.24.x
+    # - Run: make upgrade-go-version VERSION=1.24.x
+    # - Remove this ignore block to receive major updates again
+    #
+    # See: PR #51 closed 2024-12-14 - x/text v0.31.0 required Go 1.24.0
+    ignore:
+      - dependency-name: "golang.org/x/*"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 10
     reviewers:
       - "ginsys"
@@ -64,6 +76,26 @@ updates:
           - "terser"
           - "jsdom"
           - "autoprefixer"
+    # TEMPORARY: Ignore major updates for vite/vitest ecosystem
+    # Major updates often have peer dependency conflicts (e.g., @vitest/coverage-v8 v4 requires vitest v4)
+    # and may require coordinated upgrades of all related packages
+    #
+    # WHEN TO REMOVE: When ready to upgrade vite/vitest ecosystem
+    # - Review migration guides for Vite 6/7 and Vitest 2/3/4
+    # - Upgrade all packages together: vite, vitest, @vitejs/*, @vitest/*
+    # - Update Node.js if needed (plugin-vue@6 requires node ^20.19.0 || >=22.12.0)
+    # - Remove this ignore block to receive major updates again
+    #
+    # See: PR #54 closed 2024-12-14 - version mismatch between @vitest/coverage-v8 v4 and vitest v1
+    ignore:
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitejs/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
     reviewers:
       - "ginsys"
