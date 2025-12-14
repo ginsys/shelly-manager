@@ -148,7 +148,7 @@ jobs:
           CI: true
 
       - name: Upload test artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: playwright-comprehensive-results
@@ -159,7 +159,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload backend logs
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: backend-logs-weekly
