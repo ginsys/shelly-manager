@@ -54,3 +54,85 @@ export interface Device {
   updated_at?: string
 }
 
+// Device Status Types
+export interface WiFiStatus {
+  connected: boolean
+  ssid?: string
+  ip?: string
+  rssi?: number
+}
+
+export interface SwitchStatus {
+  id: number
+  output: boolean
+  apower?: number
+  voltage?: number
+  current?: number
+  temperature?: number
+  source?: string
+}
+
+export interface MeterStatus {
+  id: number
+  power: number
+  is_valid: boolean
+  total?: number
+  total_returned?: number
+}
+
+export interface DeviceStatus {
+  device_id: number
+  ip: string
+  temperature?: number
+  uptime?: number
+  wifi?: WiFiStatus
+  switches?: SwitchStatus[]
+  meters?: MeterStatus[]
+}
+
+// Device Energy Types
+export interface DeviceEnergy {
+  timestamp: string
+  power: number
+  total: number
+  total_returned: number
+  voltage: number
+  current: number
+  pf?: number
+}
+
+// Device Control Types
+export interface ControlDeviceRequest {
+  action: 'on' | 'off' | 'toggle' | 'reboot'
+  params?: {
+    channel?: number
+  }
+}
+
+export interface ControlDeviceResponse {
+  status: string
+  device_id: number
+  action: string
+}
+
+// Device Create/Update Types
+export interface CreateDeviceRequest {
+  ip: string
+  mac: string
+  type?: string
+  name?: string
+  firmware?: string
+  status?: string
+  settings?: string
+}
+
+export interface UpdateDeviceRequest {
+  ip?: string
+  mac?: string
+  type?: string
+  name?: string
+  firmware?: string
+  status?: string
+  settings?: string
+}
+

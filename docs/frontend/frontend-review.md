@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 29 Vue components (13 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 17% of backend API functionality (23/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 29 Vue components (13 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 21% of backend API functionality (29/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
 - 29 Vue components (13 pages + 1 layout + 15 reusable components)
@@ -158,7 +158,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 
 | Category | Total Endpoints | Used | Unused | Coverage |
 |----------|-----------------|------|--------|----------|
-| Device Management | 8 | 2 | 6 | 25% |
+| Device Management | 8 | 8 | 0 | 100% |
 | Device Configuration | 11 | 0 | 11 | 0% |
 | Capability Config | 5 | 0 | 5 | 0% |
 | Configuration Templates | 8 | 0 | 8 | 0% |
@@ -177,15 +177,21 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **23** | **115** | **17%** |
+| **TOTAL** | **138** | **29** | **109** | **21%** |
 
-### 4.3 Used Endpoints (23 total)
+### 4.3 Used Endpoints (29 total)
 
-#### Devices (2 endpoints)
+#### Devices (8 endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/devices` | GET | List all devices with pagination |
 | `/devices/{id}` | GET | Get device details |
+| `/devices` | POST | Create a new device |
+| `/devices/{id}` | PUT | Update device information |
+| `/devices/{id}` | DELETE | Delete a device |
+| `/devices/{id}/control` | POST | Control device (on/off/toggle/reboot) |
+| `/devices/{id}/status` | GET | Get live device status |
+| `/devices/{id}/energy` | GET | Get device energy metrics |
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |
@@ -281,15 +287,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 |----------|--------|---------|
 | `/version` | GET | API/server version info |
 
-### 4.4 Unused Endpoints by Category (89 total)
-
-#### Device Management (6 unused)
-- `POST /api/v1/devices` - Create device
-- `PUT /api/v1/devices/{id}` - Update device
-- `DELETE /api/v1/devices/{id}` - Delete device
-- `POST /api/v1/devices/{id}/control` - Control device
-- `GET /api/v1/devices/{id}/status` - Get device status
-- `GET /api/v1/devices/{id}/energy` - Get energy metrics
+### 4.4 Unused Endpoints by Category (109 total)
 
 #### Device Configuration (11 unused)
 - `GET /api/v1/devices/{id}/config` - Get stored config

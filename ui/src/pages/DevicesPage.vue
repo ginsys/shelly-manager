@@ -3,6 +3,12 @@
     <div class="toolbar">
       <h1 class="title" data-testid="page-title">Devices</h1>
       <div class="spacer" />
+      <button v-if="selectedDevices.length > 0" @click="bulkDelete" class="btn-danger" data-testid="bulk-delete">
+        Delete Selected ({{ selectedDevices.length }})
+      </button>
+      <button @click="showCreateForm" class="btn-primary" data-testid="add-device">
+        + Add Device
+      </button>
       <input
         class="search"
         v-model="search"
@@ -24,6 +30,9 @@
       <table v-else class="table" data-testid="devices-table">
         <thead>
           <tr>
+            <th class="checkbox-col">
+              <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" data-testid="select-all" />
+            </th>
             <th @click="toggleSort('name')">Name <SortIcon :field="'name'" :sort="sort" /></th>
             <th @click="toggleSort('ip')">IP <SortIcon :field="'ip'" :sort="sort" /></th>
             <th @click="toggleSort('mac')">MAC <SortIcon :field="'mac'" :sort="sort" /></th>
@@ -31,10 +40,14 @@
             <th @click="toggleSort('status')">Status <SortIcon :field="'status'" :sort="sort" /></th>
             <th @click="toggleSort('last_seen')">Last Seen <SortIcon :field="'last_seen'" :sort="sort" /></th>
             <th>Firmware</th>
+            <th class="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="d in pagedSortedFiltered" :key="d.id" data-testid="device-row">
+            <td class="checkbox-col">
+              <input type="checkbox" :value="d.id" v-model="selectedDevices" data-testid="device-checkbox" />
+            </td>
             <td>
               <router-link :to="`/devices/${d.id}`" class="rowlink" data-testid="device-link">{{ d.name || '-' }}</router-link>
             </td>
@@ -46,9 +59,15 @@
             </td>
             <td>{{ formatDate(d.last_seen) }}</td>
             <td class="mono small">{{ d.firmware || '-' }}</td>
+            <td class="actions-col">
+              <button @click="quickControl(d, 'on')" class="action-btn" title="Turn On" data-testid="quick-on">⚡</button>
+              <button @click="quickControl(d, 'off')" class="action-btn" title="Turn Off" data-testid="quick-off">⏸</button>
+              <button @click="showEditForm(d)" class="action-btn" title="Edit" data-testid="edit-device">✏️</button>
+              <button @click="confirmDelete(d)" class="action-btn" title="Delete" data-testid="delete-device">🗑️</button>
+            </td>
           </tr>
           <tr v-if="pagedSortedFiltered.length === 0">
-            <td colspan="7" class="state" data-testid="empty-state">No devices found</td>
+            <td colspan="9" class="state" data-testid="empty-state">No devices found</td>
           </tr>
         </tbody>
       </table>
@@ -59,16 +78,31 @@
       <span>Page {{ page }} / {{ totalPages || 1 }}</span>
       <button class="btn" :disabled="!hasNext" @click="nextPage" data-testid="next-page">Next</button>
     </div>
+
+    <!-- Device Form Overlay -->
+    <div v-if="formVisible" class="overlay" @click.self="closeForm">
+      <DeviceForm
+        :existing-device="editingDevice"
+        :loading="formLoading"
+        :error="formError"
+        @submit="handleFormSubmit"
+        @cancel="closeForm"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { listDevices } from '../api/devices'
-import type { Device } from '../api/types'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useQuasar } from 'quasar'
+import { listDevices, createDevice, updateDevice, deleteDevice, controlDevice } from '../api/devices'
+import type { Device, CreateDeviceRequest, UpdateDeviceRequest } from '../api/types'
+import DeviceForm from '../components/devices/DeviceForm.vue'
 
 // Local sort descriptor
 type Sort = { field: keyof Device | 'last_seen'; dir: 'asc' | 'desc' } | null
+
+const $q = useQuasar()
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -79,6 +113,16 @@ const totalPages = ref<number | null>(null)
 const hasNext = ref(false)
 const search = ref('')
 const sort = ref<Sort>(null)
+
+// Form state
+const formVisible = ref(false)
+const formLoading = ref(false)
+const formError = ref<string | null>(null)
+const editingDevice = ref<Device | null>(null)
+
+// Bulk selection
+const selectedDevices = ref<number[]>([])
+const selectAll = ref(false)
 
 async function fetchData() {
   loading.value = true
@@ -147,9 +191,126 @@ const sorted = computed(() => {
   return copy
 })
 
-// The backend already returns a page slice; but we keep local guard in case of future changes
 const pagedSortedFiltered = computed(() => sorted.value)
 
+// Form handlers
+function showCreateForm() {
+  editingDevice.value = null
+  formError.value = null
+  formVisible.value = true
+}
+
+function showEditForm(device: Device) {
+  editingDevice.value = device
+  formError.value = null
+  formVisible.value = true
+}
+
+function closeForm() {
+  formVisible.value = false
+  formLoading.value = false
+  formError.value = null
+  editingDevice.value = null
+}
+
+async function handleFormSubmit(data: CreateDeviceRequest | UpdateDeviceRequest) {
+  formLoading.value = true
+  formError.value = null
+
+  try {
+    if (editingDevice.value) {
+      // Update existing device
+      await updateDevice(editingDevice.value.id, data)
+      $q.notify({ type: 'positive', message: 'Device updated successfully', position: 'top' })
+    } else {
+      // Create new device
+      await createDevice(data as CreateDeviceRequest)
+      $q.notify({ type: 'positive', message: 'Device created successfully', position: 'top' })
+    }
+
+    closeForm()
+    await fetchData()
+  } catch (e: any) {
+    formError.value = e?.message || 'Operation failed'
+  } finally {
+    formLoading.value = false
+  }
+}
+
+// Delete handlers
+function confirmDelete(device: Device) {
+  $q.dialog({
+    title: 'Delete Device',
+    message: `Are you sure you want to delete "${device.name || device.ip}"? This action cannot be undone.`,
+    cancel: true,
+    persistent: true,
+    color: 'negative'
+  }).onOk(async () => {
+    try {
+      await deleteDevice(device.id)
+      $q.notify({ type: 'positive', message: 'Device deleted successfully', position: 'top' })
+      await fetchData()
+      selectedDevices.value = selectedDevices.value.filter(id => id !== device.id)
+    } catch (e: any) {
+      $q.notify({ type: 'negative', message: e?.message || 'Failed to delete device', position: 'top' })
+    }
+  })
+}
+
+function bulkDelete() {
+  if (selectedDevices.value.length === 0) return
+
+  $q.dialog({
+    title: 'Delete Multiple Devices',
+    message: `Are you sure you want to delete ${selectedDevices.value.length} device(s)? This action cannot be undone.`,
+    cancel: true,
+    persistent: true,
+    color: 'negative'
+  }).onOk(async () => {
+    const ids = [...selectedDevices.value]
+    let successCount = 0
+    let failCount = 0
+
+    for (const id of ids) {
+      try {
+        await deleteDevice(id)
+        successCount++
+      } catch {
+        failCount++
+      }
+    }
+
+    if (successCount > 0) {
+      $q.notify({ type: 'positive', message: `Successfully deleted ${successCount} device(s)`, position: 'top' })
+    }
+    if (failCount > 0) {
+      $q.notify({ type: 'negative', message: `Failed to delete ${failCount} device(s)`, position: 'top' })
+    }
+
+    selectedDevices.value = []
+    selectAll.value = false
+    await fetchData()
+  })
+}
+
+function toggleSelectAll() {
+  if (selectAll.value) {
+    selectedDevices.value = pagedSortedFiltered.value.map(d => d.id)
+  } else {
+    selectedDevices.value = []
+  }
+}
+
+// Quick control
+async function quickControl(device: Device, action: 'on' | 'off') {
+  try {
+    await controlDevice(device.id, { action })
+    $q.notify({ type: 'positive', message: `Device turned ${action}`, position: 'top' })
+    // Optionally refresh status
+  } catch (e: any) {
+    $q.notify({ type: 'negative', message: e?.message || `Failed to turn ${action}`, position: 'top' })
+  }
+}
 </script>
 
 <script lang="ts">
@@ -166,7 +327,7 @@ export default {
 
 <style scoped>
 .page { display: flex; flex-direction: column; gap: 12px; }
-.toolbar { display: flex; align-items: center; gap: 8px; }
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .title { font-size: 20px; margin: 0; }
 .spacer { flex: 1; }
 .search { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 260px; }
@@ -177,6 +338,18 @@ export default {
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
 .table th { background: #f8fafc; cursor: pointer; user-select: none; white-space: nowrap; }
+.table th.checkbox-col,
+.table td.checkbox-col {
+  width: 40px;
+  text-align: center;
+  cursor: default;
+}
+.table th.actions-col,
+.table td.actions-col {
+  width: 160px;
+  text-align: center;
+  cursor: default;
+}
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .small { font-size: 12px; color: #475569; }
 .chip { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #e2e8f0; color: #334155; }
@@ -186,6 +359,50 @@ export default {
 .pagination { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 8px; color: #334155; }
 .btn { padding: 6px 10px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary {
+  padding: 6px 12px;
+  border: none;
+  background: #3b82f6;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn-primary:hover { background: #2563eb; }
+.btn-danger {
+  padding: 6px 12px;
+  border: none;
+  background: #ef4444;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn-danger:hover { background: #dc2626; }
 .rowlink { color: #2563eb; text-decoration: none; }
 .rowlink:hover { text-decoration: underline; }
+.action-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.action-btn:hover { opacity: 1; }
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
 </style>

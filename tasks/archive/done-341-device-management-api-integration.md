@@ -1,7 +1,7 @@
 # Device Management API Integration
 
 **Priority**: MEDIUM - Important Feature
-**Status**: not-started
+**Status**: done
 **Effort**: 10 hours (with 1.3x buffer)
 
 ## Context
@@ -12,14 +12,14 @@ The backend provides 8 device management endpoints but only 2 are currently used
 
 ## Success Criteria
 
-- [ ] API client extended with 6 new device endpoints
-- [ ] DevicesPage updated with create, edit, delete actions
-- [ ] Device control functionality (on/off/restart) implemented
-- [ ] Device status polling added to DeviceDetailPage
-- [ ] Energy metrics display added to DeviceDetailPage
-- [ ] Unit tests for new API functions
-- [ ] E2E tests for device CRUD operations
-- [ ] Documentation updated in `docs/frontend/frontend-review.md`
+- [x] API client extended with 6 new device endpoints
+- [x] DevicesPage updated with create, edit, delete actions
+- [x] Device control functionality (on/off/restart) implemented
+- [x] Device status polling added to DeviceDetailPage
+- [x] Energy metrics display added to DeviceDetailPage
+- [x] Unit tests for new API functions
+- [x] E2E tests for device CRUD operations
+- [x] Documentation updated in `docs/frontend/frontend-review.md`
 
 ## Implementation
 
