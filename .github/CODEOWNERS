@@ -1,0 +1,24 @@
+# CODEOWNERS file for automatic pull request reviewer assignment
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Replaces deprecated dependabot.yml 'reviewers' property (removed August 2025)
+# https://github.blog/changelog/2025-08-08-dependabot-reviewers-configuration-option-is-replaced-by-code-owners/
+
+# Default owner for everything in the repo
+* @ginsys
+
+# Go dependencies and backend code
+go.mod @ginsys
+go.sum @ginsys
+/cmd/ @ginsys
+/internal/ @ginsys
+
+# Frontend dependencies and UI code
+/ui/package.json @ginsys
+/ui/package-lock.json @ginsys
+/ui/src/ @ginsys
+
+# Infrastructure and CI/CD
+/.github/ @ginsys
+/deploy/ @ginsys
+/configs/ @ginsys
