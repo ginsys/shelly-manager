@@ -76,9 +76,9 @@ describe('MetricsDashboardPage', () => {
     vi.mocked(metricsApi.getMetricsStatus).mockResolvedValue({ enabled: true, uptime_seconds: 3600 })
     vi.mocked(metricsApi.getMetricsHealth).mockResolvedValue({ status: 'healthy' })
     vi.mocked(metricsApi.getSystemMetrics).mockResolvedValue({
-      timestamps: [1, 2, 3],
-      cpu_percent: [10, 20, 30],
-      memory_percent: [50, 55, 60]
+      timestamps: ['2024-01-01T00:00:00Z', '2024-01-01T00:01:00Z', '2024-01-01T00:02:00Z'],
+      cpu: [10, 20, 30],
+      memory: [50, 55, 60]
     })
     vi.mocked(metricsApi.getDevicesMetrics).mockResolvedValue({
       timestamps: [1, 2, 3],
@@ -101,9 +101,10 @@ describe('MetricsDashboardPage', () => {
               metrics: {
                 status: { enabled: true, uptime_seconds: 3600 },
                 system: {
-                  timestamps: [1, 2, 3],
-                  cpu_percent: [10, 20, 30],
-                  memory_percent: [50, 55, 60]
+                  timestamps: ['2024-01-01T00:00:00Z', '2024-01-01T00:01:00Z', '2024-01-01T00:02:00Z'],
+                  cpu: [10, 20, 30],
+                  memory: [50, 55, 60],
+                  maxLength: 50
                 },
                 devices: {
                   timestamps: [1, 2, 3],

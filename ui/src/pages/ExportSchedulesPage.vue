@@ -313,13 +313,6 @@ function closeModal() {
   editingSchedule.value = null
   store.clearErrors()
 }
-
-/**
- * Navigate to schedule creation
- */
-function navigateToScheduleCreation() {
-  router.push('/export/backup?schedule=1#create-backup')
-}
 </script>
 
 <style scoped>
