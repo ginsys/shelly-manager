@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
-import { Quasar } from 'quasar'
 import MetricsDashboardPage from '../MetricsDashboardPage.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import * as metricsApi from '@/api/metrics'
@@ -96,7 +95,6 @@ describe('MetricsDashboardPage', () => {
     wrapper = mount(MetricsDashboardPage, {
       global: {
         plugins: [
-          [Quasar, {}],
           createTestingPinia({
             stubActions: false,
             initialState: {
@@ -127,11 +125,10 @@ describe('MetricsDashboardPage', () => {
           })
         ],
         stubs: {
-          // Stub chart components to avoid rendering issues
-          LineChart: true,
-          BarChart: true
-        },
-        shallow: false
+          // Stub chart components with simple templates to avoid setAttribute issues
+          LineChart: { template: '<div class="line-chart-stub"></div>' },
+          BarChart: { template: '<div class="bar-chart-stub"></div>' }
+        }
       }
     })
 
@@ -149,7 +146,7 @@ describe('MetricsDashboardPage', () => {
     })
 
     it('displays connection status cards', () => {
-      const cards = wrapper.findAll('.q-card')
+      const cards = wrapper.findAll('.card')
       expect(cards.length).toBeGreaterThan(0)
     })
 
@@ -213,12 +210,11 @@ describe('MetricsDashboardPage', () => {
 
       wrapper = mount(MetricsDashboardPage, {
         global: {
-          plugins: [[Quasar, {}], createTestingPinia({ stubActions: false })],
+          plugins: [createTestingPinia({ stubActions: false })],
           stubs: {
-            LineChart: true,
-            BarChart: true
-          },
-          shallow: false
+            LineChart: { template: '<div class="line-chart-stub"></div>' },
+            BarChart: { template: '<div class="bar-chart-stub"></div>' }
+          }
         }
       })
 
@@ -233,12 +229,11 @@ describe('MetricsDashboardPage', () => {
 
       wrapper = mount(MetricsDashboardPage, {
         global: {
-          plugins: [[Quasar, {}], createTestingPinia({ stubActions: false })],
+          plugins: [createTestingPinia({ stubActions: false })],
           stubs: {
-            LineChart: true,
-            BarChart: true
-          },
-          shallow: false
+            LineChart: { template: '<div class="line-chart-stub"></div>' },
+            BarChart: { template: '<div class="bar-chart-stub"></div>' }
+          }
         }
       })
 
@@ -343,7 +338,7 @@ describe('MetricsDashboardPage', () => {
     it('shows connected state when WebSocket is active', async () => {
       await flushPromises()
 
-      const connectionCard = wrapper.findAll('.q-card').find((c: any) =>
+      const connectionCard = wrapper.findAll('.card').find((c: any) =>
         c.text().includes('WebSocket')
       )
 
@@ -378,12 +373,11 @@ describe('MetricsDashboardPage', () => {
 
       wrapper = mount(MetricsDashboardPage, {
         global: {
-          plugins: [[Quasar, {}], createTestingPinia({ stubActions: false })],
+          plugins: [createTestingPinia({ stubActions: false })],
           stubs: {
-            LineChart: true,
-            BarChart: true
-          },
-          shallow: false
+            LineChart: { template: '<div class="line-chart-stub"></div>' },
+            BarChart: { template: '<div class="bar-chart-stub"></div>' }
+          }
         }
       })
 
@@ -401,13 +395,13 @@ describe('MetricsDashboardPage', () => {
     it('renders System Metrics chart', async () => {
       await flushPromises()
 
-      expect(wrapper.find('line-chart-stub').exists()).toBe(true)
+      expect(wrapper.find('.line-chart-stub').exists()).toBe(true)
     })
 
     it('renders Device and Drift charts', async () => {
       await flushPromises()
 
-      const barCharts = wrapper.findAll('bar-chart-stub')
+      const barCharts = wrapper.findAll('.bar-chart-stub')
       expect(barCharts.length).toBeGreaterThanOrEqual(2)
     })
 
