@@ -153,7 +153,7 @@ describe('devices api - extended operations', () => {
         }
       })
 
-      await controlDevice(123, 'on')
+      await controlDevice(123, { action: 'on' })
       expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'on' })
     })
 
@@ -162,13 +162,13 @@ describe('devices api - extended operations', () => {
         data: { success: true, timestamp: new Date().toISOString() }
       })
 
-      await controlDevice(123, 'off')
+      await controlDevice(123, { action: 'off' })
       expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'off' })
 
-      await controlDevice(123, 'restart')
+      await controlDevice(123, { action: 'restart' })
       expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'restart' })
 
-      await controlDevice(123, 'toggle')
+      await controlDevice(123, { action: 'toggle' })
       expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'toggle' })
     })
 
@@ -180,7 +180,7 @@ describe('devices api - extended operations', () => {
         }
       })
 
-      await expect(controlDevice(123, 'on')).rejects.toThrow('Device offline')
+      await expect(controlDevice(123, { action: 'on' })).rejects.toThrow('Device offline')
     })
   })
 
@@ -241,7 +241,9 @@ describe('devices api - extended operations', () => {
 
       const result = await getDeviceEnergy(123)
       expect(result).toEqual(energy)
-      expect(api.get).toHaveBeenCalledWith('/devices/123/energy')
+      expect(api.get).toHaveBeenCalledWith('/devices/123/energy', {
+        params: { channel: 0 }
+      })
     })
 
     it('handles partial energy data', async () => {
@@ -260,6 +262,9 @@ describe('devices api - extended operations', () => {
       const result = await getDeviceEnergy(123)
       expect(result.power).toBe(50.0)
       expect(result.voltage).toBeUndefined()
+      expect(api.get).toHaveBeenCalledWith('/devices/123/energy', {
+        params: { channel: 0 }
+      })
     })
 
     it('throws error when energy data unavailable', async () => {
