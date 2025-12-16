@@ -28,7 +28,6 @@ _No critical blocking tasks remaining._
 
 | # | Task | Status |
 |---|------|--------|
-| 231 | [README Export Documentation](231-readme-export-documentation.md) | partial |
 | 241 | [Code Comments Compression](241-code-comments-compression.md) | not-started |
 | 251 | [Reusable WebSocket Client](251-reusable-websocket-client.md) | not-started |
 
@@ -85,6 +84,7 @@ Completed tasks are moved to [archive/](archive/).
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
 | 211 | [Extract Duplicate Helpers](archive/done-211-extract-duplicate-helpers.md) | 2025-12-16 |
 | 221 | [Defer/Close Pattern Fix](archive/done-221-defer-close-pattern-fix.md) | 2025-12-16 |
+| 231 | [README Export Documentation](archive/done-231-readme-export-documentation.md) | 2025-12-16 |
 
 ---
 
