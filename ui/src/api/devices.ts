@@ -62,15 +62,17 @@ export async function deleteDevice(id: number | string): Promise<void> {
 }
 
 export interface DeviceControlRequest {
-  action: 'on' | 'off' | 'restart' | 'toggle'
+  action: 'on' | 'off' | 'restart' | 'toggle' | 'reboot'
+  params?: Record<string, any>
 }
 
-export async function controlDevice(id: number | string, action: string): Promise<void> {
-  const res = await api.post<APIResponse<void>>(`/devices/${id}/control`, { action })
+export async function controlDevice(id: number | string, request: DeviceControlRequest): Promise<any> {
+  const res = await api.post<APIResponse<any>>(`/devices/${id}/control`, request)
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to control device'
     throw new Error(msg)
   }
+  return res.data.data
 }
 
 export interface DeviceStatus {
@@ -100,8 +102,10 @@ export interface DeviceEnergy {
   totalReturned?: number
 }
 
-export async function getDeviceEnergy(id: number | string): Promise<DeviceEnergy> {
-  const res = await api.get<APIResponse<DeviceEnergy>>(`/devices/${id}/energy`)
+export async function getDeviceEnergy(id: number | string, channel: number = 0): Promise<DeviceEnergy> {
+  const res = await api.get<APIResponse<DeviceEnergy>>(`/devices/${id}/energy`, {
+    params: { channel },
+  })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get energy metrics'
     throw new Error(msg)

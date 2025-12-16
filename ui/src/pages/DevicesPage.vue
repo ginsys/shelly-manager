@@ -233,7 +233,7 @@ async function handleDelete(id: number) {
 
 async function handleControl(id: number, action: string) {
   try {
-    await controlDevice(id, action)
+    await controlDevice(id, { action: action as any })
     // Optionally refresh device status
     setTimeout(() => store.fetchDevices(), 500)
   } catch (e: any) {

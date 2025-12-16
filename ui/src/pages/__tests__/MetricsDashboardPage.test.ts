@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
+import { Quasar } from 'quasar'
 import MetricsDashboardPage from '../MetricsDashboardPage.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import * as metricsApi from '@/api/metrics'
@@ -95,6 +96,7 @@ describe('MetricsDashboardPage', () => {
     wrapper = mount(MetricsDashboardPage, {
       global: {
         plugins: [
+          [Quasar, {}],
           createTestingPinia({
             stubActions: false,
             initialState: {
@@ -126,16 +128,10 @@ describe('MetricsDashboardPage', () => {
         ],
         stubs: {
           // Stub chart components to avoid rendering issues
-          LineChart: { template: '<div class="line-chart-mock"></div>' },
-          BarChart: { template: '<div class="bar-chart-mock"></div>' },
-          // Stub all Quasar components to avoid rendering issues in tests
-          QCard: { template: '<div class="card"><slot /></div>' },
-          QCardSection: { template: '<div><slot /></div>' },
-          QBtn: { template: '<button><slot /></button>' },
-          QBadge: { template: '<span class="badge"><slot /></span>' },
-          QLinearProgress: { template: '<div class="progress"></div>' },
-          QSeparator: { template: '<hr>' }
-        }
+          LineChart: true,
+          BarChart: true
+        },
+        shallow: false
       }
     })
 
@@ -153,7 +149,7 @@ describe('MetricsDashboardPage', () => {
     })
 
     it('displays connection status cards', () => {
-      const cards = wrapper.findAll('.card')
+      const cards = wrapper.findAll('.q-card')
       expect(cards.length).toBeGreaterThan(0)
     })
 
@@ -217,17 +213,12 @@ describe('MetricsDashboardPage', () => {
 
       wrapper = mount(MetricsDashboardPage, {
         global: {
-          plugins: [createTestingPinia({ stubActions: false })],
+          plugins: [[Quasar, {}], createTestingPinia({ stubActions: false })],
           stubs: {
-            LineChart: { template: '<div class="line-chart-mock"></div>' },
-            BarChart: { template: '<div class="bar-chart-mock"></div>' },
-            QCard: { template: '<div class="card"><slot /></div>' },
-            QCardSection: { template: '<div><slot /></div>' },
-            QBtn: { template: '<button><slot /></button>' },
-            QBadge: { template: '<span class="badge"><slot /></span>' },
-            QLinearProgress: { template: '<div class="progress"></div>' },
-            QSeparator: { template: '<hr>' }
-          }
+            LineChart: true,
+            BarChart: true
+          },
+          shallow: false
         }
       })
 
@@ -242,17 +233,12 @@ describe('MetricsDashboardPage', () => {
 
       wrapper = mount(MetricsDashboardPage, {
         global: {
-          plugins: [createTestingPinia({ stubActions: false })],
+          plugins: [[Quasar, {}], createTestingPinia({ stubActions: false })],
           stubs: {
-            LineChart: { template: '<div class="line-chart-mock"></div>' },
-            BarChart: { template: '<div class="bar-chart-mock"></div>' },
-            QCard: { template: '<div class="card"><slot /></div>' },
-            QCardSection: { template: '<div><slot /></div>' },
-            QBtn: { template: '<button><slot /></button>' },
-            QBadge: { template: '<span class="badge"><slot /></span>' },
-            QLinearProgress: { template: '<div class="progress"></div>' },
-            QSeparator: { template: '<hr>' }
-          }
+            LineChart: true,
+            BarChart: true
+          },
+          shallow: false
         }
       })
 
@@ -357,7 +343,7 @@ describe('MetricsDashboardPage', () => {
     it('shows connected state when WebSocket is active', async () => {
       await flushPromises()
 
-      const connectionCard = wrapper.findAll('.card').find((c: any) =>
+      const connectionCard = wrapper.findAll('.q-card').find((c: any) =>
         c.text().includes('WebSocket')
       )
 
@@ -392,17 +378,12 @@ describe('MetricsDashboardPage', () => {
 
       wrapper = mount(MetricsDashboardPage, {
         global: {
-          plugins: [createTestingPinia({ stubActions: false })],
+          plugins: [[Quasar, {}], createTestingPinia({ stubActions: false })],
           stubs: {
-            LineChart: { template: '<div class="line-chart-mock"></div>' },
-            BarChart: { template: '<div class="bar-chart-mock"></div>' },
-            QCard: { template: '<div class="card"><slot /></div>' },
-            QCardSection: { template: '<div><slot /></div>' },
-            QBtn: { template: '<button><slot /></button>' },
-            QBadge: { template: '<span class="badge"><slot /></span>' },
-            QLinearProgress: { template: '<div class="progress"></div>' },
-            QSeparator: { template: '<hr>' }
-          }
+            LineChart: true,
+            BarChart: true
+          },
+          shallow: false
         }
       })
 
@@ -420,13 +401,13 @@ describe('MetricsDashboardPage', () => {
     it('renders System Metrics chart', async () => {
       await flushPromises()
 
-      expect(wrapper.find('.line-chart-mock').exists()).toBe(true)
+      expect(wrapper.find('line-chart-stub').exists()).toBe(true)
     })
 
     it('renders Device and Drift charts', async () => {
       await flushPromises()
 
-      const barCharts = wrapper.findAll('.bar-chart-mock')
+      const barCharts = wrapper.findAll('bar-chart-stub')
       expect(barCharts.length).toBeGreaterThanOrEqual(2)
     })
 
