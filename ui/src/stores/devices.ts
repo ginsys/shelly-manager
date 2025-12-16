@@ -118,6 +118,19 @@ export const useDevicesStore = defineStore('devices', {
       if (page > 0) this.page = page
     },
 
+    setPageFromQuery(pageStr: string | null | undefined) {
+      if (!pageStr) {
+        this.page = 1
+        return
+      }
+      const parsed = parseInt(pageStr, 10)
+      if (isNaN(parsed) || parsed < 1) {
+        this.page = 1
+      } else {
+        this.page = parsed
+      }
+    },
+
     setPageSize(size: number) {
       if ([10, 25, 50, 100].includes(size)) {
         this.pageSize = size
