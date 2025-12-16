@@ -16,18 +16,20 @@ updates:
         dependency-type: "production"
         exclude-patterns:
           - "golang.org/x/*"
-    # TEMPORARY: Ignore major updates for golang.org/x/* packages
-    # These packages often require newer Go versions (e.g., x/text v0.31.0 requires Go 1.24.0)
+    # TEMPORARY: Ignore major AND minor updates for golang.org/x/* packages
+    # These packages often require newer Go versions (e.g., x/text v0.31.0+ requires Go 1.24.0)
     #
     # WHEN TO REMOVE: When upgrading to Go 1.24.x
     # - Update .go-version to 1.24.x
     # - Run: make upgrade-go-version VERSION=1.24.x
-    # - Remove this ignore block to receive major updates again
+    # - Remove this ignore block to receive updates again
     #
-    # See: PR #51 closed 2024-12-14 - x/text v0.31.0 required Go 1.24.0
+    # See: PR #51, #55 closed 2024-12-14 - x/text v0.31.0/v0.32.0 required Go 1.24.0
+    # Note: Both major AND minor updates are blocked because 0.x.x packages use minor version
+    #       for breaking changes (0.28→0.32 is a minor update but requires Go 1.24.0)
     ignore:
       - dependency-name: "golang.org/x/*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     open-pull-requests-limit: 10
     reviewers:
       - "ginsys"
