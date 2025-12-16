@@ -257,7 +257,7 @@ test-coverage-check:
 # Frontend unit tests (vitest)
 test-vitest:
 	@echo "Running frontend unit tests (vitest)..."
-	cd ui && npx vitest run --coverage
+	cd ui && npm ci && npx vitest run --coverage
 
 # Complete CI test suite - matches GitHub Actions test.yml workflow exactly
 # This is the most important test to run locally before committing
