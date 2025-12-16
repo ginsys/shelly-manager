@@ -28,7 +28,6 @@ _No critical blocking tasks remaining._
 
 | # | Task | Status |
 |---|------|--------|
-| 211 | [Extract Duplicate Helpers](211-extract-duplicate-helpers.md) | not-started |
 | 221 | [Defer/Close Pattern Fix](221-defer-close-pattern-fix.md) | not-started |
 | 231 | [README Export Documentation](231-readme-export-documentation.md) | partial |
 | 241 | [Code Comments Compression](241-code-comments-compression.md) | not-started |
@@ -85,6 +84,7 @@ Completed tasks are moved to [archive/](archive/).
 | 121 | [YAML Export Plugin Tests](archive/done-121-yaml-export-plugin-tests.md) | 2025-12-16 |
 | 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-16 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
+| 211 | [Extract Duplicate Helpers](archive/done-211-extract-duplicate-helpers.md) | 2025-12-16 |
 
 ---
 
