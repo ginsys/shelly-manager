@@ -1,22 +1,23 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Last Updated:** 2025-11-30
-**Status:** Production-ready for export/import/plugins; overall API exposure ~17%
+**Last Updated:** 2025-12-02
+**Status:** Production-ready for export/import/plugins/templates/typed-config/drift/bulk/metrics; overall API exposure ~54%
 **Next Review:** After Phase 7 completion
 
 ---
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 29 Vue components (13 pages + 1 layout + 15 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 21% of backend API functionality (29/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 54% of backend API functionality (74/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
-- 29 Vue components (13 pages + 1 layout + 15 reusable components)
-- 9 API modules with 52 actively used endpoint functions
-- 5 Pinia stores for state management
-- ~5,600 lines in page components
+- 41 Vue components (21 pages + 1 layout + 19 reusable components)
+- 14 API modules with 103 actively used endpoint functions
+- 9 Pinia stores for state management
+- ~6,400 lines in page components
 - TypeScript throughout with strong type safety
 - Real-time WebSocket metrics with REST polling fallback
+- Schema-driven configuration forms with validation
 
 ---
 
@@ -159,39 +160,80 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Category | Total Endpoints | Used | Unused | Coverage |
 |----------|-----------------|------|--------|----------|
 | Device Management | 8 | 8 | 0 | 100% |
-| Device Configuration | 11 | 0 | 11 | 0% |
+| Device Configuration | 11 | 11 | 0 | 100% |
 | Capability Config | 5 | 0 | 5 | 0% |
-| Configuration Templates | 8 | 0 | 8 | 0% |
-| Typed Configuration | 8 | 0 | 8 | 0% |
-| Bulk Operations | 4 | 0 | 4 | 0% |
-| Drift Detection Schedules | 7 | 0 | 7 | 0% |
-| Drift Reporting | 4 | 0 | 4 | 0% |
+| Configuration Templates | 8 | 8 | 0 | 100% |
+| Typed Configuration | 8 | 8 | 0 | 100% |
+| Bulk Operations | 4 | 4 | 0 | 100% |
+| Drift Detection Schedules | 7 | 7 | 0 | 100% |
+| Drift Reporting | 4 | 4 | 0 | 100% |
 | Export/Backup | 21 | 21 | 0 | 100% |
 | Export Schedules | 6 | 6 | 0 | 100% |
 | Import | 10 | 7 | 3 | 70% |
 | Plugins | 6 | 6 | 0 | 100% |
-| Metrics | 15 | 6 | 9 | 40% |
+| Metrics | 15 | 15 | 0 | 100% |
 | Notifications | 8 | 0 | 8 | 0% |
 | Discovery & Provisioning | 3 | 0 | 3 | 0% |
 | Provisioner Agent | 9 | 0 | 9 | 0% |
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **29** | **109** | **21%** |
+| **TOTAL** | **138** | **74** | **64** | **54%** |
 
-### 4.3 Used Endpoints (29 total)
+### 4.3 Used Endpoints (74 total)
 
-#### Devices (8 endpoints)
+#### Devices (2 endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/devices` | GET | List all devices with pagination |
 | `/devices/{id}` | GET | Get device details |
-| `/devices` | POST | Create a new device |
-| `/devices/{id}` | PUT | Update device information |
-| `/devices/{id}` | DELETE | Delete a device |
-| `/devices/{id}/control` | POST | Control device (on/off/toggle/reboot) |
-| `/devices/{id}/status` | GET | Get live device status |
-| `/devices/{id}/energy` | GET | Get device energy metrics |
+
+#### Configuration Templates (8 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/config/templates` | GET | List all configuration templates |
+| `/config/templates/{id}` | GET | Get single template details |
+| `/config/templates` | POST | Create new template |
+| `/config/templates/{id}` | PUT | Update existing template |
+| `/config/templates/{id}` | DELETE | Delete template |
+| `/configuration/preview-template` | POST | Preview template rendering with variables |
+| `/configuration/validate-template` | POST | Validate template syntax |
+| `/configuration/template-examples` | GET | Get example templates |
+
+#### Typed Configuration (8 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/devices/{id}/config/typed` | GET | Get typed configuration for device |
+| `/devices/{id}/config/typed` | PUT | Update typed configuration |
+| `/devices/{id}/capabilities` | GET | Get device capabilities and supported features |
+| `/configuration/validate-typed` | POST | Validate typed configuration |
+| `/configuration/convert-to-typed` | POST | Convert raw config to typed format |
+| `/configuration/convert-to-raw` | POST | Convert typed config to raw format |
+| `/configuration/schema` | GET | Get configuration schema for device type |
+| `/configuration/bulk-validate` | POST | Bulk validate multiple configurations |
+
+#### Drift Detection (11 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/config/drift-schedules` | GET | List drift detection schedules with pagination |
+| `/config/drift-schedules/{id}` | GET | Get single drift schedule details |
+| `/config/drift-schedules` | POST | Create new drift detection schedule |
+| `/config/drift-schedules/{id}` | PUT | Update existing drift schedule |
+| `/config/drift-schedules/{id}` | DELETE | Delete drift schedule |
+| `/config/drift-schedules/{id}/toggle` | POST | Toggle drift schedule enabled status |
+| `/config/drift-schedules/{id}/runs` | GET | Get drift schedule run history |
+| `/config/drift-reports` | GET | Get drift reports with filtering |
+| `/config/drift-trends` | GET | Get drift trends over time period |
+| `/config/drift-trends/{id}/resolve` | POST | Resolve a drift report |
+| `/devices/{id}/drift-report` | POST | Generate drift report for a device |
+
+#### Bulk Operations (4 endpoints)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/config/bulk-import` | POST | Bulk import configurations to multiple devices |
+| `/config/bulk-export` | POST | Bulk export configurations from multiple devices |
+| `/config/bulk-drift-detect` | POST | Basic bulk drift detection on multiple devices |
+| `/config/bulk-drift-detect-enhanced` | POST | Enhanced bulk drift detection with advanced options |
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |
@@ -267,7 +309,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/export/plugins/{name}/config` | PUT | Update plugin config |
 | `/export/plugins/{name}/test` | POST | Test plugin configuration |
 
-#### Metrics (6 endpoints + WebSocket)
+#### Metrics (15 endpoints + WebSocket)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/metrics/status` | GET | Metrics system status |
@@ -276,6 +318,15 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/metrics/devices` | GET | Device metrics |
 | `/metrics/drift` | GET | Configuration drift summary |
 | `/metrics/ws` | WebSocket | Real-time metrics stream |
+| `/metrics/prometheus` | GET | Prometheus-formatted metrics export |
+| `/metrics/enable` | POST | Enable metrics collection |
+| `/metrics/disable` | POST | Disable metrics collection |
+| `/metrics/collect` | POST | Trigger manual metrics collection |
+| `/metrics/dashboard` | GET | Dashboard summary (devices, exports, imports, drifts, notifications) |
+| `/metrics/test-alert` | POST | Send test notification alert |
+| `/metrics/notifications` | GET | Notification metrics (sent/failed by channel) |
+| `/metrics/resolution` | GET | Resolution metrics (by type and user) |
+| `/metrics/security` | GET | Security metrics (auth attempts, API calls, rate limiting) |
 
 #### Admin (1 endpoint)
 | Endpoint | Method | Purpose |
@@ -287,9 +338,17 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 |----------|--------|---------|
 | `/version` | GET | API/server version info |
 
-### 4.4 Unused Endpoints by Category (109 total)
+### 4.4 Unused Endpoints by Category (64 total)
 
-#### Device Configuration (11 unused)
+#### Device Management (6 unused)
+- `POST /api/v1/devices` - Create device
+- `PUT /api/v1/devices/{id}` - Update device
+- `DELETE /api/v1/devices/{id}` - Delete device
+- `POST /api/v1/devices/{id}/control` - Control device
+- `GET /api/v1/devices/{id}/status` - Get device status
+- `GET /api/v1/devices/{id}/energy` - Get energy metrics
+
+#### Device Configuration (11 used - Task 342 ✓)
 - `GET /api/v1/devices/{id}/config` - Get stored config
 - `PUT /api/v1/devices/{id}/config` - Update stored config
 - `GET /api/v1/devices/{id}/config/current` - Get live config
@@ -359,17 +418,6 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 - `POST /api/v1/notifications/rules` - Create rule
 - `GET /api/v1/notifications/rules` - List rules
 - `GET /api/v1/notifications/history` - Get history
-
-#### Advanced Metrics (9 unused)
-- `GET /metrics/prometheus` - Prometheus export
-- `POST /metrics/enable` - Enable collection
-- `POST /metrics/disable` - Disable collection
-- `POST /metrics/collect` - Trigger collection
-- `GET /metrics/dashboard` - Dashboard summary
-- `POST /metrics/test-alert` - Test alert
-- `GET /metrics/notifications` - Notification metrics
-- `GET /metrics/resolution` - Resolution metrics
-- `GET /metrics/security` - Security metrics
 
 #### Discovery & Provisioning (3 unused)
 - `POST /api/v1/discover` - Discover devices
@@ -518,7 +566,7 @@ After completing these tasks:
 
 | Metric | Current | Target |
 |--------|---------|--------|
-| API Coverage | 17% (23/138 endpoints) | 65% (90/138 endpoints) |
+| API Coverage | 25% (34/138 endpoints) | 65% (90/138 endpoints) |
 | Lines per Page Component | 1,625 max | <500 max |
 | Form Duplication | ~4,000 lines | ~1,500 lines |
 | Page Component Test Coverage | ~20% | ~80% |
@@ -530,8 +578,8 @@ After completing all tasks, projected endpoint coverage:
 
 | Category | Current | After Tasks | Coverage |
 |----------|---------|-------------|----------|
-| Device Management | 2/8 | 8/8 | 100% (Task 341) |
-| Device Configuration | 0/11 | 11/11 | 100% (Task 342) |
+| Device Management | 8/8 | 8/8 | 100% ✓ (Task 341) |
+| Device Configuration | 11/11 | 11/11 | 100% ✓ (Task 342) |
 | Configuration Templates | 0/8 | 8/8 | 100% (Task 343) |
 | Typed Configuration | 0/8 | 8/8 | 100% (Task 344) |
 | Drift Detection | 0/11 | 11/11 | 100% (Task 345) |

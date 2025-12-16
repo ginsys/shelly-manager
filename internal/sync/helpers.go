@@ -17,19 +17,19 @@ import (
 //
 // Example:
 //
-//	checksum, err := FileSHA256("/path/to/export.json")
+//	checksum, err := sync.FileSHA256("/path/to/export.json")
 //	if err != nil { return err }
 //	fmt.Printf("Export checksum: %s\n", checksum)
 func FileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", fmt.Errorf("open file: %w", err)
+		return "", err
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return "", fmt.Errorf("hash file: %w", err)
+		return "", err
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
@@ -43,11 +43,11 @@ func FileSHA256(path string) (string, error) {
 // Example:
 //
 //	data := []byte(`{"devices": [...]}`)
-//	err := WriteGzip("/tmp/export.json.gz", data)
+//	err := sync.WriteGzip("/tmp/export.json.gz", data)
 func WriteGzip(path string, data []byte) error {
 	f, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("create file: %w", err)
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer f.Close()
 
@@ -55,7 +55,7 @@ func WriteGzip(path string, data []byte) error {
 	defer gz.Close()
 
 	if _, err := gz.Write(data); err != nil {
-		return fmt.Errorf("write gzip: %w", err)
+		return fmt.Errorf("failed to write gzip: %w", err)
 	}
 
 	// Let defer handle gz.Close()
@@ -71,11 +71,11 @@ func WriteGzip(path string, data []byte) error {
 // Example:
 //
 //	data := []byte(`{"devices": [...]}`)
-//	err := WriteZipSingle("/tmp/export.zip", "export.json", data)
-func WriteZipSingle(path, entryName string, data []byte) error {
+//	err := sync.WriteZipSingle("/tmp/export.zip", "export.json", data)
+func WriteZipSingle(path string, entryName string, data []byte) error {
 	f, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("create file: %w", err)
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer f.Close()
 
@@ -85,11 +85,11 @@ func WriteZipSingle(path, entryName string, data []byte) error {
 	hdr := &zip.FileHeader{Name: entryName, Method: zip.Deflate}
 	w, err := zw.CreateHeader(hdr)
 	if err != nil {
-		return fmt.Errorf("create zip entry: %w", err)
+		return fmt.Errorf("failed to create zip entry: %w", err)
 	}
 
 	if _, err := w.Write(data); err != nil {
-		return fmt.Errorf("write zip entry: %w", err)
+		return fmt.Errorf("failed to write zip entry: %w", err)
 	}
 
 	// Let defer handle zw.Close()

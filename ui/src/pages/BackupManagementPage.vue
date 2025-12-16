@@ -5,342 +5,56 @@
     </div>
 
     <!-- In-page Create Backup Panel -->
-    <section id="create-backup" class="create-section">
-      <h2>Create Backup or Content Export</h2>
-      <div class="grid-2">
-        <div class="form-field">
-          <label class="field-label">Create Type</label>
-          <select v-model="createType" class="form-select">
-            <option value="backup">Backup (Provider Snapshot)</option>
-            <option value="json">Content Export: JSON</option>
-            <option value="yaml">Content Export: YAML</option>
-            <option value="sma">Content Export: SMA</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label class="field-label">Run Mode</label>
-          <select v-model="runMode" class="form-select">
-            <option value="now">Run Now</option>
-            <option value="schedule">Schedule</option>
-          </select>
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="form-field">
-          <label class="field-label">Name</label>
-          <input v-model="createName" class="form-input" placeholder="e.g. Pre-maintenance snapshot" />
-        </div>
-        <div class="form-field">
-          <label class="field-label">Description</label>
-          <input v-model="createDesc" class="form-input" placeholder="Optional description" />
-        </div>
-      </div>
-      <!-- Backup options -->
-      <div class="grid-2" v-if="createType === 'backup'">
-        <div class="form-field">
-          <label class="field-label">Compression</label>
-          <select v-model="createCompression" class="form-select">
-            <option value="none">None</option>
-            <option value="gzip">Gzip</option>
-            <option value="zip">Zip</option>
-          </select>
-          <div class="field-help" v-if="providerName">
-            Database: {{ providerName }} {{ providerVersion }}
-          </div>
-        </div>
-        <div class="form-field">
-          <label class="field-label">Output Directory</label>
-          <input v-model="createOutputDir" class="form-input" placeholder="./data/backups" />
-        </div>
-      </div>
-
-      <!-- Schedule options -->
-      <div class="grid-2" v-if="runMode === 'schedule'">
-        <div class="form-field">
-          <label class="field-label">Schedule Interval</label>
-          <select v-model="schedulePreset" class="form-select" @change="applyIntervalPreset">
-            <option value="">Custom…</option>
-            <option value="15 minutes">Every 15 minutes</option>
-            <option value="1 hour">Every hour</option>
-            <option value="6 hours">Every 6 hours</option>
-            <option value="24 hours">Daily</option>
-          </select>
-          <input v-model="scheduleInterval" class="form-input" placeholder="e.g. 1 hour, 24 hours" style="margin-top:8px" />
-          <div class="field-help">Use format like "15 minutes", "1 hour", or "1 day".</div>
-        </div>
-        <div class="form-field">
-          <label class="field-label">Enabled</label>
-          <select v-model="scheduleEnabled" class="form-select">
-            <option :value="true">Enabled</option>
-            <option :value="false">Disabled</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Content export options -->
-      <div class="grid-2" v-if="createType === 'json'">
-        <div class="form-field">
-          <label class="field-label">JSON Options</label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="jsonOptions.pretty" />
-            <span>Pretty-print JSON</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="jsonOptions.include_discovered" />
-            <span>Include discovered devices</span>
-          </label>
-          <label class="field-label" style="margin-top:8px">Compression</label>
-          <select v-model="jsonCompression" class="form-select">
-            <option value="none">None</option>
-            <option value="gzip">Gzip</option>
-            <option value="zip">Zip</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label class="field-label">Output Directory</label>
-          <input v-model="exportOutputDir" class="form-input" placeholder="./data/exports" />
-        </div>
-      </div>
-      <div class="grid-2" v-if="createType === 'yaml'">
-        <div class="form-field">
-          <label class="field-label">YAML Options</label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="yamlOptions.include_discovered" />
-            <span>Include discovered devices</span>
-          </label>
-          <label class="field-label" style="margin-top:8px">Compression</label>
-          <select v-model="yamlCompression" class="form-select">
-            <option value="none">None</option>
-            <option value="gzip">Gzip</option>
-            <option value="zip">Zip</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label class="field-label">Output Directory</label>
-          <input v-model="exportOutputDir" class="form-input" placeholder="./data/exports" />
-        </div>
-      </div>
-      <div class="grid-2" v-if="createType === 'sma'">
-        <div class="form-field">
-          <label class="field-label">SMA Options</label>
-          <div class="grid-2">
-            <div>
-              <label class="field-label">Compression level (1-9)</label>
-              <input class="form-input" type="number" min="1" max="9" v-model.number="smaOptions.compression_level" />
-            </div>
-          </div>
-          <div class="grid-2">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="smaOptions.include_discovered" />
-              <span>Include discovered devices</span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="smaOptions.include_network_settings" />
-              <span>Include network settings</span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="smaOptions.include_plugin_configs" />
-              <span>Include plugin configurations</span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="smaOptions.include_system_settings" />
-              <span>Include system settings</span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="smaOptions.exclude_sensitive" />
-              <span>Exclude sensitive data</span>
-            </label>
-          </div>
-          <div class="field-help">SMA exports are compressed archives with integrity data suitable for full content migration.</div>
-        </div>
-        <div class="form-field">
-          <label class="field-label">Output Directory</label>
-          <input v-model="exportOutputDir" class="form-input" placeholder="./data/exports" />
-        </div>
-      </div>
-      <div class="form-actions">
-        <button class="primary-button" :disabled="createSubmitting" @click="createBackupPanel">
-          {{ createSubmitting ? 'Creating...' : 'Create' }}
-        </button>
-        <span v-if="createError2" class="form-error" style="margin-left:12px"><strong>Error:</strong> {{ createError2 }}</span>
-      </div>
-    </section>
+    <BackupCreateForm
+      v-model:createType="createType"
+      v-model:runMode="runMode"
+      v-model:createName="createName"
+      v-model:createDesc="createDesc"
+      v-model:createCompression="createCompression"
+      v-model:createOutputDir="createOutputDir"
+      v-model:exportOutputDir="exportOutputDir"
+      v-model:scheduleEnabled="scheduleEnabled"
+      v-model:scheduleInterval="scheduleInterval"
+      v-model:schedulePreset="schedulePreset"
+      v-model:jsonOptions="jsonOptions"
+      v-model:yamlOptions="yamlOptions"
+      v-model:jsonCompression="jsonCompression"
+      v-model:yamlCompression="yamlCompression"
+      v-model:smaOptions="smaOptions"
+      :submitting="createSubmitting"
+      :error="createError2"
+      :providerName="providerName"
+      :providerVersion="providerVersion"
+      @submit="createBackupPanel"
+    />
 
     <!-- Backup Statistics -->
-    <section class="stats-section">
-      <div class="stats">
-        <div class="card">
-          <span class="stat-label">Total:</span> 
-          <span class="stat-value">{{ statistics.total || 0 }}</span>
-        </div>
-        <div class="card">
-          <span class="stat-label">Success:</span> 
-          <span class="stat-value success">{{ statistics.success || 0 }}</span>
-        </div>
-        <div class="card">
-          <span class="stat-label">Failed:</span> 
-          <span class="stat-value failure">{{ statistics.failure || 0 }}</span>
-        </div>
-        <div class="card">
-          <span class="stat-label">Total Size:</span> 
-          <span class="stat-value">{{ formatFileSize(statistics.total_size || 0) }}</span>
-        </div>
-      </div>
-    </section>
+    <BackupStatisticsComponent :statistics="statistics" />
 
     <!-- Filters -->
-    <div class="filters-section">
-      <div class="filter-row">
-        <div class="filter-group">
-          <label class="filter-label">Format:</label>
-          <select v-model="filters.format" @change="fetchBackups" class="filter-select">
-            <option value="">All formats</option>
-            <option value="json">JSON</option>
-            <option value="sma">SMA</option>
-            <option value="yaml">YAML</option>
-          </select>
-        </div>
-        <div class="filter-group">
-          <label class="filter-label">Status:</label>
-          <select v-model="filters.success" @change="fetchBackups" class="filter-select">
-            <option :value="undefined">All statuses</option>
-            <option :value="true">Success only</option>
-            <option :value="false">Failed only</option>
-          </select>
-        </div>
-        <div class="filter-actions">
-          <button @click="refreshData" class="refresh-button" :disabled="loading">
-            🔄 Refresh
-          </button>
-        </div>
-      </div>
-    </div>
+    <BackupFilterBar
+      v-model:filters="filters"
+      :loading="loading"
+      @filter-change="fetchBackups"
+      @refresh="refreshData"
+    />
 
     <!-- Backups Table -->
-    <DataTable
-      :rows="backups"
+    <BackupList
+      :backups="backups"
       :loading="loading"
       :error="error"
-      :cols="8"
-      :rowKey="(row: any) => row.backup_id"
-    >
-      <template #header>
-        <th>Name</th>
-        <th>Format</th>
-        <th>Devices</th>
-        <th>Size</th>
-        <th>Status</th>
-        <th>Encrypted</th>
-        <th>Created</th>
-        <th>Actions</th>
-      </template>
-      <template #row="{ row }">
-        <td>
-          <div class="backup-name">
-            <strong>{{ row.name }}</strong>
-            <div class="backup-description" v-if="row.description">{{ row.description }}</div>
-            <div class="backup-id">ID: {{ row.backup_id }}</div>
-          </div>
-        </td>
-        <td>
-          <span class="format-badge">{{ row.format.toUpperCase() }}</span>
-        </td>
-        <td>{{ row.device_count }}</td>
-        <td>
-          <div v-if="row.file_size" class="file-size">
-            {{ formatFileSize(row.file_size) }}
-            <div class="checksum" v-if="row.checksum">
-              {{ row.checksum.substring(0, 8) }}...
-            </div>
-          </div>
-          <span v-else class="no-data">—</span>
-        </td>
-        <td>
-          <span :class="['status-badge', row.success ? 'success' : 'failure']">
-            {{ row.success ? 'Success' : 'Failed' }}
-          </span>
-          <div v-if="!row.success && row.error_message" class="error-message">
-            {{ row.error_message }}
-          </div>
-        </td>
-        <td>
-          <span :class="['encryption-badge', row.encrypted ? 'encrypted' : 'plain']">
-            {{ row.encrypted ? '🔒 Yes' : '🔓 No' }}
-          </span>
-        </td>
-        <td>
-          <div class="time-info">
-            {{ formatDate(row.created_at) }}
-            <div class="created-by" v-if="row.created_by">
-              by {{ row.created_by }}
-            </div>
-          </div>
-        </td>
-        <td>
-          <div class="action-buttons">
-            <button 
-              v-if="row.success"
-              class="action-btn download-btn" 
-              @click="downloadBackup(row.backup_id, row.name)"
-              :disabled="downloading === row.backup_id"
-              title="Download backup"
-            >
-              <span v-if="downloading === row.backup_id">⏳ Downloading...</span>
-              <span v-else>⬇ Download</span>
-            </button>
-            <button 
-              v-if="row.success"
-              class="action-btn restore-btn" 
-              @click="startRestore(row)"
-              title="Restore from backup"
-            >
-              ↩ Restore
-            </button>
-            <button 
-              class="action-btn delete-btn" 
-              @click="confirmDelete(row)"
-              title="Delete backup"
-            >
-              🗑️
-            </button>
-          </div>
-        </td>
-      </template>
-    </DataTable>
+      :downloading="downloading"
+      @download="downloadBackup"
+      @restore="startRestore"
+      @delete="confirmDelete"
+    />
 
     <!-- Content Exports Table -->
-    <section style="margin-top:24px">
-      <h2>Content Exports (JSON / YAML / SMA)</h2>
-      <DataTable
-        :rows="contentExports"
-        :loading="false"
-        :error="''"
-        :cols="6"
-        :rowKey="(row: any) => row.export_id"
-      >
-        <template #header>
-          <th>Plugin</th>
-          <th>Format</th>
-          <th>Records</th>
-          <th>Size</th>
-          <th>Created</th>
-          <th>Actions</th>
-        </template>
-        <template #row="{ row }">
-          <td>{{ row.plugin_name }}</td>
-          <td><span class="format-badge">{{ row.format?.toUpperCase?.() || row.plugin_name?.toUpperCase?.() }}</span></td>
-          <td>{{ row.record_count ?? '—' }}</td>
-          <td>
-            <span v-if="row.file_size">{{ formatFileSize(row.file_size) }}</span>
-            <span v-else class="no-data">—</span>
-          </td>
-          <td>{{ formatDate(row.created_at) }}</td>
-          <td>
-            <button class="action-btn download-btn" @click="downloadContent(row.export_id)">⬇ Download</button>
-          </td>
-        </template>
-      </DataTable>
-    </section>
+    <ContentExportsList
+      :content-exports="contentExports"
+      @download="downloadContent"
+    />
 
 
     <!-- Pagination -->
@@ -353,116 +67,25 @@
       @update:page="(p: number) => { currentPage = p; fetchBackups() }"
     />
 
-    <!-- (removed modal-based backup creation; using in-page create panel) -->
-
     <!-- Restore Modal -->
-    <div v-if="showRestoreModal" class="modal-overlay" @click="closeRestoreModal">
-      <div class="modal-content restore-modal" @click.stop>
-        <div class="modal-header">
-          <h3>Restore from Backup</h3>
-          <button class="close-button" @click="closeRestoreModal">✖</button>
-        </div>
-        
-        <div class="restore-content">
-          <div class="backup-info">
-            <h4>{{ restoreBackup?.name }}</h4>
-            <p>{{ restoreBackup?.description }}</p>
-            <div class="backup-details">
-              <span>Format: {{ restoreBackup?.format.toUpperCase() }}</span> • 
-              <span>Devices: {{ restoreBackup?.device_count }}</span> • 
-              <span>Size: {{ formatFileSize(restoreBackup?.file_size || 0) }}</span>
-            </div>
-          </div>
-
-          <form @submit.prevent="executeRestore" class="restore-form">
-            <div class="form-section">
-              <h4>Restore Options</h4>
-              
-              <label class="checkbox-label">
-                <input v-model="restoreOptions.include_settings" type="checkbox" />
-                <span>Restore Device Settings</span>
-              </label>
-              
-              <label class="checkbox-label">
-                <input v-model="restoreOptions.include_schedules" type="checkbox" />
-                <span>Restore Schedules</span>
-              </label>
-              
-              <label class="checkbox-label">
-                <input v-model="restoreOptions.include_metrics" type="checkbox" />
-                <span>Restore Historical Metrics</span>
-              </label>
-              
-              <label class="checkbox-label">
-                <input v-model="restoreOptions.dry_run" type="checkbox" />
-                <span>Dry Run (Preview only)</span>
-              </label>
-            </div>
-
-            <div v-if="restorePreview" class="restore-preview">
-              <h4>Restore Preview</h4>
-              <div class="preview-stats">
-                <div>Devices: {{ restorePreview.device_count }}</div>
-                <div>Settings: {{ restorePreview.settings_count }}</div>
-                <div>Schedules: {{ restorePreview.schedules_count }}</div>
-                <div>Metrics: {{ restorePreview.metrics_count }}</div>
-              </div>
-              
-              <div v-if="restorePreview.warnings.length" class="warnings">
-                <h5>⚠️ Warnings</h5>
-                <ul>
-                  <li v-for="warning in restorePreview.warnings" :key="warning">
-                    {{ warning }}
-                  </li>
-                </ul>
-              </div>
-              
-              <div v-if="restorePreview.conflicts.length" class="conflicts">
-                <h5>❌ Conflicts</h5>
-                <ul>
-                  <li v-for="conflict in restorePreview.conflicts" :key="conflict">
-                    {{ conflict }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div v-if="restoreError" class="form-error">
-              <strong>Error:</strong> {{ restoreError }}
-            </div>
-
-            <div class="modal-actions">
-              <button type="button" @click="previewRestore" class="secondary-button" :disabled="restoreLoading">
-                Preview Changes
-              </button>
-              <button type="button" @click="closeRestoreModal" class="secondary-button">
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                class="primary-button" 
-                :disabled="restoreLoading || (restorePreview?.conflicts.length > 0)"
-              >
-                {{ restoreLoading ? 'Restoring...' : (restoreOptions.dry_run ? 'Run Preview' : 'Execute Restore') }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    <RestoreModal
+      :show="showRestoreModal"
+      :backup="restoreBackup"
+      v-model:options="restoreOptions"
+      :preview="restorePreview"
+      :loading="restoreLoading"
+      :error="restoreError"
+      @close="closeRestoreModal"
+      @preview-restore="previewRestore"
+      @execute="executeRestore"
+    />
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="deleteConfirm" class="modal-overlay" @click="deleteConfirm = null">
-      <div class="modal-content confirm-modal" @click.stop>
-        <h3>Confirm Delete</h3>
-        <p>Are you sure you want to delete backup <strong>{{ deleteConfirm.name }}</strong>?</p>
-        <p class="warning">This action cannot be undone.</p>
-        <div class="modal-actions">
-          <button class="secondary-button" @click="deleteConfirm = null">Cancel</button>
-          <button class="danger-button" @click="performDelete">Delete Backup</button>
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmModal
+      :backup="deleteConfirm"
+      @confirm="performDelete"
+      @cancel="deleteConfirm = null"
+    />
 
     <!-- Success/Error Messages -->
     <div v-if="message.text" :class="['message', message.type]">
@@ -473,15 +96,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue'
-import { 
-  listBackups, 
-  getBackupStatistics, 
-  createBackup, 
+import { onMounted, ref, reactive, computed } from 'vue'
+import { useError } from '@/composables/useError'
+import {
+  listBackups,
+  getBackupStatistics,
+  createBackup,
   createJSONExport,
   createYAMLExport,
   createSMAExport,
-  deleteBackup, 
+  deleteBackup,
   downloadBackupWithName,
   downloadExportWithName,
   previewRestore,
@@ -498,6 +122,13 @@ import api from '@/api/client'
 import type { Device, Metadata } from '@/api/types'
 import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
+import BackupStatisticsComponent from '@/components/backup/BackupStatistics.vue'
+import BackupFilterBar from '@/components/backup/BackupFilterBar.vue'
+import BackupList from '@/components/backup/BackupList.vue'
+import ContentExportsList from '@/components/backup/ContentExportsList.vue'
+import RestoreModal from '@/components/backup/RestoreModal.vue'
+import DeleteConfirmModal from '@/components/backup/DeleteConfirmModal.vue'
+import BackupCreateForm from '@/components/backup/BackupCreateForm.vue'
 
 // State
 const backups = ref<BackupItem[]>([])
@@ -530,7 +161,8 @@ const smaOptions = reactive({
 const createLoading = ref(false)
 const createError = ref('')
 const loading = ref(false)
-const error = ref('')
+const { error: errorObj, hasError, setError, clearError } = useError()
+const error = computed(() => errorObj.value?.message || '')
 
 // Filters
 const filters = reactive({
@@ -604,8 +236,8 @@ function loadInitialData() {
  */
 async function fetchBackups() {
   loading.value = true
-  error.value = ''
-  
+  clearError()
+
   try {
     const result = await listBackups({
       page: currentPage.value,
@@ -613,11 +245,11 @@ async function fetchBackups() {
       format: filters.format || undefined,
       success: filters.success
     })
-    
+
     backups.value = result.items
     meta.value = result.meta
   } catch (err: any) {
-    error.value = err.message || 'Failed to load backups'
+    setError(err, { action: 'Loading backups', resource: 'Backup' })
   } finally {
     loading.value = false
   }
@@ -1097,81 +729,6 @@ async function downloadContent(id: string) {
   background-color: #2563eb;
 }
 
-.stats-section {
-  margin-bottom: 24px;
-}
-
-.stats {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.card {
-  border: 1px solid #e5e7eb;
-  padding: 16px;
-  border-radius: 6px;
-  background: #ffffff;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 120px;
-}
-
-.stat-label {
-  font-weight: 500;
-  color: #6b7280;
-}
-
-.stat-value {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.stat-value.success {
-  color: #10b981;
-}
-
-.stat-value.failure {
-  color: #ef4444;
-}
-
-.filters-section {
-  margin-bottom: 24px;
-  padding: 16px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-}
-
-.filter-row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.filter-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-}
-
-.filter-select {
-  padding: 6px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  background: white;
-  font-size: 0.875rem;
-}
-
 /* In-page create backup panel styles */
 .create-section { 
   margin-bottom: 24px; 
@@ -1182,162 +739,6 @@ async function downloadContent(id: string) {
 }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
 .form-actions { margin-top: 12px; display:flex; align-items:center; gap: 8px }
-
-.filter-actions {
-  margin-left: auto;
-}
-
-.refresh-button {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.refresh-button:hover:not(:disabled) {
-  background: #059669;
-}
-
-.refresh-button:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
-.backup-name {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.backup-description {
-  font-size: 0.75rem;
-  color: #6b7280;
-  font-style: italic;
-}
-
-.backup-id {
-  font-size: 0.75rem;
-  color: #6b7280;
-  font-family: monospace;
-}
-
-.format-badge {
-  background: #dbeafe;
-  color: #1e40af;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.file-size {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.checksum {
-  font-size: 0.75rem;
-  color: #6b7280;
-  font-family: monospace;
-}
-
-.status-badge {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.status-badge.success {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-badge.failure {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.encryption-badge {
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.encryption-badge.encrypted {
-  color: #059669;
-}
-
-.encryption-badge.plain {
-  color: #6b7280;
-}
-
-.time-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.created-by {
-  font-size: 0.75rem;
-  color: #6b7280;
-}
-
-.error-message {
-  font-size: 0.75rem;
-  color: #dc2626;
-  margin-top: 2px;
-}
-
-.no-data {
-  color: #9ca3af;
-  font-style: italic;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.action-btn {
-  background: none;
-  border: 1px solid #d1d5db;
-  padding: 4px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 0.875rem;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: #f3f4f6;
-}
-
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.download-btn:hover:not(:disabled) {
-  background: #dcfce7;
-  border-color: #10b981;
-}
-
-.restore-btn:hover:not(:disabled) {
-  background: #fef3c7;
-  border-color: #f59e0b;
-}
-
-.delete-btn:hover:not(:disabled) {
-  background: #fee2e2;
-  border-color: #dc2626;
-}
 
 .modal-overlay {
   position: fixed;

@@ -22,41 +22,38 @@ Within each level:
 
 ### CRITICAL (100s) - Blocks Commit
 
-_No critical blocking tasks remaining._
+**No open critical tasks**
+
+**Note**: All critical tasks have been completed.
 
 ### HIGH (200s) - Post-Commit Required
 
-_All high-priority tasks completed._
+| # | Task | Status |
+|---|------|--------|
+| 201 | [Content-Length Mismatch on Error Responses](201-content-length-mismatch.md) | not-started |
+| 202 | [Offline Device Detection and Fast Fail](202-offline-device-fast-fail.md) | not-started |
+| 203 | [Device-Type Specific Configuration Forms](203-device-type-config-forms.md) | not-started |
+| 204 | [Fix Live Config Page Empty Render](204-fix-live-config-empty.md) | not-started |
+| 205 | [Fix Dashboard "Resource Not Found" Error](205-fix-dashboard-not-found.md) | not-started |
+| 206 | [Fix Localhost IP Blocking False Positive](206-localhost-ip-blocking.md) | not-started |
+| 207 | [Fix UpdateDevice to Support Partial Updates](207-fix-update-device-partial-updates.md) | not-started |
+| 208 | [Fix ApplyConfigTemplate to Return 404 for Missing Templates](208-fix-apply-template-404.md) | not-started |
 
 ### MEDIUM (300s) - Important Features
 
 | # | Task | Status |
 |---|------|--------|
-| 311 | [Notification UI Implementation](311-notification-ui-implementation.md) | not-started |
-| 321 | [Provisioning UI Integration](321-provisioning-ui-integration.md) | not-started |
-| 331 | [Secrets Management K8s](331-secrets-management-k8s.md) | partial |
-| 341 | [Device Management API Integration](341-device-management-api-integration.md) | not-started |
-| 342 | [Device Configuration UI](342-device-configuration-ui.md) | not-started |
-| 343 | [Configuration Templates UI](343-configuration-templates-ui.md) | not-started |
-| 344 | [Typed Configuration UI](344-typed-configuration-ui.md) | not-started |
-| 345 | [Drift Detection UI](345-drift-detection-ui.md) | not-started |
-| 346 | [Bulk Operations UI](346-bulk-operations-ui.md) | not-started |
-| 347 | [Advanced Metrics Integration](347-advanced-metrics-integration.md) | not-started |
-| 351 | [Break Up Large Page Components](351-break-up-large-page-components.md) | not-started |
-| 352 | [Schema-Driven Form Component](352-schema-driven-form-component.md) | not-started |
-| 354 | [Improve Error Messages](354-improve-error-messages.md) | not-started |
-| 355 | [Page Component Unit Tests](355-page-component-unit-tests.md) | not-started |
-| 361 | [Remove StatsPage](361-remove-statspage.md) | not-started |
-| 362 | [Complete DeviceDetailPage](362-complete-devicedetailpage.md) | not-started |
+| 301 | [Timeouts Should Not Trigger Suspicious Activity](301-timeouts-not-suspicious.md) | not-started |
+| 302 | [Config Drift Should Return 404 for Missing Config](302-config-drift-404.md) | not-started |
+| 303 | [Cancel Pending Requests on Device Delete](303-cancel-pending-on-delete.md) | not-started |
+| 304 | [Device Control Pre-Check for Offline Status](304-control-offline-precheck.md) | not-started |
 
 ### LOW (400s) - Enhancement & Polish
 
 | # | Task | Status |
 |---|------|--------|
-| 411 | [Devices UI Refactor](411-devices-ui-refactor.md) | not-started |
-| 421 | [TLS/Proxy Hardening Guides](421-tls-proxy-hardening-guides.md) | not-started |
-| 431 | [Operational Observability](431-operational-observability.md) | not-started |
-| 441 | [Documentation Polish](441-documentation-polish.md) | not-started |
+| 401 | [Add Refresh Button to Devices List](401-add-refresh-button.md) | not-started |
+| 402 | [Downgrade WebSocket Close to DEBUG Level](402-websocket-log-level.md) | not-started |
 
 ### DEFERRED (500s) - Future Work
 
@@ -75,15 +72,19 @@ Completed tasks are moved to [archive/](archive/).
 |---|------|-----------|
 | 101 | [Code Formatting](archive/done-101-code-formatting.md) | 2025-11-30 |
 | 102 | [strings.Title Deprecation](archive/done-102-strings-title-deprecation.md) | 2025-11-30 |
-| 111 | [JSON Export Plugin Tests](archive/done-111-json-export-plugin-tests.md) | 2025-12-16 |
-| 121 | [YAML Export Plugin Tests](archive/done-121-yaml-export-plugin-tests.md) | 2025-12-16 |
-| 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-16 |
+| 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-03 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
-| 211 | [Extract Duplicate Helpers](archive/done-211-extract-duplicate-helpers.md) | 2025-12-16 |
-| 221 | [Defer/Close Pattern Fix](archive/done-221-defer-close-pattern-fix.md) | 2025-12-16 |
-| 231 | [README Export Documentation](archive/done-231-readme-export-documentation.md) | 2025-12-16 |
-| 241 | [Code Comments Compression](archive/done-241-code-comments-compression.md) | 2025-12-16 |
-| 251 | [Reusable WebSocket Client](archive/done-251-reusable-websocket-client.md) | 2025-12-16 |
+| 347 | [Advanced Metrics Integration](archive/done-347-advanced-metrics-integration.md) | 2025-11-30 |
+| 351 | [Break Up Large Page Components](archive/done-351-break-up-large-page-components.md) | 2025-12-03 |
+| 352 | [Schema-Driven Form Component](archive/done-352-schema-driven-form-component.md) | 2025-12-03 |
+| 354 | [Improve Error Messages](archive/done-354-improve-error-messages.md) | 2025-12-03 |
+| 355 | [Page Component Unit Tests](archive/done-355-page-component-unit-tests.md) | 2025-12-03 |
+| 361 | [Remove StatsPage](archive/done-361-remove-statspage.md) | 2025-12-02 |
+| 362 | [Complete DeviceDetailPage](archive/done-362-complete-devicedetailpage.md) | 2025-11-30 |
+| 411 | [Devices UI Refactor](archive/done-411-devices-ui-refactor.md) | 2025-11-30 |
+| 421 | [TLS/Proxy Hardening Guides](archive/done-421-tls-proxy-hardening-guides.md) | 2025-11-30 |
+| 431 | [Operational Observability](archive/done-431-operational-observability.md) | 2025-11-30 |
+| 441 | [Documentation Polish](archive/done-441-documentation-polish.md) | 2025-11-30 |
 
 ---
 

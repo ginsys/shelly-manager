@@ -182,6 +182,10 @@ import ScheduleForm from '@/components/ScheduleForm.vue'
 const router = useRouter()
 const store = useScheduleStore()
 
+function navigateToScheduleCreation() {
+  router.push('/export/backup?schedule=1#create-backup')
+}
+
 // UI state
 const showCreateForm = ref(false)
 const editingSchedule = ref<ExportSchedule | null>(null)
