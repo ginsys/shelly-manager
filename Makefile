@@ -1,6 +1,6 @@
 .PHONY: help build build-manager build-provisioner run run-provisioner clean docker-build docker-build-manager docker-build-provisioner docker-run docker-run-prod docker-stop docker-logs docker-pull docker-dev docker-clean dev-setup deps deps-tidy \
 	lint fix hooks-install hooks-uninstall \
-	test test-unit test-integration test-race test-security test-all test-extra \
+	test test-unit test-integration test-race test-security test-all test-extra test-vitest \
 	test-coverage test-coverage-ci test-coverage-check \
 	test-ci check-go-version upgrade-go-version \
 	ui-dev ui-build ui-preview test-e2e test-e2e-dev test-e2e-dev-ui test-smoke validate-integration \
@@ -62,7 +62,8 @@ help:
 	@echo "  $(WHITE)test-coverage-check$(NC) Check coverage threshold (27.5% minimum)"
 	@echo ""
 	@echo "$(CYAN)CI$(NC)"
-	@echo "  $(WHITE)test-ci$(NC)             Complete CI test suite $(YELLOW)→ check-go-version, deps, test-coverage-ci, test-coverage-check, lint$(NC)"
+	@echo "  $(WHITE)test-ci$(NC)             Complete CI test suite $(YELLOW)→ check-go-version, deps, test-coverage-ci, test-coverage-check, lint, test-vitest$(NC)"
+	@echo "  $(WHITE)test-vitest$(NC)         Run frontend unit tests (vitest)"
 	@echo ""
 	@echo "$(CYAN)LINTING & QUALITY$(NC)"
 	@echo "  $(WHITE)lint$(NC)                Run go vet + golangci-lint"
@@ -124,7 +125,7 @@ help:
 	@echo "$(CYAN)DEPENDENCY OVERVIEW$(NC)"
 	@echo "  build              $(YELLOW)→$(NC) build-manager, build-provisioner"
 	@echo "  start              $(YELLOW)→$(NC) ui-build (if needed) $(YELLOW)→$(NC) ui-deps $(YELLOW)→$(NC) run"
-	@echo "  test-ci            $(YELLOW)→$(NC) check-go-version $(YELLOW)→$(NC) deps $(YELLOW)→$(NC) test-coverage-ci $(YELLOW)→$(NC) test-coverage-check $(YELLOW)→$(NC) lint"
+	@echo "  test-ci            $(YELLOW)→$(NC) check-go-version $(YELLOW)→$(NC) deps $(YELLOW)→$(NC) test-coverage-ci $(YELLOW)→$(NC) test-coverage-check $(YELLOW)→$(NC) lint $(YELLOW)→$(NC) test-vitest"
 	@echo "  test-coverage      $(YELLOW)→$(NC) generates coverage.out, coverage.html"
 	@echo "  test-coverage-ci   $(YELLOW)→$(NC) generates coverage.out, coverage.html"
 	@echo "  test-coverage-check $(YELLOW)→$(NC) requires coverage.out"
@@ -253,20 +254,27 @@ test-coverage-check:
 # CI TESTS
 # ==============================================================================
 
+# Frontend unit tests (vitest)
+test-vitest:
+	@echo "Running frontend unit tests (vitest)..."
+	cd ui && npx vitest run --coverage
+
 # Complete CI test suite - matches GitHub Actions test.yml workflow exactly
 # This is the most important test to run locally before committing
 test-ci:
 	@echo "Running complete CI test suite (matches GitHub Actions)..."
-	@echo "Step 1/5: Validating Go version consistency..."
+	@echo "Step 1/6: Validating Go version consistency..."
 	$(MAKE) check-go-version
-	@echo "Step 2/5: Installing dependencies..."
+	@echo "Step 2/6: Installing dependencies..."
 	$(MAKE) deps
-	@echo "Step 3/5: Running tests with coverage and race detection..."
+	@echo "Step 3/6: Running tests with coverage and race detection..."
 	$(MAKE) test-coverage-ci
-	@echo "Step 4/5: Checking coverage threshold..."
+	@echo "Step 4/6: Checking coverage threshold..."
 	$(MAKE) test-coverage-check
-	@echo "Step 5/5: Running linting..."
+	@echo "Step 5/6: Running linting..."
 	$(MAKE) lint
+	@echo "Step 6/6: Running frontend unit tests (vitest)..."
+	$(MAKE) test-vitest
 	@echo "✅ All CI tests passed! Ready to commit."
 
 # ==============================================================================
