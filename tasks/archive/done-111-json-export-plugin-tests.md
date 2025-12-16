@@ -1,7 +1,7 @@
 # JSON Export Plugin Tests
 
 **Priority**: CRITICAL - Blocks Commit
-**Status**: not-started
+**Status**: done
 **Effort**: 45 minutes
 
 ## Context
@@ -10,9 +10,9 @@ The JSON export plugin (`internal/plugins/sync/jsonexport/json.go`) lacks test c
 
 ## Success Criteria
 
-- [ ] 4+ passing tests
-- [ ] >60% coverage of json.go
-- [ ] No race conditions (`go test -race`)
+- [x] 4+ passing tests
+- [x] >60% coverage of json.go
+- [x] No race conditions (`go test -race`)
 
 ## Implementation
 

@@ -1,7 +1,7 @@
 # Router-Link Accessibility Fix
 
 **Priority**: CRITICAL - Blocks Commit
-**Status**: not-started
+**Status**: done
 **Effort**: 10 minutes
 
 ## Context
@@ -10,10 +10,10 @@ The `ExportSchedulesPage.vue` uses `<router-link>` styled as a button, which cau
 
 ## Success Criteria
 
-- [ ] Navigation works correctly
-- [ ] Press Space key on focused button activates it
-- [ ] Screen reader announces as "button Create Schedule"
-- [ ] Lighthouse accessibility audit passes (no button-inside-link warnings)
+- [x] Navigation works correctly
+- [x] Press Space key on focused button activates it
+- [x] Screen reader announces as "button Create Schedule"
+- [x] Lighthouse accessibility audit passes (no button-inside-link warnings)
 
 ## Implementation
 
