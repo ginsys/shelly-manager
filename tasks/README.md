@@ -72,19 +72,28 @@ Completed tasks are moved to [archive/](archive/).
 |---|------|-----------|
 | 101 | [Code Formatting](archive/done-101-code-formatting.md) | 2025-11-30 |
 | 102 | [strings.Title Deprecation](archive/done-102-strings-title-deprecation.md) | 2025-11-30 |
-| 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-03 |
+| 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-16 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
-| 347 | [Advanced Metrics Integration](archive/done-347-advanced-metrics-integration.md) | 2025-11-30 |
-| 351 | [Break Up Large Page Components](archive/done-351-break-up-large-page-components.md) | 2025-12-03 |
-| 352 | [Schema-Driven Form Component](archive/done-352-schema-driven-form-component.md) | 2025-12-03 |
-| 354 | [Improve Error Messages](archive/done-354-improve-error-messages.md) | 2025-12-03 |
-| 355 | [Page Component Unit Tests](archive/done-355-page-component-unit-tests.md) | 2025-12-03 |
-| 361 | [Remove StatsPage](archive/done-361-remove-statspage.md) | 2025-12-02 |
-| 362 | [Complete DeviceDetailPage](archive/done-362-complete-devicedetailpage.md) | 2025-11-30 |
-| 411 | [Devices UI Refactor](archive/done-411-devices-ui-refactor.md) | 2025-11-30 |
-| 421 | [TLS/Proxy Hardening Guides](archive/done-421-tls-proxy-hardening-guides.md) | 2025-11-30 |
-| 431 | [Operational Observability](archive/done-431-operational-observability.md) | 2025-11-30 |
-| 441 | [Documentation Polish](archive/done-441-documentation-polish.md) | 2025-11-30 |
+| 311 | [Notification UI Implementation](archive/done-311-notification-ui-implementation.md) | 2025-12-16 |
+| 321 | [Provisioning UI Integration](archive/done-321-provisioning-ui-integration.md) | 2025-12-16 |
+| 331 | [Secrets Management K8s](archive/done-331-secrets-management-k8s.md) | 2025-12-16 |
+| 341 | [Device Management API Integration](archive/done-341-device-management-api-integration.md) | 2025-12-16 |
+| 342 | [Device Configuration UI](archive/done-342-device-configuration-ui.md) | 2025-12-16 |
+| 343 | [Configuration Templates UI](archive/done-343-configuration-templates-ui.md) | 2025-12-16 |
+| 344 | [Typed Configuration UI](archive/done-344-typed-configuration-ui.md) | 2025-12-16 |
+| 345 | [Drift Detection UI](archive/done-345-drift-detection-ui.md) | 2025-12-16 |
+| 346 | [Bulk Operations UI](archive/done-346-bulk-operations-ui.md) | 2025-12-16 |
+| 347 | [Advanced Metrics Integration](archive/done-347-advanced-metrics-integration.md) | 2025-12-16 |
+| 351 | [Break Up Large Page Components](archive/done-351-break-up-large-page-components.md) | 2025-12-16 |
+| 352 | [Schema-Driven Form Component](archive/done-352-schema-driven-form-component.md) | 2025-12-16 |
+| 354 | [Improve Error Messages](archive/done-354-improve-error-messages.md) | 2025-12-16 |
+| 355 | [Page Component Unit Tests](archive/done-355-page-component-unit-tests.md) | 2025-12-16 |
+| 361 | [Remove StatsPage](archive/done-361-remove-statspage.md) | 2025-12-16 |
+| 362 | [Complete DeviceDetailPage](archive/done-362-complete-devicedetailpage.md) | 2025-12-16 |
+| 411 | [Devices UI Refactor](archive/done-411-devices-ui-refactor.md) | 2025-12-16 |
+| 421 | [TLS/Proxy Hardening Guides](archive/done-421-tls-proxy-hardening-guides.md) | 2025-12-16 |
+| 431 | [Operational Observability](archive/done-431-operational-observability.md) | 2025-12-16 |
+| 441 | [Documentation Polish](archive/done-441-documentation-polish.md) | 2025-12-16 |
 
 ---
 
