@@ -28,58 +28,13 @@
       <!-- Dynamic Plugin Configuration -->
       <div class="form-section" v-if="pluginSchema?.config">
         <h3 class="section-title">Plugin Configuration</h3>
-        <div v-for="(field, key) in pluginSchema.config" :key="key" class="config-field">
-          <label class="form-label">
-            {{ field.label || key }}
-            <span v-if="field.required" class="required">*</span>
-            <span v-if="field.description" class="field-description">{{ field.description }}</span>
-          </label>
-          
-          <!-- Text input -->
-          <input v-if="field.type === 'string' || !field.type"
-                 v-model="formData.config[key]"
-                 :placeholder="field.placeholder"
-                 :required="field.required"
-                 class="form-input" />
-          
-          <!-- Number input -->
-          <input v-else-if="field.type === 'number'"
-                 v-model.number="formData.config[key]"
-                 type="number"
-                 :min="field.min"
-                 :max="field.max"
-                 :placeholder="field.placeholder"
-                 :required="field.required"
-                 class="form-input" />
-          
-          <!-- Boolean checkbox -->
-          <label v-else-if="field.type === 'boolean'" class="checkbox-label">
-            <input type="checkbox" v-model="formData.config[key]" />
-            {{ field.label || key }}
-          </label>
-          
-          <!-- Select dropdown -->
-          <select v-else-if="field.type === 'select'"
-                  v-model="formData.config[key]"
-                  :required="field.required"
-                  class="form-select">
-            <option value="">Select...</option>
-            <option v-for="option in field.options" :key="option.value" :value="option.value">
-              {{ option.label || option.value }}
-            </option>
-          </select>
-        </div>
+        <SchemaForm :schema="pluginSchema.config" v-model="formData.config" />
       </div>
 
       <!-- Filters Section -->
       <div class="form-section" v-if="pluginSchema?.filters">
         <h3 class="section-title">Export Filters</h3>
-        <div v-for="(filter, key) in pluginSchema.filters" :key="key" class="config-field">
-          <label class="form-label">{{ filter.label || key }}</label>
-          <input v-model="formData.filters[key]" 
-                 :placeholder="filter.placeholder" 
-                 class="form-input" />
-        </div>
+        <SchemaForm :schema="pluginSchema.filters" v-model="formData.filters" />
       </div>
 
       <!-- JSON Configuration Editor -->
@@ -182,6 +137,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { previewExport, type ExportRequest } from '@/api/export'
+import SchemaForm from '@/components/shared/SchemaForm.vue'
 
 // Plugin schema type for form generation
 interface PluginField {

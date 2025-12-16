@@ -1,360 +1,151 @@
 <template>
-  <div class="device-form">
-    <div class="form-header">
-      <h2>{{ isEdit ? 'Edit Device' : 'Add Device' }}</h2>
-      <button class="close-button" @click="$emit('cancel')" type="button">✖</button>
+  <form @submit.prevent="handleSubmit" class="device-form">
+    <div class="form-group">
+      <label for="name">Device Name *</label>
+      <input
+        id="name"
+        v-model="formData.name"
+        type="text"
+        class="form-input"
+        required
+        placeholder="Living Room Light"
+      />
     </div>
 
-    <form @submit.prevent="onSubmit" class="form-content">
-      <!-- Basic Information -->
-      <div class="form-section">
-        <h3>Device Information</h3>
+    <div class="form-group">
+      <label for="type">Device Type *</label>
+      <select id="type" v-model="formData.type" class="form-input" required>
+        <option value="">Select type...</option>
+        <option value="shelly1">Shelly 1</option>
+        <option value="shelly1pm">Shelly 1PM</option>
+        <option value="shelly25">Shelly 2.5</option>
+        <option value="shellyplug">Shelly Plug</option>
+        <option value="shellyem">Shelly EM</option>
+        <option value="shelly3em">Shelly 3EM</option>
+        <option value="shellydimmer">Shelly Dimmer</option>
+        <option value="shellyrgbw2">Shelly RGBW2</option>
+      </select>
+    </div>
 
-        <div class="form-field">
-          <label class="field-label">
-            Device Name
-            <span class="field-help">A friendly name for this device</span>
-          </label>
-          <input
-            v-model="formData.name"
-            type="text"
-            placeholder="e.g. Living Room Light"
-            class="form-input"
-            :class="{ error: errors.name }"
-          />
-          <div v-if="errors.name" class="field-error">{{ errors.name }}</div>
-        </div>
+    <div class="form-group">
+      <label for="ipAddress">IP Address *</label>
+      <input
+        id="ipAddress"
+        v-model="formData.ipAddress"
+        type="text"
+        class="form-input"
+        required
+        placeholder="192.168.1.100"
+        pattern="^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
+      />
+    </div>
 
-        <div class="form-field">
-          <label class="field-label">
-            IP Address *
-            <span class="field-help">The device's IP address on your network</span>
-          </label>
-          <input
-            v-model="formData.ip"
-            type="text"
-            required
-            placeholder="e.g. 192.168.1.100"
-            class="form-input"
-            :class="{ error: errors.ip }"
-          />
-          <div v-if="errors.ip" class="field-error">{{ errors.ip }}</div>
-        </div>
+    <div class="form-group">
+      <label for="mac">MAC Address</label>
+      <input
+        id="mac"
+        v-model="formData.mac"
+        type="text"
+        class="form-input"
+        placeholder="AA:BB:CC:DD:EE:FF"
+        pattern="^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+      />
+    </div>
 
-        <div class="form-field">
-          <label class="field-label">
-            MAC Address *
-            <span class="field-help">The device's MAC address (format: XX:XX:XX:XX:XX:XX)</span>
-          </label>
-          <input
-            v-model="formData.mac"
-            type="text"
-            required
-            placeholder="e.g. AA:BB:CC:DD:EE:FF"
-            class="form-input"
-            :class="{ error: errors.mac }"
-            :disabled="isEdit"
-          />
-          <div v-if="errors.mac" class="field-error">{{ errors.mac }}</div>
-          <div v-if="isEdit" class="field-help">MAC address cannot be changed</div>
-        </div>
+    <div class="form-actions">
+      <button type="submit" class="primary-button" :disabled="isSubmitting">
+        {{ isSubmitting ? 'Saving...' : (isEdit ? 'Update Device' : 'Create Device') }}
+      </button>
+      <button type="button" class="secondary-button" @click="$emit('cancel')">
+        Cancel
+      </button>
+    </div>
 
-        <div class="form-field">
-          <label class="field-label">
-            Device Type
-            <span class="field-help">Model or type identifier (e.g. SHSW-1, SHPLG-S)</span>
-          </label>
-          <input
-            v-model="formData.type"
-            type="text"
-            placeholder="e.g. SHSW-1"
-            class="form-input"
-            :class="{ error: errors.type }"
-          />
-          <div v-if="errors.type" class="field-error">{{ errors.type }}</div>
-        </div>
-      </div>
-
-      <!-- Error Display -->
-      <div v-if="error" class="form-error">{{ error }}</div>
-
-      <!-- Form Actions -->
-      <div class="form-actions">
-        <button type="button" @click="$emit('cancel')" class="secondary-button">
-          Cancel
-        </button>
-        <button type="submit" :disabled="!isFormValid || loading" class="primary-button">
-          {{ loading ? (isEdit ? 'Updating...' : 'Creating...') : (isEdit ? 'Update Device' : 'Create Device') }}
-        </button>
-      </div>
-    </form>
-  </div>
+    <div v-if="error" class="error-message">{{ error }}</div>
+  </form>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
-import type { Device, CreateDeviceRequest, UpdateDeviceRequest } from '@/api/types'
+import { ref, reactive, watch } from 'vue'
+import type { Device } from '@/api/types'
 
-const props = defineProps<{
-  existingDevice?: Device | null
-  loading?: boolean
-  error?: string
-}>()
+interface Props {
+  device?: Device | null
+  isEdit?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  device: null,
+  isEdit: false
+})
 
 const emit = defineEmits<{
-  submit: [CreateDeviceRequest | UpdateDeviceRequest]
+  submit: [data: Partial<Device>]
   cancel: []
 }>()
 
-const isEdit = computed(() => !!props.existingDevice)
-
-// Form data
-const formData = reactive<CreateDeviceRequest>({
-  ip: '',
-  mac: '',
+const formData = reactive({
   name: '',
   type: '',
+  ipAddress: '',
+  mac: ''
 })
 
-// Validation errors
-const errors = reactive<Record<string, string>>({})
+const isSubmitting = ref(false)
+const error = ref('')
 
-// IP address validation regex
-const IP_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+// Populate form if editing
+watch(() => props.device, (device) => {
+  if (device) {
+    formData.name = device.name || ''
+    formData.type = device.type || ''
+    formData.ipAddress = device.ipAddress || ''
+    formData.mac = device.mac || ''
+  }
+}, { immediate: true })
 
-// MAC address validation regex
-const MAC_REGEX = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/
+function handleSubmit() {
+  error.value = ''
+  isSubmitting.value = true
 
-// Computed validity
-const isFormValid = computed(() => {
-  return (
-    formData.ip &&
-    formData.mac &&
-    Object.keys(errors).length === 0
-  )
-})
-
-// Validation function
-function validateForm() {
-  // Clear previous errors
-  Object.keys(errors).forEach(key => delete errors[key])
-
-  // Validate IP address
-  if (!formData.ip) {
-    errors.ip = 'IP address is required'
-  } else if (!IP_REGEX.test(formData.ip)) {
-    errors.ip = 'Invalid IP address format (e.g. 192.168.1.100)'
+  const data: Partial<Device> = {
+    name: formData.name,
+    type: formData.type,
+    ipAddress: formData.ipAddress
   }
 
-  // Validate MAC address
-  if (!formData.mac) {
-    errors.mac = 'MAC address is required'
-  } else if (!MAC_REGEX.test(formData.mac)) {
-    errors.mac = 'Invalid MAC address format (e.g. AA:BB:CC:DD:EE:FF)'
+  if (formData.mac) {
+    data.mac = formData.mac
   }
 
-  // Validate name (if provided)
-  if (formData.name && formData.name.length > 100) {
-    errors.name = 'Name must be 100 characters or less'
-  }
-
-  // Validate type (if provided)
-  if (formData.type && formData.type.length > 50) {
-    errors.type = 'Type must be 50 characters or less'
-  }
+  emit('submit', data)
 }
 
-// Submit handler
-function onSubmit() {
-  validateForm()
-  if (!isFormValid.value) return
-
-  // Prepare submission data
-  const submitData: CreateDeviceRequest | UpdateDeviceRequest = {
-    ip: formData.ip,
-    mac: formData.mac,
-  }
-
-  // Add optional fields only if they have values
-  if (formData.name) submitData.name = formData.name
-  if (formData.type) submitData.type = formData.type
-
-  emit('submit', submitData)
-}
-
-// Initialize for edit mode
-onMounted(() => {
-  if (props.existingDevice) {
-    formData.ip = props.existingDevice.ip
-    formData.mac = props.existingDevice.mac
-    formData.name = props.existingDevice.name || ''
-    formData.type = props.existingDevice.type || ''
+defineExpose({
+  reset: () => {
+    formData.name = ''
+    formData.type = ''
+    formData.ipAddress = ''
+    formData.mac = ''
+    error.value = ''
+    isSubmitting.value = false
+  },
+  setError: (msg: string) => {
+    error.value = msg
+    isSubmitting.value = false
   }
 })
-
-// Watch for real-time validation
-watch(formData, validateForm, { deep: true })
 </script>
 
 <style scoped>
-.device-form {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.form-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.form-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.close-button {
-  background: none;
-  border: none;
-  font-size: 20px;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 4px 8px;
-  line-height: 1;
-}
-
-.close-button:hover {
-  color: #111827;
-}
-
-.form-content {
-  padding: 24px;
-}
-
-.form-section {
-  margin-bottom: 24px;
-}
-
-.form-section:last-of-type {
-  margin-bottom: 0;
-}
-
-.form-section h3 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.form-field {
-  margin-bottom: 16px;
-}
-
-.field-label {
-  display: block;
-  margin-bottom: 6px;
-  font-weight: 500;
-  color: #374151;
-  font-size: 14px;
-}
-
-.field-help {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 400;
-}
-
-.form-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: border-color 0.2s;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.form-input.error {
-  border-color: #ef4444;
-}
-
-.form-input:disabled {
-  background-color: #f3f4f6;
-  cursor: not-allowed;
-  color: #6b7280;
-}
-
-.field-error {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #ef4444;
-}
-
-.form-error {
-  padding: 12px 16px;
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 6px;
-  color: #dc2626;
-  font-size: 14px;
-  margin-bottom: 16px;
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.primary-button,
-.secondary-button {
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-}
-
-.primary-button {
-  background-color: #3b82f6;
-  color: white;
-}
-
-.primary-button:hover:not(:disabled) {
-  background-color: #2563eb;
-}
-
-.primary-button:disabled {
-  background-color: #93c5fd;
-  cursor: not-allowed;
-}
-
-.secondary-button {
-  background-color: white;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-
-.secondary-button:hover {
-  background-color: #f9fafb;
-}
+.device-form { max-width: 500px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-weight: 500; color: #374151; margin-bottom: 6px; }
+.form-input { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; font-size: 14px; }
+.form-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+.form-actions { display: flex; gap: 12px; margin-top: 20px; }
+.primary-button { padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.primary-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.secondary-button { padding: 10px 20px; background: #e5e7eb; border: none; border-radius: 6px; cursor: pointer; }
+.error-message { margin-top: 12px; padding: 12px; background: #fee2e2; color: #991b1b; border-radius: 6px; }
 </style>

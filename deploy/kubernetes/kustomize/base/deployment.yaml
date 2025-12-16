@@ -44,6 +44,37 @@ spec:
         envFrom:
         - configMapRef:
             name: shelly-manager-config
+        env:
+        - name: SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: smtp-password
+        - name: SHELLY_OPNSENSE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: opnsense-api-key
+        - name: SHELLY_OPNSENSE_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: opnsense-api-secret
+        - name: SHELLY_SECURITY_ADMIN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: admin-api-key
+        - name: SHELLY_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: database-password
+        - name: SHELLY_DATABASE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: database-username
         resources:
           requests:
             memory: "128Mi"

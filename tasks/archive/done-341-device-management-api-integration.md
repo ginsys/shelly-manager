@@ -1,8 +1,9 @@
 # Device Management API Integration
 
 **Priority**: MEDIUM - Important Feature
-**Status**: done
+**Status**: completed
 **Effort**: 10 hours (with 1.3x buffer)
+**Completed**: 2025-12-01
 
 ## Context
 
@@ -18,8 +19,8 @@ The backend provides 8 device management endpoints but only 2 are currently used
 - [x] Device status polling added to DeviceDetailPage
 - [x] Energy metrics display added to DeviceDetailPage
 - [x] Unit tests for new API functions
-- [x] E2E tests for device CRUD operations
-- [x] Documentation updated in `docs/frontend/frontend-review.md`
+- [ ] E2E tests for device CRUD operations (deferred)
+- [ ] Documentation updated in `docs/frontend/frontend-review.md` (deferred)
 
 ## Implementation
 

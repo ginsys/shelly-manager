@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
 import { getMetricsStatus, getMetricsHealth, getSystemMetrics, getDevicesMetrics, getDriftSummary } from '@/api/metrics'
 import { useWebSocket } from '@/composables/useWebSocket'
-import { ref, computed } from 'vue'
 
 // WebSocket message types from backend
 export interface WSMessage {
@@ -10,68 +10,70 @@ export interface WSMessage {
   timestamp: string
 }
 
-// State shape for bounded ring buffers
-export interface MetricsState {
-  status: any
-  health: any
+export const useMetricsStore = defineStore('metrics', () => {
+  // State
+  const status = ref<any>(null)
+  const health = ref<any>(null)
 
   // Time-series data with bounded ring buffers
-  system: {
+  const system = ref<{
     timestamps: string[]
     cpu: number[]
     memory: number[]
     disk?: number[]
     maxLength: number
-  } | null
+  } | null>(null)
 
-  devices: any
-  drift: any
-
-  // Internals
-  _timer: number
-  _animationFrameId: number
-}
-
-// Helper to get WebSocket URL
-function getMetricsWsUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = window.location.host
-  return `${protocol}//${host}/api/v1/metrics/ws`
-}
-
-export const useMetricsStore = defineStore('metrics', () => {
-  // State
-  const status = ref<any>(null)
-  const health = ref<any>(null)
-  const system = ref<MetricsState['system']>(null)
   const devices = ref<any>(null)
   const drift = ref<any>(null)
 
-  // Internals
-  const _timer = ref(0)
-  const _animationFrameId = ref(0)
+  // Polling timer
+  const _timer = ref<ReturnType<typeof setInterval> | null>(null)
+  const _animationFrameId = ref<number>(0)
 
-  // WebSocket composable
+  // WebSocket URL generator
+  function getWebSocketUrl(): string {
+    const base = (window as any).__API_BASE__ || '/api/v1'
+    const loc = window.location
+    const proto = loc.protocol === 'https:' ? 'wss' : 'ws'
+    const token = (window as any).__ADMIN_KEY__
+    return `${proto}://${loc.host}${base.replace('/api/v1', '')}/metrics/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`
+  }
+
+  // Initialize WebSocket with composable
   const ws = useWebSocket<WSMessage>({
-    url: getMetricsWsUrl,
-    onMessage: handleWSMessage,
+    url: getWebSocketUrl,
+    autoConnect: false,
+    reconnect: true,
+    reconnectInterval: 1000,
     heartbeatInterval: 15000,
     heartbeatTimeout: 45000,
+    onMessage: (msg) => handleWSMessage(msg),
     onOpen: () => {
+      console.log('WebSocket connected')
       stopPolling() // Stop REST polling when WS active
     },
-    onClose: () => {
+    onClose: (event) => {
+      console.log('WebSocket closed:', event.code, event.reason)
       startPolling() // Resume REST polling
+    },
+    onError: (error) => {
+      console.error('WebSocket error:', error)
     }
   })
 
-  // Computed - expose WebSocket state
+  // Getters
   const wsConnected = computed(() => ws.isConnected.value)
   const wsReconnectAttempts = computed(() => ws.reconnectAttempts.value)
   const lastMessageAt = computed(() => ws.lastMessageAt.value)
-  const isRealtimeActive = computed(() => ws.isRealtimeActive.value)
 
-  // Actions - REST API fallback methods
+  // Connection status with timeout detection
+  const isRealtimeActive = computed(() => {
+    if (!ws.isConnected.value || !ws.lastMessageAt.value) return false
+    return Date.now() - ws.lastMessageAt.value < 60000 // 1 minute timeout
+  })
+
+  // REST API fallback methods
   async function fetchStatus() {
     try {
       status.value = await getMetricsStatus()
@@ -91,7 +93,7 @@ export const useMetricsStore = defineStore('metrics', () => {
   async function fetchSummaries() {
     try {
       const systemData = await getSystemMetrics()
-      if (systemData && !wsConnected.value) {
+      if (systemData && !ws.isConnected.value) {
         // Only update from REST if WebSocket is not active
         updateSystemMetrics(systemData)
       }
@@ -116,7 +118,7 @@ export const useMetricsStore = defineStore('metrics', () => {
   function startPolling(intervalMs = 30000) {
     if (_timer.value) return
     _timer.value = setInterval(() => {
-      if (!wsConnected.value) {
+      if (!ws.isConnected.value) {
         fetchSummaries()
       }
     }, intervalMs)
@@ -126,11 +128,11 @@ export const useMetricsStore = defineStore('metrics', () => {
   function stopPolling() {
     if (_timer.value) {
       clearInterval(_timer.value)
-      _timer.value = 0
+      _timer.value = null
     }
   }
 
-  // WebSocket connection management (delegated to composable)
+  // WebSocket connection management
   function connectWS() {
     ws.connect()
   }
@@ -226,10 +228,12 @@ export const useMetricsStore = defineStore('metrics', () => {
     devices,
     drift,
 
-    // Computed
+    // WebSocket state
     wsConnected,
     wsReconnectAttempts,
     lastMessageAt,
+
+    // Getters
     isRealtimeActive,
 
     // Actions
@@ -240,8 +244,17 @@ export const useMetricsStore = defineStore('metrics', () => {
     stopPolling,
     connectWS,
     disconnectWS,
+    cleanup,
+
+    // Internal (exposed for testing)
+    _ws: ws,
+    _timer,
+    _animationFrameId,
+    // Expose these for testing compatibility
     updateSystemMetrics,
-    cleanup
+    handleWSMessage,
+    scheduleReconnect: () => {
+      /* Reconnection is now handled by useWebSocket composable */
+    }
   }
 })
-

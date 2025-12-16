@@ -1,0 +1,175 @@
+// PROPOSED FIX FOR Task 207: UpdateDevice Partial Updates
+// File: internal/api/handlers.go (lines 333-373)
+
+func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+		return
+	}
+
+	// Check if device exists
+	existingDevice, err := h.DB.GetDevice(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			h.responseWriter().WriteNotFoundError(w, r, "Device")
+		} else {
+			h.responseWriter().WriteInternalError(w, r, err)
+		}
+		return
+	}
+
+	// Decode into a map to detect which fields are present
+	var updateData map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+
+	// Apply updates only to fields that are present in the request
+	updatedDevice := existingDevice // Start with existing values
+
+	// Update only the fields that are present in the request
+	if name, ok := updateData["name"]; ok {
+		if strVal, isStr := name.(string); isStr {
+			updatedDevice.Name = strVal
+		}
+	}
+	if ip, ok := updateData["ip"]; ok {
+		if strVal, isStr := ip.(string); isStr {
+			updatedDevice.IP = strVal
+		}
+	}
+	if deviceType, ok := updateData["type"]; ok {
+		if strVal, isStr := deviceType.(string); isStr {
+			updatedDevice.Type = strVal
+		}
+	}
+	if firmware, ok := updateData["firmware"]; ok {
+		if strVal, isStr := firmware.(string); isStr {
+			updatedDevice.Firmware = strVal
+		}
+	}
+	if status, ok := updateData["status"]; ok {
+		if strVal, isStr := status.(string); isStr {
+			updatedDevice.Status = strVal
+		}
+	}
+	if settings, ok := updateData["settings"]; ok {
+		if strVal, isStr := settings.(string); isStr {
+			updatedDevice.Settings = strVal
+		}
+	}
+
+	// Validate the updated device
+	if err := h.validateDeviceSettings(&updatedDevice); err != nil {
+		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
+		return
+	}
+
+	// Update device in database
+	if err := h.DB.UpdateDevice(&updatedDevice); err != nil {
+		// Check for constraint violations
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") ||
+		   strings.Contains(err.Error(), "duplicate key value") {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict,
+				"Device with this MAC or IP address already exists", nil)
+			return
+		}
+		h.responseWriter().WriteInternalError(w, r, err)
+		return
+	}
+
+	h.responseWriter().WriteSuccess(w, r, updatedDevice)
+}
+
+// ALTERNATIVE APPROACH: Using GORM's Updates() method
+// This is cleaner but requires creating a separate update struct
+
+type DeviceUpdateRequest struct {
+	Name     *string `json:"name,omitempty"`
+	IP       *string `json:"ip,omitempty"`
+	Type     *string `json:"type,omitempty"`
+	Firmware *string `json:"firmware,omitempty"`
+	Status   *string `json:"status,omitempty"`
+	Settings *string `json:"settings,omitempty"`
+}
+
+func (h *Handler) UpdateDeviceAlternative(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+		return
+	}
+
+	// Check if device exists
+	existingDevice, err := h.DB.GetDevice(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			h.responseWriter().WriteNotFoundError(w, r, "Device")
+		} else {
+			h.responseWriter().WriteInternalError(w, r, err)
+		}
+		return
+	}
+
+	// Decode update request
+	var updateReq DeviceUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+
+	// Build update map with only non-nil fields
+	updates := make(map[string]interface{})
+	if updateReq.Name != nil {
+		updates["name"] = *updateReq.Name
+		existingDevice.Name = *updateReq.Name
+	}
+	if updateReq.IP != nil {
+		updates["ip"] = *updateReq.IP
+		existingDevice.IP = *updateReq.IP
+	}
+	if updateReq.Type != nil {
+		updates["type"] = *updateReq.Type
+		existingDevice.Type = *updateReq.Type
+	}
+	if updateReq.Firmware != nil {
+		updates["firmware"] = *updateReq.Firmware
+		existingDevice.Firmware = *updateReq.Firmware
+	}
+	if updateReq.Status != nil {
+		updates["status"] = *updateReq.Status
+		existingDevice.Status = *updateReq.Status
+	}
+	if updateReq.Settings != nil {
+		updates["settings"] = *updateReq.Settings
+		existingDevice.Settings = *updateReq.Settings
+	}
+
+	// Validate the updated device
+	if err := h.validateDeviceSettings(&existingDevice); err != nil {
+		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
+		return
+	}
+
+	// Use GORM's Updates() to update only specified fields
+	result := h.DB.GetDB().Model(&database.Device{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		// Check for constraint violations
+		if strings.Contains(result.Error.Error(), "UNIQUE constraint failed") ||
+		   strings.Contains(result.Error.Error(), "duplicate key value") {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict,
+				"Device with this MAC or IP address already exists", nil)
+			return
+		}
+		h.responseWriter().WriteInternalError(w, r, result.Error)
+		return
+	}
+
+	// Fetch updated device to return
+	updatedDevice, _ := h.DB.GetDevice(uint(id))
+	h.responseWriter().WriteSuccess(w, r, updatedDevice)
+}

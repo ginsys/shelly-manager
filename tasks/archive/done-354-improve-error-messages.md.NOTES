@@ -1,0 +1,53 @@
+COMPLETION STATUS: ✅ TASK COMPLETED
+
+Infrastructure Complete ✅:
+- ✅ Error types and mappings (ui/src/types/errors.ts)
+- ✅ Error composable with full normalization (ui/src/composables/useError.ts)
+- ✅ ErrorDisplay component (ui/src/components/shared/ErrorDisplay.vue)
+- ✅ Comprehensive unit tests (22 tests, 100% coverage)
+- ✅ DevicesPage.vue updated to use ErrorState component (Task 411)
+- ✅ Build verified
+
+All Pages Integrated ✅:
+- ✅ DevicesPage.vue
+- ✅ BackupManagementPage.vue
+- ✅ GitOpsExportPage.vue
+- ✅ PluginManagementPage.vue (via plugin store)
+- ✅ MetricsDashboardPage.vue
+
+Post-Task-351 Integration Complete ✅:
+After Task 351 component extraction, integrated error handling infrastructure into refactored pages:
+
+- ✅ BackupManagementPage.vue: Now uses useError composable with context
+- ✅ GitOpsExportPage.vue: Now uses useError composable with context
+- ✅ PluginManagementPage.vue: Already using proper error handling via plugin store
+- ✅ MetricsDashboardPage.vue: Now uses useError composable with context (completed 2025-12-03)
+
+Changes Applied:
+1. Imported useError composable in BackupManagementPage and GitOpsExportPage
+2. Replaced `const error = ref('')` with `const { error, setError, clearError } = useError()`
+3. Updated error handling to use `setError(err, { action, resource })` with context
+4. Added computed error message for backward compatibility with child components
+5. Build verification: ✅ Passing (8.47s)
+
+Implementation Pattern:
+```typescript
+// In parent pages (BackupManagementPage, GitOpsExportPage):
+import { useError } from '@/composables/useError'
+
+const { error: errorObj, hasError, setError, clearError } = useError()
+const error = computed(() => errorObj.value?.message || '')
+
+async function fetchData() {
+  clearError()
+  try {
+    await apiCall()
+  } catch (err) {
+    setError(err, { action: 'Loading data', resource: 'Resource' })
+  }
+}
+```
+
+Child components continue to receive simple error strings via props and display them using DataTable or inline error displays. This approach maintains separation of concerns while providing structured error handling at the page level.
+
+Actual effort: ~30 minutes (as predicted, much easier after Task 351 refactoring)

@@ -1,0 +1,137 @@
+// PROPOSED FIX FOR Task 208: ApplyConfigTemplate Return 404 for Missing Templates
+// File: internal/api/handlers.go (lines 1063-1098)
+
+func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+		return
+	}
+
+	var req struct {
+		TemplateID uint                   `json:"template_id"`
+		Variables  map[string]interface{} `json:"variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+
+	if err := h.Service.ApplyConfigTemplate(uint(id), req.TemplateID, req.Variables); err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id":   id,
+			"template_id": req.TemplateID,
+			"error":       err.Error(),
+		}).Error("Failed to apply config template")
+
+		// Check error type and return appropriate status code
+		errMsg := err.Error()
+
+		// Handle "not found" errors with 404
+		if strings.Contains(errMsg, "not found") ||
+		   strings.Contains(errMsg, "record not found") ||
+		   err == gorm.ErrRecordNotFound {
+			// Determine what wasn't found
+			if strings.Contains(errMsg, "template") {
+				h.responseWriter().WriteNotFoundError(w, r, "Template")
+			} else if strings.Contains(errMsg, "device") {
+				h.responseWriter().WriteNotFoundError(w, r, "Device")
+			} else {
+				h.responseWriter().WriteNotFoundError(w, r, "Resource")
+			}
+			return
+		}
+
+		// Handle validation errors with 400
+		if strings.Contains(errMsg, "validation failed") ||
+		   strings.Contains(errMsg, "invalid") {
+			h.responseWriter().WriteValidationError(w, r, errMsg)
+			return
+		}
+
+		// All other errors are 500
+		h.responseWriter().WriteInternalError(w, r, err)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":      "success",
+		"device_id":   id,
+		"template_id": req.TemplateID,
+		"message":     "Template applied to device",
+	}
+
+	h.responseWriter().WriteSuccess(w, r, response)
+}
+
+// ALTERNATIVE: If you want to use custom error types for better error handling
+// This would require defining custom error types in the service layer
+
+// In internal/configuration/errors.go or similar:
+/*
+var (
+	ErrTemplateNotFound = errors.New("template not found")
+	ErrDeviceNotFound   = errors.New("device not found")
+	ErrValidationFailed = errors.New("validation failed")
+)
+*/
+
+// Then in the handler:
+/*
+func (h *Handler) ApplyConfigTemplateWithCustomErrors(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+		return
+	}
+
+	var req struct {
+		TemplateID uint                   `json:"template_id"`
+		Variables  map[string]interface{} `json:"variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+
+	if err := h.Service.ApplyConfigTemplate(uint(id), req.TemplateID, req.Variables); err != nil {
+		h.logger.WithFields(map[string]any{
+			"device_id":   id,
+			"template_id": req.TemplateID,
+			"error":       err.Error(),
+		}).Error("Failed to apply config template")
+
+		// Use errors.Is() for better error type checking
+		if errors.Is(err, ErrTemplateNotFound) {
+			h.responseWriter().WriteNotFoundError(w, r, "Template")
+			return
+		}
+		if errors.Is(err, ErrDeviceNotFound) {
+			h.responseWriter().WriteNotFoundError(w, r, "Device")
+			return
+		}
+		if errors.Is(err, ErrValidationFailed) {
+			h.responseWriter().WriteValidationError(w, r, err.Error())
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			h.responseWriter().WriteNotFoundError(w, r, "Resource")
+			return
+		}
+
+		h.responseWriter().WriteInternalError(w, r, err)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":      "success",
+		"device_id":   id,
+		"template_id": req.TemplateID,
+		"message":     "Template applied to device",
+	}
+
+	h.responseWriter().WriteSuccess(w, r, response)
+}
+*/

@@ -14,13 +14,65 @@ const router = createRouter({
       component: () => import('./pages/DevicesPage.vue'),
       meta: { title: 'Devices' }
     },
-    { 
-      path: '/devices/:id', 
+    {
+      path: '/devices/:id',
       name: 'device-detail',
       component: () => import('./pages/DeviceDetailPage.vue'),
       meta: { title: 'Device Details' }
     },
-    
+    {
+      path: '/devices/:id/config',
+      name: 'device-config',
+      component: () => import('./pages/DeviceConfigPage.vue'),
+      meta: { title: 'Device Configuration' }
+    },
+    {
+      path: '/devices/:id/config/history',
+      name: 'device-config-history',
+      component: () => import('./pages/DeviceConfigHistoryPage.vue'),
+      meta: { title: 'Configuration History' }
+    },
+
+    // Configuration Templates
+    {
+      path: '/templates',
+      name: 'templates',
+      component: () => import('./pages/TemplatesPage.vue'),
+      meta: { title: 'Configuration Templates' }
+    },
+    {
+      path: '/templates/examples',
+      name: 'template-examples',
+      component: () => import('./pages/TemplateExamplesPage.vue'),
+      meta: { title: 'Template Examples' }
+    },
+    {
+      path: '/templates/:id',
+      name: 'template-detail',
+      component: () => import('./pages/TemplateDetailPage.vue'),
+      meta: { title: 'Template Details' }
+    },
+
+    // Drift Detection
+    {
+      path: '/drift/schedules',
+      name: 'drift-schedules',
+      component: () => import('./pages/DriftSchedulesPage.vue'),
+      meta: { title: 'Drift Detection Schedules', category: 'drift' }
+    },
+    {
+      path: '/drift/reports',
+      name: 'drift-reports',
+      component: () => import('./pages/DriftReportsPage.vue'),
+      meta: { title: 'Drift Reports', category: 'drift' }
+    },
+    {
+      path: '/drift/trends',
+      name: 'drift-trends',
+      component: () => import('./pages/DriftTrendsPage.vue'),
+      meta: { title: 'Drift Trends', category: 'drift' }
+    },
+
     // Export & Import routes
     { 
       path: '/export/schedules', 
@@ -75,27 +127,73 @@ const router = createRouter({
     },
     
     // Metrics and monitoring
-    { 
-      path: '/dashboard', 
+    {
+      path: '/dashboard',
       name: 'metrics',
       component: () => import('./pages/MetricsDashboardPage.vue'),
       meta: { title: 'Metrics Dashboard' }
     },
-    { 
-      path: '/stats', 
-      name: 'stats',
-      component: () => import('./pages/StatsPage.vue'),
-      meta: { title: 'Statistics' }
-    },
-    
+
     // Admin
-    { 
-      path: '/admin', 
+    {
+      path: '/admin',
       name: 'admin',
       component: () => import('./pages/AdminSettingsPage.vue'),
       meta: { title: 'Admin Settings' }
     },
-    
+
+    // Notifications
+    {
+      path: '/notifications/channels',
+      name: 'notification-channels',
+      component: () => import('./pages/NotificationChannelsPage.vue'),
+      meta: { title: 'Notification Channels', category: 'notifications' }
+    },
+    {
+      path: '/notifications/channels/:id',
+      name: 'notification-channel-detail',
+      component: () => import('./pages/NotificationChannelDetailPage.vue'),
+      meta: { title: 'Channel Details', category: 'notifications' }
+    },
+    {
+      path: '/notifications/rules',
+      name: 'notification-rules',
+      component: () => import('./pages/NotificationRulesPage.vue'),
+      meta: { title: 'Notification Rules', category: 'notifications' }
+    },
+    {
+      path: '/notifications/history',
+      name: 'notification-history',
+      component: () => import('./pages/NotificationHistoryPage.vue'),
+      meta: { title: 'Notification History', category: 'notifications' }
+    },
+
+    // Provisioning
+    {
+      path: '/provisioning',
+      name: 'provisioning-dashboard',
+      component: () => import('./pages/ProvisioningDashboardPage.vue'),
+      meta: { title: 'Provisioning Dashboard', category: 'provisioning' }
+    },
+    {
+      path: '/provisioning/tasks',
+      name: 'provisioning-tasks',
+      component: () => import('./pages/ProvisioningTasksPage.vue'),
+      meta: { title: 'Provisioning Tasks', category: 'provisioning' }
+    },
+    {
+      path: '/provisioning/tasks/:id',
+      name: 'provisioning-task-detail',
+      component: () => import('./pages/ProvisioningTaskDetailPage.vue'),
+      meta: { title: 'Task Details', category: 'provisioning' }
+    },
+    {
+      path: '/provisioning/agents',
+      name: 'provisioning-agents',
+      component: () => import('./pages/ProvisioningAgentsPage.vue'),
+      meta: { title: 'Provisioning Agents', category: 'provisioning' }
+    },
+
     // 404 handler - must be last
     {
       path: '/:pathMatch(.*)*',

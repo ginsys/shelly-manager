@@ -1,15 +1,5 @@
 import api from './client'
-import type {
-  APIResponse,
-  Device,
-  Metadata,
-  CreateDeviceRequest,
-  UpdateDeviceRequest,
-  ControlDeviceRequest,
-  ControlDeviceResponse,
-  DeviceStatus,
-  DeviceEnergy,
-} from './types'
+import type { APIResponse, Device, Metadata } from './types'
 
 export interface ListDevicesParams {
   page?: number
@@ -45,7 +35,7 @@ export async function getDevice(id: number | string): Promise<Device> {
   return res.data.data
 }
 
-export async function createDevice(data: CreateDeviceRequest): Promise<Device> {
+export async function createDevice(data: Partial<Device>): Promise<Device> {
   const res = await api.post<APIResponse<Device>>('/devices', data)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to create device'
@@ -54,7 +44,7 @@ export async function createDevice(data: CreateDeviceRequest): Promise<Device> {
   return res.data.data
 }
 
-export async function updateDevice(id: number | string, data: UpdateDeviceRequest): Promise<Device> {
+export async function updateDevice(id: number | string, data: Partial<Device>): Promise<Device> {
   const res = await api.put<APIResponse<Device>>(`/devices/${id}`, data)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to update device'
@@ -71,16 +61,26 @@ export async function deleteDevice(id: number | string): Promise<void> {
   }
 }
 
-export async function controlDevice(
-  id: number | string,
-  request: ControlDeviceRequest,
-): Promise<ControlDeviceResponse> {
-  const res = await api.post<APIResponse<ControlDeviceResponse>>(`/devices/${id}/control`, request)
-  if (!res.data.success || !res.data.data) {
+export interface DeviceControlRequest {
+  action: 'on' | 'off' | 'restart' | 'toggle'
+}
+
+export async function controlDevice(id: number | string, action: string): Promise<void> {
+  const res = await api.post<APIResponse<void>>(`/devices/${id}/control`, { action })
+  if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to control device'
     throw new Error(msg)
   }
-  return res.data.data
+}
+
+export interface DeviceStatus {
+  online: boolean
+  lastSeen?: string
+  uptime?: number
+  temperature?: number
+  cloud?: { enabled: boolean; connected: boolean }
+  wifi?: { ssid: string; rssi: number }
+  mqtt?: { connected: boolean }
 }
 
 export async function getDeviceStatus(id: number | string): Promise<DeviceStatus> {
@@ -92,12 +92,18 @@ export async function getDeviceStatus(id: number | string): Promise<DeviceStatus
   return res.data.data
 }
 
-export async function getDeviceEnergy(id: number | string, channel = 0): Promise<DeviceEnergy> {
-  const res = await api.get<APIResponse<DeviceEnergy>>(`/devices/${id}/energy`, {
-    params: { channel },
-  })
+export interface DeviceEnergy {
+  power?: number
+  voltage?: number
+  current?: number
+  total?: number
+  totalReturned?: number
+}
+
+export async function getDeviceEnergy(id: number | string): Promise<DeviceEnergy> {
+  const res = await api.get<APIResponse<DeviceEnergy>>(`/devices/${id}/energy`)
   if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to get device energy data'
+    const msg = res.data.error?.message || 'Failed to get energy metrics'
     throw new Error(msg)
   }
   return res.data.data
