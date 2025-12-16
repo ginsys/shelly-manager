@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
-import { getMetricsStatus, getMetricsHealth, getSystemMetrics, getDevicesMetrics, getDriftSummary, openMetricsWebSocket } from '@/api/metrics'
+import { getMetricsStatus, getMetricsHealth, getSystemMetrics, getDevicesMetrics, getDriftSummary } from '@/api/metrics'
+import { useWebSocket } from '@/composables/useWebSocket'
+import { ref, computed } from 'vue'
 
 // WebSocket message types from backend
 export interface WSMessage {
@@ -12,10 +14,7 @@ export interface WSMessage {
 export interface MetricsState {
   status: any
   health: any
-  wsConnected: boolean
-  wsReconnectAttempts: number
-  lastMessageAt: number | null
-  
+
   // Time-series data with bounded ring buffers
   system: {
     timestamps: string[]
@@ -24,285 +23,225 @@ export interface MetricsState {
     disk?: number[]
     maxLength: number
   } | null
-  
+
   devices: any
   drift: any
-  
+
   // Internals
   _timer: number
-  _ws: WebSocket | null
-  _reconnectTimer: number
-  _heartbeatTimer: number
   _animationFrameId: number
 }
 
-export const useMetricsStore = defineStore('metrics', {
-  state: (): MetricsState => ({
-    status: null,
-    health: null,
-    wsConnected: false,
-    wsReconnectAttempts: 0,
-    lastMessageAt: null,
-    
-    system: null,
-    devices: null,
-    drift: null,
-    
-    _timer: 0,
-    _ws: null,
-    _reconnectTimer: 0,
-    _heartbeatTimer: 0,
-    _animationFrameId: 0
-  }),
-  
-  getters: {
-    // Connection status with timeout detection
-    isRealtimeActive(): boolean {
-      if (!this.wsConnected || !this.lastMessageAt) return false
-      return Date.now() - this.lastMessageAt < 60000 // 1 minute timeout
+// Helper to get WebSocket URL
+function getMetricsWsUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  return `${protocol}//${host}/api/v1/metrics/ws`
+}
+
+export const useMetricsStore = defineStore('metrics', () => {
+  // State
+  const status = ref<any>(null)
+  const health = ref<any>(null)
+  const system = ref<MetricsState['system']>(null)
+  const devices = ref<any>(null)
+  const drift = ref<any>(null)
+
+  // Internals
+  const _timer = ref(0)
+  const _animationFrameId = ref(0)
+
+  // WebSocket composable
+  const ws = useWebSocket<WSMessage>({
+    url: getMetricsWsUrl,
+    onMessage: handleWSMessage,
+    heartbeatInterval: 15000,
+    heartbeatTimeout: 45000,
+    onOpen: () => {
+      stopPolling() // Stop REST polling when WS active
+    },
+    onClose: () => {
+      startPolling() // Resume REST polling
     }
-  },
-  
-  actions: {
-    // REST API fallback methods
-    async fetchStatus(){ 
-      try { 
-        this.status = await getMetricsStatus() 
-      } catch (e) {
-        console.warn('Failed to fetch metrics status:', e)
-      }
-    },
-    
-    async fetchHealth(){ 
-      try { 
-        this.health = await getMetricsHealth() 
-      } catch (e) {
-        console.warn('Failed to fetch metrics health:', e)
-      }
-    },
-    
-    async fetchSummaries(){
-      try { 
-        const systemData = await getSystemMetrics()
-        if (systemData && !this.wsConnected) {
-          // Only update from REST if WebSocket is not active
-          this.updateSystemMetrics(systemData)
-        }
-      } catch (e) {
-        console.warn('Failed to fetch system metrics:', e)
-      }
-      
-      try { 
-        this.devices = await getDevicesMetrics() 
-      } catch (e) {
-        console.warn('Failed to fetch devices metrics:', e)
-      }
-      
-      try { 
-        this.drift = await getDriftSummary() 
-      } catch (e) {
-        console.warn('Failed to fetch drift summary:', e)
-      }
-    },
+  })
 
-    // Polling for fallback when WebSocket unavailable
-    startPolling(intervalMs = 30000){ // Reduced frequency when WS available
-      if (this._timer) return
-      this._timer = setInterval(() => { 
-        if (!this.wsConnected) {
-          this.fetchSummaries() 
-        }
-      }, intervalMs)
-      this.fetchSummaries()
-    },
-    
-    stopPolling(){ 
-      if (this._timer) { 
-        clearInterval(this._timer)
-        this._timer = 0 
-      }
-    },
+  // Computed - expose WebSocket state
+  const wsConnected = computed(() => ws.isConnected.value)
+  const wsReconnectAttempts = computed(() => ws.reconnectAttempts.value)
+  const lastMessageAt = computed(() => ws.lastMessageAt.value)
+  const isRealtimeActive = computed(() => ws.isRealtimeActive.value)
 
-    // WebSocket connection management with exponential backoff
-    connectWS(){
-      if (this._ws?.readyState === WebSocket.OPEN) return
-      
-      this.disconnectWS()
-      
-      try {
-        this._ws = openMetricsWebSocket((msg: WSMessage) => {
-          this.handleWSMessage(msg)
-        })
-        
-        this._ws.onopen = () => {
-          console.log('WebSocket connected')
-          this.wsConnected = true
-          this.wsReconnectAttempts = 0
-          this.lastMessageAt = Date.now()
-          this.stopPolling() // Stop REST polling when WS active
-          this.startHeartbeat()
-        }
-        
-        this._ws.onclose = (event) => {
-          console.log('WebSocket closed:', event.code, event.reason)
-          this.wsConnected = false
-          this.lastMessageAt = null
-          this.stopHeartbeat()
-          this.startPolling() // Resume REST polling
-          this.scheduleReconnect(event)
-        }
-        
-        this._ws.onerror = (error) => {
-          console.error('WebSocket error:', error)
-        }
-        
-      } catch (error) {
-        console.error('Failed to create WebSocket:', error)
-        this.scheduleReconnect()
-      }
-    },
-    
-    disconnectWS(){
-      if (this._ws) {
-        this._ws.close(1000, 'Client disconnect')
-        this._ws = null
-      }
-      this.wsConnected = false
-      this.stopHeartbeat()
-      this.clearReconnectTimer()
-    },
-    
-    // Exponential backoff with jitter
-    scheduleReconnect(closeEvent?: CloseEvent){
-      this.clearReconnectTimer()
-      
-      // Don't reconnect on certain close codes
-      if (closeEvent && [1000, 1001, 1005].includes(closeEvent.code)) {
-        return
-      }
-      
-      const baseDelay = 1000 // 1 second
-      const maxDelay = 30000 // 30 seconds
-      const backoffFactor = 2
-      const jitter = 0.5
-      
-      let delay = Math.min(baseDelay * Math.pow(backoffFactor, this.wsReconnectAttempts), maxDelay)
-      delay = delay * (1 + (Math.random() - 0.5) * jitter) // Add jitter
-      
-      console.log(`Reconnecting WebSocket in ${Math.round(delay)}ms (attempt ${this.wsReconnectAttempts + 1})`)
-      
-      this._reconnectTimer = setTimeout(() => {
-        this.wsReconnectAttempts++
-        this.connectWS()
-      }, delay)
-    },
-    
-    clearReconnectTimer(){
-      if (this._reconnectTimer) {
-        clearTimeout(this._reconnectTimer)
-        this._reconnectTimer = 0
-      }
-    },
-    
-    // Heartbeat to detect connection issues
-    startHeartbeat(){
-      this.stopHeartbeat()
-      this._heartbeatTimer = setInterval(() => {
-        if (this.lastMessageAt && Date.now() - this.lastMessageAt > 45000) {
-          console.warn('WebSocket heartbeat timeout, reconnecting...')
-          this.connectWS()
-        }
-      }, 15000) // Check every 15 seconds
-    },
-    
-    stopHeartbeat(){
-      if (this._heartbeatTimer) {
-        clearInterval(this._heartbeatTimer)
-        this._heartbeatTimer = 0
-      }
-    },
+  // Actions - REST API fallback methods
+  async function fetchStatus() {
+    try {
+      status.value = await getMetricsStatus()
+    } catch (e) {
+      console.warn('Failed to fetch metrics status:', e)
+    }
+  }
 
-    // Message handling with throttling
-    handleWSMessage(msg: WSMessage){
-      this.lastMessageAt = Date.now()
-      
-      // Cancel pending animation frame
-      if (this._animationFrameId) {
-        cancelAnimationFrame(this._animationFrameId)
+  async function fetchHealth() {
+    try {
+      health.value = await getMetricsHealth()
+    } catch (e) {
+      console.warn('Failed to fetch metrics health:', e)
+    }
+  }
+
+  async function fetchSummaries() {
+    try {
+      const systemData = await getSystemMetrics()
+      if (systemData && !wsConnected.value) {
+        // Only update from REST if WebSocket is not active
+        updateSystemMetrics(systemData)
       }
-      
-      // Throttle updates using requestAnimationFrame
-      this._animationFrameId = requestAnimationFrame(() => {
-        switch (msg.type) {
-          case 'status':
-            this.status = msg.data
-            break
-          case 'health':
-            this.health = msg.data
-            break
-          case 'system':
-            this.updateSystemMetrics(msg.data)
-            break
-          case 'devices':
-            this.devices = msg.data
-            break
-          case 'drift':
-            this.drift = msg.data
-            break
-          case 'heartbeat':
-            // Just update lastMessageAt
-            break
-          default:
-            console.warn('Unknown WebSocket message type:', msg.type)
-        }
-      })
-    },
-    
-    // Update system metrics with bounded ring buffer
-    updateSystemMetrics(data: any){
-      const maxLength = 50 // Configurable window size
-      
-      if (!this.system) {
-        this.system = {
-          timestamps: [],
-          cpu: [],
-          memory: [],
-          disk: data.disk ? [] : undefined,
-          maxLength
-        }
+    } catch (e) {
+      console.warn('Failed to fetch system metrics:', e)
+    }
+
+    try {
+      devices.value = await getDevicesMetrics()
+    } catch (e) {
+      console.warn('Failed to fetch devices metrics:', e)
+    }
+
+    try {
+      drift.value = await getDriftSummary()
+    } catch (e) {
+      console.warn('Failed to fetch drift summary:', e)
+    }
+  }
+
+  // Polling for fallback when WebSocket unavailable
+  function startPolling(intervalMs = 30000) {
+    if (_timer.value) return
+    _timer.value = setInterval(() => {
+      if (!wsConnected.value) {
+        fetchSummaries()
       }
-      
-      const timestamp = data.timestamp || new Date().toISOString()
-      
-      // Add new data
-      this.system.timestamps.push(timestamp)
-      this.system.cpu.push(data.cpu || 0)
-      this.system.memory.push(data.memory || 0)
-      if (data.disk !== undefined && this.system.disk) {
-        this.system.disk.push(data.disk)
+    }, intervalMs)
+    fetchSummaries()
+  }
+
+  function stopPolling() {
+    if (_timer.value) {
+      clearInterval(_timer.value)
+      _timer.value = 0
+    }
+  }
+
+  // WebSocket connection management (delegated to composable)
+  function connectWS() {
+    ws.connect()
+  }
+
+  function disconnectWS() {
+    ws.disconnect()
+  }
+
+  // Message handling with throttling
+  function handleWSMessage(msg: WSMessage) {
+    // Cancel pending animation frame
+    if (_animationFrameId.value) {
+      cancelAnimationFrame(_animationFrameId.value)
+    }
+
+    // Throttle updates using requestAnimationFrame
+    _animationFrameId.value = requestAnimationFrame(() => {
+      switch (msg.type) {
+        case 'status':
+          status.value = msg.data
+          break
+        case 'health':
+          health.value = msg.data
+          break
+        case 'system':
+          updateSystemMetrics(msg.data)
+          break
+        case 'devices':
+          devices.value = msg.data
+          break
+        case 'drift':
+          drift.value = msg.data
+          break
+        case 'heartbeat':
+          // Just update lastMessageAt (handled by composable)
+          break
+        default:
+          console.warn('Unknown WebSocket message type:', msg.type)
       }
-      
-      // Trim to max length
-      if (this.system.timestamps.length > maxLength) {
-        this.system.timestamps.splice(0, this.system.timestamps.length - maxLength)
-        this.system.cpu.splice(0, this.system.cpu.length - maxLength)
-        this.system.memory.splice(0, this.system.memory.length - maxLength)
-        if (this.system.disk) {
-          this.system.disk.splice(0, this.system.disk.length - maxLength)
-        }
-      }
-    },
-    
-    // Cleanup method
-    cleanup(){
-      this.stopPolling()
-      this.disconnectWS()
-      this.clearReconnectTimer()
-      if (this._animationFrameId) {
-        cancelAnimationFrame(this._animationFrameId)
-        this._animationFrameId = 0
+    })
+  }
+
+  // Update system metrics with bounded ring buffer
+  function updateSystemMetrics(data: any) {
+    const maxLength = 50 // Configurable window size
+
+    if (!system.value) {
+      system.value = {
+        timestamps: [],
+        cpu: [],
+        memory: [],
+        disk: data.disk ? [] : undefined,
+        maxLength
       }
     }
+
+    const timestamp = data.timestamp || new Date().toISOString()
+
+    // Add new data
+    system.value.timestamps.push(timestamp)
+    system.value.cpu.push(data.cpu || 0)
+    system.value.memory.push(data.memory || 0)
+    if (data.disk !== undefined && system.value.disk) {
+      system.value.disk.push(data.disk)
+    }
+
+    // Trim to max length
+    if (system.value.timestamps.length > maxLength) {
+      system.value.timestamps.splice(0, system.value.timestamps.length - maxLength)
+      system.value.cpu.splice(0, system.value.cpu.length - maxLength)
+      system.value.memory.splice(0, system.value.memory.length - maxLength)
+      if (system.value.disk) {
+        system.value.disk.splice(0, system.value.disk.length - maxLength)
+      }
+    }
+  }
+
+  // Cleanup method
+  function cleanup() {
+    stopPolling()
+    disconnectWS()
+    if (_animationFrameId.value) {
+      cancelAnimationFrame(_animationFrameId.value)
+      _animationFrameId.value = 0
+    }
+  }
+
+  return {
+    // State
+    status,
+    health,
+    system,
+    devices,
+    drift,
+
+    // Computed
+    wsConnected,
+    wsReconnectAttempts,
+    lastMessageAt,
+    isRealtimeActive,
+
+    // Actions
+    fetchStatus,
+    fetchHealth,
+    fetchSummaries,
+    startPolling,
+    stopPolling,
+    connectWS,
+    disconnectWS,
+    updateSystemMetrics,
+    cleanup
   }
 })
 

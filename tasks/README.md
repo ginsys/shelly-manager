@@ -26,9 +26,7 @@ _No critical blocking tasks remaining._
 
 ### HIGH (200s) - Post-Commit Required
 
-| # | Task | Status |
-|---|------|--------|
-| 251 | [Reusable WebSocket Client](251-reusable-websocket-client.md) | not-started |
+_All high-priority tasks completed._
 
 ### MEDIUM (300s) - Important Features
 
@@ -85,6 +83,7 @@ Completed tasks are moved to [archive/](archive/).
 | 221 | [Defer/Close Pattern Fix](archive/done-221-defer-close-pattern-fix.md) | 2025-12-16 |
 | 231 | [README Export Documentation](archive/done-231-readme-export-documentation.md) | 2025-12-16 |
 | 241 | [Code Comments Compression](archive/done-241-code-comments-compression.md) | 2025-12-16 |
+| 251 | [Reusable WebSocket Client](archive/done-251-reusable-websocket-client.md) | 2025-12-16 |
 
 ---
 

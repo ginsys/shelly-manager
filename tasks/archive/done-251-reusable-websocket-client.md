@@ -1,7 +1,7 @@
 # Extract Reusable WebSocket Client
 
 **Priority**: HIGH - Foundation Component
-**Status**: not-started
+**Status**: done
 **Effort**: 8 hours (with 1.3x buffer)
 
 ## Context
@@ -15,15 +15,15 @@ This is a **foundation task** that should be completed early as it enables real-
 
 ## Success Criteria
 
-- [ ] Generic `useWebSocket` composable created
-- [ ] Supports typed messages with generics
-- [ ] Automatic reconnection with exponential backoff
-- [ ] Heartbeat/ping-pong support
-- [ ] Connection status tracking
-- [ ] Event-based message handling
-- [ ] Metrics store refactored to use composable
-- [ ] Unit tests for composable (>80% coverage)
-- [ ] Documentation updated in `docs/frontend/frontend-review.md`
+- [x] Generic `useWebSocket` composable created
+- [x] Supports typed messages with generics
+- [x] Automatic reconnection with exponential backoff
+- [x] Heartbeat/ping-pong support
+- [x] Connection status tracking
+- [x] Event-based message handling
+- [x] Metrics store refactored to use composable
+- [x] Unit tests for composable (>80% coverage)
+- [x] Documentation updated in `docs/frontend/frontend-review.md`
 
 ## Implementation
 
