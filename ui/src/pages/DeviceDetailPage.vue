@@ -305,7 +305,7 @@ async function refreshAll() {
 async function handleControl(action: string) {
   try {
     const id = route.params.id as string
-    await controlDevice(id, action)
+    await controlDevice(id, { action: action as any })
     // Refresh status after control command
     setTimeout(() => {
       fetchStatus()
