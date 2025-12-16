@@ -2,9 +2,9 @@
   <main style="padding:16px">
     <div class="page-header">
       <h1>Export Schedules</h1>
-      <router-link class="primary-button" to="/export/backup?schedule=1#create-backup">
+      <button class="primary-button" @click="navigateToScheduleCreation">
         ➕ Create Schedule
-      </router-link>
+      </button>
     </div>
 
     <!-- Schedule Statistics -->
@@ -170,6 +170,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { useScheduleStore } from '@/stores/schedule'
 import { formatInterval } from '@/api/schedule'
 import type { ExportSchedule, ExportScheduleRequest } from '@/api/schedule'
@@ -178,6 +179,7 @@ import PaginationBar from '@/components/PaginationBar.vue'
 import ScheduleFilterBar from '@/components/ScheduleFilterBar.vue'
 import ScheduleForm from '@/components/ScheduleForm.vue'
 
+const router = useRouter()
 const store = useScheduleStore()
 
 // UI state
@@ -306,6 +308,13 @@ function closeModal() {
   showCreateForm.value = false
   editingSchedule.value = null
   store.clearErrors()
+}
+
+/**
+ * Navigate to schedule creation
+ */
+function navigateToScheduleCreation() {
+  router.push('/export/backup?schedule=1#create-backup')
 }
 </script>
 

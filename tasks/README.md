@@ -22,11 +22,7 @@ Within each level:
 
 ### CRITICAL (100s) - Blocks Commit
 
-| # | Task | Status |
-|---|------|--------|
-| 111 | [JSON Export Plugin Tests](111-json-export-plugin-tests.md) | not-started |
-| 121 | [YAML Export Plugin Tests](121-yaml-export-plugin-tests.md) | not-started |
-| 131 | [Router-Link Accessibility Fix](131-router-link-accessibility-fix.md) | not-started |
+_No critical blocking tasks remaining._
 
 ### HIGH (200s) - Post-Commit Required
 
@@ -85,6 +81,9 @@ Completed tasks are moved to [archive/](archive/).
 |---|------|-----------|
 | 101 | [Code Formatting](archive/done-101-code-formatting.md) | 2025-11-30 |
 | 102 | [strings.Title Deprecation](archive/done-102-strings-title-deprecation.md) | 2025-11-30 |
+| 111 | [JSON Export Plugin Tests](archive/done-111-json-export-plugin-tests.md) | 2025-12-16 |
+| 121 | [YAML Export Plugin Tests](archive/done-121-yaml-export-plugin-tests.md) | 2025-12-16 |
+| 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-16 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
 
 ---

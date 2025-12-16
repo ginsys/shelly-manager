@@ -1,7 +1,7 @@
 # YAML Export Plugin Tests
 
 **Priority**: CRITICAL - Blocks Commit
-**Status**: not-started
+**Status**: done
 **Effort**: 45 minutes
 
 ## Context
@@ -10,9 +10,9 @@ The YAML export plugin (`internal/plugins/sync/yamlexport/yaml.go`) lacks test c
 
 ## Success Criteria
 
-- [ ] 4+ passing tests
-- [ ] >60% coverage of yaml.go
-- [ ] No race conditions (`go test -race`)
+- [x] 4+ passing tests
+- [x] >60% coverage of yaml.go
+- [x] No race conditions (`go test -race`)
 
 ## Implementation
 
