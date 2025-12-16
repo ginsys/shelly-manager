@@ -165,7 +165,8 @@
       "WebFetch(domain:docs.github.com)",
       "Bash(do)",
       "WebFetch(domain:codecov.io)",
-      "Bash(./scripts/upgrade-go-version.sh:*)"
+      "Bash(./scripts/upgrade-go-version.sh:*)",
+      "Bash(CGO_ENABLED=0 go build:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
