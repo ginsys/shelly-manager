@@ -11,6 +11,7 @@ This folder contains individual task files for the Shelly Manager project. Each 
 | **300** | 300-399 | MEDIUM - Important Features |
 | **400** | 400-499 | LOW - Enhancement & Polish |
 | **500** | 500-599 | DEFERRED - Future Work |
+| **600** | 600-699 | FEATURE - Configuration Management Redesign |
 
 Within each level:
 - **Tens digit**: Task groups (10, 20, 30...)
@@ -61,6 +62,43 @@ Within each level:
 |---|------|--------|
 | 511 | [Authentication & RBAC Framework](511-authentication-rbac-framework.md) | not-started |
 | 521 | [Multi-tenant Architecture](521-multi-tenant-architecture.md) | not-started |
+
+### FEATURE (600s) - Configuration Management Redesign
+
+Major redesign of the device configuration system to support:
+- Schema-based configuration with form editing (not raw JSON)
+- Hierarchical templates (global → group → device-type → device)
+- Template inheritance with override tracking
+- Apply and verify workflow
+
+| # | Task | Status | Depends On | Effort |
+|---|------|--------|------------|--------|
+| 601 | [Config System - Design & Foundation](601-config-system-foundation.md) | not-started | - | 8h |
+| 602 | [Gen1 Converters (SHPLG-S)](602-gen1-converter-shplg-s.md) | not-started | 601 | 6h |
+| 603 | [Gen1 Converters (SHSW-1, SHSW-PM, SHIX3-1)](603-gen1-converter-remaining.md) | not-started | 602 | 6h |
+| 604 | [Template Merge Engine](604-template-merge-engine.md) | not-started | 601 | 6h |
+| 605 | [Database Schema Migration](605-database-schema-migration.md) | not-started | 601 | 4h |
+| 606 | [Template & Override Service Layer](606-template-override-service.md) | not-started | 604, 605 | 8h |
+| 607 | [Config Apply & Verify Flow](607-config-apply-verify.md) | not-started | 602-603, 606 | 6h |
+| 608 | [REST API Endpoints](608-rest-api-endpoints.md) | not-started | 606, 607 | 6h |
+| 609 | [Cleanup Legacy Template System](609-cleanup-legacy-templates.md) | not-started | 606 | 3h |
+| 610 | [UI: Template Management](610-ui-template-management.md) | not-started | 608 | TBD |
+| 611 | [UI: Device Config Forms](611-ui-device-config-forms.md) | not-started | 608 | TBD |
+
+**Total backend effort**: ~53 hours
+
+**Dependency Graph**:
+```
+601 (Foundation)
+ ├── 602 (SHPLG-S Converter)
+ │    └── 603 (Other Converters)
+ │         └── 607 (Apply & Verify) ──┐
+ ├── 604 (Merge Engine) ──────────────┼── 606 (Service Layer)
+ └── 605 (Database) ──────────────────┘        │
+                                               ├── 608 (API) ──┬── 610 (UI: Templates)
+                                               │               └── 611 (UI: Forms)
+                                               └── 609 (Cleanup)
+```
 
 ---
 
