@@ -340,8 +340,8 @@ func (s *SMAPlugin) Export(ctx context.Context, data *sync.ExportData, config sy
 		return nil, fmt.Errorf("failed to create archive file: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			s.logger.Warn("Failed to close archive file", "error", err)
+		if closeErr := file.Close(); closeErr != nil {
+			s.logger.Warn("Failed to close archive file", "error", closeErr)
 		}
 	}()
 
@@ -351,23 +351,23 @@ func (s *SMAPlugin) Export(ctx context.Context, data *sync.ExportData, config sy
 		return nil, fmt.Errorf("failed to create gzip writer: %w", err)
 	}
 	defer func() {
-		if err := gzipWriter.Close(); err != nil {
-			s.logger.Warn("Failed to close gzip writer", "error", err)
+		if closeErr := gzipWriter.Close(); closeErr != nil {
+			s.logger.Warn("Failed to close gzip writer", "error", closeErr)
 		}
 	}()
 
 	// Write compressed data
-	if _, err := gzipWriter.Write(jsonData); err != nil {
-		return nil, fmt.Errorf("failed to write compressed data: %w", err)
+	if _, writeErr := gzipWriter.Write(jsonData); writeErr != nil {
+		return nil, fmt.Errorf("failed to write compressed data: %w", writeErr)
 	}
 
 	// Close gzip writer to ensure all data is written
-	if err := gzipWriter.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
+	if closeErr := gzipWriter.Close(); closeErr != nil {
+		return nil, fmt.Errorf("failed to close gzip writer: %w", closeErr)
 	}
 
-	if err := file.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close archive file: %w", err)
+	if closeErr := file.Close(); closeErr != nil {
+		return nil, fmt.Errorf("failed to close archive file: %w", closeErr)
 	}
 
 	// Get final file info

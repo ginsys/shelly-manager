@@ -49,10 +49,7 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	}
 	auth := r.Header.Get("Authorization")
 	xKey := r.Header.Get("X-API-Key")
-	ok := false
-	if len(auth) > 7 && auth[:7] == "Bearer " && auth[7:] == h.adminAPIKey {
-		ok = true
-	}
+	ok := len(auth) > 7 && auth[:7] == "Bearer " && auth[7:] == h.adminAPIKey
 	if !ok && xKey != "" && xKey == h.adminAPIKey {
 		ok = true
 	}

@@ -39,8 +39,8 @@ func (s *SMAPlugin) ImportFromFile(ctx context.Context, filePath string, config 
 		return nil, fmt.Errorf("failed to open SMA file: %w", err)
 	}
 	defer func() {
-		if err := file.Close(); err != nil {
-			s.logger.Warn("Failed to close SMA file", "error", err)
+		if closeErr := file.Close(); closeErr != nil {
+			s.logger.Warn("Failed to close SMA file", "error", closeErr)
 		}
 	}()
 
@@ -50,8 +50,8 @@ func (s *SMAPlugin) ImportFromFile(ctx context.Context, filePath string, config 
 		return nil, fmt.Errorf("failed to create gzip reader (file may not be compressed): %w", err)
 	}
 	defer func() {
-		if err := gzipReader.Close(); err != nil {
-			s.logger.Warn("Failed to close gzip reader", "error", err)
+		if closeErr := gzipReader.Close(); closeErr != nil {
+			s.logger.Warn("Failed to close gzip reader", "error", closeErr)
 		}
 	}()
 

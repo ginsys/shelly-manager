@@ -12,7 +12,7 @@ func TestValidatePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a subdirectory
 	subDir := filepath.Join(tmpDir, "subdir")
@@ -141,17 +141,17 @@ func TestValidatePath_EdgeCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Test case: base directory with similar prefix
 	// Create /tmp/test and /tmp/test_backup
 	testDir := filepath.Join(tmpDir, "exports")
 	testDirBackup := filepath.Join(tmpDir, "exports_backup")
-	if err := os.MkdirAll(testDir, 0755); err != nil {
-		t.Fatalf("failed to create test directory: %v", err)
+	if mkdirErr := os.MkdirAll(testDir, 0755); mkdirErr != nil {
+		t.Fatalf("failed to create test directory: %v", mkdirErr)
 	}
-	if err := os.MkdirAll(testDirBackup, 0755); err != nil {
-		t.Fatalf("failed to create test backup directory: %v", err)
+	if mkdirErr := os.MkdirAll(testDirBackup, 0755); mkdirErr != nil {
+		t.Fatalf("failed to create test backup directory: %v", mkdirErr)
 	}
 
 	// Try to escape to exports_backup from exports base
@@ -167,28 +167,28 @@ func TestValidatePathWithSymlinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create base directory structure
 	baseDir := filepath.Join(tmpDir, "base")
 	outsideDir := filepath.Join(tmpDir, "outside")
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		t.Fatalf("failed to create base directory: %v", err)
+	if mkdirErr := os.MkdirAll(baseDir, 0755); mkdirErr != nil {
+		t.Fatalf("failed to create base directory: %v", mkdirErr)
 	}
-	if err := os.MkdirAll(outsideDir, 0755); err != nil {
-		t.Fatalf("failed to create outside directory: %v", err)
+	if mkdirErr := os.MkdirAll(outsideDir, 0755); mkdirErr != nil {
+		t.Fatalf("failed to create outside directory: %v", mkdirErr)
 	}
 
 	// Create a file outside the base directory
 	outsideFile := filepath.Join(outsideDir, "secret.txt")
-	if err := os.WriteFile(outsideFile, []byte("secret"), 0644); err != nil {
-		t.Fatalf("failed to create outside file: %v", err)
+	if writeErr := os.WriteFile(outsideFile, []byte("secret"), 0644); writeErr != nil {
+		t.Fatalf("failed to create outside file: %v", writeErr)
 	}
 
 	// Create a symlink inside base pointing outside
 	symlinkPath := filepath.Join(baseDir, "link")
-	if err := os.Symlink(outsideDir, symlinkPath); err != nil {
-		t.Skipf("symlinks not supported: %v", err)
+	if symlinkErr := os.Symlink(outsideDir, symlinkPath); symlinkErr != nil {
+		t.Skipf("symlinks not supported: %v", symlinkErr)
 	}
 
 	// ValidatePathWithSymlinks should block access through symlink
@@ -206,7 +206,7 @@ func TestIsPathSafe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	tests := []struct {
 		name     string

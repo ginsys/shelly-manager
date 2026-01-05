@@ -104,7 +104,7 @@ func TestWriteGzip(t *testing.T) {
 			}
 
 			// Verify file exists
-			if _, err := os.Stat(tmpFile); os.IsNotExist(err) {
+			if _, statErr := os.Stat(tmpFile); os.IsNotExist(statErr) {
 				t.Errorf("Output file not created: %s", tmpFile)
 				return
 			}
@@ -114,13 +114,13 @@ func TestWriteGzip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to open output file: %v", err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			gz, err := gzip.NewReader(f)
 			if err != nil {
 				t.Fatalf("Failed to create gzip reader: %v", err)
 			}
-			defer gz.Close()
+			defer func() { _ = gz.Close() }()
 
 			decompressed, err := io.ReadAll(gz)
 			if err != nil {
@@ -195,7 +195,7 @@ func TestWriteZipSingle(t *testing.T) {
 			}
 
 			// Verify file exists
-			if _, err := os.Stat(tmpFile); os.IsNotExist(err) {
+			if _, statErr := os.Stat(tmpFile); os.IsNotExist(statErr) {
 				t.Errorf("Output file not created: %s", tmpFile)
 				return
 			}
@@ -205,7 +205,7 @@ func TestWriteZipSingle(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to open zip: %v", err)
 			}
-			defer zr.Close()
+			defer func() { _ = zr.Close() }()
 
 			if len(zr.File) != 1 {
 				t.Fatalf("Expected 1 file in zip, got %d", len(zr.File))
@@ -220,7 +220,7 @@ func TestWriteZipSingle(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to open zip entry: %v", err)
 			}
-			defer rc.Close()
+			defer func() { _ = rc.Close() }()
 
 			extracted, err := io.ReadAll(rc)
 			if err != nil {

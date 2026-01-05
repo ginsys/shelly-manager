@@ -25,10 +25,10 @@ func TestRotateAdminKey_AuthAndPropagation(t *testing.T) {
 	// authentication and key propagation work correctly with full middleware.
 	// Temporarily unset test mode so SetupRoutesWithSecurity returns production router.
 	origTestMode := os.Getenv("SHELLY_SECURITY_VALIDATION_TEST_MODE")
-	os.Unsetenv("SHELLY_SECURITY_VALIDATION_TEST_MODE")
+	_ = os.Unsetenv("SHELLY_SECURITY_VALIDATION_TEST_MODE")
 	defer func() {
 		if origTestMode != "" {
-			os.Setenv("SHELLY_SECURITY_VALIDATION_TEST_MODE", origTestMode)
+			_ = os.Setenv("SHELLY_SECURITY_VALIDATION_TEST_MODE", origTestMode)
 		}
 	}()
 

@@ -204,11 +204,11 @@ func TestSMAPlugin_Export(t *testing.T) {
 	// Verify file is compressed and contains valid JSON
 	file, err := os.Open(result.OutputPath)
 	require.NoError(t, err)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	gzipReader, err := gzip.NewReader(file)
 	require.NoError(t, err)
-	defer gzipReader.Close()
+	defer func() { _ = gzipReader.Close() }()
 
 	jsonData, err := io.ReadAll(gzipReader)
 	require.NoError(t, err)
@@ -586,9 +586,10 @@ func TestSMAPlugin_Integration_ExportImport(t *testing.T) {
 	// Verify changes contain expected resources
 	var deviceChange, templateChange *sync.ImportChange
 	for _, change := range importResult.Changes {
-		if change.Resource == "device" {
+		switch change.Resource {
+		case "device":
 			deviceChange = &change
-		} else if change.Resource == "template" {
+		case "template":
 			templateChange = &change
 		}
 	}

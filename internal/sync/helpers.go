@@ -25,7 +25,7 @@ func FileSHA256(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -49,10 +49,10 @@ func WriteGzip(path string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gz := gzip.NewWriter(f)
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	if _, err := gz.Write(data); err != nil {
 		return fmt.Errorf("failed to write gzip: %w", err)
@@ -77,10 +77,10 @@ func WriteZipSingle(path string, entryName string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	zw := zip.NewWriter(f)
-	defer zw.Close()
+	defer func() { _ = zw.Close() }()
 
 	hdr := &zip.FileHeader{Name: entryName, Method: zip.Deflate}
 	w, err := zw.CreateHeader(hdr)
