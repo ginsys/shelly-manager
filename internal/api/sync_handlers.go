@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/sync"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // SyncHandlers provides HTTP handlers for sync operations (export/import)

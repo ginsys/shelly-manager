@@ -4,8 +4,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 func TestHealthEndpointAuth(t *testing.T) {
