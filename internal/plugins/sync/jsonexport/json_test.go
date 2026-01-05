@@ -171,7 +171,7 @@ func TestPlugin_Export_Success(t *testing.T) {
 	}
 
 	// Verify file exists
-	if _, err := os.Stat(result.OutputPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(result.OutputPath); os.IsNotExist(statErr) {
 		t.Errorf("Output file not created: %s", result.OutputPath)
 	}
 

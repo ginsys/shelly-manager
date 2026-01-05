@@ -87,7 +87,7 @@ func TestMethodNotAllowed_Returns404(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
@@ -132,7 +132,7 @@ func TestExportHistoryPaginationMeta(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var wrap map[string]any
@@ -190,7 +190,7 @@ func TestImportHistoryPaginationMeta(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var wrap map[string]any
@@ -241,7 +241,7 @@ func TestExportHistoryFilterPluginAndSuccess(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var wrap map[string]any
@@ -285,7 +285,7 @@ func TestImportHistoryFilterPluginAndSuccess(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var wrap map[string]any
@@ -329,7 +329,7 @@ func TestExportHistoryPaginationBoundsAndUnknownPlugin(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var wrap map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&wrap))
@@ -344,7 +344,7 @@ func TestExportHistoryPaginationBoundsAndUnknownPlugin(t *testing.T) {
 	req2.Header.Set("User-Agent", "TestAgent/1.0")
 	resp2, err := http.DefaultClient.Do(req2)
 	require.NoError(t, err)
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	wrap = map[string]any{}
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&wrap))
@@ -382,7 +382,7 @@ func TestImportHistoryInvalidSuccessAndAuthRequired(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var wrap map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&wrap))
@@ -396,7 +396,7 @@ func TestImportHistoryInvalidSuccessAndAuthRequired(t *testing.T) {
 	req2.Header.Set("User-Agent", "TestAgent/1.0")
 	resp2, err := http.DefaultClient.Do(req2)
 	require.NoError(t, err)
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	require.Equal(t, http.StatusUnauthorized, resp2.StatusCode)
 }
 
@@ -464,7 +464,7 @@ func TestExportHistoryNonIntegerPageDefaults(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var wrap map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&wrap))
@@ -499,7 +499,7 @@ func TestImportHistoryNonIntegerPageDefaults(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var wrap map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&wrap))
@@ -546,7 +546,7 @@ func TestExportImportStatisticsReflectTotals(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var s map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&s))
@@ -564,7 +564,7 @@ func TestExportImportStatisticsReflectTotals(t *testing.T) {
 	req2.Header.Set("User-Agent", "TestAgent/1.0")
 	resp2, err := http.DefaultClient.Do(req2)
 	require.NoError(t, err)
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	s = map[string]any{}
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&s))
@@ -621,7 +621,7 @@ func TestImportHistoryUnknownPluginAndCaseSensitivity(t *testing.T) {
 	req.Header.Set("User-Agent", "TestAgent/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var wrap map[string]any
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&wrap))
@@ -634,7 +634,7 @@ func TestImportHistoryUnknownPluginAndCaseSensitivity(t *testing.T) {
 	req2.Header.Set("User-Agent", "TestAgent/1.0")
 	resp2, err := http.DefaultClient.Do(req2)
 	require.NoError(t, err)
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	wrap = map[string]any{}
 	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&wrap))
