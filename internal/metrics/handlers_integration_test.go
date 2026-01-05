@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestSendTestAlert_NotifiesWhenConfigured(t *testing.T) {

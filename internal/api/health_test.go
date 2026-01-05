@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gorilla/mux"
+
 	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/testutil"
-	"github.com/gorilla/mux"
 )
 
 func TestHealthz_OK(t *testing.T) {
