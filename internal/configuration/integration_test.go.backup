@@ -61,20 +61,20 @@ func TestConfigurationService_TypedConfigurationWorkflow(t *testing.T) {
 	// Test 1: Create typed configuration
 	typedConfig := &TypedConfiguration{
 		WiFi: &WiFiConfiguration{
-			Enable:   BoolPtr(true),
-			SSID:     StringPtr("TestNetwork"),
-			Password: StringPtr("password123"),
-			IPv4Mode: StringPtr("dhcp"),
+			Enable:   true,
+			SSID:     "TestNetwork",
+			Password: "password123",
+			IPv4Mode: "dhcp",
 		},
 		MQTT: &MQTTConfiguration{
-			Enable: BoolPtr(true),
-			Server: StringPtr("mqtt.example.com:1883"),
-			User:   StringPtr("testuser"),
+			Enable: true,
+			Server: "mqtt.example.com:1883",
+			User:   "testuser",
 		},
 		Auth: &AuthConfiguration{
-			Enable:   BoolPtr(true),
-			Username: StringPtr("admin"),
-			Password: StringPtr("securepassword"),
+			Enable:   true,
+			Username: "admin",
+			Password: "securepassword",
 		},
 	}
 
@@ -94,10 +94,10 @@ func TestConfigurationService_TypedConfigurationWorkflow(t *testing.T) {
 	if retrievedConfig.WiFi == nil {
 		t.Errorf("WiFi configuration is nil")
 	} else {
-		if StringVal(retrievedConfig.WiFi.SSID, "") != "TestNetwork" {
-			t.Errorf("Expected SSID 'TestNetwork', got %q", StringVal(retrievedConfig.WiFi.SSID, ""))
+		if retrievedConfig.WiFi.SSID != "TestNetwork" {
+			t.Errorf("Expected SSID 'TestNetwork', got %q", retrievedConfig.WiFi.SSID)
 		}
-		if !BoolVal(retrievedConfig.WiFi.Enable, false) {
+		if !retrievedConfig.WiFi.Enable {
 			t.Errorf("Expected WiFi to be enabled")
 		}
 	}
@@ -105,8 +105,8 @@ func TestConfigurationService_TypedConfigurationWorkflow(t *testing.T) {
 	if retrievedConfig.MQTT == nil {
 		t.Errorf("MQTT configuration is nil")
 	} else {
-		if StringVal(retrievedConfig.MQTT.Server, "") != "mqtt.example.com:1883" {
-			t.Errorf("Expected MQTT server 'mqtt.example.com:1883', got %q", StringVal(retrievedConfig.MQTT.Server, ""))
+		if retrievedConfig.MQTT.Server != "mqtt.example.com:1883" {
+			t.Errorf("Expected MQTT server 'mqtt.example.com:1883', got %q", retrievedConfig.MQTT.Server)
 		}
 	}
 
@@ -139,13 +139,11 @@ func TestConfigurationService_TypedConfigurationWorkflow(t *testing.T) {
 	}
 
 	// Verify round-trip conversion
-	if StringVal(convertedBack.WiFi.SSID, "") != StringVal(typedConfig.WiFi.SSID, "") {
-		t.Errorf("Round-trip conversion failed for WiFi SSID: got %q, want %q",
-			StringVal(convertedBack.WiFi.SSID, ""), StringVal(typedConfig.WiFi.SSID, ""))
+	if convertedBack.WiFi.SSID != typedConfig.WiFi.SSID {
+		t.Errorf("Round-trip conversion failed for WiFi SSID")
 	}
-	if StringVal(convertedBack.MQTT.Server, "") != StringVal(typedConfig.MQTT.Server, "") {
-		t.Errorf("Round-trip conversion failed for MQTT server: got %q, want %q",
-			StringVal(convertedBack.MQTT.Server, ""), StringVal(typedConfig.MQTT.Server, ""))
+	if convertedBack.MQTT.Server != typedConfig.MQTT.Server {
+		t.Errorf("Round-trip conversion failed for MQTT server")
 	}
 }
 
@@ -256,9 +254,9 @@ func TestConfigurationService_ValidationWorkflow(t *testing.T) {
 			name: "Basic valid configuration",
 			config: &TypedConfiguration{
 				WiFi: &WiFiConfiguration{
-					Enable:   BoolPtr(true),
-					SSID:     StringPtr("TestNetwork"),
-					Password: StringPtr("password123"),
+					Enable:   true,
+					SSID:     "TestNetwork",
+					Password: "password123",
 				},
 			},
 			validationLevel: ValidationLevelBasic,
@@ -271,14 +269,14 @@ func TestConfigurationService_ValidationWorkflow(t *testing.T) {
 			name: "Configuration with warnings",
 			config: &TypedConfiguration{
 				WiFi: &WiFiConfiguration{
-					Enable:   BoolPtr(true),
-					SSID:     StringPtr("ab"),  // Too short
-					Password: StringPtr("123"), // Too short
+					Enable:   true,
+					SSID:     "ab",  // Too short
+					Password: "123", // Too short
 				},
 				Auth: &AuthConfiguration{
-					Enable:   BoolPtr(true),
-					Username: StringPtr("admin"), // Common username
-					Password: StringPtr("admin"), // Default password
+					Enable:   true,
+					Username: "admin", // Common username
+					Password: "admin", // Default password
 				},
 			},
 			validationLevel: ValidationLevelBasic,
@@ -292,14 +290,14 @@ func TestConfigurationService_ValidationWorkflow(t *testing.T) {
 			name: "Strict validation rejects weak passwords",
 			config: &TypedConfiguration{
 				WiFi: &WiFiConfiguration{
-					Enable:   BoolPtr(true),
-					SSID:     StringPtr("TestNetwork"),
-					Password: StringPtr("123"),
+					Enable:   true,
+					SSID:     "TestNetwork",
+					Password: "123",
 				},
 				Auth: &AuthConfiguration{
-					Enable:   BoolPtr(true),
-					Username: StringPtr("admin"),
-					Password: StringPtr("admin"),
+					Enable:   true,
+					Username: "admin",
+					Password: "admin",
 				},
 			},
 			validationLevel: ValidationLevelStrict,
@@ -314,17 +312,17 @@ func TestConfigurationService_ValidationWorkflow(t *testing.T) {
 			name: "Production validation warnings",
 			config: &TypedConfiguration{
 				WiFi: &WiFiConfiguration{
-					Enable:   BoolPtr(true),
-					SSID:     StringPtr("TestNetwork"),
-					Password: StringPtr("password123"),
+					Enable:   true,
+					SSID:     "TestNetwork",
+					Password: "password123",
 				},
 				MQTT: &MQTTConfiguration{
-					Enable: BoolPtr(true),
-					Server: StringPtr("localhost:1883"),
+					Enable: true,
+					Server: "localhost:1883",
 				},
 				Cloud: &CloudConfiguration{
-					Enable: BoolPtr(true),
-					Server: StringPtr("https://cloud.example.com"),
+					Enable: true,
+					Server: "https://cloud.example.com",
 				},
 				// No auth configuration = disabled
 			},
@@ -371,22 +369,22 @@ func TestConfigurationService_BatchValidation(t *testing.T) {
 	configs := []*TypedConfiguration{
 		{
 			WiFi: &WiFiConfiguration{
-				Enable:   BoolPtr(true),
-				SSID:     StringPtr("ValidNetwork"),
-				Password: StringPtr("password123"),
+				Enable:   true,
+				SSID:     "ValidNetwork",
+				Password: "password123",
 			},
 		},
 		{
 			WiFi: &WiFiConfiguration{
-				Enable: BoolPtr(true),
-				SSID:   StringPtr(""), // Invalid - empty SSID
+				Enable: true,
+				SSID:   "", // Invalid - empty SSID
 			},
 		},
 		{
 			MQTT: &MQTTConfiguration{
-				Enable: BoolPtr(true),
-				Server: StringPtr("mqtt.example.com:1883"),
-				Port:   IntPtr(1883),
+				Enable: true,
+				Server: "mqtt.example.com:1883",
+				Port:   1883,
 			},
 		},
 	}
@@ -511,18 +509,18 @@ func TestConfigurationService_RawToTypedConversion(t *testing.T) {
 				if tt.expectedWiFiSSID != "" {
 					if typedConfig.WiFi == nil {
 						t.Errorf("WiFi configuration is nil")
-					} else if StringVal(typedConfig.WiFi.SSID, "") != tt.expectedWiFiSSID {
+					} else if typedConfig.WiFi.SSID != tt.expectedWiFiSSID {
 						t.Errorf("Expected WiFi SSID %q, got %q",
-							tt.expectedWiFiSSID, StringVal(typedConfig.WiFi.SSID, ""))
+							tt.expectedWiFiSSID, typedConfig.WiFi.SSID)
 					}
 				}
 
 				if tt.expectedMQTTServer != "" {
 					if typedConfig.MQTT == nil {
 						t.Errorf("MQTT configuration is nil")
-					} else if StringVal(typedConfig.MQTT.Server, "") != tt.expectedMQTTServer {
+					} else if typedConfig.MQTT.Server != tt.expectedMQTTServer {
 						t.Errorf("Expected MQTT server %q, got %q",
-							tt.expectedMQTTServer, StringVal(typedConfig.MQTT.Server, ""))
+							tt.expectedMQTTServer, typedConfig.MQTT.Server)
 					}
 				}
 			} else {
@@ -553,9 +551,9 @@ func TestConfigurationService_ConfigurationHistory(t *testing.T) {
 	// Create initial configuration
 	config1 := &TypedConfiguration{
 		WiFi: &WiFiConfiguration{
-			Enable:   BoolPtr(true),
-			SSID:     StringPtr("Network1"),
-			Password: StringPtr("password1"),
+			Enable:   true,
+			SSID:     "Network1",
+			Password: "password1",
 		},
 	}
 
@@ -567,13 +565,13 @@ func TestConfigurationService_ConfigurationHistory(t *testing.T) {
 	// Update configuration
 	config2 := &TypedConfiguration{
 		WiFi: &WiFiConfiguration{
-			Enable:   BoolPtr(true),
-			SSID:     StringPtr("Network2"),
-			Password: StringPtr("password2"),
+			Enable:   true,
+			SSID:     "Network2",
+			Password: "password2",
 		},
 		MQTT: &MQTTConfiguration{
-			Enable: BoolPtr(true),
-			Server: StringPtr("mqtt.example.com"),
+			Enable: true,
+			Server: "mqtt.example.com",
 		},
 	}
 
@@ -596,8 +594,8 @@ func TestConfigurationService_ConfigurationHistory(t *testing.T) {
 		t.Fatalf("Failed to get current configuration: %v", err)
 	}
 
-	if StringVal(currentConfig.WiFi.SSID, "") != "Network2" {
-		t.Errorf("Expected current SSID 'Network2', got %q", StringVal(currentConfig.WiFi.SSID, ""))
+	if currentConfig.WiFi.SSID != "Network2" {
+		t.Errorf("Expected current SSID 'Network2', got %q", currentConfig.WiFi.SSID)
 	}
 
 	if currentConfig.MQTT == nil {
@@ -617,8 +615,8 @@ func TestConfigurationService_ErrorHandling(t *testing.T) {
 	// Test updating configuration with invalid data
 	invalidConfig := &TypedConfiguration{
 		WiFi: &WiFiConfiguration{
-			Enable: BoolPtr(true),
-			SSID:   StringPtr(""), // Invalid - empty SSID when enabled
+			Enable: true,
+			SSID:   "", // Invalid - empty SSID when enabled
 		},
 	}
 
@@ -664,14 +662,14 @@ func TestConfigurationService_PerformanceStress(t *testing.T) {
 	// Create configurations for all devices
 	config := &TypedConfiguration{
 		WiFi: &WiFiConfiguration{
-			Enable:   BoolPtr(true),
-			SSID:     StringPtr("TestNetwork"),
-			Password: StringPtr("password123"),
+			Enable:   true,
+			SSID:     "TestNetwork",
+			Password: "password123",
 		},
 		MQTT: &MQTTConfiguration{
-			Enable: BoolPtr(true),
-			Server: StringPtr("mqtt.example.com"),
-			Port:   IntPtr(1883),
+			Enable: true,
+			Server: "mqtt.example.com",
+			Port:   1883,
 		},
 	}
 

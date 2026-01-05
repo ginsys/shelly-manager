@@ -351,43 +351,42 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 	normalized := &NormalizedConfig{}
 
 	if typedConfig.WiFi != nil {
-		normalized.WiFi.Enabled = typedConfig.WiFi.Enable
-		normalized.WiFi.SSID = typedConfig.WiFi.SSID
-		normalized.WiFi.DHCP = typedConfig.WiFi.IPv4Mode == "dhcp"
+		normalized.WiFi.Enabled = configuration.BoolVal(typedConfig.WiFi.Enable, false)
+		normalized.WiFi.SSID = configuration.StringVal(typedConfig.WiFi.SSID, "")
+		normalized.WiFi.DHCP = configuration.StringVal(typedConfig.WiFi.IPv4Mode, "") == "dhcp"
 
 		if typedConfig.WiFi.AccessPoint != nil {
-			normalized.WiFi.AP.Enabled = typedConfig.WiFi.AccessPoint.Enable
-			normalized.WiFi.AP.SSID = typedConfig.WiFi.AccessPoint.SSID
+			normalized.WiFi.AP.Enabled = configuration.BoolVal(typedConfig.WiFi.AccessPoint.Enable, false)
+			normalized.WiFi.AP.SSID = configuration.StringVal(typedConfig.WiFi.AccessPoint.SSID, "")
 		}
 	}
 
 	if typedConfig.MQTT != nil {
-		normalized.MQTT.Enabled = typedConfig.MQTT.Enable
-		normalized.MQTT.Server = typedConfig.MQTT.Server
-		normalized.MQTT.User = typedConfig.MQTT.User
-		normalized.MQTT.KeepAlive = typedConfig.MQTT.KeepAlive
+		normalized.MQTT.Enabled = configuration.BoolVal(typedConfig.MQTT.Enable, false)
+		normalized.MQTT.Server = configuration.StringVal(typedConfig.MQTT.Server, "")
+		normalized.MQTT.User = configuration.StringVal(typedConfig.MQTT.User, "")
+		normalized.MQTT.KeepAlive = configuration.IntVal(typedConfig.MQTT.KeepAlive, 0)
 	}
 
 	if typedConfig.Auth != nil {
-		normalized.Auth.Enabled = typedConfig.Auth.Enable
-		normalized.Auth.User = typedConfig.Auth.Username
+		normalized.Auth.Enabled = configuration.BoolVal(typedConfig.Auth.Enable, false)
+		normalized.Auth.User = configuration.StringVal(typedConfig.Auth.Username, "")
 	}
 
 	if typedConfig.System != nil && typedConfig.System.Device != nil {
-		normalized.Device.Name = typedConfig.System.Device.Name
-		normalized.Device.Hostname = typedConfig.System.Device.Hostname
-		normalized.Device.MAC = typedConfig.System.Device.MAC
-		normalized.Time.Timezone = typedConfig.System.Device.Timezone
+		normalized.Device.Name = configuration.StringVal(typedConfig.System.Device.Name, "")
+		normalized.Device.Hostname = configuration.StringVal(typedConfig.System.Device.Hostname, "")
+		normalized.Device.MAC = configuration.StringVal(typedConfig.System.Device.MAC, "")
+		normalized.Time.Timezone = configuration.StringVal(typedConfig.System.Device.Timezone, "")
 
-		// Add discoverable from system device settings
-		if typedConfig.System.Device.Discoverable {
-			discoverable := typedConfig.System.Device.Discoverable
+		if typedConfig.System.Device.Discoverable != nil && *typedConfig.System.Device.Discoverable {
+			discoverable := *typedConfig.System.Device.Discoverable
 			normalized.Raw.Discoverable = &discoverable
 		}
 
 		if typedConfig.System.Location != nil {
-			normalized.Location.Lat = typedConfig.System.Location.Latitude
-			normalized.Location.Lng = typedConfig.System.Location.Longitude
+			normalized.Location.Lat = configuration.Float64Val(typedConfig.System.Location.Latitude, 0)
+			normalized.Location.Lng = configuration.Float64Val(typedConfig.System.Location.Longitude, 0)
 		}
 
 		if typedConfig.System.SNTP != nil {
@@ -396,20 +395,21 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 	}
 
 	if typedConfig.Cloud != nil {
-		normalized.Cloud.Enabled = typedConfig.Cloud.Enable
+		normalized.Cloud.Enabled = configuration.BoolVal(typedConfig.Cloud.Enable, false)
 	}
 
 	if typedConfig.CoIoT != nil {
 		normalized.CoIoT.Enabled = typedConfig.CoIoT.Enabled
 	}
 
-	// Convert Relay configuration
 	if typedConfig.Relay != nil {
 		normalized.Relay = &NormalizedRelay{}
 
-		if typedConfig.Relay.DefaultState != "" {
-			normalized.Relay.DefaultState = typedConfig.Relay.DefaultState
+		defaultState := configuration.StringVal(typedConfig.Relay.DefaultState, "")
+		if defaultState != "" {
+			normalized.Relay.DefaultState = defaultState
 		}
+
 		if typedConfig.Relay.AutoOn != nil {
 			normalized.Relay.AutoOn = *typedConfig.Relay.AutoOn
 		}
@@ -417,11 +417,12 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 			normalized.Relay.AutoOff = *typedConfig.Relay.AutoOff
 		}
 
-		// Use first relay for state (if relays exist)
 		if len(typedConfig.Relay.Relays) > 0 {
 			firstRelay := typedConfig.Relay.Relays[0]
-			if firstRelay.DefaultState != "" {
-				normalized.Relay.DefaultState = firstRelay.DefaultState
+
+			relayDefaultState := configuration.StringVal(firstRelay.DefaultState, "")
+			if relayDefaultState != "" {
+				normalized.Relay.DefaultState = relayDefaultState
 			}
 			if firstRelay.AutoOn != nil {
 				normalized.Relay.AutoOn = *firstRelay.AutoOn
@@ -431,8 +432,7 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 			}
 		}
 
-		// Default state from actual relay state is handled separately
-		normalized.Relay.State = "off" // Default, actual state comes from device status
+		normalized.Relay.State = "off"
 	}
 
 	// Extract raw fields if available

@@ -900,23 +900,23 @@ func (h *Handler) convertWiFiConfig(data map[string]interface{}) (*configuration
 			wifi.Password = configuration.StringPtr(pass)
 		}
 		if ipv4mode, ok := data["ipv4mode"].(string); ok {
-			wifi.IPv4Mode = configuration.StringPtr(ipv4mode)
+			wifi.IPv4Mode = ipv4mode
 		}
 
 		// Convert static IP if present
 		if staticData, ok := data["ip"].(map[string]interface{}); ok {
 			static := &configuration.StaticIPConfig{}
 			if ip, ok := staticData["ip"].(string); ok {
-				static.IP = configuration.StringPtr(ip)
+				static.IP = ip
 			}
 			if netmask, ok := staticData["netmask"].(string); ok {
-				static.Netmask = configuration.StringPtr(netmask)
+				static.Netmask = netmask
 			}
 			if gw, ok := staticData["gw"].(string); ok {
-				static.Gateway = configuration.StringPtr(gw)
+				static.Gateway = gw
 			}
 			if dns, ok := staticData["nameserver"].(string); ok {
-				static.Nameserver = configuration.StringPtr(dns)
+				static.Nameserver = dns
 			}
 			wifi.StaticIP = static
 		}
@@ -928,18 +928,18 @@ func (h *Handler) convertWiFiConfig(data map[string]interface{}) (*configuration
 
 		// Try both "enable" and "enabled" (Shelly devices use "enabled")
 		if enable, ok := apData["enable"].(bool); ok {
-			ap.Enable = configuration.BoolPtr(enable)
+			ap.Enable = enable
 		} else if enabled, ok := apData["enabled"].(bool); ok {
-			ap.Enable = configuration.BoolPtr(enabled)
+			ap.Enable = enabled
 		}
 		if ssid, ok := apData["ssid"].(string); ok {
-			ap.SSID = configuration.StringPtr(ssid)
+			ap.SSID = ssid
 		}
 		if pass, ok := apData["pass"].(string); ok {
-			ap.Password = configuration.StringPtr(pass)
+			ap.Password = pass
 		}
 		if key, ok := apData["key"].(string); ok {
-			ap.Key = configuration.StringPtr(key)
+			ap.Key = key
 		}
 
 		wifi.AccessPoint = ap
@@ -953,31 +953,31 @@ func (h *Handler) convertMQTTConfig(data map[string]interface{}) (*configuration
 	var warnings []string
 
 	if enable, ok := data["enable"].(bool); ok {
-		mqtt.Enable = configuration.BoolPtr(enable)
+		mqtt.Enable = enable
 	}
 
 	if server, ok := data["server"].(string); ok {
-		mqtt.Server = configuration.StringPtr(server)
+		mqtt.Server = server
 	}
 
 	if port, ok := data["port"].(float64); ok {
-		mqtt.Port = configuration.IntPtr(int(port))
+		mqtt.Port = int(port)
 	}
 
 	if user, ok := data["user"].(string); ok {
-		mqtt.User = configuration.StringPtr(user)
+		mqtt.User = user
 	}
 
 	if pass, ok := data["pass"].(string); ok {
-		mqtt.Password = configuration.StringPtr(pass)
+		mqtt.Password = pass
 	}
 
 	if clientID, ok := data["id"].(string); ok {
-		mqtt.ClientID = configuration.StringPtr(clientID)
+		mqtt.ClientID = clientID
 	}
 
 	if keepAlive, ok := data["keep_alive"].(float64); ok {
-		mqtt.KeepAlive = configuration.IntPtr(int(keepAlive))
+		mqtt.KeepAlive = int(keepAlive)
 	}
 
 	return mqtt, warnings
@@ -989,24 +989,24 @@ func (h *Handler) convertAuthConfig(data map[string]interface{}) (*configuration
 
 	// Handle both "enable" and "enabled" (Shelly devices use "enabled")
 	if enable, ok := data["enable"].(bool); ok {
-		auth.Enable = configuration.BoolPtr(enable)
+		auth.Enable = enable
 	} else if enabled, ok := data["enabled"].(bool); ok {
-		auth.Enable = configuration.BoolPtr(enabled)
+		auth.Enable = enabled
 	}
 
 	// Handle both "user" and "username" (Shelly devices use "username")
 	if user, ok := data["user"].(string); ok {
-		auth.Username = configuration.StringPtr(user)
+		auth.Username = user
 	} else if username, ok := data["username"].(string); ok {
-		auth.Username = configuration.StringPtr(username)
+		auth.Username = username
 	}
 
 	if pass, ok := data["pass"].(string); ok {
-		auth.Password = configuration.StringPtr(pass)
+		auth.Password = pass
 	}
 
 	if realm, ok := data["realm"].(string); ok {
-		auth.Realm = configuration.StringPtr(realm)
+		auth.Realm = realm
 	}
 
 	return auth, warnings
@@ -1022,44 +1022,44 @@ func (h *Handler) convertSystemConfig(data map[string]interface{}) (*configurati
 
 	// Device name from root level "name" field
 	if name, ok := data["name"].(string); ok {
-		device.Name = configuration.StringPtr(name)
+		device.Name = name
 		hasDeviceData = true
 	}
 
 	// Device info from "device" object
 	if deviceData, ok := data["device"].(map[string]interface{}); ok {
 		if hostname, ok := deviceData["hostname"].(string); ok {
-			device.Hostname = configuration.StringPtr(hostname)
+			device.Hostname = hostname
 			hasDeviceData = true
 		}
 		if mac, ok := deviceData["mac"].(string); ok {
-			device.MAC = configuration.StringPtr(mac)
+			device.MAC = mac
 			hasDeviceData = true
 		}
 		if deviceType, ok := deviceData["type"].(string); ok {
-			device.Profile = configuration.StringPtr(deviceType)
+			device.Profile = deviceType
 			hasDeviceData = true
 		}
 	}
 
 	// Timezone from root level "tz" or "timezone" field
 	if tz, ok := data["tz"].(string); ok {
-		device.Timezone = configuration.StringPtr(tz)
+		device.Timezone = tz
 		hasDeviceData = true
 	} else if timezone, ok := data["timezone"].(string); ok {
-		device.Timezone = configuration.StringPtr(timezone)
+		device.Timezone = timezone
 		hasDeviceData = true
 	}
 
 	// Discoverable from root level
 	if discoverable, ok := data["discoverable"].(bool); ok {
-		device.Discoverable = configuration.BoolPtr(discoverable)
+		device.Discoverable = discoverable
 		hasDeviceData = true
 	}
 
 	// Eco mode from root level
 	if ecoMode, ok := data["eco_mode"].(bool); ok {
-		device.EcoMode = configuration.BoolPtr(ecoMode)
+		device.EcoMode = ecoMode
 		hasDeviceData = true
 	}
 
@@ -1071,8 +1071,8 @@ func (h *Handler) convertSystemConfig(data map[string]interface{}) (*configurati
 	if lat, ok := data["lat"].(float64); ok {
 		if lng, ok := data["lng"].(float64); ok {
 			location := &configuration.LocationConfig{}
-			location.Latitude = configuration.Float64Ptr(lat)
-			location.Longitude = configuration.Float64Ptr(lng)
+			location.Latitude = lat
+			location.Longitude = lng
 			system.Location = location
 		}
 	}
@@ -1098,13 +1098,13 @@ func (h *Handler) convertCloudConfig(data map[string]interface{}) (*configuratio
 
 	// Handle both "enable" and "enabled" (Shelly devices use "enabled")
 	if enable, ok := data["enable"].(bool); ok {
-		cloud.Enable = configuration.BoolPtr(enable)
+		cloud.Enable = enable
 	} else if enabled, ok := data["enabled"].(bool); ok {
-		cloud.Enable = configuration.BoolPtr(enabled)
+		cloud.Enable = enabled
 	}
 
 	if server, ok := data["server"].(string); ok {
-		cloud.Server = configuration.StringPtr(server)
+		cloud.Server = server
 	}
 
 	return cloud, warnings
@@ -1139,10 +1139,10 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 	// Check for single relay configuration
 	if relayData, ok := data["relay"].(map[string]interface{}); ok {
 		if defaultState, ok := relayData["default_state"].(string); ok {
-			relay.DefaultState = configuration.StringPtr(defaultState)
+			relay.DefaultState = defaultState
 		}
 		if btnType, ok := relayData["btn_type"].(string); ok {
-			relay.ButtonType = configuration.StringPtr(btnType)
+			relay.ButtonType = btnType
 		}
 		if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
 			autoOnInt := int(autoOn)
@@ -1153,7 +1153,7 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 			relay.AutoOff = &autoOffInt
 		}
 		if hasTimer, ok := relayData["has_timer"].(bool); ok {
-			relay.HasTimer = configuration.BoolPtr(hasTimer)
+			relay.HasTimer = hasTimer
 		}
 	}
 
@@ -1167,16 +1167,16 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 				}
 
 				if name, ok := relayMap["name"].(string); ok && name != "" {
-					singleRelay.Name = configuration.StringPtr(name)
+					singleRelay.Name = name
 				} else if appType, ok := relayMap["appliance_type"].(string); ok {
-					singleRelay.Name = configuration.StringPtr(appType)
+					singleRelay.Name = appType
 				}
 
 				if defaultState, ok := relayMap["default_state"].(string); ok {
-					singleRelay.DefaultState = configuration.StringPtr(defaultState)
+					singleRelay.DefaultState = defaultState
 					// Also set global default state from first relay
-					if i == 0 && configuration.StringVal(relay.DefaultState, "") == "" {
-						relay.DefaultState = configuration.StringPtr(defaultState)
+					if i == 0 && relay.DefaultState == "" {
+						relay.DefaultState = defaultState
 					}
 				}
 				if autoOn, ok := relayMap["auto_on"].(float64); ok {
@@ -1196,18 +1196,18 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 					}
 				}
 				if schedule, ok := relayMap["schedule"].(bool); ok {
-					singleRelay.Schedule = configuration.BoolPtr(schedule)
+					singleRelay.Schedule = schedule
 				}
 				if btnType, ok := relayMap["btn_type"].(string); ok {
 					// Set global button type from first relay
-					if i == 0 && configuration.StringVal(relay.ButtonType, "") == "" {
-						relay.ButtonType = configuration.StringPtr(btnType)
+					if i == 0 && relay.ButtonType == "" {
+						relay.ButtonType = btnType
 					}
 				}
 				if hasTimer, ok := relayMap["has_timer"].(bool); ok {
 					// Set global has_timer from first relay
 					if i == 0 {
-						relay.HasTimer = configuration.BoolPtr(hasTimer)
+						relay.HasTimer = hasTimer
 					}
 				}
 
@@ -1225,10 +1225,10 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 					ID: i,
 				}
 				if name, ok := relayData["name"].(string); ok {
-					singleRelay.Name = configuration.StringPtr(name)
+					singleRelay.Name = name
 				}
 				if defaultState, ok := relayData["default_state"].(string); ok {
-					singleRelay.DefaultState = configuration.StringPtr(defaultState)
+					singleRelay.DefaultState = defaultState
 				}
 				if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
 					autoOnInt := int(autoOn)
@@ -1239,7 +1239,7 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 					singleRelay.AutoOff = &autoOffInt
 				}
 				if schedule, ok := relayData["schedule"].(bool); ok {
-					singleRelay.Schedule = configuration.BoolPtr(schedule)
+					singleRelay.Schedule = schedule
 				}
 				relayConfigs = append(relayConfigs, singleRelay)
 			}
@@ -1251,15 +1251,15 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 	}
 
 	// Fall back to global settings if no specific relay config found
-	if configuration.StringVal(relay.DefaultState, "") == "" {
+	if relay.DefaultState == "" {
 		if defaultState, ok := data["default_state"].(string); ok {
-			relay.DefaultState = configuration.StringPtr(defaultState)
+			relay.DefaultState = defaultState
 		}
 	}
 
 	// Ensure we always have at least a default state to prevent empty object
-	if configuration.StringVal(relay.DefaultState, "") == "" {
-		relay.DefaultState = configuration.StringPtr("off") // Sensible default
+	if relay.DefaultState == "" {
+		relay.DefaultState = "off" // Sensible default
 	}
 
 	return relay, warnings
@@ -1281,21 +1281,21 @@ func (h *Handler) convertPowerMeteringConfig(data map[string]interface{}) (*conf
 		power.MaxCurrent = &maxCurrent
 	}
 	if protection, ok := data["protection_action"].(string); ok {
-		power.ProtectionAction = configuration.StringPtr(protection)
+		power.ProtectionAction = protection
 	}
 	if correction, ok := data["power_correction"].(float64); ok {
-		power.PowerCorrection = configuration.Float64Ptr(correction)
+		power.PowerCorrection = correction
 	} else {
-		power.PowerCorrection = configuration.Float64Ptr(1.0) // Default multiplier
+		power.PowerCorrection = 1.0 // Default multiplier
 	}
 	if period, ok := data["reporting_period"].(float64); ok {
-		power.ReportingPeriod = configuration.IntPtr(int(period))
+		power.ReportingPeriod = int(period)
 	}
 	if costPerKWh, ok := data["cost_per_kwh"].(float64); ok && costPerKWh > 0 {
 		power.CostPerKWh = &costPerKWh
 	}
 	if currency, ok := data["currency"].(string); ok {
-		power.Currency = configuration.StringPtr(currency)
+		power.Currency = currency
 	}
 
 	return power, warnings
@@ -1313,43 +1313,43 @@ func (h *Handler) convertDimmingConfig(data map[string]interface{}) (*configurat
 	}
 
 	if minBrightness, ok := data["min_brightness"].(float64); ok {
-		dimming.MinBrightness = configuration.IntPtr(int(minBrightness))
+		dimming.MinBrightness = int(minBrightness)
 	} else {
-		dimming.MinBrightness = configuration.IntPtr(1)
+		dimming.MinBrightness = 1 // Default minimum
 	}
 	if maxBrightness, ok := data["max_brightness"].(float64); ok {
-		dimming.MaxBrightness = configuration.IntPtr(int(maxBrightness))
+		dimming.MaxBrightness = int(maxBrightness)
 	} else {
-		dimming.MaxBrightness = configuration.IntPtr(100)
+		dimming.MaxBrightness = 100 // Default maximum
 	}
 	if defaultBrightness, ok := data["default_brightness"].(float64); ok {
-		dimming.DefaultBrightness = configuration.IntPtr(int(defaultBrightness))
+		dimming.DefaultBrightness = int(defaultBrightness)
 	} else {
-		dimming.DefaultBrightness = configuration.IntPtr(100)
+		dimming.DefaultBrightness = 100 // Default
 	}
 	if defaultState, ok := data["default_state"].(bool); ok {
-		dimming.DefaultState = configuration.BoolPtr(defaultState)
+		dimming.DefaultState = defaultState
 	}
 	if fadeRate, ok := data["fade_rate"].(float64); ok {
-		dimming.FadeRate = configuration.IntPtr(int(fadeRate))
+		dimming.FadeRate = int(fadeRate)
 	}
 	if transition, ok := data["transition"].(float64); ok {
-		dimming.TransitionTime = configuration.IntPtr(int(transition))
+		dimming.TransitionTime = int(transition)
 	}
 	if leadingEdge, ok := data["leading_edge"].(bool); ok {
-		dimming.LeadingEdge = configuration.BoolPtr(leadingEdge)
+		dimming.LeadingEdge = leadingEdge
 	}
 	if nightMode, ok := data["night_mode"].(bool); ok {
-		dimming.NightModeEnabled = configuration.BoolPtr(nightMode)
+		dimming.NightModeEnabled = nightMode
 	}
 	if nightBrightness, ok := data["night_mode_brightness"].(float64); ok {
-		dimming.NightModeBrightness = configuration.IntPtr(int(nightBrightness))
+		dimming.NightModeBrightness = int(nightBrightness)
 	}
 	if nightStart, ok := data["night_mode_start"].(string); ok {
-		dimming.NightModeStart = configuration.StringPtr(nightStart)
+		dimming.NightModeStart = nightStart
 	}
 	if nightEnd, ok := data["night_mode_end"].(string); ok {
-		dimming.NightModeEnd = configuration.StringPtr(nightEnd)
+		dimming.NightModeEnd = nightEnd
 	}
 
 	return dimming, warnings
@@ -1367,42 +1367,42 @@ func (h *Handler) convertRollerConfig(data map[string]interface{}) (*configurati
 	}
 
 	if motorDirection, ok := data["motor_direction"].(string); ok {
-		roller.MotorDirection = configuration.StringPtr(motorDirection)
+		roller.MotorDirection = motorDirection
 	}
 	if maxOpenTime, ok := data["max_open_time"].(float64); ok {
-		roller.MaxOpenTime = configuration.IntPtr(int(maxOpenTime))
+		roller.MaxOpenTime = int(maxOpenTime)
 	}
 	if maxCloseTime, ok := data["max_close_time"].(float64); ok {
-		roller.MaxCloseTime = configuration.IntPtr(int(maxCloseTime))
+		roller.MaxCloseTime = int(maxCloseTime)
 	}
 	if defaultPos, ok := data["default_position"].(float64); ok {
 		defaultPosInt := int(defaultPos)
 		roller.DefaultPosition = &defaultPosInt
 	}
 	if currentPos, ok := data["current_position"].(float64); ok {
-		roller.CurrentPosition = configuration.IntPtr(int(currentPos))
+		roller.CurrentPosition = int(currentPos)
 	}
 	if positioning, ok := data["positioning"].(bool); ok {
-		roller.PositioningEnabled = configuration.BoolPtr(positioning)
+		roller.PositioningEnabled = positioning
 	}
 	if obstacle, ok := data["obstacle_detection"].(bool); ok {
-		roller.ObstacleDetection = configuration.BoolPtr(obstacle)
+		roller.ObstacleDetection = obstacle
 	}
 	if obstaclePower, ok := data["obstacle_power"].(float64); ok && obstaclePower > 0 {
 		obstaclePowerInt := int(obstaclePower)
 		roller.ObstaclePower = &obstaclePowerInt
 	}
 	if safetySwitch, ok := data["safety_switch"].(bool); ok {
-		roller.SafetySwitch = configuration.BoolPtr(safetySwitch)
+		roller.SafetySwitch = safetySwitch
 	}
 	if swap, ok := data["swap"].(bool); ok {
-		roller.SwapInputs = configuration.BoolPtr(swap)
+		roller.SwapInputs = swap
 	}
 	if inputMode, ok := data["input_mode"].(string); ok {
-		roller.InputMode = configuration.StringPtr(inputMode)
+		roller.InputMode = inputMode
 	}
 	if holdTime, ok := data["button_hold_time"].(float64); ok {
-		roller.ButtonHoldTime = configuration.IntPtr(int(holdTime))
+		roller.ButtonHoldTime = int(holdTime)
 	}
 
 	return roller, warnings
@@ -1420,19 +1420,20 @@ func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuratio
 
 				// Extract individual input properties
 				if name, ok := inputMap["name"].(string); ok && name != "" {
-					singleInput.Name = configuration.StringPtr(name)
+					singleInput.Name = name
 				}
 				if btnType, ok := inputMap["btn_type"].(string); ok {
-					singleInput.Type = configuration.StringPtr("button") // Default type
-					singleInput.Mode = configuration.StringPtr(btnType)
+					singleInput.Type = "button" // Default type
+					singleInput.Mode = btnType
 				}
 				if btnReverse, ok := inputMap["btn_reverse"].(float64); ok {
-					singleInput.Inverted = configuration.BoolPtr(btnReverse != 0)
+					singleInput.Inverted = btnReverse != 0
 				}
 
+				// Add timing settings from global config
 				if longPushDuration, ok := data["longpush_duration_ms"].(map[string]interface{}); ok {
 					if _, ok := longPushDuration["min"].(float64); ok {
-						singleInput.LongPushAction = configuration.StringPtr("long")
+						singleInput.LongPushAction = "long" // Default action
 					}
 				}
 
@@ -1443,12 +1444,12 @@ func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuratio
 		// Set global input properties from timing configurations
 		if longPushDuration, ok := data["longpush_duration_ms"].(map[string]interface{}); ok {
 			if minDuration, ok := longPushDuration["min"].(float64); ok {
-				input.LongPushTime = configuration.IntPtr(int(minDuration))
+				input.LongPushTime = int(minDuration)
 			}
 		}
 		if multiPushTime, ok := data["multipush_time_between_pushes_ms"].(map[string]interface{}); ok {
 			if maxTime, ok := multiPushTime["max"].(float64); ok {
-				input.MultiPushTime = configuration.IntPtr(int(maxTime))
+				input.MultiPushTime = int(maxTime)
 			}
 		}
 
@@ -1463,31 +1464,31 @@ func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuratio
 	}
 
 	if inputType, ok := data["type"].(string); ok {
-		input.Type = configuration.StringPtr(inputType)
+		input.Type = inputType
 	}
 	if mode, ok := data["mode"].(string); ok {
-		input.Mode = configuration.StringPtr(mode)
+		input.Mode = mode
 	}
 	if inverted, ok := data["inverted"].(bool); ok {
-		input.Inverted = configuration.BoolPtr(inverted)
+		input.Inverted = inverted
 	}
 	if debounce, ok := data["debounce_time"].(float64); ok {
-		input.DebounceTime = configuration.IntPtr(int(debounce))
+		input.DebounceTime = int(debounce)
 	}
 	if longPush, ok := data["longpush_time"].(float64); ok {
-		input.LongPushTime = configuration.IntPtr(int(longPush))
+		input.LongPushTime = int(longPush)
 	}
 	if multiPush, ok := data["multipush_time"].(float64); ok {
-		input.MultiPushTime = configuration.IntPtr(int(multiPush))
+		input.MultiPushTime = int(multiPush)
 	}
 	if singleAction, ok := data["single_push_action"].(string); ok {
-		input.SinglePushAction = configuration.StringPtr(singleAction)
+		input.SinglePushAction = singleAction
 	}
 	if doubleAction, ok := data["double_push_action"].(string); ok {
-		input.DoublePushAction = configuration.StringPtr(doubleAction)
+		input.DoublePushAction = doubleAction
 	}
 	if longAction, ok := data["long_push_action"].(string); ok {
-		input.LongPushAction = configuration.StringPtr(longAction)
+		input.LongPushAction = longAction
 	}
 
 	return input, warnings
@@ -1498,19 +1499,19 @@ func (h *Handler) convertLEDConfig(data map[string]interface{}) (*configuration.
 	var warnings []string
 
 	if enabled, ok := data["led_status_disable"].(bool); ok {
-		led.Enabled = configuration.BoolPtr(!enabled)
+		led.Enabled = !enabled // led_status_disable is the inverse
 	}
 	if mode, ok := data["led_mode"].(string); ok {
-		led.Mode = configuration.StringPtr(mode)
+		led.Mode = mode
 	}
 	if brightness, ok := data["led_brightness"].(float64); ok {
-		led.Brightness = configuration.IntPtr(int(brightness))
+		led.Brightness = int(brightness)
 	}
 	if nightMode, ok := data["led_night_mode"].(bool); ok {
-		led.NightModeEnabled = configuration.BoolPtr(nightMode)
+		led.NightModeEnabled = nightMode
 	}
 	if powerIndication, ok := data["led_power_disable"].(bool); ok {
-		led.PowerIndication = configuration.BoolPtr(!powerIndication)
+		led.PowerIndication = !powerIndication // led_power_disable is the inverse
 	}
 
 	return led, warnings

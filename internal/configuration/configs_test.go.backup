@@ -171,8 +171,8 @@ func TestDimmingConfig(t *testing.T) {
 	if BoolVal(decoded.NightModeEnabled, false) != BoolVal(config.NightModeEnabled, false) {
 		t.Errorf("NightModeEnabled mismatch: got %v, want %v", BoolVal(decoded.NightModeEnabled, false), BoolVal(config.NightModeEnabled, false))
 	}
-	if StringVal(decoded.NightModeStart, "") != StringVal(config.NightModeStart, "") {
-		t.Errorf("NightModeStart mismatch: got %s, want %s", StringVal(decoded.NightModeStart, ""), StringVal(config.NightModeStart, ""))
+	if decoded.NightModeStart != config.NightModeStart {
+		t.Errorf("NightModeStart mismatch: got %s, want %s", decoded.NightModeStart, config.NightModeStart)
 	}
 }
 
@@ -184,21 +184,21 @@ func TestRollerConfig(t *testing.T) {
 	maxTiltTime := 1500
 
 	config := RollerConfig{
-		MotorDirection:     StringPtr("normal"),
-		MotorSpeed:         IntPtr(30),
-		CalibrationState:   StringPtr("calibrated"),
-		MaxOpenTime:        IntPtr(25),
-		MaxCloseTime:       IntPtr(24),
+		MotorDirection:     "normal",
+		MotorSpeed:         30,
+		CalibrationState:   "calibrated",
+		MaxOpenTime:        25,
+		MaxCloseTime:       24,
 		DefaultPosition:    &defaultPos,
-		CurrentPosition:    IntPtr(75),
-		PositioningEnabled: BoolPtr(true),
-		ObstacleDetection:  BoolPtr(true),
+		CurrentPosition:    75,
+		PositioningEnabled: true,
+		ObstacleDetection:  true,
 		ObstaclePower:      &obstaclePower,
-		SafetySwitch:       BoolPtr(true),
-		SwapInputs:         BoolPtr(false),
-		InputMode:          StringPtr("two_buttons"),
-		ButtonHoldTime:     IntPtr(800),
-		TiltEnabled:        BoolPtr(true),
+		SafetySwitch:       true,
+		SwapInputs:         false,
+		InputMode:          "two_buttons",
+		ButtonHoldTime:     800,
+		TiltEnabled:        true,
 		TiltPosition:       &tiltPos,
 		MaxTiltTime:        &maxTiltTime,
 	}
@@ -217,11 +217,11 @@ func TestRollerConfig(t *testing.T) {
 	}
 
 	// Verify fields
-	if StringVal(decoded.MotorDirection, "") != StringVal(config.MotorDirection, "") {
-		t.Errorf("MotorDirection mismatch: got %s, want %s", StringVal(decoded.MotorDirection, ""), StringVal(config.MotorDirection, ""))
+	if decoded.MotorDirection != config.MotorDirection {
+		t.Errorf("MotorDirection mismatch: got %s, want %s", decoded.MotorDirection, config.MotorDirection)
 	}
-	if StringVal(decoded.CalibrationState, "") != StringVal(config.CalibrationState, "") {
-		t.Errorf("CalibrationState mismatch: got %s, want %s", StringVal(decoded.CalibrationState, ""), StringVal(config.CalibrationState, ""))
+	if decoded.CalibrationState != config.CalibrationState {
+		t.Errorf("CalibrationState mismatch: got %s, want %s", decoded.CalibrationState, config.CalibrationState)
 	}
 	if decoded.DefaultPosition == nil || *decoded.DefaultPosition != defaultPos {
 		t.Errorf("DefaultPosition mismatch: got %v, want %d", decoded.DefaultPosition, defaultPos)
@@ -229,8 +229,8 @@ func TestRollerConfig(t *testing.T) {
 	if decoded.ObstaclePower == nil || *decoded.ObstaclePower != obstaclePower {
 		t.Errorf("ObstaclePower mismatch: got %v, want %d", decoded.ObstaclePower, obstaclePower)
 	}
-	if BoolVal(decoded.TiltEnabled, false) != BoolVal(config.TiltEnabled, false) {
-		t.Errorf("TiltEnabled mismatch: got %v, want %v", BoolVal(decoded.TiltEnabled, false), BoolVal(config.TiltEnabled, false))
+	if decoded.TiltEnabled != config.TiltEnabled {
+		t.Errorf("TiltEnabled mismatch: got %v, want %v", decoded.TiltEnabled, config.TiltEnabled)
 	}
 	if decoded.TiltPosition == nil || *decoded.TiltPosition != tiltPos {
 		t.Errorf("TiltPosition mismatch: got %v, want %d", decoded.TiltPosition, tiltPos)
@@ -240,25 +240,25 @@ func TestRollerConfig(t *testing.T) {
 // TestInputConfig tests input configuration
 func TestInputConfig(t *testing.T) {
 	config := InputConfig{
-		Type:             StringPtr("button"),
-		Mode:             StringPtr("momentary"),
-		Inverted:         BoolPtr(false),
-		DebounceTime:     IntPtr(50),
-		LongPushTime:     IntPtr(1000),
-		MultiPushTime:    IntPtr(500),
-		SinglePushAction: StringPtr("toggle"),
-		DoublePushAction: StringPtr("on"),
-		TriplePushAction: StringPtr("off"),
-		LongPushAction:   StringPtr("dim"),
+		Type:             "button",
+		Mode:             "momentary",
+		Inverted:         false,
+		DebounceTime:     50,
+		LongPushTime:     1000,
+		MultiPushTime:    500,
+		SinglePushAction: "toggle",
+		DoublePushAction: "on",
+		TriplePushAction: "off",
+		LongPushAction:   "dim",
 		Inputs: []SingleInputConfig{
 			{
 				ID:               0,
-				Name:             StringPtr("Button 1"),
-				Type:             StringPtr("button"),
-				Mode:             StringPtr("momentary"),
-				Inverted:         BoolPtr(false),
-				SinglePushAction: StringPtr("toggle"),
-				LongPushAction:   StringPtr("off"),
+				Name:             "Button 1",
+				Type:             "button",
+				Mode:             "momentary",
+				Inverted:         false,
+				SinglePushAction: "toggle",
+				LongPushAction:   "off",
 			},
 		},
 	}
@@ -277,38 +277,38 @@ func TestInputConfig(t *testing.T) {
 	}
 
 	// Verify fields
-	if StringVal(decoded.Type, "") != StringVal(config.Type, "") {
-		t.Errorf("Type mismatch: got %s, want %s", StringVal(decoded.Type, ""), StringVal(config.Type, ""))
+	if decoded.Type != config.Type {
+		t.Errorf("Type mismatch: got %s, want %s", decoded.Type, config.Type)
 	}
-	if StringVal(decoded.Mode, "") != StringVal(config.Mode, "") {
-		t.Errorf("Mode mismatch: got %s, want %s", StringVal(decoded.Mode, ""), StringVal(config.Mode, ""))
+	if decoded.Mode != config.Mode {
+		t.Errorf("Mode mismatch: got %s, want %s", decoded.Mode, config.Mode)
 	}
-	if IntVal(decoded.LongPushTime, 0) != IntVal(config.LongPushTime, 0) {
-		t.Errorf("LongPushTime mismatch: got %d, want %d", IntVal(decoded.LongPushTime, 0), IntVal(config.LongPushTime, 0))
+	if decoded.LongPushTime != config.LongPushTime {
+		t.Errorf("LongPushTime mismatch: got %d, want %d", decoded.LongPushTime, config.LongPushTime)
 	}
-	if StringVal(decoded.SinglePushAction, "") != StringVal(config.SinglePushAction, "") {
-		t.Errorf("SinglePushAction mismatch: got %s, want %s", StringVal(decoded.SinglePushAction, ""), StringVal(config.SinglePushAction, ""))
+	if decoded.SinglePushAction != config.SinglePushAction {
+		t.Errorf("SinglePushAction mismatch: got %s, want %s", decoded.SinglePushAction, config.SinglePushAction)
 	}
 	if len(decoded.Inputs) != 1 {
 		t.Fatalf("Expected 1 input, got %d", len(decoded.Inputs))
 	}
-	if StringVal(decoded.Inputs[0].Name, "") != "Button 1" {
-		t.Errorf("Input[0].Name mismatch: got %s, want Button 1", StringVal(decoded.Inputs[0].Name, ""))
+	if decoded.Inputs[0].Name != "Button 1" {
+		t.Errorf("Input[0].Name mismatch: got %s, want Button 1", decoded.Inputs[0].Name)
 	}
 }
 
 // TestLEDConfig tests LED configuration
 func TestLEDConfig(t *testing.T) {
 	config := LEDConfig{
-		Enabled:             BoolPtr(true),
-		Mode:                StringPtr("status"),
-		Brightness:          IntPtr(75),
-		NightModeEnabled:    BoolPtr(true),
-		NightModeBrightness: IntPtr(10),
-		NightModeStart:      StringPtr("22:00"),
-		NightModeEnd:        StringPtr("07:00"),
-		PowerIndication:     BoolPtr(true),
-		NetworkIndication:   BoolPtr(true),
+		Enabled:             true,
+		Mode:                "status",
+		Brightness:          75,
+		NightModeEnabled:    true,
+		NightModeBrightness: 10,
+		NightModeStart:      "22:00",
+		NightModeEnd:        "07:00",
+		PowerIndication:     true,
+		NetworkIndication:   true,
 	}
 
 	// Test JSON marshaling
@@ -325,17 +325,17 @@ func TestLEDConfig(t *testing.T) {
 	}
 
 	// Verify fields
-	if BoolVal(decoded.Enabled, false) != BoolVal(config.Enabled, false) {
-		t.Errorf("Enabled mismatch: got %v, want %v", BoolVal(decoded.Enabled, false), BoolVal(config.Enabled, false))
+	if decoded.Enabled != config.Enabled {
+		t.Errorf("Enabled mismatch: got %v, want %v", decoded.Enabled, config.Enabled)
 	}
-	if StringVal(decoded.Mode, "") != StringVal(config.Mode, "") {
-		t.Errorf("Mode mismatch: got %s, want %s", StringVal(decoded.Mode, ""), StringVal(config.Mode, ""))
+	if decoded.Mode != config.Mode {
+		t.Errorf("Mode mismatch: got %s, want %s", decoded.Mode, config.Mode)
 	}
-	if IntVal(decoded.Brightness, 0) != IntVal(config.Brightness, 0) {
-		t.Errorf("Brightness mismatch: got %d, want %d", IntVal(decoded.Brightness, 0), IntVal(config.Brightness, 0))
+	if decoded.Brightness != config.Brightness {
+		t.Errorf("Brightness mismatch: got %d, want %d", decoded.Brightness, config.Brightness)
 	}
-	if BoolVal(decoded.PowerIndication, false) != BoolVal(config.PowerIndication, false) {
-		t.Errorf("PowerIndication mismatch: got %v, want %v", BoolVal(decoded.PowerIndication, false), BoolVal(config.PowerIndication, false))
+	if decoded.PowerIndication != config.PowerIndication {
+		t.Errorf("PowerIndication mismatch: got %v, want %v", decoded.PowerIndication, config.PowerIndication)
 	}
 }
 

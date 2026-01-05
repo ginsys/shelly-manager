@@ -231,8 +231,8 @@ func TestConfigurationValidator_ValidateWiFi(t *testing.T) {
 		{
 			name: "Short SSID warning",
 			wifi: &WiFiConfiguration{
-				Enable: BoolPtr(true),
-				SSID:   StringPtr("ab"),
+				Enable: true,
+				SSID:   "ab",
 			},
 			expectWarnings: 1,
 			expectedCodes:  []string{"SHORT_SSID"},
@@ -240,8 +240,8 @@ func TestConfigurationValidator_ValidateWiFi(t *testing.T) {
 		{
 			name: "Special characters in SSID",
 			wifi: &WiFiConfiguration{
-				Enable: BoolPtr(true),
-				SSID:   StringPtr("Test\"Network"),
+				Enable: true,
+				SSID:   "Test\"Network",
 			},
 			expectWarnings: 1,
 			expectedCodes:  []string{"SPECIAL_CHARS_SSID"},
@@ -249,9 +249,9 @@ func TestConfigurationValidator_ValidateWiFi(t *testing.T) {
 		{
 			name: "Short password warning",
 			wifi: &WiFiConfiguration{
-				Enable:   BoolPtr(true),
-				SSID:     StringPtr("TestNetwork"),
-				Password: StringPtr("123"),
+				Enable:   true,
+				SSID:     "TestNetwork",
+				Password: "123",
 			},
 			expectWarnings: 1,
 			expectedCodes:  []string{"WEAK_WIFI_PASSWORD"},
@@ -259,11 +259,11 @@ func TestConfigurationValidator_ValidateWiFi(t *testing.T) {
 		{
 			name: "WiFi repeater mode info",
 			wifi: &WiFiConfiguration{
-				Enable: BoolPtr(true),
-				SSID:   StringPtr("TestNetwork"),
+				Enable: true,
+				SSID:   "TestNetwork",
 				AccessPoint: &AccessPointConfig{
-					Enable: BoolPtr(true),
-					SSID:   StringPtr("TestAP"),
+					Enable: true,
+					SSID:   "TestAP",
 				},
 			},
 			expectWarnings: 0, // This should be an info message, not warning
@@ -313,8 +313,8 @@ func TestConfigurationValidator_ValidateMQTT(t *testing.T) {
 			name:            "Localhost server warning in production",
 			validationLevel: ValidationLevelProduction,
 			mqtt: &MQTTConfiguration{
-				Enable: BoolPtr(true),
-				Server: StringPtr("localhost:1883"),
+				Enable: true,
+				Server: "localhost:1883",
 			},
 			expectWarnings: 1,
 			expectedCodes:  []string{"LOCALHOST_MQTT_SERVER"},
@@ -323,10 +323,10 @@ func TestConfigurationValidator_ValidateMQTT(t *testing.T) {
 			name:            "Default credentials warning",
 			validationLevel: ValidationLevelBasic,
 			mqtt: &MQTTConfiguration{
-				Enable:   BoolPtr(true),
-				Server:   StringPtr("mqtt.example.com"),
-				User:     StringPtr("admin"),
-				Password: StringPtr("admin"),
+				Enable:   true,
+				Server:   "mqtt.example.com",
+				User:     "admin",
+				Password: "admin",
 			},
 			expectWarnings: 1,
 			expectedCodes:  []string{"DEFAULT_MQTT_CREDENTIALS"},
@@ -335,9 +335,9 @@ func TestConfigurationValidator_ValidateMQTT(t *testing.T) {
 			name:            "Short keep alive warning",
 			validationLevel: ValidationLevelBasic,
 			mqtt: &MQTTConfiguration{
-				Enable:    BoolPtr(true),
-				Server:    StringPtr("mqtt.example.com"),
-				KeepAlive: IntPtr(15),
+				Enable:    true,
+				Server:    "mqtt.example.com",
+				KeepAlive: 15,
 			},
 			expectWarnings: 1,
 			expectedCodes:  []string{"SHORT_KEEPALIVE"},
@@ -346,9 +346,9 @@ func TestConfigurationValidator_ValidateMQTT(t *testing.T) {
 			name:            "Topic prefix with wildcards error",
 			validationLevel: ValidationLevelBasic,
 			mqtt: &MQTTConfiguration{
-				Enable:      BoolPtr(true),
-				Server:      StringPtr("mqtt.example.com"),
-				TopicPrefix: StringPtr("home/+/sensors"),
+				Enable:      true,
+				Server:      "mqtt.example.com",
+				TopicPrefix: "home/+/sensors",
 			},
 			expectWarnings: 0, // This should be an error, not warning
 		},
@@ -411,9 +411,9 @@ func TestConfigurationValidator_ValidateAuth(t *testing.T) {
 			name:            "Common username warning",
 			validationLevel: ValidationLevelBasic,
 			auth: &AuthConfiguration{
-				Enable:   BoolPtr(true),
-				Username: StringPtr("admin"),
-				Password: StringPtr("securepassword"),
+				Enable:   true,
+				Username: "admin",
+				Password: "securepassword",
 			},
 			expectWarnings: 2, // Common username + weak password complexity
 			expectedCodes:  []string{"COMMON_USERNAME", "WEAK_PASSWORD"},
@@ -422,9 +422,9 @@ func TestConfigurationValidator_ValidateAuth(t *testing.T) {
 			name:            "Default password warning",
 			validationLevel: ValidationLevelBasic,
 			auth: &AuthConfiguration{
-				Enable:   BoolPtr(true),
-				Username: StringPtr("user"),
-				Password: StringPtr("admin"),
+				Enable:   true,
+				Username: "user",
+				Password: "admin",
 			},
 			expectWarnings: 4, // Common username + 3 password warnings (short, weak, default)
 			expectedCodes:  []string{"COMMON_USERNAME", "WEAK_PASSWORD", "DEFAULT_PASSWORD"},
@@ -433,9 +433,9 @@ func TestConfigurationValidator_ValidateAuth(t *testing.T) {
 			name:            "Default password error in strict mode",
 			validationLevel: ValidationLevelStrict,
 			auth: &AuthConfiguration{
-				Enable:   BoolPtr(true),
-				Username: StringPtr("user"),
-				Password: StringPtr("123456"),
+				Enable:   true,
+				Username: "user",
+				Password: "123456",
 			},
 			expectWarnings: 5, // Common username + 4 password warnings (comprehensive validation)
 		},
@@ -566,9 +566,9 @@ func TestConfigurationValidator_ValidateIPConfiguration(t *testing.T) {
 		{
 			name: "Valid IP configuration",
 			ipConfig: &StaticIPConfig{
-				IP:      StringPtr("192.168.1.100"),
-				Netmask: StringPtr("255.255.255.0"),
-				Gateway: StringPtr("192.168.1.1"),
+				IP:      "192.168.1.100",
+				Netmask: "255.255.255.0",
+				Gateway: "192.168.1.1",
 			},
 			expectErrors:   0,
 			expectWarnings: 0,
@@ -576,9 +576,9 @@ func TestConfigurationValidator_ValidateIPConfiguration(t *testing.T) {
 		{
 			name: "Invalid IP address",
 			ipConfig: &StaticIPConfig{
-				IP:      StringPtr("invalid.ip"),
-				Netmask: StringPtr("255.255.255.0"),
-				Gateway: StringPtr("192.168.1.1"),
+				IP:      "invalid.ip",
+				Netmask: "255.255.255.0",
+				Gateway: "192.168.1.1",
 			},
 			expectErrors:  1,
 			expectedCodes: []string{"INVALID_IP"},
@@ -586,9 +586,9 @@ func TestConfigurationValidator_ValidateIPConfiguration(t *testing.T) {
 		{
 			name: "IP and gateway in different subnets",
 			ipConfig: &StaticIPConfig{
-				IP:      StringPtr("192.168.1.100"),
-				Netmask: StringPtr("255.255.255.0"),
-				Gateway: StringPtr("10.0.0.1"),
+				IP:      "192.168.1.100",
+				Netmask: "255.255.255.0",
+				Gateway: "10.0.0.1",
 			},
 			expectErrors:   0,
 			expectWarnings: 1,
@@ -677,7 +677,7 @@ func TestConfigurationValidator_DeviceCompatibility(t *testing.T) {
 			config: &TypedConfiguration{
 				System: &SystemConfiguration{
 					Device: &TypedDeviceConfig{
-						EcoMode: BoolPtr(true),
+						EcoMode: true,
 					},
 				},
 			},

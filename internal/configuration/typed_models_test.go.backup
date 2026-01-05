@@ -38,7 +38,7 @@ func TestTypedConfiguration_Validate(t *testing.T) {
 			name: "Valid minimal configuration",
 			config: &TypedConfiguration{
 				WiFi: &WiFiConfiguration{
-					Enable: BoolPtr(false),
+					Enable: false,
 				},
 			},
 			expectValid: true,
@@ -47,8 +47,8 @@ func TestTypedConfiguration_Validate(t *testing.T) {
 			name: "Invalid WiFi - empty SSID when enabled",
 			config: &TypedConfiguration{
 				WiFi: &WiFiConfiguration{
-					Enable: BoolPtr(true),
-					SSID:   StringPtr(""),
+					Enable: true,
+					SSID:   "",
 				},
 			},
 			expectValid:   false,
@@ -58,8 +58,8 @@ func TestTypedConfiguration_Validate(t *testing.T) {
 			name: "Invalid MQTT - empty server when enabled",
 			config: &TypedConfiguration{
 				MQTT: &MQTTConfiguration{
-					Enable: BoolPtr(true),
-					Server: StringPtr(""),
+					Enable: true,
+					Server: "",
 				},
 			},
 			expectValid:   false,
@@ -69,8 +69,8 @@ func TestTypedConfiguration_Validate(t *testing.T) {
 			name: "Invalid Auth - empty username when enabled",
 			config: &TypedConfiguration{
 				Auth: &AuthConfiguration{
-					Enable:   BoolPtr(true),
-					Username: StringPtr(""),
+					Enable:   true,
+					Username: "",
 				},
 			},
 			expectValid:   false,
@@ -108,24 +108,24 @@ func TestWiFiConfiguration_Validate(t *testing.T) {
 		{
 			name: "Valid enabled WiFi with DHCP",
 			wifi: &WiFiConfiguration{
-				Enable:   BoolPtr(true),
-				SSID:     StringPtr("TestNetwork"),
-				Password: StringPtr("password123"),
-				IPv4Mode: StringPtr("dhcp"),
+				Enable:   true,
+				SSID:     "TestNetwork",
+				Password: "password123",
+				IPv4Mode: "dhcp",
 			},
 			expectValid: true,
 		},
 		{
 			name: "Valid enabled WiFi with static IP",
 			wifi: &WiFiConfiguration{
-				Enable:   BoolPtr(true),
-				SSID:     StringPtr("TestNetwork"),
-				Password: StringPtr("password123"),
-				IPv4Mode: StringPtr("static"),
+				Enable:   true,
+				SSID:     "TestNetwork",
+				Password: "password123",
+				IPv4Mode: "static",
 				StaticIP: &StaticIPConfig{
-					IP:      StringPtr("192.168.1.100"),
-					Netmask: StringPtr("255.255.255.0"),
-					Gateway: StringPtr("192.168.1.1"),
+					IP:      "192.168.1.100",
+					Netmask: "255.255.255.0",
+					Gateway: "192.168.1.1",
 				},
 			},
 			expectValid: true,
@@ -133,15 +133,15 @@ func TestWiFiConfiguration_Validate(t *testing.T) {
 		{
 			name: "Valid disabled WiFi",
 			wifi: &WiFiConfiguration{
-				Enable: BoolPtr(false),
+				Enable: false,
 			},
 			expectValid: true,
 		},
 		{
 			name: "Invalid - enabled without SSID",
 			wifi: &WiFiConfiguration{
-				Enable: BoolPtr(true),
-				SSID:   StringPtr(""),
+				Enable: true,
+				SSID:   "",
 			},
 			expectValid:   false,
 			expectedError: "SSID is required when WiFi is enabled",
@@ -149,8 +149,8 @@ func TestWiFiConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - SSID too long",
 			wifi: &WiFiConfiguration{
-				Enable: BoolPtr(true),
-				SSID:   StringPtr("ThisSSIDIsWayTooLongAndExceedsTheThirtyTwoCharacterLimit"),
+				Enable: true,
+				SSID:   "ThisSSIDIsWayTooLongAndExceedsTheThirtyTwoCharacterLimit",
 			},
 			expectValid:   false,
 			expectedError: "SSID must be 32 characters or less",
@@ -158,9 +158,9 @@ func TestWiFiConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - password too long",
 			wifi: &WiFiConfiguration{
-				Enable:   BoolPtr(true),
-				SSID:     StringPtr("TestNetwork"),
-				Password: StringPtr("ThisPasswordIsWayTooLongAndExceedsTheSixtyThreeCharacterLimitForWiFiPasswords123456789"),
+				Enable:   true,
+				SSID:     "TestNetwork",
+				Password: "ThisPasswordIsWayTooLongAndExceedsTheSixtyThreeCharacterLimitForWiFiPasswords123456789",
 			},
 			expectValid:   false,
 			expectedError: "WiFi password must be 63 characters or less",
@@ -168,9 +168,9 @@ func TestWiFiConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - static mode without static IP config",
 			wifi: &WiFiConfiguration{
-				Enable:   BoolPtr(true),
-				SSID:     StringPtr("TestNetwork"),
-				IPv4Mode: StringPtr("static"),
+				Enable:   true,
+				SSID:     "TestNetwork",
+				IPv4Mode: "static",
 				StaticIP: nil,
 			},
 			expectValid:   false,
@@ -179,9 +179,9 @@ func TestWiFiConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - invalid IPv4 mode",
 			wifi: &WiFiConfiguration{
-				Enable:   BoolPtr(true),
-				SSID:     StringPtr("TestNetwork"),
-				IPv4Mode: StringPtr("invalid"),
+				Enable:   true,
+				SSID:     "TestNetwork",
+				IPv4Mode: "invalid",
 			},
 			expectValid:   false,
 			expectedError: "IPv4 mode must be 'dhcp' or 'static'",
@@ -218,28 +218,28 @@ func TestStaticIPConfig_Validate(t *testing.T) {
 		{
 			name: "Valid static IP configuration",
 			staticIP: &StaticIPConfig{
-				IP:      StringPtr("192.168.1.100"),
-				Netmask: StringPtr("255.255.255.0"),
-				Gateway: StringPtr("192.168.1.1"),
+				IP:      "192.168.1.100",
+				Netmask: "255.255.255.0",
+				Gateway: "192.168.1.1",
 			},
 			expectValid: true,
 		},
 		{
 			name: "Valid static IP configuration with nameserver",
 			staticIP: &StaticIPConfig{
-				IP:         StringPtr("192.168.1.100"),
-				Netmask:    StringPtr("255.255.255.0"),
-				Gateway:    StringPtr("192.168.1.1"),
-				Nameserver: StringPtr("8.8.8.8"),
+				IP:         "192.168.1.100",
+				Netmask:    "255.255.255.0",
+				Gateway:    "192.168.1.1",
+				Nameserver: "8.8.8.8",
 			},
 			expectValid: true,
 		},
 		{
 			name: "Invalid IP address",
 			staticIP: &StaticIPConfig{
-				IP:      StringPtr("invalid.ip"),
-				Netmask: StringPtr("255.255.255.0"),
-				Gateway: StringPtr("192.168.1.1"),
+				IP:      "invalid.ip",
+				Netmask: "255.255.255.0",
+				Gateway: "192.168.1.1",
 			},
 			expectValid:   false,
 			expectedError: "invalid IP address: invalid.ip",
@@ -247,9 +247,9 @@ func TestStaticIPConfig_Validate(t *testing.T) {
 		{
 			name: "Invalid netmask",
 			staticIP: &StaticIPConfig{
-				IP:      StringPtr("192.168.1.100"),
-				Netmask: StringPtr("invalid.mask"),
-				Gateway: StringPtr("192.168.1.1"),
+				IP:      "192.168.1.100",
+				Netmask: "invalid.mask",
+				Gateway: "192.168.1.1",
 			},
 			expectValid:   false,
 			expectedError: "invalid netmask: invalid.mask",
@@ -257,9 +257,9 @@ func TestStaticIPConfig_Validate(t *testing.T) {
 		{
 			name: "Invalid gateway",
 			staticIP: &StaticIPConfig{
-				IP:      StringPtr("192.168.1.100"),
-				Netmask: StringPtr("255.255.255.0"),
-				Gateway: StringPtr("invalid.gateway"),
+				IP:      "192.168.1.100",
+				Netmask: "255.255.255.0",
+				Gateway: "invalid.gateway",
 			},
 			expectValid:   false,
 			expectedError: "invalid gateway: invalid.gateway",
@@ -267,10 +267,10 @@ func TestStaticIPConfig_Validate(t *testing.T) {
 		{
 			name: "Invalid nameserver",
 			staticIP: &StaticIPConfig{
-				IP:         StringPtr("192.168.1.100"),
-				Netmask:    StringPtr("255.255.255.0"),
-				Gateway:    StringPtr("192.168.1.1"),
-				Nameserver: StringPtr("invalid.dns"),
+				IP:         "192.168.1.100",
+				Netmask:    "255.255.255.0",
+				Gateway:    "192.168.1.1",
+				Nameserver: "invalid.dns",
 			},
 			expectValid:   false,
 			expectedError: "invalid nameserver: invalid.dns",
@@ -307,37 +307,37 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 		{
 			name: "Valid enabled MQTT",
 			mqtt: &MQTTConfiguration{
-				Enable: BoolPtr(true),
-				Server: StringPtr("mqtt.example.com:1883"),
+				Enable: true,
+				Server: "mqtt.example.com:1883",
 			},
 			expectValid: true,
 		},
 		{
 			name: "Valid disabled MQTT",
 			mqtt: &MQTTConfiguration{
-				Enable: BoolPtr(false),
+				Enable: false,
 			},
 			expectValid: true,
 		},
 		{
 			name: "Valid MQTT with all settings",
 			mqtt: &MQTTConfiguration{
-				Enable:            BoolPtr(true),
-				Server:            StringPtr("mqtt.example.com:1883"),
-				User:              StringPtr("testuser"),
-				Password:          StringPtr("testpass"),
-				ClientID:          StringPtr("client123"),
-				KeepAlive:         IntPtr(60),
-				MaxQueuedMessages: IntPtr(10),
-				TopicPrefix:       StringPtr("homeassistant"),
+				Enable:            true,
+				Server:            "mqtt.example.com:1883",
+				User:              "testuser",
+				Password:          "testpass",
+				ClientID:          "client123",
+				KeepAlive:         60,
+				MaxQueuedMessages: 10,
+				TopicPrefix:       "homeassistant",
 			},
 			expectValid: true,
 		},
 		{
 			name: "Invalid - enabled without server",
 			mqtt: &MQTTConfiguration{
-				Enable: BoolPtr(true),
-				Server: StringPtr(""),
+				Enable: true,
+				Server: "",
 			},
 			expectValid:   false,
 			expectedError: "MQTT server is required when MQTT is enabled",
@@ -345,8 +345,8 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - invalid server format",
 			mqtt: &MQTTConfiguration{
-				Enable: BoolPtr(true),
-				Server: StringPtr("invalid..server"),
+				Enable: true,
+				Server: "invalid..server",
 			},
 			expectValid:   false,
 			expectedError: "invalid MQTT server format: invalid..server",
@@ -354,9 +354,9 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - port out of range",
 			mqtt: &MQTTConfiguration{
-				Enable: BoolPtr(true),
-				Server: StringPtr("mqtt.example.com:1883"),
-				Port:   IntPtr(70000),
+				Enable: true,
+				Server: "mqtt.example.com:1883",
+				Port:   70000,
 			},
 			expectValid:   false,
 			expectedError: "MQTT port must be between 1 and 65535",
@@ -364,9 +364,9 @@ func TestMQTTConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - client ID too long",
 			mqtt: &MQTTConfiguration{
-				Enable:   BoolPtr(true),
-				Server:   StringPtr("mqtt.example.com"),
-				ClientID: StringPtr("ThisClientIDIsWayTooLongAndExceedsTheOneHundredTwentyEightCharacterLimitForMQTTClientIDsWhichShouldCauseValidationToFailCompletely"),
+				Enable:   true,
+				Server:   "mqtt.example.com",
+				ClientID: "ThisClientIDIsWayTooLongAndExceedsTheOneHundredTwentyEightCharacterLimitForMQTTClientIDsWhichShouldCauseValidationToFailCompletely",
 			},
 			expectValid:   false,
 			expectedError: "MQTT client ID must be 128 characters or less",
@@ -402,25 +402,25 @@ func TestAuthConfiguration_Validate(t *testing.T) {
 		{
 			name: "Valid enabled auth",
 			auth: &AuthConfiguration{
-				Enable:   BoolPtr(true),
-				Username: StringPtr("admin"),
-				Password: StringPtr("securepass"),
+				Enable:   true,
+				Username: "admin",
+				Password: "securepass",
 			},
 			expectValid: true,
 		},
 		{
 			name: "Valid disabled auth",
 			auth: &AuthConfiguration{
-				Enable: BoolPtr(false),
+				Enable: false,
 			},
 			expectValid: true,
 		},
 		{
 			name: "Invalid - enabled without username",
 			auth: &AuthConfiguration{
-				Enable:   BoolPtr(true),
-				Username: StringPtr(""),
-				Password: StringPtr("securepass"),
+				Enable:   true,
+				Username: "",
+				Password: "securepass",
 			},
 			expectValid:   false,
 			expectedError: "username is required when authentication is enabled",
@@ -428,9 +428,9 @@ func TestAuthConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - enabled without password",
 			auth: &AuthConfiguration{
-				Enable:   BoolPtr(true),
-				Username: StringPtr("admin"),
-				Password: StringPtr(""),
+				Enable:   true,
+				Username: "admin",
+				Password: "",
 			},
 			expectValid:   false,
 			expectedError: "password is required when authentication is enabled",
@@ -438,9 +438,9 @@ func TestAuthConfiguration_Validate(t *testing.T) {
 		{
 			name: "Invalid - username too long",
 			auth: &AuthConfiguration{
-				Enable:   BoolPtr(true),
-				Username: StringPtr("ThisUsernameIsWayTooLongAndExceedsTheSixtyFourCharacterLimitExtra"),
-				Password: StringPtr("securepass"),
+				Enable:   true,
+				Username: "ThisUsernameIsWayTooLongAndExceedsTheSixtyFourCharacterLimitExtra",
+				Password: "securepass",
 			},
 			expectValid:   false,
 			expectedError: "username must be 64 characters or less",
@@ -469,14 +469,14 @@ func TestAuthConfiguration_Validate(t *testing.T) {
 func TestTypedConfiguration_ToJSON(t *testing.T) {
 	config := &TypedConfiguration{
 		WiFi: &WiFiConfiguration{
-			Enable:   BoolPtr(true),
-			SSID:     StringPtr("TestNetwork"),
-			Password: StringPtr("password123"),
+			Enable:   true,
+			SSID:     "TestNetwork",
+			Password: "password123",
 		},
 		MQTT: &MQTTConfiguration{
-			Enable: BoolPtr(true),
-			Server: StringPtr("mqtt.example.com"),
-			Port:   IntPtr(1883),
+			Enable: true,
+			Server: "mqtt.example.com",
+			Port:   1883,
 		},
 	}
 
@@ -541,14 +541,14 @@ func TestFromJSON(t *testing.T) {
 	if config.WiFi == nil {
 		t.Errorf("WiFi configuration is nil")
 	} else {
-		if !BoolVal(config.WiFi.Enable, false) {
+		if !config.WiFi.Enable {
 			t.Errorf("Expected WiFi to be enabled")
 		}
-		if StringVal(config.WiFi.SSID, "") != "TestNetwork" {
-			t.Errorf("Expected SSID to be 'TestNetwork', got %q", StringVal(config.WiFi.SSID, ""))
+		if config.WiFi.SSID != "TestNetwork" {
+			t.Errorf("Expected SSID to be 'TestNetwork', got %q", config.WiFi.SSID)
 		}
-		if StringVal(config.WiFi.Password, "") != "password123" {
-			t.Errorf("Expected password to be 'password123', got %q", StringVal(config.WiFi.Password, ""))
+		if config.WiFi.Password != "password123" {
+			t.Errorf("Expected password to be 'password123', got %q", config.WiFi.Password)
 		}
 	}
 
@@ -556,14 +556,14 @@ func TestFromJSON(t *testing.T) {
 	if config.MQTT == nil {
 		t.Errorf("MQTT configuration is nil")
 	} else {
-		if !BoolVal(config.MQTT.Enable, false) {
+		if !config.MQTT.Enable {
 			t.Errorf("Expected MQTT to be enabled")
 		}
-		if StringVal(config.MQTT.Server, "") != "mqtt.example.com" {
-			t.Errorf("Expected MQTT server to be 'mqtt.example.com', got %q", StringVal(config.MQTT.Server, ""))
+		if config.MQTT.Server != "mqtt.example.com" {
+			t.Errorf("Expected MQTT server to be 'mqtt.example.com', got %q", config.MQTT.Server)
 		}
-		if IntVal(config.MQTT.Port, 0) != 1883 {
-			t.Errorf("Expected MQTT port to be 1883, got %d", IntVal(config.MQTT.Port, 0))
+		if config.MQTT.Port != 1883 {
+			t.Errorf("Expected MQTT port to be 1883, got %d", config.MQTT.Port)
 		}
 	}
 }
