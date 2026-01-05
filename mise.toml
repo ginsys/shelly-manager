@@ -1,5 +1,5 @@
 [settings]
 lockfile = true
 [tools]
-go = "1.23.12"
-golangci-lint = "1.60.3"
+go = "1.24.11"
+golangci-lint = "2.7.2"

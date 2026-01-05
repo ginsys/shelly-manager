@@ -331,7 +331,7 @@ func TestShellyService_UpdateRelayConfig(t *testing.T) {
 	autoOn := 10
 	autoOff := 20
 	relayConfig := &configuration.RelayConfig{
-		DefaultState: configuration.StringPtr("off"),
+		DefaultState: "off",
 		AutoOn:       &autoOn,
 		AutoOff:      &autoOff,
 	}
@@ -348,7 +348,7 @@ func TestShellyService_UpdateRelayConfig_InvalidDevice(t *testing.T) {
 	service := NewService(db, cfg)
 
 	relayConfig := &configuration.RelayConfig{
-		DefaultState: configuration.StringPtr("off"),
+		DefaultState: "off",
 	}
 
 	err := service.UpdateRelayConfig(99999, relayConfig)
@@ -375,9 +375,9 @@ func TestShellyService_UpdateDimmingConfig(t *testing.T) {
 	}
 
 	dimmingConfig := &configuration.DimmingConfig{
-		DefaultBrightness: configuration.IntPtr(75),
-		FadeRate:          configuration.IntPtr(1000),
-		DefaultState:      configuration.BoolPtr(true),
+		DefaultBrightness: 75,
+		FadeRate:          1000,
+		DefaultState:      true,
 	}
 
 	err = service.UpdateDimmingConfig(device.ID, dimmingConfig)
@@ -404,10 +404,10 @@ func TestShellyService_UpdateRollerConfig(t *testing.T) {
 	}
 
 	rollerConfig := &configuration.RollerConfig{
-		MaxOpenTime:      configuration.IntPtr(60),
-		MaxCloseTime:     configuration.IntPtr(60),
-		CurrentPosition:  configuration.IntPtr(0),
-		CalibrationState: configuration.StringPtr("not_calibrated"),
+		MaxOpenTime:      60,
+		MaxCloseTime:     60,
+		CurrentPosition:  0,
+		CalibrationState: "not_calibrated",
 	}
 
 	err = service.UpdateRollerConfig(device.ID, rollerConfig)

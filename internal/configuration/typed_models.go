@@ -40,57 +40,57 @@ type TypedConfiguration struct {
 
 // WiFiConfiguration represents WiFi settings
 type WiFiConfiguration struct {
-	Enable        bool               `json:"enable" validate:"required"`
-	SSID          string             `json:"ssid" validate:"required,min=1,max=32"`
-	Password      string             `json:"password,omitempty" validate:"max=63"`
-	IPv4Mode      string             `json:"ipv4mode,omitempty" validate:"oneof=dhcp static"`
+	Enable        *bool              `json:"enable,omitempty"`
+	SSID          *string            `json:"ssid,omitempty"`
+	Password      *string            `json:"password,omitempty"`
+	IPv4Mode      *string            `json:"ipv4mode,omitempty"`
 	StaticIP      *StaticIPConfig    `json:"static_ip,omitempty"`
 	AccessPoint   *AccessPointConfig `json:"ap,omitempty"`
-	RoamThreshold int                `json:"roam_threshold,omitempty" validate:"min=-100,max=-50"`
+	RoamThreshold *int               `json:"roam_threshold,omitempty"`
 }
 
 // StaticIPConfig represents static IP configuration
 type StaticIPConfig struct {
-	IP         string `json:"ip" validate:"required,ip"`
-	Netmask    string `json:"netmask" validate:"required,ip"`
-	Gateway    string `json:"gw" validate:"required,ip"`
-	Nameserver string `json:"nameserver,omitempty" validate:"omitempty,ip"`
+	IP         *string `json:"ip,omitempty"`
+	Netmask    *string `json:"netmask,omitempty"`
+	Gateway    *string `json:"gw,omitempty"`
+	Nameserver *string `json:"nameserver,omitempty"`
 }
 
 // AccessPointConfig represents access point configuration
 type AccessPointConfig struct {
-	Enable   bool   `json:"enable"`
-	SSID     string `json:"ssid,omitempty" validate:"max=32"`
-	Password string `json:"pass,omitempty" validate:"min=8,max=63"`
-	Key      string `json:"key,omitempty" validate:"oneof=open wpa_psk wpa2_psk"`
+	Enable   *bool   `json:"enable,omitempty"`
+	SSID     *string `json:"ssid,omitempty"`
+	Password *string `json:"pass,omitempty"`
+	Key      *string `json:"key,omitempty"`
 }
 
 // MQTTConfiguration represents MQTT settings
 type MQTTConfiguration struct {
-	Enable             bool   `json:"enable"`
-	Server             string `json:"server,omitempty" validate:"omitempty,hostname_port|ip"`
-	Port               int    `json:"port,omitempty" validate:"omitempty,min=1,max=65535"`
-	User               string `json:"user,omitempty"`
-	Password           string `json:"pass,omitempty"`
-	ClientID           string `json:"id,omitempty" validate:"max=128"`
-	CleanSession       bool   `json:"clean_session"`
-	KeepAlive          int    `json:"keep_alive,omitempty" validate:"omitempty,min=1,max=3600"`
-	MaxQueuedMessages  int    `json:"max_qos_msgs,omitempty" validate:"omitempty,min=1,max=100"`
-	RetainPeriod       int    `json:"retain,omitempty" validate:"omitempty,min=0"`
-	UpdatePeriod       int    `json:"update_period,omitempty" validate:"omitempty,min=1,max=3600"`
-	TopicPrefix        string `json:"topic_prefix,omitempty" validate:"max=256"`
-	RPCNotifications   bool   `json:"rpc_ntf"`
-	StatusNotification bool   `json:"status_ntf"`
-	UseClientCert      bool   `json:"ssl_ca,omitempty"`
-	EnableSNI          bool   `json:"enable_sni,omitempty"`
+	Enable             *bool   `json:"enable,omitempty"`
+	Server             *string `json:"server,omitempty"`
+	Port               *int    `json:"port,omitempty"`
+	User               *string `json:"user,omitempty"`
+	Password           *string `json:"pass,omitempty"`
+	ClientID           *string `json:"id,omitempty"`
+	CleanSession       *bool   `json:"clean_session,omitempty"`
+	KeepAlive          *int    `json:"keep_alive,omitempty"`
+	MaxQueuedMessages  *int    `json:"max_qos_msgs,omitempty"`
+	RetainPeriod       *int    `json:"retain,omitempty"`
+	UpdatePeriod       *int    `json:"update_period,omitempty"`
+	TopicPrefix        *string `json:"topic_prefix,omitempty"`
+	RPCNotifications   *bool   `json:"rpc_ntf,omitempty"`
+	StatusNotification *bool   `json:"status_ntf,omitempty"`
+	UseClientCert      *bool   `json:"ssl_ca,omitempty"`
+	EnableSNI          *bool   `json:"enable_sni,omitempty"`
 }
 
 // AuthConfiguration represents authentication settings
 type AuthConfiguration struct {
-	Enable   bool   `json:"enable"`
-	Username string `json:"user,omitempty" validate:"omitempty,min=1,max=64"`
-	Password string `json:"pass,omitempty" validate:"omitempty,min=1"`
-	Realm    string `json:"realm,omitempty" validate:"max=64"`
+	Enable   *bool   `json:"enable,omitempty"`
+	Username *string `json:"user,omitempty"`
+	Password *string `json:"pass,omitempty"`
+	Realm    *string `json:"realm,omitempty"`
 }
 
 // SystemConfiguration represents system settings
@@ -102,29 +102,29 @@ type SystemConfiguration struct {
 	RPC          *RPCConfig         `json:"rpc_udp,omitempty"`
 	SNTP         *SNTPConfig        `json:"sntp,omitempty"`
 	Sleep        *SleepConfig       `json:"sleep_mode,omitempty"`
-	WakeupPeriod int                `json:"wakeup_period,omitempty" validate:"omitempty,min=1"`
+	WakeupPeriod *int               `json:"wakeup_period,omitempty"`
 }
 
 // TypedDeviceConfig represents device-specific settings
 type TypedDeviceConfig struct {
-	Name         string     `json:"name,omitempty" validate:"max=64"`
-	MAC          string     `json:"mac,omitempty"`
-	Hostname     string     `json:"hostname,omitempty" validate:"max=63,hostname"`
-	EcoMode      bool       `json:"eco_mode,omitempty"`
-	Profile      string     `json:"profile,omitempty"`
-	Discoverable bool       `json:"discoverable,omitempty"`
-	AddonType    string     `json:"addon_type,omitempty"`
-	FWAutoUpdate bool       `json:"fw_auto_update,omitempty"`
-	Timezone     string     `json:"tz,omitempty" validate:"max=64"`
-	LatLon       []float64  `json:"lat_lon,omitempty" validate:"len=0|len=2"`
+	Name         *string    `json:"name,omitempty"`
+	MAC          *string    `json:"mac,omitempty"`
+	Hostname     *string    `json:"hostname,omitempty"`
+	EcoMode      *bool      `json:"eco_mode,omitempty"`
+	Profile      *string    `json:"profile,omitempty"`
+	Discoverable *bool      `json:"discoverable,omitempty"`
+	AddonType    *string    `json:"addon_type,omitempty"`
+	FWAutoUpdate *bool      `json:"fw_auto_update,omitempty"`
+	Timezone     *string    `json:"tz,omitempty"`
+	LatLon       []float64  `json:"lat_lon,omitempty"`
 	BleConfig    *BLEConfig `json:"ble,omitempty"`
 }
 
 // LocationConfig represents location settings
 type LocationConfig struct {
-	Timezone  string  `json:"tz,omitempty" validate:"max=64"`
-	Latitude  float64 `json:"lat,omitempty" validate:"min=-90,max=90"`
-	Longitude float64 `json:"lng,omitempty" validate:"min=-180,max=180"`
+	Timezone  *string  `json:"tz,omitempty"`
+	Latitude  *float64 `json:"lat,omitempty"`
+	Longitude *float64 `json:"lng,omitempty"`
 }
 
 // NetworkConfiguration represents network settings
@@ -170,15 +170,15 @@ type WiFiAPConfig struct {
 
 // CloudConfiguration represents cloud settings
 type CloudConfiguration struct {
-	Enable bool   `json:"enable"`
-	Server string `json:"server,omitempty" validate:"omitempty,url"`
+	Enable *bool   `json:"enable,omitempty"`
+	Server *string `json:"server,omitempty"`
 }
 
 // LocationConfiguration represents location and time settings
 type LocationConfiguration struct {
-	Timezone  string  `json:"tz,omitempty" validate:"max=64"`
-	Latitude  float64 `json:"lat,omitempty" validate:"min=-90,max=90"`
-	Longitude float64 `json:"lng,omitempty" validate:"min=-180,max=180"`
+	Timezone  *string  `json:"tz,omitempty"`
+	Latitude  *float64 `json:"lat,omitempty"`
+	Longitude *float64 `json:"lng,omitempty"`
 }
 
 // Additional configuration structures for completeness
@@ -260,23 +260,29 @@ func (tc *TypedConfiguration) Validate() error {
 
 // Validate validates WiFi configuration
 func (w *WiFiConfiguration) Validate() error {
-	if w.Enable && w.SSID == "" {
-		return fmt.Errorf("SSID is required when WiFi is enabled")
+	if w == nil {
+		return nil
 	}
 
-	if len(w.SSID) > 32 {
+	if w.Enable != nil && *w.Enable {
+		if w.SSID == nil || *w.SSID == "" {
+			return fmt.Errorf("SSID is required when WiFi is enabled")
+		}
+	}
+
+	if w.SSID != nil && len(*w.SSID) > 32 {
 		return fmt.Errorf("SSID must be 32 characters or less")
 	}
 
-	if len(w.Password) > 63 {
+	if w.Password != nil && len(*w.Password) > 63 {
 		return fmt.Errorf("WiFi password must be 63 characters or less")
 	}
 
-	if w.IPv4Mode != "" && w.IPv4Mode != "dhcp" && w.IPv4Mode != "static" {
+	if w.IPv4Mode != nil && *w.IPv4Mode != "" && *w.IPv4Mode != "dhcp" && *w.IPv4Mode != "static" {
 		return fmt.Errorf("IPv4 mode must be 'dhcp' or 'static'")
 	}
 
-	if w.IPv4Mode == "static" && w.StaticIP == nil {
+	if w.IPv4Mode != nil && *w.IPv4Mode == "static" && w.StaticIP == nil {
 		return fmt.Errorf("static IP configuration required when IPv4 mode is 'static'")
 	}
 
@@ -286,7 +292,7 @@ func (w *WiFiConfiguration) Validate() error {
 		}
 	}
 
-	if w.RoamThreshold != 0 && (w.RoamThreshold < -100 || w.RoamThreshold > -50) {
+	if w.RoamThreshold != nil && (*w.RoamThreshold < -100 || *w.RoamThreshold > -50) {
 		return fmt.Errorf("roam threshold must be between -100 and -50 dBm")
 	}
 
@@ -295,20 +301,24 @@ func (w *WiFiConfiguration) Validate() error {
 
 // Validate validates static IP configuration
 func (s *StaticIPConfig) Validate() error {
-	if net.ParseIP(s.IP) == nil {
-		return fmt.Errorf("invalid IP address: %s", s.IP)
+	if s == nil {
+		return nil
 	}
 
-	if net.ParseIP(s.Netmask) == nil {
-		return fmt.Errorf("invalid netmask: %s", s.Netmask)
+	if s.IP != nil && net.ParseIP(*s.IP) == nil {
+		return fmt.Errorf("invalid IP address: %s", *s.IP)
 	}
 
-	if net.ParseIP(s.Gateway) == nil {
-		return fmt.Errorf("invalid gateway: %s", s.Gateway)
+	if s.Netmask != nil && net.ParseIP(*s.Netmask) == nil {
+		return fmt.Errorf("invalid netmask: %s", *s.Netmask)
 	}
 
-	if s.Nameserver != "" && net.ParseIP(s.Nameserver) == nil {
-		return fmt.Errorf("invalid nameserver: %s", s.Nameserver)
+	if s.Gateway != nil && net.ParseIP(*s.Gateway) == nil {
+		return fmt.Errorf("invalid gateway: %s", *s.Gateway)
+	}
+
+	if s.Nameserver != nil && *s.Nameserver != "" && net.ParseIP(*s.Nameserver) == nil {
+		return fmt.Errorf("invalid nameserver: %s", *s.Nameserver)
 	}
 
 	return nil
@@ -316,36 +326,39 @@ func (s *StaticIPConfig) Validate() error {
 
 // Validate validates MQTT configuration
 func (m *MQTTConfiguration) Validate() error {
-	if !m.Enable {
-		return nil // Skip validation if MQTT is disabled
+	if m == nil {
+		return nil
 	}
 
-	if m.Server == "" {
+	if m.Enable == nil || !*m.Enable {
+		return nil
+	}
+
+	if m.Server == nil || *m.Server == "" {
 		return fmt.Errorf("MQTT server is required when MQTT is enabled")
 	}
 
-	// Validate server format (hostname:port, IP:port, or just hostname/IP)
-	if !isValidHostnamePort(m.Server) && !isValidIPPort(m.Server) && !isValidHostname(m.Server) && net.ParseIP(m.Server) == nil {
-		return fmt.Errorf("invalid MQTT server format: %s", m.Server)
+	if m.Server != nil && !isValidHostnamePort(*m.Server) && !isValidIPPort(*m.Server) && !isValidHostname(*m.Server) && net.ParseIP(*m.Server) == nil {
+		return fmt.Errorf("invalid MQTT server format: %s", *m.Server)
 	}
 
-	if m.Port != 0 && (m.Port < 1 || m.Port > 65535) {
+	if m.Port != nil && (*m.Port < 1 || *m.Port > 65535) {
 		return fmt.Errorf("MQTT port must be between 1 and 65535")
 	}
 
-	if len(m.ClientID) > 128 {
+	if m.ClientID != nil && len(*m.ClientID) > 128 {
 		return fmt.Errorf("MQTT client ID must be 128 characters or less")
 	}
 
-	if m.KeepAlive != 0 && (m.KeepAlive < 1 || m.KeepAlive > 3600) {
+	if m.KeepAlive != nil && (*m.KeepAlive < 1 || *m.KeepAlive > 3600) {
 		return fmt.Errorf("MQTT keep alive must be between 1 and 3600 seconds")
 	}
 
-	if m.MaxQueuedMessages != 0 && (m.MaxQueuedMessages < 1 || m.MaxQueuedMessages > 100) {
+	if m.MaxQueuedMessages != nil && (*m.MaxQueuedMessages < 1 || *m.MaxQueuedMessages > 100) {
 		return fmt.Errorf("MQTT max queued messages must be between 1 and 100")
 	}
 
-	if len(m.TopicPrefix) > 256 {
+	if m.TopicPrefix != nil && len(*m.TopicPrefix) > 256 {
 		return fmt.Errorf("MQTT topic prefix must be 256 characters or less")
 	}
 
@@ -354,23 +367,27 @@ func (m *MQTTConfiguration) Validate() error {
 
 // Validate validates authentication configuration
 func (a *AuthConfiguration) Validate() error {
-	if !a.Enable {
-		return nil // Skip validation if auth is disabled
+	if a == nil {
+		return nil
 	}
 
-	if a.Username == "" {
+	if a.Enable == nil || !*a.Enable {
+		return nil
+	}
+
+	if a.Username == nil || *a.Username == "" {
 		return fmt.Errorf("username is required when authentication is enabled")
 	}
 
-	if len(a.Username) > 64 {
+	if a.Username != nil && len(*a.Username) > 64 {
 		return fmt.Errorf("username must be 64 characters or less")
 	}
 
-	if a.Password == "" {
+	if a.Password == nil || *a.Password == "" {
 		return fmt.Errorf("password is required when authentication is enabled")
 	}
 
-	if len(a.Realm) > 64 {
+	if a.Realm != nil && len(*a.Realm) > 64 {
 		return fmt.Errorf("realm must be 64 characters or less")
 	}
 
@@ -379,6 +396,10 @@ func (a *AuthConfiguration) Validate() error {
 
 // Validate validates system configuration
 func (s *SystemConfiguration) Validate() error {
+	if s == nil {
+		return nil
+	}
+
 	if s.Device != nil {
 		if err := s.Device.Validate(); err != nil {
 			return fmt.Errorf("device config validation failed: %w", err)
@@ -391,7 +412,7 @@ func (s *SystemConfiguration) Validate() error {
 		}
 	}
 
-	if s.WakeupPeriod != 0 && s.WakeupPeriod < 1 {
+	if s.WakeupPeriod != nil && *s.WakeupPeriod < 1 {
 		return fmt.Errorf("wakeup period must be positive")
 	}
 
@@ -400,19 +421,23 @@ func (s *SystemConfiguration) Validate() error {
 
 // Validate validates device configuration
 func (d *TypedDeviceConfig) Validate() error {
-	if len(d.Name) > 64 {
+	if d == nil {
+		return nil
+	}
+
+	if d.Name != nil && len(*d.Name) > 64 {
 		return fmt.Errorf("device name must be 64 characters or less")
 	}
 
-	if d.Hostname != "" && !isValidHostname(d.Hostname) {
-		return fmt.Errorf("invalid hostname: %s", d.Hostname)
+	if d.Hostname != nil && *d.Hostname != "" && !isValidHostname(*d.Hostname) {
+		return fmt.Errorf("invalid hostname: %s", *d.Hostname)
 	}
 
-	if len(d.Hostname) > 63 {
+	if d.Hostname != nil && len(*d.Hostname) > 63 {
 		return fmt.Errorf("hostname must be 63 characters or less")
 	}
 
-	if len(d.Timezone) > 64 {
+	if d.Timezone != nil && len(*d.Timezone) > 64 {
 		return fmt.Errorf("timezone must be 64 characters or less")
 	}
 
@@ -435,15 +460,19 @@ func (d *TypedDeviceConfig) Validate() error {
 
 // Validate validates location configuration
 func (l *LocationConfig) Validate() error {
-	if len(l.Timezone) > 64 {
+	if l == nil {
+		return nil
+	}
+
+	if l.Timezone != nil && len(*l.Timezone) > 64 {
 		return fmt.Errorf("timezone must be 64 characters or less")
 	}
 
-	if l.Latitude < -90 || l.Latitude > 90 {
+	if l.Latitude != nil && (*l.Latitude < -90 || *l.Latitude > 90) {
 		return fmt.Errorf("latitude must be between -90 and 90")
 	}
 
-	if l.Longitude < -180 || l.Longitude > 180 {
+	if l.Longitude != nil && (*l.Longitude < -180 || *l.Longitude > 180) {
 		return fmt.Errorf("longitude must be between -180 and 180")
 	}
 

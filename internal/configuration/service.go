@@ -1411,33 +1411,32 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 		wifi := &WiFiConfiguration{}
 
 		if enable, ok := wifiData["enable"].(bool); ok {
-			wifi.Enable = enable
+			wifi.Enable = BoolPtr(enable)
 		}
 		if ssid, ok := wifiData["ssid"].(string); ok {
-			wifi.SSID = ssid
+			wifi.SSID = StringPtr(ssid)
 		}
 		if pass, ok := wifiData["pass"].(string); ok {
-			wifi.Password = pass
+			wifi.Password = StringPtr(pass)
 		}
 		if ipv4mode, ok := wifiData["ipv4mode"].(string); ok {
-			wifi.IPv4Mode = ipv4mode
+			wifi.IPv4Mode = StringPtr(ipv4mode)
 		}
 
-		// Convert static IP if present
 		if staticData, ok := wifiData["ip"].(map[string]interface{}); ok {
 			static := &StaticIPConfig{}
 
 			if ip, ok := staticData["ip"].(string); ok {
-				static.IP = ip
+				static.IP = StringPtr(ip)
 			}
 			if netmask, ok := staticData["netmask"].(string); ok {
-				static.Netmask = netmask
+				static.Netmask = StringPtr(netmask)
 			}
 			if gw, ok := staticData["gw"].(string); ok {
-				static.Gateway = gw
+				static.Gateway = StringPtr(gw)
 			}
 			if dns, ok := staticData["nameserver"].(string); ok {
-				static.Nameserver = dns
+				static.Nameserver = StringPtr(dns)
 			}
 
 			wifi.StaticIP = static
@@ -1452,19 +1451,19 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 		mqtt := &MQTTConfiguration{}
 
 		if enable, ok := mqttData["enable"].(bool); ok {
-			mqtt.Enable = enable
+			mqtt.Enable = BoolPtr(enable)
 		}
 		if server, ok := mqttData["server"].(string); ok {
-			mqtt.Server = server
+			mqtt.Server = StringPtr(server)
 		}
 		if port, ok := mqttData["port"].(float64); ok {
-			mqtt.Port = int(port)
+			mqtt.Port = IntPtr(int(port))
 		}
 		if user, ok := mqttData["user"].(string); ok {
-			mqtt.User = user
+			mqtt.User = StringPtr(user)
 		}
 		if pass, ok := mqttData["pass"].(string); ok {
-			mqtt.Password = pass
+			mqtt.Password = StringPtr(pass)
 		}
 
 		typedConfig.MQTT = mqtt
@@ -1476,13 +1475,13 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 		auth := &AuthConfiguration{}
 
 		if enable, ok := authData["enable"].(bool); ok {
-			auth.Enable = enable
+			auth.Enable = BoolPtr(enable)
 		}
 		if user, ok := authData["user"].(string); ok {
-			auth.Username = user
+			auth.Username = StringPtr(user)
 		}
 		if pass, ok := authData["pass"].(string); ok {
-			auth.Password = pass
+			auth.Password = StringPtr(pass)
 		}
 
 		typedConfig.Auth = auth
@@ -1498,13 +1497,13 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 			device := &TypedDeviceConfig{}
 
 			if name, ok := deviceData["name"].(string); ok {
-				device.Name = name
+				device.Name = StringPtr(name)
 			}
 			if hostname, ok := deviceData["hostname"].(string); ok {
-				device.Hostname = hostname
+				device.Hostname = StringPtr(hostname)
 			}
 			if tz, ok := deviceData["tz"].(string); ok {
-				device.Timezone = tz
+				device.Timezone = StringPtr(tz)
 			}
 
 			system.Device = device
@@ -1519,10 +1518,10 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 		cloud := &CloudConfiguration{}
 
 		if enable, ok := cloudData["enable"].(bool); ok {
-			cloud.Enable = enable
+			cloud.Enable = BoolPtr(enable)
 		}
 		if server, ok := cloudData["server"].(string); ok {
-			cloud.Server = server
+			cloud.Server = StringPtr(server)
 		}
 
 		typedConfig.Cloud = cloud
@@ -1536,28 +1535,25 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 		// Convert first relay (most common case for single-relay devices)
 		if firstRelay, ok := relaysData[0].(map[string]interface{}); ok {
 			if defaultState, ok := firstRelay["default_state"].(string); ok {
-				relay.DefaultState = defaultState
+				relay.DefaultState = StringPtr(defaultState)
 			}
 			if btnType, ok := firstRelay["btn_type"].(string); ok {
-				relay.ButtonType = btnType
+				relay.ButtonType = StringPtr(btnType)
 			}
 			if autoOn, ok := firstRelay["auto_on"].(float64); ok && autoOn > 0 {
-				autoOnInt := int(autoOn)
-				relay.AutoOn = &autoOnInt
+				relay.AutoOn = IntPtr(int(autoOn))
 			}
 			if autoOff, ok := firstRelay["auto_off"].(float64); ok && autoOff > 0 {
-				autoOffInt := int(autoOff)
-				relay.AutoOff = &autoOffInt
+				relay.AutoOff = IntPtr(int(autoOff))
 			}
 			if hasTimer, ok := firstRelay["has_timer"].(bool); ok {
-				relay.HasTimer = hasTimer
+				relay.HasTimer = BoolPtr(hasTimer)
 			}
 			if schedule, ok := firstRelay["schedule"].(bool); ok && schedule {
-				relay.HasTimer = true // schedule implies timer capability
+				relay.HasTimer = BoolPtr(true)
 			}
 			if maxPower, ok := firstRelay["max_power"].(float64); ok && maxPower > 0 {
-				maxPowerInt := int(maxPower)
-				relay.MaxPowerLimit = &maxPowerInt
+				relay.MaxPowerLimit = IntPtr(int(maxPower))
 			}
 		}
 
@@ -1570,24 +1566,22 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 				}
 
 				if name, ok := relayMap["name"].(string); ok && name != "" {
-					singleRelay.Name = name
+					singleRelay.Name = StringPtr(name)
 				} else if appType, ok := relayMap["appliance_type"].(string); ok {
-					singleRelay.Name = appType
+					singleRelay.Name = StringPtr(appType)
 				}
 
 				if defaultState, ok := relayMap["default_state"].(string); ok {
-					singleRelay.DefaultState = defaultState
+					singleRelay.DefaultState = StringPtr(defaultState)
 				}
 				if autoOn, ok := relayMap["auto_on"].(float64); ok && autoOn > 0 {
-					autoOnInt := int(autoOn)
-					singleRelay.AutoOn = &autoOnInt
+					singleRelay.AutoOn = IntPtr(int(autoOn))
 				}
 				if autoOff, ok := relayMap["auto_off"].(float64); ok && autoOff > 0 {
-					autoOffInt := int(autoOff)
-					singleRelay.AutoOff = &autoOffInt
+					singleRelay.AutoOff = IntPtr(int(autoOff))
 				}
 				if schedule, ok := relayMap["schedule"].(bool); ok {
-					singleRelay.Schedule = schedule
+					singleRelay.Schedule = BoolPtr(schedule)
 				}
 
 				relays[i] = singleRelay
@@ -1602,16 +1596,16 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 	// Convert Input section
 	if inputsData, ok := rawData["inputs"].([]interface{}); ok && len(inputsData) > 0 {
 		input := &InputConfig{
-			Type: "button", // Default for most Shelly devices
+			Type: StringPtr("button"),
 		}
 
 		// Convert first input for global settings
 		if firstInput, ok := inputsData[0].(map[string]interface{}); ok {
 			if btnType, ok := firstInput["btn_type"].(string); ok {
-				input.Mode = btnType
+				input.Mode = StringPtr(btnType)
 			}
 			if btnReverse, ok := firstInput["btn_reverse"].(float64); ok {
-				input.Inverted = btnReverse > 0
+				input.Inverted = BoolPtr(btnReverse > 0)
 			}
 		}
 
@@ -1621,26 +1615,27 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 			if inputMap, ok := inputData.(map[string]interface{}); ok {
 				singleInput := SingleInputConfig{
 					ID:   i,
-					Type: "button",
+					Type: StringPtr("button"),
 				}
 
 				if name, ok := inputMap["name"].(string); ok && name != "" {
-					singleInput.Name = name
+					singleInput.Name = StringPtr(name)
 				} else {
-					singleInput.Name = fmt.Sprintf("Input %d", i)
+					singleInput.Name = StringPtr(fmt.Sprintf("Input %d", i))
 				}
 
 				if btnType, ok := inputMap["btn_type"].(string); ok {
-					singleInput.Mode = btnType
+					singleInput.Mode = StringPtr(btnType)
 				}
 				if btnReverse, ok := inputMap["btn_reverse"].(float64); ok {
-					singleInput.Inverted = btnReverse > 0
+					singleInput.Inverted = BoolPtr(btnReverse > 0)
 				}
 
 				inputs[i] = singleInput
 			}
 		}
 
+		input.Inputs = inputs
 		typedConfig.Input = input
 		delete(rawData, "inputs")
 	}

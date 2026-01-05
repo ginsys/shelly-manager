@@ -418,25 +418,25 @@ func TestDeviceCapabilities(t *testing.T) {
 			Generation: 1,
 		},
 		relay: &RelayConfig{
-			DefaultState: "last",
-			ButtonType:   "toggle",
+			DefaultState: StringPtr("last"),
+			ButtonType:   StringPtr("toggle"),
 			AutoOn:       &autoOn,
 			AutoOff:      nil,
-			HasTimer:     true,
+			HasTimer:     BoolPtr(true),
 			Relays: []SingleRelayConfig{
 				{
 					ID:           0,
-					Name:         "Relay 0",
-					DefaultState: "off",
-					Schedule:     true,
+					Name:         StringPtr("Relay 0"),
+					DefaultState: StringPtr("off"),
+					Schedule:     BoolPtr(true),
 				},
 			},
 		},
 		power: &PowerMeteringConfig{
 			MaxPower:         &maxPower,
-			ProtectionAction: "off",
-			PowerCorrection:  1.0,
-			ReportingPeriod:  60,
+			ProtectionAction: StringPtr("off"),
+			PowerCorrection:  Float64Ptr(1.0),
+			ReportingPeriod:  IntPtr(60),
 		},
 	}
 
@@ -466,8 +466,8 @@ func TestDeviceCapabilities(t *testing.T) {
 	if relayConfig == nil {
 		t.Fatal("GetRelayConfig() returned nil")
 	}
-	if relayConfig.DefaultState != "last" {
-		t.Errorf("RelayConfig.DefaultState = %s, want last", relayConfig.DefaultState)
+	if StringVal(relayConfig.DefaultState, "") != "last" {
+		t.Errorf("RelayConfig.DefaultState = %s, want last", StringVal(relayConfig.DefaultState, ""))
 	}
 
 	// Test HasPowerMetering interface
@@ -480,15 +480,14 @@ func TestDeviceCapabilities(t *testing.T) {
 		t.Errorf("PowerConfig.MaxPower = %d, want 2300", *powerConfig.MaxPower)
 	}
 
-	// Test setting configs
 	newAutoOn := 600
 	hasRelay.SetRelayConfig(&RelayConfig{
-		DefaultState: "on",
+		DefaultState: StringPtr("on"),
 		AutoOn:       &newAutoOn,
 	})
 	updatedRelay := hasRelay.GetRelayConfig()
-	if updatedRelay.DefaultState != "on" {
-		t.Errorf("Updated RelayConfig.DefaultState = %s, want on", updatedRelay.DefaultState)
+	if StringVal(updatedRelay.DefaultState, "") != "on" {
+		t.Errorf("Updated RelayConfig.DefaultState = %s, want on", StringVal(updatedRelay.DefaultState, ""))
 	}
 	if *updatedRelay.AutoOn != 600 {
 		t.Errorf("Updated RelayConfig.AutoOn = %d, want 600", *updatedRelay.AutoOn)
