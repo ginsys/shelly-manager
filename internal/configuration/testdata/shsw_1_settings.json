@@ -1,0 +1,79 @@
+{
+  "device": {
+    "type": "SHSW-1",
+    "mac": "112233445566",
+    "hostname": "shelly1-112233445566",
+    "num_outputs": 1,
+    "num_meters": 0
+  },
+  "wifi_sta": {
+    "enabled": true,
+    "ssid": "HomeNetwork",
+    "key": "wifipassword",
+    "ipv4_method": "dhcp",
+    "ip": null,
+    "netmask": null,
+    "gw": null,
+    "dns": null
+  },
+  "wifi_ap": {
+    "enabled": false,
+    "ssid": "shelly1-112233445566",
+    "key": ""
+  },
+  "mqtt": {
+    "enable": false,
+    "server": "192.168.1.100:1883",
+    "user": "",
+    "pass": "",
+    "id": "shelly1-112233445566",
+    "clean_session": true,
+    "keep_alive": 60
+  },
+  "login": {
+    "enabled": false,
+    "username": "admin",
+    "password": ""
+  },
+  "cloud": {
+    "enabled": true,
+    "server": "shelly-cloud.allterco.com:6012/jrpc"
+  },
+  "coiot": {
+    "enabled": true,
+    "update_period": 15,
+    "peer": ""
+  },
+  "name": "Garage Light",
+  "timezone": "Europe/London",
+  "lat": 51.5074,
+  "lng": -0.1278,
+  "eco_mode_enabled": true,
+  "discoverable": true,
+  "relays": [
+    {
+      "name": "Garage Relay",
+      "ison": false,
+      "default_state": "off",
+      "auto_on": 0,
+      "auto_off": 0
+    }
+  ],
+  "inputs": [
+    {
+      "name": "Wall Switch",
+      "type": "switch",
+      "mode": "toggle",
+      "inverted": false,
+      "single_push_action": "toggle",
+      "long_push_action": "off"
+    }
+  ],
+  "fw": "20220209-094704/v1.11.8-g8c7bb8d",
+  "hwinfo": {
+    "hw_revision": "prod-2019",
+    "batch_id": 1
+  },
+  "time": "14:30",
+  "unixtime": 1673460000
+}

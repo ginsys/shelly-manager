@@ -1,0 +1,80 @@
+{
+  "device": {
+    "type": "SHSW-PM",
+    "mac": "223344556677",
+    "hostname": "shelly1pm-223344556677",
+    "num_outputs": 1,
+    "num_meters": 1
+  },
+  "wifi_sta": {
+    "enabled": true,
+    "ssid": "OfficeWiFi",
+    "key": "officepass123",
+    "ipv4_method": "static",
+    "ip": "192.168.1.50",
+    "netmask": "255.255.255.0",
+    "gw": "192.168.1.1",
+    "dns": "8.8.8.8"
+  },
+  "wifi_ap": {
+    "enabled": false,
+    "ssid": "shelly1pm-223344556677",
+    "key": ""
+  },
+  "mqtt": {
+    "enable": true,
+    "server": "mqtt.office.local:1883",
+    "user": "shelly",
+    "pass": "shellymqtt",
+    "id": "shelly1pm-223344556677",
+    "clean_session": true,
+    "keep_alive": 30
+  },
+  "login": {
+    "enabled": true,
+    "username": "admin",
+    "password": "admin123"
+  },
+  "cloud": {
+    "enabled": false,
+    "server": "shelly-cloud.allterco.com:6012/jrpc"
+  },
+  "coiot": {
+    "enabled": false,
+    "update_period": 15,
+    "peer": ""
+  },
+  "name": "Server Room AC",
+  "timezone": "America/Los_Angeles",
+  "lat": 37.7749,
+  "lng": -122.4194,
+  "eco_mode_enabled": false,
+  "discoverable": true,
+  "max_power": 3500,
+  "relays": [
+    {
+      "name": "AC Unit",
+      "ison": true,
+      "default_state": "last",
+      "auto_on": 0,
+      "auto_off": 3600
+    }
+  ],
+  "inputs": [
+    {
+      "name": "Thermostat",
+      "type": "button",
+      "mode": "momentary",
+      "inverted": false,
+      "single_push_action": "toggle",
+      "long_push_action": "off"
+    }
+  ],
+  "fw": "20220209-094704/v1.11.8-g8c7bb8d",
+  "hwinfo": {
+    "hw_revision": "prod-2020",
+    "batch_id": 2
+  },
+  "time": "09:15",
+  "unixtime": 1673441700
+}
