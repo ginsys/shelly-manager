@@ -17,6 +17,11 @@ type Device struct {
 	Settings  string    `json:"settings" gorm:"type:text"` // JSON string
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	TemplateIDs   string `json:"template_ids" gorm:"type:text;default:'[]'"`
+	Overrides     string `json:"overrides" gorm:"type:text;default:'{}'"`
+	DesiredConfig string `json:"desired_config" gorm:"type:text;default:'{}'"`
+	ConfigApplied bool   `json:"config_applied" gorm:"default:false"`
 }
 
 // DiscoveredDevice represents a temporarily discovered Shelly device from provisioning scans
