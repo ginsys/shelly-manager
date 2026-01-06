@@ -1,0 +1,86 @@
+{
+  "device": {
+    "type": "SHPLG-S",
+    "mac": "AABBCCDDEEFF",
+    "hostname": "shellyplug-s-AABBCCDDEEFF",
+    "num_outputs": 1,
+    "num_meters": 1
+  },
+  "wifi_sta": {
+    "enabled": true,
+    "ssid": "MyHomeNetwork",
+    "key": "mypassword123",
+    "ipv4_method": "dhcp",
+    "ip": null,
+    "netmask": null,
+    "gw": null,
+    "dns": null
+  },
+  "wifi_ap": {
+    "enabled": false,
+    "ssid": "shellyplug-s-AABBCCDDEEFF",
+    "key": ""
+  },
+  "mqtt": {
+    "enable": true,
+    "server": "192.168.1.100:1883",
+    "user": "mqtt_user",
+    "pass": "mqtt_pass",
+    "id": "shellyplug-s-AABBCCDDEEFF",
+    "clean_session": true,
+    "keep_alive": 60,
+    "max_qos_msgs": 100,
+    "reconnect_timeout": 10.0,
+    "retain": false,
+    "update_period": 30
+  },
+  "login": {
+    "enabled": true,
+    "username": "admin",
+    "password": "adminpass"
+  },
+  "cloud": {
+    "enabled": false,
+    "server": "shelly-cloud.allterco.com:6012/jrpc"
+  },
+  "coiot": {
+    "enabled": true,
+    "update_period": 15,
+    "peer": ""
+  },
+  "name": "Kitchen Plug",
+  "timezone": "America/New_York",
+  "lat": 40.7128,
+  "lng": -74.0060,
+  "eco_mode_enabled": false,
+  "discoverable": true,
+  "sntp": {
+    "server": "time.google.com"
+  },
+  "max_power": 2500,
+  "led_power_disable": false,
+  "led_status_disable": false,
+  "relays": [
+    {
+      "name": "Kitchen Outlet",
+      "ison": false,
+      "default_state": "off",
+      "auto_on": 0,
+      "auto_off": 0,
+      "schedule": false,
+      "schedule_rules": []
+    }
+  ],
+  "fw": "20220209-094704/v1.11.8-g8c7bb8d",
+  "build_info": {
+    "build_id": "20220209-094704/v1.11.8-g8c7bb8d",
+    "build_timestamp": "2022-02-09T09:47:04Z",
+    "build_version": "1.0"
+  },
+  "hwinfo": {
+    "hw_revision": "prod-2020",
+    "batch_id": 1
+  },
+  "time": "12:34",
+  "unixtime": 1673456789
+}
