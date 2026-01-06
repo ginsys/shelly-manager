@@ -35,8 +35,9 @@ type ConfigTemplate struct {
 	ID          uint            `json:"id" gorm:"primaryKey"`
 	Name        string          `json:"name" gorm:"uniqueIndex;not null"`
 	Description string          `json:"description"`
-	DeviceType  string          `json:"device_type"` // e.g., "SHSW-1", "SHPLG-S", or "all"
-	Generation  int             `json:"generation"`  // 1 for Gen1, 2 for Gen2+, 0 for all
+	Scope       string          `json:"scope" gorm:"not null"` // "global", "group", "device_type"
+	DeviceType  string          `json:"device_type"`           // e.g., "SHSW-1", "SHPLG-S", or "all"
+	Generation  int             `json:"generation"`            // 1 for Gen1, 2 for Gen2+, 0 for all
 	Config      json.RawMessage `json:"config" gorm:"type:text"`
 	Variables   json.RawMessage `json:"variables" gorm:"type:text"` // Variable definitions for template
 	IsDefault   bool            `json:"is_default"`                 // Default template for device type

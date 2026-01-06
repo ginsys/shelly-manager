@@ -797,6 +797,7 @@ func TestCreateConfigTemplate(t *testing.T) {
 	templateReq := map[string]interface{}{
 		"name":        "Test Template",
 		"description": "Test template description",
+		"scope":       "device_type",
 		"deviceType":  "shelly-1",
 		"config":      map[string]interface{}{"relay": map[string]interface{}{"auto_on": true}},
 	}
@@ -1127,6 +1128,7 @@ func TestUpdateConfigTemplate(t *testing.T) {
 	template := &configuration.ConfigTemplate{
 		Name:        "Test Template",
 		Description: "Test Description",
+		Scope:       "device_type",
 		DeviceType:  "shelly-1",
 		Config:      []byte(`{"relay": {"auto_on": true}}`),
 	}
@@ -1169,6 +1171,7 @@ func TestDeleteConfigTemplate(t *testing.T) {
 	template := &configuration.ConfigTemplate{
 		Name:        "Test Template",
 		Description: "Test Description",
+		Scope:       "device_type",
 		DeviceType:  "shelly-1",
 		Config:      []byte(`{"relay": {"auto_on": true}}`),
 	}
@@ -1200,6 +1203,7 @@ func TestApplyConfigTemplate(t *testing.T) {
 	template := &configuration.ConfigTemplate{
 		Name:        "Test Template",
 		Description: "Test Description",
+		Scope:       "device_type",
 		DeviceType:  "shelly-1",
 		Config:      []byte(`{"relay": {"auto_on": true}}`),
 	}
