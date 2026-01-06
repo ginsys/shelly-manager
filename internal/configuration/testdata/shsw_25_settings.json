@@ -1,0 +1,95 @@
+{
+  "device": {
+    "type": "SHSW-25",
+    "mac": "334455667788",
+    "hostname": "shelly25-334455667788",
+    "num_outputs": 2,
+    "num_meters": 2
+  },
+  "wifi_sta": {
+    "enabled": true,
+    "ssid": "SmartHome",
+    "key": "smarthome2024",
+    "ipv4_method": "dhcp",
+    "ip": null,
+    "netmask": null,
+    "gw": null,
+    "dns": null
+  },
+  "wifi_ap": {
+    "enabled": false,
+    "ssid": "shelly25-334455667788",
+    "key": ""
+  },
+  "mqtt": {
+    "enable": true,
+    "server": "192.168.1.10:1883",
+    "user": "homeassistant",
+    "pass": "hapass",
+    "id": "shelly25-334455667788",
+    "clean_session": true,
+    "keep_alive": 60
+  },
+  "login": {
+    "enabled": false,
+    "username": "admin",
+    "password": ""
+  },
+  "cloud": {
+    "enabled": false,
+    "server": "shelly-cloud.allterco.com:6012/jrpc"
+  },
+  "coiot": {
+    "enabled": true,
+    "update_period": 30,
+    "peer": "192.168.1.5"
+  },
+  "name": "Living Room Lights",
+  "timezone": "Europe/Berlin",
+  "lat": 52.5200,
+  "lng": 13.4050,
+  "eco_mode_enabled": false,
+  "discoverable": true,
+  "max_power": 4600,
+  "relays": [
+    {
+      "name": "Ceiling Light",
+      "ison": false,
+      "default_state": "off",
+      "auto_on": 0,
+      "auto_off": 0
+    },
+    {
+      "name": "Floor Lamp",
+      "ison": true,
+      "default_state": "last",
+      "auto_on": 0,
+      "auto_off": 7200
+    }
+  ],
+  "inputs": [
+    {
+      "name": "Wall Switch 1",
+      "type": "switch",
+      "mode": "toggle",
+      "inverted": false,
+      "single_push_action": "toggle",
+      "long_push_action": "off"
+    },
+    {
+      "name": "Wall Switch 2",
+      "type": "switch",
+      "mode": "toggle",
+      "inverted": false,
+      "single_push_action": "toggle",
+      "long_push_action": "off"
+    }
+  ],
+  "fw": "20220209-094704/v1.11.8-g8c7bb8d",
+  "hwinfo": {
+    "hw_revision": "prod-2020",
+    "batch_id": 3
+  },
+  "time": "20:45",
+  "unixtime": 1673473500
+}

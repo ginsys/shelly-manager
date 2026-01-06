@@ -73,14 +73,19 @@ func (c *Gen1Converter) FromAPIConfig(apiJSON json.RawMessage, deviceType string
 		return nil, fmt.Errorf("failed to convert Relay: %w", err)
 	}
 
-	// Convert PowerMetering settings
-	if err := c.convertPowerMetering(gen1, config); err != nil {
+	// Convert PowerMetering settings (device-specific)
+	if err := c.convertPowerMetering(gen1, config, deviceType); err != nil {
 		return nil, fmt.Errorf("failed to convert PowerMetering: %w", err)
 	}
 
-	// Convert LED settings
-	if err := c.convertLED(gen1, config); err != nil {
+	// Convert LED settings (device-specific)
+	if err := c.convertLED(gen1, config, deviceType); err != nil {
 		return nil, fmt.Errorf("failed to convert LED: %w", err)
+	}
+
+	// Convert Input settings
+	if err := c.convertInput(gen1, config, deviceType); err != nil {
+		return nil, fmt.Errorf("failed to convert Input: %w", err)
 	}
 
 	return config, nil
@@ -119,10 +124,13 @@ func (c *Gen1Converter) ToAPIConfig(config *DeviceConfiguration, deviceType stri
 	c.exportRelay(config, gen1, deviceType)
 
 	// Convert PowerMetering settings
-	c.exportPowerMetering(config, gen1)
+	c.exportPowerMetering(config, gen1, deviceType)
 
 	// Convert LED settings
-	c.exportLED(config, gen1)
+	c.exportLED(config, gen1, deviceType)
+
+	// Convert Input settings
+	c.exportInput(config, gen1, deviceType)
 
 	// Marshal to JSON
 	return json.Marshal(gen1)
@@ -403,7 +411,11 @@ func (c *Gen1Converter) convertRelay(gen1 map[string]interface{}, config *Device
 	return nil
 }
 
-func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config *DeviceConfiguration) error {
+func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
+	if !c.hasPowerMetering(deviceType) {
+		return nil
+	}
+
 	if maxPower, ok := gen1["max_power"].(float64); ok {
 		config.PowerMetering = &PowerMeteringConfig{
 			MaxPower: IntPtr(int(maxPower)),
@@ -413,13 +425,15 @@ func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config
 	return nil
 }
 
-func (c *Gen1Converter) convertLED(gen1 map[string]interface{}, config *DeviceConfiguration) error {
+func (c *Gen1Converter) convertLED(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
+	if !c.hasLED(deviceType) {
+		return nil
+	}
+
 	led := &LEDConfig{}
 	hasData := false
 
-	// Gen1 uses led_power_disable and led_status_disable
 	if ledPowerDisable, ok := gen1["led_power_disable"].(bool); ok {
-		// Inverted: disable=true means enabled=false
 		led.PowerIndication = BoolPtr(!ledPowerDisable)
 		hasData = true
 	}
@@ -619,6 +633,10 @@ func (c *Gen1Converter) exportLocation(config *DeviceConfiguration, gen1 map[str
 }
 
 func (c *Gen1Converter) exportRelay(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
+	if !c.hasRelay(deviceType) {
+		return
+	}
+
 	if config.Relay == nil || len(config.Relay.Relays) == 0 {
 		return
 	}
@@ -647,7 +665,11 @@ func (c *Gen1Converter) exportRelay(config *DeviceConfiguration, gen1 map[string
 	gen1["relays"] = relays
 }
 
-func (c *Gen1Converter) exportPowerMetering(config *DeviceConfiguration, gen1 map[string]interface{}) {
+func (c *Gen1Converter) exportPowerMetering(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
+	if !c.hasPowerMetering(deviceType) {
+		return
+	}
+
 	if config.PowerMetering == nil {
 		return
 	}
@@ -657,7 +679,12 @@ func (c *Gen1Converter) exportPowerMetering(config *DeviceConfiguration, gen1 ma
 	}
 }
 
-func (c *Gen1Converter) exportLED(config *DeviceConfiguration, gen1 map[string]interface{}) {
+func (c *Gen1Converter) exportLED(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
+	// Only plugs have LED ring
+	if !c.hasLED(deviceType) {
+		return
+	}
+
 	if config.LED == nil {
 		return
 	}
@@ -668,5 +695,122 @@ func (c *Gen1Converter) exportLED(config *DeviceConfiguration, gen1 map[string]i
 	}
 	if config.LED.NetworkIndication != nil {
 		gen1["led_status_disable"] = !*config.LED.NetworkIndication
+	}
+}
+
+// Input conversion methods
+
+func (c *Gen1Converter) convertInput(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
+	inputsData, ok := gen1["inputs"].([]interface{})
+	if !ok || len(inputsData) == 0 {
+		return nil
+	}
+
+	input := &InputConfig{
+		Inputs: make([]SingleInputConfig, 0, len(inputsData)),
+	}
+
+	for i, inputItem := range inputsData {
+		inputMap, ok := inputItem.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		singleInput := SingleInputConfig{
+			ID: i,
+		}
+
+		if name, ok := inputMap["name"].(string); ok {
+			singleInput.Name = StringPtr(name)
+		}
+		if inputType, ok := inputMap["type"].(string); ok {
+			singleInput.Type = StringPtr(inputType)
+		}
+		if mode, ok := inputMap["mode"].(string); ok {
+			singleInput.Mode = StringPtr(mode)
+		}
+		if inverted, ok := inputMap["inverted"].(bool); ok {
+			singleInput.Inverted = BoolPtr(inverted)
+		}
+		if action, ok := inputMap["single_push_action"].(string); ok {
+			singleInput.SinglePushAction = StringPtr(action)
+		}
+		if action, ok := inputMap["long_push_action"].(string); ok {
+			singleInput.LongPushAction = StringPtr(action)
+		}
+
+		input.Inputs = append(input.Inputs, singleInput)
+	}
+
+	if len(input.Inputs) > 0 {
+		config.Input = input
+	}
+
+	return nil
+}
+
+func (c *Gen1Converter) exportInput(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
+	if config.Input == nil || len(config.Input.Inputs) == 0 {
+		return
+	}
+
+	inputs := make([]map[string]interface{}, len(config.Input.Inputs))
+
+	for i, input := range config.Input.Inputs {
+		inputMap := make(map[string]interface{})
+
+		if input.Name != nil {
+			inputMap["name"] = *input.Name
+		}
+		if input.Type != nil {
+			inputMap["type"] = *input.Type
+		}
+		if input.Mode != nil {
+			inputMap["mode"] = *input.Mode
+		}
+		if input.Inverted != nil {
+			inputMap["inverted"] = *input.Inverted
+		}
+		if input.SinglePushAction != nil {
+			inputMap["single_push_action"] = *input.SinglePushAction
+		}
+		if input.LongPushAction != nil {
+			inputMap["long_push_action"] = *input.LongPushAction
+		}
+
+		inputs[i] = inputMap
+	}
+
+	gen1["inputs"] = inputs
+}
+
+// Device capability helper methods
+
+func (c *Gen1Converter) hasLED(deviceType string) bool {
+	// Only plugs have LED ring indicator
+	switch deviceType {
+	case "SHPLG-S", "SHPLG-1":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Gen1Converter) hasPowerMetering(deviceType string) bool {
+	switch deviceType {
+	case "SHPLG-S", "SHSW-PM", "SHSW-25":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Gen1Converter) hasRelay(deviceType string) bool {
+	switch deviceType {
+	case "SHIX3-1":
+		// Input-only device, no relays
+		return false
+	default:
+		return true
 	}
 }

@@ -1,0 +1,86 @@
+{
+  "device": {
+    "type": "SHIX3-1",
+    "mac": "445566778899",
+    "hostname": "shellyi3-445566778899",
+    "num_outputs": 0,
+    "num_meters": 0
+  },
+  "wifi_sta": {
+    "enabled": true,
+    "ssid": "SmartHome",
+    "key": "smarthome2024",
+    "ipv4_method": "dhcp",
+    "ip": null,
+    "netmask": null,
+    "gw": null,
+    "dns": null
+  },
+  "wifi_ap": {
+    "enabled": false,
+    "ssid": "shellyi3-445566778899",
+    "key": ""
+  },
+  "mqtt": {
+    "enable": true,
+    "server": "192.168.1.10:1883",
+    "user": "homeassistant",
+    "pass": "hapass",
+    "id": "shellyi3-445566778899",
+    "clean_session": true,
+    "keep_alive": 60
+  },
+  "login": {
+    "enabled": true,
+    "username": "admin",
+    "password": "i3secure"
+  },
+  "cloud": {
+    "enabled": false,
+    "server": "shelly-cloud.allterco.com:6012/jrpc"
+  },
+  "coiot": {
+    "enabled": true,
+    "update_period": 15,
+    "peer": ""
+  },
+  "name": "Bedroom Scene Controller",
+  "timezone": "Europe/Berlin",
+  "lat": 52.5200,
+  "lng": 13.4050,
+  "eco_mode_enabled": false,
+  "discoverable": true,
+  "inputs": [
+    {
+      "name": "Bedside Button",
+      "type": "button",
+      "mode": "momentary",
+      "inverted": false,
+      "single_push_action": "scene_1",
+      "long_push_action": "scene_off"
+    },
+    {
+      "name": "Door Sensor",
+      "type": "switch",
+      "mode": "edge",
+      "inverted": true,
+      "single_push_action": "scene_2",
+      "long_push_action": "none"
+    },
+    {
+      "name": "Motion Trigger",
+      "type": "button",
+      "mode": "momentary",
+      "inverted": false,
+      "single_push_action": "scene_3",
+      "long_push_action": "scene_4"
+    }
+  ],
+  "fw": "20220209-094704/v1.11.8-g8c7bb8d",
+  "hwinfo": {
+    "hw_revision": "prod-2021",
+    "batch_id": 4
+  },
+  "time": "22:00",
+  "unixtime": 1673478000
+}

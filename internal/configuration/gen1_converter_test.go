@@ -465,3 +465,392 @@ func TestGen1Converter_Generation(t *testing.T) {
 		t.Errorf("Generation() = %d, want 1", converter.Generation())
 	}
 }
+
+func TestGen1Converter_FromAPIConfig_SHSW1(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	fixture, err := os.ReadFile("testdata/shsw_1_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load test fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(fixture, "SHSW-1")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	if config.System == nil || config.System.Device == nil {
+		t.Fatal("System.Device is nil")
+	}
+	if StringVal(config.System.Device.Name, "") != "Garage Light" {
+		t.Errorf("Name = %v, want Garage Light", StringVal(config.System.Device.Name, ""))
+	}
+
+	if config.Relay == nil || len(config.Relay.Relays) != 1 {
+		t.Fatalf("Expected 1 relay, got %v", config.Relay)
+	}
+
+	if config.Input == nil || len(config.Input.Inputs) != 1 {
+		t.Fatalf("Expected 1 input, got %v", config.Input)
+	}
+
+	if config.PowerMetering != nil {
+		t.Error("SHSW-1 should NOT have PowerMetering")
+	}
+	if config.LED != nil {
+		t.Error("SHSW-1 should NOT have LED config")
+	}
+}
+
+func TestGen1Converter_ToAPIConfig_SHSW1(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	config := &DeviceConfiguration{
+		System: &SystemConfiguration{
+			Device: &TypedDeviceConfig{Name: StringPtr("Test SHSW-1")},
+		},
+		Relay: &RelayConfig{
+			Relays: []SingleRelayConfig{{ID: 0, Name: StringPtr("Test Relay")}},
+		},
+		Input: &InputConfig{
+			Inputs: []SingleInputConfig{{ID: 0, Name: StringPtr("Test Input")}},
+		},
+		PowerMetering: &PowerMeteringConfig{MaxPower: IntPtr(1000)},
+		LED:           &LEDConfig{PowerIndication: BoolPtr(true)},
+	}
+
+	apiJSON, err := converter.ToAPIConfig(config, "SHSW-1")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var gen1 map[string]interface{}
+	if err := json.Unmarshal(apiJSON, &gen1); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if _, exists := gen1["max_power"]; exists {
+		t.Error("SHSW-1 should NOT have max_power")
+	}
+	if _, exists := gen1["led_power_disable"]; exists {
+		t.Error("SHSW-1 should NOT have LED settings")
+	}
+}
+
+func TestGen1Converter_RoundTrip_SHSW1(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	originalJSON, err := os.ReadFile("testdata/shsw_1_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(originalJSON, "SHSW-1")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	resultJSON, err := converter.ToAPIConfig(config, "SHSW-1")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(resultJSON, &result); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+
+	if result["name"] != "Garage Light" {
+		t.Errorf("name = %v, want Garage Light", result["name"])
+	}
+}
+
+func TestGen1Converter_FromAPIConfig_SHSWPM(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	fixture, err := os.ReadFile("testdata/shsw_pm_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load test fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(fixture, "SHSW-PM")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	if config.PowerMetering == nil {
+		t.Fatal("SHSW-PM should have PowerMetering")
+	}
+	if IntVal(config.PowerMetering.MaxPower, 0) != 3500 {
+		t.Errorf("MaxPower = %v, want 3500", IntVal(config.PowerMetering.MaxPower, 0))
+	}
+
+	if config.LED != nil {
+		t.Error("SHSW-PM should NOT have LED config")
+	}
+}
+
+func TestGen1Converter_ToAPIConfig_SHSWPM(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	config := &DeviceConfiguration{
+		PowerMetering: &PowerMeteringConfig{MaxPower: IntPtr(2000)},
+		LED:           &LEDConfig{PowerIndication: BoolPtr(true)},
+	}
+
+	apiJSON, err := converter.ToAPIConfig(config, "SHSW-PM")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var gen1 map[string]interface{}
+	if err := json.Unmarshal(apiJSON, &gen1); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if gen1["max_power"] != float64(2000) {
+		t.Errorf("max_power = %v, want 2000", gen1["max_power"])
+	}
+	if _, exists := gen1["led_power_disable"]; exists {
+		t.Error("SHSW-PM should NOT have LED settings")
+	}
+}
+
+func TestGen1Converter_RoundTrip_SHSWPM(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	originalJSON, err := os.ReadFile("testdata/shsw_pm_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(originalJSON, "SHSW-PM")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	resultJSON, err := converter.ToAPIConfig(config, "SHSW-PM")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(resultJSON, &result); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+
+	if result["max_power"] != float64(3500) {
+		t.Errorf("max_power = %v, want 3500", result["max_power"])
+	}
+}
+
+func TestGen1Converter_FromAPIConfig_SHSW25(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	fixture, err := os.ReadFile("testdata/shsw_25_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load test fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(fixture, "SHSW-25")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	if config.Relay == nil || len(config.Relay.Relays) != 2 {
+		t.Fatalf("Expected 2 relays, got %d", len(config.Relay.Relays))
+	}
+
+	if config.Input == nil || len(config.Input.Inputs) != 2 {
+		t.Fatalf("Expected 2 inputs, got %d", len(config.Input.Inputs))
+	}
+
+	if config.PowerMetering == nil {
+		t.Fatal("SHSW-25 should have PowerMetering")
+	}
+
+	if config.LED != nil {
+		t.Error("SHSW-25 should NOT have LED config")
+	}
+}
+
+func TestGen1Converter_ToAPIConfig_SHSW25(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	config := &DeviceConfiguration{
+		Relay: &RelayConfig{
+			Relays: []SingleRelayConfig{
+				{ID: 0, Name: StringPtr("Relay 1")},
+				{ID: 1, Name: StringPtr("Relay 2")},
+			},
+		},
+		Input: &InputConfig{
+			Inputs: []SingleInputConfig{
+				{ID: 0, Name: StringPtr("Input 1")},
+				{ID: 1, Name: StringPtr("Input 2")},
+			},
+		},
+		PowerMetering: &PowerMeteringConfig{MaxPower: IntPtr(4000)},
+	}
+
+	apiJSON, err := converter.ToAPIConfig(config, "SHSW-25")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var gen1 map[string]interface{}
+	if err := json.Unmarshal(apiJSON, &gen1); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	relays := gen1["relays"].([]interface{})
+	if len(relays) != 2 {
+		t.Errorf("Expected 2 relays, got %d", len(relays))
+	}
+
+	inputs := gen1["inputs"].([]interface{})
+	if len(inputs) != 2 {
+		t.Errorf("Expected 2 inputs, got %d", len(inputs))
+	}
+}
+
+func TestGen1Converter_RoundTrip_SHSW25(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	originalJSON, err := os.ReadFile("testdata/shsw_25_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(originalJSON, "SHSW-25")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	resultJSON, err := converter.ToAPIConfig(config, "SHSW-25")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(resultJSON, &result); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+
+	relays := result["relays"].([]interface{})
+	if len(relays) != 2 {
+		t.Errorf("Expected 2 relays in round-trip")
+	}
+}
+
+func TestGen1Converter_FromAPIConfig_SHIX31(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	fixture, err := os.ReadFile("testdata/shix3_1_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load test fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(fixture, "SHIX3-1")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	if config.Input == nil || len(config.Input.Inputs) != 3 {
+		t.Fatalf("Expected 3 inputs, got %v", config.Input)
+	}
+
+	if config.Relay != nil && len(config.Relay.Relays) > 0 {
+		t.Error("SHIX3-1 should NOT have relays")
+	}
+	if config.PowerMetering != nil {
+		t.Error("SHIX3-1 should NOT have PowerMetering")
+	}
+	if config.LED != nil {
+		t.Error("SHIX3-1 should NOT have LED")
+	}
+}
+
+func TestGen1Converter_ToAPIConfig_SHIX31(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	config := &DeviceConfiguration{
+		Input: &InputConfig{
+			Inputs: []SingleInputConfig{
+				{ID: 0, Name: StringPtr("Button 1")},
+				{ID: 1, Name: StringPtr("Button 2")},
+				{ID: 2, Name: StringPtr("Button 3")},
+			},
+		},
+		Relay:         &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, Name: StringPtr("Fake")}}},
+		PowerMetering: &PowerMeteringConfig{MaxPower: IntPtr(1000)},
+		LED:           &LEDConfig{PowerIndication: BoolPtr(true)},
+	}
+
+	apiJSON, err := converter.ToAPIConfig(config, "SHIX3-1")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var gen1 map[string]interface{}
+	if err := json.Unmarshal(apiJSON, &gen1); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	inputs := gen1["inputs"].([]interface{})
+	if len(inputs) != 3 {
+		t.Errorf("Expected 3 inputs, got %d", len(inputs))
+	}
+
+	if _, exists := gen1["relays"]; exists {
+		t.Error("SHIX3-1 should NOT have relays in output")
+	}
+	if _, exists := gen1["max_power"]; exists {
+		t.Error("SHIX3-1 should NOT have max_power")
+	}
+}
+
+func TestGen1Converter_RoundTrip_SHIX31(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text"})
+	converter := NewGen1Converter(logger)
+
+	originalJSON, err := os.ReadFile("testdata/shix3_1_settings.json")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	config, err := converter.FromAPIConfig(originalJSON, "SHIX3-1")
+	if err != nil {
+		t.Fatalf("FromAPIConfig failed: %v", err)
+	}
+
+	resultJSON, err := converter.ToAPIConfig(config, "SHIX3-1")
+	if err != nil {
+		t.Fatalf("ToAPIConfig failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(resultJSON, &result); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+
+	inputs := result["inputs"].([]interface{})
+	if len(inputs) != 3 {
+		t.Errorf("Expected 3 inputs in round-trip, got %d", len(inputs))
+	}
+
+	if _, exists := result["relays"]; exists {
+		t.Error("relays should be excluded for SHIX3-1")
+	}
+}
