@@ -210,6 +210,38 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	// Device-specific drift reporting
 	api.HandleFunc("/devices/{id}/drift-report", handler.GenerateDeviceDriftReport).Methods("POST")
 
+	// New template management routes (pointer-based config system)
+	api.HandleFunc("/config/templates/new", handler.GetNewConfigTemplates).Methods("GET")
+	api.HandleFunc("/config/templates/new", handler.CreateNewConfigTemplate).Methods("POST")
+	api.HandleFunc("/config/templates/new/{id}", handler.GetNewConfigTemplate).Methods("GET")
+	api.HandleFunc("/config/templates/new/{id}", handler.UpdateNewConfigTemplate).Methods("PUT")
+	api.HandleFunc("/config/templates/new/{id}", handler.DeleteNewConfigTemplate).Methods("DELETE")
+
+	// Device template assignment routes
+	api.HandleFunc("/devices/{id}/templates/new", handler.GetDeviceNewTemplates).Methods("GET")
+	api.HandleFunc("/devices/{id}/templates/new", handler.SetDeviceNewTemplates).Methods("PUT")
+	api.HandleFunc("/devices/{id}/templates/new/{templateId}", handler.AddDeviceNewTemplate).Methods("POST")
+	api.HandleFunc("/devices/{id}/templates/new/{templateId}", handler.RemoveDeviceNewTemplate).Methods("DELETE")
+
+	// Device tag routes
+	api.HandleFunc("/devices/{id}/tags/new", handler.GetDeviceNewTags).Methods("GET")
+	api.HandleFunc("/devices/{id}/tags/new", handler.AddDeviceNewTag).Methods("POST")
+	api.HandleFunc("/devices/{id}/tags/new/{tag}", handler.RemoveDeviceNewTag).Methods("DELETE")
+	api.HandleFunc("/tags/new", handler.ListAllNewTags).Methods("GET")
+	api.HandleFunc("/tags/new/{tag}/devices", handler.GetDevicesByNewTag).Methods("GET")
+
+	// Device override routes
+	api.HandleFunc("/devices/{id}/overrides/new", handler.GetDeviceNewOverrides).Methods("GET")
+	api.HandleFunc("/devices/{id}/overrides/new", handler.SetDeviceNewOverrides).Methods("PUT")
+	api.HandleFunc("/devices/{id}/overrides/new", handler.PatchDeviceNewOverrides).Methods("PATCH")
+	api.HandleFunc("/devices/{id}/overrides/new", handler.DeleteDeviceNewOverrides).Methods("DELETE")
+
+	// Desired config and apply routes
+	api.HandleFunc("/devices/{id}/desired-config", handler.GetDeviceDesiredConfig).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/new/apply", handler.ApplyDeviceNewConfig).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/new/status", handler.GetDeviceNewConfigStatus).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/new/verify", handler.VerifyDeviceNewConfig).Methods("POST")
+
 	// Notification routes
 	if handler != nil && handler.NotificationHandler != nil {
 		api.HandleFunc("/notifications/channels", handler.NotificationHandler.CreateChannel).Methods("POST")
