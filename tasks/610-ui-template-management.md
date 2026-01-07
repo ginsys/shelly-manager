@@ -1,9 +1,10 @@
 # UI: Template Management
 
 **Priority**: MEDIUM
-**Status**: not-started
-**Effort**: TBD (separate agent)
+**Status**: completed
+**Effort**: 4 hours
 **Depends On**: 608
+**Completed**: 2026-01-08
 
 ## Context
 

@@ -82,10 +82,10 @@ Major redesign of the device configuration system to support:
 | 607 | [Config Apply & Verify Flow](607-config-apply-verify.md) | **completed** | 602-603, 606 | 6h |
 | 608 | [REST API Endpoints](608-rest-api-endpoints.md) | **completed** | 606, 607 | 6h |
 | 609 | [Cleanup Legacy Template System](609-cleanup-legacy-templates.md) | **completed** | 608 | 3h |
-| 610 | [UI: Template Management](610-ui-template-management.md) | not-started | 608 | TBD |
-| 611 | [UI: Device Config Forms](611-ui-device-config-forms.md) | not-started | 608 | TBD |
+| 610 | [UI: Template Management](610-ui-template-management.md) | **completed** | 608 | 4h |
+| 611 | [UI: Device Config Forms](611-ui-device-config-forms.md) | **completed** | 608 | 6h |
 
-**Total backend effort**: ~53 hours
+**Total effort**: Backend ~53h + UI ~10h = ~63 hours
 
 **Dependency Graph**:
 ```
