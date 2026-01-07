@@ -13,35 +13,6 @@ export interface ConfigTemplate {
   updatedAt: string
 }
 
-export interface TemplateExample {
-  name: string
-  description: string
-  deviceType: string
-  content: string
-  variables?: Record<string, any>
-}
-
-export interface TemplatePreviewRequest {
-  templateContent: string
-  variables?: Record<string, any>
-}
-
-export interface TemplatePreviewResult {
-  renderedConfig: Record<string, any>
-  errors?: string[]
-}
-
-export interface TemplateValidationRequest {
-  templateContent: string
-  deviceType?: string
-}
-
-export interface TemplateValidationResult {
-  valid: boolean
-  errors?: string[]
-  warnings?: string[]
-}
-
 export interface ListTemplatesParams {
   page?: number
   pageSize?: number
@@ -112,44 +83,4 @@ export async function deleteTemplate(id: number | string): Promise<void> {
     const msg = res.data.error?.message || 'Failed to delete template'
     throw new Error(msg)
   }
-}
-
-// Preview template rendering
-export async function previewTemplate(request: TemplatePreviewRequest): Promise<TemplatePreviewResult> {
-  const res = await api.post<APIResponse<TemplatePreviewResult>>('/configuration/preview-template', request)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to preview template'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Validate template syntax
-export async function validateTemplate(request: TemplateValidationRequest): Promise<TemplateValidationResult> {
-  const res = await api.post<APIResponse<TemplateValidationResult>>('/configuration/validate-template', request)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to validate template'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Save template (alternate endpoint)
-export async function saveTemplate(data: Partial<ConfigTemplate>): Promise<ConfigTemplate> {
-  const res = await api.post<APIResponse<ConfigTemplate>>('/configuration/templates', data)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to save template'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Get example templates
-export async function getTemplateExamples(): Promise<TemplateExample[]> {
-  const res = await api.get<APIResponse<{ examples: TemplateExample[] }>>('/configuration/template-examples')
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to load template examples'
-    throw new Error(msg)
-  }
-  return res.data.data.examples || []
 }

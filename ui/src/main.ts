@@ -40,12 +40,7 @@ const router = createRouter({
       component: () => import('./pages/TemplatesPage.vue'),
       meta: { title: 'Configuration Templates' }
     },
-    {
-      path: '/templates/examples',
-      name: 'template-examples',
-      component: () => import('./pages/TemplateExamplesPage.vue'),
-      meta: { title: 'Template Examples' }
-    },
+
     {
       path: '/templates/:id',
       name: 'template-detail',

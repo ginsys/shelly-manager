@@ -59,8 +59,7 @@
         <div class="card-header">
           <h2>Template Content</h2>
           <div class="spacer" />
-          <button class="btn small" @click="showValidateDialog = true">Validate</button>
-          <button class="btn small primary" @click="showPreviewDialog = true">Preview</button>
+
         </div>
         <textarea
           v-model="editData.templateContent"
@@ -82,73 +81,6 @@
             <div class="action-title">Apply to Device</div>
             <div class="action-desc">Configure a device using this template</div>
           </button>
-          <button class="action-card" @click="showPreviewDialog = true">
-            <div class="action-icon">👁️</div>
-            <div class="action-title">Preview Template</div>
-            <div class="action-desc">See rendered configuration</div>
-          </button>
-          <button class="action-card" @click="showValidateDialog = true">
-            <div class="action-icon">✓</div>
-            <div class="action-title">Validate Syntax</div>
-            <div class="action-desc">Check template for errors</div>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Preview Dialog -->
-    <div v-if="showPreviewDialog" class="modal-overlay" @click.self="showPreviewDialog = false">
-      <div class="modal">
-        <h2>Preview Template</h2>
-        <div class="form-group">
-          <label>Variables (JSON)</label>
-          <textarea v-model="previewVariables" class="form-input monospace" rows="8" placeholder="{}" />
-        </div>
-        <button class="btn primary" @click="handlePreview">Generate Preview</button>
-
-        <div v-if="store.previewResult" class="preview-result">
-          <h3>Rendered Configuration</h3>
-          <pre class="code-block">{{ JSON.stringify(store.previewResult.renderedConfig, null, 2) }}</pre>
-          <div v-if="store.previewResult.errors?.length" class="errors">
-            <h4>Errors:</h4>
-            <ul>
-              <li v-for="(err, i) in store.previewResult.errors" :key="i">{{ err }}</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button class="btn" @click="closePreview">Close</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Validate Dialog -->
-    <div v-if="showValidateDialog" class="modal-overlay" @click.self="showValidateDialog = false">
-      <div class="modal">
-        <h2>Validate Template</h2>
-        <button class="btn primary" @click="handleValidate">Run Validation</button>
-
-        <div v-if="store.validationResult" class="validation-result">
-          <div v-if="store.validationResult.valid" class="success">
-            ✓ Template is valid
-          </div>
-          <div v-else class="errors">
-            <h4>Errors:</h4>
-            <ul>
-              <li v-for="(err, i) in store.validationResult.errors" :key="i">{{ err }}</li>
-            </ul>
-          </div>
-          <div v-if="store.validationResult.warnings?.length" class="warnings">
-            <h4>Warnings:</h4>
-            <ul>
-              <li v-for="(warn, i) in store.validationResult.warnings" :key="i">{{ warn }}</li>
-            </ul>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button class="btn" @click="closeValidate">Close</button>
         </div>
       </div>
     </div>
@@ -194,10 +126,7 @@ const editData = ref({
   templateContent: ''
 })
 
-const showPreviewDialog = ref(false)
-const showValidateDialog = ref(false)
 const showApplyDialog = ref(false)
-const previewVariables = ref('{}')
 const applyVariables = ref('{}')
 const applyDeviceId = ref<number | null>(null)
 
@@ -247,23 +176,6 @@ function cancelEdit() {
   editMode.value = false
 }
 
-async function handlePreview() {
-  try {
-    const vars = JSON.parse(previewVariables.value)
-    await store.preview(editData.value.templateContent, vars)
-  } catch (e: any) {
-    alert('Failed to preview: ' + (e?.message || 'Invalid JSON variables'))
-  }
-}
-
-async function handleValidate() {
-  try {
-    await store.validate(editData.value.templateContent, editData.value.deviceType)
-  } catch (e: any) {
-    alert('Failed to validate: ' + (e?.message || 'Unknown error'))
-  }
-}
-
 async function handleApply() {
   if (!applyDeviceId.value) {
     alert('Please enter a device ID')
@@ -277,16 +189,6 @@ async function handleApply() {
   } catch (e: any) {
     alert('Failed to apply: ' + (e?.message || 'Invalid JSON variables'))
   }
-}
-
-function closePreview() {
-  showPreviewDialog.value = false
-  store.clearPreview()
-}
-
-function closeValidate() {
-  showValidateDialog.value = false
-  store.clearValidation()
 }
 
 onMounted(() => {
@@ -341,12 +243,5 @@ onMounted(() => {
 .form-group label { display: block; font-weight: 500; color: #374151; margin-bottom: 6px; }
 .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
 
-.preview-result, .validation-result { margin-top: 16px; padding: 16px; background: #f8fafc; border-radius: 6px; }
-.code-block { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
-.success { color: #16a34a; font-weight: 600; padding: 12px; background: #dcfce7; border-radius: 6px; }
-.errors, .warnings { margin-top: 12px; }
-.errors h4, .warnings h4 { margin: 0 0 8px 0; font-size: 14px; }
-.errors { color: #b91c1c; }
-.warnings { color: #ca8a04; }
-.errors ul, .warnings ul { margin: 0; padding-left: 20px; }
+
 </style>

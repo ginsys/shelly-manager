@@ -291,7 +291,7 @@ describe('typedConfig API', () => {
       const result = await getConfigSchema('shelly1')
       expect(result).toEqual(schema)
       expect(result.required).toContain('wifi')
-      expect(api.get).toHaveBeenCalledWith('/configuration/schema', {
+      expect(api.get).toHaveBeenCalledWith('/config/schema', {
         params: { device_type: 'shelly1' }
       })
     })
@@ -311,7 +311,7 @@ describe('typedConfig API', () => {
       })
 
       await getConfigSchema()
-      expect(api.get).toHaveBeenCalledWith('/configuration/schema', {
+      expect(api.get).toHaveBeenCalledWith('/config/schema', {
         params: { device_type: undefined }
       })
     })

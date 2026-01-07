@@ -171,21 +171,15 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	api.HandleFunc("/config/templates/{id}", handler.UpdateConfigTemplate).Methods("PUT")
 	api.HandleFunc("/config/templates/{id}", handler.DeleteConfigTemplate).Methods("DELETE")
 
-	// Template variable substitution routes
-	api.HandleFunc("/configuration/preview-template", handler.PreviewTemplate).Methods("POST")
-	api.HandleFunc("/configuration/validate-template", handler.ValidateTemplate).Methods("POST")
-	api.HandleFunc("/configuration/templates", handler.SaveTemplate).Methods("POST")
-	api.HandleFunc("/configuration/template-examples", handler.GetTemplateExamples).Methods("GET")
-
 	// Typed configuration routes
 	api.HandleFunc("/devices/{id}/config/typed", handler.GetTypedDeviceConfig).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/typed", handler.UpdateTypedDeviceConfig).Methods("PUT")
 	api.HandleFunc("/devices/{id}/capabilities", handler.GetDeviceCapabilities).Methods("GET")
-	api.HandleFunc("/configuration/validate-typed", handler.ValidateTypedConfig).Methods("POST")
-	api.HandleFunc("/configuration/convert-to-typed", handler.ConvertConfigToTyped).Methods("POST")
-	api.HandleFunc("/configuration/convert-to-raw", handler.ConvertTypedToRaw).Methods("POST")
-	api.HandleFunc("/configuration/schema", handler.GetConfigurationSchema).Methods("GET")
-	api.HandleFunc("/configuration/bulk-validate", handler.BulkValidateConfigs).Methods("POST")
+	api.HandleFunc("/config/validate-typed", handler.ValidateTypedConfig).Methods("POST")
+	api.HandleFunc("/config/convert-to-typed", handler.ConvertConfigToTyped).Methods("POST")
+	api.HandleFunc("/config/convert-to-raw", handler.ConvertTypedToRaw).Methods("POST")
+	api.HandleFunc("/config/schema", handler.GetConfigurationSchema).Methods("GET")
+	api.HandleFunc("/config/bulk-validate", handler.BulkValidateConfigs).Methods("POST")
 
 	// Bulk configuration operations
 	api.HandleFunc("/config/bulk-import", handler.BulkImportConfigs).Methods("POST")

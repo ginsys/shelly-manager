@@ -5,14 +5,7 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
-  previewTemplate,
-  validateTemplate,
-  saveTemplate,
-  getTemplateExamples,
   type ConfigTemplate,
-  type TemplateExample,
-  type TemplatePreviewResult,
-  type TemplateValidationResult,
   type ListTemplatesParams
 } from '@/api/templates'
 import type { Metadata } from '@/api/types'
@@ -21,9 +14,6 @@ export const useTemplatesStore = defineStore('templates', () => {
   // State
   const templates = ref<ConfigTemplate[]>([])
   const currentTemplate = ref<ConfigTemplate | null>(null)
-  const examples = ref<TemplateExample[]>([])
-  const previewResult = ref<TemplatePreviewResult | null>(null)
-  const validationResult = ref<TemplateValidationResult | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const meta = ref<Metadata | undefined>(undefined)
@@ -113,66 +103,6 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
-  // Preview template rendering
-  async function preview(templateContent: string, variables?: Record<string, any>) {
-    loading.value = true
-    error.value = null
-    try {
-      previewResult.value = await previewTemplate({ templateContent, variables })
-      return previewResult.value
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to preview template'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // Validate template syntax
-  async function validate(templateContent: string, deviceType?: string) {
-    loading.value = true
-    error.value = null
-    try {
-      validationResult.value = await validateTemplate({ templateContent, deviceType })
-      return validationResult.value
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to validate template'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // Save template using alternate endpoint
-  async function save(data: Partial<ConfigTemplate>) {
-    loading.value = true
-    error.value = null
-    try {
-      const template = await saveTemplate(data)
-      templates.value.unshift(template)
-      return template
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to save template'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // Fetch example templates
-  async function fetchExamples() {
-    loading.value = true
-    error.value = null
-    try {
-      examples.value = await getTemplateExamples()
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to load examples'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
   // Set current template
   function setCurrentTemplate(template: ConfigTemplate | null) {
     currentTemplate.value = template
@@ -195,22 +125,10 @@ export const useTemplatesStore = defineStore('templates', () => {
     pageSize.value = newPageSize
   }
 
-  // Clear preview/validation results
-  function clearPreview() {
-    previewResult.value = null
-  }
-
-  function clearValidation() {
-    validationResult.value = null
-  }
-
   // Reset store
   function reset() {
     templates.value = []
     currentTemplate.value = null
-    examples.value = []
-    previewResult.value = null
-    validationResult.value = null
     loading.value = false
     error.value = null
     meta.value = undefined
@@ -224,9 +142,6 @@ export const useTemplatesStore = defineStore('templates', () => {
     // State
     templates,
     currentTemplate,
-    examples,
-    previewResult,
-    validationResult,
     loading,
     error,
     meta,
@@ -240,17 +155,11 @@ export const useTemplatesStore = defineStore('templates', () => {
     create,
     update,
     remove,
-    preview,
-    validate,
-    save,
-    fetchExamples,
     setCurrentTemplate,
     setDeviceTypeFilter,
     setSearchFilter,
     setPage,
     setPageSize,
-    clearPreview,
-    clearValidation,
     reset
   }
 })
