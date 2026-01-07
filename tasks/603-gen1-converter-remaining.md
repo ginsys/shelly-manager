@@ -1,8 +1,9 @@
 # Gen1 API Converters (SHSW-1, SHSW-PM, SHIX3-1)
 
 **Priority**: HIGH
-**Status**: not-started
+**Status**: completed
 **Effort**: 6 hours
+**Completed**: 2026-01-06
 **Depends On**: 602
 
 ## Context

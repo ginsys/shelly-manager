@@ -1,8 +1,9 @@
 # REST API Endpoints
 
 **Priority**: HIGH
-**Status**: not-started
+**Status**: completed
 **Effort**: 6 hours
+**Completed**: 2026-01-07
 **Depends On**: 606, 607
 
 ## Context
