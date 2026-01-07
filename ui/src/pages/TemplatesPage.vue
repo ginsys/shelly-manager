@@ -3,58 +3,57 @@
     <div class="toolbar">
       <h1 class="title">Configuration Templates</h1>
       <div class="spacer" />
-      <button class="btn primary" @click="showCreateDialog = true">+ Create Template</button>
+      <button class="btn primary" @click="openCreate">+ Create Template</button>
     </div>
 
-    <!-- Filters -->
     <div class="filters">
-      <select v-model="deviceType" class="select" @change="handleFilterChange">
-        <option value="">All Device Types</option>
-        <option value="shelly1">Shelly 1</option>
-        <option value="shelly1pm">Shelly 1PM</option>
-        <option value="shelly25">Shelly 2.5</option>
-        <option value="shellyplug">Shelly Plug</option>
-        <option value="shellyem">Shelly EM</option>
-        <option value="shelly3em">Shelly 3EM</option>
+      <select v-model="store.scopeFilter" class="select" @change="store.fetchTemplates()">
+        <option value="">All Scopes</option>
+        <option value="global">Global</option>
+        <option value="group">Group</option>
+        <option value="device_type">Device Type</option>
       </select>
+
       <input
-        v-model="search"
+        v-model="store.deviceTypeFilter"
         type="text"
         class="search"
-        placeholder="Search templates..."
-        @input="handleSearchChange"
+        placeholder="Filter device type (e.g. SHPLG-S)"
       />
+
+      <input v-model="store.searchFilter" type="text" class="search" placeholder="Search by name..." />
     </div>
 
-    <!-- Loading/Error states -->
     <div v-if="store.loading" class="card state">Loading...</div>
     <div v-else-if="store.error" class="card state error">{{ store.error }}</div>
 
-    <!-- Templates Table -->
     <div v-else class="card">
-      <table v-if="store.templates.length > 0" class="table">
+      <table v-if="store.filteredTemplates.length > 0" class="table">
         <thead>
           <tr>
             <th>Name</th>
+            <th>Scope</th>
             <th>Device Type</th>
-            <th>Description</th>
             <th>Updated</th>
+            <th>Secrets</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="template in store.templates" :key="template.id">
+          <tr v-for="template in store.filteredTemplates" :key="template.id">
             <td>
-              <router-link :to="`/templates/${template.id}`" class="link">
-                {{ template.name }}
-              </router-link>
+              <router-link :to="`/templates/${template.id}`" class="link">{{ template.name }}</router-link>
             </td>
-            <td><span class="device-type">{{ template.deviceType }}</span></td>
-            <td class="desc">{{ template.description || '-' }}</td>
-            <td>{{ formatDate(template.updatedAt) }}</td>
+            <td><span class="pill">{{ template.scope }}</span></td>
+            <td><span class="pill">{{ template.device_type || '-' }}</span></td>
+            <td>{{ formatDate(template.updated_at) }}</td>
+            <td>
+              <span v-if="hasSecrets(template)" class="pill warning">has secrets</span>
+              <span v-else class="pill">none</span>
+            </td>
             <td>
               <div class="actions">
-                <button class="action-btn" @click="handleEdit(template)">Edit</button>
+                <button class="action-btn" @click="openEdit(template)">Edit</button>
                 <button class="action-btn danger" @click="handleDelete(template.id)">Delete</button>
               </div>
             </td>
@@ -64,41 +63,50 @@
       <div v-else class="state">No templates found</div>
     </div>
 
-    <!-- Pagination -->
-    <div v-if="store.meta?.pagination" class="pagination">
-      <button class="btn" :disabled="store.page <= 1" @click="prevPage">Prev</button>
-      <span>Page {{ store.page }} / {{ store.meta.pagination.total_pages || 1 }}</span>
-      <button class="btn" :disabled="!store.meta.pagination.has_next" @click="nextPage">Next</button>
-    </div>
-
-    <!-- Create Dialog (simple inline form) -->
-    <div v-if="showCreateDialog" class="modal-overlay" @click.self="showCreateDialog = false">
+    <div v-if="showDialog" class="modal-overlay" @click.self="closeDialog">
       <div class="modal">
-        <h2>{{ editingTemplate ? 'Edit Template' : 'Create Template' }}</h2>
-        <div class="form-group">
-          <label>Name *</label>
-          <input v-model="formData.name" type="text" class="form-input" required />
+        <h2>{{ editing ? 'Edit Template' : 'Create Template' }}</h2>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Name *</label>
+            <input v-model="form.name" type="text" class="form-input" required />
+          </div>
+
+          <div class="form-group">
+            <label>Scope *</label>
+            <select v-model="form.scope" class="form-input">
+              <option value="global">global</option>
+              <option value="group">group</option>
+              <option value="device_type">device_type</option>
+            </select>
+          </div>
+
+          <div class="form-group" :class="{ disabled: form.scope !== 'device_type' }">
+            <label>Device Type {{ form.scope === 'device_type' ? '*' : '' }}</label>
+            <input
+              v-model="form.device_type"
+              type="text"
+              class="form-input"
+              :disabled="form.scope !== 'device_type'"
+              placeholder="SHPLG-S"
+            />
+          </div>
+
+          <div class="form-group full">
+            <label>Description</label>
+            <textarea v-model="form.description" class="form-input" rows="2" />
+          </div>
+
+          <div class="form-group full">
+            <label>Config (JSON) *</label>
+            <textarea v-model="configJson" class="template-area" rows="14" spellcheck="false" />
+            <div class="hint">
+              Store only the desired fields. Password fields are accepted, but returned redacted.
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Device Type *</label>
-          <select v-model="formData.deviceType" class="form-input" required>
-            <option value="">Select...</option>
-            <option value="shelly1">Shelly 1</option>
-            <option value="shelly1pm">Shelly 1PM</option>
-            <option value="shelly25">Shelly 2.5</option>
-            <option value="shellyplug">Shelly Plug</option>
-            <option value="shellyem">Shelly EM</option>
-            <option value="shelly3em">Shelly 3EM</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea v-model="formData.description" class="form-input" rows="2" />
-        </div>
-        <div class="form-group">
-          <label>Template Content *</label>
-          <textarea v-model="formData.templateContent" class="template-area" rows="10" spellcheck="false" />
-        </div>
+
         <div class="modal-actions">
           <button class="btn" @click="closeDialog">Cancel</button>
           <button class="btn primary" @click="handleSave">Save</button>
@@ -109,24 +117,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
 import { useTemplatesStore } from '@/stores/templates'
-import type { ConfigTemplate } from '@/api/templates'
+import type { ConfigTemplate, TemplateScope } from '@/api/templates'
 
-const router = useRouter()
 const store = useTemplatesStore()
 
-const deviceType = ref('')
-const search = ref('')
-const showCreateDialog = ref(false)
-const editingTemplate = ref<ConfigTemplate | null>(null)
-const formData = ref({
+const showDialog = ref(false)
+const editing = ref<ConfigTemplate | null>(null)
+
+const form = ref<{ name: string; description?: string; scope: TemplateScope; device_type?: string }>({
   name: '',
-  deviceType: '',
   description: '',
-  templateContent: ''
+  scope: 'global',
+  device_type: '',
 })
+
+const configJson = ref<string>('{}')
 
 function formatDate(iso: string) {
   try {
@@ -136,75 +143,74 @@ function formatDate(iso: string) {
   }
 }
 
-function handleFilterChange() {
-  store.setDeviceTypeFilter(deviceType.value || undefined)
-  store.fetchTemplates()
+function hasSecrets(t: ConfigTemplate) {
+  return Boolean(t.has_wifi_password || t.has_mqtt_password || t.has_auth_password)
 }
 
-let searchTimeout: ReturnType<typeof setTimeout> | null = null
-function handleSearchChange() {
-  if (searchTimeout) clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(() => {
-    store.setSearchFilter(search.value || undefined)
-    store.fetchTemplates()
-  }, 300)
+function openCreate() {
+  editing.value = null
+  form.value = { name: '', description: '', scope: 'global', device_type: '' }
+  configJson.value = '{\n  \n}'
+  showDialog.value = true
 }
 
-function handleEdit(template: ConfigTemplate) {
-  editingTemplate.value = template
-  formData.value = {
+function openEdit(template: ConfigTemplate) {
+  editing.value = template
+  form.value = {
     name: template.name,
-    deviceType: template.deviceType,
     description: template.description || '',
-    templateContent: template.templateContent
+    scope: (template.scope as TemplateScope) || 'global',
+    device_type: template.device_type || '',
   }
-  showCreateDialog.value = true
+  configJson.value = JSON.stringify(template.config || {}, null, 2)
+  showDialog.value = true
+}
+
+function closeDialog() {
+  showDialog.value = false
+  editing.value = null
+}
+
+async function handleSave() {
+  let parsedConfig: Record<string, any>
+  try {
+    parsedConfig = JSON.parse(configJson.value || '{}')
+  } catch (e: any) {
+    alert('Invalid config JSON: ' + (e?.message || 'Unknown error'))
+    return
+  }
+
+  try {
+    if (editing.value) {
+      await store.update(editing.value.id, {
+        name: form.value.name,
+        description: form.value.description,
+        config: parsedConfig,
+      })
+    } else {
+      await store.create({
+        name: form.value.name,
+        description: form.value.description,
+        scope: form.value.scope,
+        device_type: form.value.scope === 'device_type' ? form.value.device_type : undefined,
+        config: parsedConfig,
+      })
+    }
+
+    closeDialog()
+    await store.fetchTemplates()
+  } catch (e: any) {
+    alert('Failed to save template: ' + (e?.message || 'Unknown error'))
+  }
 }
 
 async function handleDelete(id: number) {
-  if (!confirm('Are you sure you want to delete this template?')) return
+  if (!confirm('Delete this template? This will fail if assigned to devices.')) return
+
   try {
     await store.remove(id)
   } catch (e: any) {
     alert('Failed to delete: ' + (e?.message || 'Unknown error'))
-  }
-}
-
-async function handleSave() {
-  try {
-    if (editingTemplate.value) {
-      await store.update(editingTemplate.value.id, formData.value)
-    } else {
-      await store.create(formData.value)
-    }
-    closeDialog()
-  } catch (e: any) {
-    alert('Failed to save: ' + (e?.message || 'Unknown error'))
-  }
-}
-
-function closeDialog() {
-  showCreateDialog.value = false
-  editingTemplate.value = null
-  formData.value = {
-    name: '',
-    deviceType: '',
-    description: '',
-    templateContent: ''
-  }
-}
-
-function prevPage() {
-  if (store.page > 1) {
-    store.setPage(store.page - 1)
-    store.fetchTemplates()
-  }
-}
-
-function nextPage() {
-  if (store.meta?.pagination?.has_next) {
-    store.setPage(store.page + 1)
-    store.fetchTemplates()
   }
 }
 
@@ -218,41 +224,40 @@ onMounted(() => {
 .toolbar { display: flex; align-items: center; gap: 8px; }
 .title { font-size: 20px; margin: 0; }
 .spacer { flex: 1; }
-.btn { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; color: inherit; }
-.btn:hover { background: #f8fafc; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: #2563eb; color: white; border-color: #2563eb; }
-.btn.primary:hover { background: #1d4ed8; }
 
-.filters { display: flex; gap: 8px; }
-.select { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; min-width: 180px; }
-.search { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; flex: 1; max-width: 300px; }
+.btn { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; }
+.btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
 
-.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
-.state { padding: 32px; text-align: center; color: #64748b; }
-.state.error { color: #b91c1c; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; }
+.state { color: #64748b; }
+.state.error { color: #b91c1c; background: #fee2e2; border-color: #fecaca; }
+
+.filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.select, .search { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+.search { min-width: 240px; }
 
 .table { width: 100%; border-collapse: collapse; }
-.table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
-.table th { background: #f8fafc; font-weight: 600; }
+.table th, .table td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
 .link { color: #2563eb; text-decoration: none; }
 .link:hover { text-decoration: underline; }
-.device-type { padding: 2px 8px; background: #e0e7ff; color: #3730a3; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.desc { color: #64748b; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.actions { display: flex; gap: 4px; }
-.action-btn { padding: 4px 8px; font-size: 12px; background: #e5e7eb; border: none; border-radius: 4px; cursor: pointer; }
-.action-btn:hover { background: #cbd5e1; }
-.action-btn.danger { background: #fee2e2; color: #991b1b; }
+.pill { display: inline-flex; padding: 2px 8px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 12px; }
+.pill.warning { background: #fef3c7; color: #92400e; }
 
-.pagination { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 8px; }
+.actions { display: flex; gap: 8px; }
+.action-btn { padding: 6px 10px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; }
+.action-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff; }
 
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: white; padding: 24px; border-radius: 8px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; }
-.modal h2 { margin-top: 0; }
-.form-group { margin-bottom: 16px; }
-.form-group label { display: block; font-weight: 500; color: #374151; margin-bottom: 6px; }
-.form-input { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; font-size: 14px; }
-.template-area { font-family: ui-monospace, monospace; font-size: 13px; resize: vertical; }
-.modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal { width: min(840px, 100%); background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; padding: 14px; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group.disabled { opacity: 0.6; }
+.form-input { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+.template-area { padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.hint { font-size: 12px; color: #64748b; }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid #e5e7eb; margin-top: 12px; }
 </style>

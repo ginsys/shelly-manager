@@ -1,44 +1,47 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   listTemplates,
   createTemplate,
   updateTemplate,
   deleteTemplate,
   type ConfigTemplate,
-  type ListTemplatesParams
+  type TemplateScope,
+  type UpdateTemplateRequest,
 } from '@/api/templates'
-import type { Metadata } from '@/api/types'
 
 export const useTemplatesStore = defineStore('templates', () => {
-  // State
   const templates = ref<ConfigTemplate[]>([])
-  const currentTemplate = ref<ConfigTemplate | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const meta = ref<Metadata | undefined>(undefined)
 
-  // Filters
-  const deviceTypeFilter = ref<string | undefined>(undefined)
-  const searchFilter = ref<string | undefined>(undefined)
-  const page = ref(1)
-  const pageSize = ref(25)
+  const scopeFilter = ref<TemplateScope | ''>('')
+  const deviceTypeFilter = ref<string>('')
+  const searchFilter = ref<string>('')
 
-  // Actions
+  const filteredTemplates = computed(() => {
+    const search = searchFilter.value.trim().toLowerCase()
+    const deviceType = deviceTypeFilter.value.trim().toLowerCase()
 
-  // Fetch templates list
-  async function fetchTemplates(params?: ListTemplatesParams) {
+    return templates.value
+      .filter((t) => {
+        if (!deviceType) return true
+        return (t.device_type || '').toLowerCase().includes(deviceType)
+      })
+      .filter((t) => {
+        if (!search) return true
+        return (t.name || '').toLowerCase().includes(search)
+      })
+      .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+  })
+
+  async function fetchTemplates() {
     loading.value = true
     error.value = null
+
     try {
-      const result = await listTemplates({
-        page: params?.page || page.value,
-        pageSize: params?.pageSize || pageSize.value,
-        deviceType: params?.deviceType || deviceTypeFilter.value,
-        search: params?.search || searchFilter.value
-      })
-      templates.value = result.items
-      meta.value = result.meta
+      const result = await listTemplates({ scope: scopeFilter.value || undefined })
+      templates.value = result
     } catch (e: any) {
       error.value = e?.message || 'Failed to load templates'
       throw e
@@ -47,14 +50,20 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
-  // Create new template
-  async function create(data: Partial<ConfigTemplate>) {
+  async function create(data: {
+    name: string
+    description?: string
+    scope: TemplateScope | string
+    device_type?: string
+    config: Record<string, any>
+  }) {
     loading.value = true
     error.value = null
+
     try {
-      const template = await createTemplate(data)
-      templates.value.unshift(template)
-      return template
+      const created = await createTemplate(data)
+      templates.value = [created, ...templates.value]
+      return created
     } catch (e: any) {
       error.value = e?.message || 'Failed to create template'
       throw e
@@ -63,20 +72,15 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
-  // Update existing template
-  async function update(id: number | string, data: Partial<ConfigTemplate>) {
+  async function update(id: number | string, data: UpdateTemplateRequest) {
     loading.value = true
     error.value = null
+
     try {
-      const template = await updateTemplate(id, data)
-      const index = templates.value.findIndex(t => t.id === Number(id))
-      if (index !== -1) {
-        templates.value[index] = template
-      }
-      if (currentTemplate.value?.id === Number(id)) {
-        currentTemplate.value = template
-      }
-      return template
+      const updated = await updateTemplate(id, data)
+      const index = templates.value.findIndex((t) => t.id === Number(id))
+      if (index !== -1) templates.value[index] = updated.template
+      return updated
     } catch (e: any) {
       error.value = e?.message || 'Failed to update template'
       throw e
@@ -85,16 +89,13 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
-  // Delete template
   async function remove(id: number | string) {
     loading.value = true
     error.value = null
+
     try {
       await deleteTemplate(id)
-      templates.value = templates.value.filter(t => t.id !== Number(id))
-      if (currentTemplate.value?.id === Number(id)) {
-        currentTemplate.value = null
-      }
+      templates.value = templates.value.filter((t) => t.id !== Number(id))
     } catch (e: any) {
       error.value = e?.message || 'Failed to delete template'
       throw e
@@ -103,63 +104,29 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
-  // Set current template
-  function setCurrentTemplate(template: ConfigTemplate | null) {
-    currentTemplate.value = template
-  }
-
-  // Set filters
-  function setDeviceTypeFilter(deviceType: string | undefined) {
-    deviceTypeFilter.value = deviceType
-  }
-
-  function setSearchFilter(search: string | undefined) {
-    searchFilter.value = search
-  }
-
-  function setPage(newPage: number) {
-    page.value = newPage
-  }
-
-  function setPageSize(newPageSize: number) {
-    pageSize.value = newPageSize
-  }
-
-  // Reset store
   function reset() {
     templates.value = []
-    currentTemplate.value = null
     loading.value = false
     error.value = null
-    meta.value = undefined
-    deviceTypeFilter.value = undefined
-    searchFilter.value = undefined
-    page.value = 1
-    pageSize.value = 25
+    scopeFilter.value = ''
+    deviceTypeFilter.value = ''
+    searchFilter.value = ''
   }
 
   return {
-    // State
     templates,
-    currentTemplate,
+    filteredTemplates,
     loading,
     error,
-    meta,
+
+    scopeFilter,
     deviceTypeFilter,
     searchFilter,
-    page,
-    pageSize,
 
-    // Actions
     fetchTemplates,
     create,
     update,
     remove,
-    setCurrentTemplate,
-    setDeviceTypeFilter,
-    setSearchFilter,
-    setPage,
-    setPageSize,
-    reset
+    reset,
   }
 })
