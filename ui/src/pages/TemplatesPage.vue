@@ -3,7 +3,6 @@
     <div class="toolbar">
       <h1 class="title">Configuration Templates</h1>
       <div class="spacer" />
-      <router-link class="btn" to="/templates/examples">Browse Examples</router-link>
       <button class="btn primary" @click="showCreateDialog = true">+ Create Template</button>
     </div>
 

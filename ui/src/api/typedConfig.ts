@@ -102,9 +102,8 @@ export async function getDeviceCapabilities(deviceId: number | string): Promise<
   return res.data.data
 }
 
-// Validate typed configuration
 export async function validateTypedConfig(request: ConversionRequest): Promise<ValidationResult> {
-  const res = await api.post<APIResponse<ValidationResult>>('/configuration/validate-typed', request)
+  const res = await api.post<APIResponse<ValidationResult>>('/config/validate-typed', request)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to validate typed configuration'
     throw new Error(msg)
@@ -112,9 +111,8 @@ export async function validateTypedConfig(request: ConversionRequest): Promise<V
   return res.data.data
 }
 
-// Convert raw configuration to typed format
 export async function convertToTyped(request: ConversionRequest): Promise<TypedConfig> {
-  const res = await api.post<APIResponse<TypedConfig>>('/configuration/convert-to-typed', request)
+  const res = await api.post<APIResponse<TypedConfig>>('/config/convert-to-typed', request)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to convert to typed configuration'
     throw new Error(msg)
@@ -122,9 +120,8 @@ export async function convertToTyped(request: ConversionRequest): Promise<TypedC
   return res.data.data
 }
 
-// Convert typed configuration to raw format
 export async function convertToRaw(request: ConversionRequest): Promise<Record<string, any>> {
-  const res = await api.post<APIResponse<{ config: Record<string, any> }>>('/configuration/convert-to-raw', request)
+  const res = await api.post<APIResponse<{ config: Record<string, any> }>>('/config/convert-to-raw', request)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to convert to raw configuration'
     throw new Error(msg)
@@ -132,9 +129,8 @@ export async function convertToRaw(request: ConversionRequest): Promise<Record<s
   return res.data.data.config
 }
 
-// Get configuration schema
 export async function getConfigSchema(deviceType?: string): Promise<ConfigSchema> {
-  const res = await api.get<APIResponse<ConfigSchema>>('/configuration/schema', {
+  const res = await api.get<APIResponse<ConfigSchema>>('/config/schema', {
     params: { device_type: deviceType }
   })
   if (!res.data.success || !res.data.data) {
@@ -144,9 +140,8 @@ export async function getConfigSchema(deviceType?: string): Promise<ConfigSchema
   return res.data.data
 }
 
-// Bulk validate configurations
 export async function bulkValidateConfigs(request: BulkValidationRequest): Promise<BulkValidationResult> {
-  const res = await api.post<APIResponse<BulkValidationResult>>('/configuration/bulk-validate', request)
+  const res = await api.post<APIResponse<BulkValidationResult>>('/config/bulk-validate', request)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to bulk validate configurations'
     throw new Error(msg)
