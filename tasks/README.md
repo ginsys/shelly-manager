@@ -73,15 +73,15 @@ Major redesign of the device configuration system to support:
 
 | # | Task | Status | Depends On | Effort |
 |---|------|--------|------------|--------|
-| 601 | [Config System - Design & Foundation](601-config-system-foundation.md) | not-started | - | 8h |
-| 602 | [Gen1 Converters (SHPLG-S)](602-gen1-converter-shplg-s.md) | not-started | 601 | 6h |
-| 603 | [Gen1 Converters (SHSW-1, SHSW-PM, SHIX3-1)](603-gen1-converter-remaining.md) | not-started | 602 | 6h |
-| 604 | [Template Merge Engine](604-template-merge-engine.md) | not-started | 601 | 6h |
-| 605 | [Database Schema Migration](605-database-schema-migration.md) | not-started | 601 | 4h |
-| 606 | [Template & Override Service Layer](606-template-override-service.md) | not-started | 604, 605 | 8h |
-| 607 | [Config Apply & Verify Flow](607-config-apply-verify.md) | not-started | 602-603, 606 | 6h |
-| 608 | [REST API Endpoints](608-rest-api-endpoints.md) | not-started | 606, 607 | 6h |
-| 609 | [Cleanup Legacy Template System](609-cleanup-legacy-templates.md) | not-started | 606 | 3h |
+| 601 | [Config System - Design & Foundation](601-config-system-foundation.md) | **completed** | - | 8h |
+| 602 | [Gen1 Converters (SHPLG-S)](602-gen1-converter-shplg-s.md) | **completed** | 601 | 6h |
+| 603 | [Gen1 Converters (SHSW-1, SHSW-PM, SHIX3-1)](603-gen1-converter-remaining.md) | **completed** | 602 | 6h |
+| 604 | [Template Merge Engine](604-template-merge-engine.md) | **completed** | 601 | 6h |
+| 605 | [Database Schema Migration](605-database-schema-migration.md) | **completed** | 601 | 4h |
+| 606 | [Template & Override Service Layer](606-template-override-service.md) | **completed** | 604, 605 | 8h |
+| 607 | [Config Apply & Verify Flow](607-config-apply-verify.md) | **completed** | 602-603, 606 | 6h |
+| 608 | [REST API Endpoints](608-rest-api-endpoints.md) | **completed** | 606, 607 | 6h |
+| 609 | [Cleanup Legacy Template System](609-cleanup-legacy-templates.md) | **completed** | 608 | 3h |
 | 610 | [UI: Template Management](610-ui-template-management.md) | not-started | 608 | TBD |
 | 611 | [UI: Device Config Forms](611-ui-device-config-forms.md) | not-started | 608 | TBD |
 
