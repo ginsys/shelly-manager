@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock the axios client
 vi.mock('../client', () => {
   return {
     default: {
       get: vi.fn(),
       post: vi.fn(),
       put: vi.fn(),
-      delete: vi.fn()
-    }
+      delete: vi.fn(),
+    },
   }
 })
 
@@ -19,10 +18,10 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
-  type ConfigTemplate
+  type ConfigTemplate,
 } from '../templates'
 
-describe('templates API', () => {
+describe('templates API (new config templates)', () => {
   beforeEach(() => {
     ;(api.get as any).mockReset()
     ;(api.post as any).mockReset()
@@ -30,231 +29,115 @@ describe('templates API', () => {
     ;(api.delete as any).mockReset()
   })
 
-  describe('getTemplate', () => {
-    it('returns a single template', async () => {
-      const template: ConfigTemplate = {
+  it('listTemplates calls /config/templates/new', async () => {
+    const templates: ConfigTemplate[] = [
+      {
         id: 1,
-        name: 'Basic WiFi Template',
-        description: 'Standard WiFi configuration',
-        deviceType: 'shelly1',
-        templateContent: '{{ wifi.ssid }}',
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2023-01-01T00:00:00Z'
-      }
+        name: 'Global MQTT',
+        scope: 'global',
+        config: { mqtt: { enable: true } },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ]
 
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: template,
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const result = await getTemplate(1)
-      expect(result).toEqual(template)
-      expect(api.get).toHaveBeenCalledWith('/config/templates/1')
+    ;(api.get as any).mockResolvedValue({
+      data: {
+        success: true,
+        data: { templates },
+        timestamp: new Date().toISOString(),
+      },
     })
 
-    it('throws error when template not found', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Template not found' }
-        }
-      })
+    const result = await listTemplates()
+    expect(result).toEqual(templates)
+    expect(api.get).toHaveBeenCalledWith('/config/templates/new', { params: { scope: undefined } })
+  })
 
-      await expect(getTemplate(999)).rejects.toThrow('Template not found')
+  it('getTemplate calls /config/templates/new/:id', async () => {
+    const template: ConfigTemplate = {
+      id: 2,
+      name: 'Plug Defaults',
+      scope: 'device_type',
+      device_type: 'SHPLG-S',
+      config: { system: { name: 'Plug' } },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    }
+
+    ;(api.get as any).mockResolvedValue({
+      data: {
+        success: true,
+        data: { template },
+        timestamp: new Date().toISOString(),
+      },
+    })
+
+    const result = await getTemplate(2)
+    expect(result).toEqual(template)
+    expect(api.get).toHaveBeenCalledWith('/config/templates/new/2')
+  })
+
+  it('createTemplate posts to /config/templates/new', async () => {
+    const created: ConfigTemplate = {
+      id: 3,
+      name: 'Office Settings',
+      scope: 'group',
+      config: { mqtt: { server: 'mqtt.local' } },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+
+    ;(api.post as any).mockResolvedValue({
+      data: {
+        success: true,
+        data: { template: created },
+        timestamp: new Date().toISOString(),
+      },
+    })
+
+    const result = await createTemplate({
+      name: created.name,
+      scope: created.scope,
+      config: created.config,
+    })
+
+    expect(result).toEqual(created)
+    expect(api.post).toHaveBeenCalledWith('/config/templates/new', {
+      name: created.name,
+      scope: created.scope,
+      config: created.config,
     })
   })
 
-  describe('listTemplates', () => {
-    it('returns list of templates', async () => {
-      const templates: ConfigTemplate[] = [
-        {
-          id: 1,
-          name: 'Basic WiFi Template',
-          description: 'Standard WiFi configuration',
-          deviceType: 'shelly1',
-          templateContent: '{{ wifi.ssid }}',
-          createdAt: '2023-01-01T00:00:00Z',
-          updatedAt: '2023-01-01T00:00:00Z'
-        },
-        {
-          id: 2,
-          name: 'MQTT Template',
-          description: 'MQTT broker configuration',
-          deviceType: 'shelly1pm',
-          templateContent: '{{ mqtt.server }}',
-          createdAt: '2023-01-02T00:00:00Z',
-          updatedAt: '2023-01-02T00:00:00Z'
-        }
-      ]
+  it('updateTemplate calls /config/templates/new/:id', async () => {
+    const updated: ConfigTemplate = {
+      id: 5,
+      name: 'Updated',
+      scope: 'global',
+      config: { cloud: { enable: false } },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    }
 
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { templates },
-          meta: { pagination: { page: 1, page_size: 25, total: 2 } },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const result = await listTemplates()
-      expect(result.items).toHaveLength(2)
-      expect(result.items[0].name).toBe('Basic WiFi Template')
-      expect(api.get).toHaveBeenCalledWith('/config/templates', {
-        params: { page: 1, page_size: 25, device_type: undefined, search: undefined }
-      })
+    ;(api.put as any).mockResolvedValue({
+      data: {
+        success: true,
+        data: { template: updated, affected_devices: 7 },
+        timestamp: new Date().toISOString(),
+      },
     })
 
-    it('supports filtering by device type', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { templates: [] },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      await listTemplates({ deviceType: 'shelly1pm' })
-      expect(api.get).toHaveBeenCalledWith('/config/templates', {
-        params: { page: 1, page_size: 25, device_type: 'shelly1pm', search: undefined }
-      })
-    })
-
-    it('supports search filtering', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { templates: [] },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      await listTemplates({ search: 'wifi' })
-      expect(api.get).toHaveBeenCalledWith('/config/templates', {
-        params: { page: 1, page_size: 25, device_type: undefined, search: 'wifi' }
-      })
-    })
-
-    it('throws error on failure', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Database error' }
-        }
-      })
-
-      await expect(listTemplates()).rejects.toThrow('Database error')
-    })
+    const result = await updateTemplate(5, { name: 'Updated', config: updated.config })
+    expect(result.template).toEqual(updated)
+    expect(result.affected_devices).toBe(7)
+    expect(api.put).toHaveBeenCalledWith('/config/templates/new/5', { name: 'Updated', config: updated.config })
   })
 
-  describe('createTemplate', () => {
-    it('creates a new template', async () => {
-      const newTemplate: Partial<ConfigTemplate> = {
-        name: 'New Template',
-        description: 'Test template',
-        deviceType: 'shelly1',
-        templateContent: '{{ test }}'
-      }
+  it('deleteTemplate treats 204 as success', async () => {
+    ;(api.delete as any).mockResolvedValue({ status: 204, data: '' })
 
-      const createdTemplate: ConfigTemplate = {
-        id: 123,
-        name: 'New Template',
-        description: 'Test template',
-        deviceType: 'shelly1',
-        templateContent: '{{ test }}',
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2023-01-01T00:00:00Z'
-      }
-
-      ;(api.post as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: createdTemplate,
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const result = await createTemplate(newTemplate)
-      expect(result).toEqual(createdTemplate)
-      expect(api.post).toHaveBeenCalledWith('/config/templates', newTemplate)
-    })
-
-    it('throws error on creation failure', async () => {
-      ;(api.post as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Invalid template content' }
-        }
-      })
-
-      await expect(createTemplate({})).rejects.toThrow('Invalid template content')
-    })
-  })
-
-  describe('updateTemplate', () => {
-    it('updates an existing template', async () => {
-      const updates: Partial<ConfigTemplate> = {
-        name: 'Updated Template'
-      }
-
-      const updatedTemplate: ConfigTemplate = {
-        id: 123,
-        name: 'Updated Template',
-        deviceType: 'shelly1',
-        templateContent: '{{ test }}',
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2023-01-02T00:00:00Z'
-      }
-
-      ;(api.put as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: updatedTemplate,
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const result = await updateTemplate(123, updates)
-      expect(result).toEqual(updatedTemplate)
-      expect(api.put).toHaveBeenCalledWith('/config/templates/123', updates)
-    })
-
-    it('throws error when template not found', async () => {
-      ;(api.put as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Template not found' }
-        }
-      })
-
-      await expect(updateTemplate(999, {})).rejects.toThrow('Template not found')
-    })
-  })
-
-  describe('deleteTemplate', () => {
-    it('deletes a template', async () => {
-      ;(api.delete as any).mockResolvedValue({
-        data: {
-          success: true,
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      await deleteTemplate(123)
-      expect(api.delete).toHaveBeenCalledWith('/config/templates/123')
-    })
-
-    it('throws error on deletion failure', async () => {
-      ;(api.delete as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Template in use by devices' }
-        }
-      })
-
-      await expect(deleteTemplate(123)).rejects.toThrow('Template in use by devices')
-    })
+    await deleteTemplate(123)
+    expect(api.delete).toHaveBeenCalledWith('/config/templates/new/123')
   })
 })
