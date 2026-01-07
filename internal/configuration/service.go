@@ -18,16 +18,16 @@ import (
 
 // Service handles configuration management operations
 type Service struct {
-	db             *gorm.DB
-	logger         *logging.Logger
-	reporter       *Reporter
-	templateEngine *TemplateEngine
-	driftNotifier  func(ctx context.Context, deviceID uint, deviceName string, differenceCount int)
+	db               *gorm.DB
+	logger           *logging.Logger
+	reporter         *Reporter
+	templateEngine   *TemplateEngine
+	driftNotifier    func(ctx context.Context, deviceID uint, deviceName string, differenceCount int)
+	ConfigurationSvc *ConfigurationService
 }
 
 // NewService creates a new configuration service
 func NewService(db *gorm.DB, logger *logging.Logger) *Service {
-	// Auto-migrate configuration tables
 	if err := db.AutoMigrate(
 		&ConfigTemplate{},
 		&DeviceConfig{},
@@ -40,17 +40,18 @@ func NewService(db *gorm.DB, logger *logging.Logger) *Service {
 		logger.Error("Failed to auto-migrate configuration tables", "error", err)
 	}
 
-	// Create reporter
 	reporter := NewReporter(db, logger)
-
-	// Create template engine
 	templateEngine := NewTemplateEngine(logger)
 
+	repo := NewGormConfigRepository(db, logger)
+	configurationSvc := NewConfigurationService(repo, nil, logger)
+
 	return &Service{
-		db:             db,
-		logger:         logger,
-		reporter:       reporter,
-		templateEngine: templateEngine,
+		db:               db,
+		logger:           logger,
+		reporter:         reporter,
+		templateEngine:   templateEngine,
+		ConfigurationSvc: configurationSvc,
 	}
 }
 
