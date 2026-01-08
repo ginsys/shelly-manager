@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="toolbar">
-      <router-link class="btn" :to="`/devices/${deviceId}`">← Back to Device</router-link>
+      <router-link class="btn" :to="`/devices/${deviceId}`">Back to Device</router-link>
       <h1 class="title">Device Configuration</h1>
       <div class="spacer" />
       <button class="btn" @click="handleRefresh" :disabled="store.loading">Refresh</button>
@@ -22,8 +22,8 @@
       <div v-if="store.status" class="card status-card">
         <div class="status-row">
           <span class="status-label">Status:</span>
-          <span v-if="store.status.config_applied && !store.status.pending_changes" class="badge success">✓ Applied</span>
-          <span v-else-if="store.status.pending_changes" class="badge warning">⏳ Pending</span>
+          <span v-if="store.status.config_applied && !store.status.pending_changes" class="badge success">Applied</span>
+          <span v-else-if="store.status.pending_changes" class="badge warning">Pending</span>
           <span v-else class="badge">Not configured</span>
         </div>
         <div v-if="store.status.last_applied" class="status-row">
@@ -46,10 +46,10 @@
       <div v-if="store.lastVerify" class="card verify-card">
         <h3>Verification Result</h3>
         <div v-if="store.lastVerify.match" class="verify-success">
-          ✓ Device configuration matches desired state
+          Device configuration matches desired state
         </div>
         <div v-else class="verify-failed">
-          ⚠️ Configuration drift detected
+          Configuration drift detected
           <div v-if="store.lastVerify.differences" class="differences">
             <div v-for="(diff, idx) in store.lastVerify.differences" :key="idx" class="diff-item">
               <strong>{{ diff.path }}:</strong> expected <code>{{ JSON.stringify(diff.expected) }}</code>, 
@@ -78,7 +78,7 @@
                 <span v-if="template.device_type" class="pill">{{ template.device_type }}</span>
               </div>
             </div>
-            <button class="btn-icon" @click="handleRemoveTemplate(template.id)" title="Remove">×</button>
+            <button class="btn-icon" @click="handleRemoveTemplate(template.id)" title="Remove">x</button>
           </div>
         </div>
       </div>
@@ -87,25 +87,19 @@
         <div class="header-row">
           <h2>Device Overrides</h2>
           <div class="spacer" />
-          <button v-if="store.overrides" class="btn" @click="handleClearOverrides">Clear All</button>
+          <button v-if="store.overrides && Object.keys(store.overrides).length > 0" class="btn" @click="handleClearOverrides">Clear All</button>
           <button class="btn" @click="editOverrides = !editOverrides">
             {{ editOverrides ? 'Cancel' : 'Edit' }}
           </button>
           <button v-if="editOverrides" class="btn primary" @click="handleSaveOverrides">Save</button>
         </div>
-        <div v-if="!store.overrides && !editOverrides" class="empty-state">
+        <div v-if="(!store.overrides || Object.keys(store.overrides).length === 0) && !editOverrides" class="empty-state">
           No overrides set. Click Edit to add device-specific overrides.
         </div>
         <div v-else-if="editOverrides" class="editor">
-          <textarea 
-            v-model="overridesJson" 
-            class="code-textarea" 
-            rows="12" 
-            spellcheck="false"
-            placeholder="{}"
-          />
+          <ConfigEditor v-model="overridesData" :device-type="deviceType" />
         </div>
-        <pre v-else class="code-view">{{ JSON.stringify(store.overrides, null, 2) }}</pre>
+        <ConfigView v-else :config="store.overrides" />
       </div>
 
       <div class="card">
@@ -115,17 +109,21 @@
           <button class="btn" @click="showSources = !showSources">
             {{ showSources ? 'Hide Sources' : 'Show Sources' }}
           </button>
+          <button class="btn" @click="showRawJson = !showRawJson">
+            {{ showRawJson ? 'Structured View' : 'Raw JSON' }}
+          </button>
         </div>
         <div v-if="!store.desiredConfig" class="empty-state">
           No configuration computed. Add templates or overrides above.
         </div>
-        <div v-else-if="showSources && store.sources" class="sources-view">
-          <div v-for="(source, path) in store.sources" :key="path" class="source-item">
-            <span class="source-path">{{ path }}:</span>
-            <span class="source-badge">{{ getSourceIcon(source) }} {{ source }}</span>
-          </div>
-        </div>
-        <pre v-else class="code-view">{{ JSON.stringify(store.desiredConfig, null, 2) }}</pre>
+        <pre v-else-if="showRawJson" class="code-view">{{ JSON.stringify(store.desiredConfig, null, 2) }}</pre>
+        <ConfigView 
+          v-else 
+          :config="store.desiredConfig" 
+          :sources="showSources ? store.sources : undefined"
+          :show-source-badges="showSources"
+          :expand-all="true"
+        />
       </div>
     </template>
 
@@ -150,20 +148,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
+import ConfigView from '@/components/config/ConfigView.vue'
+import ConfigEditor from '@/components/config/ConfigEditor.vue'
 
 const route = useRoute()
 const store = useDeviceConfigNewStore()
 
 const deviceId = ref<number | string>(route.params.id as string)
+const deviceType = ref<string | undefined>(undefined)
 const editOverrides = ref(false)
-const overridesJson = ref('{}')
+const overridesData = ref<Record<string, any>>({})
 const showSources = ref(false)
+const showRawJson = ref(false)
 const showAddTemplate = ref(false)
 const newTemplateId = ref<number | null>(null)
 const newTemplatePosition = ref<number | null>(null)
+
+watch(() => store.overrides, (newOverrides) => {
+  overridesData.value = JSON.parse(JSON.stringify(newOverrides || {}))
+}, { immediate: true, deep: true })
 
 function formatDate(iso: string) {
   try {
@@ -173,18 +179,10 @@ function formatDate(iso: string) {
   }
 }
 
-function getSourceIcon(source: string) {
-  if (source.includes('Global')) return '🌍'
-  if (source.includes('Group')) return '🏷️'
-  if (source.includes('device-type') || source.includes('Device-type')) return '📦'
-  if (source.includes('override') || source.includes('Override')) return '✏️'
-  return '⚙️'
-}
-
 async function handleRefresh() {
   try {
     await store.refresh(deviceId.value)
-    overridesJson.value = JSON.stringify(store.overrides || {}, null, 2)
+    overridesData.value = JSON.parse(JSON.stringify(store.overrides || {}))
   } catch (e: any) {
     console.error('Refresh failed:', e)
   }
@@ -224,12 +222,11 @@ async function handleRemoveTemplate(templateId: number) {
 
 async function handleSaveOverrides() {
   try {
-    const parsed = JSON.parse(overridesJson.value || '{}')
-    await store.saveOverrides(deviceId.value, parsed)
+    await store.saveOverrides(deviceId.value, overridesData.value)
     editOverrides.value = false
     await handleRefresh()
   } catch (e: any) {
-    alert('Failed to save overrides: ' + (e?.message || 'Invalid JSON'))
+    alert('Failed to save overrides: ' + (e?.message || 'Unknown error'))
   }
 }
 

@@ -33,8 +33,7 @@ Within each level:
 |---|------|--------|
 | 201 | [Content-Length Mismatch on Error Responses](201-content-length-mismatch.md) | not-started |
 | 202 | [Offline Device Detection and Fast Fail](202-offline-device-fast-fail.md) | not-started |
-| 203 | [Device-Type Specific Configuration Forms](203-device-type-config-forms.md) | not-started |
-| 204 | [Fix Live Config Page Empty Render](204-fix-live-config-empty.md) | not-started |
+| 203 | [Device-Type Specific Configuration Forms](203-device-type-config-forms.md) | **completed** |
 | 205 | [Fix Dashboard "Resource Not Found" Error](205-fix-dashboard-not-found.md) | not-started |
 | 206 | [Fix Localhost IP Blocking False Positive](206-localhost-ip-blocking.md) | not-started |
 | 207 | [Fix UpdateDevice to Support Partial Updates](207-fix-update-device-partial-updates.md) | not-started |
@@ -112,6 +111,7 @@ Completed tasks are moved to [archive/](archive/).
 | 102 | [strings.Title Deprecation](archive/done-102-strings-title-deprecation.md) | 2025-11-30 |
 | 131 | [Router-Link Accessibility Fix](archive/done-131-router-link-accessibility-fix.md) | 2025-12-16 |
 | 203 | [API Documentation](archive/done-203-api-documentation.md) | 2025-11-30 |
+| 204 | [Fix Live Config Page Empty Render](archive/obsolete-204-fix-live-config-empty.md) | **obsolete** |
 | 311 | [Notification UI Implementation](archive/done-311-notification-ui-implementation.md) | 2025-12-16 |
 | 321 | [Provisioning UI Integration](archive/done-321-provisioning-ui-integration.md) | 2025-12-16 |
 | 331 | [Secrets Management K8s](archive/done-331-secrets-management-k8s.md) | 2025-12-16 |
