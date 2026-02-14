@@ -83,27 +83,11 @@ internal/
 
 ## 📋 Task Management
 
-All development tasks are tracked in the `tasks/` folder. See [tasks/README.md](../tasks/README.md) for the full index.
+Project tracking is managed via **GitHub Issues**, **Milestones**, and **Project board**.
 
-**Priority-based Numbering**:
-- **100-199**: CRITICAL - Blocks Commit
-- **200-299**: HIGH - Post-Commit Required
-- **300-399**: MEDIUM - Important Features
-- **400-499**: LOW - Enhancement & Polish
-- **500-599**: DEFERRED - Future Work
-
-**Working on Tasks**:
-1. Before starting work, update the task status to `in-progress`
-2. Update success criteria checkboxes as you complete each item
-3. When done, move the task file to `tasks/archive/` with `done-` prefix
-4. Update `tasks/README.md` to reflect the new status
-5. Keep task content accurate - update implementation details if approach changes
-
-**Creating New Tasks**:
-1. Choose appropriate priority range (100s, 200s, etc.)
-2. Use next available number in that range (leave gaps for insertion)
-3. Follow the template in `tasks/README.md`
-4. Add entry to the index table in `tasks/README.md`
+- Open issues represent active work items with labels for priority and area
+- Milestones group issues by development phase (Phase 7, Phase 8)
+- Historical tasks are preserved as closed issues for reference
 
 ## 🎯 Success Metrics & Targets
 
@@ -141,12 +125,12 @@ See [Frontend Review](../docs/frontend/frontend-review.md) Section 7 for detaile
 |----------|---------|--------------|
 | [API Overview](../docs/api/api-overview.md) | Backend API reference (112+ endpoints) | When API changes |
 | [Frontend Review](../docs/frontend/frontend-review.md) | Frontend architecture, API gap analysis, task list | After frontend work |
-| [Tasks Index](../tasks/README.md) | Development task tracking | Continuously |
+| [GitHub Issues](https://github.com/ginsys/shelly-manager/issues) | Development task tracking | Continuously |
 | [Phase 8 Plan](../docs/development/PHASE_8_WEB_UI_PLAN.md) | Vue.js SPA modernization plan | On milestone completion |
 
 **Important**: When completing frontend tasks, update `docs/frontend/frontend-review.md` to reflect new API coverage and resolved issues.
 
 ---
 
-**Last Updated**: 2025-11-30
-**Task Tracking**: See `tasks/` folder for individual task files with priority-based numbering
+**Last Updated**: 2026-02-14
+**Task Tracking**: GitHub Issues, Milestones, and Project board

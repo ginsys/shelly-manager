@@ -203,7 +203,7 @@ make deps
 make build
 ```
 
-See [AGENTS.md](AGENTS.md) for contributor guidelines and [tasks/README.md](tasks/README.md) for current work.
+See [AGENTS.md](AGENTS.md) for contributor guidelines and [GitHub Issues](https://github.com/ginsys/shelly-manager/issues) for current work.
 
 ## Resources
 

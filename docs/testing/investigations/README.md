@@ -15,7 +15,7 @@ Comprehensive testing of all 27 device API endpoints. Found 2 critical bugs caus
 
 **Results**:
 - 24 / 27 endpoints working (89%)
-- 2 bugs fixed via Tasks 207 and 208
+- 2 bugs tracked via GitHub Issues (originally tasks 207 and 208)
 
 ---
 
@@ -43,5 +43,5 @@ This archive preserves:
 ## Related Documentation
 
 - [Testing Documentation](../README.md)
-- [Task Tracking](../../../tasks/README.md)
+- [GitHub Issues](https://github.com/ginsys/shelly-manager/issues)
 - [API Documentation](../../api/api-overview.md)

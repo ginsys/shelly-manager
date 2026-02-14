@@ -1,6 +1,6 @@
 ## Summary
 
-Describe what this PR changes and why. Link related issues/tasks from `TASKS.md`.
+Describe what this PR changes and why. Link related GitHub Issues.
 
 ## Checklist
 

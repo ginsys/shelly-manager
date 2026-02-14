@@ -8,7 +8,7 @@
 - `ui/`: New SPA (Vue 3 + Quasar) replacing the legacy UI.
 - `bin/`: build output; `data/`: local data like `shelly.db` (ignored).
 
-Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 6.9 security/auth → Phase 7 API standardization). For ongoing work and acceptance criteria, treat `TASKS.md` as the single source of truth.
+Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backend-frontend integration → Phase 8 frontend modernization). For ongoing work and acceptance criteria, see GitHub Issues and Milestones.
 
 ## Build, Test, and Development Commands
 - `make build`: build both binaries to `bin/`.
@@ -41,7 +41,7 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 6.9 sec
   - Keep types/scopes focused: ui/export, ui/import, ui/metrics, docs/tasks, etc.
 - PRs must: describe changes, link issues, include tests for behavior, pass `make test-ci` locally, and update `docs/` when touching APIs/architecture.
 - For UI changes in `ui/`, attach screenshots or brief GIFs.
- - Roadmap: state how the change supports priorities in `./.claude/CLAUDE.md` and the specific items in `TASKS.md` (single source of truth).
+ - Roadmap: state how the change supports priorities in `./.claude/CLAUDE.md` and link to relevant GitHub Issues.
 
 ### Feature Completion & Commit Hygiene
 - Ship features as complete units. Include code, tests, docs, and wiring before committing the feature.
