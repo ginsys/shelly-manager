@@ -25,12 +25,12 @@ Comprehensive testing of all 27 device API endpoints to identify bugs and verify
 
 1. **PUT /api/v1/devices/{id}** → Returns 500 instead of 200
    - Root cause: Handler doesn't support partial updates
-   - Task created: [207-fix-update-device-partial-updates.md](../../../../tasks/207-fix-update-device-partial-updates.md)
+   - Tracked: GitHub Issue #74 (originally task-207)
    - Priority: HIGH
 
 2. **POST /api/v1/devices/{id}/config/apply-template** → Returns 500 instead of 404
    - Root cause: Missing resource returns 500 instead of 404
-   - Task created: [208-fix-apply-template-404.md](../../../../tasks/208-fix-apply-template-404.md)
+   - Tracked: GitHub Issue #75 (originally task-208)
    - Priority: HIGH
 
 ## Usage
@@ -51,15 +51,14 @@ cd docs/testing/investigations/2025-12-07-device-endpoints
 ./test-device-endpoints.sh
 ```
 
-## Related Tasks
+## Related Issues
 
-- Task 207: Fix UpdateDevice to Support Partial Updates (HIGH priority)
-- Task 208: Fix ApplyConfigTemplate to Return 404 for Missing Templates (HIGH priority)
-- Task 302: Config Drift Should Return 404 for Missing Config (MEDIUM priority - pre-existing)
+- Issue #74: UpdateDevice should support partial updates (HIGH priority, originally task-207)
+- Issue #75: ApplyConfigTemplate should return 404 for missing templates (HIGH priority, originally task-208)
+- Issue #77: Config drift should return 404 for missing config (MEDIUM priority, originally task-302)
 
 ## Next Steps
 
-1. Implement fixes for Task 207 and Task 208
+1. Implement fixes for Issues #74 and #75
 2. Run `make test-ci` to verify fixes
 3. Re-run this investigation script to confirm 500 errors resolved
-4. Update task files to completed status

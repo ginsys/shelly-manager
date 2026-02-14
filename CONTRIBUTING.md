@@ -30,13 +30,13 @@ Examples
   - API clients, store, page
   - Tests for client
 - `test(api): add pagination tests for devices`
-- `docs(tasks): update Phase 7 progress and next steps`
+- `docs(frontend): update Phase 7 progress and next steps`
 
 Common scopes
 
 - `ui/export`, `ui/import`, `ui/metrics`, `ui/admin`, `ui/stats`
 - `api`, `service`, `database`
-- `docs/tasks`, `docs/api`, `ci`, `chore`
+- `docs/frontend`, `docs/api`, `ci`, `chore`
 
 ## PR Requirements
 

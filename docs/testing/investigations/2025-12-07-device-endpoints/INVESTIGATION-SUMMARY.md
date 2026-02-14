@@ -11,14 +11,14 @@ Tested all 27 device API endpoints to identify which are working and which have 
 
 **Working Endpoints**: 24 / 27 (89%)
 **Failed Endpoints**: 2 / 27 (7%)
-**Expected Failures**: 1 (config/drift - known issue, tracked in Task 302)
+**Expected Failures**: 1 (config/drift - known issue, tracked in Issue #77)
 
 ## Issues Found
 
 ### Issue 1: PUT /api/v1/devices/{id} → 500 Internal Server Error
 
 **Status**: ❌ Bug - Returns 500 instead of 200
-**Tracked In**: Task 207
+**Tracked In**: Issue #74 (originally task-207)
 **Priority**: HIGH
 
 **Test Case**:
@@ -47,7 +47,7 @@ level=ERROR msg="Internal server error" method=PUT path=/api/v1/devices/1
 ### Issue 2: POST /api/v1/devices/{id}/config/apply-template → 500 Internal Server Error
 
 **Status**: ❌ Bug - Returns 500 instead of 404
-**Tracked In**: Task 208
+**Tracked In**: Issue #75 (originally task-208)
 **Priority**: HIGH
 
 **Test Case**:
@@ -108,12 +108,12 @@ chmod +x test-device-endpoints.sh
 
 ---
 
-## Task Files Created
+## GitHub Issues Created
 
-| Task | Priority | File | Status |
-|------|----------|------|--------|
-| 207 | HIGH | [Fix UpdateDevice Partial Updates](../../../tasks/207-fix-update-device-partial-updates.md) | not-started |
-| 208 | HIGH | [Fix ApplyConfigTemplate 404](../../../tasks/208-fix-apply-template-404.md) | not-started |
+| Issue | Priority | Title | Status |
+|-------|----------|-------|--------|
+| #74 | HIGH | UpdateDevice should support partial updates | open |
+| #75 | HIGH | ApplyConfigTemplate should return 404 for missing templates | open |
 
 Both tasks include:
 - ✅ Context and evidence
@@ -164,44 +164,38 @@ Both tasks include:
 
 ### ❌ Broken (2 endpoints)
 
-- PUT /api/v1/devices/{id} → 500 (Task 207)
-- POST /api/v1/devices/{id}/config/apply-template → 500 (Task 208)
+- PUT /api/v1/devices/{id} → 500 (Issue #74)
+- POST /api/v1/devices/{id}/config/apply-template → 500 (Issue #75)
 
 ### ⚠️ Known Issue (1 endpoint)
 
-- GET /api/v1/devices/{id}/config/drift → 500 when no config stored (Task 302)
+- GET /api/v1/devices/{id}/config/drift → 500 when no config stored (Issue #77)
 
 ---
 
 ## Next Steps
 
-1. **Implement Task 207**: Fix UpdateDevice for partial updates
+1. **Fix Issue #74**: UpdateDevice partial updates
    - Choose approach (map-based or pointer-based struct)
    - Add constraint violation handling (return 409, not 500)
    - Add tests for partial updates
-   - Estimated effort: 2 hours
 
-2. **Implement Task 208**: Fix ApplyConfigTemplate to return 404
+2. **Fix Issue #75**: ApplyConfigTemplate 404
    - Add error type checking
    - Return 404 for "not found" errors
    - Return 400 for validation errors
-   - Estimated effort: 1 hour
 
 3. **Validation**:
    - Run `make test-ci` after both fixes
    - Re-run endpoint tests to verify 500s are resolved
-   - Update task files to completed status
-   - Move to archive folder
 
 ---
 
 ## Files Reference
 
-**Task Files**:
-- `tasks/207-fix-update-device-partial-updates.md`
-- `207-proposed-fix.txt` (code proposal)
-- `tasks/208-fix-apply-template-404.md`
-- `208-proposed-fix.txt` (code proposal)
+**Proposed Fixes**:
+- `207-proposed-fix.txt` (code proposal for Issue #74)
+- `208-proposed-fix.txt` (code proposal for Issue #75)
 
 **Code to Modify**:
 - `internal/api/handlers.go` (lines 333-373, 1063-1098)
