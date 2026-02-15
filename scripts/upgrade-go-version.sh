@@ -5,6 +5,7 @@
 # - .go-version
 # - go.mod (go directive and toolchain)
 # - mise.toml
+# - Dockerfiles (deploy/docker/Dockerfile.*)
 #
 # Usage: ./scripts/upgrade-go-version.sh 1.24.0
 
@@ -77,6 +78,16 @@ if [[ -f mise.toml ]]; then
         echo "  mise.toml: no go version to update (skipped)"
     fi
 fi
+
+# Update Dockerfiles
+for dockerfile in deploy/docker/Dockerfile.*; do
+    if [[ -f "$dockerfile" ]]; then
+        if grep -q "FROM golang:[0-9.]" "$dockerfile"; then
+            sed_inplace "$dockerfile" "s|FROM golang:[0-9.]\+-|FROM golang:${MAJOR_MINOR}-|"
+            echo "  Updated $dockerfile"
+        fi
+    fi
+done
 
 # Run go mod tidy to ensure consistency
 # Use GOTOOLCHAIN=local to prevent go from auto-switching to a newer version
