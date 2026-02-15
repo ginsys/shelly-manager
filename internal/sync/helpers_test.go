@@ -240,3 +240,49 @@ func TestWriteZipSingle_InvalidPath(t *testing.T) {
 		t.Error("Expected error for invalid path, got nil")
 	}
 }
+
+func TestCleanPath(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{"absolute path", "/tmp/export.json", false},
+		{"relative path", "data/export.json", false},
+		{"dot prefix", "./data/export.json", false},
+		{"traversal", "../../../etc/passwd", true},
+		{"double dot only", "..", true},
+		{"embedded absolute resolves", "/tmp/../../../etc/passwd", false}, // Clean resolves to /etc/passwd
+		{"relative traversal prefix", "../../secret", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := cleanPath(tt.path)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("cleanPath(%q) error = %v, wantErr %v", tt.path, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestPathTraversal_FileSHA256(t *testing.T) {
+	_, err := FileSHA256("../../../etc/passwd")
+	if err == nil {
+		t.Error("Expected path traversal error, got nil")
+	}
+}
+
+func TestPathTraversal_WriteGzip(t *testing.T) {
+	err := WriteGzip("../../../tmp/evil.gz", []byte("test"))
+	if err == nil {
+		t.Error("Expected path traversal error, got nil")
+	}
+}
+
+func TestPathTraversal_WriteZipSingle(t *testing.T) {
+	err := WriteZipSingle("../../../tmp/evil.zip", "test.json", []byte("test"))
+	if err == nil {
+		t.Error("Expected path traversal error, got nil")
+	}
+}

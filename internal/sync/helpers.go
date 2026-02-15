@@ -7,7 +7,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 )
+
+// cleanPath sanitises a file path by resolving traversal sequences.
+// It returns an error if the cleaned path still contains "..".
+func cleanPath(path string) (string, error) {
+	cleaned := filepath.Clean(path)
+	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
+		if part == ".." {
+			return "", fmt.Errorf("path traversal not allowed: %s", path)
+		}
+	}
+	return cleaned, nil
+}
 
 // FileSHA256 calculates the SHA-256 checksum of a file.
 // Returns hex-encoded string of the checksum.
@@ -21,6 +35,10 @@ import (
 //	if err != nil { return err }
 //	fmt.Printf("Export checksum: %s\n", checksum)
 func FileSHA256(path string) (string, error) {
+	path, err := cleanPath(path)
+	if err != nil {
+		return "", err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -45,6 +63,10 @@ func FileSHA256(path string) (string, error) {
 //	data := []byte(`{"devices": [...]}`)
 //	err := sync.WriteGzip("/tmp/export.json.gz", data)
 func WriteGzip(path string, data []byte) error {
+	path, err := cleanPath(path)
+	if err != nil {
+		return err
+	}
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
@@ -73,6 +95,10 @@ func WriteGzip(path string, data []byte) error {
 //	data := []byte(`{"devices": [...]}`)
 //	err := sync.WriteZipSingle("/tmp/export.zip", "export.json", data)
 func WriteZipSingle(path string, entryName string, data []byte) error {
+	path, err := cleanPath(path)
+	if err != nil {
+		return err
+	}
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
