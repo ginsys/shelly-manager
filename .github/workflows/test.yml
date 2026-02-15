@@ -9,7 +9,7 @@ concurrency:
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths:
       - 'go.mod'
       - 'go.sum'
@@ -21,7 +21,7 @@ on:
       - '.github/workflows/test.yml'
       - '.go-version'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
