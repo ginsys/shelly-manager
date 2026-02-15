@@ -38,7 +38,6 @@ jobs:
         run: |
           go mod download
           cd ui && npm ci
-          npm install -g serve
           npx playwright install --with-deps
 
       - name: Build and start services
@@ -95,7 +94,7 @@ jobs:
 
           # Start frontend server
           cd ui
-          npx serve -s dist -l 5173 > ../frontend.log 2>&1 &
+          npx vite preview --host 0.0.0.0 --port 5173 > ../frontend.log 2>&1 &
           FRONTEND_PID=$!
           cd ..
           echo "FRONTEND_PID=$FRONTEND_PID" >> $GITHUB_ENV
