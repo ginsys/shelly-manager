@@ -14,7 +14,7 @@ Thanks for your interest in contributing! This document summarizes the local wor
 
 ## Branching & Pull Requests
 
-All changes go through feature branches and pull requests against `develop`.
+All changes go through feature branches and pull requests against `main`.
 
 ### Branch Naming
 
@@ -31,28 +31,26 @@ Types: `fix/`, `feat/`, `docs/`, `refactor/`, `test/`, `chore/`
 
 ### Workflow
 
-1. Create a branch from `develop`:
+1. Create a branch from `main`:
    ```bash
-   git checkout develop
-   git pull origin develop
+   git checkout main
+   git pull origin main
    git checkout -b feat/80-refresh-button
    ```
 2. Make changes, commit with conventional commits
 3. Run `make test-ci` before pushing
-4. Push and open a PR against `develop`:
+4. Push and open a PR against `main`:
    ```bash
    git push -u origin feat/80-refresh-button
-   gh pr create --base develop
+   gh pr create --base main
    ```
 5. PR must pass CI checks before merge
 6. After merge, delete the feature branch:
    ```bash
-   git checkout develop
-   git pull origin develop
+   git checkout main
+   git pull origin main
    git branch -d feat/80-refresh-button
    ```
-
-Periodically, `develop` is merged to `main` for releases.
 
 ### PR Guidelines
 

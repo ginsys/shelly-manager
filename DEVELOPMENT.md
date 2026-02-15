@@ -62,10 +62,10 @@ npm run dev
 ### Working on an Issue
 
 1. Pick an issue from [GitHub Issues](https://github.com/ginsys/shelly-manager/issues)
-2. Create a feature branch from `develop`:
+2. Create a feature branch from `main`:
    ```bash
-   git checkout develop
-   git pull origin develop
+   git checkout main
+   git pull origin main
    git checkout -b fix/74-partial-updates
    ```
 3. Make changes and commit:
@@ -79,12 +79,12 @@ npm run dev
 4. Push and create a PR:
    ```bash
    git push -u origin fix/74-partial-updates
-   gh pr create --base develop
+   gh pr create --base main
    ```
 5. After the PR is merged, clean up:
    ```bash
-   git checkout develop
-   git pull origin develop
+   git checkout main
+   git pull origin main
    git branch -d fix/74-partial-updates
    ```
 
