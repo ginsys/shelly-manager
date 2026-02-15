@@ -5,6 +5,7 @@
 # - .go-version (source of truth)
 # - go.mod
 # - mise.toml
+# - Dockerfiles (deploy/docker/Dockerfile.*)
 # - GitHub Actions workflows (should use go-version-file, not hardcoded)
 #
 # It also validates that dependencies don't require a newer Go version.
@@ -78,6 +79,23 @@ if [[ -f mise.toml ]]; then
         ERRORS=$((ERRORS+1))
     fi
 fi
+
+# Check Dockerfiles
+echo ""
+echo "Checking Dockerfiles..."
+for dockerfile in deploy/docker/Dockerfile.*; do
+    if [[ -f "$dockerfile" ]]; then
+        go_version=$(grep -oP '(?<=FROM golang:)[0-9.]+' "$dockerfile" | head -1)
+        if [[ -n "$go_version" ]]; then
+            if [[ "$go_version" == "$EXPECTED_MAJOR_MINOR" ]]; then
+                echo -e "  ${GREEN}✓${NC} $dockerfile: golang:$go_version"
+            else
+                echo -e "  ${RED}✗${NC} $dockerfile: golang:$go_version (expected $EXPECTED_MAJOR_MINOR)"
+                ERRORS=$((ERRORS + 1))
+            fi
+        fi
+    fi
+done
 
 # Check GitHub Actions workflows
 echo ""
