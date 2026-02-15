@@ -167,7 +167,8 @@
       "WebFetch(domain:codecov.io)",
       "Bash(./scripts/upgrade-go-version.sh:*)",
       "Bash(CGO_ENABLED=0 go build:*)",
-      "Bash(Grep -r \"controlDevice\\(\" ui/src)"
+      "Bash(Grep -r \"controlDevice\\(\" ui/src)",
+      "Bash(/tmp/create_historical_issues.sh)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
