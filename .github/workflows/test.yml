@@ -22,16 +22,6 @@ on:
       - '.go-version'
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - 'go.mod'
-      - 'go.sum'
-      - 'cmd/**'
-      - 'internal/**'
-      - 'configs/**'
-      - 'deploy/docker/**'
-      - 'ui/**'
-      - '.github/workflows/test.yml'
-      - '.go-version'
   workflow_dispatch:
 
 jobs:
