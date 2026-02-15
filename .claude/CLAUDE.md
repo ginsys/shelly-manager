@@ -88,6 +88,7 @@ Project tracking is managed via **GitHub Issues**, **Milestones**, and **Project
 - Open issues represent active work items with labels for priority and area
 - Milestones group issues by development phase (Phase 7, Phase 8)
 - Historical tasks are preserved as closed issues for reference
+- Development follows a feature branch workflow — see `CONTRIBUTING.md`
 
 ## 🎯 Success Metrics & Targets
 

@@ -57,6 +57,55 @@ npm run dev
 
 ---
 
+## Development Workflow
+
+### Working on an Issue
+
+1. Pick an issue from [GitHub Issues](https://github.com/ginsys/shelly-manager/issues)
+2. Create a feature branch from `develop`:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b fix/74-partial-updates
+   ```
+3. Make changes and commit:
+   ```bash
+   make test-ci
+   git add <files>
+   git commit -m "fix(api): support partial device updates
+
+   Closes #74"
+   ```
+4. Push and create a PR:
+   ```bash
+   git push -u origin fix/74-partial-updates
+   gh pr create --base develop
+   ```
+5. After the PR is merged, clean up:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git branch -d fix/74-partial-updates
+   ```
+
+See `CONTRIBUTING.md` for branch naming conventions and full PR guidelines.
+
+### Handling Dependabot PRs
+
+Use `@dependabot` commands in PR comments (not `gh pr close`):
+
+| Command | Effect |
+|---------|--------|
+| `@dependabot close` | Close PR, prevent recreation |
+| `@dependabot ignore this dependency` | Ignore permanently |
+| `@dependabot ignore this major version` | Ignore major updates |
+| `@dependabot rebase` | Rebase the PR |
+| `@dependabot recreate` | Recreate from scratch |
+
+When deferring: comment `@dependabot close` with an explanation.
+
+---
+
 ## Configuration
 
 ### Backend Configuration

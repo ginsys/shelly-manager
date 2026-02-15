@@ -12,6 +12,68 @@ Thanks for your interest in contributing! This document summarizes the local wor
   - `make lint-ci` — golangci-lint
   - `make ui-dev` / `make ui-build` — SPA dev/build (see `ui/README.md`)
 
+## Branching & Pull Requests
+
+All changes go through feature branches and pull requests against `develop`.
+
+### Branch Naming
+
+Use the format `<type>/<issue>-<short-description>`:
+
+- `fix/74-partial-updates`
+- `feat/80-refresh-button`
+- `docs/84-frontend-audit`
+- `refactor/91-handler-cleanup`
+- `test/95-database-coverage`
+- `chore/99-dependency-update`
+
+Types: `fix/`, `feat/`, `docs/`, `refactor/`, `test/`, `chore/`
+
+### Workflow
+
+1. Create a branch from `develop`:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git checkout -b feat/80-refresh-button
+   ```
+2. Make changes, commit with conventional commits
+3. Run `make test-ci` before pushing
+4. Push and open a PR against `develop`:
+   ```bash
+   git push -u origin feat/80-refresh-button
+   gh pr create --base develop
+   ```
+5. PR must pass CI checks before merge
+6. After merge, delete the feature branch:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   git branch -d feat/80-refresh-button
+   ```
+
+Periodically, `develop` is merged to `main` for releases.
+
+### PR Guidelines
+
+- Link the GitHub Issue in the PR body (e.g., `Closes #80`)
+- Keep PRs focused — one issue per PR
+- Unrelated refactors go into separate PRs
+
+### Handling Dependabot PRs
+
+Use `@dependabot` commands in PR comments:
+
+| Command | Effect |
+|---------|--------|
+| `@dependabot close` | Close PR, prevent recreation |
+| `@dependabot ignore this dependency` | Ignore permanently |
+| `@dependabot ignore this major version` | Ignore major updates |
+| `@dependabot rebase` | Rebase the PR |
+| `@dependabot recreate` | Recreate from scratch |
+
+When deferring an update: comment `@dependabot close` with an explanation of why.
+
 ## Commit & PR Guidelines
 
 We use Conventional Commits with concise subjects and precise scopes.
