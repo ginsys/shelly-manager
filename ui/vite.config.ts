@@ -30,7 +30,7 @@ export default defineConfig({
           'charts': ['echarts'],
 
           // Utility libraries
-          'vendor-utils': ['axios', 'pako', 'crypto-browserify'],
+          'vendor-utils': ['axios', 'pako'],
 
           // UI framework
           'vendor-ui': ['quasar'],
