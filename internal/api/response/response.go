@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -308,12 +309,19 @@ func (rw *ResponseWriter) WriteNoContent(w http.ResponseWriter, r *http.Request)
 
 // writeJSONResponse writes a JSON response with proper headers
 func (rw *ResponseWriter) writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(statusCode)
-
-	if err := json.NewEncoder(w).Encode(data); err != nil && rw.logger != nil {
-		rw.logger.Error("Failed to encode JSON response", "error", err)
+	body, err := json.Marshal(data)
+	if err != nil {
+		if rw.logger != nil {
+			rw.logger.Error("Failed to marshal JSON response", "error", err)
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
+	body = append(body, '\n')
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(statusCode)
+	_, _ = w.Write(body)
 }
 
 // Convenience functions for quick responses

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -278,11 +279,9 @@ func RateLimitMiddleware(config *SecurityConfig, logger *logging.Logger) func(ht
 				}
 
 				// Return rate limit exceeded response
-				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", config.RateLimit))
 				w.Header().Set("X-RateLimit-Remaining", "0")
 				w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", time.Now().Add(config.RateLimitWindow).Unix()))
-				w.WriteHeader(http.StatusTooManyRequests)
 
 				// Write standardized error response with timestamp
 				response := map[string]interface{}{
@@ -297,8 +296,17 @@ func RateLimitMiddleware(config *SecurityConfig, logger *logging.Logger) func(ht
 					"timestamp": time.Now().UTC(),
 				}
 
-				if err := writeJSONResponse(w, response); err != nil && logger != nil {
-					logger.Error("Failed to write rate limit response", "error", err)
+				body, err := json.Marshal(response)
+				if err != nil {
+					http.Error(w, "Internal server error", http.StatusInternalServerError)
+					return
+				}
+				body = append(body, '\n')
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+				w.WriteHeader(http.StatusTooManyRequests)
+				if _, writeErr := w.Write(body); writeErr != nil && logger != nil {
+					logger.Error("Failed to write rate limit response", "error", writeErr)
 				}
 				return
 			}
@@ -429,8 +437,6 @@ func TimeoutMiddleware(config *SecurityConfig, logger *logging.Logger) func(http
 					}).Warn("Request timed out")
 				}
 
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusRequestTimeout)
 				response := map[string]interface{}{
 					"success": false,
 					"error": map[string]interface{}{
@@ -439,11 +445,16 @@ func TimeoutMiddleware(config *SecurityConfig, logger *logging.Logger) func(http
 					},
 					"timestamp": time.Now().UTC(),
 				}
-				if err := writeJSONResponse(w, response); err != nil {
-					// Log the error but don't panic - this is a timeout response
-					// We can't change the response at this point
+				body, err := json.Marshal(response)
+				if err != nil {
+					http.Error(w, "Internal server error", http.StatusInternalServerError)
 					return
 				}
+				body = append(body, '\n')
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+				w.WriteHeader(http.StatusRequestTimeout)
+				_, _ = w.Write(body)
 			}
 		})
 	}
@@ -620,9 +631,6 @@ func IPBlockingMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logg
 					}).Warn("Request blocked from blocked IP")
 				}
 
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-
 				response := map[string]interface{}{
 					"success": false,
 					"error": map[string]interface{}{
@@ -632,8 +640,17 @@ func IPBlockingMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logg
 					"timestamp": time.Now().UTC(),
 				}
 
-				if err := writeJSONResponse(w, response); err != nil && logger != nil {
-					logger.Error("Failed to write IP blocked response", "error", err)
+				body, err := json.Marshal(response)
+				if err != nil {
+					http.Error(w, "Internal server error", http.StatusInternalServerError)
+					return
+				}
+				body = append(body, '\n')
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+				w.WriteHeader(http.StatusForbidden)
+				if _, writeErr := w.Write(body); writeErr != nil && logger != nil {
+					logger.Error("Failed to write IP blocked response", "error", writeErr)
 				}
 				return
 			}
@@ -667,10 +684,4 @@ func MonitoringMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logg
 			monitor.TrackRequest(r, wrapped.statusCode, duration)
 		})
 	}
-}
-
-// writeJSONResponse is a helper function to write JSON responses
-func writeJSONResponse(w http.ResponseWriter, data interface{}) error {
-	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(data)
 }
