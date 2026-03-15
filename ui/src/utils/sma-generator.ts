@@ -1,5 +1,5 @@
-import { createHash } from 'crypto-browserify'
 import pako from 'pako'
+import { sha256Hex } from './sha256'
 import type { 
   SMAArchive, 
   SMAMetadata, 
@@ -91,7 +91,7 @@ export async function generateSMAFile(
     // Calculate checksum if requested
     let checksum: string | undefined
     if (options.calculateChecksum !== false) {
-      checksum = calculateSHA256(jsonData)
+      checksum = await sha256Hex(jsonData)
       
       // Update archive with checksum
       archive.metadata.integrity.checksum = `sha256:${checksum}`
@@ -507,15 +507,6 @@ export function validateSMADataSources(dataSources: SMADataSources): {
 }
 
 // Helper functions
-
-/**
- * Calculate SHA-256 hash of string
- */
-function calculateSHA256(data: string): string {
-  const hash = createHash('sha256')
-  hash.update(data)
-  return hash.digest('hex')
-}
 
 /**
  * Generate UUID v4

@@ -13,12 +13,9 @@ import {
   type SMAGenerateOptions
 } from '../sma-generator'
 
-// Mock crypto-browserify
-vi.mock('crypto-browserify', () => ({
-  createHash: vi.fn(() => ({
-    update: vi.fn(),
-    digest: vi.fn(() => 'mockedchecksum')
-  }))
+// Mock sha256
+vi.mock('../sha256', () => ({
+  sha256Hex: vi.fn().mockResolvedValue('mockedchecksum')
 }))
 
 // Mock pako

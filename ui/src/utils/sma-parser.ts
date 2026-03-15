@@ -1,5 +1,5 @@
-import { createHash } from 'crypto-browserify'
 import pako from 'pako'
+import { sha256Hex } from './sha256'
 
 /**
  * SMA Format Parser for Shelly Manager Archive files
@@ -218,7 +218,7 @@ export async function parseSMAFile(
 
     // Validate checksum if requested
     if (options.validateChecksum !== false) {
-      const calculatedChecksum = calculateSHA256(decompressedData)
+      const calculatedChecksum = await sha256Hex(decompressedData)
       const expectedChecksum = archive.metadata.integrity.checksum.replace('sha256:', '')
       
       if (calculatedChecksum !== expectedChecksum) {
@@ -502,15 +502,6 @@ export function filterSMAArchive(archive: SMAArchive, sections: string[]): Parti
 }
 
 // Helper functions
-
-/**
- * Calculate SHA-256 hash of string
- */
-function calculateSHA256(data: string): string {
-  const hash = createHash('sha256')
-  hash.update(data)
-  return hash.digest('hex')
-}
 
 /**
  * Format bytes to human readable string
