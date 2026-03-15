@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -401,6 +402,91 @@ func abs(d time.Duration) time.Duration {
 		return -d
 	}
 	return d
+}
+
+func TestContentLengthMatchesBody(t *testing.T) {
+	handler, service := setupTestHandler(t)
+
+	tests := []struct {
+		name   string
+		invoke func(w http.ResponseWriter, r *http.Request)
+		method string
+		path   string
+	}{
+		{
+			name:   "GetMetricsStatus",
+			invoke: handler.GetMetricsStatus,
+			method: "GET",
+			path:   "/metrics/status",
+		},
+		{
+			name:   "EnableMetrics",
+			invoke: handler.EnableMetrics,
+			method: "POST",
+			path:   "/metrics/enable",
+		},
+		{
+			name:   "DisableMetrics",
+			invoke: handler.DisableMetrics,
+			method: "POST",
+			path:   "/metrics/disable",
+		},
+	}
+
+	// Ensure service is in a known state
+	service.Enable()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			tt.invoke(w, req)
+
+			cl := w.Header().Get("Content-Length")
+			if cl == "" {
+				t.Fatal("Content-Length header must be set")
+			}
+
+			clInt, err := strconv.Atoi(cl)
+			if err != nil {
+				t.Fatalf("Content-Length must be a valid integer: %v", err)
+			}
+
+			if clInt != len(w.Body.Bytes()) {
+				t.Errorf("Content-Length %d does not match body size %d", clInt, len(w.Body.Bytes()))
+			}
+		})
+	}
+}
+
+func TestAdminRejectionContentLength(t *testing.T) {
+	handler, _ := setupTestHandler(t)
+	handler.SetAdminAPIKey("secret-key")
+
+	req := httptest.NewRequest("GET", "/metrics/health", nil)
+	// No auth header — should get 401
+	w := httptest.NewRecorder()
+
+	handler.GetHealth(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("Expected 401, got %d", w.Code)
+	}
+
+	cl := w.Header().Get("Content-Length")
+	if cl == "" {
+		t.Fatal("Content-Length header must be set on 401 response")
+	}
+
+	clInt, err := strconv.Atoi(cl)
+	if err != nil {
+		t.Fatalf("Content-Length must be a valid integer: %v", err)
+	}
+
+	if clInt != len(w.Body.Bytes()) {
+		t.Errorf("Content-Length %d does not match body size %d", clInt, len(w.Body.Bytes()))
+	}
 }
 
 func TestHandlerWithBadRequests(t *testing.T) {

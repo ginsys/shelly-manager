@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -783,6 +784,72 @@ func BenchmarkResponseGeneration(b *testing.B) {
 			builder.WithRequestID(fmt.Sprintf("req-%d", i)).Success(data)
 		}
 	})
+}
+
+func TestContentLengthMatchesBody(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
+	writer := NewResponseWriter(logger)
+
+	tests := []struct {
+		name   string
+		write  func(w http.ResponseWriter, r *http.Request)
+		status int
+	}{
+		{
+			name: "WriteSuccess 200",
+			write: func(w http.ResponseWriter, r *http.Request) {
+				writer.WriteSuccess(w, r, map[string]string{"key": "value"})
+			},
+			status: http.StatusOK,
+		},
+		{
+			name: "WriteCreated 201",
+			write: func(w http.ResponseWriter, r *http.Request) {
+				writer.WriteCreated(w, r, map[string]string{"id": "123"})
+			},
+			status: http.StatusCreated,
+		},
+		{
+			name: "WriteError 400",
+			write: func(w http.ResponseWriter, r *http.Request) {
+				writer.WriteError(w, r, http.StatusBadRequest, ErrCodeBadRequest, "bad request", nil)
+			},
+			status: http.StatusBadRequest,
+		},
+		{
+			name: "WriteNotFoundError 404",
+			write: func(w http.ResponseWriter, r *http.Request) {
+				writer.WriteNotFoundError(w, r, "Device")
+			},
+			status: http.StatusNotFound,
+		},
+		{
+			name: "WriteInternalError 500",
+			write: func(w http.ResponseWriter, r *http.Request) {
+				writer.WriteInternalError(w, r, fmt.Errorf("something broke"))
+			},
+			status: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/api/v1/test", nil)
+
+			tt.write(rr, req)
+
+			assert.Equal(t, tt.status, rr.Code)
+
+			cl := rr.Header().Get("Content-Length")
+			require.NotEmpty(t, cl, "Content-Length header must be set")
+
+			clInt, err := strconv.Atoi(cl)
+			require.NoError(t, err, "Content-Length must be a valid integer")
+			assert.Equal(t, clInt, len(rr.Body.Bytes()),
+				"Content-Length header must match actual body size")
+		})
+	}
 }
 
 // Helper function
