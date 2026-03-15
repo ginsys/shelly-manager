@@ -867,16 +867,35 @@ func TestTrackRequestLocalhostExemption(t *testing.T) {
 		monitor := NewSecurityMonitor(config, logger)
 		defer monitor.Close()
 
+		// Use 400 Bad Request (not 408 timeout) since timeouts are excluded from suspicious detection
 		for i := 0; i < 15; i++ {
 			req := httptest.NewRequest("GET", "/api/v1/test", nil)
 			req.RemoteAddr = "10.0.0.50:12345"
 			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
-			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+			monitor.TrackRequest(req, http.StatusBadRequest, time.Millisecond*50)
 		}
 
 		metrics := monitor.GetMetrics()
 		assert.Greater(t, metrics.SuspiciousRequests, int64(0), "Non-localhost should accumulate suspicious requests")
 		assert.True(t, monitor.IsIPBlocked("10.0.0.50"), "Non-localhost should be blocked after threshold")
+	})
+
+	t.Run("408 timeout does not trigger suspicious tracking", func(t *testing.T) {
+		config := DefaultSecurityConfig()
+		monitor := NewSecurityMonitor(config, logger)
+		defer monitor.Close()
+
+		// 408 timeouts are normal operation (e.g. offline devices), not attacks
+		for i := 0; i < 20; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/devices/1/status", nil)
+			req.RemoteAddr = "10.0.0.60:12345"
+			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
+			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+		}
+
+		metrics := monitor.GetMetrics()
+		assert.Equal(t, int64(0), metrics.SuspiciousRequests, "408 timeouts should not count as suspicious")
+		assert.False(t, monitor.IsIPBlocked("10.0.0.60"), "408 timeouts should not cause IP blocking")
 	})
 
 	t.Run("Custom TrustedIPs config respected", func(t *testing.T) {
@@ -897,11 +916,12 @@ func TestTrackRequestLocalhostExemption(t *testing.T) {
 		assert.False(t, monitor.IsIPBlocked("10.0.0.99"))
 
 		// 127.0.0.1 should NOT be trusted with this custom config
+		// Use 400 Bad Request (not 408) since timeouts are excluded from suspicious detection
 		for i := 0; i < 15; i++ {
 			req := httptest.NewRequest("GET", "/api/v1/test", nil)
 			req.RemoteAddr = "127.0.0.1:12345"
 			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
-			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+			monitor.TrackRequest(req, http.StatusBadRequest, time.Millisecond*50)
 		}
 
 		metrics = monitor.GetMetrics()
