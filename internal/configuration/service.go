@@ -567,13 +567,13 @@ func (s *Service) ApplyTemplate(deviceID uint, templateID uint, variables map[st
 	// Get template
 	var template ConfigTemplate
 	if err := s.db.First(&template, templateID).Error; err != nil {
-		return fmt.Errorf("template not found: %w", err)
+		return fmt.Errorf("%w: %w", ErrTemplateNotFound, err)
 	}
 
 	// Get device to check compatibility
 	var device Device
 	if err := s.db.First(&device, deviceID).Error; err != nil {
-		return fmt.Errorf("device not found: %w", err)
+		return fmt.Errorf("%w: %w", ErrDeviceNotFound, err)
 	}
 
 	// Check device type compatibility
