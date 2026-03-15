@@ -1,0 +1,64 @@
+classify:
+  filesystem_read:
+    - make help
+    - make test
+    - make test-unit
+    - make test-integration
+    - make test-race
+    - make test-security
+    - make test-coverage
+    - make test-coverage-ci
+    - make test-coverage-check
+    - make test-ci
+    - make test-all
+    - make test-vitest
+    - make test-smoke
+    - make lint
+    - make benchmark
+    - make check-go-version
+    - make example-list
+    - make example-provisioner-status
+    - make docker-logs
+
+  lang_exec:
+    - make build
+    - make build-manager
+    - make build-provisioner
+    - make run
+    - make start
+    - make run-provisioner
+    - make dev-setup
+    - make deps
+    - make deps-tidy
+    - make fix
+    - make hooks-install
+    - make hooks-uninstall
+    - make ui-deps
+    - make ui-dev
+    - make ui-build
+    - make ui-preview
+    - make upgrade-go-version
+    - make example-discover
+    - make example-provision
+    - make example-provisioner-scan
+    - make example-provisioner-provision
+
+  network_write:
+    - make docker-build
+    - make docker-build-manager
+    - make docker-build-provisioner
+    - make docker-run
+    - make docker-run-prod
+    - make docker-dev
+    - make docker-pull
+    - make test-e2e
+    - make test-e2e-dev
+    - make test-e2e-dev-ui
+    - make test-extra
+    - make validate-integration
+
+  container_destructive:
+    - make clean
+    - make clean-all
+    - make docker-stop
+    - make docker-clean
