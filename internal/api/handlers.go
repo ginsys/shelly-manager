@@ -1075,6 +1075,14 @@ func (h *Handler) ApplyConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Service.ApplyConfigTemplate(uint(id), req.TemplateID, req.Variables); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if strings.Contains(err.Error(), "template not found") {
+				h.responseWriter().WriteNotFoundError(w, r, "Template")
+			} else {
+				h.responseWriter().WriteNotFoundError(w, r, "Device")
+			}
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id":   id,
 			"template_id": req.TemplateID,
