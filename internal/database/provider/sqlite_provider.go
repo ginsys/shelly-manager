@@ -436,6 +436,18 @@ func (s *SQLiteProvider) ListBackups() ([]BackupInfo, error) {
 	return []BackupInfo{}, nil
 }
 
+// validateBackupPath sanitises a file path, rejecting any that contain
+// directory-traversal components ("..") after cleaning.
+func (s *SQLiteProvider) validateBackupPath(path string) (string, error) {
+	// Check for traversal components in the original path before cleaning
+	for _, part := range strings.Split(path, string(filepath.Separator)) {
+		if part == ".." {
+			return "", fmt.Errorf("path traversal not allowed: %s", path)
+		}
+	}
+	return filepath.Clean(path), nil
+}
+
 // DeleteBackup is a no-op without a provider-level catalog; attempt to remove by path.
 func (s *SQLiteProvider) DeleteBackup(backupID string) error {
 	if backupID == "" {
@@ -443,7 +455,11 @@ func (s *SQLiteProvider) DeleteBackup(backupID string) error {
 	}
 	// Best effort: treat backupID as path if it looks like a file
 	if strings.Contains(backupID, string(os.PathSeparator)) {
-		if err := os.Remove(backupID); err != nil && !os.IsNotExist(err) {
+		cleaned, err := s.validateBackupPath(backupID)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(cleaned); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
@@ -452,6 +468,14 @@ func (s *SQLiteProvider) DeleteBackup(backupID string) error {
 
 // copyFile copies a file from src to dst.
 func (s *SQLiteProvider) copyFile(src, dst string) error {
+	src, err := s.validateBackupPath(src)
+	if err != nil {
+		return err
+	}
+	dst, err = s.validateBackupPath(dst)
+	if err != nil {
+		return err
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -470,6 +494,14 @@ func (s *SQLiteProvider) copyFile(src, dst string) error {
 
 // gzipFile compresses a single file into .gz without tar container.
 func (s *SQLiteProvider) gzipFile(src, dst string) error {
+	src, err := s.validateBackupPath(src)
+	if err != nil {
+		return err
+	}
+	dst, err = s.validateBackupPath(dst)
+	if err != nil {
+		return err
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -494,6 +526,14 @@ func (s *SQLiteProvider) gzipFile(src, dst string) error {
 
 // zipFile compresses a single file into a .zip archive with one entry.
 func (s *SQLiteProvider) zipFile(src, dst string) error {
+	src, err := s.validateBackupPath(src)
+	if err != nil {
+		return err
+	}
+	dst, err = s.validateBackupPath(dst)
+	if err != nil {
+		return err
+	}
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
@@ -537,6 +577,12 @@ func (s *SQLiteProvider) zipFile(src, dst string) error {
 }
 
 func fileSHA256(path string) (string, error) {
+	for _, part := range strings.Split(path, string(filepath.Separator)) {
+		if part == ".." {
+			return "", fmt.Errorf("path traversal not allowed: %s", path)
+		}
+	}
+	path = filepath.Clean(path)
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
