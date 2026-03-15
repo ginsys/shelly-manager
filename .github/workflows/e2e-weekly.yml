@@ -140,6 +140,25 @@ jobs:
             sleep 1
           done
 
+      - name: Verify frontend serves correctly
+        run: |
+          echo "=== Response headers for index.html ==="
+          curl -sI http://localhost:5173/
+          echo ""
+          echo "=== First JS bundle response headers ==="
+          MAIN_JS=$(grep -oP 'src="/assets/[^"]+' ui/dist/index.html | head -1 | sed 's/src="//')
+          if [ -n "$MAIN_JS" ]; then
+            curl -sI "http://localhost:5173${MAIN_JS}"
+          else
+            echo "WARNING: No JS bundle found in dist/index.html"
+          fi
+          echo ""
+          echo "=== Built index.html ==="
+          cat ui/dist/index.html
+          echo ""
+          echo "=== Frontend log (last 20 lines) ==="
+          tail -20 frontend.log || true
+
       - name: Run E2E tests (Comprehensive - All Browsers)
         working-directory: ui
         run: npm run test:e2e

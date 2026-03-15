@@ -34,12 +34,6 @@ export default defineConfig({
     // Base URL for the application
     baseURL: process.env.CI ? 'http://localhost:5173' : 'http://localhost:5173',
     
-    // API endpoint for backend tests
-    extraHTTPHeaders: {
-      'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    },
-    
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',
     
@@ -110,12 +104,8 @@ export default defineConfig({
     },
     {
       name: 'webkit',
-      use: { 
+      use: {
         ...devices['Desktop Safari'],
-        // WebKit-specific settings
-        launchOptions: {
-          args: ['--disable-web-security'],
-        },
         // Increased timeouts for WebKit stability
         navigationTimeout: 60000,
         actionTimeout: 25000,
@@ -150,6 +140,7 @@ export default defineConfig({
         baseURL: 'http://localhost:8080',
         extraHTTPHeaders: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         }
       }
     }

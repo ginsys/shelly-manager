@@ -5,26 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shelly Manager</title>
     
-    <!-- Performance optimizations for faster loading -->
-    <link rel="preconnect" href="http://localhost:8080" />
-    <link rel="dns-prefetch" href="http://localhost:8080" />
-
-    <!-- DNS prefetch for potential external resources -->
-    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
-    <link rel="dns-prefetch" href="//cdn.jsdelivr.net" />
-
-    <!-- Additional preconnections for test environments -->
-    <link rel="preconnect" href="http://localhost:5173" />
-    
-    <!-- Firefox-specific optimizations -->
     <meta name="theme-color" content="#ffffff" />
     <meta name="color-scheme" content="light" />
-    
-    <!-- CSP: no inline scripts/styles; this file should be served with strict CSP headers. -->
   </head>
   <body>
     <div id="app"></div>
-    <!-- Dev convenience script removed from production build to avoid Vite bundling issues -->
     <script type="module" src="/src/main.ts"></script>
   </body>
   </html>
