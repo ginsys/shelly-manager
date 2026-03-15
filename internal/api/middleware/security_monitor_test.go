@@ -794,3 +794,147 @@ func BenchmarkSecurityMonitoring(b *testing.B) {
 		}
 	})
 }
+
+func TestIsTrustedIP(t *testing.T) {
+	t.Run("Default trusted IPs", func(t *testing.T) {
+		defaults := []string{"127.0.0.1", "::1", "localhost"}
+		assert.True(t, isTrustedIP("127.0.0.1", defaults))
+		assert.True(t, isTrustedIP("::1", defaults))
+		assert.True(t, isTrustedIP("localhost", defaults))
+	})
+
+	t.Run("Non-trusted IP", func(t *testing.T) {
+		defaults := []string{"127.0.0.1", "::1", "localhost"}
+		assert.False(t, isTrustedIP("10.0.0.1", defaults))
+		assert.False(t, isTrustedIP("192.168.1.1", defaults))
+	})
+
+	t.Run("Custom trusted IPs", func(t *testing.T) {
+		custom := []string{"10.0.0.1", "192.168.1.100"}
+		assert.True(t, isTrustedIP("10.0.0.1", custom))
+		assert.True(t, isTrustedIP("192.168.1.100", custom))
+		assert.False(t, isTrustedIP("127.0.0.1", custom))
+	})
+
+	t.Run("Empty trusted list", func(t *testing.T) {
+		assert.False(t, isTrustedIP("127.0.0.1", nil))
+		assert.False(t, isTrustedIP("127.0.0.1", []string{}))
+	})
+}
+
+func TestTrackRequestLocalhostExemption(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
+
+	t.Run("127.0.0.1 exempt from suspicious tracking", func(t *testing.T) {
+		config := DefaultSecurityConfig()
+		monitor := NewSecurityMonitor(config, logger)
+		defer monitor.Close()
+
+		// Send 15 error-status requests from localhost
+		for i := 0; i < 15; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/test", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
+			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+		}
+
+		metrics := monitor.GetMetrics()
+		assert.Equal(t, int64(15), metrics.TotalRequests, "Total requests should still be counted")
+		assert.Equal(t, int64(0), metrics.SuspiciousRequests, "Localhost should not accumulate suspicious requests")
+		assert.False(t, monitor.IsIPBlocked("127.0.0.1"), "Localhost should not be blocked")
+	})
+
+	t.Run("::1 exempt from suspicious tracking", func(t *testing.T) {
+		config := DefaultSecurityConfig()
+		monitor := NewSecurityMonitor(config, logger)
+		defer monitor.Close()
+
+		for i := 0; i < 15; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/test", nil)
+			req.RemoteAddr = "[::1]:12345"
+			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
+			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+		}
+
+		metrics := monitor.GetMetrics()
+		assert.Equal(t, int64(15), metrics.TotalRequests)
+		assert.Equal(t, int64(0), metrics.SuspiciousRequests)
+		assert.False(t, monitor.IsIPBlocked("::1"))
+	})
+
+	t.Run("Non-localhost IP still tracked normally", func(t *testing.T) {
+		config := DefaultSecurityConfig()
+		monitor := NewSecurityMonitor(config, logger)
+		defer monitor.Close()
+
+		for i := 0; i < 15; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/test", nil)
+			req.RemoteAddr = "10.0.0.50:12345"
+			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
+			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+		}
+
+		metrics := monitor.GetMetrics()
+		assert.Greater(t, metrics.SuspiciousRequests, int64(0), "Non-localhost should accumulate suspicious requests")
+		assert.True(t, monitor.IsIPBlocked("10.0.0.50"), "Non-localhost should be blocked after threshold")
+	})
+
+	t.Run("Custom TrustedIPs config respected", func(t *testing.T) {
+		config := DefaultSecurityConfig()
+		config.TrustedIPs = []string{"10.0.0.99"}
+		monitor := NewSecurityMonitor(config, logger)
+		defer monitor.Close()
+
+		for i := 0; i < 15; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/test", nil)
+			req.RemoteAddr = "10.0.0.99:12345"
+			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
+			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+		}
+
+		metrics := monitor.GetMetrics()
+		assert.Equal(t, int64(0), metrics.SuspiciousRequests, "Custom trusted IP should be exempt")
+		assert.False(t, monitor.IsIPBlocked("10.0.0.99"))
+
+		// 127.0.0.1 should NOT be trusted with this custom config
+		for i := 0; i < 15; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/test", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			req.Header.Set("User-Agent", "Mozilla/5.0 (compatible)")
+			monitor.TrackRequest(req, http.StatusRequestTimeout, time.Millisecond*50)
+		}
+
+		metrics = monitor.GetMetrics()
+		assert.Greater(t, metrics.SuspiciousRequests, int64(0), "127.0.0.1 should be tracked when not in TrustedIPs")
+	})
+
+	t.Run("TrackRateLimitViolation localhost exempt", func(t *testing.T) {
+		config := DefaultSecurityConfig()
+		monitor := NewSecurityMonitor(config, logger)
+		defer monitor.Close()
+
+		for i := 0; i < 10; i++ {
+			req := httptest.NewRequest("GET", "/api/v1/test", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			monitor.TrackRateLimitViolation(req)
+		}
+
+		metrics := monitor.GetMetrics()
+		assert.Equal(t, int64(0), metrics.RateLimitViolations, "Localhost rate limit violations should not be tracked")
+	})
+
+	t.Run("TrackValidationFailure localhost exempt", func(t *testing.T) {
+		config := DefaultSecurityConfig()
+		monitor := NewSecurityMonitor(config, logger)
+		defer monitor.Close()
+
+		for i := 0; i < 10; i++ {
+			req := httptest.NewRequest("POST", "/api/v1/test", nil)
+			req.RemoteAddr = "127.0.0.1:12345"
+			monitor.TrackValidationFailure(req, "headers")
+		}
+
+		metrics := monitor.GetMetrics()
+		assert.Equal(t, int64(0), metrics.ValidationFailures, "Localhost validation failures should not be tracked")
+	})
+}
