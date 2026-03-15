@@ -325,8 +325,11 @@ func (sm *SecurityMonitor) isSuspiciousRequest(r *http.Request, statusCode int) 
 		return true
 	}
 
-	// Check for error responses that might indicate attacks
-	if statusCode >= 400 && statusCode != 404 && statusCode != 401 {
+	// Check for error responses that might indicate attacks.
+	// Exclude 404 (not found), 401 (unauthorized), and 408 (request timeout)
+	// as these are normal operational responses, not attack indicators.
+	// Timeouts (408) commonly occur when communicating with offline devices.
+	if statusCode >= 400 && statusCode != 404 && statusCode != 401 && statusCode != 408 {
 		return true
 	}
 
