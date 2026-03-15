@@ -1234,6 +1234,68 @@ func TestApplyConfigTemplate(t *testing.T) {
 	testutil.AssertEqual(t, http.StatusInternalServerError, w.Code)
 }
 
+func TestApplyConfigTemplate_TemplateNotFound(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Add a test device but no template
+	device := testutil.TestDevice()
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	applyReq := map[string]interface{}{
+		"template_id": 999,
+		"variables":   map[string]interface{}{},
+	}
+	body, _ := json.Marshal(applyReq)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/config/apply-template", device.ID), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.ApplyConfigTemplate(w, req)
+
+	testutil.AssertEqual(t, http.StatusNotFound, w.Code)
+}
+
+func TestApplyConfigTemplate_DeviceNotFound(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Create a template but no device
+	template := &configuration.ConfigTemplate{
+		Name:        "Test Template",
+		Description: "Test Description",
+		Scope:       "device_type",
+		DeviceType:  "shelly-1",
+		Config:      []byte(`{"relay": {"auto_on": true}}`),
+	}
+	err := db.GetDB().Create(template).Error
+	testutil.AssertNoError(t, err)
+
+	applyReq := map[string]interface{}{
+		"template_id": template.ID,
+		"variables":   map[string]interface{}{},
+	}
+	body, _ := json.Marshal(applyReq)
+
+	req := httptest.NewRequest("POST", "/api/v1/devices/999/config/apply-template", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = mux.SetURLVars(req, map[string]string{"id": "999"})
+
+	w := httptest.NewRecorder()
+	handler.ApplyConfigTemplate(w, req)
+
+	testutil.AssertEqual(t, http.StatusNotFound, w.Code)
+}
+
 func TestGetConfigHistory(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
