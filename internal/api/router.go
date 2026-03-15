@@ -248,12 +248,9 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 		api.HandleFunc("/notifications/history", handler.NotificationHandler.GetHistory).Methods("GET")
 	}
 
-	// Metrics routes (non-WebSocket)
+	// Metrics routes (non-WebSocket) — under /api/v1 so the frontend's axios baseURL works
 	if handler.MetricsHandler != nil {
-		metricsAPI := r.PathPrefix("/metrics").Subrouter()
-
-		// Prometheus metrics endpoint
-		metricsAPI.Handle("/prometheus", handler.MetricsHandler.PrometheusHandler()).Methods("GET")
+		metricsAPI := api.PathPrefix("/metrics").Subrouter()
 
 		// Control endpoints
 		metricsAPI.HandleFunc("/status", handler.MetricsHandler.GetMetricsStatus).Methods("GET")
@@ -277,6 +274,9 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 		if securityMonitor != nil {
 			metricsAPI.HandleFunc("/security", createSecurityMetricsHandler(securityMonitor, logger)).Methods("GET")
 		}
+
+		// Prometheus endpoint on root router (used by external scrapers, not the frontend)
+		r.Handle("/metrics/prometheus", handler.MetricsHandler.PrometheusHandler()).Methods("GET")
 	}
 
 	// Discovery route
