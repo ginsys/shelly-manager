@@ -884,8 +884,8 @@ func TestDetectConfigDrift(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.DetectConfigDrift(w, req)
 
-	// Should get an error since we're not actually connecting to a device
-	testutil.AssertEqual(t, http.StatusInternalServerError, w.Code)
+	// Should get 404 since no stored configuration exists for this device
+	testutil.AssertEqual(t, http.StatusNotFound, w.Code)
 }
 
 func TestBulkDetectConfigDrift(t *testing.T) {

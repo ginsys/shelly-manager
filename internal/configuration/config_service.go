@@ -10,12 +10,13 @@ import (
 )
 
 var (
-	ErrTemplateNotFound    = errors.New("template not found")
-	ErrTemplateAssigned    = errors.New("template is assigned to devices")
-	ErrDeviceNotFound      = errors.New("device not found")
-	ErrInvalidScope        = errors.New("invalid scope: must be 'global', 'group', or 'device_type'")
-	ErrDeviceTypeRequired  = errors.New("device_type required when scope is 'device_type'")
-	ErrTemplateIDsNotFound = errors.New("one or more template IDs not found")
+	ErrTemplateNotFound     = errors.New("template not found")
+	ErrTemplateAssigned     = errors.New("template is assigned to devices")
+	ErrDeviceNotFound       = errors.New("device not found")
+	ErrInvalidScope         = errors.New("invalid scope: must be 'global', 'group', or 'device_type'")
+	ErrDeviceTypeRequired   = errors.New("device_type required when scope is 'device_type'")
+	ErrTemplateIDsNotFound  = errors.New("one or more template IDs not found")
+	ErrStoredConfigNotFound = errors.New("no stored configuration found for device")
 )
 
 type ServiceConfigTemplate struct {

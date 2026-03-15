@@ -952,6 +952,13 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 	// Detect configuration drift
 	drift, err := h.Service.DetectConfigDrift(uint(id))
 	if err != nil {
+		if errors.Is(err, configuration.ErrStoredConfigNotFound) {
+			h.logger.WithFields(map[string]any{
+				"device_id": id,
+			}).Warn("No stored configuration found for drift detection")
+			h.responseWriter().WriteNotFoundError(w, r, "Stored configuration")
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"error":     err.Error(),

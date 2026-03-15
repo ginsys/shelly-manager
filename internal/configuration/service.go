@@ -415,7 +415,7 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 	var storedConfig DeviceConfig
 	if err := s.db.Where("device_id = ?", deviceID).First(&storedConfig).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("no stored configuration found for device %d", deviceID)
+			return nil, fmt.Errorf("%w: device %d", ErrStoredConfigNotFound, deviceID)
 		}
 		return nil, fmt.Errorf("failed to get stored config: %w", err)
 	}
