@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -219,6 +220,44 @@ func TestRateLimitMiddleware(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRateLimitResponseContentLength(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
+	config := func() *SecurityConfig {
+		cfg := DefaultSecurityConfig()
+		cfg.RateLimit = 1
+		cfg.RateLimitWindow = time.Second
+		return cfg
+	}()
+
+	middleware := RateLimitMiddleware(config, logger)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// First request consumes the quota
+	req := httptest.NewRequest("GET", "/api/v1/test", nil)
+	req.RemoteAddr = "10.99.99.99:12345"
+	rr := httptest.NewRecorder()
+	middleware(handler).ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	// Second request triggers 429
+	req = httptest.NewRequest("GET", "/api/v1/test", nil)
+	req.RemoteAddr = "10.99.99.99:12345"
+	rr = httptest.NewRecorder()
+	middleware(handler).ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
+
+	cl := rr.Header().Get("Content-Length")
+	require.NotEmpty(t, cl, "Content-Length header must be set on 429 response")
+
+	clInt, err := strconv.Atoi(cl)
+	require.NoError(t, err, "Content-Length must be a valid integer")
+	assert.Equal(t, clInt, len(rr.Body.Bytes()),
+		"Content-Length header must match actual body size")
 }
 
 func TestRequestSizeMiddleware(t *testing.T) {

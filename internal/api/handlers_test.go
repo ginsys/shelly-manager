@@ -44,6 +44,38 @@ func testNotificationHandler(t *testing.T, db *database.Manager) *notification.H
 	return notification.NewHandler(notificationService, logger)
 }
 
+func TestWriteJSONContentLength(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Use Healthz which calls writeJSON internally
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/healthz", nil)
+
+	handler.Healthz(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", rr.Code)
+	}
+
+	cl := rr.Header().Get("Content-Length")
+	if cl == "" {
+		t.Fatal("Content-Length header must be set")
+	}
+
+	clInt, err := strconv.Atoi(cl)
+	if err != nil {
+		t.Fatalf("Content-Length must be a valid integer: %v", err)
+	}
+
+	if clInt != len(rr.Body.Bytes()) {
+		t.Errorf("Content-Length %d does not match body size %d", clInt, len(rr.Body.Bytes()))
+	}
+}
+
 func TestGetDevices(t *testing.T) {
 	// Setup
 	db, cleanup := testutil.TestDatabase(t)
