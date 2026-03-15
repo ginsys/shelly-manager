@@ -116,7 +116,7 @@ func (h *Handler) GetSystemMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	metrics, err := h.wsHub.collectDashboardMetrics(r.Context())
 	if err != nil {
-		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
+		writeErrorResponse(w, "INTERNAL_ERROR", "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, metrics.SystemStatus, h.logger, "system metrics")
@@ -129,7 +129,7 @@ func (h *Handler) GetDevicesMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	metrics, err := h.wsHub.collectDashboardMetrics(r.Context())
 	if err != nil {
-		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
+		writeErrorResponse(w, "INTERNAL_ERROR", "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, map[string]any{"devices": metrics.DeviceMetrics}, h.logger, "device metrics")
@@ -142,7 +142,7 @@ func (h *Handler) GetDriftSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	metrics, err := h.wsHub.collectDashboardMetrics(r.Context())
 	if err != nil {
-		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
+		writeErrorResponse(w, "INTERNAL_ERROR", "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, metrics.DriftMetrics, h.logger, "drift metrics")
@@ -155,7 +155,7 @@ func (h *Handler) GetNotificationSummary(w http.ResponseWriter, r *http.Request)
 	}
 	metrics, err := h.wsHub.collectDashboardMetrics(r.Context())
 	if err != nil {
-		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
+		writeErrorResponse(w, "INTERNAL_ERROR", "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, metrics.NotificationMetrics, h.logger, "notification metrics")
@@ -168,7 +168,7 @@ func (h *Handler) GetResolutionSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	metrics, err := h.wsHub.collectDashboardMetrics(r.Context())
 	if err != nil {
-		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
+		writeErrorResponse(w, "INTERNAL_ERROR", "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, metrics.ResolutionMetrics, h.logger, "resolution metrics")
@@ -207,7 +207,7 @@ func (h *Handler) CollectMetrics(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "metrics",
 		}).Error("Failed to collect metrics")
-		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
+		writeErrorResponse(w, "INTERNAL_ERROR", "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *Handler) GetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
 			"error":     err.Error(),
 			"component": "metrics",
 		}).Error("Failed to collect dashboard metrics")
-		http.Error(w, "Failed to collect dashboard metrics", http.StatusInternalServerError)
+		writeErrorResponse(w, "INTERNAL_ERROR", "Failed to collect dashboard metrics", http.StatusInternalServerError)
 		return
 	}
 
@@ -322,8 +322,14 @@ func (h *Handler) SendTestAlert(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeJSON marshals data and writes it as a JSON response with proper Content-Length.
+// The data is wrapped in the standard APIResponse envelope: {"success":true,"data":...,"timestamp":...}
 func writeJSON(w http.ResponseWriter, data interface{}, logger *logging.Logger, context string) {
-	body, err := json.Marshal(data)
+	response := map[string]any{
+		"success":   true,
+		"data":      data,
+		"timestamp": time.Now().UTC(),
+	}
+	body, err := json.Marshal(response)
 	if err != nil {
 		if logger != nil {
 			logger.WithFields(map[string]any{
@@ -338,6 +344,19 @@ func writeJSON(w http.ResponseWriter, data interface{}, logger *logging.Logger, 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	_, _ = w.Write(body)
+}
+
+// writeErrorResponse writes a structured error response in the standard APIResponse envelope.
+func writeErrorResponse(w http.ResponseWriter, code string, message string, statusCode int) {
+	response := map[string]any{
+		"success": false,
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+		"timestamp": time.Now().UTC(),
+	}
+	writeJSONWithStatus(w, response, statusCode)
 }
 
 // writeJSONWithStatus marshals data and writes it as a JSON response with a specific status code.

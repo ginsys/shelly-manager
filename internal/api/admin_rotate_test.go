@@ -90,14 +90,14 @@ func TestRotateAdminKey_AuthAndPropagation(t *testing.T) {
 	// 3) Metrics admin endpoint should now require new key
 	// old key -> 401
 	rr3 := httptest.NewRecorder()
-	req3 := httptest.NewRequest("GET", "/metrics/health", nil)
+	req3 := httptest.NewRequest("GET", "/api/v1/metrics/health", nil)
 	req3.Header.Set("Authorization", "Bearer "+initialKey)
 	req3.Header.Set("User-Agent", "TestAgent/1.0")
 	r.ServeHTTP(rr3, req3)
 	require.Equal(t, http.StatusUnauthorized, rr3.Code)
 	// new key -> 200
 	rr4 := httptest.NewRecorder()
-	req4 := httptest.NewRequest("GET", "/metrics/health", nil)
+	req4 := httptest.NewRequest("GET", "/api/v1/metrics/health", nil)
 	req4.Header.Set("Authorization", "Bearer new-secret")
 	req4.Header.Set("User-Agent", "TestAgent/1.0")
 	r.ServeHTTP(rr4, req4)

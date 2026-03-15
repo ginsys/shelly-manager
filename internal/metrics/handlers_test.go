@@ -29,6 +29,26 @@ func setupTestHandler(t *testing.T) (*Handler, *Service) {
 	return handler, service
 }
 
+// unwrapResponse extracts the data field from the standard APIResponse envelope.
+func unwrapResponse(t *testing.T, body []byte, target interface{}) {
+	t.Helper()
+	var envelope struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("Failed to unmarshal envelope: %v", err)
+	}
+	if !envelope.Success {
+		t.Fatal("Expected success=true")
+	}
+	if target != nil {
+		if err := json.Unmarshal(envelope.Data, target); err != nil {
+			t.Fatalf("Failed to unmarshal data: %v", err)
+		}
+	}
+}
+
 func TestNewHandler(t *testing.T) {
 	handler, service := setupTestHandler(t)
 
@@ -64,10 +84,7 @@ func TestGetMetricsStatus(t *testing.T) {
 	}
 
 	var status MetricsStatus
-	err := json.Unmarshal(w.Body.Bytes(), &status)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal response: %v", err)
-	}
+	unwrapResponse(t, w.Body.Bytes(), &status)
 
 	if !status.Enabled {
 		t.Error("Expected metrics to be enabled")
@@ -81,10 +98,7 @@ func TestGetMetricsStatus(t *testing.T) {
 
 	handler.GetMetricsStatus(w, req)
 
-	err = json.Unmarshal(w.Body.Bytes(), &status)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal response: %v", err)
-	}
+	unwrapResponse(t, w.Body.Bytes(), &status)
 
 	if status.Enabled {
 		t.Error("Expected metrics to be disabled")
@@ -107,10 +121,7 @@ func TestGetMetricsStatusWithLastCollection(t *testing.T) {
 	handler.GetMetricsStatus(w, req)
 
 	var status MetricsStatus
-	err = json.Unmarshal(w.Body.Bytes(), &status)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal response: %v", err)
-	}
+	unwrapResponse(t, w.Body.Bytes(), &status)
 
 	if status.LastCollectionTime.IsZero() {
 		t.Error("Expected last collection time to be set")
@@ -142,10 +153,7 @@ func TestEnableMetrics(t *testing.T) {
 	}
 
 	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal response: %v", err)
-	}
+	unwrapResponse(t, w.Body.Bytes(), &response)
 
 	if response["status"] != "enabled" {
 		t.Errorf("Expected status 'enabled', got '%s'", response["status"])
@@ -180,10 +188,7 @@ func TestDisableMetrics(t *testing.T) {
 	}
 
 	var response map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal response: %v", err)
-	}
+	unwrapResponse(t, w.Body.Bytes(), &response)
 
 	if response["status"] != "disabled" {
 		t.Errorf("Expected status 'disabled', got '%s'", response["status"])
@@ -213,10 +218,7 @@ func TestCollectMetrics(t *testing.T) {
 	}
 
 	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal response: %v", err)
-	}
+	unwrapResponse(t, w.Body.Bytes(), &response)
 
 	if response["status"] != "collected" {
 		t.Errorf("Expected status 'collected', got '%v'", response["status"])
