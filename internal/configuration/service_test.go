@@ -888,7 +888,7 @@ func TestDetectDrift_NoStoredConfig(t *testing.T) {
 
 	assert.Nil(t, drift)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no stored configuration found")
+	assert.ErrorIs(t, err, ErrStoredConfigNotFound)
 
 	mockClient.AssertNotCalled(t, "GetInfo")
 }
