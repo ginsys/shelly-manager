@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { sha256Hex, isWebCryptoAvailable } from '../sha256'
 
 // NIST test vector: SHA-256("abc")
