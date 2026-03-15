@@ -125,8 +125,19 @@ func (h *Handler) RotateAdminKey(w http.ResponseWriter, r *http.Request) {
 
 // writeJSON writes a JSON response and logs any encoding errors
 func (h *Handler) writeJSON(w http.ResponseWriter, data interface{}) {
-	if err := json.NewEncoder(w).Encode(data); err != nil && h.logger != nil {
-		h.logger.Error("Failed to encode JSON response", "error", err)
+	body, err := json.Marshal(data)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Error("Failed to marshal JSON response", "error", err)
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	body = append(body, '\n')
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if _, writeErr := w.Write(body); writeErr != nil && h.logger != nil {
+		h.logger.Error("Failed to write JSON response", "error", writeErr)
 	}
 }
 
@@ -148,8 +159,7 @@ func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
 		status = "degraded"
 	}
 	resp := health{Status: status}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	h.writeJSON(w, resp)
 }
 
 // FastHealthz - Optimized health endpoint for test mode
@@ -179,8 +189,7 @@ func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
 		resp["database_provider_name"] = name
 		resp["database_provider_version"] = ver
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(apiresp.Success(resp))
+	h.writeJSON(w, apiresp.Success(resp))
 }
 
 // Readyz returns readiness: dependencies available (currently DB).

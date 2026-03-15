@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -54,16 +55,15 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 		ok = true
 	}
 	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		response := map[string]any{
 			"success": false,
 			"error": map[string]string{
 				"code":    "UNAUTHORIZED",
 				"message": "Admin authorization required",
 			},
 			"timestamp": time.Now().UTC(),
-		})
+		}
+		writeJSONWithStatus(w, response, http.StatusUnauthorized)
 		return false
 	}
 	return true
@@ -89,15 +89,7 @@ func (h *Handler) GetMetricsStatus(w http.ResponseWriter, r *http.Request) {
 		UptimeSeconds:      h.service.GetUptimeSeconds(),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(status); err != nil {
-		h.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "metrics",
-		}).Error("Failed to encode metrics status response")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	writeJSON(w, status, h.logger, "metrics status")
 
 	h.logger.WithFields(map[string]any{
 		"component": "metrics",
@@ -114,8 +106,7 @@ func (h *Handler) GetHealth(w http.ResponseWriter, r *http.Request) {
 		"last_collection_time": h.service.GetLastCollectionTime(),
 		"uptime_seconds":       h.service.GetUptimeSeconds(),
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, resp, h.logger, "health")
 }
 
 // GetSystemMetrics returns system status (subset for dashboards)
@@ -128,8 +119,7 @@ func (h *Handler) GetSystemMetrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(metrics.SystemStatus)
+	writeJSON(w, metrics.SystemStatus, h.logger, "system metrics")
 }
 
 // GetDevicesMetrics returns device metrics summary
@@ -142,8 +132,7 @@ func (h *Handler) GetDevicesMetrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"devices": metrics.DeviceMetrics})
+	writeJSON(w, map[string]any{"devices": metrics.DeviceMetrics}, h.logger, "device metrics")
 }
 
 // GetDriftSummary returns drift metrics summary
@@ -156,8 +145,7 @@ func (h *Handler) GetDriftSummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(metrics.DriftMetrics)
+	writeJSON(w, metrics.DriftMetrics, h.logger, "drift metrics")
 }
 
 // GetNotificationSummary returns notification metrics
@@ -170,8 +158,7 @@ func (h *Handler) GetNotificationSummary(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(metrics.NotificationMetrics)
+	writeJSON(w, metrics.NotificationMetrics, h.logger, "notification metrics")
 }
 
 // GetResolutionSummary returns resolution metrics
@@ -184,25 +171,15 @@ func (h *Handler) GetResolutionSummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to collect metrics", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(metrics.ResolutionMetrics)
+	writeJSON(w, metrics.ResolutionMetrics, h.logger, "resolution metrics")
 }
 
 // EnableMetrics enables metrics collection
 func (h *Handler) EnableMetrics(w http.ResponseWriter, r *http.Request) {
 	h.service.Enable()
 
-	w.Header().Set("Content-Type", "application/json")
 	response := map[string]string{"status": "enabled"}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "metrics",
-		}).Error("Failed to encode enable metrics response")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	writeJSON(w, response, h.logger, "enable metrics")
 
 	h.logger.WithFields(map[string]any{
 		"component": "metrics",
@@ -213,17 +190,8 @@ func (h *Handler) EnableMetrics(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DisableMetrics(w http.ResponseWriter, r *http.Request) {
 	h.service.Disable()
 
-	w.Header().Set("Content-Type", "application/json")
 	response := map[string]string{"status": "disabled"}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "metrics",
-		}).Error("Failed to encode disable metrics response")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	writeJSON(w, response, h.logger, "disable metrics")
 
 	h.logger.WithFields(map[string]any{
 		"component": "metrics",
@@ -245,21 +213,12 @@ func (h *Handler) CollectMetrics(w http.ResponseWriter, r *http.Request) {
 
 	duration := time.Since(start)
 
-	w.Header().Set("Content-Type", "application/json")
 	response := map[string]any{
 		"status":       "collected",
 		"duration_ms":  duration.Milliseconds(),
 		"collected_at": time.Now(),
 	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "metrics",
-		}).Error("Failed to encode collect metrics response")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	writeJSON(w, response, h.logger, "collect metrics")
 
 	h.logger.WithFields(map[string]any{
 		"duration":  duration,
@@ -288,15 +247,7 @@ func (h *Handler) GetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(metrics); err != nil {
-		h.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "metrics",
-		}).Error("Failed to encode dashboard metrics response")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	writeJSON(w, metrics, h.logger, "dashboard metrics")
 
 	h.logger.WithFields(map[string]any{
 		"component": "metrics",
@@ -317,16 +268,15 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			ok = true
 		}
 		if !ok {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]any{
+			response := map[string]any{
 				"success": false,
 				"error": map[string]string{
 					"code":    "UNAUTHORIZED",
 					"message": "Admin authorization required",
 				},
 				"timestamp": time.Now().UTC(),
-			})
+			}
+			writeJSONWithStatus(w, response, http.StatusUnauthorized)
 			return
 		}
 	}
@@ -356,28 +306,52 @@ func (h *Handler) SendTestAlert(w http.ResponseWriter, r *http.Request) {
 		h.notifier(r.Context(), alertType, severity, message)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	response := map[string]string{
 		"status":     "sent",
 		"alert_type": alertType,
 		"message":    message,
 		"severity":   severity,
 	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		h.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "metrics",
-		}).Error("Failed to encode test alert response")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	writeJSON(w, response, h.logger, "test alert")
 
 	h.logger.WithFields(map[string]any{
 		"alert_type": alertType,
 		"severity":   severity,
 		"component":  "metrics",
 	}).Info("Test alert sent to dashboard")
+}
+
+// writeJSON marshals data and writes it as a JSON response with proper Content-Length.
+func writeJSON(w http.ResponseWriter, data interface{}, logger *logging.Logger, context string) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		if logger != nil {
+			logger.WithFields(map[string]any{
+				"error":     err.Error(),
+				"component": "metrics",
+			}).Error("Failed to marshal " + context + " response")
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	body = append(body, '\n')
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	_, _ = w.Write(body)
+}
+
+// writeJSONWithStatus marshals data and writes it as a JSON response with a specific status code.
+func writeJSONWithStatus(w http.ResponseWriter, data interface{}, statusCode int) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	body = append(body, '\n')
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(statusCode)
+	_, _ = w.Write(body)
 }
 
 // SetupMetricsRoutes adds metrics routes to the router
