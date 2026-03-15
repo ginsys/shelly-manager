@@ -275,8 +275,8 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 			metricsAPI.HandleFunc("/security", createSecurityMetricsHandler(securityMonitor, logger)).Methods("GET")
 		}
 
-		// Prometheus endpoint on root router (used by external scrapers, not the frontend)
-		r.Handle("/metrics/prometheus", handler.MetricsHandler.PrometheusHandler()).Methods("GET")
+		// Prometheus endpoint
+		metricsAPI.Handle("/prometheus", handler.MetricsHandler.PrometheusHandler()).Methods("GET")
 	}
 
 	// Discovery route
