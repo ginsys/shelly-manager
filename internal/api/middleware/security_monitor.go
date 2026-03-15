@@ -115,6 +115,17 @@ func NewSecurityMonitor(config *SecurityConfig, logger *logging.Logger) *Securit
 	return sm
 }
 
+// isTrustedIP checks if an IP is in the trusted IPs list (e.g. localhost).
+// Trusted IPs are exempt from suspicious activity tracking and blocking.
+func isTrustedIP(ip string, trustedIPs []string) bool {
+	for _, trusted := range trustedIPs {
+		if ip == trusted {
+			return true
+		}
+	}
+	return false
+}
+
 // TrackRequest records a request for security monitoring
 func (sm *SecurityMonitor) TrackRequest(r *http.Request, statusCode int, duration time.Duration) {
 	clientIP := getClientIP(r)
@@ -123,6 +134,11 @@ func (sm *SecurityMonitor) TrackRequest(r *http.Request, statusCode int, duratio
 	sm.statistics.TotalRequests++
 	sm.statistics.LastUpdated = time.Now()
 	sm.statistics.mutex.Unlock()
+
+	// Skip suspicious activity tracking for trusted IPs (e.g. localhost)
+	if isTrustedIP(clientIP, sm.config.TrustedIPs) {
+		return
+	}
 
 	// Load or create attack info
 	var attackInfo *AttackInfo
@@ -182,6 +198,10 @@ func (sm *SecurityMonitor) TrackRequest(r *http.Request, statusCode int, duratio
 func (sm *SecurityMonitor) TrackRateLimitViolation(r *http.Request) {
 	clientIP := getClientIP(r)
 
+	if isTrustedIP(clientIP, sm.config.TrustedIPs) {
+		return
+	}
+
 	if value, exists := sm.attackMap.Load(clientIP); exists {
 		attackInfo := value.(*AttackInfo)
 		attackInfo.RateLimitViolations++
@@ -197,6 +217,10 @@ func (sm *SecurityMonitor) TrackRateLimitViolation(r *http.Request) {
 // TrackValidationFailure records a validation failure
 func (sm *SecurityMonitor) TrackValidationFailure(r *http.Request, validationType string) {
 	clientIP := getClientIP(r)
+
+	if isTrustedIP(clientIP, sm.config.TrustedIPs) {
+		return
+	}
 
 	if value, exists := sm.attackMap.Load(clientIP); exists {
 		attackInfo := value.(*AttackInfo)

@@ -55,6 +55,7 @@ type SecurityConfig struct {
 	// Attack detection
 	EnableIPBlocking bool          // enable automatic IP blocking
 	BlockDuration    time.Duration // how long to block suspicious IPs
+	TrustedIPs       []string      // IPs exempt from suspicious activity tracking and blocking
 
 	// Proxy handling
 	UseProxyHeaders bool     // trust proxy headers for client IP extraction
@@ -86,6 +87,7 @@ func DefaultSecurityConfig() *SecurityConfig {
 		EnableMonitoring:   true,      // enable security monitoring
 		EnableIPBlocking:   true,      // enable automatic IP blocking
 		BlockDuration:      time.Hour, // block for 1 hour
+		TrustedIPs:         []string{"127.0.0.1", "::1", "localhost"},
 		UseProxyHeaders:    false,
 		TrustedProxies:     nil,
 	}
@@ -605,9 +607,8 @@ func IPBlockingMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logg
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientIP := getClientIP(r)
 
-			// Check if IP is blocked (skip localhost in development)
-			isLocalhost := clientIP == "127.0.0.1" || clientIP == "::1" || clientIP == "localhost"
-			if config.EnableIPBlocking && monitor != nil && !isLocalhost && monitor.IsIPBlocked(clientIP) {
+			// Check if IP is blocked (skip trusted IPs like localhost)
+			if config.EnableIPBlocking && monitor != nil && !isTrustedIP(clientIP, config.TrustedIPs) && monitor.IsIPBlocked(clientIP) {
 				if logger != nil && config.LogSecurityEvents {
 					logger.WithFields(map[string]any{
 						"client_ip":      clientIP,
