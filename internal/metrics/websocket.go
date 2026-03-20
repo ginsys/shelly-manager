@@ -416,7 +416,7 @@ func (c *WebSocketClient) readPump() {
 	for {
 		_, _, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				c.hub.logger.WithFields(map[string]any{
 					"error":     err.Error(),
 					"component": "websocket",
@@ -453,7 +453,7 @@ func (c *WebSocketClient) writePump() {
 					c.hub.logger.WithFields(map[string]any{
 						"error":     err.Error(),
 						"component": "websocket",
-					}).Error("Failed to write close message")
+					}).Debug("Failed to write close message")
 				}
 				return
 			}
