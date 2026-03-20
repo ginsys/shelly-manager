@@ -1354,3 +1354,87 @@ func TestGetConfigHistory(t *testing.T) {
 	_, ok := wrap["data"].([]interface{})
 	testutil.AssertTrue(t, ok)
 }
+
+func TestGetDeviceStatus_OfflineDevice(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	device := testutil.TestDevice()
+	device.Status = "offline"
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/status", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.GetDeviceStatus(w, req)
+
+	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+
+	var resp map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	testutil.AssertNoError(t, err)
+	errData, ok := resp["error"].(map[string]interface{})
+	testutil.AssertTrue(t, ok)
+	testutil.AssertEqual(t, "DEVICE_OFFLINE", errData["code"])
+}
+
+func TestGetDeviceEnergy_OfflineDevice(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	device := testutil.TestDevice()
+	device.Status = "offline"
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/energy", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.GetDeviceEnergy(w, req)
+
+	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+
+	var resp map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	testutil.AssertNoError(t, err)
+	errData, ok := resp["error"].(map[string]interface{})
+	testutil.AssertTrue(t, ok)
+	testutil.AssertEqual(t, "DEVICE_OFFLINE", errData["code"])
+}
+
+func TestDetectConfigDrift_OfflineDevice(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	device := testutil.TestDevice()
+	device.Status = "offline"
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/drift/detect", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.DetectConfigDrift(w, req)
+
+	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+
+	var resp map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	testutil.AssertNoError(t, err)
+	errData, ok := resp["error"].(map[string]interface{})
+	testutil.AssertTrue(t, ok)
+	testutil.AssertEqual(t, "DEVICE_OFFLINE", errData["code"])
+}

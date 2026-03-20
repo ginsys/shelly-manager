@@ -598,6 +598,10 @@ func (h *Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request) {
 	// Get device status
 	status, err := h.Service.GetDeviceStatus(uint(id))
 	if err != nil {
+		if errors.Is(err, service.ErrDeviceOffline) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"error":     err.Error(),
@@ -629,6 +633,10 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 	// Get energy data
 	energy, err := h.Service.GetDeviceEnergy(uint(id), channel)
 	if err != nil {
+		if errors.Is(err, service.ErrDeviceOffline) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"channel":   channel,
@@ -952,6 +960,10 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 	// Detect configuration drift
 	drift, err := h.Service.DetectConfigDrift(uint(id))
 	if err != nil {
+		if errors.Is(err, service.ErrDeviceOffline) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
+			return
+		}
 		if errors.Is(err, configuration.ErrStoredConfigNotFound) {
 			h.logger.WithFields(map[string]any{
 				"device_id": id,
