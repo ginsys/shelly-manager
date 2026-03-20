@@ -154,7 +154,7 @@ describe('devices api - extended operations', () => {
       })
 
       await controlDevice(123, { action: 'on' })
-      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'on' })
+      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'on' }, { signal: undefined })
     })
 
     it('supports different actions', async () => {
@@ -163,13 +163,13 @@ describe('devices api - extended operations', () => {
       })
 
       await controlDevice(123, { action: 'off' })
-      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'off' })
+      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'off' }, { signal: undefined })
 
       await controlDevice(123, { action: 'restart' })
-      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'restart' })
+      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'restart' }, { signal: undefined })
 
       await controlDevice(123, { action: 'toggle' })
-      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'toggle' })
+      expect(api.post).toHaveBeenCalledWith('/devices/123/control', { action: 'toggle' }, { signal: undefined })
     })
 
     it('throws error when control fails', async () => {
@@ -206,7 +206,7 @@ describe('devices api - extended operations', () => {
 
       const result = await getDeviceStatus(123)
       expect(result).toEqual(status)
-      expect(api.get).toHaveBeenCalledWith('/devices/123/status')
+      expect(api.get).toHaveBeenCalledWith('/devices/123/status', { signal: undefined })
     })
 
     it('throws error when status unavailable', async () => {
@@ -242,7 +242,8 @@ describe('devices api - extended operations', () => {
       const result = await getDeviceEnergy(123)
       expect(result).toEqual(energy)
       expect(api.get).toHaveBeenCalledWith('/devices/123/energy', {
-        params: { channel: 0 }
+        params: { channel: 0 },
+        signal: undefined,
       })
     })
 
@@ -263,7 +264,8 @@ describe('devices api - extended operations', () => {
       expect(result.power).toBe(50.0)
       expect(result.voltage).toBeUndefined()
       expect(api.get).toHaveBeenCalledWith('/devices/123/energy', {
-        params: { channel: 0 }
+        params: { channel: 0 },
+        signal: undefined,
       })
     })
 

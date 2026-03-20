@@ -109,8 +109,8 @@ export async function exportDeviceConfig(id: number | string): Promise<DeviceCon
 }
 
 // Detect configuration drift
-export async function detectConfigDrift(id: number | string): Promise<ConfigDrift> {
-  const res = await api.get<APIResponse<ConfigDrift>>(`/devices/${id}/config/drift`)
+export async function detectConfigDrift(id: number | string, signal?: AbortSignal): Promise<ConfigDrift> {
+  const res = await api.get<APIResponse<ConfigDrift>>(`/devices/${id}/config/drift`, { signal })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to detect configuration drift'
     throw new Error(msg)
