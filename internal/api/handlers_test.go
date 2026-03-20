@@ -1364,6 +1364,7 @@ func TestGetDeviceStatus_OfflineDevice(t *testing.T) {
 
 	device := testutil.TestDevice()
 	device.Status = "offline"
+	device.LastSeen = time.Now().Add(-10 * time.Minute) // Stale enough to skip revalidation
 	err := db.AddDevice(device)
 	testutil.AssertNoError(t, err)
 
@@ -1373,7 +1374,7 @@ func TestGetDeviceStatus_OfflineDevice(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.GetDeviceStatus(w, req)
 
-	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+	testutil.AssertEqual(t, http.StatusServiceUnavailable, w.Code)
 
 	var resp map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &resp)
@@ -1401,7 +1402,7 @@ func TestGetDeviceEnergy_OfflineDevice(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.GetDeviceEnergy(w, req)
 
-	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+	testutil.AssertEqual(t, http.StatusServiceUnavailable, w.Code)
 
 	var resp map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &resp)
@@ -1429,7 +1430,7 @@ func TestDetectConfigDrift_OfflineDevice(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.DetectConfigDrift(w, req)
 
-	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+	testutil.AssertEqual(t, http.StatusServiceUnavailable, w.Code)
 
 	var resp map[string]interface{}
 	err = json.Unmarshal(w.Body.Bytes(), &resp)
