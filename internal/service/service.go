@@ -696,6 +696,28 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 	}
 
 	if device.Status == "offline" {
+		// Allow a short revalidation probe if recently marked offline (within 5 minutes)
+		if time.Since(device.LastSeen) <= 5*time.Minute {
+			client, clientErr := s.getClient(device)
+			if clientErr == nil {
+				probeCtx, probeCancel := context.WithTimeout(s.ctx, 3*time.Second)
+				defer probeCancel()
+				if status, probeErr := client.GetStatus(probeCtx); probeErr == nil {
+					device.Status = "online"
+					device.LastSeen = time.Now()
+					_ = s.DB.UpdateDevice(device)
+					return map[string]interface{}{
+						"device_id":   deviceID,
+						"ip":          device.IP,
+						"temperature": status.Temperature,
+						"uptime":      status.Uptime,
+						"wifi":        status.WiFiStatus,
+						"switches":    status.Switches,
+						"meters":      status.Meters,
+					}, nil
+				}
+			}
+		}
 		return nil, ErrDeviceOffline
 	}
 

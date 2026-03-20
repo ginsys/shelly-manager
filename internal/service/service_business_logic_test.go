@@ -632,3 +632,52 @@ func TestShellyService_DetectConfigDrift_OfflineDevice(t *testing.T) {
 		t.Errorf("Expected ErrDeviceOffline, got: %v", err)
 	}
 }
+
+func TestGetDeviceStatus_OfflineDevice_RecentRevalidation(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
+
+	server := createMockShellyServer()
+	defer server.Close()
+
+	db := createTestDB(t)
+	cfg := createTestConfigBusiness()
+	svc := NewService(db, cfg)
+
+	serverIP := server.URL[len("http://"):]
+	device := &database.Device{
+		IP:       serverIP,
+		MAC:      "68C63A123459",
+		Type:     "SHSW-25",
+		Name:     "Recently Offline Device",
+		Status:   "offline",
+		LastSeen: time.Now(), // Within 5-minute revalidation window
+		Settings: `{"model":"SHSW-25","gen":1,"auth_enabled":false}`,
+	}
+	if err := db.AddDevice(device); err != nil {
+		t.Fatalf("Failed to create test device: %v", err)
+	}
+
+	result, err := svc.GetDeviceStatus(device.ID)
+	if err != nil {
+		t.Fatalf("Expected successful revalidation, got error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Expected non-nil result from revalidation")
+	}
+	if result["device_id"] != device.ID {
+		t.Errorf("Expected device_id %d, got %v", device.ID, result["device_id"])
+	}
+
+	// Verify device status was updated to online
+	updated, err := db.GetDevice(device.ID)
+	if err != nil {
+		t.Fatalf("Failed to get updated device: %v", err)
+	}
+	if updated.Status != "online" {
+		t.Errorf("Expected device status 'online', got '%s'", updated.Status)
+	}
+}
