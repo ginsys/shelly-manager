@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -560,5 +561,74 @@ func createTestConfigBusiness() *config.Config {
 			Timeout:  5,
 			Enabled:  true,
 		},
+	}
+}
+
+func TestShellyService_GetDeviceStatus_OfflineDevice(t *testing.T) {
+	db := createTestDB(t)
+	cfg := createTestConfigBusiness()
+	svc := NewService(db, cfg)
+
+	device := &database.Device{
+		IP:       "192.168.1.100",
+		MAC:      "68C63A123456",
+		Type:     "SHSW-25",
+		Name:     "Offline Device",
+		Status:   "offline",
+		Settings: `{"model":"SHSW-25","gen":1,"auth_enabled":false}`,
+	}
+	if err := db.AddDevice(device); err != nil {
+		t.Fatalf("Failed to create test device: %v", err)
+	}
+
+	_, err := svc.GetDeviceStatus(device.ID)
+	if !errors.Is(err, ErrDeviceOffline) {
+		t.Errorf("Expected ErrDeviceOffline, got: %v", err)
+	}
+}
+
+func TestShellyService_GetDeviceEnergy_OfflineDevice(t *testing.T) {
+	db := createTestDB(t)
+	cfg := createTestConfigBusiness()
+	svc := NewService(db, cfg)
+
+	device := &database.Device{
+		IP:       "192.168.1.100",
+		MAC:      "68C63A123457",
+		Type:     "SHSW-25",
+		Name:     "Offline Device",
+		Status:   "offline",
+		Settings: `{"model":"SHSW-25","gen":1,"auth_enabled":false}`,
+	}
+	if err := db.AddDevice(device); err != nil {
+		t.Fatalf("Failed to create test device: %v", err)
+	}
+
+	_, err := svc.GetDeviceEnergy(device.ID, 0)
+	if !errors.Is(err, ErrDeviceOffline) {
+		t.Errorf("Expected ErrDeviceOffline, got: %v", err)
+	}
+}
+
+func TestShellyService_DetectConfigDrift_OfflineDevice(t *testing.T) {
+	db := createTestDB(t)
+	cfg := createTestConfigBusiness()
+	svc := NewService(db, cfg)
+
+	device := &database.Device{
+		IP:       "192.168.1.100",
+		MAC:      "68C63A123458",
+		Type:     "SHSW-25",
+		Name:     "Offline Device",
+		Status:   "offline",
+		Settings: `{"model":"SHSW-25","gen":1,"auth_enabled":false}`,
+	}
+	if err := db.AddDevice(device); err != nil {
+		t.Fatalf("Failed to create test device: %v", err)
+	}
+
+	_, err := svc.DetectConfigDrift(device.ID)
+	if !errors.Is(err, ErrDeviceOffline) {
+		t.Errorf("Expected ErrDeviceOffline, got: %v", err)
 	}
 }

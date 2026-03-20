@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -17,6 +18,9 @@ import (
 	"github.com/ginsys/shelly-manager/internal/shelly/gen1"
 	"github.com/ginsys/shelly-manager/internal/shelly/gen2"
 )
+
+// ErrDeviceOffline is returned when a device is known to be offline and communication is skipped.
+var ErrDeviceOffline = errors.New("device is offline")
 
 // ShellyService handles the core business logic
 type ShellyService struct {
@@ -691,6 +695,10 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
 
+	if device.Status == "offline" {
+		return nil, ErrDeviceOffline
+	}
+
 	// Get or create client
 	client, err := s.getClient(device)
 	if err != nil {
@@ -736,6 +744,10 @@ func (s *ShellyService) GetDeviceEnergy(deviceID uint, channel int) (*shelly.Ene
 	device, err := s.DB.GetDevice(deviceID)
 	if err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
+	}
+
+	if device.Status == "offline" {
+		return nil, ErrDeviceOffline
 	}
 
 	// Get or create client
@@ -889,6 +901,10 @@ func (s *ShellyService) DetectConfigDrift(deviceID uint) (*configuration.ConfigD
 	device, err := s.DB.GetDevice(deviceID)
 	if err != nil {
 		return nil, fmt.Errorf("device not found: %w", err)
+	}
+
+	if device.Status == "offline" {
+		return nil, ErrDeviceOffline
 	}
 
 	// Get or create client with auth retry
