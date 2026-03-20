@@ -127,7 +127,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { createDevice, updateDevice, deleteDevice, controlDevice } from '../api/devices'
+import { createDevice, updateDevice, deleteDevice, controlDevice, isAbortError } from '../api/devices'
 import type { Device } from '../api/types'
 import { useDevicesStore } from '../stores/devices'
 import DeviceForm from '../components/devices/DeviceForm.vue'
@@ -227,6 +227,7 @@ async function handleDelete(id: number) {
     await deleteDevice(id)
     await store.fetchDevices()
   } catch (e: any) {
+    if (isAbortError(e)) return
     alert('Failed to delete device: ' + (e?.message || 'Unknown error'))
   }
 }

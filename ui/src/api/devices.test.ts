@@ -45,7 +45,7 @@ describe('devices api', () => {
 
     const d = await getDevice(2)
     expect(d.id).toBe(2)
-    expect(api.get).toHaveBeenCalledWith('/devices/2')
+    expect(api.get).toHaveBeenCalledWith('/devices/2', { signal: undefined })
   })
 })
 

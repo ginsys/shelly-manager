@@ -297,7 +297,7 @@ describe('deviceConfig API', () => {
       const result = await detectConfigDrift(123)
       expect(result.hasDrift).toBe(true)
       expect(result.driftFields).toHaveLength(2)
-      expect(api.get).toHaveBeenCalledWith('/devices/123/config/drift')
+      expect(api.get).toHaveBeenCalledWith('/devices/123/config/drift', { signal: undefined })
     })
 
     it('returns no drift when configurations match', async () => {

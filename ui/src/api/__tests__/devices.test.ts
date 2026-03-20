@@ -88,7 +88,7 @@ describe('Devices API', () => {
 
       const result = await getDevice(1)
 
-      expect(mockApi.get).toHaveBeenCalledWith('/devices/1')
+      expect(mockApi.get).toHaveBeenCalledWith('/devices/1', { signal: undefined })
       expect(result).toEqual(mockDevice)
     })
 
@@ -113,7 +113,7 @@ describe('Devices API', () => {
 
       await getDevice('1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/devices/1')
+      expect(mockApi.get).toHaveBeenCalledWith('/devices/1', { signal: undefined })
     })
   })
 
@@ -244,7 +244,7 @@ describe('Devices API', () => {
 
       const result = await controlDevice(1, { action: 'on' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/devices/1/control', { action: 'on' })
+      expect(mockApi.post).toHaveBeenCalledWith('/devices/1/control', { action: 'on' }, { signal: undefined })
       expect(result).toEqual(controlResponse)
     })
 
@@ -264,7 +264,7 @@ describe('Devices API', () => {
 
       const result = await controlDevice(1, { action: 'off' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/devices/1/control', { action: 'off' })
+      expect(mockApi.post).toHaveBeenCalledWith('/devices/1/control', { action: 'off' }, { signal: undefined })
       expect(result).toEqual(controlResponse)
     })
 
@@ -287,7 +287,7 @@ describe('Devices API', () => {
       expect(mockApi.post).toHaveBeenCalledWith('/devices/1/control', {
         action: 'on',
         params: { channel: 2 },
-      })
+      }, { signal: undefined })
       expect(result).toEqual(controlResponse)
     })
 
@@ -315,7 +315,7 @@ describe('Devices API', () => {
 
         await controlDevice(1, { action })
 
-        expect(mockApi.post).toHaveBeenCalledWith('/devices/1/control', { action })
+        expect(mockApi.post).toHaveBeenCalledWith('/devices/1/control', { action }, { signal: undefined })
       }
     })
   })
@@ -353,7 +353,7 @@ describe('Devices API', () => {
 
       const result = await getDeviceStatus(1)
 
-      expect(mockApi.get).toHaveBeenCalledWith('/devices/1/status')
+      expect(mockApi.get).toHaveBeenCalledWith('/devices/1/status', { signal: undefined })
       expect(result).toEqual(mockStatus)
     })
 
@@ -392,6 +392,7 @@ describe('Devices API', () => {
 
       expect(mockApi.get).toHaveBeenCalledWith('/devices/1/energy', {
         params: { channel: 0 },
+        signal: undefined,
       })
       expect(result).toEqual(mockEnergy)
     })
@@ -417,6 +418,7 @@ describe('Devices API', () => {
 
       expect(mockApi.get).toHaveBeenCalledWith('/devices/1/energy', {
         params: { channel: 2 },
+        signal: undefined,
       })
       expect(result).toEqual(mockEnergy)
     })

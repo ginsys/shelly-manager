@@ -26,8 +26,8 @@ export async function listDevices(params: ListDevicesParams = {}): Promise<ListD
   }
 }
 
-export async function getDevice(id: number | string): Promise<Device> {
-  const res = await api.get<APIResponse<Device>>(`/devices/${id}`)
+export async function getDevice(id: number | string, signal?: AbortSignal): Promise<Device> {
+  const res = await api.get<APIResponse<Device>>(`/devices/${id}`, { signal })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Device not found'
     throw new Error(msg)
@@ -66,8 +66,8 @@ export interface DeviceControlRequest {
   params?: Record<string, any>
 }
 
-export async function controlDevice(id: number | string, request: DeviceControlRequest): Promise<any> {
-  const res = await api.post<APIResponse<any>>(`/devices/${id}/control`, request)
+export async function controlDevice(id: number | string, request: DeviceControlRequest, signal?: AbortSignal): Promise<any> {
+  const res = await api.post<APIResponse<any>>(`/devices/${id}/control`, request, { signal })
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to control device'
     throw new Error(msg)
@@ -85,8 +85,8 @@ export interface DeviceStatus {
   mqtt?: { connected: boolean }
 }
 
-export async function getDeviceStatus(id: number | string): Promise<DeviceStatus> {
-  const res = await api.get<APIResponse<DeviceStatus>>(`/devices/${id}/status`)
+export async function getDeviceStatus(id: number | string, signal?: AbortSignal): Promise<DeviceStatus> {
+  const res = await api.get<APIResponse<DeviceStatus>>(`/devices/${id}/status`, { signal })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get device status'
     throw new Error(msg)
@@ -102,13 +102,20 @@ export interface DeviceEnergy {
   totalReturned?: number
 }
 
-export async function getDeviceEnergy(id: number | string, channel: number = 0): Promise<DeviceEnergy> {
+export async function getDeviceEnergy(id: number | string, channel: number = 0, signal?: AbortSignal): Promise<DeviceEnergy> {
   const res = await api.get<APIResponse<DeviceEnergy>>(`/devices/${id}/energy`, {
     params: { channel },
+    signal,
   })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get energy metrics'
     throw new Error(msg)
   }
   return res.data.data
+}
+
+export function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (err instanceof Error && err.name === 'CanceledError') return true
+  return false
 }

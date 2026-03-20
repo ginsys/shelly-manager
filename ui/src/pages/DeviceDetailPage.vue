@@ -162,7 +162,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevice } from '../api/devices'
+import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevice, isAbortError } from '../api/devices'
 import { detectConfigDrift } from '../api/deviceConfig'
 import type { Device } from '../api/types'
 import type { DeviceStatus, DeviceEnergy } from '../api/devices'
@@ -180,6 +180,7 @@ const drift = ref<ConfigDrift | null>(null)
 const driftLoading = ref(false)
 const showEditDialog = ref(false)
 const editForm = ref<{ name: string; settings: string }>({ name: '', settings: '' })
+const abortController = new AbortController()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
 const hasEnergyData = computed(() => {
@@ -244,11 +245,12 @@ function formatUptime(seconds: number): string {
 async function fetchDevice() {
   try {
     const id = route.params.id as string
-    d.value = await getDevice(id)
+    d.value = await getDevice(id, abortController.signal)
     // Populate edit form
     editForm.value.name = d.value.name || ''
     editForm.value.settings = d.value.settings || ''
   } catch (e: any) {
+    if (isAbortError(e)) return
     console.error('Failed to load device:', e)
   }
 }
@@ -257,8 +259,9 @@ async function fetchDrift() {
   try {
     driftLoading.value = true
     const id = route.params.id as string
-    drift.value = await detectConfigDrift(id)
+    drift.value = await detectConfigDrift(id, abortController.signal)
   } catch (e: any) {
+    if (isAbortError(e)) return
     // Drift detection might not be available for all devices
     console.warn('Failed to check drift:', e)
   } finally {
@@ -269,8 +272,9 @@ async function fetchDrift() {
 async function fetchStatus() {
   try {
     const id = route.params.id as string
-    status.value = await getDeviceStatus(id)
+    status.value = await getDeviceStatus(id, abortController.signal)
   } catch (e: any) {
+    if (isAbortError(e)) return
     // Status might not be available for all devices
     console.warn('Failed to load status:', e)
   }
@@ -279,8 +283,9 @@ async function fetchStatus() {
 async function fetchEnergy() {
   try {
     const id = route.params.id as string
-    energy.value = await getDeviceEnergy(id)
+    energy.value = await getDeviceEnergy(id, 0, abortController.signal)
   } catch (e: any) {
+    if (isAbortError(e)) return
     // Energy metrics not available for all devices
     console.warn('Failed to load energy metrics:', e)
   }
@@ -340,6 +345,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  abortController.abort()
   if (refreshInterval) {
     clearInterval(refreshInterval)
   }
