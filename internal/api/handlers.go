@@ -556,6 +556,7 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Action string                 `json:"action"`
 		Params map[string]interface{} `json:"params"`
+		Force  bool                   `json:"force"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
@@ -568,8 +569,21 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pass force flag into params
+	if req.Force {
+		if req.Params == nil {
+			req.Params = make(map[string]interface{})
+		}
+		req.Params["force"] = true
+	}
+
 	// Execute control command
 	if err := h.Service.ControlDevice(uint(id), req.Action, req.Params); err != nil {
+		if errors.Is(err, service.ErrDeviceOffline) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeDeviceOffline,
+				"Device is offline. Set \"force\": true to attempt anyway.", nil)
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"action":    req.Action,

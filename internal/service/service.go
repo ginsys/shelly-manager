@@ -534,6 +534,12 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 		return fmt.Errorf("device not found: %w", err)
 	}
 
+	// Pre-check: fail fast if device is offline (bypass with force flag)
+	force, _ := params["force"].(bool)
+	if !force && device.Status == "offline" {
+		return ErrDeviceOffline
+	}
+
 	// Get or create client
 	client, err := s.getClient(device)
 	if err != nil {
