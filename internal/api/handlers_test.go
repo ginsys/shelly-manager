@@ -661,6 +661,77 @@ func TestControlDevice_MissingAction(t *testing.T) {
 	testutil.AssertEqual(t, http.StatusBadRequest, w.Code)
 }
 
+func TestControlDevice_OfflineDevice(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	device := testutil.TestDevice()
+	device.Status = "offline"
+	device.LastSeen = time.Now().Add(-10 * time.Minute)
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	controlReq := map[string]interface{}{
+		"action": "toggle",
+		"params": map[string]interface{}{"output": 0},
+	}
+	body, _ := json.Marshal(controlReq)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/control", device.ID), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.ControlDevice(w, req)
+
+	testutil.AssertEqual(t, http.StatusServiceUnavailable, w.Code)
+
+	var resp map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	testutil.AssertNoError(t, err)
+	errData, ok := resp["error"].(map[string]interface{})
+	testutil.AssertTrue(t, ok)
+	testutil.AssertEqual(t, "DEVICE_OFFLINE", errData["code"])
+}
+
+func TestControlDevice_OfflineDevice_Force(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	device := testutil.TestDevice()
+	device.Status = "offline"
+	device.LastSeen = time.Now().Add(-10 * time.Minute)
+	err := db.AddDevice(device)
+	testutil.AssertNoError(t, err)
+
+	controlReq := map[string]interface{}{
+		"action": "toggle",
+		"params": map[string]interface{}{"output": 0},
+		"force":  true,
+	}
+	body, _ := json.Marshal(controlReq)
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/control", device.ID), bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.ControlDevice(w, req)
+
+	// Force bypass should skip the offline check; expect 500 (no real device) not 503
+	testutil.AssertTrue(t, w.Code != http.StatusServiceUnavailable)
+}
+
 func TestGetDeviceStatus(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping network test in short mode")
