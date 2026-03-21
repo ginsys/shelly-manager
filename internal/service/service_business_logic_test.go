@@ -681,3 +681,59 @@ func TestGetDeviceStatus_OfflineDevice_RecentRevalidation(t *testing.T) {
 		t.Errorf("Expected device status 'online', got '%s'", updated.Status)
 	}
 }
+
+func TestShellyService_ControlDevice_OfflineDevice(t *testing.T) {
+	db := createTestDB(t)
+	cfg := createTestConfigBusiness()
+	svc := NewService(db, cfg)
+
+	device := &database.Device{
+		IP:       "192.168.1.100",
+		MAC:      "68C63A123460",
+		Type:     "SHSW-25",
+		Name:     "Offline Device",
+		Status:   "offline",
+		Settings: `{"model":"SHSW-25","gen":1,"auth_enabled":false}`,
+	}
+	if err := db.AddDevice(device); err != nil {
+		t.Fatalf("Failed to create test device: %v", err)
+	}
+
+	err := svc.ControlDevice(device.ID, "on", map[string]interface{}{"channel": 0})
+	if !errors.Is(err, ErrDeviceOffline) {
+		t.Errorf("Expected ErrDeviceOffline, got: %v", err)
+	}
+}
+
+func TestShellyService_ControlDevice_OfflineDevice_Force(t *testing.T) {
+	if ln, err := net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		t.Skipf("Skipping due to restricted socket permissions: %v", err)
+	} else {
+		_ = ln.Close()
+	}
+
+	db := createTestDB(t)
+	cfg := createTestConfigBusiness()
+	svc := NewService(db, cfg)
+
+	device := &database.Device{
+		IP:       "192.168.1.100",
+		MAC:      "68C63A123461",
+		Type:     "SHSW-25",
+		Name:     "Offline Device Force",
+		Status:   "offline",
+		Settings: `{"model":"SHSW-25","gen":1,"auth_enabled":false}`,
+	}
+	if err := db.AddDevice(device); err != nil {
+		t.Fatalf("Failed to create test device: %v", err)
+	}
+
+	err := svc.ControlDevice(device.ID, "on", map[string]interface{}{"channel": 0, "force": true})
+	if errors.Is(err, ErrDeviceOffline) {
+		t.Errorf("Expected force bypass to skip offline check, but got ErrDeviceOffline")
+	}
+	// Error is expected (no real device), but it should NOT be ErrDeviceOffline
+	if err == nil {
+		t.Error("Expected an error (no real device to connect to), got nil")
+	}
+}

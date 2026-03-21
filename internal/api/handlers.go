@@ -580,7 +580,7 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 	// Execute control command
 	if err := h.Service.ControlDevice(uint(id), req.Action, req.Params); err != nil {
 		if errors.Is(err, service.ErrDeviceOffline) {
-			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeDeviceOffline,
+			h.responseWriter().WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeDeviceOffline,
 				"Device is offline. Set \"force\": true to attempt anyway.", nil)
 			return
 		}
