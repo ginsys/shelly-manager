@@ -286,6 +286,15 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	api.HandleFunc("/provisioning/status", handler.GetProvisioningStatus).Methods("GET")
 	api.HandleFunc("/provisioning/provision", handler.ProvisionDevices).Methods("POST")
 
+	// UI-facing provisioning task/agent routes (admin-key auth)
+	api.HandleFunc("/provisioning/tasks", handler.ListProvisioningTasksUI).Methods("GET")
+	api.HandleFunc("/provisioning/tasks", handler.CreateProvisioningTaskUI).Methods("POST")
+	api.HandleFunc("/provisioning/tasks/{id}", handler.GetProvisioningTaskUI).Methods("GET")
+	api.HandleFunc("/provisioning/tasks/{id}/cancel", handler.CancelProvisioningTaskUI).Methods("POST")
+	api.HandleFunc("/provisioning/bulk", handler.BulkProvisionUI).Methods("POST")
+	api.HandleFunc("/provisioning/agents", handler.ListProvisioningAgentsUI).Methods("GET")
+	api.HandleFunc("/provisioning/agents/{id}/status", handler.GetProvisioningAgentStatusUI).Methods("GET")
+
 	// Provisioner agent management routes
 	api.HandleFunc("/provisioner/agents/register", handler.RegisterAgent).Methods("POST")
 	api.HandleFunc("/provisioner/agents", handler.GetProvisionerAgents).Methods("GET")
