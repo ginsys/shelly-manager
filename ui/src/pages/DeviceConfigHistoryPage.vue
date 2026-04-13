@@ -8,12 +8,12 @@
     </div>
 
     <!-- Loading/Error states -->
-    <div v-if="store.loading" class="card state">Loading...</div>
-    <div v-else-if="store.error" class="card state error">{{ store.error }}</div>
+    <div v-if="loading" class="card state">Loading...</div>
+    <div v-else-if="error" class="card state error">{{ error }}</div>
 
     <!-- History Table -->
     <div v-else class="card">
-      <table v-if="store.history.length > 0" class="table">
+      <table v-if="history.length > 0" class="table">
         <thead>
           <tr>
             <th>Timestamp</th>
@@ -23,7 +23,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="entry in store.history" :key="entry.id">
+          <tr v-for="entry in history" :key="entry.id">
             <td>{{ formatDate(entry.timestamp) }}</td>
             <td>
               <span :class="['source-badge', entry.source]">{{ entry.source }}</span>
@@ -56,14 +56,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useDeviceConfigStore } from '@/stores/deviceConfig'
-import type { ConfigHistoryEntry } from '@/api/deviceConfig'
+import { getConfigHistory, updateDeviceConfig, type ConfigHistoryEntry } from '@/api/deviceConfig'
 
 const route = useRoute()
 const router = useRouter()
-const store = useDeviceConfigStore()
 
 const deviceId = ref<number | string>(route.params.id as string)
+const history = ref<ConfigHistoryEntry[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 const viewingConfig = ref<ConfigHistoryEntry | null>(null)
 
 function formatDate(iso: string) {
@@ -82,7 +83,7 @@ async function restoreConfig(entry: ConfigHistoryEntry) {
   if (!confirm('Are you sure you want to restore this configuration?')) return
 
   try {
-    await store.saveStoredConfig(deviceId.value, entry.config)
+    await updateDeviceConfig(deviceId.value, entry.config)
     viewingConfig.value = null
     alert('Configuration restored successfully')
     router.push(`/devices/${deviceId.value}/config`)
@@ -92,7 +93,15 @@ async function restoreConfig(entry: ConfigHistoryEntry) {
 }
 
 async function handleRefresh() {
-  await store.fetchHistory(deviceId.value)
+  loading.value = true
+  error.value = null
+  try {
+    history.value = await getConfigHistory(deviceId.value)
+  } catch (e: any) {
+    error.value = e?.message || 'Failed to load configuration history'
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => {
