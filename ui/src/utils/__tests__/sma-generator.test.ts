@@ -120,22 +120,23 @@ describe('SMA Generator', () => {
       return compressed
     })
 
-    // Mock Blob and URL for browser APIs
-    global.Blob = vi.fn().mockImplementation((parts, options) => ({
-      size: parts?.[0]?.length || 0,
-      type: options?.type || 'application/octet-stream'
-    })) as any
+    // Mock Blob and URL for browser APIs. Use `function` (not arrow) so
+    // vitest 4 treats these as constructors when called with `new`.
+    global.Blob = vi.fn().mockImplementation(function (this: any, parts, options) {
+      this.size = parts?.[0]?.length || 0
+      this.type = options?.type || 'application/octet-stream'
+    }) as any
 
     global.URL = {
       createObjectURL: vi.fn(() => 'blob:mock-url'),
       revokeObjectURL: vi.fn()
     } as any
 
-    global.File = vi.fn().mockImplementation((parts, name, options) => ({
-      name,
-      size: parts?.[0]?.length || 0,
-      type: options?.type || 'application/octet-stream'
-    })) as any
+    global.File = vi.fn().mockImplementation(function (this: any, parts, name, options) {
+      this.name = name
+      this.size = parts?.[0]?.length || 0
+      this.type = options?.type || 'application/octet-stream'
+    }) as any
   })
 
   describe('generateSMAFile', () => {
