@@ -371,6 +371,28 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	// Update existing device with new data
 	updatedDevice.ID = existingDevice.ID
 	if err := h.DB.UpdateDevice(&updatedDevice); err != nil {
+		h.logger.WithFields(map[string]any{
+			"error":      err.Error(),
+			"device_id":  updatedDevice.ID,
+			"device_ip":  updatedDevice.IP,
+			"device_mac": updatedDevice.MAC,
+			"component":  "api",
+			"operation":  "update_device",
+			"request_id": r.Context().Value("request_id"),
+		}).Error("UpdateDevice operation failed with detailed context")
+
+		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") ||
+			strings.Contains(strings.ToLower(err.Error()), "constraint failed") {
+			if strings.Contains(strings.ToLower(err.Error()), "ip") {
+				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this IP address already exists", nil)
+			} else if strings.Contains(strings.ToLower(err.Error()), "mac") {
+				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this MAC address already exists", nil)
+			} else {
+				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device conflict", nil)
+			}
+			return
+		}
+
 		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
