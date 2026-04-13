@@ -63,7 +63,9 @@ export async function createTask(data: Partial<ProvisioningTask>): Promise<Provi
 }
 
 export async function cancelTask(id: string): Promise<void> {
-  const res = await api.post<APIResponse<void>>(`/provisioning/tasks/${id}/cancel`)
+  // Empty-body POST: pass {} so axios emits Content-Type for the backend's
+  // ValidateContentTypeMiddleware.
+  const res = await api.post<APIResponse<void>>(`/provisioning/tasks/${id}/cancel`, {})
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to cancel provisioning task'
     throw new Error(msg)

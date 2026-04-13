@@ -137,7 +137,9 @@ describe('provisioning api', () => {
       })
 
       await cancelTask('1')
-      expect(api.post).toHaveBeenCalledWith('/provisioning/tasks/1/cancel')
+      // Empty {} body is sent so axios emits Content-Type for the backend's
+      // ValidateContentTypeMiddleware.
+      expect(api.post).toHaveBeenCalledWith('/provisioning/tasks/1/cancel', {})
     })
 
     it('getTasks throws error on API failure', async () => {
