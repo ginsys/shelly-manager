@@ -1,49 +1,71 @@
 import api from './client'
 import type { APIResponse, Metadata } from './types'
 
-// Drift detection interfaces
+// Backend uses snake_case; these interfaces mirror `internal/configuration/models.go`.
+
 export interface DriftSchedule {
   id: number
   name: string
   description?: string
-  deviceIds?: number[]
-  deviceFilter?: string
-  checkInterval: string // e.g., "1h", "24h"
   enabled: boolean
-  lastRun?: string
-  nextRun?: string
-  createdAt: string
-  updatedAt: string
+  cron_spec: string
+  device_ids?: number[] | null
+  device_filter?: string | null
+  last_run?: string | null
+  next_run?: string | null
+  run_count: number
+  created_at: string
+  updated_at: string
 }
 
 export interface DriftScheduleRun {
   id: number
-  scheduleId: number
-  startedAt: string
-  completedAt?: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  devicesChecked: number
-  driftsDetected: number
+  schedule_id: number
+  status: 'running' | 'completed' | 'failed'
+  started_at: string
+  completed_at?: string | null
+  duration?: number | null
+  results?: string
   error?: string
+  created_at: string
 }
 
+// Aggregate report (summary + devices + recommendations). Backend model;
+// the UI currently does not render these directly — see DriftTrend for
+// per-path drift items shown on the "Drift Reports" page.
 export interface DriftReport {
   id: number
-  deviceId: number
-  deviceName: string
-  detectedAt: string
-  driftType: 'config_changed' | 'unexpected_value' | 'missing_config'
-  field: string
-  expectedValue: any
-  actualValue: any
-  severity: 'low' | 'medium' | 'high' | 'critical'
-  resolved: boolean
-  resolvedAt?: string
-  resolvedBy?: string
-  notes?: string
+  report_type: string
+  device_id?: number | null
+  schedule_id?: number | null
+  summary: Record<string, unknown>
+  devices: Array<Record<string, unknown>>
+  recommendations: Array<Record<string, unknown>>
+  generated_at: string
+  created_at: string
 }
 
+// Per-path drift pattern tracked over time. Backend entity backing the
+// UI's "Drift Reports" table (one row per drifting config path per device)
+// and resolvable via POST /config/drift-trends/{id}/resolve.
 export interface DriftTrend {
+  id: number
+  device_id: number
+  path: string
+  category: string
+  severity: 'low' | 'medium' | 'high' | 'critical' | string
+  first_seen: string
+  last_seen: string
+  occurrences: number
+  resolved: boolean
+  resolved_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Daily aggregate derived client-side from a list of DriftTrend records;
+// fuels the "Drift Trends" chart page. Backend has no equivalent endpoint.
+export interface DriftDailyAggregate {
   date: string
   totalDrifts: number
   resolvedDrifts: number
@@ -54,10 +76,10 @@ export interface DriftTrend {
 export interface CreateDriftScheduleRequest {
   name: string
   description?: string
-  deviceIds?: number[]
-  deviceFilter?: string
-  checkInterval: string
   enabled?: boolean
+  cron_spec: string
+  device_ids?: number[]
+  device_filter?: string
 }
 
 export interface ListDriftSchedulesResult {
@@ -65,14 +87,9 @@ export interface ListDriftSchedulesResult {
   meta?: Metadata
 }
 
-export interface ListDriftReportsResult {
-  items: DriftReport[]
-  meta?: Metadata
-}
-
-// List drift schedules
+// List drift schedules. Backend returns a raw array at `data`.
 export async function listDriftSchedules(page = 1, pageSize = 25): Promise<ListDriftSchedulesResult> {
-  const res = await api.get<APIResponse<{ schedules: DriftSchedule[] }>>('/config/drift-schedules', {
+  const res = await api.get<APIResponse<DriftSchedule[]>>('/config/drift-schedules', {
     params: { page, page_size: pageSize }
   })
   if (!res.data.success) {
@@ -80,12 +97,11 @@ export async function listDriftSchedules(page = 1, pageSize = 25): Promise<ListD
     throw new Error(msg)
   }
   return {
-    items: res.data.data?.schedules || [],
+    items: res.data.data || [],
     meta: res.data.meta
   }
 }
 
-// Get single drift schedule
 export async function getDriftSchedule(id: number | string): Promise<DriftSchedule> {
   const res = await api.get<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`)
   if (!res.data.success || !res.data.data) {
@@ -95,7 +111,6 @@ export async function getDriftSchedule(id: number | string): Promise<DriftSchedu
   return res.data.data
 }
 
-// Create drift schedule
 export async function createDriftSchedule(data: CreateDriftScheduleRequest): Promise<DriftSchedule> {
   const res = await api.post<APIResponse<DriftSchedule>>('/config/drift-schedules', data)
   if (!res.data.success || !res.data.data) {
@@ -105,7 +120,6 @@ export async function createDriftSchedule(data: CreateDriftScheduleRequest): Pro
   return res.data.data
 }
 
-// Update drift schedule
 export async function updateDriftSchedule(id: number | string, data: Partial<CreateDriftScheduleRequest>): Promise<DriftSchedule> {
   const res = await api.put<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`, data)
   if (!res.data.success || !res.data.data) {
@@ -115,7 +129,6 @@ export async function updateDriftSchedule(id: number | string, data: Partial<Cre
   return res.data.data
 }
 
-// Delete drift schedule
 export async function deleteDriftSchedule(id: number | string): Promise<void> {
   const res = await api.delete<APIResponse<void>>(`/config/drift-schedules/${id}`)
   if (!res.data.success) {
@@ -124,9 +137,10 @@ export async function deleteDriftSchedule(id: number | string): Promise<void> {
   }
 }
 
-// Toggle drift schedule enabled status
 export async function toggleDriftSchedule(id: number | string): Promise<DriftSchedule> {
-  const res = await api.post<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}/toggle`)
+  // Empty-body POST: pass {} so axios emits a Content-Type header
+  // (required by the backend's ValidateContentTypeMiddleware).
+  const res = await api.post<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}/toggle`, {})
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to toggle drift schedule'
     throw new Error(msg)
@@ -134,64 +148,99 @@ export async function toggleDriftSchedule(id: number | string): Promise<DriftSch
   return res.data.data
 }
 
-// Get drift schedule run history
-export async function getDriftScheduleRuns(id: number | string, page = 1, pageSize = 25): Promise<{ items: DriftScheduleRun[]; meta?: Metadata }> {
-  const res = await api.get<APIResponse<{ runs: DriftScheduleRun[] }>>(`/config/drift-schedules/${id}/runs`, {
-    params: { page, page_size: pageSize }
+// Backend returns a raw array; `limit` is the only filter the handler reads.
+export async function getDriftScheduleRuns(id: number | string, limit = 50): Promise<{ items: DriftScheduleRun[]; meta?: Metadata }> {
+  const res = await api.get<APIResponse<DriftScheduleRun[]>>(`/config/drift-schedules/${id}/runs`, {
+    params: { limit }
   })
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to load schedule runs'
     throw new Error(msg)
   }
   return {
-    items: res.data.data?.runs || [],
+    items: res.data.data || [],
     meta: res.data.meta
   }
 }
 
-// Get drift reports
-export async function getDriftReports(page = 1, pageSize = 25, resolved?: boolean): Promise<ListDriftReportsResult> {
-  const res = await api.get<APIResponse<{ reports: DriftReport[] }>>('/config/drift-reports', {
-    params: { page, page_size: pageSize, resolved }
+// Aggregate drift reports. Returned as a raw array. Rarely used by the UI today;
+// the Drift Reports page now renders DriftTrend rows (via getDriftTrends).
+export async function getDriftReports(limit = 50, deviceId?: number, reportType?: string): Promise<DriftReport[]> {
+  const res = await api.get<APIResponse<DriftReport[]>>('/config/drift-reports', {
+    params: { limit, device_id: deviceId, type: reportType }
   })
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to load drift reports'
     throw new Error(msg)
   }
-  return {
-    items: res.data.data?.reports || [],
-    meta: res.data.meta
-  }
+  return res.data.data || []
 }
 
-// Get drift trends
-export async function getDriftTrends(days = 30): Promise<DriftTrend[]> {
-  const res = await api.get<APIResponse<{ trends: DriftTrend[] }>>('/config/drift-trends', {
-    params: { days }
+// Per-path drift patterns. Backend returns a raw array; filters are
+// `device_id`, `resolved`, `limit`. There is no `days` filter on the server —
+// the caller passes `limit` and derives date-range views client-side.
+export async function getDriftTrends(limit = 500, resolved?: boolean, deviceId?: number): Promise<DriftTrend[]> {
+  const res = await api.get<APIResponse<DriftTrend[]>>('/config/drift-trends', {
+    params: { limit, resolved, device_id: deviceId }
   })
-  if (!res.data.success || !res.data.data) {
+  if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to load drift trends'
     throw new Error(msg)
   }
-  return res.data.data.trends || []
+  return res.data.data || []
 }
 
-// Resolve drift report
-export async function resolveDriftReport(id: number | string, notes?: string): Promise<DriftReport> {
-  const res = await api.post<APIResponse<DriftReport>>(`/config/drift-trends/${id}/resolve`, { notes })
+// Mark a DriftTrend (per-path pattern) as resolved. The backend handler
+// ignores the request body but the Content-Type middleware still requires
+// a JSON payload, so we send {}.
+export async function resolveDriftTrend(id: number | string): Promise<void> {
+  const res = await api.post<APIResponse<{ status: string }>>(`/config/drift-trends/${id}/resolve`, {})
+  if (!res.data.success) {
+    const msg = res.data.error?.message || 'Failed to resolve drift trend'
+    throw new Error(msg)
+  }
+}
+
+export async function generateDeviceDriftReport(deviceId: number | string): Promise<DriftReport> {
+  const res = await api.post<APIResponse<DriftReport>>(`/devices/${deviceId}/drift-report`, {})
   if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to resolve drift report'
+    const msg = res.data.error?.message || 'Failed to generate device drift report'
     throw new Error(msg)
   }
   return res.data.data
 }
 
-// Generate drift report for a device
-export async function generateDeviceDriftReport(deviceId: number | string): Promise<DriftReport[]> {
-  const res = await api.post<APIResponse<{ reports: DriftReport[] }>>(`/devices/${deviceId}/drift-report`)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to generate device drift report'
-    throw new Error(msg)
+// Compute day-bucketed drift totals from per-path trend records. Each trend
+// contributes to the day in which it was last seen; resolution counts use
+// resolved_at when present, otherwise last_seen.
+export function computeDailyAggregates(trends: DriftTrend[], days = 30): DriftDailyAggregate[] {
+  const bucket = new Map<string, { total: number; resolved: number; unresolved: number; devices: Set<number> }>()
+  const cutoff = Date.now() - days * 86_400_000
+
+  for (const t of trends) {
+    const basis = t.resolved && t.resolved_at ? t.resolved_at : t.last_seen
+    const time = new Date(basis).getTime()
+    if (!Number.isFinite(time) || time < cutoff) continue
+
+    const date = basis.slice(0, 10)
+    let entry = bucket.get(date)
+    if (!entry) {
+      entry = { total: 0, resolved: 0, unresolved: 0, devices: new Set<number>() }
+      bucket.set(date, entry)
+    }
+    entry.total += 1
+    if (t.resolved) entry.resolved += 1
+    else entry.unresolved += 1
+    entry.devices.add(t.device_id)
   }
-  return res.data.data.reports || []
+
+  return Array.from(bucket.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, e]) => ({
+      date,
+      totalDrifts: e.total,
+      resolvedDrifts: e.resolved,
+      unresolvedDrifts: e.unresolved,
+      deviceCount: e.devices.size
+    }))
 }

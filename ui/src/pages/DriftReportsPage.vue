@@ -1,22 +1,25 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <h1>Drift Reports</h1>
+      <div>
+        <h1>Drift Reports</h1>
+        <p class="subhead">Per-device, per-path drift items tracked over time.</p>
+      </div>
       <div class="filters">
         <select v-model="resolvedFilter" class="select" @change="handleFilterChange">
-          <option value="">All Reports</option>
+          <option value="">All Items</option>
           <option value="false">Unresolved Only</option>
           <option value="true">Resolved Only</option>
         </select>
       </div>
     </div>
 
-    <div v-if="store.loading" class="loading">Loading reports...</div>
+    <div v-if="store.loading" class="loading">Loading drift items...</div>
     <div v-else-if="store.error" class="error">{{ store.error }}</div>
 
     <div v-else class="content">
-      <div v-if="store.reports.length === 0" class="empty">
-        <p>No drift reports found.</p>
+      <div v-if="store.trends.length === 0" class="empty">
+        <p>No drift items found.</p>
         <p v-if="resolvedFilter">Try adjusting your filters.</p>
       </div>
 
@@ -25,64 +28,59 @@
           <thead>
             <tr>
               <th>Device</th>
-              <th>Field</th>
-              <th>Drift Type</th>
-              <th>Expected</th>
-              <th>Actual</th>
+              <th>Path</th>
+              <th>Category</th>
               <th>Severity</th>
-              <th>Detected</th>
+              <th>First Seen</th>
+              <th>Last Seen</th>
+              <th>Occurrences</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="report in store.reports"
-              :key="report.id"
-              :class="{ resolved: report.resolved }"
+              v-for="item in store.trends"
+              :key="item.id"
+              :class="{ resolved: item.resolved }"
             >
               <td>
-                <router-link :to="`/devices/${report.deviceId}`" class="device-link">
-                  {{ report.deviceName }}
+                <router-link :to="`/devices/${item.device_id}`" class="device-link">
+                  Device #{{ item.device_id }}
                 </router-link>
               </td>
               <td>
-                <code class="field-name">{{ report.field }}</code>
+                <code class="field-name">{{ item.path }}</code>
               </td>
               <td>
-                <span class="drift-type" :class="report.driftType">
-                  {{ formatDriftType(report.driftType) }}
+                <span class="category-badge">{{ item.category }}</span>
+              </td>
+              <td>
+                <span class="severity-badge" :class="item.severity">
+                  {{ item.severity }}
                 </span>
               </td>
               <td>
-                <code class="value">{{ formatValue(report.expectedValue) }}</code>
+                <span class="timestamp">{{ formatDate(item.first_seen) }}</span>
               </td>
               <td>
-                <code class="value">{{ formatValue(report.actualValue) }}</code>
+                <span class="timestamp">{{ formatDate(item.last_seen) }}</span>
               </td>
+              <td class="numeric">{{ item.occurrences }}</td>
               <td>
-                <span class="severity-badge" :class="report.severity">
-                  {{ report.severity }}
-                </span>
-              </td>
-              <td>
-                <span class="timestamp">{{ formatDate(report.detectedAt) }}</span>
-              </td>
-              <td>
-                <span v-if="report.resolved" class="status-badge resolved">
+                <span v-if="item.resolved" class="status-badge resolved">
                   Resolved
-                  <span v-if="report.resolvedAt" class="resolved-info">
-                    {{ formatDate(report.resolvedAt) }}
-                    <span v-if="report.resolvedBy">by {{ report.resolvedBy }}</span>
+                  <span v-if="item.resolved_at" class="resolved-info">
+                    {{ formatDate(item.resolved_at) }}
                   </span>
                 </span>
                 <span v-else class="status-badge unresolved">Unresolved</span>
               </td>
               <td>
                 <button
-                  v-if="!report.resolved"
+                  v-if="!item.resolved"
                   class="btn-small"
-                  @click="openResolveDialog(report)"
+                  @click="openResolveDialog(item)"
                 >
                   Resolve
                 </button>
@@ -92,71 +90,51 @@
           </tbody>
         </table>
       </div>
-
-      <div v-if="store.reportMeta && store.reportMeta.total > pageSize" class="pagination">
-        <button class="btn" :disabled="page === 1" @click="handlePageChange(page - 1)">
-          Previous
-        </button>
-        <span class="page-info">
-          Page {{ page }} of {{ Math.ceil(store.reportMeta.total / pageSize) }}
-          ({{ store.reportMeta.total }} total)
-        </span>
-        <button
-          class="btn"
-          :disabled="page >= Math.ceil(store.reportMeta.total / pageSize)"
-          @click="handlePageChange(page + 1)"
-        >
-          Next
-        </button>
-      </div>
     </div>
 
-    <!-- Resolve Dialog -->
-    <div v-if="resolvingReport" class="modal" @click.self="closeResolveDialog">
+    <div v-if="resolvingItem" class="modal" @click.self="closeResolveDialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>Resolve Drift Report</h2>
+          <h2>Resolve Drift Item</h2>
           <button class="btn-close" @click="closeResolveDialog">×</button>
         </div>
 
         <div class="report-summary">
           <div class="summary-item">
             <span class="label">Device:</span>
-            <span class="value">{{ resolvingReport.deviceName }}</span>
+            <span class="value">#{{ resolvingItem.device_id }}</span>
           </div>
           <div class="summary-item">
-            <span class="label">Field:</span>
-            <code class="value">{{ resolvingReport.field }}</code>
+            <span class="label">Path:</span>
+            <code class="value">{{ resolvingItem.path }}</code>
           </div>
           <div class="summary-item">
-            <span class="label">Drift Type:</span>
-            <span class="value">{{ formatDriftType(resolvingReport.driftType) }}</span>
+            <span class="label">Category:</span>
+            <span class="value">{{ resolvingItem.category }}</span>
           </div>
           <div class="summary-item">
             <span class="label">Severity:</span>
-            <span class="severity-badge" :class="resolvingReport.severity">
-              {{ resolvingReport.severity }}
+            <span class="severity-badge" :class="resolvingItem.severity">
+              {{ resolvingItem.severity }}
             </span>
+          </div>
+          <div class="summary-item">
+            <span class="label">Occurrences:</span>
+            <span class="value">{{ resolvingItem.occurrences }}</span>
           </div>
         </div>
 
-        <form @submit.prevent="handleResolve">
-          <div class="form-field">
-            <label for="notes">Resolution Notes</label>
-            <textarea
-              id="notes"
-              v-model="resolveNotes"
-              class="form-textarea"
-              rows="4"
-              placeholder="Optional: Add notes about how this drift was resolved..."
-            />
-          </div>
+        <p class="resolution-note">
+          Marking this drift pattern as resolved clears it from the unresolved list.
+          The backend does not persist resolution notes.
+        </p>
 
-          <div class="form-actions">
-            <button type="button" class="btn" @click="closeResolveDialog">Cancel</button>
-            <button type="submit" class="btn primary">Mark as Resolved</button>
-          </div>
-        </form>
+        <div class="form-actions">
+          <button type="button" class="btn" @click="closeResolveDialog">Cancel</button>
+          <button type="button" class="btn primary" @click="handleResolve">
+            Mark as Resolved
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -165,15 +143,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useDriftStore } from '@/stores/drift'
-import type { DriftReport } from '@/api/drift'
+import type { DriftTrend } from '@/api/drift'
 
 const store = useDriftStore()
 
-const page = ref(1)
-const pageSize = ref(25)
 const resolvedFilter = ref('')
-const resolvingReport = ref<DriftReport | null>(null)
-const resolveNotes = ref('')
+const resolvingItem = ref<DriftTrend | null>(null)
 
 const resolvedBoolean = computed<boolean | undefined>(() => {
   if (resolvedFilter.value === 'true') return true
@@ -181,58 +156,35 @@ const resolvedBoolean = computed<boolean | undefined>(() => {
   return undefined
 })
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return '—'
   return new Date(dateStr).toLocaleString()
 }
 
-function formatDriftType(type: string): string {
-  return type
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, l => l.toUpperCase())
-}
-
-function formatValue(value: any): string {
-  if (value === null || value === undefined) return 'null'
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
-function openResolveDialog(report: DriftReport) {
-  resolvingReport.value = report
-  resolveNotes.value = report.notes || ''
+function openResolveDialog(item: DriftTrend) {
+  resolvingItem.value = item
 }
 
 function closeResolveDialog() {
-  resolvingReport.value = null
-  resolveNotes.value = ''
+  resolvingItem.value = null
 }
 
 async function handleResolve() {
-  if (!resolvingReport.value) return
-
+  if (!resolvingItem.value) return
   try {
-    await store.resolveReport(
-      resolvingReport.value.id,
-      resolveNotes.value.trim() || undefined
-    )
+    await store.resolveTrend(resolvingItem.value.id)
     closeResolveDialog()
   } catch (e: any) {
-    alert(e?.message || 'Failed to resolve report')
+    alert(e?.message || 'Failed to resolve drift item')
   }
 }
 
 async function handleFilterChange() {
-  page.value = 1
-  await store.fetchReports(page.value, pageSize.value, resolvedBoolean.value)
-}
-
-async function handlePageChange(newPage: number) {
-  page.value = newPage
-  await store.fetchReports(page.value, pageSize.value, resolvedBoolean.value)
+  await store.fetchTrends(resolvedBoolean.value)
 }
 
 onMounted(() => {
-  store.fetchReports(page.value, pageSize.value, resolvedBoolean.value)
+  store.fetchTrends(resolvedBoolean.value)
 })
 </script>
 
@@ -246,12 +198,19 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24px;
+  gap: 16px;
 }
 
 .page-header h1 {
   margin: 0;
   font-size: 24px;
   color: #1f2937;
+}
+
+.subhead {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #64748b;
 }
 
 .filters {
@@ -317,6 +276,11 @@ onMounted(() => {
   font-size: 14px;
 }
 
+.reports-table td.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .reports-table tbody tr:hover {
   background: #f9fafb;
 }
@@ -343,26 +307,13 @@ onMounted(() => {
   font-size: 13px;
 }
 
-.drift-type {
-  padding: 4px 8px;
+.category-badge {
+  padding: 2px 8px;
+  background: #e0e7ff;
+  color: #3730a3;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
-}
-
-.drift-type.config_changed {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.drift-type.unexpected_value {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.drift-type.missing_config {
-  background: #fee2e2;
-  color: #991b1b;
 }
 
 .value {
@@ -386,7 +337,8 @@ onMounted(() => {
   color: #1e40af;
 }
 
-.severity-badge.medium {
+.severity-badge.medium,
+.severity-badge.warning {
   background: #fef3c7;
   color: #92400e;
 }
@@ -449,19 +401,6 @@ onMounted(() => {
   font-weight: bold;
 }
 
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.page-info {
-  font-size: 14px;
-  color: #64748b;
-}
-
 .btn {
   padding: 8px 16px;
   border: 1px solid #cbd5e1;
@@ -473,11 +412,6 @@ onMounted(() => {
 
 .btn:hover {
   background: #f8fafc;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .btn.primary {
@@ -545,7 +479,7 @@ onMounted(() => {
   padding: 16px;
   background: #f9fafb;
   border-radius: 6px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .summary-item {
@@ -558,7 +492,7 @@ onMounted(() => {
   font-size: 13px;
   font-weight: 600;
   color: #6b7280;
-  min-width: 80px;
+  min-width: 90px;
 }
 
 .summary-item .value {
@@ -566,26 +500,14 @@ onMounted(() => {
   color: #1f2937;
 }
 
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.resolution-note {
+  font-size: 13px;
+  color: #6b7280;
+  padding: 12px;
+  background: #f9fafb;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 4px;
   margin-bottom: 16px;
-}
-
-.form-field label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.form-textarea {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 14px;
-  resize: vertical;
 }
 
 .form-actions {
