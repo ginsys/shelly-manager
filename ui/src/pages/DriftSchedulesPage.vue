@@ -35,24 +35,28 @@
 
           <div class="schedule-details">
             <div class="detail-item">
-              <span class="label">Check Interval:</span>
-              <span class="value">{{ schedule.checkInterval }}</span>
+              <span class="label">Cron Schedule:</span>
+              <span class="value"><code>{{ schedule.cron_spec }}</code></span>
             </div>
-            <div v-if="schedule.deviceIds && schedule.deviceIds.length > 0" class="detail-item">
+            <div v-if="schedule.device_ids && schedule.device_ids.length > 0" class="detail-item">
               <span class="label">Devices:</span>
-              <span class="value">{{ schedule.deviceIds.length }} device(s)</span>
+              <span class="value">{{ schedule.device_ids.length }} device(s)</span>
             </div>
-            <div v-if="schedule.deviceFilter" class="detail-item">
+            <div v-if="schedule.device_filter" class="detail-item">
               <span class="label">Device Filter:</span>
-              <span class="value">{{ schedule.deviceFilter }}</span>
+              <span class="value">{{ schedule.device_filter }}</span>
             </div>
-            <div v-if="schedule.lastRun" class="detail-item">
+            <div class="detail-item">
+              <span class="label">Run Count:</span>
+              <span class="value">{{ schedule.run_count }}</span>
+            </div>
+            <div v-if="schedule.last_run" class="detail-item">
               <span class="label">Last Run:</span>
-              <span class="value">{{ formatDate(schedule.lastRun) }}</span>
+              <span class="value">{{ formatDate(schedule.last_run) }}</span>
             </div>
-            <div v-if="schedule.nextRun" class="detail-item">
+            <div v-if="schedule.next_run" class="detail-item">
               <span class="label">Next Run:</span>
-              <span class="value">{{ formatDate(schedule.nextRun) }}</span>
+              <span class="value">{{ formatDate(schedule.next_run) }}</span>
             </div>
           </div>
 
@@ -69,7 +73,7 @@
         </div>
       </div>
 
-      <div v-if="store.scheduleMeta && store.scheduleMeta.total > pageSize" class="pagination">
+      <div v-if="store.scheduleMeta && (store.scheduleMeta.total_count || 0) > pageSize" class="pagination">
         <button
           class="btn"
           :disabled="page === 1"
@@ -78,12 +82,12 @@
           Previous
         </button>
         <span class="page-info">
-          Page {{ page }} of {{ Math.ceil(store.scheduleMeta.total / pageSize) }}
-          ({{ store.scheduleMeta.total }} total)
+          Page {{ page }} of {{ Math.ceil((store.scheduleMeta.total_count || 0) / pageSize) }}
+          ({{ (store.scheduleMeta.total_count || 0) }} total)
         </span>
         <button
           class="btn"
-          :disabled="page >= Math.ceil(store.scheduleMeta.total / pageSize)"
+          :disabled="page >= Math.ceil((store.scheduleMeta.total_count || 0) / pageSize)"
           @click="handlePageChange(page + 1)"
         >
           Next
@@ -121,16 +125,21 @@
           </div>
 
           <div class="form-field">
-            <label for="checkInterval">Check Interval *</label>
+            <label for="cronSpec">Cron Schedule *</label>
             <input
-              id="checkInterval"
-              v-model="formData.checkInterval"
+              id="cronSpec"
+              v-model="formData.cron_spec"
               type="text"
               required
               class="form-input"
-              placeholder="e.g., 1h, 24h, 30m"
+              placeholder="0 */6 * * *"
             />
-            <small>Examples: 1h, 24h, 30m, 7d</small>
+            <small>Standard cron expression. Presets:
+              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 * * * *'">hourly</button>
+              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 */6 * * *'">every 6h</button>
+              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 0 * * *'">daily</button>
+              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 0 * * 0'">weekly</button>
+            </small>
           </div>
 
           <div class="form-field">
@@ -195,9 +204,9 @@ const deviceIdsInput = ref('')
 const formData = ref<CreateDriftScheduleRequest>({
   name: '',
   description: '',
-  checkInterval: '24h',
-  deviceIds: [],
-  deviceFilter: '',
+  cron_spec: '0 0 * * *',
+  device_ids: [],
+  device_filter: '',
   enabled: true
 })
 
@@ -209,9 +218,9 @@ function resetForm() {
   formData.value = {
     name: '',
     description: '',
-    checkInterval: '24h',
-    deviceIds: [],
-    deviceFilter: '',
+    cron_spec: '0 0 * * *',
+    device_ids: [],
+    device_filter: '',
     enabled: true
   }
   deviceIdsInput.value = ''
@@ -222,12 +231,12 @@ function editSchedule(schedule: DriftSchedule) {
   formData.value = {
     name: schedule.name,
     description: schedule.description,
-    checkInterval: schedule.checkInterval,
-    deviceIds: schedule.deviceIds,
-    deviceFilter: schedule.deviceFilter,
+    cron_spec: schedule.cron_spec,
+    device_ids: schedule.device_ids || [],
+    device_filter: schedule.device_filter || '',
     enabled: schedule.enabled
   }
-  deviceIdsInput.value = schedule.deviceIds?.join(',') || ''
+  deviceIdsInput.value = (schedule.device_ids || []).join(',')
 }
 
 function closeDialog() {
@@ -240,12 +249,12 @@ async function handleSubmit() {
   try {
     // Parse device IDs
     if (deviceIdsInput.value.trim()) {
-      formData.value.deviceIds = deviceIdsInput.value
+      formData.value.device_ids = deviceIdsInput.value
         .split(',')
         .map(id => parseInt(id.trim()))
         .filter(id => !isNaN(id))
     } else {
-      formData.value.deviceIds = undefined
+      formData.value.device_ids = undefined
     }
 
     if (editingSchedule.value) {
@@ -554,6 +563,20 @@ onMounted(() => {
 .form-field small {
   font-size: 12px;
   color: #6b7280;
+}
+
+.cron-preset {
+  margin-left: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cron-preset:hover {
+  background: #e5e7eb;
 }
 
 .form-input,

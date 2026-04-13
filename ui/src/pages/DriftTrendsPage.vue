@@ -17,7 +17,7 @@
     <div v-else-if="store.error" class="error">{{ store.error }}</div>
 
     <div v-else class="content">
-      <div v-if="store.trends.length === 0" class="empty">
+      <div v-if="aggregates.length === 0" class="empty">
         <p>No drift trends data available for the selected period.</p>
       </div>
 
@@ -70,7 +70,7 @@
             <div class="chart-content">
               <div class="chart-bars">
                 <div
-                  v-for="(trend, index) in store.trends"
+                  v-for="(trend, index) in aggregates"
                   :key="index"
                   class="bar-group"
                 >
@@ -124,7 +124,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(trend, index) in store.trends" :key="index">
+              <tr v-for="(trend, index) in aggregates" :key="index">
                 <td>{{ formatDateLong(trend.date) }}</td>
                 <td>{{ trend.totalDrifts }}</td>
                 <td class="resolved-count">{{ trend.resolvedDrifts }}</td>
@@ -157,27 +157,29 @@ import { useDriftStore } from '@/stores/drift'
 const store = useDriftStore()
 const days = ref(30)
 
-const totalDrifts = computed(() => {
-  return store.trends.reduce((sum, t) => sum + t.totalDrifts, 0)
-})
+const aggregates = computed(() => store.trendAggregates)
 
-const totalResolved = computed(() => {
-  return store.trends.reduce((sum, t) => sum + t.resolvedDrifts, 0)
-})
+const totalDrifts = computed(() =>
+  aggregates.value.reduce((sum, t) => sum + t.totalDrifts, 0)
+)
 
-const totalUnresolved = computed(() => {
-  return store.trends.reduce((sum, t) => sum + t.unresolvedDrifts, 0)
-})
+const totalResolved = computed(() =>
+  aggregates.value.reduce((sum, t) => sum + t.resolvedDrifts, 0)
+)
+
+const totalUnresolved = computed(() =>
+  aggregates.value.reduce((sum, t) => sum + t.unresolvedDrifts, 0)
+)
 
 const avgDevices = computed(() => {
-  if (store.trends.length === 0) return 0
-  const total = store.trends.reduce((sum, t) => sum + t.deviceCount, 0)
-  return Math.round(total / store.trends.length)
+  if (aggregates.value.length === 0) return 0
+  const total = aggregates.value.reduce((sum, t) => sum + t.deviceCount, 0)
+  return Math.round(total / aggregates.value.length)
 })
 
-const maxDrifts = computed(() => {
-  return Math.max(...store.trends.map(t => t.totalDrifts), 1)
-})
+const maxDrifts = computed(() =>
+  Math.max(...aggregates.value.map(t => t.totalDrifts), 1)
+)
 
 const yAxisTicks = computed(() => {
   const max = maxDrifts.value
@@ -205,11 +207,13 @@ function formatDateLong(dateStr: string): string {
 }
 
 async function handleDaysChange() {
-  await store.fetchTrends(days.value)
+  store.setTrendAggregateDays(days.value)
+  await store.fetchTrends()
 }
 
 onMounted(() => {
-  store.fetchTrends(days.value)
+  store.setTrendAggregateDays(days.value)
+  store.fetchTrends()
 })
 </script>
 
