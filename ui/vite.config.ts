@@ -22,18 +22,12 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Core Vue ecosystem
-          'vendor-vue': ['vue', 'vue-router', 'pinia'],
-
-          // Large charting library - separate chunk
-          'charts': ['echarts'],
-
-          // Utility libraries
-          'vendor-utils': ['axios', 'pako'],
-
-          // UI framework
-          'vendor-ui': ['quasar'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (/[\\/]node_modules[\\/](vue|vue-router|pinia)[\\/]/.test(id)) return 'vendor-vue'
+          if (/[\\/]node_modules[\\/]echarts[\\/]/.test(id)) return 'charts'
+          if (/[\\/]node_modules[\\/](axios|pako)[\\/]/.test(id)) return 'vendor-utils'
+          if (/[\\/]node_modules[\\/]quasar[\\/]/.test(id)) return 'vendor-ui'
         }
       },
 
