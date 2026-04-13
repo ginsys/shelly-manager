@@ -324,6 +324,40 @@ func TestUpdateDevice(t *testing.T) {
 	testutil.AssertEqual(t, "Updated Device Name", dbDevice.Name)
 }
 
+func TestUpdateDevice_IPConflict(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	// Seed two devices with distinct IPs/MACs
+	d1 := testutil.TestDevice()
+	d1.IP = "192.168.1.10"
+	d1.MAC = "AA:BB:CC:DD:EE:01"
+	testutil.AssertNoError(t, db.AddDevice(d1))
+
+	d2 := testutil.TestDevice()
+	d2.IP = "192.168.1.20"
+	d2.MAC = "AA:BB:CC:DD:EE:02"
+	testutil.AssertNoError(t, db.AddDevice(d2))
+
+	// Attempt to update d2 to reuse d1's IP
+	updated := *d2
+	updated.IP = d1.IP
+	body, err := json.Marshal(updated)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("PUT", "/api/v1/devices/"+strconv.Itoa(int(d2.ID)), bytes.NewReader(body))
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(d2.ID))})
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.UpdateDevice(w, req)
+
+	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+}
+
 func TestUpdateDevice_NotFound(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()

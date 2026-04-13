@@ -28,10 +28,10 @@
     </div>
 
     <div class="form-group">
-      <label for="ipAddress">IP Address *</label>
+      <label for="ip">IP Address *</label>
       <input
-        id="ipAddress"
-        v-model="formData.ipAddress"
+        id="ip"
+        v-model="formData.ip"
         type="text"
         class="form-input"
         required
@@ -87,7 +87,7 @@ const emit = defineEmits<{
 const formData = reactive({
   name: '',
   type: '',
-  ipAddress: '',
+  ip: '',
   mac: ''
 })
 
@@ -99,7 +99,7 @@ watch(() => props.device, (device) => {
   if (device) {
     formData.name = device.name || ''
     formData.type = device.type || ''
-    formData.ipAddress = device.ipAddress || ''
+    formData.ip = device.ip || ''
     formData.mac = device.mac || ''
   }
 }, { immediate: true })
@@ -111,7 +111,7 @@ function handleSubmit() {
   const data: Partial<Device> = {
     name: formData.name,
     type: formData.type,
-    ipAddress: formData.ipAddress
+    ip: formData.ip
   }
 
   if (formData.mac) {
@@ -125,7 +125,7 @@ defineExpose({
   reset: () => {
     formData.name = ''
     formData.type = ''
-    formData.ipAddress = ''
+    formData.ip = ''
     formData.mac = ''
     error.value = ''
     isSubmitting.value = false
