@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
 
       # Moderate scope: patch + minor only. Majors (and grouped PRs whose
       # highest bump is major) fall through and stay manual.
