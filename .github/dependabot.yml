@@ -16,6 +16,20 @@ updates:
         dependency-type: "production"
         exclude-patterns:
           - "golang.org/x/*"
+      # Catch-all: bundle remaining non-major version updates into one PR
+      gomod-all:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "golang.org/x/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Bundle all security updates into a single PR
+      gomod-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     # TEMPORARY: Ignore major AND minor updates for golang.org/x/* packages
     # These packages often require newer Go versions (e.g., x/text v0.31.0+ requires Go 1.24.0)
     #
@@ -76,6 +90,18 @@ updates:
           - "terser"
           - "jsdom"
           - "autoprefixer"
+      # Catch-all: bundle remaining non-major version updates into one PR
+      npm-all:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      # Bundle all security updates into a single PR
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     # TEMPORARY: Ignore major updates for vite/vitest ecosystem
     # Major updates often have peer dependency conflicts (e.g., @vitest/coverage-v8 v4 requires vitest v4)
     # and may require coordinated upgrades of all related packages
@@ -113,6 +139,11 @@ updates:
     groups:
       # Group all GitHub Actions together
       all-actions:
+        patterns:
+          - "*"
+      # Bundle all security updates into a single PR
+      actions-security:
+        applies-to: security-updates
         patterns:
           - "*"
     open-pull-requests-limit: 5
