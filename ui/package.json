@@ -24,11 +24,11 @@
     "test:install": "playwright install"
   },
   "dependencies": {
-    "axios": "^1.16.1",
+    "axios": "^1.18.0",
     "echarts": "^6.1.0",
     "pako": "^2.1.0",
     "pinia": "^3.0.4",
-    "quasar": "^2.19.3",
+    "quasar": "^2.20.1",
     "vue": "^3.5.35",
     "vue-router": "^5.1.0"
   },
