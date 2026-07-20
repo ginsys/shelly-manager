@@ -36,13 +36,13 @@
     "@pinia/testing": "^1.0.3",
     "@playwright/test": "^1.61.1",
     "@types/pako": "^2.0.0",
-    "@vitejs/plugin-vue": "^6.0.7",
+    "@vitejs/plugin-vue": "^6.0.8",
     "@vitest/coverage-v8": "^4.1.10",
     "@vue/test-utils": "^2.4.11",
     "jsdom": "^29.1.1",
     "terser": "^5.49.0",
     "typescript": "^7.0.2",
-    "vite": "^8.1.4",
+    "vite": "^8.1.5",
     "vitest": "^4.1.4"
   }
 }
