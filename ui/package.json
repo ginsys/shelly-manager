@@ -33,7 +33,7 @@
     "vue-router": "^5.2.0"
   },
   "devDependencies": {
-    "@pinia/testing": "^1.0.3",
+    "@pinia/testing": "^2.0.1",
     "@playwright/test": "^1.61.1",
     "@types/pako": "^2.0.0",
     "@vitejs/plugin-vue": "^6.0.8",
