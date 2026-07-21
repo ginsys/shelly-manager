@@ -56,11 +56,13 @@ Complete frontend implementation for SMA (Shelly Management Archive) format supp
 - Export metadata configuration
 - Real-time validation and preview
 
-**SMA import UI — not yet wired**
+**SMA import — not available**
 - A prototype `src/components/SMAImportForm.vue` existed but was never mounted by
   any page or route, so the described import workflow was not reachable. It has
-  been removed. Wiring a real import UI (drag-and-drop, preview, conflict
-  detection) depends on the backend SMA import routes and is tracked separately.
+  been removed. Application-level SMA import is not implemented: the backend has
+  no SMA import routes (only the generic `/import` handlers), and the frontend
+  SMA import helpers target `/import/sma*` paths that 404. Only the client-side
+  codec (parser/generator) works today; import is deferred pending #249.
 
 **File: `src/components/BackupForm.vue` (Enhanced)**
 - Integrated SMA configuration when SMA format selected
