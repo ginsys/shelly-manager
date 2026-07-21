@@ -268,9 +268,16 @@ Content-Type: application/json
 }
 ```
 
-### Import SMA
+### Import SMA — not available
+
+> There is no SMA import endpoint. The backend registers only the generic
+> `/import` and `/import/preview` routes (`internal/api/import_handlers.go`);
+> `POST /api/v1/import/sma` does not exist and returns 404. Application-level SMA
+> import is deferred pending #249 — only the client-side codec works today. The
+> request shape below is the intended design, not a working endpoint.
+
 ```http
-POST /api/v1/import/sma
+POST /api/v1/import/sma   # NOT IMPLEMENTED — 404
 Content-Type: multipart/form-data
 
 {

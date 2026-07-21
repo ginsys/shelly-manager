@@ -99,8 +99,9 @@ UI Updates ← State Updates ← Response ← SMA Plugin
 ### File Processing
 
 ```
-SMA File → Parser → Validation → Preview → Import Options → Backend
-Generated Data → Generator → Compression → Download/Upload
+Export (working):  Generated Data → Generator → Compression → Download
+Import (codec only): SMA File → Parser → Validation   [stops here — no backend
+                     import route; Preview/Import Options/Backend not wired, #249]
 ```
 
 ### Component Integration
@@ -222,8 +223,9 @@ Backend SMA Plugin
 ## 🔄 Integration Points
 
 ### Backend Integration
-- Compatible with existing SMA plugin API
-- Uses established export/import endpoints
+- Export uses the established SMA export endpoints (`POST /export/sma`,
+  `GET /export/sma/{id}/download`)
+- **Import has no backend endpoint** — the SMA import path is not wired (#249)
 - Follows existing authentication patterns
 - Maintains API response consistency
 
@@ -238,11 +240,11 @@ Backend SMA Plugin
 2. **Format Selection** → Dynamic configuration appears
 3. **Configuration** → Real-time validation and preview
 4. **Creation** → Progress tracking and result display
-5. **Import** → Complete workflow with validation
+5. **Import** → not available (no backend route; codec only, #249)
 
 ## ✨ Key Benefits
 
-1. **Complete Implementation**: Full feature parity with backend
+1. **Export Implementation**: SMA export is wired to the backend; import is not
 2. **User Experience**: Intuitive, responsive interface
 3. **Data Integrity**: Comprehensive validation and verification
 4. **Performance**: Optimized for various file sizes
@@ -250,15 +252,16 @@ Backend SMA Plugin
 6. **Maintainability**: Well-structured, tested codebase
 7. **Documentation**: Comprehensive user and developer guides
 
-## 🎉 Ready for Production
+## Status
 
-The SMA format frontend implementation is complete and production-ready:
+SMA **export** is implemented and wired end to end. SMA **import** is not: there
+is no backend import route and no import UI — only the client-side codec
+(parser/generator) exists. Import is deferred pending #249.
 
-- ✅ **Feature Complete**: All required functionality implemented
-- ✅ **Tested**: 58 unit tests, 100% passing
-- ✅ **Documented**: Comprehensive documentation provided
-- ✅ **Integrated**: Seamlessly integrated with existing UI
-- ✅ **Performant**: Optimized for real-world usage
-- ✅ **Secure**: Security best practices implemented
-
-The implementation provides a comprehensive, user-friendly interface for SMA format support that integrates seamlessly with the existing Shelly Manager architecture while providing powerful new backup and restore capabilities.
+- ✅ **Export**: create + download wired to `POST /export/sma` and
+  `GET /export/sma/{id}/download`
+- ✅ **Codec**: parser/generator with checksum verification, unit-tested
+- ❌ **Import**: no backend endpoint, no UI (#249)
+- ⚠️ **Docs**: older "production-ready / complete import workflow" claims in this
+  file and the SMA guides referred to the export path and the prototyped-but-
+  unwired import path; corrected to reflect the above.

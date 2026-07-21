@@ -263,9 +263,9 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/export/json` | POST | Create JSON export |
 | `/export/yaml` | POST | Create YAML export |
 | `/export/sma` | POST | Create SMA export |
-| `/export/sma/{id}` | GET | Get SMA export result |
 | `/export/sma/{id}/download` | GET | Download SMA file |
-| `/export/sma-preview` | POST | Preview SMA export |
+| ~~`/export/sma/{id}`~~ | GET | ❌ Not registered — generic `/export/{id}` covers result retrieval |
+| ~~`/export/sma-preview`~~ | POST | ❌ Not registered — use generic `/export/preview` |
 
 #### Export - GitOps (7 endpoints)
 | Endpoint | Method | Purpose |
@@ -288,16 +288,16 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/export/schedules/{id}` | DELETE | Delete schedule |
 | `/export/schedules/{id}/run` | POST | Manually run schedule |
 
-#### Import (7 endpoints)
+#### Import (4 registered endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/import/history` | GET | List all imports |
 | `/import/{id}` | GET | Get import result |
 | `/import/statistics` | GET | Import stats |
 | `/import/preview` | POST | Preview import operation |
-| `/import/sma` | POST | Import SMA file (multipart) |
-| `/import/sma/{id}` | GET | Get SMA import result |
-| `/import/sma-preview` | POST | Preview SMA file |
+| ~~`/import/sma`~~ | POST | ❌ Not registered — no SMA import route exists (#249) |
+| ~~`/import/sma/{id}`~~ | GET | ❌ Not registered (#249) |
+| ~~`/import/sma-preview`~~ | POST | ❌ Not registered (#249) |
 
 #### Plugins (6 endpoints)
 | Endpoint | Method | Purpose |
