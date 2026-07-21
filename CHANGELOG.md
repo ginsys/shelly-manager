@@ -18,6 +18,20 @@ All notable changes to this project are documented here. The project follows Con
   key — an inverted policy. `/metrics/prometheus` stays public by convention.
   (#246)
 
+### Fixed
+- Repaired the SMA import round-trip, which was broken end to end. Decompression
+  called the non-existent `pako.gunzip` with the obsolete `{ to: 'string' }`
+  option; and checksum validation always failed because the generator hashed the
+  pre-checksum JSON while the parser hashed the post-checksum JSON. Switched
+  `sma-parser`/`sma-generator` to pako 3 named imports with `{ toText: true }`,
+  made both sides hash the same canonical form, fixed the uncompressed-size
+  measurement to count UTF-8 bytes, removed the stale `@types/pako`, and added an
+  unmocked generate→parse round-trip test (real pako + real sha256). (#260)
+- Disabled the backup Restore action in the UI until its backend endpoints
+  exist (#249). The previous handlers recursed into themselves and targeted
+  missing `/import/restore*` routes; `BackupList` now fails closed via a
+  `restoreEnabled` prop. (#260)
+
 ## [0.5.4] - 2024-01-15
 
 ### 🚀 Major Features Added

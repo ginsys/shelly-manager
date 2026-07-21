@@ -1,4 +1,4 @@
-import pako from 'pako'
+import { gzip } from 'pako'
 import { sha256Hex } from './sha256'
 import type { 
   SMAArchive, 
@@ -80,7 +80,10 @@ export async function generateSMAFile(
     
     // Convert to JSON
     const jsonData = JSON.stringify(archive, null, 2)
-    const originalSize = new TextEncoder().encode(jsonData).length
+    // Size of the content actually compressed. In the checksum path this is
+    // recomputed from finalJsonData (which carries record_count + checksum), so
+    // the generator's originalSize matches what parseSMAFile measures.
+    let originalSize = new TextEncoder().encode(jsonData).length
     let recordCount = 0
 
     // Count records
@@ -91,20 +94,24 @@ export async function generateSMAFile(
     // Calculate checksum if requested
     let checksum: string | undefined
     if (options.calculateChecksum !== false) {
-      checksum = await sha256Hex(jsonData)
-      
-      // Update archive with checksum
-      archive.metadata.integrity.checksum = `sha256:${checksum}`
+      // Hash a canonical form of the archive — record_count populated, checksum
+      // blank — so parseSMAFile can recompute the identical value from the
+      // decompressed content. (Previously the hash covered the pre-checksum,
+      // pre-record_count JSON, so every generated archive failed validation.)
       archive.metadata.integrity.record_count = recordCount
-      
-      // Regenerate JSON with updated metadata
+      archive.metadata.integrity.checksum = ''
+      checksum = await sha256Hex(JSON.stringify(archive, null, 2))
+      archive.metadata.integrity.checksum = `sha256:${checksum}`
+
+      // Regenerate JSON with the checksum in place
       const finalJsonData = JSON.stringify(archive, null, 2)
-      
+      originalSize = new TextEncoder().encode(finalJsonData).length
+
       // Compress if requested
       let finalData: Uint8Array
       if (options.compression !== false) {
         try {
-          finalData = pako.gzip(finalJsonData, { 
+          finalData = gzip(finalJsonData, {
             level: options.compressionLevel || 6 
           })
         } catch (compressionError) {
@@ -147,7 +154,7 @@ export async function generateSMAFile(
     let finalData: Uint8Array
     if (options.compression !== false) {
       try {
-        finalData = pako.gzip(jsonData, { 
+        finalData = gzip(jsonData, {
           level: options.compressionLevel || 6 
         })
       } catch (compressionError) {
@@ -523,8 +530,8 @@ function generateUUID(): string {
  * Check if browser supports SMA generation
  */
 export function isSMAGenerationSupported(): boolean {
-  return typeof crypto !== 'undefined' && 
-         typeof pako !== 'undefined' &&
+  return typeof crypto !== 'undefined' &&
+         typeof gzip === 'function' &&
          typeof Blob !== 'undefined' &&
          typeof URL !== 'undefined'
 }

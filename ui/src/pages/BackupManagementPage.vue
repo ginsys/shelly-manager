@@ -45,6 +45,7 @@
       :loading="loading"
       :error="error"
       :downloading="downloading"
+      :restore-enabled="false"
       @download="downloadBackup"
       @restore="startRestore"
       @delete="confirmDelete"
@@ -76,8 +77,8 @@
       :loading="restoreLoading"
       :error="restoreError"
       @close="closeRestoreModal"
-      @preview-restore="previewRestore"
-      @execute="executeRestore"
+      @preview-restore="handlePreviewRestore"
+      @execute="handleExecuteRestore"
     />
 
     <!-- Delete Confirmation Modal -->
@@ -542,7 +543,7 @@ function startRestore(backup: BackupItem) {
 /**
  * Preview restore changes
  */
-async function previewRestore() {
+async function handlePreviewRestore() {
   if (!restoreBackup.value) return
   
   restoreLoading.value = true
@@ -563,7 +564,7 @@ async function previewRestore() {
 /**
  * Execute restore
  */
-async function executeRestore() {
+async function handleExecuteRestore() {
   if (!restoreBackup.value) return
   
   restoreLoading.value = true
