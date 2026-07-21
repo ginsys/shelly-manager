@@ -345,62 +345,10 @@ fix:
 # Install git pre-commit hook for automatic formatting
 hooks-install:
 	@echo "Installing git pre-commit hook..."
-	@echo '#!/bin/bash' > .git/hooks/pre-commit
-	@echo '#' >> .git/hooks/pre-commit
-	@echo '# Pre-commit hook for Go code formatting and comprehensive linting' >> .git/hooks/pre-commit
-	@echo '# This hook runs the same linting as CI to ensure local-CI parity' >> .git/hooks/pre-commit
-	@echo '#' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo '# Colors for output' >> .git/hooks/pre-commit
-	@echo "RED='\033[0;31m'" >> .git/hooks/pre-commit
-	@echo "GREEN='\033[0;32m'" >> .git/hooks/pre-commit
-	@echo "YELLOW='\033[1;33m'" >> .git/hooks/pre-commit
-	@echo "NC='\033[0m' # No Color" >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo 'echo -e "$${YELLOW}Running pre-commit checks...$${NC}"' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo '# Check if we have Go files in the commit' >> .git/hooks/pre-commit
-	@echo 'go_files=$$(git diff --cached --name-only --diff-filter=ACM | grep "\.go$$")' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo 'if [ -z "$$go_files" ]; then' >> .git/hooks/pre-commit
-	@echo '    echo -e "$${GREEN}No Go files to check.$${NC}"' >> .git/hooks/pre-commit
-	@echo '    exit 0' >> .git/hooks/pre-commit
-	@echo 'fi' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo 'echo -e "$${YELLOW}Checking Go files: $$go_files$${NC}"' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo '# Run go fmt and capture any files that need formatting' >> .git/hooks/pre-commit
-	@echo 'unformatted=$$(echo "$$go_files" | xargs gofmt -l)' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo 'if [ -n "$$unformatted" ]; then' >> .git/hooks/pre-commit
-	@echo '    echo -e "$${YELLOW}Auto-formatting Go files...$${NC}"' >> .git/hooks/pre-commit
-	@echo '    echo "$$unformatted" | xargs gofmt -w' >> .git/hooks/pre-commit
-	@echo '    ' >> .git/hooks/pre-commit
-	@echo '    # Run goimports if available' >> .git/hooks/pre-commit
-	@echo '    if command -v goimports >/dev/null 2>&1; then' >> .git/hooks/pre-commit
-	@echo '        echo -e "$${YELLOW}Auto-formatting imports...$${NC}"' >> .git/hooks/pre-commit
-	@echo '        echo "$$go_files" | xargs goimports -w' >> .git/hooks/pre-commit
-	@echo '    fi' >> .git/hooks/pre-commit
-	@echo '    ' >> .git/hooks/pre-commit
-	@echo '    # Add the formatted files back to the commit' >> .git/hooks/pre-commit
-	@echo '    echo "$$unformatted" | xargs git add' >> .git/hooks/pre-commit
-	@echo '    echo "$$go_files" | xargs git add' >> .git/hooks/pre-commit
-	@echo '    ' >> .git/hooks/pre-commit
-	@echo '    echo -e "$${GREEN}Code formatted and added to commit.$${NC}"' >> .git/hooks/pre-commit
-	@echo 'fi' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo '# Run complete lint suite (same as CI)' >> .git/hooks/pre-commit
-	@echo 'echo -e "$${YELLOW}Running complete lint suite (same as CI)...$${NC}"' >> .git/hooks/pre-commit
-	@echo 'if ! make lint; then' >> .git/hooks/pre-commit
-	@echo '    echo -e "$${RED}Linting failed. Please fix issues before committing.$${NC}"' >> .git/hooks/pre-commit
-	@echo '    exit 1' >> .git/hooks/pre-commit
-	@echo 'fi' >> .git/hooks/pre-commit
-	@echo '' >> .git/hooks/pre-commit
-	@echo 'echo -e "$${GREEN}Pre-commit checks passed!$${NC}"' >> .git/hooks/pre-commit
-	@echo 'exit 0' >> .git/hooks/pre-commit
+	@cp .githooks/pre-commit .git/hooks/pre-commit
 	@chmod +x .git/hooks/pre-commit
 	@echo "Pre-commit hook installed successfully!"
-	@echo "The hook will automatically format Go code and run comprehensive linting (same as CI) before each commit."
+	@echo "It formats staged Go files and runs 'make lint' (via mise when present) before each commit."
 
 # Uninstall git pre-commit hook
 hooks-uninstall:

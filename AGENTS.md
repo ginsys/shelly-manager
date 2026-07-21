@@ -35,8 +35,8 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backe
 - Run `make test-ci` before pushing; inspect `coverage.html` locally when needed.
 
 ## Commit & Pull Request Guidelines
-- Create feature branches from `develop` for all changes. Branch naming: `<type>/<issue>-<short-description>` (e.g., `fix/74-partial-updates`, `feat/80-refresh-button`).
-- Open PRs against `develop` and link the relevant GitHub Issue (e.g., `Closes #74`).
+- Create feature branches from `main` for all changes. Branch naming: `<type>/<issue>-<short-description>` (e.g., `fix/74-partial-updates`, `feat/80-refresh-button`).
+- Open PRs against `main` and link the relevant GitHub Issue (e.g., `Closes #74`).
 - Follow Conventional Commits with concise subjects (≤72 chars) and precise scopes.
   - Good: `feat(ui/export): add history slice`, `test(api): add pagination tests`
   - Avoid stuffing multiple changes in a single subject. Use short bullets in body.
