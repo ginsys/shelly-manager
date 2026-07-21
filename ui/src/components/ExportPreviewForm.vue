@@ -136,36 +136,27 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { previewExport, type ExportRequest } from '@/api/export'
+import { previewExport } from '@/api/export'
 import SchemaForm from '@/components/shared/SchemaForm.vue'
-
-// Plugin schema type for form generation
-interface PluginField {
-  type?: 'string' | 'number' | 'boolean' | 'select'
-  label?: string
-  description?: string
-  placeholder?: string
-  required?: boolean
-  min?: number
-  max?: number
-  options?: { value: string; label?: string }[]
-}
-
-interface PluginSchema {
-  config?: Record<string, PluginField>
-  filters?: Record<string, PluginField>
-  options?: Record<string, PluginField>
-}
+import type { FormSchema } from '@/types/schema'
 
 interface Plugin {
   id: string
   name: string
   formats: string[]
-  schema?: PluginSchema
+  schema?: FormSchema
 }
 
-// Reactive state
-const formData = reactive<ExportRequest>({
+// Reactive state. config/filters/options are non-optional here (they seed the
+// SchemaForm v-models and are Object.assign targets); the object is still
+// structurally an ExportRequest for previewExport().
+const formData = reactive<{
+  plugin_name: string
+  format: string
+  config: Record<string, unknown>
+  filters: Record<string, unknown>
+  options: Record<string, unknown>
+}>({
   plugin_name: '',
   format: '',
   config: {},

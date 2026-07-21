@@ -191,42 +191,26 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { previewImport } from '@/api/import'
 import SchemaForm from '@/components/shared/SchemaForm.vue'
+import type { FormSchema } from '@/types/schema'
 
 // Plugin schema type for form generation (same as export)
-interface PluginField {
-  type?: 'string' | 'number' | 'boolean' | 'select'
-  label?: string
-  description?: string
-  placeholder?: string
-  required?: boolean
-  min?: number
-  max?: number
-  options?: { value: string; label?: string }[]
-}
-
-interface PluginSchema {
-  config?: Record<string, PluginField>
-  options?: Record<string, PluginField>
-}
-
 interface Plugin {
   id: string
   name: string
   formats: string[]
-  schema?: PluginSchema
+  schema?: FormSchema
   acceptedTypes?: string[]
 }
 
-interface ImportRequest {
+// Reactive state. config/options are non-optional here (they seed the SchemaForm
+// v-models and are Object.assign targets); the preview request is built
+// separately in previewImportData().
+const formData = reactive<{
   plugin_name: string
   format: string
-  config?: Record<string, any>
-  options?: Record<string, any>
-  data?: string
-}
-
-// Reactive state
-const formData = reactive<ImportRequest>({
+  config: Record<string, unknown>
+  options: Record<string, unknown>
+}>({
   plugin_name: '',
   format: '',
   config: {},
@@ -385,11 +369,11 @@ async function onPreview() {
       data = await readFileAsText(selectedFile.value)
     }
     
-    const requestData: ImportRequest = {
+    const requestData = {
       ...formData,
       data
     }
-    
+
     const result = await previewImport(requestData)
     previewResult.value = result.summary || result
     
