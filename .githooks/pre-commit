@@ -40,22 +40,35 @@ fi
 echo -e "${YELLOW}Checking Go files:${NC}"
 echo "$go_files"
 
-# Auto-format any unformatted files and restage them. Go paths in this repo do
-# not contain spaces, so word-splitting the list into arguments is safe.
+# Refuse partially staged Go files. Formatting rewrites the working tree, and
+# restaging (git add below) would then sweep in the unstaged hunks too — a
+# silent commit of unstaged work. A Go file that also has unstaged changes is
+# exactly this case. Go paths in this repo do not contain spaces, so
+# word-splitting the list into arguments is safe.
 # shellcheck disable=SC2086
-unformatted=$(run gofmt -l $go_files)
-if [ -n "$unformatted" ]; then
-	echo -e "${YELLOW}Formatting Go files...${NC}"
-	# shellcheck disable=SC2086
-	run gofmt -w $unformatted
-	if run sh -c 'command -v goimports >/dev/null 2>&1'; then
-		# shellcheck disable=SC2086
-		run goimports -w $go_files
-	fi
-	# shellcheck disable=SC2086
-	git add $go_files
-	echo -e "${GREEN}Formatted and restaged.${NC}"
+partial=$(comm -12 \
+	<(printf '%s\n' $go_files | sort -u) \
+	<(git diff --name-only | sort -u))
+if [ -n "$partial" ]; then
+	echo -e "${RED}Refusing to commit: these Go files are partially staged:${NC}"
+	echo "$partial"
+	echo -e "${RED}Formatting would also stage their unstaged changes. Stage them fully (git add) or stash the rest, then commit.${NC}"
+	exit 1
 fi
+
+# Format every staged Go file and restage. gofmt always; goimports too when
+# available, so import-only issues are auto-fixed rather than only flagged by
+# lint. Restaging is safe here because no file has unstaged hunks (checked
+# above). Formatting is idempotent, so running unconditionally is fine.
+# shellcheck disable=SC2086
+run gofmt -w $go_files
+if run sh -c 'command -v goimports >/dev/null 2>&1'; then
+	# shellcheck disable=SC2086
+	run goimports -w $go_files
+fi
+# shellcheck disable=SC2086
+git add $go_files
+echo -e "${GREEN}Formatted and restaged.${NC}"
 
 # Run the same lint suite as CI (go vet + golangci-lint over the module).
 echo -e "${YELLOW}Running lint suite (make lint)...${NC}"
