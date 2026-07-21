@@ -412,15 +412,15 @@
             Define variables that will be substituted in the generated files
           </div>
           
-          <div v-for="(value, key, index) in formData.variable_substitution" :key="index" class="variable-row">
+          <div v-for="(_value, key, index) in formData.variable_substitution" :key="index" class="variable-row">
             <input
               :value="key"
-              @input="updateVariableKey(key, $event.target.value)"
+              @input="updateVariableKey(key, ($event.target as HTMLInputElement).value)"
               placeholder="Variable name"
               class="variable-key form-input"
             />
             <input
-              v-model="formData.variable_substitution[key]"
+              v-model="formData.variable_substitution![key]"
               placeholder="Variable value"
               class="variable-value form-input"
             />
@@ -738,7 +738,6 @@ function validateForm() {
 function calculateSizeEstimate() {
   // Simple size estimation based on device count, format, and options
   let baseSize = estimatedDeviceCount.value * 1024 // ~1KB per device base
-  let files = estimatedFileCount.value
 
   // Format-specific size adjustments
   if (formData.format === 'terraform') {

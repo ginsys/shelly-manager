@@ -37,7 +37,7 @@
       <!-- Textarea -->
       <textarea
         v-else-if="field.type === 'textarea'"
-        :value="modelValue[key]"
+        :value="String(modelValue[key] ?? '')"
         @input="updateField(key, ($event.target as HTMLTextAreaElement).value)"
         :placeholder="field.placeholder"
         :required="field.required"
@@ -49,7 +49,7 @@
       <label v-else-if="field.type === 'boolean'" class="field-checkbox">
         <input
           type="checkbox"
-          :checked="modelValue[key]"
+          :checked="Boolean(modelValue[key])"
           @change="updateField(key, ($event.target as HTMLInputElement).checked)"
         />
         <span>{{ field.placeholder || 'Enable' }}</span>

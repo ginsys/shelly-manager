@@ -84,7 +84,7 @@
             <button
               type="submit"
               class="primary-button"
-              :disabled="loading || (preview?.conflicts.length > 0)"
+              :disabled="loading || ((preview?.conflicts?.length ?? 0) > 0)"
             >
               {{ loading ? 'Restoring...' : (localOptions.dry_run ? 'Run Preview' : 'Execute Restore') }}
             </button>

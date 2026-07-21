@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { createDevice, updateDevice, deleteDevice, controlDevice, isAbortError } from '../api/devices'
 import type { Device } from '../api/types'
 import { useDevicesStore } from '../stores/devices'

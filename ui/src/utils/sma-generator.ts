@@ -132,7 +132,7 @@ export async function generateSMAFile(
       }
 
       const compressedSize = finalData.length
-      const blob = new Blob([finalData], { type: 'application/octet-stream' })
+      const blob = new Blob([finalData as BlobPart], { type: 'application/octet-stream' })
       const filename = generateSMAFilename(archive.metadata)
 
       return {
@@ -175,7 +175,7 @@ export async function generateSMAFile(
     }
 
     const compressedSize = finalData.length
-    const blob = new Blob([finalData], { type: 'application/octet-stream' })
+    const blob = new Blob([finalData as BlobPart], { type: 'application/octet-stream' })
     const filename = generateSMAFilename(archive.metadata)
 
     return {
