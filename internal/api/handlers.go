@@ -859,6 +859,10 @@ func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 
 // BulkImportConfigs handles POST /api/v1/config/bulk-import
 func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
+	// Bulk operations mutate every device; require admin before touching hardware.
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	// Get all devices
 	devices, err := h.Service.DB.GetDevices()
 	if err != nil {
@@ -923,6 +927,10 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 
 // BulkExportConfigs handles POST /api/v1/config/bulk-export
 func (h *Handler) BulkExportConfigs(w http.ResponseWriter, r *http.Request) {
+	// Bulk export pushes stored config to every physical device; require admin.
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	// Get all devices
 	devices, err := h.Service.DB.GetDevices()
 	if err != nil {
@@ -1030,6 +1038,10 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 
 // BulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect
 func (h *Handler) BulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) {
+	// Bulk drift detection contacts every device; require admin.
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	// Perform bulk drift detection across all devices
 	result, err := h.Service.BulkDetectConfigDrift()
 	if err != nil {
@@ -1678,6 +1690,10 @@ func (h *Handler) MarkTrendResolved(w http.ResponseWriter, r *http.Request) {
 
 // EnhancedBulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect-enhanced
 func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) {
+	// Enhanced bulk drift detection contacts every device; require admin.
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	h.logger.Info("Starting enhanced bulk drift detection with comprehensive reporting")
 
 	result, err := h.Service.BulkDetectConfigDrift()
