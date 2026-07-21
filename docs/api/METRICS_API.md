@@ -6,22 +6,29 @@ Note: The WebSocket endpoint may be registered at `/metrics/ws` (top-level) and 
 
 ## HTTP Endpoints
 
-- `GET /metrics/prometheus`
+Authentication policy (when `security.admin_api_key` is configured): every
+endpoint below marked `(admin)` requires `Authorization: Bearer <ADMIN_KEY>` or
+`X-API-Key: <ADMIN_KEY>` and returns `401` otherwise. `/metrics/prometheus` is
+`(public)` by convention — standard scrapers do not send the admin bearer, so
+secure it at the network layer. When no admin key is configured, all endpoints
+are open.
+
+- `GET /metrics/prometheus` (public)
   - Exposes Prometheus metrics. Suitable for Prometheus scraping.
 
-- `GET /metrics/status`
+- `GET /metrics/status` (admin)
   - Returns JSON status: `{ "enabled": true|false, "last_collection_time": "...", "uptime_seconds": n }`.
 
-- `POST /metrics/enable` / `POST /metrics/disable`
+- `POST /metrics/enable` / `POST /metrics/disable` (admin)
   - Enables or disables metrics collection. Returns `{ "status": "enabled|disabled" }`.
 
-- `POST /metrics/collect`
+- `POST /metrics/collect` (admin)
   - Triggers a manual collection. Response includes `{ "status": "collected", "duration_ms": n, "collected_at": "..." }`.
 
-- `GET /metrics/dashboard`
+- `GET /metrics/dashboard` (admin)
   - Returns aggregated dashboard metrics as JSON (HTTP route; separate from WebSocket real-time stream).
 
-- `POST /metrics/test-alert?type=<t>&severity=<s>`
+- `POST /metrics/test-alert?type=<t>&severity=<s>` (admin)
   - Sends a synthetic alert over WebSocket broadcast for testing dashboards.
 
 - `GET /metrics/health` (admin)
