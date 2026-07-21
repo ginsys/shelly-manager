@@ -122,6 +122,11 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@vitest/*"
         update-types: ["version-update:semver-major"]
+      # typescript is pinned to the 5.x JS line: vue-tsc / Volar need the
+      # JavaScript compiler API, which the native typescript@7 (tsgo) package
+      # does not ship. Revisit when vue-tsc supports the native compiler.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
