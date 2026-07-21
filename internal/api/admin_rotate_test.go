@@ -103,6 +103,22 @@ func TestRotateAdminKey_AuthAndPropagation(t *testing.T) {
 	r.ServeHTTP(rr4, req4)
 	require.Equal(t, http.StatusOK, rr4.Code, rr4.Body.String())
 
+	// 3b) Security metrics endpoint exposes attacker IPs and must also require the
+	// admin key (#246/#258): old key -> 401, new key -> 200.
+	rrSecOld := httptest.NewRecorder()
+	reqSecOld := httptest.NewRequest("GET", "/api/v1/metrics/security", nil)
+	reqSecOld.Header.Set("Authorization", "Bearer "+initialKey)
+	reqSecOld.Header.Set("User-Agent", "TestAgent/1.0")
+	r.ServeHTTP(rrSecOld, reqSecOld)
+	require.Equal(t, http.StatusUnauthorized, rrSecOld.Code)
+
+	rrSecNew := httptest.NewRecorder()
+	reqSecNew := httptest.NewRequest("GET", "/api/v1/metrics/security", nil)
+	reqSecNew.Header.Set("Authorization", "Bearer new-secret")
+	reqSecNew.Header.Set("User-Agent", "TestAgent/1.0")
+	r.ServeHTTP(rrSecNew, reqSecNew)
+	require.Equal(t, http.StatusOK, rrSecNew.Code, rrSecNew.Body.String())
+
 	// 4) Export endpoint should also reflect new key requirement
 	exportReq := map[string]any{
 		"plugin_name": "mockfile",

@@ -279,9 +279,16 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 		metricsAPI.HandleFunc("/notifications", handler.MetricsHandler.GetNotificationSummary).Methods("GET")
 		metricsAPI.HandleFunc("/resolution", handler.MetricsHandler.GetResolutionSummary).Methods("GET")
 
-		// Security metrics endpoint
+		// Security metrics endpoint — exposes attacker IPs and activity, so gate it
+		// with the same admin key as the other protected metrics reads.
 		if securityMonitor != nil {
-			metricsAPI.HandleFunc("/security", createSecurityMetricsHandler(securityMonitor, logger)).Methods("GET")
+			securityHandler := createSecurityMetricsHandler(securityMonitor, logger)
+			metricsAPI.HandleFunc("/security", func(w http.ResponseWriter, r *http.Request) {
+				if !handler.requireAdmin(w, r) {
+					return
+				}
+				securityHandler(w, r)
+			}).Methods("GET")
 		}
 
 		// Prometheus endpoint
