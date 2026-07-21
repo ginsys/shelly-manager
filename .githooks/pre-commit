@@ -12,13 +12,20 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# run executes a command through mise when present, otherwise directly.
+# Decide once how to invoke tooling. Prefer mise (this repo pins its toolchain
+# in mise.toml), but only if it is installed AND can actually load the project
+# config — the `sh -c 'exit 0'` probe fails when mise.toml is untrusted or
+# unloadable. Otherwise fall back to PATH so contributors who have gofmt/go/
+# golangci-lint available directly are never blocked.
+if command -v mise >/dev/null 2>&1 && mise exec -- sh -c 'exit 0' >/dev/null 2>&1; then
+	RUNNER="mise exec --"
+else
+	RUNNER=""
+fi
+
+# run executes a command through the selected runner (mise or PATH).
 run() {
-	if command -v mise >/dev/null 2>&1; then
-		mise exec -- "$@"
-	else
-		"$@"
-	fi
+	$RUNNER "$@"
 }
 
 echo -e "${YELLOW}Running pre-commit checks...${NC}"
