@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Security
+- Require the configured admin key on all four bulk configuration endpoints
+  (`POST /api/v1/config/bulk-import`, `/bulk-export`, `/bulk-drift-detect`,
+  `/bulk-drift-detect-enhanced`). These operate across every device and
+  `bulk-export` pushes stored config to physical hardware, so they were an
+  unauthenticated fleet-wide mutation surface. Also documents the previously
+  missing `bulk-drift-detect-enhanced` route in the OpenAPI spec. (#245)
+
 ## [0.5.4] - 2024-01-15
 
 ### 🚀 Major Features Added
