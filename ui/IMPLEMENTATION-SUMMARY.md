@@ -56,16 +56,15 @@ Complete frontend implementation for SMA (Shelly Management Archive) format supp
 - Export metadata configuration
 - Real-time validation and preview
 
-**SMA import — no UI (backend works via generic route)**
+**SMA import — preview-only backend, no UI**
 - A prototype `src/components/SMAImportForm.vue` existed but was never mounted by
   any page or route, so the workflow was unreachable. It has been removed.
-- The backend *does* support SMA import: `POST /api/v1/import` with
-  `plugin_name: "sma"` dispatches to the registered, integration-tested SMA
-  plugin (`file`/`data` sources; `url` unimplemented). There is simply no
-  dedicated `/import/sma*` route.
-- The gap is on the frontend: no import UI exists, and the app's SMA import
-  helpers target the non-existent `/import/sma*` paths (404) instead of the
-  generic route. A working import UI must call `POST /api/v1/import`.
+- `POST /api/v1/import` with `plugin_name: "sma"` dispatches to the registered SMA
+  plugin (`file`/`data` sources; `url` unimplemented). **Validation and dry-run
+  preview work; non-dry-run persistence is a placeholder that fakes success
+  without writing to the DB (#272).** There is no dedicated `/import/sma*` route.
+- Frontend gap: no import UI, and the app's SMA import helpers target the
+  non-existent `/import/sma*` paths (404) instead of the generic route.
 
 **File: `src/components/BackupForm.vue` (Enhanced)**
 - Integrated SMA configuration when SMA format selected
@@ -102,8 +101,9 @@ UI Updates ← State Updates ← Response ← SMA Plugin
 ### File Processing
 
 ```
-Export (working):     Generated Data → Generator → Compression → Download
-Import backend (OK):  SMA File → POST /api/v1/import (plugin_name: "sma") → restore
+Export (working):      Generated Data → Generator → Compression → Download
+Import preview (OK):   SMA File → POST /api/v1/import (dry_run) → validated preview
+Import restore (stub): non-dry-run persists nothing, fakes success (#272)
 Import frontend (gap): app's SMA helpers call /import/sma* (404); no import UI
 ```
 
@@ -228,8 +228,9 @@ Backend SMA Plugin
 ### Backend Integration
 - Export uses the established SMA export endpoints (`POST /export/sma`,
   `GET /export/sma/{id}/download`)
-- Import backend works via generic `POST /import` (`plugin_name: "sma"`); no
-  dedicated `/import/sma` route and no frontend import UI
+- Import backend: generic `POST /import` (`plugin_name: "sma"`) previews only —
+  non-dry-run restore is a stub that fakes success (#272); no `/import/sma` route,
+  no frontend import UI
 - Follows existing authentication patterns
 - Maintains API response consistency
 
@@ -244,7 +245,7 @@ Backend SMA Plugin
 2. **Format Selection** → Dynamic configuration appears
 3. **Configuration** → Real-time validation and preview
 4. **Creation** → Progress tracking and result display
-5. **Import** → no UI; backend import available via generic `POST /import`
+5. **Import** → no UI; generic `POST /import` previews only, restore stubbed (#272)
 
 ## ✨ Key Benefits
 
@@ -258,16 +259,16 @@ Backend SMA Plugin
 
 ## Status
 
-SMA **export** is implemented and wired end to end. SMA **import** works on the
-backend (generic `POST /api/v1/import` with `plugin_name: "sma"`) but has no
-frontend UI, and the app's SMA import helpers point at non-existent
-`/import/sma*` routes.
+SMA **export** is implemented and wired end to end. SMA **import** is only
+partly functional: the generic `POST /api/v1/import` (`plugin_name: "sma"`) route
+dispatches to the plugin and previews correctly, but non-dry-run restore persists
+nothing (#272), and there is no frontend UI.
 
 - ✅ **Export**: create + download wired to `POST /export/sma` and
   `GET /export/sma/{id}/download`
 - ✅ **Codec**: parser/generator with checksum verification, unit-tested
-- ✅ **Import backend**: generic `POST /import` (`plugin_name: "sma"`), registered
-  plugin, integration-tested
+- ⚠️ **Import backend**: generic `POST /import` (`plugin_name: "sma"`) validates
+  and previews, but non-dry-run persistence is a stub that fakes success (#272)
 - ❌ **Import frontend**: no UI; SMA helpers target `/import/sma*` (404)
 - ⚠️ **Docs**: older "production-ready / complete import workflow" claims in this
   file and the SMA guides referred to the export path and the prototyped-but-
