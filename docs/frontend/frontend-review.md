@@ -288,7 +288,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/export/schedules/{id}` | DELETE | Delete schedule |
 | `/export/schedules/{id}/run` | POST | Manually run schedule |
 
-#### Import (4 registered endpoints)
+#### Import (5 registered endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/import` | POST | Generic import — SMA runs here with `plugin_name: "sma"` (⚠️ preview works; non-dry-run restore is a stub, #272) |

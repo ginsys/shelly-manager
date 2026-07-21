@@ -287,19 +287,28 @@ Content-Type: application/json
 {
   "plugin_name": "sma",
   "source": {
-    "type": "file",          // "file" (reads source.path) or "data" (inline source.data); "url" not implemented
+    "type": "file",
     "path": "/path/to/backup.sma"
   },
   "options": {
-    "dry_run": true,         // ImportOptions: dry_run | force_overwrite | validate_only | backup_before
+    "dry_run": true,
     "force_overwrite": false,
-    "backup_before": true    // decoded but not acted on by the current SMA import stub
+    "backup_before": true
   }
 }
 ```
 
+- `source.type`: `file` (reads `source.path`) or `data` (inline `source.data`);
+  `url` is not implemented.
+- `options` maps to the backend `ImportOptions`: `dry_run`, `force_overwrite`,
+  `validate_only`, `backup_before`. (`backup_before` is decoded but not acted on
+  by the current SMA import stub.)
+
 Use `POST /api/v1/import/preview` with the same body for a dry-run preview (this
-is the only path that behaves correctly today). Both require the admin key.
+is the only path that behaves correctly today). Both routes go through
+`requireAdmin`, which enforces the admin key **only when `security.admin_api_key`
+is configured** — with the shipped-empty default it permits all requests, so
+these endpoints are open unless an admin key is set.
 
 ## Error Handling
 
