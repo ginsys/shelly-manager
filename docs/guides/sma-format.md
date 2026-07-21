@@ -268,20 +268,23 @@ Content-Type: application/json
 }
 ```
 
-### Import SMA — not available
+### Import SMA
 
-> There is no SMA import endpoint. The backend registers only the generic
-> `/import` and `/import/preview` routes (`internal/api/import_handlers.go`);
-> `POST /api/v1/import/sma` does not exist and returns 404. Application-level SMA
-> import is deferred pending #249 — only the client-side codec works today. The
-> request shape below is the intended design, not a working endpoint.
+> There is **no** dedicated `POST /api/v1/import/sma` route (it 404s). SMA import
+> runs through the **generic** import endpoint with `plugin_name: "sma"`. The
+> `sma` plugin is registered in the sync engine and integration-tested; the
+> request body is JSON (not multipart).
 
 ```http
-POST /api/v1/import/sma   # NOT IMPLEMENTED — 404
-Content-Type: multipart/form-data
+POST /api/v1/import
+Content-Type: application/json
 
 {
-  "file": "<sma-file-upload>",
+  "plugin_name": "sma",
+  "source": {
+    "type": "file",          // "file" (reads source.path) or "data" (inline source.data); "url" not implemented
+    "path": "/path/to/backup.sma"
+  },
   "options": {
     "dry_run": false,
     "merge_strategy": "overwrite",
@@ -289,6 +292,9 @@ Content-Type: multipart/form-data
   }
 }
 ```
+
+Use `POST /api/v1/import/preview` with the same body for a dry-run preview. Both
+require the admin key.
 
 ## Error Handling
 
