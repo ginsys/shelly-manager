@@ -1,0 +1,61 @@
+#!/bin/bash
+#
+# Pre-commit hook: format staged Go files and run the lint suite (parity with CI).
+# Installed by `make hooks-install`, which copies this file to .git/hooks/.
+#
+# Tooling is routed through `mise` when it is available, so the hook works
+# whether the Go toolchain is on PATH directly or only via mise (this repo pins
+# its toolchain in mise.toml). Contributors without mise fall back to PATH.
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# run executes a command through mise when present, otherwise directly.
+run() {
+	if command -v mise >/dev/null 2>&1; then
+		mise exec -- "$@"
+	else
+		"$@"
+	fi
+}
+
+echo -e "${YELLOW}Running pre-commit checks...${NC}"
+
+# Only Go files are formatted/linted here.
+go_files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+if [ -z "$go_files" ]; then
+	echo -e "${GREEN}No Go files to check.${NC}"
+	exit 0
+fi
+
+echo -e "${YELLOW}Checking Go files:${NC}"
+echo "$go_files"
+
+# Auto-format any unformatted files and restage them. Go paths in this repo do
+# not contain spaces, so word-splitting the list into arguments is safe.
+# shellcheck disable=SC2086
+unformatted=$(run gofmt -l $go_files)
+if [ -n "$unformatted" ]; then
+	echo -e "${YELLOW}Formatting Go files...${NC}"
+	# shellcheck disable=SC2086
+	run gofmt -w $unformatted
+	if run sh -c 'command -v goimports >/dev/null 2>&1'; then
+		# shellcheck disable=SC2086
+		run goimports -w $go_files
+	fi
+	# shellcheck disable=SC2086
+	git add $go_files
+	echo -e "${GREEN}Formatted and restaged.${NC}"
+fi
+
+# Run the same lint suite as CI (go vet + golangci-lint over the module).
+echo -e "${YELLOW}Running lint suite (make lint)...${NC}"
+if ! run make lint; then
+	echo -e "${RED}Linting failed. Please fix issues before committing.${NC}"
+	exit 1
+fi
+
+echo -e "${GREEN}Pre-commit checks passed!${NC}"
+exit 0
