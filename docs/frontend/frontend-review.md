@@ -291,13 +291,18 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 #### Import (4 registered endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
+| `/import` | POST | Generic import — SMA import runs here with `plugin_name: "sma"` (registered plugin) |
+| `/import/preview` | POST | Preview import operation (same body, dry-run) |
 | `/import/history` | GET | List all imports |
 | `/import/{id}` | GET | Get import result |
 | `/import/statistics` | GET | Import stats |
-| `/import/preview` | POST | Preview import operation |
-| ~~`/import/sma`~~ | POST | ❌ Not registered — no SMA import route exists (#249) |
-| ~~`/import/sma/{id}`~~ | GET | ❌ Not registered (#249) |
-| ~~`/import/sma-preview`~~ | POST | ❌ Not registered (#249) |
+| ~~`/import/sma`~~ | POST | ❌ Not registered — use `POST /import` with `plugin_name: "sma"` |
+| ~~`/import/sma/{id}`~~ | GET | ❌ Not registered — use `GET /import/{id}` |
+| ~~`/import/sma-preview`~~ | POST | ❌ Not registered — use `POST /import/preview` |
+
+> Note: the frontend SMA import helpers target the struck `/import/sma*` paths
+> (which 404). The backend supports SMA import via the generic `/import` route
+> above; the frontend just isn't wired to it.
 
 #### Plugins (6 endpoints)
 | Endpoint | Method | Purpose |
