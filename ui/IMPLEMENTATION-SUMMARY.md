@@ -1,10 +1,24 @@
 # SMA Format Frontend Implementation Summary
 
+> **⚠️ Accuracy note (2026-07).** This document was written when SMA support was
+> prototyped and overstates import. The truth: **SMA export works end to end; SMA
+> import does not.** There is no import UI (the prototype form was removed), the
+> app's SMA import helpers target non-existent `/import/sma*` routes (404), and
+> even the generic `POST /api/v1/import` (`plugin_name: "sma"`) only previews —
+> non-dry-run restore is an unimplemented stub that fakes success (#272). The
+> ✅-marked "Import Features", "Import Configuration", and import-related "User
+> Experience" items below (conflict resolution, merge strategies, safety backups,
+> drag-and-drop, progress UI, etc.) describe **intended design, not shipped
+> behavior**. See the "Status" section at the end for the verified state.
+
 ## Overview
 
-Complete frontend implementation for SMA (Shelly Management Archive) format support in the Shelly Manager Vue.js application. This provides seamless integration with the existing Go backend SMA plugin through a comprehensive TypeScript-based frontend solution.
+Frontend support for the SMA (Shelly Management Archive) format in the Shelly
+Manager Vue.js app. The **export** path and the client-side **codec**
+(parser/generator) are implemented; **import** is not wired end to end (see the
+banner above and the Status section).
 
-## 🎯 Implementation Complete
+## 🎯 Implementation Status
 
 ### ✅ Core Utilities
 
@@ -29,9 +43,11 @@ Complete frontend implementation for SMA (Shelly Management Archive) format supp
 ### ✅ API Integration
 
 **File: `src/api/export.ts` (Extended)**
-- Complete SMA-specific API endpoint definitions
-- Export/Import/Preview functionality
-- TypeScript interfaces for all SMA operations
+- SMA **export** endpoint definitions (working)
+- ⚠️ SMA **import** helpers target `/import/sma*` routes that do not exist (404);
+  the working backend path is the generic `POST /api/v1/import` (#272 for the
+  restore stub). These helpers need rewiring.
+- TypeScript interfaces for SMA operations
 - Error handling and response parsing
 
 ### ✅ State Management
@@ -84,9 +100,9 @@ Complete frontend implementation for SMA (Shelly Management Archive) format supp
 ### ✅ Dependencies
 
 **File: `package.json` (Updated)**
-- Added `pako` for Gzip compression/decompression
+- Added `pako` for Gzip compression/decompression (pako 3 ships its own types;
+  `@types/pako` was later removed — see PR #263)
 - Added `crypto-browserify` for SHA-256 hashing
-- Added `@types/pako` for TypeScript support
 
 ## 🏗️ Architecture
 
@@ -128,14 +144,19 @@ Backend SMA Plugin
 - **Metadata**: Creator attribution and export tracking
 - **Device Selection**: All devices or specific subset
 
-### Import Configuration
-- **Validation**: Checksum and structure verification
-- **Preview**: Dry-run capability
-- **Conflict Resolution**: Overwrite/merge/skip strategies
-- **Safety**: Automatic backup before import
-- **Selective Import**: Choose specific sections
+### Import Configuration (intended — not shipped)
+- **Validation**: Checksum and structure verification — works in preview
+- **Preview**: Dry-run capability — works
+- **Conflict Resolution**: Overwrite/merge/skip strategies — ❌ not implemented
+  (backend `ImportOptions` has only `force_overwrite`, no merge strategy)
+- **Safety**: Automatic backup before import — ❌ `backup_before` decoded but
+  unused by the import stub (#272)
+- **Selective Import**: Choose specific sections — ❌ not implemented
 
-## 🚀 Features Implemented
+## 🚀 Features & Status
+
+(Export items are shipped; import items are largely intended-not-shipped — see the
+accuracy banner at the top.)
 
 ### Export Features
 1. ✅ Format selection in backup forms
@@ -146,20 +167,23 @@ Backend SMA Plugin
 6. ✅ Size estimation with real-time updates
 7. ✅ Progress tracking and status display
 
-### Import Features
-1. ✅ File validation (structure + integrity)
-2. ✅ Preview mode with detailed analysis
-3. ✅ Conflict detection and resolution
-4. ✅ Selective section import
-5. ✅ Multiple merge strategies
-6. ✅ Dry run capability
-7. ✅ Safety backups before import
+### Import Features (mostly NOT shipped — see banner)
+1. ✅ File validation (structure + integrity) — in preview
+2. ✅ Preview mode with detailed analysis — dry-run works
+3. ❌ Conflict detection and resolution — not implemented (#272)
+4. ❌ Selective section import — not implemented
+5. ❌ Multiple merge strategies — no such backend option
+6. ✅ Dry run capability — works
+7. ❌ Safety backups before import — `backup_before` unused by the stub (#272)
 
 ### User Experience
-1. ✅ Drag-and-drop file selection
-2. ✅ Real-time validation feedback
-3. ✅ Progress indicators and status
-4. ✅ Clear error messages and recovery
+Export UX (format selection, size estimation, validation feedback) is shipped.
+The import-side UX below described the removed `SMAImportForm.vue` prototype and
+is **not present** — there is no import screen:
+1. ❌ Drag-and-drop file selection — no import UI
+2. ✅ Real-time validation feedback — export forms
+3. ❌ Progress indicators and status — no import UI
+4. ✅ Clear error messages and recovery — export forms
 5. ✅ Responsive design (mobile-friendly)
 6. ✅ Accessibility considerations
 7. ✅ Comprehensive help text
@@ -174,7 +198,7 @@ Backend SMA Plugin
 
 ### Processing Performance
 - **Export**: 1-5 seconds typical
-- **Import**: 2-10 seconds (depends on conflicts)
+- **Import**: N/A — restore is not implemented (#272); preview parsing only
 - **Memory Usage**: 2-3x file size during processing
 - **Compression**: 30-45% size reduction typical
 
