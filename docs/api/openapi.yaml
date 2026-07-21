@@ -1560,6 +1560,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
 
+  /api/v1/config/bulk-drift-detect-enhanced:
+    post:
+      tags: [Drift]
+      summary: Bulk drift detection with comprehensive reporting
+      operationId: bulkDetectDriftEnhanced
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Enhanced bulk drift detection result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
   # Export Endpoints
   /api/v1/export/plugins:
     get:
