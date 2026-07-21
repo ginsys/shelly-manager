@@ -18,11 +18,20 @@ export interface ConfigSchema {
 
 export interface SchemaProperty {
   type: string
+  // Present on section-level schemas: the backend GetConfigurationSchema emits a
+  // human title and nested properties for each config section (JSON-Schema style,
+  // internal/configuration/typed_models.go). The frontend ConfigEditor renders both.
+  title?: string
+  properties?: Record<string, SchemaProperty>
   description?: string
   enum?: any[]
   default?: any
   minimum?: number
   maximum?: number
+  // Also emitted by the backend at property level (typed_models.go) and read by
+  // ConfigEditor: string format hints (e.g. "password", "ipv4") and a max length.
+  format?: string
+  maxLength?: number
   pattern?: string
 }
 
