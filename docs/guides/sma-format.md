@@ -272,8 +272,13 @@ Content-Type: application/json
 
 > There is **no** dedicated `POST /api/v1/import/sma` route (it 404s). SMA import
 > runs through the **generic** import endpoint with `plugin_name: "sma"`. The
-> `sma` plugin is registered in the sync engine and integration-tested; the
 > request body is JSON (not multipart).
+>
+> **⚠️ Non-dry-run import does not persist data yet (#272).** The SMA plugin's
+> `performImport` is a placeholder: validation and dry-run **preview** work, but a
+> real import returns `success: true` with a positive `records_imported` count
+> **without writing anything to the database**. Treat only preview as functional
+> until #272 is fixed.
 
 ```http
 POST /api/v1/import
@@ -286,15 +291,15 @@ Content-Type: application/json
     "path": "/path/to/backup.sma"
   },
   "options": {
-    "dry_run": false,
-    "merge_strategy": "overwrite",
-    "backup_before": true
+    "dry_run": true,         // ImportOptions: dry_run | force_overwrite | validate_only | backup_before
+    "force_overwrite": false,
+    "backup_before": true    // decoded but not acted on by the current SMA import stub
   }
 }
 ```
 
-Use `POST /api/v1/import/preview` with the same body for a dry-run preview. Both
-require the admin key.
+Use `POST /api/v1/import/preview` with the same body for a dry-run preview (this
+is the only path that behaves correctly today). Both require the admin key.
 
 ## Error Handling
 
