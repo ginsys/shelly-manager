@@ -321,8 +321,10 @@ src/utils/
     └── sma-generator.test.ts # Generator unit tests
 
 src/components/
-├── SMAConfigForm.vue       # SMA export configuration
-└── SMAImportForm.vue       # SMA import interface
+└── SMAConfigForm.vue       # SMA export configuration
+# Note: the SMA import UI is not yet wired. The parser/generator utilities and
+# backend import routes are the integration path; the former SMAImportForm.vue
+# was an unmounted prototype and has been removed pending that work.
 
 src/api/
 └── export.ts              # SMA API integration (extended)

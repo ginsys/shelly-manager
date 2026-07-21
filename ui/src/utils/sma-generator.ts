@@ -108,7 +108,7 @@ export async function generateSMAFile(
       originalSize = new TextEncoder().encode(finalJsonData).length
 
       // Compress if requested
-      let finalData: Uint8Array
+      let finalData: Uint8Array<ArrayBuffer>
       if (options.compression !== false) {
         try {
           finalData = gzip(finalJsonData, {
@@ -132,7 +132,7 @@ export async function generateSMAFile(
       }
 
       const compressedSize = finalData.length
-      const blob = new Blob([finalData as BlobPart], { type: 'application/octet-stream' })
+      const blob = new Blob([finalData], { type: 'application/octet-stream' })
       const filename = generateSMAFilename(archive.metadata)
 
       return {
@@ -151,7 +151,7 @@ export async function generateSMAFile(
     }
 
     // Simple generation without checksum recalculation
-    let finalData: Uint8Array
+    let finalData: Uint8Array<ArrayBuffer>
     if (options.compression !== false) {
       try {
         finalData = gzip(jsonData, {
@@ -175,7 +175,7 @@ export async function generateSMAFile(
     }
 
     const compressedSize = finalData.length
-    const blob = new Blob([finalData as BlobPart], { type: 'application/octet-stream' })
+    const blob = new Blob([finalData], { type: 'application/octet-stream' })
     const filename = generateSMAFilename(archive.metadata)
 
     return {
