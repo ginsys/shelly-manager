@@ -83,6 +83,9 @@ type MetricsStatus struct {
 
 // GetMetricsStatus returns the current metrics system status
 func (h *Handler) GetMetricsStatus(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	status := MetricsStatus{
 		Enabled:            h.service.IsEnabled(),
 		LastCollectionTime: h.service.GetLastCollectionTime(),
@@ -176,6 +179,9 @@ func (h *Handler) GetResolutionSummary(w http.ResponseWriter, r *http.Request) {
 
 // EnableMetrics enables metrics collection
 func (h *Handler) EnableMetrics(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	h.service.Enable()
 
 	response := map[string]string{"status": "enabled"}
@@ -188,6 +194,9 @@ func (h *Handler) EnableMetrics(w http.ResponseWriter, r *http.Request) {
 
 // DisableMetrics disables metrics collection
 func (h *Handler) DisableMetrics(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	h.service.Disable()
 
 	response := map[string]string{"status": "disabled"}
@@ -200,6 +209,9 @@ func (h *Handler) DisableMetrics(w http.ResponseWriter, r *http.Request) {
 
 // CollectMetrics triggers manual metrics collection
 func (h *Handler) CollectMetrics(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	start := time.Now()
 
 	if err := h.service.CollectMetrics(r.Context()); err != nil {
@@ -237,6 +249,9 @@ func (h *Handler) PrometheusHandler() http.Handler {
 
 // GetDashboardMetrics returns dashboard metrics for HTTP requests
 func (h *Handler) GetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	metrics, err := h.wsHub.collectDashboardMetrics(r.Context())
 	if err != nil {
 		h.logger.WithFields(map[string]any{
@@ -285,6 +300,9 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 // SendTestAlert sends a test alert for dashboard testing
 func (h *Handler) SendTestAlert(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	// Get alert type and severity from query parameters
 	alertType := r.URL.Query().Get("type")
 	severity := r.URL.Query().Get("severity")
