@@ -2334,6 +2334,10 @@ paths:
       tags: [Metrics]
       summary: Prometheus metrics endpoint
       operationId: getPrometheusMetrics
+      description: >-
+        Public by convention: standard Prometheus scrapers do not send the
+        admin bearer token, and this exposes only aggregate counters. Secure it
+        at the network layer.
       responses:
         '200':
           description: Prometheus metrics
@@ -2347,6 +2351,9 @@ paths:
       tags: [Metrics]
       summary: Get metrics collection status
       operationId: getMetricsStatus
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Metrics status
@@ -2360,6 +2367,9 @@ paths:
       tags: [Metrics]
       summary: Enable metrics collection
       operationId: enableMetrics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Metrics enabled
@@ -2373,6 +2383,9 @@ paths:
       tags: [Metrics]
       summary: Disable metrics collection
       operationId: disableMetrics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Metrics disabled
@@ -2386,6 +2399,9 @@ paths:
       tags: [Metrics]
       summary: Get dashboard metrics
       operationId: getDashboardMetrics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Dashboard metrics
@@ -2416,6 +2432,9 @@ paths:
       tags: [Metrics]
       summary: Get metrics system health
       operationId: getMetricsHealth
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Metrics health
@@ -2429,6 +2448,9 @@ paths:
       tags: [Metrics]
       summary: Get system metrics
       operationId: getSystemMetrics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: System metrics
@@ -2442,6 +2464,9 @@ paths:
       tags: [Metrics]
       summary: Get device metrics
       operationId: getDeviceMetrics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Device metrics
@@ -2455,6 +2480,9 @@ paths:
       tags: [Metrics]
       summary: Get drift summary
       operationId: getDriftMetrics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Drift metrics
@@ -2468,6 +2496,9 @@ paths:
       tags: [Metrics]
       summary: Get security metrics
       operationId: getSecurityMetrics
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
       responses:
         '200':
           description: Security metrics

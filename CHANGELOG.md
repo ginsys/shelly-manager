@@ -11,6 +11,12 @@ All notable changes to this project are documented here. The project follows Con
   `bulk-export` pushes stored config to physical hardware, so they were an
   unauthenticated fleet-wide mutation surface. Also documents the previously
   missing `bulk-drift-detect-enhanced` route in the OpenAPI spec. (#245)
+- Require the configured admin key on the metrics control endpoints
+  (`POST /metrics/enable`, `/disable`, `/collect`, `/test-alert`) and the data
+  reads (`GET /metrics/status`, `/dashboard`, `/security`). Previously the
+  mutating endpoints were unauthenticated while the read summaries required the
+  key — an inverted policy. `/metrics/prometheus` stays public by convention.
+  (#246)
 
 ## [0.5.4] - 2024-01-15
 
