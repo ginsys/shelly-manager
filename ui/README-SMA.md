@@ -24,6 +24,11 @@ The SMA format is a specialized archive format designed for comprehensive backup
 
 ### Import Features
 
+> **Not yet available.** Application-level SMA import is not implemented. The
+> backend exposes no SMA import routes and there is no import UI. Only the
+> client-side codec (parser/generator) works today. Import is deferred pending
+> #249. The capabilities below describe the intended design, not current behavior.
+
 1. **File Validation**: Structure and integrity validation
 2. **Preview Mode**: See what will be imported before applying
 3. **Conflict Detection**: Identify potential conflicts with existing data
@@ -58,6 +63,10 @@ The SMA format is a specialized archive format designed for comprehensive backup
    - Click "Create Backup" to generate the SMA file
 
 ### Importing SMA Files
+
+> **Not yet available.** There is no SMA import UI and no backend SMA import
+> endpoint. The steps below document the intended workflow for when import is
+> implemented (deferred pending #249); they do not work today.
 
 1. **Open Import Dialog**
    - Use the SMA import functionality (implementation depends on UI structure)
@@ -268,13 +277,17 @@ Enable debug mode by:
 
 ### Backend Endpoints
 
-The SMA format integrates with these backend endpoints:
+Only SMA **export** is backed by real routes (`sync_handlers.go`):
 
 - `POST /api/v1/export/sma` - Create SMA export
-- `GET /api/v1/export/sma/{id}` - Get export result
 - `GET /api/v1/export/sma/{id}/download` - Download SMA file
-- `POST /api/v1/import/sma` - Import SMA file
-- `POST /api/v1/import/sma-preview` - Preview SMA import
+
+**SMA import has no backend routes.** `import_handlers.go` registers only the
+generic `/import` and `/import/preview` handlers; there are no `/import/sma`,
+`/import/sma-preview`, or `/import/sma/{id}` endpoints (nor a standalone
+`GET /export/sma/{id}`). The frontend SMA import helpers still target those
+paths and will 404 until the endpoints are implemented — application-level SMA
+import is deferred pending #249. Only the client-side codec works today.
 
 ### Response Formats
 
@@ -322,9 +335,11 @@ src/utils/
 
 src/components/
 └── SMAConfigForm.vue       # SMA export configuration
-# Note: the SMA import UI is not yet wired. The parser/generator utilities and
-# backend import routes are the integration path; the former SMAImportForm.vue
-# was an unmounted prototype and has been removed pending that work.
+# Note: SMA import is NOT available. No SMA-specific backend routes exist
+# (import_handlers.go registers only generic /import and /import/preview), so the
+# frontend SMA import helpers target /import/sma* paths that 404. The former
+# SMAImportForm.vue was an unmounted prototype and has been removed; import
+# requires backend endpoints to be implemented first.
 
 src/api/
 └── export.ts              # SMA API integration (extended)
