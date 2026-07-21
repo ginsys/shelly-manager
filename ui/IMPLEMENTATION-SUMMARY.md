@@ -43,7 +43,10 @@ banner above and the Status section).
 ### ✅ API Integration
 
 **File: `src/api/export.ts` (Extended)**
-- SMA **export** endpoint definitions (working)
+- SMA **export**: `createSMAExport` (`POST /export/sma`) and download work, but
+  ⚠️ `getSMAExportResult` targets `/export/sma/{id}` and `previewSMAExport` targets
+  `/export/sma-preview` — **neither route is registered** (both 404); use the
+  generic `/export/{id}` and `/export/preview` instead. These helpers need rewiring.
 - ⚠️ SMA **import** helpers target `/import/sma*` routes that do not exist (404);
   the working backend path is the generic `POST /api/v1/import` (#272 for the
   restore stub). These helpers need rewiring.
@@ -289,7 +292,9 @@ dispatches to the plugin and previews correctly, but non-dry-run restore persist
 nothing (#272), and there is no frontend UI.
 
 - ✅ **Export**: create + download wired to `POST /export/sma` and
-  `GET /export/sma/{id}/download`
+  `GET /export/sma/{id}/download` (note: the `getSMAExportResult` /
+  `previewSMAExport` helpers target unregistered `/export/sma/{id}` and
+  `/export/sma-preview` and 404 — use the generic `/export/{id}` / `/export/preview`)
 - ✅ **Codec**: parser/generator with checksum verification, unit-tested
 - ⚠️ **Import backend**: generic `POST /import` (`plugin_name: "sma"`) validates
   and previews, but non-dry-run persistence is a stub that fakes success (#272)
