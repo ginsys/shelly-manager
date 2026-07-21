@@ -252,6 +252,15 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	if handler.MetricsHandler != nil {
 		metricsAPI := api.PathPrefix("/metrics").Subrouter()
 
+		// Admin-key policy for /metrics/* (enforced per-handler via requireAdmin,
+		// which is a no-op when no admin key is configured):
+		//   Gated (mutating): /enable /disable /collect /test-alert
+		//   Gated (data reads, consistent with /health /system /...): /status /dashboard
+		//     plus /health /system /devices /drift /notifications /resolution /security
+		//   Public: /prometheus — standard scrapers do not send the admin bearer, and
+		//     it exposes only aggregate counters; secure it at the network layer instead.
+		//   The /metrics/ws real-time stream is a separate concern (see #247).
+
 		// Control endpoints
 		metricsAPI.HandleFunc("/status", handler.MetricsHandler.GetMetricsStatus).Methods("GET")
 		metricsAPI.HandleFunc("/enable", handler.MetricsHandler.EnableMetrics).Methods("POST")
