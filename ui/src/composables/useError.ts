@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import type { AxiosError } from 'axios'
 import type { AppError, ErrorContext } from '@/types/errors'
 import { getErrorMessage, getErrorSuggestions, isErrorRetryable } from '@/types/errors'
+import type { APIResponse } from '@/api/types'
 
 export function useError() {
   const error = ref<AppError | null>(null)
@@ -18,7 +19,7 @@ export function useError() {
   function normalizeError(err: unknown, context?: ErrorContext): AppError {
     // Handle axios errors with backend error structure
     if (isAxiosError(err)) {
-      const backendError = (err.response?.data as { error?: { code?: string; message?: string; details?: string } } | undefined)?.error
+      const backendError = (err.response?.data as APIResponse<unknown> | undefined)?.error
 
       if (backendError) {
         // Backend returned structured error
@@ -26,7 +27,7 @@ export function useError() {
         return {
           code,
           message: backendError.message || getErrorMessage(code),
-          details: backendError.details,
+          details: stringifyDetails(backendError.details),
           context,
           suggestions: getErrorSuggestions(code),
           retryable: isErrorRetryable(code)
@@ -84,6 +85,19 @@ export function useError() {
 // Type guard for axios errors
 function isAxiosError(err: unknown): err is AxiosError {
   return (err as any)?.isAxiosError === true
+}
+
+// Backend APIError.details is arbitrary JSON (unknown) — commonly a string, but
+// validation errors return field maps. AppError.details is a display string, so
+// serialize any non-string value rather than pretending the backend sends one.
+function stringifyDetails(details: unknown): string | undefined {
+  if (details == null) return undefined
+  if (typeof details === 'string') return details
+  try {
+    return JSON.stringify(details)
+  } catch {
+    return String(details)
+  }
 }
 
 // Map HTTP status codes to error codes

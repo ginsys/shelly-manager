@@ -103,6 +103,32 @@ describe('useError', () => {
       expect(error.value?.details).toBe('No device with ID 123')
     })
 
+    it('serializes object-shaped backend error details (validation map)', () => {
+      const { error, setError } = useError()
+      const axiosErr = {
+        isAxiosError: true,
+        message: 'Request failed',
+        response: {
+          status: 400,
+          data: {
+            error: {
+              code: 'VALIDATION_FAILED',
+              message: 'Validation failed',
+              // Backend APIError.details is `unknown`; validation errors send a map.
+              details: { name: 'is required', port: 'must be a number' }
+            }
+          }
+        }
+      } as unknown as AxiosError
+
+      setError(axiosErr)
+
+      expect(error.value?.code).toBe('VALIDATION_FAILED')
+      expect(typeof error.value?.details).toBe('string')
+      expect(error.value?.details).toContain('is required')
+      expect(error.value?.details).toContain('must be a number')
+    })
+
     it('normalizes axios errors without backend structure using status code', () => {
       const { error, setError } = useError()
       const axiosErr = {
