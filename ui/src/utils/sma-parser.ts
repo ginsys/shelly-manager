@@ -1,4 +1,4 @@
-import pako from 'pako'
+import { ungzip } from 'pako'
 import { sha256Hex } from './sha256'
 
 /**
@@ -183,9 +183,11 @@ export async function parseSMAFile(
     
     try {
       const uint8Array = new Uint8Array(buffer)
-      const decompressed = pako.gunzip(uint8Array, { to: 'string' })
+      const decompressed = ungzip(uint8Array, { toText: true })
       decompressedData = decompressed
-      originalSize = decompressed.length
+      // decompressed is a string; measure the uncompressed size in bytes (UTF-8),
+      // not UTF-16 code units, so the ratio is correct for non-ASCII content.
+      originalSize = new TextEncoder().encode(decompressed).length
     } catch (decompressError) {
       return {
         success: false,
@@ -216,11 +218,16 @@ export async function parseSMAFile(
       }
     }
 
-    // Validate checksum if requested
-    if (options.validateChecksum !== false) {
-      const calculatedChecksum = await sha256Hex(decompressedData)
+    // Validate checksum if requested (and one is present). Recompute over the
+    // same canonical form the generator hashed: the archive with its checksum
+    // field blanked.
+    if (options.validateChecksum !== false && archive.metadata.integrity.checksum) {
       const expectedChecksum = archive.metadata.integrity.checksum.replace('sha256:', '')
-      
+      const storedChecksum = archive.metadata.integrity.checksum
+      archive.metadata.integrity.checksum = ''
+      const calculatedChecksum = await sha256Hex(JSON.stringify(archive, null, 2))
+      archive.metadata.integrity.checksum = storedChecksum
+
       if (calculatedChecksum !== expectedChecksum) {
         return {
           success: false,
@@ -416,7 +423,7 @@ export async function extractSMAMetadata(buffer: ArrayBuffer): Promise<{
 }> {
   try {
     const uint8Array = new Uint8Array(buffer)
-    const decompressed = pako.gunzip(uint8Array, { to: 'string' })
+    const decompressed = ungzip(uint8Array, { toText: true })
     
     // Parse just enough to get metadata
     const partialParse = JSON.parse(decompressed)
@@ -518,7 +525,7 @@ function formatBytes(bytes: number): string {
  * Check if browser supports required features
  */
 export function isSMAParsingSupported(): boolean {
-  return typeof crypto !== 'undefined' && 
-         typeof pako !== 'undefined' &&
+  return typeof crypto !== 'undefined' &&
+         typeof ungzip === 'function' &&
          typeof performance !== 'undefined'
 }

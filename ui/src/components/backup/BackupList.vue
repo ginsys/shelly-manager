@@ -73,8 +73,9 @@
           <button
             v-if="row.success"
             class="action-btn restore-btn"
-            @click="emit('restore', row)"
-            title="Restore from backup"
+            @click="restoreEnabled && emit('restore', row)"
+            :disabled="!restoreEnabled"
+            :title="restoreEnabled ? 'Restore from backup' : 'Restore is not supported yet (tracked in #249)'"
           >
             ↩ Restore
           </button>
@@ -100,9 +101,14 @@ interface Props {
   loading: boolean
   error: string
   downloading?: string
+  // Restore requires backend endpoints that do not exist yet (#249). Fail closed:
+  // a consumer must opt in explicitly once the restore backend slice lands.
+  restoreEnabled?: boolean
 }
 
-defineProps<Props>()
+withDefaults(defineProps<Props>(), {
+  restoreEnabled: false,
+})
 
 const emit = defineEmits<{
   download: [backupId: string, backupName: string]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import pako from 'pako'
+import * as pako from 'pako'
 import {
   parseSMAFile,
   parseSMAFromFile,
@@ -16,11 +16,13 @@ vi.mock('../sha256', () => ({
   sha256Hex: vi.fn().mockResolvedValue('mockedchecksum')
 }))
 
-// Mock pako
+// Mock pako. The parser uses a named import (`import { ungzip }`) and decodes
+// with `{ toText: true }`; the mock returns a stubbed string so these tests
+// exercise parser logic, not real decompression. See sma-parser.roundtrip.test.ts
+// for the unmocked end-to-end guard.
 vi.mock('pako', () => ({
-  default: {
-    gunzip: vi.fn()
-  }
+  ungzip: vi.fn(),
+  gzip: vi.fn()
 }))
 
 const mockPako = vi.mocked(pako)
@@ -122,7 +124,7 @@ describe('SMA Parser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Setup default pako mock behavior
-    mockPako.gunzip.mockReturnValue(JSON.stringify(mockSMAArchive))
+    mockPako.ungzip.mockReturnValue(JSON.stringify(mockSMAArchive))
   })
 
   describe('parseSMAFile', () => {
@@ -147,7 +149,7 @@ describe('SMA Parser', () => {
     })
 
     it('should fail when decompression fails', async () => {
-      mockPako.gunzip.mockImplementation(() => {
+      mockPako.ungzip.mockImplementation(() => {
         throw new Error('Invalid gzip data')
       })
       const buffer = new ArrayBuffer(100)
@@ -159,7 +161,7 @@ describe('SMA Parser', () => {
     })
 
     it('should fail when JSON parsing fails', async () => {
-      mockPako.gunzip.mockReturnValue('invalid json {')
+      mockPako.ungzip.mockReturnValue('invalid json {')
       const buffer = new ArrayBuffer(100)
 
       const result = await parseSMAFile(buffer)
@@ -172,7 +174,7 @@ describe('SMA Parser', () => {
       // Mock wrong checksum
       const wrongArchive = { ...mockSMAArchive }
       wrongArchive.metadata.integrity.checksum = 'sha256:wrongchecksum'
-      mockPako.gunzip.mockReturnValue(JSON.stringify(wrongArchive))
+      mockPako.ungzip.mockReturnValue(JSON.stringify(wrongArchive))
       
       const buffer = new ArrayBuffer(100)
 
@@ -185,7 +187,7 @@ describe('SMA Parser', () => {
     it('should skip checksum validation when disabled', async () => {
       const wrongArchive = { ...mockSMAArchive }
       wrongArchive.metadata.integrity.checksum = 'sha256:wrongchecksum'
-      mockPako.gunzip.mockReturnValue(JSON.stringify(wrongArchive))
+      mockPako.ungzip.mockReturnValue(JSON.stringify(wrongArchive))
       
       const buffer = new ArrayBuffer(100)
 
@@ -197,7 +199,7 @@ describe('SMA Parser', () => {
     it('should validate structure when enabled', async () => {
       const invalidArchive = { ...mockSMAArchive }
       delete (invalidArchive as any).sma_version
-      mockPako.gunzip.mockReturnValue(JSON.stringify(invalidArchive))
+      mockPako.ungzip.mockReturnValue(JSON.stringify(invalidArchive))
       
       const buffer = new ArrayBuffer(100)
 
@@ -214,7 +216,7 @@ describe('SMA Parser', () => {
   describe('parseSMAFromFile', () => {
     it('should parse File object successfully', async () => {
       // Reset the mock to ensure clean test
-      mockPako.gunzip.mockReturnValue(JSON.stringify(mockSMAArchive))
+      mockPako.ungzip.mockReturnValue(JSON.stringify(mockSMAArchive))
       
       const mockFile = {
         arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(100)),
@@ -311,7 +313,7 @@ describe('SMA Parser', () => {
     it('should handle missing metadata', async () => {
       const archiveWithoutMetadata = { ...mockSMAArchive }
       delete (archiveWithoutMetadata as any).metadata
-      mockPako.gunzip.mockReturnValue(JSON.stringify(archiveWithoutMetadata))
+      mockPako.ungzip.mockReturnValue(JSON.stringify(archiveWithoutMetadata))
       
       const buffer = new ArrayBuffer(100)
 
@@ -322,7 +324,7 @@ describe('SMA Parser', () => {
     })
 
     it('should handle decompression error', async () => {
-      mockPako.gunzip.mockImplementation(() => {
+      mockPako.ungzip.mockImplementation(() => {
         throw new Error('Decompression failed')
       })
       const buffer = new ArrayBuffer(100)
@@ -407,8 +409,8 @@ describe('SMA Parser', () => {
 
   describe('Error handling', () => {
     it('should handle unexpected errors gracefully', async () => {
-      // Make pako.gunzip throw an unexpected error
-      mockPako.gunzip.mockImplementation(() => {
+      // Make pako.ungzip throw an unexpected error
+      mockPako.ungzip.mockImplementation(() => {
         throw new Error('Unexpected decompression error')
       })
       
@@ -431,7 +433,7 @@ describe('SMA Parser', () => {
   describe('Performance and size tracking', () => {
     it('should track parsing time', async () => {
       // Reset mock to return valid data
-      mockPako.gunzip.mockReturnValue(JSON.stringify(mockSMAArchive))
+      mockPako.ungzip.mockReturnValue(JSON.stringify(mockSMAArchive))
       const buffer = new ArrayBuffer(100)
 
       const result = await parseSMAFile(buffer, { validateChecksum: false })
@@ -442,7 +444,7 @@ describe('SMA Parser', () => {
 
     it('should calculate compression ratio', async () => {
       const buffer = new ArrayBuffer(50) // Compressed size
-      mockPako.gunzip.mockReturnValue(JSON.stringify(mockSMAArchive)) // Valid JSON
+      mockPako.ungzip.mockReturnValue(JSON.stringify(mockSMAArchive)) // Valid JSON
 
       const result = await parseSMAFile(buffer, { validateChecksum: false })
 

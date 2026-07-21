@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import pako from 'pako'
+import * as pako from 'pako'
 import {
   generateSMAFile,
   generateSMAWithConfig,
@@ -18,11 +18,10 @@ vi.mock('../sha256', () => ({
   sha256Hex: vi.fn().mockResolvedValue('mockedchecksum')
 }))
 
-// Mock pako
+// Mock pako. The generator uses a named import (`import { gzip }`).
 vi.mock('pako', () => ({
-  default: {
-    gzip: vi.fn()
-  }
+  gzip: vi.fn(),
+  ungzip: vi.fn()
 }))
 
 const mockPako = vi.mocked(pako)
