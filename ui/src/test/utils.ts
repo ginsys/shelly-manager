@@ -3,10 +3,11 @@
  * Provides common patterns for mounting components with plugins and mocking
  */
 
-import { mount, VueWrapper } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { vi } from 'vitest'
-import { createRouter, createMemoryHistory, Router } from 'vue-router'
+import { createRouter, createMemoryHistory } from 'vue-router'
+import type { Router } from 'vue-router'
 import type { Component } from 'vue'
 
 /**

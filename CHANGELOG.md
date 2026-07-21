@@ -32,6 +32,13 @@ All notable changes to this project are documented here. The project follows Con
   missing `/import/restore*` routes; `BackupList` now fails closed via a
   `restoreEnabled` prop. (#260)
 
+### Changed
+- Cleaned up the frontend type-check backlog (#260): removed dead code
+  (unused imports, the never-mounted `SMAImportForm` component, and orphaned
+  helpers in `BackupManagementPage`) and applied minimal, contract-preserving
+  type fixes (DOM event casts, null-guards, value coercion). Behavior is
+  unchanged; `vue-tsc` errors dropped from 67 to 38. (#260)
+
 ## [0.5.4] - 2024-01-15
 
 ### 🚀 Major Features Added

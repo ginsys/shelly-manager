@@ -111,8 +111,7 @@ import {
   downloadExportWithName,
   previewRestore,
   executeRestore,
-  type BackupRequest, 
-  type BackupItem, 
+  type BackupItem,
   type BackupStatistics,
     type RestoreRequest,
     type RestorePreview
@@ -121,7 +120,6 @@ import {
   import { useRoute } from 'vue-router'
 import api from '@/api/client'
 import type { Device, Metadata } from '@/api/types'
-import DataTable from '@/components/DataTable.vue'
 import PaginationBar from '@/components/PaginationBar.vue'
 import BackupStatisticsComponent from '@/components/backup/BackupStatistics.vue'
 import BackupFilterBar from '@/components/backup/BackupFilterBar.vue'
@@ -144,9 +142,6 @@ const availableDevices = ref<Device[]>([])
 const meta = ref<Metadata>()
 const contentExports = ref<any[]>([])
 // Create Export state
-const showCreateForm = ref(false)
-const createFormat = ref<'json' | 'yaml' | 'sma'>('json')
-const outputDir = ref('./data/exports')
   const jsonOptions = reactive({ pretty: true, include_discovered: true })
   const yamlOptions = reactive({ include_discovered: true })
   const jsonCompression = ref<'none'|'gzip'|'zip'>('none')
@@ -159,10 +154,8 @@ const smaOptions = reactive({
   include_system_settings: true,
   exclude_sensitive: true,
 })
-const createLoading = ref(false)
-const createError = ref('')
 const loading = ref(false)
-const { error: errorObj, hasError, setError, clearError } = useError()
+const { error: errorObj, setError, clearError } = useError()
 const error = computed(() => errorObj.value?.message || '')
 
 // Filters
@@ -284,41 +277,6 @@ async function fetchContentExports() {
   } catch (err) {
     console.error('Failed to fetch content exports:', err)
     contentExports.value = []
-  }
-}
-
-function closeCreateModal() {
-  showCreateForm.value = false
-  createError.value = ''
-}
-
-async function createExport() {
-  createLoading.value = true
-  createError.value = ''
-  try {
-    if (createFormat.value === 'json') {
-      await createJSONExport({ output_path: outputDir.value, ...jsonOptions })
-    } else if (createFormat.value === 'yaml') {
-      await createYAMLExport({ output_path: outputDir.value, ...yamlOptions })
-    } else {
-      await createSMAExport(
-        { output_path: outputDir.value, compression_level: smaOptions.compression_level, include_checksums: true },
-        {
-          include_discovered: smaOptions.include_discovered,
-          include_network_settings: smaOptions.include_network_settings,
-          include_plugin_configs: smaOptions.include_plugin_configs,
-          include_system_settings: smaOptions.include_system_settings,
-        },
-        {}
-      )
-    }
-    showMessage('Export created successfully', 'success')
-    closeCreateModal()
-    await fetchContentExports()
-  } catch (err: any) {
-    createError.value = err.message || 'Failed to create export'
-  } finally {
-    createLoading.value = false
   }
 }
 
@@ -477,31 +435,6 @@ async function createBackupPanel() {
   }
 }
 
-function applyIntervalPreset() {
-  if (schedulePreset.value) {
-    scheduleInterval.value = schedulePreset.value
-  }
-}
-
-/**
- * Poll backup result until completion
- */
-function pollBackupResult(backupId: string) {
-  const poll = async () => {
-    try {
-      // This would check the backup status
-      // For now just refresh the list after a delay
-      setTimeout(() => {
-        fetchBackups()
-      }, 2000)
-    } catch (err) {
-      console.error('Polling error:', err)
-    }
-  }
-  
-  poll()
-}
-
 /**
  * Download a backup file
  */
@@ -639,24 +572,6 @@ function showMessage(text: string, type: 'success' | 'error') {
     }, 5000)
   }
 }
-
-/**
- * Format file size
- */
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-/**
- * Format date
- */
-  function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleString()
-  }
 
   const route = useRoute()
 

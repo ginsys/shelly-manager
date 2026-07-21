@@ -214,7 +214,7 @@ const store = useMetricsStore()
 const currentTime = ref(Date.now())
 
 // Error handling with structured context
-const { error: errorObj, hasError, setError, clearError } = useError()
+const { error: errorObj, setError, clearError } = useError()
 const error = computed(() => errorObj.value?.message || null)
 
 // Advanced metrics state

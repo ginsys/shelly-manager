@@ -101,7 +101,6 @@ import {
   type GitOpsExportItem,
   type GitOpsExportStatistics,
   type GitOpsExportResult,
-  type GitOpsExportPreview,
   type GitOpsIntegrationStatus
 } from '@/api/export'
 import type { Device, Metadata } from '@/api/types'
@@ -128,7 +127,7 @@ const integrationStatus = ref<GitOpsIntegrationStatus | null>(null)
 const availableDevices = ref<Device[]>([])
 const meta = ref<Metadata>()
 const loading = ref(false)
-const { error: errorObj, hasError, setError, clearError } = useError()
+const { error: errorObj, setError, clearError } = useError()
 const error = computed(() => errorObj.value?.message || '')
 
 // Filters
@@ -293,7 +292,7 @@ async function handlePreviewExport(request: GitOpsExportRequest) {
 /**
  * Poll export result until completion
  */
-function pollExportResult(exportId: string) {
+function pollExportResult(_exportId: string) {
   const poll = async () => {
     try {
       // This would check the export status

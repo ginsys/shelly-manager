@@ -18,7 +18,7 @@ export function useError() {
   function normalizeError(err: unknown, context?: ErrorContext): AppError {
     // Handle axios errors with backend error structure
     if (isAxiosError(err)) {
-      const backendError = err.response?.data?.error
+      const backendError = (err.response?.data as { error?: { code?: string; message?: string; details?: string } } | undefined)?.error
 
       if (backendError) {
         // Backend returned structured error

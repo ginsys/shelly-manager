@@ -16,7 +16,6 @@ import {
   type ConfigStatusData,
   type DesiredConfigData,
   type DeviceConfiguration,
-  type DeviceTemplatesData,
   type ConfigVerifyData,
   verifyDeviceConfigNew,
 } from '@/api/configNew'
