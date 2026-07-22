@@ -33,6 +33,20 @@ All notable changes to this project are documented here. The project follows Con
   `restoreEnabled` prop. (#260)
 
 ### Changed
+- Enforce the frontend `vue-tsc` baseline in CI as a strict per-file ratchet
+  (#254). The 117 → 30 burn-down was previously unprotected — `typecheck` ran in
+  neither `make test-ci` nor any workflow, so the count could creep back
+  silently. `ui/typecheck-baseline.json` now pins per-file counts; the gate fails
+  if any count rises, if a new file reports errors, **and** if counts drop until
+  the baseline is regenerated, so every improvement is locked in by the same PR
+  that makes it. The updater is monotonic (it refuses to raise the baseline, so a
+  regression cannot be blessed by re-running it); renames go through a narrow
+  `--move old=new` that requires the old file to be gone and the new one present.
+  Parsing is fail-closed — unrecognised compiler output, a crashed or
+  signal-killed compiler, unexpected stderr, or a mismatched exit status all fail
+  rather than being read as "no errors", and never rewrite the baseline. Covered
+  by 74 tests. Note raw `npm run typecheck` remains red (30 known errors, tracked
+  by #260); `npm run typecheck:baseline` is the gate. (#254)
 - Cleaned up the frontend type-check backlog (#260): removed dead code
   (unused imports, the never-mounted `SMAImportForm` component, and orphaned
   helpers in `BackupManagementPage`) and applied minimal, contract-preserving

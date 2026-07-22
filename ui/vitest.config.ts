@@ -11,6 +11,7 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/scripts/**',           // node:test suites (typecheck ratchet tooling)
       '**/tests/e2e/**',        // Playwright E2E tests
       '**/tests/fixtures/**',   // Playwright test fixtures
       '**/.playwright/**',      // Playwright cache
