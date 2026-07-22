@@ -74,6 +74,23 @@ describe.each([
     expect(resize).toHaveBeenCalledOnce()
   })
 
+  it('does not initialize or leak a resize listener when unmounted before the imports resolve', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    // Mount and unmount synchronously: onMounted is still suspended on its first
+    // `await import(...)`, so the continuation runs after the component is gone.
+    const w = mount(Component, { props: { options: {} } })
+    w.unmount()
+
+    await flushPromises()
+
+    expect(init).not.toHaveBeenCalled()
+    expect(addSpy).not.toHaveBeenCalledWith('resize', expect.any(Function))
+    // And nothing is left listening on the window.
+    window.dispatchEvent(new Event('resize'))
+    expect(resize).not.toHaveBeenCalled()
+    addSpy.mockRestore()
+  })
+
   it('disposes the chart and drops the resize listener on unmount', async () => {
     const removeSpy = vi.spyOn(window, 'removeEventListener')
     wrapper = mount(Component, { props: { options: {} } })
