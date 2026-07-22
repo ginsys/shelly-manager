@@ -3,55 +3,60 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch, shallowRef } from 'vue'
+import { onMounted, onUnmounted, ref, watch, shallowRef } from 'vue'
+import type { ECharts } from 'echarts/core'
 
 const props = defineProps<{ options: any }>()
 const root = ref<HTMLDivElement>()
 
-// Use shallowRef for large objects like echarts instances
-const chartRef = shallowRef(null)
+// shallowRef: echarts instances are large and must not be made deeply reactive
+const chartRef = shallowRef<ECharts | null>(null)
 
-// Lazy load echarts only when component is mounted
-let echarts: any = null
+// echarts.init, resolved lazily on mount so the library stays out of the initial bundle
+let echartsInit: typeof import('echarts/core').init | null = null
 
 onMounted(async () => {
-  if (process.env.NODE_ENV === 'development') {
-    // Use CDN in development for faster rebuilds
-    echarts = await import('https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.esm.js')
-  } else {
-    // Bundle in production - lazy load the entire echarts module
-    const { init } = await import('echarts/core')
-    const { BarChart } = await import('echarts/charts')
-    const {
-      TitleComponent,
-      TooltipComponent,
-      LegendComponent,
-      GridComponent
-    } = await import('echarts/components')
-    const { CanvasRenderer } = await import('echarts/renderers')
-    const { use } = await import('echarts/core')
+  // Lazy-load the installed echarts package (tree-shaken core + only what we render)
+  const core = await import('echarts/core')
+  const { BarChart } = await import('echarts/charts')
+  const {
+    TitleComponent,
+    TooltipComponent,
+    LegendComponent,
+    GridComponent
+  } = await import('echarts/components')
+  const { CanvasRenderer } = await import('echarts/renderers')
 
-    // Register components
-    use([
-      TitleComponent,
-      TooltipComponent,
-      LegendComponent,
-      GridComponent,
-      BarChart,
-      CanvasRenderer
-    ])
-
-    echarts = { init }
-  }
+  core.use([
+    TitleComponent,
+    TooltipComponent,
+    LegendComponent,
+    GridComponent,
+    BarChart,
+    CanvasRenderer
+  ])
+  echartsInit = core.init
 
   initChart()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  chartRef.value?.dispose()
+  chartRef.value = null
 })
 
 const initChart = () => {
-  if (root.value && echarts) {
-    chartRef.value = echarts.init(root.value)
-    chartRef.value.setOption(props.options || {})
+  if (root.value && echartsInit) {
+    const chart = echartsInit(root.value)
+    chartRef.value = chart
+    chart.setOption(props.options || {})
   }
+}
+
+const handleResize = () => {
+  chartRef.value?.resize()
 }
 
 watch(() => props.options, (opt) => {
