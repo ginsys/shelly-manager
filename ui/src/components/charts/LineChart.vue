@@ -14,6 +14,8 @@ const chartRef = shallowRef<ECharts | null>(null)
 
 // echarts.init, resolved lazily on mount so the library stays out of the initial bundle
 let echartsInit: typeof import('echarts/core').init | null = null
+// Set on unmount so a still-pending dynamic import can't initialize a dead component
+let unmounted = false
 
 onMounted(async () => {
   // Lazy-load the installed echarts package (tree-shaken core + only what we render)
@@ -26,6 +28,11 @@ onMounted(async () => {
     GridComponent
   } = await import('echarts/components')
   const { CanvasRenderer } = await import('echarts/renderers')
+
+  // The imports are async: onUnmounted may already have run (e.g. navigating away
+  // on a cold cache). Bail out, or we'd init a detached node and leak the resize
+  // listener that unmount can no longer remove.
+  if (unmounted) return
 
   core.use([
     TitleComponent,
@@ -42,6 +49,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  unmounted = true
   window.removeEventListener('resize', handleResize)
   chartRef.value?.dispose()
   chartRef.value = null
