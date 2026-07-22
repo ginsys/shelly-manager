@@ -627,7 +627,10 @@ func TestConfigTemplateScopeMigration_PreservesExtendedColumns(t *testing.T) {
 			"VALUES ('rich', 'SHSW-1', '{\"a\":1}', 2, '{\"ssid\":\"x\"}', 1)").Error)
 	closeRawSQLite(t, db)
 
-	manager := mustStartManager(t, path)
+	// The full boot sequence, not just the Manager: the concern is both that the
+	// constraint rebuild preserves these columns and that the configuration
+	// service's own migration afterwards does not re-add them empty.
+	manager := startFullStack(t, path)
 
 	var got struct {
 		Scope      string
