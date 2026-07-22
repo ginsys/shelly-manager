@@ -38,6 +38,14 @@ All notable changes to this project are documented here. The project follows Con
   helpers in `BackupManagementPage`) and applied minimal, contract-preserving
   type fixes (DOM event casts, null-guards, value coercion). Behavior is
   unchanged; `vue-tsc` errors dropped from 67 to 38. (#260)
+- Charts now always load the installed `echarts` package. `BarChart`/`LineChart`
+  had a development-only branch importing a pinned echarts 5.5.0 from
+  `cdn.jsdelivr.net` while the repo ships echarts 6.1.0 — a dev/prod version skew
+  and an external network dependency. The paired `rollupOptions.external` dev
+  branch was removed too. Chart instance refs are now typed
+  (`shallowRef<ECharts | null>`), and the previously missing lifecycle was added:
+  resize on window resize, dispose plus listener removal on unmount. `vue-tsc`
+  errors dropped from 38 to 30. (#260)
 
 ## [0.5.4] - 2024-01-15
 
