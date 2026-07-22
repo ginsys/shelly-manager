@@ -137,11 +137,18 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Standardized test execution for CI
 
 #### `make test-ci`
-**Purpose**: Complete CI test suite with all validations (deps → coverage+race → coverage threshold → lint)  
+**Purpose**: Complete CI test suite with all validations (Go version → deps → coverage+race → coverage threshold → lint → frontend type-check ratchet → vitest)
+
 **When to use**:
 - Main CI/CD pipeline
 - Comprehensive validation
 - Quality gate enforcement
+
+#### `make typecheck-check`
+
+- **Purpose**: Frontend `vue-tsc` baseline ratchet. Runs the tooling's own parser tests, then compares per-file error counts against `ui/typecheck-baseline.json`.
+- **Behaviour**: fails if any file's count rises, if a new file reports errors, **and** if counts drop — a drop means the baseline is stale and must be regenerated in the same PR with `cd ui && npm run typecheck:update-baseline`. That strictness is what makes each improvement permanent.
+- **Note**: raw `npm run typecheck` is still red (30 known pre-existing errors, tracked by #260); `npm run typecheck:baseline` is the gate.
 
 ### 5. Performance and Development Tests
 
@@ -228,7 +235,8 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 The GitHub Actions workflow (`test.yml`) uses these steps:
 
-- Main test job: `make test-ci` (installs deps, runs coverage+race, enforces 27.5% threshold, runs lint via golangci-lint 1.60.3 read from `mise.toml`).
+- Main test job: `make test-ci` (installs deps, runs coverage+race, enforces 27.5% threshold, runs lint via golangci-lint 1.60.3 read from `mise.toml`, enforces the frontend type-check ratchet, and runs vitest).
+- Frontend Unit Tests job: `npm ci` → type-check baseline tooling tests → `vue-tsc` baseline ratchet → vitest with coverage. The tooling tests run first so a broken parser is reported as its own failure rather than as a gate verdict.
 - Matrix job: `make test-matrix` on Linux/macOS across Go versions (fast, race+short).
 - Windows job (informational): `go test -v -race -short ./...` without `make`.
 - Build job: `make build` and publish artifact.
@@ -384,7 +392,7 @@ make test-coverage  # Full coverage report
 ```
 
 ### Required Before Commit
-- Run `make test-ci` for local/CI parity (installs deps, runs coverage+race, enforces coverage threshold, and lint). This is the gate used by CI and should pass locally before committing or opening a PR.
+- Run `make test-ci` for local/CI parity (installs deps, runs coverage+race, enforces coverage threshold, lint, the frontend type-check ratchet, and vitest). This is the gate used by CI and should pass locally before committing or opening a PR.
 
 ### CI Pipeline Suggestions
 ```yaml

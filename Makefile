@@ -3,6 +3,7 @@
 	test test-unit test-integration test-race test-security test-all test-extra test-vitest \
 	test-coverage test-coverage-ci test-coverage-check \
 	test-ci check-go-version upgrade-go-version \
+	ui-deps ui-deps-check typecheck-check \
 	ui-dev ui-build ui-preview test-e2e test-e2e-dev test-e2e-dev-ui test-smoke validate-integration \
 	benchmark example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
 
@@ -62,8 +63,9 @@ help:
 	@echo "  $(WHITE)test-coverage-check$(NC) Check coverage threshold (27.5% minimum)"
 	@echo ""
 	@echo "$(CYAN)CI$(NC)"
-	@echo "  $(WHITE)test-ci$(NC)             Complete CI test suite $(YELLOW)→ check-go-version, deps, test-coverage-ci, test-coverage-check, lint, test-vitest$(NC)"
+	@echo "  $(WHITE)test-ci$(NC)             Complete CI test suite $(YELLOW)→ check-go-version, deps, test-coverage-ci, test-coverage-check, lint, typecheck-check, test-vitest$(NC)"
 	@echo "  $(WHITE)test-vitest$(NC)         Run frontend unit tests (vitest)"
+	@echo "  $(WHITE)typecheck-check$(NC)     Check the vue-tsc baseline ratchet (and its parser tests)"
 	@echo ""
 	@echo "$(CYAN)LINTING & QUALITY$(NC)"
 	@echo "  $(WHITE)lint$(NC)                Run go vet + golangci-lint"
@@ -125,7 +127,7 @@ help:
 	@echo "$(CYAN)DEPENDENCY OVERVIEW$(NC)"
 	@echo "  build              $(YELLOW)→$(NC) build-manager, build-provisioner"
 	@echo "  start              $(YELLOW)→$(NC) ui-build (if needed) $(YELLOW)→$(NC) ui-deps $(YELLOW)→$(NC) run"
-	@echo "  test-ci            $(YELLOW)→$(NC) check-go-version $(YELLOW)→$(NC) deps $(YELLOW)→$(NC) test-coverage-ci $(YELLOW)→$(NC) test-coverage-check $(YELLOW)→$(NC) lint $(YELLOW)→$(NC) test-vitest"
+	@echo "  test-ci            $(YELLOW)→$(NC) check-go-version $(YELLOW)→$(NC) deps $(YELLOW)→$(NC) test-coverage-ci $(YELLOW)→$(NC) test-coverage-check $(YELLOW)→$(NC) lint $(YELLOW)→$(NC) typecheck-check $(YELLOW)→$(NC) test-vitest"
 	@echo "  test-coverage      $(YELLOW)→$(NC) generates coverage.out, coverage.html"
 	@echo "  test-coverage-ci   $(YELLOW)→$(NC) generates coverage.out, coverage.html"
 	@echo "  test-coverage-check $(YELLOW)→$(NC) requires coverage.out"
@@ -254,26 +256,48 @@ test-coverage-check:
 # CI TESTS
 # ==============================================================================
 
+# Frontend dependency stamp: lets CI-oriented targets share a single npm ci,
+# while still reinstalling whenever either manifest changes. `make ui-deps`
+# remains an explicit, unconditional reinstall.
+UI_DEPS_STAMP := ui/node_modules/.deps-stamp
+
+$(UI_DEPS_STAMP): ui/package.json ui/package-lock.json
+	@echo "Installing UI dependencies (manifest changed or missing)..."
+	cd ui && npm ci
+	@touch $@
+
+ui-deps-check: $(UI_DEPS_STAMP)
+
+# Frontend type-check ratchet (#254): parser tests first, then the gate itself,
+# so a broken parser is reported as its own failure rather than a gate result.
+typecheck-check: ui-deps-check
+	@echo "Running type-check baseline parser tests..."
+	cd ui && npm run test:typecheck-baseline
+	@echo "Checking vue-tsc baseline (ratchet)..."
+	cd ui && npm run typecheck:baseline
+
 # Frontend unit tests (vitest)
-test-vitest:
+test-vitest: ui-deps-check
 	@echo "Running frontend unit tests (vitest)..."
-	cd ui && npm ci && npx vitest run --coverage
+	cd ui && npx vitest run --coverage
 
 # Complete CI test suite - matches GitHub Actions test.yml workflow exactly
 # This is the most important test to run locally before committing
 test-ci:
 	@echo "Running complete CI test suite (matches GitHub Actions)..."
-	@echo "Step 1/6: Validating Go version consistency..."
+	@echo "Step 1/7: Validating Go version consistency..."
 	$(MAKE) check-go-version
-	@echo "Step 2/6: Installing dependencies..."
+	@echo "Step 2/7: Installing dependencies..."
 	$(MAKE) deps
-	@echo "Step 3/6: Running tests with coverage and race detection..."
+	@echo "Step 3/7: Running tests with coverage and race detection..."
 	$(MAKE) test-coverage-ci
-	@echo "Step 4/6: Checking coverage threshold..."
+	@echo "Step 4/7: Checking coverage threshold..."
 	$(MAKE) test-coverage-check
-	@echo "Step 5/6: Running linting..."
+	@echo "Step 5/7: Running linting..."
 	$(MAKE) lint
-	@echo "Step 6/6: Running frontend unit tests (vitest)..."
+	@echo "Step 6/7: Checking frontend type-check baseline..."
+	$(MAKE) typecheck-check
+	@echo "Step 7/7: Running frontend unit tests (vitest)..."
 	$(MAKE) test-vitest
 	@echo "✅ All CI tests passed! Ready to commit."
 
@@ -496,6 +520,7 @@ example-provisioner-provision:
 ui-deps:
 	@echo "Installing UI dependencies..."
 	@cd ui && if [ -f package-lock.json ]; then npm ci; else npm install; fi
+	@touch $(UI_DEPS_STAMP)
 
 # Run the SPA dev server (Vite)
 ui-dev: ui-deps

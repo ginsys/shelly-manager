@@ -15,8 +15,9 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backe
 - `make run` / `make run-provisioner`: run manager/provisioner locally.
 - `make test`: fast test pass; `make test-full`: full suite.
 - `make test-coverage-ci`: coverage + race, writes `coverage.html`.
-- `make test-ci`: replicates CI (deps, coverage, threshold check, lint). Run before commits.
-- `make lint` / `make lint-ci`: formatting, vet, golangci-lint.
+- `make test-ci`: replicates CI (deps, coverage, threshold check, lint, frontend type-check ratchet, vitest). Run before commits.
+- `make lint`: formatting, vet, golangci-lint.
+- `make typecheck-check`: frontend `vue-tsc` baseline ratchet (see `ui/typecheck-baseline.json`).
 - `make format`: `gofmt` + `goimports`; `make dev-setup`: init local dev (hooks).
 - Docker: `make docker-build`, `make docker-run`, `make docker-stop`.
 

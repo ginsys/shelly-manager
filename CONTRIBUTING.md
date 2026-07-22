@@ -7,9 +7,10 @@ Thanks for your interest in contributing! This document summarizes the local wor
 - Install tool versions pinned by `mise.toml` (optional but recommended):
   - `mise install`
 - Useful commands (same as CI):
-  - `make test-ci` — deps → race+coverage → coverage gate → lint (run before every commit)
+  - `make test-ci` — deps → race+coverage → coverage gate → lint → frontend type-check ratchet → vitest (run before every commit)
   - `make test` / `make test-full` — fast tests / full tests (network included)
-  - `make lint-ci` — golangci-lint
+  - `make lint` — gofmt, vet, golangci-lint
+  - `make typecheck-check` — frontend `vue-tsc` baseline ratchet (`ui/typecheck-baseline.json`); lock in fixes with `cd ui && npm run typecheck:update-baseline`
   - `make ui-dev` / `make ui-build` — SPA dev/build (see `ui/README.md`)
 
 ## Branching & Pull Requests

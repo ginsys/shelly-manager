@@ -1,0 +1,9 @@
+{
+  "src/components/ExportPreviewForm.vue": 10,
+  "src/components/ImportPreviewForm.vue": 8,
+  "src/components/PluginConfigForm.vue": 2,
+  "src/components/ScheduleForm.vue": 4,
+  "src/pages/DriftSchedulesPage.vue": 2,
+  "src/pages/PluginManagementPage.vue": 3,
+  "src/stores/plugin.ts": 1
+}
