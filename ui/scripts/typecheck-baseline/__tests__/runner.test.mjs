@@ -41,7 +41,6 @@ function makeFs(initial = {}) {
   }
 }
 
-const silent = () => {}
 const capture = () => {
   const lines = []
   return { sink: (msg) => lines.push(String(msg)), lines, text: () => lines.join('\n') }
