@@ -1052,8 +1052,11 @@ func TestTemplateOperations(t *testing.T) {
 	service, db := setupTestService(t)
 
 	t.Run("CreateTemplate", func(t *testing.T) {
+		// Scope is required: a template stored without one cannot be migrated
+		// later (#275), so the write path now rejects it.
 		template := &ConfigTemplate{
 			Name:       "New Template",
+			Scope:      ScopeDeviceType,
 			DeviceType: "SHSW-1",
 			Config:     json.RawMessage(`{"test": "create"}`),
 		}
@@ -1091,6 +1094,7 @@ func TestTemplateOperations(t *testing.T) {
 		// Create template
 		template := &ConfigTemplate{
 			Name:       "Update Test",
+			Scope:      ScopeDeviceType,
 			DeviceType: "SHSW-1",
 			Config:     json.RawMessage(`{"original": true}`),
 		}

@@ -8,7 +8,7 @@ import (
 // ResolutionPolicy represents automated resolution policies
 type ResolutionPolicy struct {
 	ID          uint   `json:"id" gorm:"primaryKey"`
-	Name        string `json:"name" gorm:"uniqueIndex;not null"`
+	Name        string `json:"name" gorm:"size:191;uniqueIndex;not null"`
 	Description string `json:"description"`
 	Enabled     bool   `json:"enabled" gorm:"default:true"`
 
@@ -174,7 +174,7 @@ type BatchResolutionRequest struct {
 // ResolutionSchedule represents scheduled resolution windows
 type ResolutionSchedule struct {
 	ID          uint   `json:"id" gorm:"primaryKey"`
-	Name        string `json:"name" gorm:"uniqueIndex;not null"`
+	Name        string `json:"name" gorm:"size:191;uniqueIndex;not null"`
 	Description string `json:"description"`
 	Enabled     bool   `json:"enabled" gorm:"default:true"`
 

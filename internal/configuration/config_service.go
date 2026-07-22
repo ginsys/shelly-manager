@@ -550,17 +550,7 @@ func (s *ConfigurationService) GetConfigStatus(deviceID uint) (*ConfigStatus, er
 }
 
 func (s *ConfigurationService) validateTemplateScope(template *ServiceConfigTemplate) error {
-	switch template.Scope {
-	case "global", "group":
-		return nil
-	case "device_type":
-		if template.DeviceType == "" {
-			return ErrDeviceTypeRequired
-		}
-		return nil
-	default:
-		return ErrInvalidScope
-	}
+	return ValidateTemplateScope(template.Scope, template.DeviceType)
 }
 
 func (s *ConfigurationService) validateTemplateIDs(templateIDs []uint) error {
