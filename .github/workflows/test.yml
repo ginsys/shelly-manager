@@ -135,6 +135,65 @@ jobs:
     - name: Check test coverage threshold
       run: make test-coverage-check
 
+  database-providers:
+    name: Database Provider Migration
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 15
+
+    # The pre-migration schema fixups run on every provider, so the legacy
+    # upgrade path is exercised against real PostgreSQL and MySQL servers and
+    # not only SQLite.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: '.go-version'
+        cache: true
+
+    # Deliberately narrow: setting POSTGRES_TEST_HOST for the whole package
+    # would also switch on the repository's other env-gated PostgreSQL suites,
+    # which is a separate CI expansion and not this job's purpose.
+    - name: Run provider migration matrix
+      env:
+        POSTGRES_TEST_HOST: 127.0.0.1
+        POSTGRES_TEST_PORT: '5432'
+        POSTGRES_TEST_USER: postgres
+        POSTGRES_TEST_PASSWORD: postgres
+        MYSQL_TEST_HOST: 127.0.0.1
+        MYSQL_TEST_PORT: '3306'
+        MYSQL_TEST_USER: root
+        MYSQL_TEST_PASSWORD: root
+      run: go test ./internal/database -run '^TestConfigTemplateScopeMigrationProviders$' -v
+
   vitest:
     name: Frontend Unit Tests
     runs-on: ubuntu-latest

@@ -91,8 +91,15 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 		return fmt.Errorf("failed to configure connection pool: %w", m.sanitizeError(err))
 	}
 
+	// Mark the handle live before probing it: Ping (and updateProviderVersion)
+	// refuse to run while connected is false, so pinging first made Connect
+	// fail unconditionally with "not connected to database". Rolled back below
+	// if the probe fails.
+	m.connected = true
+
 	// Test the connection
 	if err := m.Ping(); err != nil {
+		m.connected = false
 		m.db = nil
 		return fmt.Errorf("failed to ping database: %w", m.sanitizeError(err))
 	}
@@ -104,7 +111,6 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 		}).Warn("Failed to get MySQL version")
 	}
 
-	m.connected = true
 	m.logger.WithFields(map[string]any{
 		"provider": "mysql",
 		"host":     m.getHostFromDSN(dsn),

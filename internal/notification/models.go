@@ -8,7 +8,7 @@ import (
 // NotificationChannel represents a configured notification destination
 type NotificationChannel struct {
 	ID          uint            `json:"id" gorm:"primaryKey"`
-	Name        string          `json:"name" gorm:"uniqueIndex;not null"`
+	Name        string          `json:"name" gorm:"size:191;uniqueIndex;not null"`
 	Type        string          `json:"type" gorm:"not null"` // "email", "webhook", "slack", "discord"
 	Enabled     bool            `json:"enabled" gorm:"default:true"`
 	Config      json.RawMessage `json:"config" gorm:"type:text"` // Channel-specific configuration
@@ -47,7 +47,7 @@ type SlackConfig struct {
 // NotificationRule represents when and how to send notifications
 type NotificationRule struct {
 	ID          uint                `json:"id" gorm:"primaryKey"`
-	Name        string              `json:"name" gorm:"uniqueIndex;not null"`
+	Name        string              `json:"name" gorm:"size:191;uniqueIndex;not null"`
 	Description string              `json:"description"`
 	Enabled     bool                `json:"enabled" gorm:"default:true"`
 	ChannelID   uint                `json:"channel_id" gorm:"not null"`
@@ -119,7 +119,7 @@ const (
 // NotificationTemplate represents message templates
 type NotificationTemplate struct {
 	ID            uint            `json:"id" gorm:"primaryKey"`
-	Name          string          `json:"name" gorm:"uniqueIndex;not null"`
+	Name          string          `json:"name" gorm:"size:191;uniqueIndex;not null"`
 	Type          string          `json:"type"`    // "email", "webhook", "slack"
 	Subject       string          `json:"subject"` // For email
 	Body          string          `json:"body" gorm:"type:text"`

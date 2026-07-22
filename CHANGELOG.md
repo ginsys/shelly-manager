@@ -19,6 +19,37 @@ All notable changes to this project are documented here. The project follows Con
   (#246)
 
 ### Fixed
+- Existing databases could not start the server after upgrading: AutoMigrate
+  emitted `ALTER TABLE config_templates ADD scope text NOT NULL`, which SQLite
+  refuses on a populated table and PostgreSQL rejects for the NULLs it would
+  create. Startup now repairs a legacy schema before AutoMigrate runs — a
+  read-only preflight that classifies every row, then a transactional backfill,
+  then per-column `NOT NULL` tightening (only where a column is still nullable).
+  A missing scope is derived from the legacy `device_type`, preserving or
+  narrowing applicability but never widening it: exactly `all` becomes `global`,
+  any other concrete type becomes `device_type`, and an empty or NULL device type
+  aborts startup with **every** offending template listed and a remedy. A NULL
+  `config` aborts the same way rather than being invented as `{}`. The repair is
+  idempotent and resumes safely from a partially completed run. A permanent
+  `default:'global'` column default was rejected as the fix: it would have
+  silently accepted scope-less inserts forever. See
+  `docs/guides/database-upgrade.md`. (#275)
+- Closed the write path that recreates those rows: `POST`/`PUT
+  /api/v1/config/templates` validated nothing and wrote straight to the
+  database, so a client could store an empty or nonsense scope that the next
+  startup would refuse to migrate. Both paths now share one validator with the
+  newer repository path, and a violation returns a standard-envelope **400**
+  instead of the blanket 500 the handlers previously produced. (#275)
+- The PostgreSQL and MySQL providers could never connect: `Connect()` called
+  `Ping()` before setting `connected`, and `Ping()` refuses while `connected` is
+  false, so every attempt failed with `failed to ping database: not connected to
+  database`. Only SQLite was reachable in practice. (#275)
+- MySQL could not migrate the schema at all, which the new provider CI job
+  surfaced. `TEXT` columns cannot carry a `DEFAULT` (`Device.TemplateIDs`,
+  `Overrides` and `DesiredConfig` now seed their empty documents in a
+  `BeforeSave` hook instead), and indexed string columns need a bounded length,
+  so all 24 of them are now `size:191` — the largest utf8mb4 prefix that fits
+  MySQL's 767-byte index limit. (#275)
 - Repaired the SMA import round-trip, which was broken end to end. Decompression
   called the non-existent `pako.gunzip` with the obsolete `{ to: 'string' }`
   option; and checksum validation always failed because the generator hashed the
@@ -31,6 +62,13 @@ All notable changes to this project are documented here. The project follows Con
   exist (#249). The previous handlers recursed into themselves and targeted
   missing `/import/restore*` routes; `BackupList` now fails closed via a
   `restoreEnabled` prop. (#260)
+
+### Added
+- CI job `database-providers`, running the legacy-schema upgrade matrix against
+  health-checked `postgres:16` and `mysql:8` service containers. The startup
+  repair runs on every provider, so it is no longer verified on SQLite alone.
+  The job pins the one test by name rather than exporting the provider env vars
+  package-wide, which would also enable unrelated env-gated suites. (#275)
 
 ### Changed
 - Enforce the frontend `vue-tsc` baseline in CI as a strict per-file ratchet

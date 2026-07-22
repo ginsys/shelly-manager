@@ -91,8 +91,15 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 		return fmt.Errorf("failed to configure connection pool: %w", p.sanitizeError(err))
 	}
 
+	// Mark the handle live before probing it: Ping (and updateProviderVersion)
+	// refuse to run while connected is false, so pinging first made Connect
+	// fail unconditionally with "not connected to database". Rolled back below
+	// if the probe fails.
+	p.connected = true
+
 	// Test the connection
 	if err := p.Ping(); err != nil {
+		p.connected = false
 		p.db = nil
 		return fmt.Errorf("failed to ping database: %w", p.sanitizeError(err))
 	}
@@ -104,7 +111,6 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 		}).Warn("Failed to get PostgreSQL version")
 	}
 
-	p.connected = true
 	p.logger.WithFields(map[string]any{
 		"provider": "postgresql",
 		"host":     p.getHostFromDSN(dsn),

@@ -32,17 +32,24 @@ const (
 
 // ConfigTemplate represents a reusable configuration template
 type ConfigTemplate struct {
-	ID          uint            `json:"id" gorm:"primaryKey"`
-	Name        string          `json:"name" gorm:"uniqueIndex;not null"`
-	Description string          `json:"description"`
-	Scope       string          `json:"scope" gorm:"not null"` // "global", "group", "device_type"
-	DeviceType  string          `json:"device_type"`           // e.g., "SHSW-1", "SHPLG-S", or "all"
-	Generation  int             `json:"generation"`            // 1 for Gen1, 2 for Gen2+, 0 for all
-	Config      json.RawMessage `json:"config" gorm:"type:text"`
-	Variables   json.RawMessage `json:"variables" gorm:"type:text"` // Variable definitions for template
-	IsDefault   bool            `json:"is_default"`                 // Default template for device type
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID          uint   `json:"id" gorm:"primaryKey"`
+	Name        string `json:"name" gorm:"size:191;uniqueIndex;not null"`
+	Description string `json:"description"`
+	// scope and device_type are indexed by the sibling models that share this
+	// table (see #280); config must stay `not null` here too. Three structs
+	// AutoMigrate config_templates in sequence at startup, so a single
+	// disagreement makes them fight: this field being nullable had GORM relax
+	// the constraint on every boot, which the pre-migration fixup then
+	// re-tightened — rebuilding the table twice per start and dropping any
+	// index the operator had added.
+	Scope      string          `json:"scope" gorm:"size:191;not null;index"` // "global", "group", "device_type"
+	DeviceType string          `json:"device_type" gorm:"size:191;index"`    // e.g., "SHSW-1", "SHPLG-S", or "all"
+	Generation int             `json:"generation"`                           // 1 for Gen1, 2 for Gen2+, 0 for all
+	Config     json.RawMessage `json:"config" gorm:"type:text;not null"`
+	Variables  json.RawMessage `json:"variables" gorm:"type:text"` // Variable definitions for template
+	IsDefault  bool            `json:"is_default"`                 // Default template for device type
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
 // DeviceConfig represents a device-specific configuration
@@ -389,7 +396,7 @@ type RecommendedAction struct {
 type DriftTrend struct {
 	ID          uint       `json:"id" gorm:"primaryKey"`
 	DeviceID    uint       `json:"device_id" gorm:"index"`
-	Path        string     `json:"path" gorm:"index"`
+	Path        string     `json:"path" gorm:"size:191;index"`
 	Category    string     `json:"category"`
 	Severity    string     `json:"severity"`
 	FirstSeen   time.Time  `json:"first_seen"`

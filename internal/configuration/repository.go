@@ -21,10 +21,10 @@ type GormConfigRepository struct {
 // This mirrors database.ConfigTemplate but is defined here to avoid import cycles
 type DbConfigTemplate struct {
 	ID          uint            `gorm:"primaryKey" json:"id"`
-	Name        string          `gorm:"uniqueIndex;not null" json:"name"`
+	Name        string          `gorm:"size:191;uniqueIndex;not null" json:"name"`
 	Description string          `json:"description,omitempty"`
-	Scope       string          `gorm:"not null;index" json:"scope"`
-	DeviceType  string          `gorm:"index" json:"device_type,omitempty"`
+	Scope       string          `gorm:"size:191;not null;index" json:"scope"`
+	DeviceType  string          `gorm:"size:191;index" json:"device_type,omitempty"`
 	Config      json.RawMessage `gorm:"type:text;not null" json:"config"`
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
@@ -38,7 +38,7 @@ func (DbConfigTemplate) TableName() string {
 type DbDeviceTag struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	DeviceID  uint      `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"device_id"`
-	Tag       string    `gorm:"not null;index" json:"tag"`
+	Tag       string    `gorm:"size:191;not null;index" json:"tag"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

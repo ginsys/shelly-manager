@@ -53,6 +53,16 @@ func NewManagerWithLogger(config provider.DatabaseConfig, logger *logging.Logger
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	// Repair legacy schemas before AutoMigrate runs. AutoMigrate cannot add a
+	// NOT NULL column to a populated table, so an unrepaired upgrade aborts
+	// startup outright (#275).
+	if err := runPreMigrationFixups(dbProvider.GetDB(), logger); err != nil {
+		if closeErr := dbProvider.Close(); closeErr != nil {
+			logger.WithFields(map[string]any{"closeError": closeErr}).Error("Failed to close database provider after pre-migration error")
+		}
+		return nil, fmt.Errorf("failed to prepare database schema for migration: %w", err)
+	}
+
 	// Auto-migrate all models to ensure schema is up-to-date
 	if err := dbProvider.Migrate(
 		&Device{},

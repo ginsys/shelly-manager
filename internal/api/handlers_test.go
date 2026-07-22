@@ -931,11 +931,14 @@ func TestCreateConfigTemplate(t *testing.T) {
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
+	// The wire field is device_type; the camelCase spelling this test used to
+	// send was silently dropped, so it stored a device_type-scoped template with
+	// no device type — the exact row that later blocks migration (#275).
 	templateReq := map[string]interface{}{
 		"name":        "Test Template",
 		"description": "Test template description",
 		"scope":       "device_type",
-		"deviceType":  "shelly-1",
+		"device_type": "shelly-1",
 		"config":      map[string]interface{}{"relay": map[string]interface{}{"auto_on": true}},
 	}
 	body, _ := json.Marshal(templateReq)
@@ -1273,10 +1276,13 @@ func TestUpdateConfigTemplate(t *testing.T) {
 	testutil.AssertNoError(t, err)
 
 	// Update the template
+	// PUT replaces the row, so scope and device_type have to be sent back — and
+	// under their real wire names — or the update would blank the scope.
 	updateReq := map[string]interface{}{
 		"name":        "Updated Template",
 		"description": "Updated Description",
-		"deviceType":  "shelly-1",
+		"scope":       "device_type",
+		"device_type": "shelly-1",
 		"config":      map[string]interface{}{"relay": map[string]interface{}{"auto_on": false}},
 	}
 	body, _ := json.Marshal(updateReq)

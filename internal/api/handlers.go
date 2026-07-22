@@ -1068,6 +1068,20 @@ func (h *Handler) GetConfigTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateConfigTemplate handles POST /api/v1/config/templates
+// writeTemplateScopeError maps a violation of the template scope invariant to a
+// 400. These handlers previously funnelled every error into a 500, which let a
+// client's malformed scope look like a server fault — and, worse, left the
+// invariant unenforced on this write path (see #275). Matching with errors.Is
+// keeps the mapping intact if the services later wrap these errors with context.
+// Reports whether the error was handled.
+func (h *Handler) writeTemplateScopeError(w http.ResponseWriter, r *http.Request, err error) bool {
+	if !errors.Is(err, configuration.ErrInvalidScope) && !errors.Is(err, configuration.ErrDeviceTypeRequired) {
+		return false
+	}
+	h.responseWriter().WriteValidationError(w, r, err.Error())
+	return true
+}
+
 func (h *Handler) CreateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	var template configuration.ConfigTemplate
 	if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
@@ -1076,6 +1090,9 @@ func (h *Handler) CreateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Service.ConfigSvc.CreateTemplate(&template); err != nil {
+		if h.writeTemplateScopeError(w, r, err) {
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to create config template")
@@ -1102,6 +1119,9 @@ func (h *Handler) UpdateConfigTemplate(w http.ResponseWriter, r *http.Request) {
 
 	template.ID = uint(id)
 	if err := h.Service.ConfigSvc.UpdateTemplate(&template); err != nil {
+		if h.writeTemplateScopeError(w, r, err) {
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"template_id": id,
 			"error":       err.Error(),

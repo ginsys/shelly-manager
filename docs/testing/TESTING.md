@@ -150,6 +150,34 @@ All test commands are organized into logical groups and defined in the `Makefile
 - **Behaviour**: fails if any file's count rises, if a new file reports errors, **and** if counts drop — a drop means the baseline is stale and must be regenerated in the same PR with `cd ui && npm run typecheck:update-baseline`. That strictness is what makes each improvement permanent.
 - **Note**: raw `npm run typecheck` is still red (30 known pre-existing errors, tracked by #260); `npm run typecheck:baseline` is the gate.
 
+#### Database provider migration matrix (CI job `database-providers`)
+
+- **Purpose**: the startup schema repair (`internal/database/migrations.go`) runs
+  on every provider, so the legacy-upgrade path is exercised against real
+  PostgreSQL and MySQL servers, not just SQLite.
+- **Where**: the `database-providers` job in `.github/workflows/test.yml`, using
+  health-checked `postgres:16` and `mysql:8` service containers.
+- **Command**: `go test ./internal/database -run '^TestConfigTemplateScopeMigrationProviders$'`
+- **Deliberately narrow**: the test name is pinned rather than running the whole
+  package with the provider env vars set, because `POSTGRES_TEST_HOST` also
+  switches on the repository's other env-gated PostgreSQL suites. Enabling those
+  is a separate decision, not a side effect of this job.
+- **Running it locally**:
+
+  ```bash
+  docker run -d --rm --name pg -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:16
+  docker run -d --rm --name my -e MYSQL_ROOT_PASSWORD=root -p 53306:3306 mysql:8
+
+  POSTGRES_TEST_HOST=127.0.0.1 POSTGRES_TEST_PORT=55432 \
+  MYSQL_TEST_HOST=127.0.0.1 MYSQL_TEST_PORT=53306 \
+    go test ./internal/database -run '^TestConfigTemplateScopeMigrationProviders$' -v
+  ```
+
+  Each provider skips with a clear message when its server is not configured, so
+  the suite stays green on a workstation without containers. Fixtures use an
+  isolated database per run and are dialect-specific — the SQLite legacy DDL is
+  not portable verbatim.
+
 ### 5. Performance and Development Tests
 
 #### `make benchmark`

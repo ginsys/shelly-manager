@@ -734,11 +734,17 @@ func (s *Service) GetTemplates() ([]ConfigTemplate, error) {
 
 // CreateTemplate creates a new configuration template
 func (s *Service) CreateTemplate(template *ConfigTemplate) error {
+	if err := ValidateTemplateScope(template.Scope, template.DeviceType); err != nil {
+		return err
+	}
 	return s.db.Create(template).Error
 }
 
 // UpdateTemplate updates an existing template
 func (s *Service) UpdateTemplate(template *ConfigTemplate) error {
+	if err := ValidateTemplateScope(template.Scope, template.DeviceType); err != nil {
+		return err
+	}
 	return s.db.Save(template).Error
 }
 
