@@ -612,6 +612,43 @@ func TestConfigTemplateScopeMigration_PartialConstraintRecovery(t *testing.T) {
 	assert.False(t, repeat.changedAnything(), "a completed migration must be a no-op, got %+v", repeat)
 }
 
+// TestConfigTemplateScopeMigration_PreservesExtendedColumns guards the columns
+// that only the wider sibling model knows about (#280). database.ConfigTemplate
+// does not declare generation, variables or is_default, and tightening a
+// constraint on SQLite rebuilds the table — so if that rebuild worked from the
+// model rather than from the table's own DDL, a normal pre-scope upgrade would
+// quietly discard this metadata.
+func TestConfigTemplateScopeMigration_PreservesExtendedColumns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db := openRawSQLite(t, path)
+	require.NoError(t, db.Exec(legacyConfigTemplatesDDL).Error)
+	require.NoError(t, db.Exec(
+		"INSERT INTO config_templates (name, device_type, config, generation, variables, is_default) "+
+			"VALUES ('rich', 'SHSW-1', '{\"a\":1}', 2, '{\"ssid\":\"x\"}', 1)").Error)
+	closeRawSQLite(t, db)
+
+	manager := mustStartManager(t, path)
+
+	var got struct {
+		Scope      string
+		Generation int
+		Variables  string
+		IsDefault  bool
+	}
+	require.NoError(t, manager.GetDB().Raw(
+		"SELECT scope, generation, variables, is_default FROM config_templates WHERE name = 'rich'").
+		Scan(&got).Error)
+
+	assert.Equal(t, "device_type", got.Scope)
+	assert.Equal(t, 2, got.Generation, "generation must survive the constraint rebuild")
+	assert.JSONEq(t, `{"ssid":"x"}`, got.Variables, "variables must survive the constraint rebuild")
+	assert.True(t, got.IsDefault, "is_default must survive the constraint rebuild")
+
+	// The columns themselves must still be there, not just this row's values.
+	columns := columnNames(t, manager.GetDB())
+	assert.Subset(t, columns, []string{"generation", "variables", "is_default"})
+}
+
 // TestDeviceJSONColumnDefaults pins the behaviour that replaced the column
 // DEFAULTs on the device JSON columns. MySQL forbids defaults on TEXT, so the
 // seeding moved into BeforeSave — an unset field must still land as an empty
