@@ -29,10 +29,7 @@ export default defineConfig({
           if (/[\\/]node_modules[\\/](axios|pako)[\\/]/.test(id)) return 'vendor-utils'
           if (/[\\/]node_modules[\\/]quasar[\\/]/.test(id)) return 'vendor-ui'
         }
-      },
-
-      // External dependencies for development (CDN)
-      external: process.env.NODE_ENV === 'development' ? ['echarts'] : []
+      }
     },
 
     // Stricter size limits
