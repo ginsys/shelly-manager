@@ -1,20 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import PluginDetailsView from '../PluginDetailsView.vue'
 import type { Plugin } from '@/api/plugin'
-
-// The plugin store is only used for getPluginStatusClass (the view is read-only).
-const getPluginStatusClass = (status: Plugin['status']) => {
-  if (!status.available) return 'unavailable'
-  if (status.error) return 'error'
-  if (!status.configured) return 'not-configured'
-  if (!status.enabled) return 'disabled'
-  return 'ready'
-}
-
-vi.mock('@/stores/plugin', () => ({
-  usePluginStore: () => ({ getPluginStatusClass }),
-}))
 
 // Slot-passthrough stubs for the Quasar components (the app never installs Quasar).
 const passthrough = (tag: string) => ({
@@ -62,17 +49,20 @@ describe('PluginDetailsView (#260)', () => {
     expect(text).toContain('yaml')
   })
 
-  it('derives the status label from the status object, not a string', () => {
-    // 'ready' comes from getPluginStatusClass, proving status is treated as an object
-    expect(mountView(makePlugin()).text()).toContain('ready')
-    expect(mountView(makePlugin({ status: { available: true, configured: true, enabled: false } })).text())
-      .toContain('disabled')
+  it('presents registration only, not configured/enabled status (#266)', () => {
+    // Backend hardcodes status; the view shows a neutral "Registered" chip and
+    // never the fictional Ready/Disabled/Not Configured labels.
+    const text = mountView(makePlugin()).text()
+    expect(text).toContain('Registered')
+    for (const fiction of ['Ready', 'Not Configured', 'Disabled', 'unavailable']) {
+      expect(text, `should not render fictional status "${fiction}"`).not.toContain(fiction)
+    }
   })
 
   it('is read-only: no configure/toggle actions and no phantom or non-list-DTO fields', () => {
     const text = mountView().text()
     for (const absent of [
-      // read-only: configuration/enable-disable deferred to #264/PR3
+      // read-only: configuration/enable-disable deferred to #264
       'Configure', 'Enable', 'Disable',
       // health is not part of the list DTO
       'Health',

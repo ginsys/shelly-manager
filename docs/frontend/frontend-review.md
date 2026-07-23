@@ -319,14 +319,28 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 > usable end-to-end from either the API or the UI yet.
 
 #### Plugins (6 endpoints)
+
+> **Frontend types (#266):** the list endpoint (`GET /export/plugins`) and the
+> detail endpoint (`GET /export/plugins/{name}`) return **different shapes**, now
+> modelled as separate exact DTOs: `Plugin` (list item) and
+> `PluginDetail = { info, capabilities }`. The permissive superset (with
+> `health`/`config_schema`/`example_config`/`metadata`) is gone, so consumers can
+> no longer read list-absent fields. Plugin `status` is backend-hardcoded, so the
+> UI presents a listed plugin as **"Registered"** only — not configured/enabled —
+> and the fictional status filter, status sort, and configured/disabled/error
+> statistics were removed.
+>
+> The `/config` (GET/PUT) and `/test` routes below **do not exist on the backend**
+> — tracked and resolved in #264.
+
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/export/plugins` | GET | List all plugins by category |
-| `/export/plugins/{name}` | GET | Get plugin details |
+| `/export/plugins/{name}` | GET | Get plugin details (`{ info, capabilities }`) |
 | `/export/plugins/{name}/schema` | GET | Get plugin config schema |
-| `/export/plugins/{name}/config` | GET | Get current plugin config |
-| `/export/plugins/{name}/config` | PUT | Update plugin config |
-| `/export/plugins/{name}/test` | POST | Test plugin configuration |
+| `/export/plugins/{name}/config` | GET | ⚠️ Phantom route — not registered (#264) |
+| `/export/plugins/{name}/config` | PUT | ⚠️ Phantom route — not registered (#264) |
+| `/export/plugins/{name}/test` | POST | ⚠️ Phantom route — not registered (#264) |
 
 #### Metrics (15 endpoints + WebSocket)
 | Endpoint | Method | Purpose |

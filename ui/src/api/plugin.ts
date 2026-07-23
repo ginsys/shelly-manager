@@ -1,6 +1,12 @@
 import api from './client'
 import type { APIResponse, Metadata } from './types'
 
+// Exact list DTO returned by GET /export/plugins. Mirrors the backend
+// `pluginDTO` (internal/api/sync_handlers.go). This is a precise contract, NOT
+// a permissive superset: fields the list endpoint does not return (health,
+// config_schema, example_config, metadata) are intentionally absent so consumers
+// cannot read list-absent data without a type error. The per-plugin detail
+// endpoint has a different shape — see PluginDetail.
 export interface Plugin {
   name: string
   display_name: string
@@ -9,26 +15,45 @@ export interface Plugin {
   category: string
   capabilities: string[]
   status: PluginStatus
-  health?: PluginHealth
-  config_schema?: Record<string, any>
-  example_config?: Record<string, any>
-  metadata?: Record<string, any>
 }
 
+// Backend hardcodes available/configured/enabled to true today
+// (internal/api/sync_handlers.go); the UI treats a listed plugin as "Registered"
+// and does not present configured/enabled as meaningful state. Fields the
+// backend never emits (error, last_used) are intentionally not modelled.
 export interface PluginStatus {
   available: boolean
   configured: boolean
   enabled: boolean
-  error?: string
-  last_used?: string
 }
 
-export interface PluginHealth {
-  healthy: boolean
-  last_check?: string
-  check_duration_ms?: number
-  issues?: string[]
-  metrics?: Record<string, any>
+// Detail DTO returned by GET /export/plugins/{name}: `{ info, capabilities }`,
+// a different shape from the list item above. Mirrors the Go PluginInfo /
+// PluginCapabilities structs (internal/sync/plugin.go).
+export interface PluginInfo {
+  name: string
+  version: string
+  description: string
+  author: string
+  website?: string
+  license: string
+  supported_formats: string[]
+  tags: string[]
+  category: string
+}
+
+export interface PluginCapabilities {
+  supports_incremental: boolean
+  supports_scheduling: boolean
+  requires_authentication: boolean
+  supported_outputs: string[]
+  max_data_size: number
+  concurrency_level: number
+}
+
+export interface PluginDetail {
+  info: PluginInfo
+  capabilities: PluginCapabilities
 }
 
 export interface PluginSchema {
@@ -110,15 +135,16 @@ export async function listPlugins(category?: string): Promise<ListPluginsResult>
 }
 
 /**
- * Get details for a specific plugin
+ * Get details for a specific plugin. Returns the detail shape
+ * `{ info, capabilities }` (GET /export/plugins/{name}), NOT the list item.
  */
-export async function getPlugin(name: string): Promise<Plugin> {
-  const res = await api.get<APIResponse<Plugin>>(`/export/plugins/${name}`)
-  
+export async function getPlugin(name: string): Promise<PluginDetail> {
+  const res = await api.get<APIResponse<PluginDetail>>(`/export/plugins/${name}`)
+
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.error?.message || 'Failed to load plugin details')
   }
-  
+
   return res.data.data
 }
 
@@ -394,27 +420,4 @@ export function getPluginCategoryInfo(category: string): { display_name: string;
     description: `${category} plugins`,
     icon: '📦'
   }
-}
-
-/**
- * Format plugin status for display
- */
-export function formatPluginStatus(status: PluginStatus): { text: string; class: string; icon: string } {
-  if (!status.available) {
-    return { text: 'Unavailable', class: 'unavailable', icon: '❌' }
-  }
-  
-  if (status.error) {
-    return { text: 'Error', class: 'error', icon: '⚠️' }
-  }
-  
-  if (!status.configured) {
-    return { text: 'Not Configured', class: 'not-configured', icon: '⚙️' }
-  }
-  
-  if (!status.enabled) {
-    return { text: 'Disabled', class: 'disabled', icon: '⏸️' }
-  }
-  
-  return { text: 'Ready', class: 'ready', icon: '✅' }
 }

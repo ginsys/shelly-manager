@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePluginStore } from '../plugin'
 import * as pluginApi from '@/api/plugin'
-import type { Plugin, PluginSchema, PluginConfig, PluginTestResult, PluginCategory } from '@/api/plugin'
+import type { Plugin, PluginDetail, PluginSchema, PluginConfig, PluginTestResult, PluginCategory } from '@/api/plugin'
 
 // Mock the API functions
 vi.mock('@/api/plugin', () => ({
@@ -23,8 +23,6 @@ describe('Plugin Store', () => {
     available: true,
     configured: true,
     enabled: true,
-    error: undefined,
-    last_error: undefined,
   }
 
   const mockPlugin: Plugin = {
@@ -32,7 +30,6 @@ describe('Plugin Store', () => {
     display_name: 'Test Plugin',
     description: 'A test plugin for unit testing',
     version: '1.0.0',
-    author: 'Test Author',
     category: 'backup',
     capabilities: ['backup', 'restore'],
     status: mockPluginStatus,
@@ -43,13 +40,34 @@ describe('Plugin Store', () => {
     display_name: 'Sync Plugin',
     description: 'A synchronization plugin',
     version: '2.0.0',
-    author: 'Sync Author',
     category: 'sync',
     capabilities: ['sync'],
     status: {
       available: true,
       configured: false,
       enabled: false,
+    },
+  }
+
+  // Detail endpoint shape returned by getPlugin (#266).
+  const mockDetail: PluginDetail = {
+    info: {
+      name: 'test-plugin',
+      version: '1.0.0',
+      description: 'A test plugin for unit testing',
+      author: 'Test Author',
+      license: 'MIT',
+      supported_formats: ['backup', 'restore'],
+      tags: ['backup'],
+      category: 'backup',
+    },
+    capabilities: {
+      supports_incremental: true,
+      supports_scheduling: false,
+      requires_authentication: false,
+      supported_outputs: ['file'],
+      max_data_size: 0,
+      concurrency_level: 1,
     },
   }
 
@@ -119,7 +137,6 @@ describe('Plugin Store', () => {
       expect(store.currentPlugin).toBeNull()
       expect(store.currentPluginSchema).toBeNull()
       expect(store.selectedCategory).toBe('')
-      expect(store.statusFilter).toBe('')
       expect(store.searchQuery).toBe('')
     })
   })
@@ -140,24 +157,13 @@ describe('Plugin Store', () => {
         expect(store.filteredPlugins).toEqual([mockPlugin])
       })
 
-      it('should filter by status - configured', () => {
-        store.statusFilter = 'configured'
-        expect(store.filteredPlugins).toEqual([mockPlugin])
-      })
-
-      it('should filter by status - available', () => {
-        store.statusFilter = 'available'
-        expect(store.filteredPlugins).toEqual([mockPlugin2])
-      })
-
       it('should filter by search query', () => {
         store.searchQuery = 'sync'
         expect(store.filteredPlugins).toEqual([mockPlugin2])
       })
 
-      it('should combine multiple filters', () => {
+      it('should combine category and search filters', () => {
         store.selectedCategory = 'backup'
-        store.statusFilter = 'configured'
         store.searchQuery = 'test'
         expect(store.filteredPlugins).toEqual([mockPlugin])
       })
@@ -174,11 +180,13 @@ describe('Plugin Store', () => {
     })
 
     describe('pluginStats', () => {
-      it('should calculate statistics correctly', () => {
+      it('reports only truthful counts: total and per-category', () => {
         const stats = store.pluginStats
         expect(stats.total).toBe(2)
-        expect(stats.configured).toBe(1)
-        expect(stats.available).toBe(1)
+        expect(stats.byCategory).toEqual({ backup: 1, sync: 1 })
+        // No fictional status tallies.
+        expect('configured' in stats).toBe(false)
+        expect('error' in stats).toBe(false)
       })
     })
 
@@ -237,18 +245,21 @@ describe('Plugin Store', () => {
     })
 
     describe('loadPluginDetails', () => {
+      // Note: loadPluginDetails still calls the phantom /config route via
+      // loadPluginConfig; that known-404 path is owned by the immediately
+      // following #264 PR. These tests only assert the detail-shape retyping,
+      // not that configuration loading works.
       it('should load plugin details successfully', async () => {
-        vi.mocked(pluginApi.getPlugin).mockResolvedValue(mockPlugin)
+        vi.mocked(pluginApi.getPlugin).mockResolvedValue(mockDetail)
         vi.mocked(pluginApi.getPluginSchema).mockResolvedValue(mockSchema)
         vi.mocked(pluginApi.getPluginConfig).mockResolvedValue(mockConfig)
         vi.mocked(pluginApi.generateDefaultConfig).mockReturnValue({ endpoint: '', timeout: 30 })
 
         const result = await store.loadPluginDetails('test-plugin')
 
-        expect(result).toEqual(mockPlugin)
-        expect(store.currentPlugin).toEqual(mockPlugin)
+        expect(result).toEqual(mockDetail)
+        expect(store.currentPlugin).toEqual(mockDetail)
         expect(store.currentPluginSchema).toEqual(mockSchema)
-        expect(store.currentPluginConfig).toEqual(mockConfig)
         expect(store.currentError).toBe('')
       })
 
@@ -260,14 +271,14 @@ describe('Plugin Store', () => {
       })
 
       it('should continue if schema loading fails', async () => {
-        vi.mocked(pluginApi.getPlugin).mockResolvedValue(mockPlugin)
+        vi.mocked(pluginApi.getPlugin).mockResolvedValue(mockDetail)
         vi.mocked(pluginApi.getPluginSchema).mockRejectedValue(new Error('Schema not found'))
         vi.mocked(pluginApi.getPluginConfig).mockResolvedValue(mockConfig)
 
         const result = await store.loadPluginDetails('test-plugin')
 
-        expect(result).toEqual(mockPlugin)
-        expect(store.currentPlugin).toEqual(mockPlugin)
+        expect(result).toEqual(mockDetail)
+        expect(store.currentPlugin).toEqual(mockDetail)
         expect(store.currentPluginSchema).toBeNull()
       })
     })
@@ -281,7 +292,7 @@ describe('Plugin Store', () => {
       it('should update configuration successfully', async () => {
         const updatedConfig = { ...mockConfig, config: newConfig }
         store.plugins = [mockPlugin]
-        store.currentPlugin = mockPlugin
+        store.currentPlugin = mockDetail
 
         vi.mocked(pluginApi.updatePluginConfig).mockResolvedValue(updatedConfig)
 
@@ -395,11 +406,6 @@ describe('Plugin Store', () => {
       it('should set category filter', () => {
         store.setCategory('backup')
         expect(store.selectedCategory).toBe('backup')
-      })
-
-      it('should set status filter', () => {
-        store.setStatusFilter('configured')
-        expect(store.statusFilter).toBe('configured')
       })
 
       it('should set search query', () => {

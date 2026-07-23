@@ -20,11 +20,9 @@
     <!-- Filters and Search -->
     <PluginFilterBar
       v-model:selectedCategory="selectedCategory"
-      v-model:statusFilter="statusFilter"
       v-model:searchQuery="searchQuery"
       :categories="categories"
       @update:selectedCategory="pluginStore.setCategory($event)"
-      @update:statusFilter="pluginStore.setStatusFilter($event)"
       @update:searchQuery="pluginStore.setSearchQuery($event)"
     />
 
@@ -64,7 +62,6 @@
             v-for="plugin in categoryPlugins"
             :key="plugin.name"
             :plugin="plugin"
-            :statusClass="getPluginStatusClass(plugin.status)"
             :testResult="getTestResult(plugin.name)"
             :isPluginTesting="isPluginTesting(plugin.name)"
             :currentLoading="currentLoading"
@@ -86,7 +83,7 @@
     <div v-if="!loading && filteredPlugins.length === 0" class="empty-state" data-testid="empty-state">
       <div class="empty-icon">📦</div>
       <h3>No Plugins Found</h3>
-      <p v-if="searchQuery || selectedCategory || statusFilter">
+      <p v-if="searchQuery || selectedCategory">
         Try adjusting your search criteria or clearing filters.
       </p>
       <p v-else>
@@ -148,7 +145,6 @@ import { computed, onMounted, reactive, ref, defineAsyncComponent } from 'vue'
 import { usePluginStore } from '@/stores/plugin'
 import {
   getPluginCategoryInfo,
-  formatPluginStatus,
   type Plugin
 } from '@/api/plugin'
 import PluginStatistics from '@/components/plugin/PluginStatistics.vue'
@@ -174,7 +170,6 @@ const currentLoading = computed(() => pluginStore.currentLoading)
 
 // Reactive filters
 const selectedCategory = ref('')
-const statusFilter = ref('')
 const searchQuery = ref('')
 
 // Modal state
@@ -283,13 +278,6 @@ async function testPlugin(plugin: Plugin) {
   } catch (err: any) {
     showMessage(err.message || `Failed to test ${plugin.display_name}`, 'error')
   }
-}
-
-/**
- * Get plugin status CSS class
- */
-function getPluginStatusClass(status: Plugin['status']) {
-  return pluginStore.getPluginStatusClass(status)
 }
 
 /**
