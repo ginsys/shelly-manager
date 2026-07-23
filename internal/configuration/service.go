@@ -426,8 +426,9 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 		return nil, fmt.Errorf("failed to import current config: %w", err)
 	}
 
-	// Compare configurations
-	differences := s.compareConfigurations(storedConfig.Config, currentConfig.Config)
+	// Compare configurations, ignoring volatile bookkeeping metadata (_metadata, device_info)
+	// that ImportFromDevice re-stamps on every import.
+	differences := s.compareConfigurationsForDrift(storedConfig.Config, currentConfig.Config)
 
 	if len(differences) == 0 {
 		// No drift detected
@@ -766,8 +767,25 @@ func (s *Service) GetConfigHistory(deviceID uint, limit int) ([]ConfigHistory, e
 	return history, err
 }
 
-// compareConfigurations compares two JSON configurations and returns differences
+// compareConfigurations compares two JSON configurations and returns differences.
+// It reports every difference, including bookkeeping metadata subtrees; use it for
+// audit-history change tracking where metadata changes are meaningful.
 func (s *Service) compareConfigurations(stored, current json.RawMessage) []ConfigDifference {
+	return s.compareConfigurationsFiltered(stored, current, nil)
+}
+
+// compareConfigurationsForDrift compares two JSON configurations for drift detection,
+// ignoring volatile bookkeeping subtrees (_metadata, device_info) that ImportFromDevice
+// adds on every import. Without this, a re-import's re-stamped _metadata.imported_at would
+// register as drift on any check whose second differs from the stored baseline.
+func (s *Service) compareConfigurationsForDrift(stored, current json.RawMessage) []ConfigDifference {
+	return s.compareConfigurationsFiltered(stored, current, isDriftMetadataKey)
+}
+
+// compareConfigurationsFiltered unmarshals both configs and compares them recursively.
+// When skipKey is non-nil, any map key it matches is excluded from the comparison at every
+// depth. A nil skipKey compares everything (the audit-history behavior).
+func (s *Service) compareConfigurationsFiltered(stored, current json.RawMessage, skipKey func(string) bool) []ConfigDifference {
 	var differences []ConfigDifference
 
 	var storedMap, currentMap map[string]interface{}
@@ -779,15 +797,33 @@ func (s *Service) compareConfigurations(stored, current json.RawMessage) []Confi
 	}
 
 	// Compare maps recursively
-	s.compareMaps("", storedMap, currentMap, &differences)
+	s.compareMapsFiltered("", storedMap, currentMap, &differences, skipKey)
 
 	return differences
 }
 
-// compareMaps recursively compares two maps
+// isDriftMetadataKey reports whether a raw map key names a volatile bookkeeping subtree that
+// drift detection should ignore. It matches the key exactly (not as a substring) so real
+// fields such as device_info_enabled or a key literally named "vendor._metadata" are kept.
+func isDriftMetadataKey(key string) bool {
+	return key == "_metadata" || key == "device_info"
+}
+
+// compareMaps recursively compares two maps, reporting all differences (no filtering).
 func (s *Service) compareMaps(path string, expected, actual map[string]interface{}, differences *[]ConfigDifference) {
+	s.compareMapsFiltered(path, expected, actual, differences, nil)
+}
+
+// compareMapsFiltered recursively compares two maps. When skipKey is non-nil, keys it matches
+// are skipped at every level, so entire metadata subtrees are excluded without splitting the
+// flattened path (which would misclassify JSON keys that themselves contain dots).
+func (s *Service) compareMapsFiltered(path string, expected, actual map[string]interface{}, differences *[]ConfigDifference, skipKey func(string) bool) {
 	// Check for removed keys
 	for key, expectedValue := range expected {
+		if skipKey != nil && skipKey(key) {
+			continue
+		}
+
 		currentPath := path
 		if currentPath != "" {
 			currentPath += "."
@@ -812,7 +848,7 @@ func (s *Service) compareMaps(path string, expected, actual map[string]interface
 			actualMap, actualIsMap := actualValue.(map[string]interface{})
 
 			if expectedIsMap && actualIsMap {
-				s.compareMaps(currentPath, expectedMap, actualMap, differences)
+				s.compareMapsFiltered(currentPath, expectedMap, actualMap, differences, skipKey)
 			} else {
 				*differences = append(*differences, ConfigDifference{
 					Path:     currentPath,
@@ -826,6 +862,10 @@ func (s *Service) compareMaps(path string, expected, actual map[string]interface
 
 	// Check for added keys
 	for key, actualValue := range actual {
+		if skipKey != nil && skipKey(key) {
+			continue
+		}
+
 		currentPath := path
 		if currentPath != "" {
 			currentPath += "."
