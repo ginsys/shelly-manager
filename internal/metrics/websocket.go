@@ -36,11 +36,99 @@ type WebSocketClient struct {
 	ip   string
 }
 
+// MessageType enumerates the WebSocket message types the metrics hub emits.
+//
+// These constants are the single source of truth for the Go/TS contract. The
+// frontend union in ui/src/api/metricsMessages.ts must stay in exact sync with
+// AllMessageTypes(); TestMessageTypeContract (contract_test.go) fails CI if they
+// diverge, so a new type added here forces a corresponding frontend handler.
+const (
+	// MessageTypeInitialMetrics carries a full DashboardMetrics snapshot sent once
+	// to each client immediately after it connects.
+	MessageTypeInitialMetrics = "initial_metrics"
+	// MessageTypeMetricsUpdate carries a full DashboardMetrics snapshot broadcast
+	// on the periodic collection tick.
+	MessageTypeMetricsUpdate = "metrics_update"
+	// MessageTypeAlert carries an alert payload (alert_type, message, severity).
+	MessageTypeAlert = "alert"
+	// MessageTypeDeviceStatusChange carries a device online/offline transition.
+	MessageTypeDeviceStatusChange = "device_status_change"
+	// MessageTypeDriftDetected carries a configuration-drift detection event.
+	MessageTypeDriftDetected = "drift_detected"
+)
+
+// AllMessageTypes returns every WebSocket message type the hub can emit, in a
+// stable order. It is the authoritative set enforced against the frontend
+// manifest by the cross-boundary contract test.
+func AllMessageTypes() []string {
+	return []string{
+		MessageTypeInitialMetrics,
+		MessageTypeMetricsUpdate,
+		MessageTypeAlert,
+		MessageTypeDeviceStatusChange,
+		MessageTypeDriftDetected,
+	}
+}
+
 // MetricsUpdate represents a real-time metrics update
 type MetricsUpdate struct {
 	Type      string      `json:"type"`
 	Timestamp time.Time   `json:"timestamp"`
 	Data      interface{} `json:"data"`
+}
+
+// Message builders. These centralise the wire payload for each message type so
+// the Go/TS contract is defined in exactly one place per type and can be
+// asserted directly (TestMessage*Payload) without going through the lossy
+// broadcast channel.
+
+// newDashboardUpdate builds an initial_metrics or metrics_update message; both
+// carry a full DashboardMetrics snapshot and differ only by type.
+func newDashboardUpdate(msgType string, metrics *DashboardMetrics) *MetricsUpdate {
+	return &MetricsUpdate{Type: msgType, Timestamp: time.Now(), Data: metrics}
+}
+
+// newAlertUpdate builds an alert message.
+func newAlertUpdate(alertType, message, severity string) *MetricsUpdate {
+	return &MetricsUpdate{
+		Type:      MessageTypeAlert,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"alert_type": alertType,
+			"message":    message,
+			"severity":   severity,
+		},
+	}
+}
+
+// newDeviceStatusChangeUpdate builds a device_status_change message.
+func newDeviceStatusChangeUpdate(deviceID, deviceName, oldStatus, newStatus string) *MetricsUpdate {
+	return &MetricsUpdate{
+		Type:      MessageTypeDeviceStatusChange,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"device_id":   deviceID,
+			"device_name": deviceName,
+			"old_status":  oldStatus,
+			"new_status":  newStatus,
+			"timestamp":   time.Now(),
+		},
+	}
+}
+
+// newDriftDetectedUpdate builds a drift_detected message.
+func newDriftDetectedUpdate(deviceID, deviceName string, driftCount int, severity string) *MetricsUpdate {
+	return &MetricsUpdate{
+		Type:      MessageTypeDriftDetected,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"device_id":   deviceID,
+			"device_name": deviceName,
+			"drift_count": driftCount,
+			"severity":    severity,
+			"timestamp":   time.Now(),
+		},
+	}
 }
 
 // DashboardMetrics represents the complete dashboard metrics
@@ -201,11 +289,7 @@ func (h *WebSocketHub) startMetricsCollection(ctx context.Context) {
 				continue
 			}
 
-			update := &MetricsUpdate{
-				Type:      "metrics_update",
-				Timestamp: time.Now(),
-				Data:      metrics,
-			}
+			update := newDashboardUpdate(MessageTypeMetricsUpdate, metrics)
 
 			select {
 			case h.broadcast <- update:
@@ -277,11 +361,7 @@ func (h *WebSocketHub) sendInitialMetrics(client *WebSocketClient) {
 		return
 	}
 
-	update := &MetricsUpdate{
-		Type:      "initial_metrics",
-		Timestamp: time.Now(),
-		Data:      metrics,
-	}
+	update := newDashboardUpdate(MessageTypeInitialMetrics, metrics)
 
 	select {
 	case client.send <- update:
@@ -483,17 +563,7 @@ func (c *WebSocketClient) writePump() {
 
 // BroadcastAlert broadcasts an alert to all connected clients
 func (h *WebSocketHub) BroadcastAlert(alertType, message string, severity string) {
-	alert := map[string]interface{}{
-		"alert_type": alertType,
-		"message":    message,
-		"severity":   severity,
-	}
-
-	update := &MetricsUpdate{
-		Type:      "alert",
-		Timestamp: time.Now(),
-		Data:      alert,
-	}
+	update := newAlertUpdate(alertType, message, severity)
 
 	select {
 	case h.broadcast <- update:
@@ -514,19 +584,7 @@ func (h *WebSocketHub) BroadcastAlert(alertType, message string, severity string
 
 // BroadcastDeviceStatusChange broadcasts device status changes
 func (h *WebSocketHub) BroadcastDeviceStatusChange(deviceID, deviceName, oldStatus, newStatus string) {
-	statusChange := map[string]interface{}{
-		"device_id":   deviceID,
-		"device_name": deviceName,
-		"old_status":  oldStatus,
-		"new_status":  newStatus,
-		"timestamp":   time.Now(),
-	}
-
-	update := &MetricsUpdate{
-		Type:      "device_status_change",
-		Timestamp: time.Now(),
-		Data:      statusChange,
-	}
+	update := newDeviceStatusChangeUpdate(deviceID, deviceName, oldStatus, newStatus)
 
 	severity := "info"
 	if newStatus == "offline" {
@@ -548,19 +606,7 @@ func (h *WebSocketHub) BroadcastDeviceStatusChange(deviceID, deviceName, oldStat
 
 // BroadcastDriftDetected broadcasts configuration drift detection
 func (h *WebSocketHub) BroadcastDriftDetected(deviceID, deviceName string, driftCount int, severity string) {
-	driftAlert := map[string]interface{}{
-		"device_id":   deviceID,
-		"device_name": deviceName,
-		"drift_count": driftCount,
-		"severity":    severity,
-		"timestamp":   time.Now(),
-	}
-
-	update := &MetricsUpdate{
-		Type:      "drift_detected",
-		Timestamp: time.Now(),
-		Data:      driftAlert,
-	}
+	update := newDriftDetectedUpdate(deviceID, deviceName, driftCount, severity)
 
 	// Send alert
 	alertMessage := fmt.Sprintf("Configuration drift detected on %s (%d issues)", deviceName, driftCount)
