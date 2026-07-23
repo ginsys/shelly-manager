@@ -182,7 +182,7 @@ describe('useWebSocket', () => {
     scope.stop()
   })
 
-  it('should handle heartbeat timeout', async () => {
+  it('should recycle the socket on heartbeat timeout even with no messages', async () => {
     const scope = effectScope()
     const ws = scope.run(() => useWebSocket({
       url: 'ws://test',
@@ -193,16 +193,53 @@ describe('useWebSocket', () => {
 
     ws.connect()
 
-    const mockWS = wsInstances[wsInstances.length - 1]
-    mockWS.simulateOpen()
+    const firstWS = wsInstances[wsInstances.length - 1]
+    firstWS.simulateOpen()
     await nextTick()
+    const countBefore = wsInstances.length
 
-    // Advance time past heartbeat timeout
+    // No message ever arrives; the connect-time baseline must still trip the
+    // heartbeat and force a close-then-connect recycle onto a fresh socket.
     vi.advanceTimersByTime(300)
     await nextTick()
 
-    // Should trigger reconnection attempt
-    expect(ws.reconnectAttempts.value).toBeGreaterThanOrEqual(0)
+    expect(wsInstances.length).toBeGreaterThan(countBefore)
+    const latestWS = wsInstances[wsInstances.length - 1]
+    expect(latestWS).not.toBe(firstWS)
+    // The stale socket was force-closed; the fresh one is mid-connect.
+    expect(ws.status.value).toBe('connecting')
+
+    scope.stop()
+  })
+
+  it('should ignore late events from a superseded socket after recycle', async () => {
+    const messages: any[] = []
+    const scope = effectScope()
+    const ws = scope.run(() => useWebSocket({
+      url: 'ws://test',
+      autoConnect: false,
+      heartbeatInterval: 100,
+      heartbeatTimeout: 200,
+      onMessage: (msg) => messages.push(msg)
+    }))!
+
+    ws.connect()
+    const staleWS = wsInstances[wsInstances.length - 1]
+    staleWS.simulateOpen()
+    await nextTick()
+
+    // Trigger a recycle; `staleWS` is now superseded.
+    vi.advanceTimersByTime(300)
+    await nextTick()
+    expect(wsInstances[wsInstances.length - 1]).not.toBe(staleWS)
+
+    // A late message from the stale socket must be dropped, and a late close must
+    // not flip status or schedule a reconnect against the new generation.
+    staleWS.simulateMessage({ type: 'stale', data: 'ignored' })
+    staleWS.close(1006, 'late abnormal close')
+    await vi.runAllTimersAsync()
+
+    expect(messages.find((m) => m?.type === 'stale')).toBeUndefined()
 
     scope.stop()
   })
