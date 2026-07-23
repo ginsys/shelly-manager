@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- Configuration drift detection no longer reports in-sync devices as drifted.
+  `ImportFromDevice` re-stamps a volatile `_metadata.imported_at` (plus a
+  `device_info` subtree) on every import, and `DetectDrift` re-imports the device
+  before diffing — so any check whose timestamp differed from the stored baseline
+  registered a spurious difference and set `RequiresAction`, marking a
+  perfectly-synced device as drifted (and intermittently failing the drift tests
+  in CI). Drift comparison now ignores the `_metadata`/`device_info` bookkeeping
+  subtrees via an exact raw-key match applied during recursion, so genuine config
+  drift is still detected while our own import metadata is not. Audit-history
+  change tracking (`createHistory`) is unchanged and still records metadata
+  changes.
 - Real-time metrics over WebSocket never actually worked and reported a false
   "LIVE": the backend emitted `initial_metrics`/`metrics_update`/`alert`/
   `device_status_change`/`drift_detected` while the frontend only accepted a

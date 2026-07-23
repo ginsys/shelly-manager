@@ -804,6 +804,12 @@ func TestDetectDrift_MinimalDrift(t *testing.T) {
 		Raw: json.RawMessage(`{"name":"shelly1-123456","wifi":{"enable":true,"ssid":"TestNetwork","ip":"192.168.1.100"}}`),
 	}
 
+	// A drift on a truly-in-sync device must NOT fire a notification.
+	notifierCalls := 0
+	service.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
+		notifierCalls++
+	})
+
 	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
 	mockClient.On("GetConfig", mock.Anything).Return(deviceConfig, nil)
 
@@ -812,15 +818,20 @@ func TestDetectDrift_MinimalDrift(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, importedConfig)
 
-	// Now test drift detection with same configuration - should find minimal or no significant drift
+	// Re-checking the same device data must report no drift: the only thing that changes
+	// between imports is volatile bookkeeping metadata (_metadata.imported_at), which drift
+	// detection ignores. This must hold regardless of whether the two imports straddle a
+	// one-second boundary (the source of the former flake).
 	drift, err := service.DetectDrift(1, mockClient)
 
 	require.NoError(t, err)
-	// Since we're comparing the same data, any drift should be minimal (metadata only)
-	if drift != nil {
-		// If drift is detected, it should only be metadata changes, not core config
-		assert.False(t, drift.RequiresAction, "Core configuration should not require action")
-	}
+	require.Nil(t, drift, "in-sync device (metadata-only delta) must not report drift")
+
+	// Stored status stays synced and no drift notification is emitted.
+	var stored DeviceConfig
+	require.NoError(t, db.Where("device_id = ?", 1).First(&stored).Error)
+	assert.Equal(t, "synced", stored.SyncStatus)
+	assert.Equal(t, 0, notifierCalls, "no drift notification for an in-sync device")
 
 	mockClient.AssertExpectations(t)
 }
@@ -891,6 +902,129 @@ func TestDetectDrift_NoStoredConfig(t *testing.T) {
 	assert.ErrorIs(t, err, ErrStoredConfigNotFound)
 
 	mockClient.AssertNotCalled(t, "GetInfo")
+}
+
+// TestDetectDrift_MetadataOnly is a timing-independent end-to-end regression for the flake that
+// turned main red: a stored baseline whose _metadata.imported_at is an old, fixed timestamp is
+// compared against a fresh re-import (which re-stamps imported_at). Drift detection must ignore
+// the volatile metadata delta and report no drift, without depending on the two imports landing
+// in the same wall-clock second.
+func TestDetectDrift_MetadataOnly(t *testing.T) {
+	service, db := setupTestService(t)
+	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
+
+	notifierCalls := 0
+	service.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
+		notifierCalls++
+	})
+
+	// Stored baseline: real config plus metadata subtrees whose values differ from what a fresh
+	// import will produce (old imported_at, stale device_info). Only metadata differs.
+	stored := DeviceConfig{
+		DeviceID: 1,
+		Config: json.RawMessage(`{
+			"name": "shelly1-123456",
+			"wifi": {"enable": true, "ssid": "TestNetwork", "ip": "192.168.1.100"},
+			"_metadata": {"imported_at": "2020-01-01T00:00:00Z", "import_source": "device"},
+			"device_info": {"id": "shelly1-123456", "firmware": "old-fw"}
+		}`),
+		SyncStatus: "synced",
+	}
+	require.NoError(t, db.Create(&stored).Error)
+
+	mockClient := new(mockShellyClient)
+	mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
+		ID:         "shelly1-123456",
+		Generation: 1,
+		Model:      "SHSW-1",
+		FW:         "new-fw",
+	}, nil)
+	mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
+		Raw: json.RawMessage(`{"name":"shelly1-123456","wifi":{"enable":true,"ssid":"TestNetwork","ip":"192.168.1.100"}}`),
+	}, nil)
+
+	drift, err := service.DetectDrift(1, mockClient)
+	require.NoError(t, err)
+	require.Nil(t, drift, "metadata-only delta must not report drift")
+	assert.Equal(t, 0, notifierCalls, "no drift notification for a metadata-only delta")
+
+	mockClient.AssertExpectations(t)
+}
+
+// TestCompareConfigurationsForDrift_IgnoresMetadataSubtrees confirms the drift comparator drops
+// added/removed/modified _metadata and device_info subtrees at the raw-key level.
+func TestCompareConfigurationsForDrift_IgnoresMetadataSubtrees(t *testing.T) {
+	service, _ := setupTestService(t)
+
+	base := json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2020-01-01T00:00:00Z"}, "device_info": {"firmware": "a"}}`)
+
+	cases := map[string]json.RawMessage{
+		"modified metadata":      json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2025-01-01T00:00:00Z"}, "device_info": {"firmware": "a"}}`),
+		"modified device_info":   json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2020-01-01T00:00:00Z"}, "device_info": {"firmware": "b"}}`),
+		"removed metadata trees": json.RawMessage(`{"name": "dev"}`),
+		"added metadata trees":   json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2020-01-01T00:00:00Z"}, "device_info": {"firmware": "a"}, "extra_meta_ignored": false}`),
+	}
+	// The "added" case intentionally adds a non-metadata key too, so assert per-case below.
+
+	for name, current := range cases {
+		t.Run(name, func(t *testing.T) {
+			diffs := service.compareConfigurationsForDrift(base, current)
+			for _, d := range diffs {
+				assert.NotContains(t, d.Path, "_metadata", "metadata subtree should be filtered")
+				assert.NotContains(t, d.Path, "device_info", "device_info subtree should be filtered")
+			}
+		})
+	}
+
+	// Metadata-only change → zero differences.
+	metaOnly := json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2099-01-01T00:00:00Z"}, "device_info": {"firmware": "z"}}`)
+	assert.Empty(t, service.compareConfigurationsForDrift(base, metaOnly))
+}
+
+// TestCompareConfigurationsForDrift_KeepsMetadataLikeKeys proves the raw-key exact match keeps
+// real fields that merely resemble metadata keys, including a single JSON key that itself
+// contains a dot (which a path-splitting filter would wrongly hide).
+func TestCompareConfigurationsForDrift_KeepsMetadataLikeKeys(t *testing.T) {
+	service, _ := setupTestService(t)
+
+	cases := map[string][2]json.RawMessage{
+		"device_info_enabled": {
+			json.RawMessage(`{"device_info_enabled": true}`),
+			json.RawMessage(`{"device_info_enabled": false}`),
+		},
+		"custom_metadata": {
+			json.RawMessage(`{"custom_metadata": "a"}`),
+			json.RawMessage(`{"custom_metadata": "b"}`),
+		},
+		"dotted key vendor._metadata": {
+			json.RawMessage(`{"vendor._metadata": 1}`),
+			json.RawMessage(`{"vendor._metadata": 2}`),
+		},
+	}
+
+	for name, pair := range cases {
+		t.Run(name, func(t *testing.T) {
+			diffs := service.compareConfigurationsForDrift(pair[0], pair[1])
+			assert.NotEmpty(t, diffs, "metadata-like key must still produce drift")
+		})
+	}
+}
+
+// TestCompareConfigurations_ReportsMetadata locks in the audit/drift split: the unfiltered
+// comparator (used by createHistory) still reports a metadata-only change, while the
+// drift-specific comparator ignores that same change.
+func TestCompareConfigurations_ReportsMetadata(t *testing.T) {
+	service, _ := setupTestService(t)
+
+	stored := json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2020-01-01T00:00:00Z"}}`)
+	current := json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2025-01-01T00:00:00Z"}}`)
+
+	audit := service.compareConfigurations(stored, current)
+	require.Len(t, audit, 1, "audit comparison must still report the metadata change")
+	assert.Contains(t, audit[0].Path, "_metadata")
+
+	assert.Empty(t, service.compareConfigurationsForDrift(stored, current),
+		"drift comparison must ignore the same metadata change")
 }
 
 func TestApplyTemplate(t *testing.T) {
@@ -1474,17 +1608,17 @@ func TestBulkDetectDrift(t *testing.T) {
 
 	// Verify results
 	assert.Equal(t, 2, result.Total)
-	assert.Equal(t, 0, result.InSync)  // Both devices show drift due to metadata fields
-	assert.Equal(t, 2, result.Drifted) // Both devices have drift (metadata + actual changes)
+	assert.Equal(t, 1, result.InSync)  // Device 1 unchanged (metadata-only delta is ignored)
+	assert.Equal(t, 1, result.Drifted) // Device 2 has a real relay-state change
 	assert.Equal(t, 0, result.Errors)
 	assert.Len(t, result.Results, 2)
 
-	// Check device 1 result (drift due to metadata fields added during import)
+	// Check device 1 result (in sync: only volatile metadata differs, which drift ignores)
 	device1Result := result.Results[0]
 	assert.Equal(t, uint(1), device1Result.DeviceID)
-	assert.Equal(t, "drift", device1Result.Status)
-	assert.Equal(t, 2, device1Result.DifferenceCount) // _metadata and device_info fields
-	assert.NotNil(t, device1Result.Drift)
+	assert.Equal(t, "synced", device1Result.Status)
+	assert.Equal(t, 0, device1Result.DifferenceCount)
+	assert.Nil(t, device1Result.Drift)
 
 	// Check device 2 result (drift detected)
 	device2Result := result.Results[1]
@@ -1557,15 +1691,15 @@ func TestBulkDetectDrift_WithErrors(t *testing.T) {
 
 	// Verify error handling
 	assert.Equal(t, 3, result.Total)
-	assert.Equal(t, 0, result.InSync)  // Device 1 has drift due to metadata
-	assert.Equal(t, 1, result.Drifted) // Device 1 succeeded but has metadata drift
+	assert.Equal(t, 1, result.InSync)  // Device 1 unchanged (metadata-only delta is ignored)
+	assert.Equal(t, 0, result.Drifted) // No real drift
 	assert.Equal(t, 2, result.Errors)  // Devices 2 and 999 failed
 	assert.Len(t, result.Results, 3)
 
-	// Check successful device (has drift due to metadata fields)
+	// Check successful device (in sync: only volatile metadata differs)
 	successResult := result.Results[0]
 	assert.Equal(t, uint(1), successResult.DeviceID)
-	assert.Equal(t, "drift", successResult.Status)
+	assert.Equal(t, "synced", successResult.Status)
 	assert.Empty(t, successResult.Error)
 
 	// Check client error device
