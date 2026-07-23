@@ -1,8 +1,16 @@
 package sync
 
 import (
+	"errors"
 	"time"
 )
+
+// ErrImportNotImplemented indicates a plugin accepted an import request but has
+// no persistence implementation yet. Handlers should surface this as a
+// client-visible 501 (not a generic 500) so callers know the operation is
+// unsupported and can retry with a dry-run preview rather than treating it as a
+// transient server fault.
+var ErrImportNotImplemented = errors.New("import persistence not implemented")
 
 // ExportData contains all data that can be exported
 type ExportData struct {

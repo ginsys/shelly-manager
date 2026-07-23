@@ -274,11 +274,12 @@ Content-Type: application/json
 > runs through the **generic** import endpoint with `plugin_name: "sma"`. The
 > request body is JSON (not multipart).
 >
-> **⚠️ Non-dry-run import does not persist data yet (#272).** The SMA plugin's
-> `performImport` is a placeholder: validation and dry-run **preview** work, but a
-> real import returns `success: true` with a positive `records_imported` count
-> **without writing anything to the database**. Treat only preview as functional
-> until #272 is fixed.
+> **⚠️ Non-dry-run import is not implemented yet (#272).** SMA persistence has
+> not been built. Validation and dry-run **preview** work; a real (non-dry-run)
+> import now **fails closed** — it returns HTTP `501 Not Implemented` with error
+> code `NOT_IMPLEMENTED` and does **not** write anything. (Previously it returned
+> a fabricated `success: true`; that has been removed.) Re-run with `dry_run` to
+> preview the changes that would be made once persistence lands.
 
 ```http
 POST /api/v1/import
@@ -301,11 +302,13 @@ Content-Type: application/json
 - `source.type`: `file` (reads `source.path`) or `data` (inline `source.data`);
   `url` is not implemented.
 - `options` maps to the backend `ImportOptions`: `dry_run`, `force_overwrite`,
-  `validate_only`, `backup_before`. (`backup_before` is decoded but not acted on
-  by the current SMA import stub.)
+  `validate_only`, `backup_before`. Only `dry_run` is acted on today: any request
+  that is not a dry run (including `validate_only` on its own) fails closed with
+  `501 Not Implemented` because SMA persistence is not built yet (#272).
+  `force_overwrite` and `backup_before` are decoded but unused.
 
-Use `POST /api/v1/import/preview` with the same body for a dry-run preview (this
-is the only path that behaves correctly today). Both routes go through
+Use `POST /api/v1/import/preview` with the same body for a dry-run preview (it
+forces `dry_run`, so it is the path that works today). Both routes go through
 `requireAdmin`, which enforces the admin key **only when `security.admin_api_key`
 is configured** — with the shipped-empty default it permits all requests, so
 these endpoints are open unless an admin key is set.

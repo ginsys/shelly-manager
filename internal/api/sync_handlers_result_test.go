@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -45,6 +46,18 @@ func (m *mockSyncPlugin) Export(_ context.Context, _ *sync.ExportData, cfg sync.
 }
 func (m *mockSyncPlugin) Import(_ context.Context, _ sync.ImportSource, _ sync.ImportConfig) (*sync.ImportResult, error) {
 	return &sync.ImportResult{Success: true, RecordsImported: 0, RecordsSkipped: 0}, nil
+}
+
+// notImplementedImportPlugin fails closed on import the way a plugin with no
+// persistence layer does (e.g. SMA until #272 lands): it wraps
+// sync.ErrImportNotImplemented so the handler can map it to a 501.
+type notImplementedImportPlugin struct{ mockSyncPlugin }
+
+func (notImplementedImportPlugin) Info() sync.PluginInfo {
+	return sync.PluginInfo{Name: "notimpl", Version: "1.0.0", SupportedFormats: []string{"txt"}}
+}
+func (notImplementedImportPlugin) Import(_ context.Context, _ sync.ImportSource, _ sync.ImportConfig) (*sync.ImportResult, error) {
+	return &sync.ImportResult{Success: false}, fmt.Errorf("notimpl plugin: %w", sync.ErrImportNotImplemented)
 }
 
 func setupSyncTestRouter(t *testing.T) (*mux.Router, *sync.SyncEngine, *logging.Logger, func()) {
@@ -149,6 +162,39 @@ func TestImportResultRetrieval(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	router.ServeHTTP(rr2, req2)
 	require.Equal(t, http.StatusOK, rr2.Code, rr2.Body.String())
+}
+
+// TestGenericImportNotImplementedReturns501 verifies that a plugin failing
+// closed with sync.ErrImportNotImplemented is surfaced to API clients as a
+// 501 NOT_IMPLEMENTED, not a generic 500 that hides the reason (#272).
+func TestGenericImportNotImplementedReturns501(t *testing.T) {
+	router, engine, _, cleanup := setupSyncTestRouter(t)
+	defer cleanup()
+	require.NoError(t, engine.RegisterPlugin(&notImplementedImportPlugin{}))
+
+	body := map[string]interface{}{
+		"plugin_name": "notimpl",
+		"format":      "txt",
+		"source":      map[string]interface{}{"type": "data"},
+		"config":      map[string]interface{}{},
+		"options":     map[string]interface{}{"dry_run": false},
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest("POST", "/api/v1/import", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Test)")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusNotImplemented, rr.Code, rr.Body.String())
+
+	var wrap map[string]interface{}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &wrap))
+	require.Equal(t, false, wrap["success"])
+	errObj, ok := wrap["error"].(map[string]interface{})
+	require.True(t, ok, "expected error object, got %s", rr.Body.String())
+	require.Equal(t, "NOT_IMPLEMENTED", errObj["code"])
 }
 
 func TestExportPreviewSummary(t *testing.T) {
