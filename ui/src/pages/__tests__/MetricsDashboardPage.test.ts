@@ -75,20 +75,21 @@ describe('MetricsDashboardPage', () => {
     // Store-level API mocks
     vi.mocked(metricsApi.getMetricsStatus).mockResolvedValue({ enabled: true, uptime_seconds: 3600 })
     vi.mocked(metricsApi.getMetricsHealth).mockResolvedValue({ status: 'healthy' })
+    // Backend-shaped REST payloads (SystemStatus / {devices} / DriftMetrics).
     vi.mocked(metricsApi.getSystemMetrics).mockResolvedValue({
-      timestamps: ['2024-01-01T00:00:00Z', '2024-01-01T00:01:00Z', '2024-01-01T00:02:00Z'],
-      cpu: [10, 20, 30],
-      memory: [50, 55, 60]
+      uptime_seconds: 3600,
+      metrics_enabled: true,
+      last_collection_time: '2026-01-01T00:00:00Z',
+      total_devices: 10,
+      online_devices: 8,
+      devices_with_drift: 2
     })
-    vi.mocked(metricsApi.getDevicesMetrics).mockResolvedValue({
-      timestamps: [1, 2, 3],
-      total: [10, 10, 10],
-      online: [8, 8, 9]
-    })
+    vi.mocked(metricsApi.getDevicesMetrics).mockResolvedValue({ devices: [] })
     vi.mocked(metricsApi.getDriftSummary).mockResolvedValue({
-      timestamps: [1, 2, 3],
-      total: [5, 6, 7],
-      unresolved: [2, 2, 3]
+      total_drift_issues: 3,
+      severity_distribution: { high: 1, low: 2 },
+      category_distribution: {},
+      trend_analysis: []
     })
 
     // Create wrapper with testing pinia
@@ -99,27 +100,7 @@ describe('MetricsDashboardPage', () => {
             stubActions: false,
             initialState: {
               metrics: {
-                status: { enabled: true, uptime_seconds: 3600 },
-                system: {
-                  timestamps: ['2024-01-01T00:00:00Z', '2024-01-01T00:01:00Z', '2024-01-01T00:02:00Z'],
-                  cpu: [10, 20, 30],
-                  memory: [50, 55, 60],
-                  maxLength: 50
-                },
-                devices: {
-                  timestamps: [1, 2, 3],
-                  total: [10, 10, 10],
-                  online: [8, 8, 9]
-                },
-                drift: {
-                  timestamps: [1, 2, 3],
-                  total: [5, 6, 7],
-                  unresolved: [2, 2, 3]
-                },
-                wsConnected: true,
-                wsReconnectAttempts: 0,
-                lastMessageAt: Date.now(),
-                isRealtimeActive: true
+                status: { enabled: true, uptime_seconds: 3600 }
               }
             }
           })

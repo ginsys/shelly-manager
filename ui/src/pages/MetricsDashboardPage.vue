@@ -133,9 +133,29 @@
     <div v-if="loading" class="loading">Loading advanced metrics...</div>
     <div v-if="error" class="error">{{ error }}</div>
 
+    <!-- Live Events feed (alert / device status change / drift detected) -->
+    <section class="events-section">
+      <h2>Live Events
+        <span v-if="store.isRealtimeActive" class="realtime-badge">LIVE</span>
+      </h2>
+      <div v-if="recentEvents.length === 0" class="events-empty">No live events yet.</div>
+      <ul v-else class="events-list">
+        <li
+          v-for="ev in recentEvents"
+          :key="ev.id"
+          class="event-item"
+          :class="`event-${ev.severity}`"
+        >
+          <span class="event-kind">{{ ev.kind }}</span>
+          <span class="event-msg">{{ ev.message }}</span>
+          <span class="event-time">{{ new Date(ev.timestamp).toLocaleTimeString() }}</span>
+        </li>
+      </ul>
+    </section>
+
     <section class="charts">
       <div class="panel">
-        <h3>System Metrics 
+        <h3>Device Counts
           <span v-if="store.isRealtimeActive" class="realtime-badge">LIVE</span>
         </h3>
         <Suspense>
@@ -337,70 +357,52 @@ const connectionText = computed(() => {
   return 'WebSocket: Disconnected'
 })
 
-// Enhanced chart options with multiple series
+// Device-count trend. The backend exposes no CPU/memory/disk telemetry (#247),
+// so this "system" chart plots the real device counts from system_status,
+// accumulated over each 5s snapshot into a bounded ring buffer.
 const systemOptions = computed(() => {
-  if (!store.system) {
-    return {
-      xAxis: { type: 'category', data: [] },
-      yAxis: { type: 'value', max: 100 },
-      series: []
-    }
-  }
-
-  const series = [
-    { 
-      type: 'line', 
-      name: 'CPU %', 
-      data: store.system.cpu,
-      smooth: true,
-      lineStyle: { color: '#3b82f6' }
-    },
-    { 
-      type: 'line', 
-      name: 'Memory %', 
-      data: store.system.memory,
-      smooth: true,
-      lineStyle: { color: '#ef4444' }
-    }
-  ]
-  
-  if (store.system.disk) {
-    series.push({
-      type: 'line',
-      name: 'Disk %',
-      data: store.system.disk,
-      smooth: true,
-      lineStyle: { color: '#10b981' }
-    })
-  }
-
+  const s = store.series
   return {
-    xAxis: { 
-      type: 'category', 
-      data: store.system.timestamps.map(ts => {
-        const date = new Date(ts)
-        return date.toLocaleTimeString()
-      })
+    xAxis: {
+      type: 'category',
+      data: s.timestamps.map(ts => new Date(ts).toLocaleTimeString())
     },
-    yAxis: { type: 'value', max: 100, min: 0 },
+    yAxis: { type: 'value', min: 0 },
     legend: { show: true },
     tooltip: { trigger: 'axis' },
     animation: !store.isRealtimeActive, // Disable animation for real-time updates
-    series
+    series: [
+      { type: 'line', name: 'Total devices', data: s.total, smooth: true, lineStyle: { color: '#3b82f6' } },
+      { type: 'line', name: 'Online', data: s.online, smooth: true, lineStyle: { color: '#10b981' } },
+      { type: 'line', name: 'With drift', data: s.drift, smooth: true, lineStyle: { color: '#ef4444' } }
+    ]
   }
 })
 
-const devicesOptions = computed(() => ({
-  xAxis: { type: 'category', data: Object.keys(store.devices ?? {}) },
-  yAxis: { type: 'value' },
-  series: [{ type: 'bar', data: Object.values(store.devices ?? {}) }]
-}))
+// Device status distribution (online/offline/...) from the latest snapshot.
+const devicesOptions = computed(() => {
+  const counts = store.deviceStatusCounts
+  return {
+    xAxis: { type: 'category', data: Object.keys(counts) },
+    yAxis: { type: 'value' },
+    tooltip: { trigger: 'axis' },
+    series: [{ type: 'bar', data: Object.values(counts) }]
+  }
+})
 
-const driftOptions = computed(() => ({
-  xAxis: { type: 'category', data: Object.keys(store.drift ?? {}) },
-  yAxis: { type: 'value' },
-  series: [{ type: 'bar', data: Object.values(store.drift ?? {}) }]
-}))
+// Drift by severity from drift_metrics.severity_distribution.
+const driftOptions = computed(() => {
+  const dist = store.drift?.severity_distribution ?? {}
+  return {
+    xAxis: { type: 'category', data: Object.keys(dist) },
+    yAxis: { type: 'value' },
+    tooltip: { trigger: 'axis' },
+    series: [{ type: 'bar', data: Object.values(dist) }]
+  }
+})
+
+// Most recent live events first, capped for display.
+const recentEvents = computed(() => [...store.events].slice(-20).reverse())
 
 // Utility functions
 function formatUptime(seconds?: number): string {
@@ -471,8 +473,26 @@ function formatSeconds(seconds: number): string {
   50% { opacity: 0.7; }
 }
 
+/* Live events feed */
+.events-section { margin-top: 24px; }
+.events-empty { color: #6b7280; font-style: italic; padding: 8px 0; }
+.events-list { list-style: none; margin: 12px 0 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.event-item {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 10px;
+  border-left: 3px solid #9ca3af;
+  border-bottom: 1px solid #f3f4f6;
+}
+.event-item.event-warning { border-left-color: #f59e0b; }
+.event-item.event-critical, .event-item.event-error { border-left-color: #ef4444; }
+.event-kind { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; color: #6b7280; }
+.event-time { font-size: 0.8rem; color: #9ca3af; }
+
 /* Chart layout */
-.charts { 
+.charts {
   display: grid; 
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
   gap: 12px; 
