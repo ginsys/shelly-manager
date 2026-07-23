@@ -189,9 +189,11 @@ describe('useMetricsStore', () => {
       store.handleWSMessage(msg('alert', { alert_type: 'test', message: 'boom', severity: 'warning' }))
       store.handleWSMessage(msg('device_status_change', {
         device_id: '1', device_name: 'Living Room', old_status: 'online', new_status: 'offline',
+        timestamp: '2026-01-01T00:00:00Z',
       }))
       store.handleWSMessage(msg('drift_detected', {
         device_id: '1', device_name: 'Living Room', drift_count: 3, severity: 'high',
+        timestamp: '2026-01-01T00:00:00Z',
       }))
 
       expect(store.events.map((e) => e.kind)).toEqual(['alert', 'device_status_change', 'drift_detected'])
@@ -200,6 +202,16 @@ describe('useMetricsStore', () => {
       expect(store.events[2].message).toContain('3 issues')
       // Events do not, by themselves, make the feed "live".
       expect(store.isRealtimeActive).toBe(false)
+    })
+
+    it('rejects an event frame missing its payload timestamp', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      store.handleWSMessage(msg('device_status_change', {
+        device_id: '1', device_name: 'D', old_status: 'online', new_status: 'offline',
+      }))
+      expect(store.events.length).toBe(0)
+      expect(store.invalidMessageCount).toBe(1)
+      spy.mockRestore()
     })
 
     it('does not coalesce a burst of events', () => {
