@@ -4,7 +4,28 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Changed
+- Drift detection schedules now fail closed. The scheduler
+  (`configuration.NewScheduler`) has no callers — schedules were stored but never
+  executed, so `next_run` was never set, `run_count` never advanced and the run
+  table was empty by construction. The API and UI previously presented these
+  inert rows as operational jobs. `POST /config/drift-schedules`,
+  `PUT /config/drift-schedules/{id}`, `POST /config/drift-schedules/{id}/toggle`
+  and `GET /config/drift-schedules/{id}/runs` now return **HTTP 501
+  Not Implemented** in the standard error envelope, short-circuiting before any
+  input parsing or database access (no side effects). List, detail and delete
+  keep working so stored schedules stay inspectable and removable. The four
+  bypass service methods that wrote GORM directly were removed so no inert
+  write/history path remains. The UI shows a "not executed in this release"
+  notice, renders schedules as stored/inactive with the `device_filter` as
+  read-only JSON, and offers deletion only. Scheduled execution is tracked
+  separately as #279. (#270)
+
 ### Fixed
+- `GET /config/drift-schedules/{id}` returned HTTP 500 instead of 404 for a
+  missing schedule: the service wraps `gorm.ErrRecordNotFound` with `%w`, but the
+  handler compared with `==`; it now uses `errors.Is`. (#270)
+
 - Configuration drift detection no longer reports in-sync devices as drifted.
   `ImportFromDevice` re-stamps a volatile `_metadata.imported_at` (plus a
   `device_info` subtree) on every import, and `DetectDrift` re-imports the device

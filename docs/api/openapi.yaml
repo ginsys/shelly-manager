@@ -1338,29 +1338,22 @@ paths:
 
     post:
       tags: [Drift]
-      summary: Create drift detection schedule
+      summary: Create drift detection schedule (unavailable)
+      description: >-
+        Not implemented in this release. Drift schedules are stored but never
+        executed, so creation fails closed with HTTP 501 and performs no
+        database writes. The scheduled-execution vertical is tracked as #279.
       operationId: createDriftSchedule
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DriftSchedule'
       responses:
-        '201':
-          description: Schedule created
+        '501':
+          description: Drift schedule execution is not implemented in this release
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/APIResponse'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/DriftSchedule'
+                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/config/drift-schedules/{id}:
     parameters:
@@ -1392,20 +1385,17 @@ paths:
 
     put:
       tags: [Drift]
-      summary: Update drift schedule
+      summary: Update drift schedule (unavailable)
+      description: >-
+        Not implemented in this release. Fails closed with HTTP 501 before
+        decoding input or touching the database (#270). See #279.
       operationId: updateDriftSchedule
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DriftSchedule'
       responses:
-        '200':
-          description: Schedule updated
+        '501':
+          description: Drift schedule execution is not implemented in this release
           content:
             application/json:
               schema:
@@ -1419,13 +1409,29 @@ paths:
         - BearerAuth: []
         - ApiKeyAuth: []
       responses:
-        '204':
+        '200':
           description: Schedule deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: deleted
 
   /api/v1/config/drift-schedules/{id}/toggle:
     post:
       tags: [Drift]
-      summary: Toggle drift schedule enabled state
+      summary: Toggle drift schedule enabled state (unavailable)
+      description: >-
+        Not implemented in this release. Fails closed with HTTP 501 and performs
+        no database writes (#270). See #279.
       operationId: toggleDriftSchedule
       security:
         - BearerAuth: []
@@ -1437,8 +1443,34 @@ paths:
           schema:
             type: integer
       responses:
-        '200':
-          description: Schedule toggled
+        '501':
+          description: Drift schedule execution is not implemented in this release
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/config/drift-schedules/{id}/runs:
+    get:
+      tags: [Drift]
+      summary: Get drift schedule run history (unavailable)
+      description: >-
+        Not implemented in this release. Schedules never execute, so run history
+        cannot exist; a successful empty array would assert history that never
+        happened. Fails closed with HTTP 501 (#270). See #279.
+      operationId: getDriftScheduleRuns
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '501':
+          description: Drift schedule execution is not implemented in this release
           content:
             application/json:
               schema:

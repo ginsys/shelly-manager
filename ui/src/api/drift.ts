@@ -10,24 +10,14 @@ export interface DriftSchedule {
   enabled: boolean
   cron_spec: string
   device_ids?: number[] | null
-  device_filter?: string | null
+  // Backend stores this as a raw JSON value (json.RawMessage). It is
+  // inspection-only in this release; the UI renders it read-only as JSON.
+  device_filter?: unknown
   last_run?: string | null
   next_run?: string | null
   run_count: number
   created_at: string
   updated_at: string
-}
-
-export interface DriftScheduleRun {
-  id: number
-  schedule_id: number
-  status: 'running' | 'completed' | 'failed'
-  started_at: string
-  completed_at?: string | null
-  duration?: number | null
-  results?: string
-  error?: string
-  created_at: string
 }
 
 // Aggregate report (summary + devices + recommendations). Backend model;
@@ -73,15 +63,6 @@ export interface DriftDailyAggregate {
   deviceCount: number
 }
 
-export interface CreateDriftScheduleRequest {
-  name: string
-  description?: string
-  enabled?: boolean
-  cron_spec: string
-  device_ids?: number[]
-  device_filter?: string
-}
-
 export interface ListDriftSchedulesResult {
   items: DriftSchedule[]
   meta?: Metadata
@@ -111,55 +92,16 @@ export async function getDriftSchedule(id: number | string): Promise<DriftSchedu
   return res.data.data
 }
 
-export async function createDriftSchedule(data: CreateDriftScheduleRequest): Promise<DriftSchedule> {
-  const res = await api.post<APIResponse<DriftSchedule>>('/config/drift-schedules', data)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to create drift schedule'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-export async function updateDriftSchedule(id: number | string, data: Partial<CreateDriftScheduleRequest>): Promise<DriftSchedule> {
-  const res = await api.put<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`, data)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to update drift schedule'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
+// Drift schedules are stored but never executed in this release, so create,
+// update, toggle and run-history are intentionally absent: the backend fails
+// those routes closed with HTTP 501 (#270). Only list, detail and delete —
+// inspection and cleanup — remain. The execution vertical is tracked as #279.
 
 export async function deleteDriftSchedule(id: number | string): Promise<void> {
   const res = await api.delete<APIResponse<void>>(`/config/drift-schedules/${id}`)
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to delete drift schedule'
     throw new Error(msg)
-  }
-}
-
-export async function toggleDriftSchedule(id: number | string): Promise<DriftSchedule> {
-  // Empty-body POST: pass {} so axios emits a Content-Type header
-  // (required by the backend's ValidateContentTypeMiddleware).
-  const res = await api.post<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}/toggle`, {})
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to toggle drift schedule'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Backend returns a raw array; `limit` is the only filter the handler reads.
-export async function getDriftScheduleRuns(id: number | string, limit = 50): Promise<{ items: DriftScheduleRun[]; meta?: Metadata }> {
-  const res = await api.get<APIResponse<DriftScheduleRun[]>>(`/config/drift-schedules/${id}/runs`, {
-    params: { limit }
-  })
-  if (!res.data.success) {
-    const msg = res.data.error?.message || 'Failed to load schedule runs'
-    throw new Error(msg)
-  }
-  return {
-    items: res.data.data || [],
-    meta: res.data.meta
   }
 }
 

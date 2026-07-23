@@ -1431,24 +1431,21 @@ func (h *Handler) GetDriftSchedules(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, schedules)
 }
 
-// CreateDriftSchedule handles POST /api/v1/config/drift-schedules
-func (h *Handler) CreateDriftSchedule(w http.ResponseWriter, r *http.Request) {
-	var schedule configuration.DriftDetectionSchedule
-	if err := json.NewDecoder(r.Body).Decode(&schedule); err != nil {
-		h.responseWriter().WriteValidationError(w, r, "Invalid schedule JSON")
-		return
-	}
+// writeSchedulingNotImplemented fails a drift-schedule operation closed with an
+// HTTP 501. Drift schedules are stored but never executed (the scheduler has no
+// callers), so create/update/toggle/runs must not fake success or assert run
+// history that cannot exist (#270). Callers invoke this before decoding input or
+// touching the service, so these paths have no database side effects; the real
+// execution vertical is tracked as #279.
+func (h *Handler) writeSchedulingNotImplemented(w http.ResponseWriter, r *http.Request) {
+	h.responseWriter().WriteError(w, r, http.StatusNotImplemented,
+		apiresp.ErrCodeNotImplemented, configuration.ErrSchedulingNotImplemented.Error(), nil)
+}
 
-	created, err := h.Service.CreateDriftSchedule(schedule)
-	if err != nil {
-		h.logger.WithFields(map[string]any{
-			"schedule_name": schedule.Name,
-			"error":         err.Error(),
-		}).Error("Failed to create drift schedule")
-		h.responseWriter().WriteInternalError(w, r, err)
-		return
-	}
-	h.responseWriter().WriteCreated(w, r, created)
+// CreateDriftSchedule handles POST /api/v1/config/drift-schedules.
+// Fails closed with 501 — see writeSchedulingNotImplemented.
+func (h *Handler) CreateDriftSchedule(w http.ResponseWriter, r *http.Request) {
+	h.writeSchedulingNotImplemented(w, r)
 }
 
 // GetDriftSchedule handles GET /api/v1/config/drift-schedules/{id}
@@ -1462,7 +1459,9 @@ func (h *Handler) GetDriftSchedule(w http.ResponseWriter, r *http.Request) {
 
 	schedule, err := h.Service.GetDriftSchedule(uint(id))
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		// The service wraps the GORM error with %w, so match with errors.Is;
+		// a bare == comparison would miss it and mask a missing row as a 500.
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			h.responseWriter().WriteNotFoundError(w, r, "Schedule")
 			return
 		}
@@ -1476,35 +1475,10 @@ func (h *Handler) GetDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, schedule)
 }
 
-// UpdateDriftSchedule handles PUT /api/v1/config/drift-schedules/{id}
+// UpdateDriftSchedule handles PUT /api/v1/config/drift-schedules/{id}.
+// Fails closed with 501 — see writeSchedulingNotImplemented.
 func (h *Handler) UpdateDriftSchedule(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseUint(vars["id"], 10, 32)
-	if err != nil {
-		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
-		return
-	}
-
-	var updates configuration.DriftDetectionSchedule
-	if decodeErr := json.NewDecoder(r.Body).Decode(&updates); decodeErr != nil {
-		h.responseWriter().WriteValidationError(w, r, "Invalid schedule JSON")
-		return
-	}
-
-	updated, err := h.Service.UpdateDriftSchedule(uint(id), updates)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			h.responseWriter().WriteNotFoundError(w, r, "Schedule")
-			return
-		}
-		h.logger.WithFields(map[string]any{
-			"schedule_id": id,
-			"error":       err.Error(),
-		}).Error("Failed to update drift schedule")
-		h.responseWriter().WriteInternalError(w, r, err)
-		return
-	}
-	h.responseWriter().WriteSuccess(w, r, updated)
+	h.writeSchedulingNotImplemented(w, r)
 }
 
 // DeleteDriftSchedule handles DELETE /api/v1/config/drift-schedules/{id}
@@ -1532,58 +1506,17 @@ func (h *Handler) DeleteDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "deleted"})
 }
 
-// ToggleDriftSchedule handles POST /api/v1/config/drift-schedules/{id}/toggle
+// ToggleDriftSchedule handles POST /api/v1/config/drift-schedules/{id}/toggle.
+// Fails closed with 501 — see writeSchedulingNotImplemented.
 func (h *Handler) ToggleDriftSchedule(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseUint(vars["id"], 10, 32)
-	if err != nil {
-		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
-		return
-	}
-
-	updated, err := h.Service.ToggleDriftSchedule(uint(id))
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			h.responseWriter().WriteNotFoundError(w, r, "Schedule")
-			return
-		}
-		h.logger.WithFields(map[string]any{
-			"schedule_id": id,
-			"error":       err.Error(),
-		}).Error("Failed to toggle drift schedule")
-		h.responseWriter().WriteInternalError(w, r, err)
-		return
-	}
-	h.responseWriter().WriteSuccess(w, r, updated)
+	h.writeSchedulingNotImplemented(w, r)
 }
 
-// GetDriftScheduleRuns handles GET /api/v1/config/drift-schedules/{id}/runs
+// GetDriftScheduleRuns handles GET /api/v1/config/drift-schedules/{id}/runs.
+// Fails closed with 501 — schedules never execute, so run history cannot exist;
+// a successful empty array would assert history that never happened (#270).
 func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseUint(vars["id"], 10, 32)
-	if err != nil {
-		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid schedule ID", nil)
-		return
-	}
-
-	// Parse optional limit parameter
-	limit := 50 // Default limit
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsedLimit, parseErr := strconv.Atoi(limitStr); parseErr == nil && parsedLimit > 0 {
-			limit = parsedLimit
-		}
-	}
-
-	runs, err := h.Service.GetDriftScheduleRuns(uint(id), limit)
-	if err != nil {
-		h.logger.WithFields(map[string]any{
-			"schedule_id": id,
-			"error":       err.Error(),
-		}).Error("Failed to get drift schedule runs")
-		h.responseWriter().WriteInternalError(w, r, err)
-		return
-	}
-	h.responseWriter().WriteSuccess(w, r, runs)
+	h.writeSchedulingNotImplemented(w, r)
 }
 
 // GetDriftReports handles GET /api/v1/config/drift-reports

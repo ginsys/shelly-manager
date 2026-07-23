@@ -80,3 +80,6 @@ ui/.nyc_output/
 **/coverage/
 ui/coverage.xml
 node_modules/
+
+# Playwright MCP scratch artifacts
+.playwright-mcp/

@@ -154,15 +154,20 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ### 9. Drift Detection Schedules (7 endpoints)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/config/drift-schedules` | List drift schedules |
-| POST | `/api/v1/config/drift-schedules` | Create schedule |
-| GET | `/api/v1/config/drift-schedules/{id}` | Get schedule |
-| PUT | `/api/v1/config/drift-schedules/{id}` | Update schedule |
-| DELETE | `/api/v1/config/drift-schedules/{id}` | Delete schedule |
-| POST | `/api/v1/config/drift-schedules/{id}/toggle` | Enable/disable schedule |
-| GET | `/api/v1/config/drift-schedules/{id}/runs` | Get schedule run history |
+> **Fail-closed (#270):** drift schedules are stored but never executed in this
+> release. The four execution-implying routes below return **HTTP 501
+> Not Implemented** with no database side effects; only list, detail and delete
+> are functional. Scheduled execution is tracked as #279.
+
+| Method | Endpoint | Description | Status |
+|--------|----------|-------------|--------|
+| GET | `/api/v1/config/drift-schedules` | List drift schedules | ✅ Functional |
+| POST | `/api/v1/config/drift-schedules` | Create schedule | ⛔ 501 Not Implemented |
+| GET | `/api/v1/config/drift-schedules/{id}` | Get schedule | ✅ Functional |
+| PUT | `/api/v1/config/drift-schedules/{id}` | Update schedule | ⛔ 501 Not Implemented |
+| DELETE | `/api/v1/config/drift-schedules/{id}` | Delete schedule | ✅ Functional |
+| POST | `/api/v1/config/drift-schedules/{id}/toggle` | Enable/disable schedule | ⛔ 501 Not Implemented |
+| GET | `/api/v1/config/drift-schedules/{id}/runs` | Get schedule run history | ⛔ 501 Not Implemented |
 
 ---
 

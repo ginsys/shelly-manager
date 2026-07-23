@@ -3,29 +3,22 @@ import { defineStore } from 'pinia'
 import {
   listDriftSchedules,
   getDriftSchedule,
-  createDriftSchedule,
-  updateDriftSchedule,
   deleteDriftSchedule,
-  toggleDriftSchedule,
-  getDriftScheduleRuns,
   getDriftReports,
   getDriftTrends,
   resolveDriftTrend,
   generateDeviceDriftReport,
   computeDailyAggregates,
   type DriftSchedule,
-  type DriftScheduleRun,
   type DriftReport,
   type DriftTrend,
-  type DriftDailyAggregate,
-  type CreateDriftScheduleRequest
+  type DriftDailyAggregate
 } from '@/api/drift'
 import type { Metadata } from '@/api/types'
 
 export const useDriftStore = defineStore('drift', () => {
   const schedules = ref<DriftSchedule[]>([])
   const currentSchedule = ref<DriftSchedule | null>(null)
-  const scheduleRuns = ref<DriftScheduleRun[]>([])
   const reports = ref<DriftReport[]>([])
   const trends = ref<DriftTrend[]>([])
   const trendAggregateDays = ref(30)
@@ -33,7 +26,6 @@ export const useDriftStore = defineStore('drift', () => {
   const error = ref<string | null>(null)
   const scheduleMeta = ref<Metadata | undefined>(undefined)
   const reportMeta = ref<Metadata | undefined>(undefined)
-  const runsMeta = ref<Metadata | undefined>(undefined)
 
   const trendAggregates = computed<DriftDailyAggregate[]>(() =>
     computeDailyAggregates(trends.value, trendAggregateDays.value)
@@ -68,38 +60,6 @@ export const useDriftStore = defineStore('drift', () => {
     }
   }
 
-  async function create(data: CreateDriftScheduleRequest) {
-    loading.value = true
-    error.value = null
-    try {
-      const newSchedule = await createDriftSchedule(data)
-      schedules.value.unshift(newSchedule)
-      return newSchedule
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to create drift schedule'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function update(id: number | string, data: Partial<CreateDriftScheduleRequest>) {
-    loading.value = true
-    error.value = null
-    try {
-      const updated = await updateDriftSchedule(id, data)
-      const index = schedules.value.findIndex(s => s.id === updated.id)
-      if (index !== -1) schedules.value[index] = updated
-      if (currentSchedule.value?.id === updated.id) currentSchedule.value = updated
-      return updated
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to update drift schedule'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
   async function remove(id: number | string) {
     loading.value = true
     error.value = null
@@ -109,38 +69,6 @@ export const useDriftStore = defineStore('drift', () => {
       if (currentSchedule.value?.id === id) currentSchedule.value = null
     } catch (e: any) {
       error.value = e?.message || 'Failed to delete drift schedule'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function toggle(id: number | string) {
-    loading.value = true
-    error.value = null
-    try {
-      const toggled = await toggleDriftSchedule(id)
-      const index = schedules.value.findIndex(s => s.id === toggled.id)
-      if (index !== -1) schedules.value[index] = toggled
-      if (currentSchedule.value?.id === toggled.id) currentSchedule.value = toggled
-      return toggled
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to toggle drift schedule'
-      throw e
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function fetchScheduleRuns(scheduleId: number | string, limit = 50) {
-    loading.value = true
-    error.value = null
-    try {
-      const result = await getDriftScheduleRuns(scheduleId, limit)
-      scheduleRuns.value = result.items
-      runsMeta.value = result.meta
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to load schedule runs'
       throw e
     } finally {
       loading.value = false
@@ -227,7 +155,6 @@ export const useDriftStore = defineStore('drift', () => {
   return {
     schedules,
     currentSchedule,
-    scheduleRuns,
     reports,
     trends,
     trendAggregates,
@@ -236,14 +163,9 @@ export const useDriftStore = defineStore('drift', () => {
     error,
     scheduleMeta,
     reportMeta,
-    runsMeta,
     fetchSchedules,
     fetchSchedule,
-    create,
-    update,
     remove,
-    toggle,
-    fetchScheduleRuns,
     fetchReports,
     fetchTrends,
     resolveTrend,

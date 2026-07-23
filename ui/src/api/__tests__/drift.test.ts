@@ -13,21 +13,15 @@ import api from '../client'
 import {
   listDriftSchedules,
   getDriftSchedule,
-  createDriftSchedule,
-  updateDriftSchedule,
   deleteDriftSchedule,
-  toggleDriftSchedule,
-  getDriftScheduleRuns,
   getDriftReports,
   getDriftTrends,
   resolveDriftTrend,
   generateDeviceDriftReport,
   computeDailyAggregates,
   type DriftSchedule,
-  type DriftScheduleRun,
   type DriftTrend,
-  type DriftReport,
-  type CreateDriftScheduleRequest
+  type DriftReport
 } from '../drift'
 
 function ok<T>(data: T) {
@@ -88,74 +82,11 @@ describe('Drift API client', () => {
     })
   })
 
-  describe('createDriftSchedule', () => {
-    it('posts snake_case fields and returns created schedule', async () => {
-      const req: CreateDriftScheduleRequest = {
-        name: 'Every 6h', cron_spec: '0 */6 * * *', device_ids: [1, 2], enabled: true
-      }
-      vi.mocked(api.post).mockResolvedValueOnce(ok({ id: 42, ...req, run_count: 0, created_at: 'x', updated_at: 'x' }))
-
-      const result = await createDriftSchedule(req)
-
-      expect(api.post).toHaveBeenCalledWith('/config/drift-schedules', req)
-      expect(result.id).toBe(42)
-      expect(result.cron_spec).toBe('0 */6 * * *')
-    })
-
-    it('throws when backend rejects', async () => {
-      vi.mocked(api.post).mockResolvedValueOnce(fail('invalid cron'))
-      await expect(createDriftSchedule({ name: 'X', cron_spec: 'bad' })).rejects.toThrow('invalid cron')
-    })
-  })
-
-  describe('updateDriftSchedule', () => {
-    it('puts partial update', async () => {
-      vi.mocked(api.put).mockResolvedValueOnce(ok({
-        id: 1, name: 'Renamed', enabled: true, cron_spec: '0 0 * * *',
-        run_count: 0, created_at: 'x', updated_at: 'x'
-      }))
-
-      const result = await updateDriftSchedule(1, { name: 'Renamed' })
-
-      expect(api.put).toHaveBeenCalledWith('/config/drift-schedules/1', { name: 'Renamed' })
-      expect(result.name).toBe('Renamed')
-    })
-  })
-
   describe('deleteDriftSchedule', () => {
     it('deletes and returns void', async () => {
       vi.mocked(api.delete).mockResolvedValueOnce(ok({ status: 'deleted' }))
       await expect(deleteDriftSchedule(5)).resolves.toBeUndefined()
       expect(api.delete).toHaveBeenCalledWith('/config/drift-schedules/5')
-    })
-  })
-
-  describe('toggleDriftSchedule', () => {
-    it('posts and returns toggled schedule', async () => {
-      vi.mocked(api.post).mockResolvedValueOnce(ok({
-        id: 1, name: 'X', enabled: false, cron_spec: '0 0 * * *',
-        run_count: 0, created_at: 'x', updated_at: 'x'
-      }))
-      const result = await toggleDriftSchedule(1)
-      expect(api.post).toHaveBeenCalledWith('/config/drift-schedules/1/toggle', {})
-      expect(result.enabled).toBe(false)
-    })
-  })
-
-  describe('getDriftScheduleRuns', () => {
-    it('returns raw array unwrapped', async () => {
-      const runs: DriftScheduleRun[] = [{
-        id: 1, schedule_id: 1, status: 'completed',
-        started_at: 'x', completed_at: 'y', created_at: 'x'
-      }]
-      vi.mocked(api.get).mockResolvedValueOnce(ok(runs))
-
-      const result = await getDriftScheduleRuns(1, 10)
-
-      expect(api.get).toHaveBeenCalledWith('/config/drift-schedules/1/runs', {
-        params: { limit: 10 }
-      })
-      expect(result.items).toEqual(runs)
     })
   })
 
