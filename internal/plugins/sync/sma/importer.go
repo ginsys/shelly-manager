@@ -113,34 +113,28 @@ func (s *SMAPlugin) ImportFromData(ctx context.Context, data []byte, config sync
 		return s.generateDryRunResult(importID, &archive, time.Since(startTime))
 	}
 
-	// Perform actual import
-	result, err := s.performImport(ctx, &archive, config)
-	if err != nil {
-		return &sync.ImportResult{
-			Success:   false,
-			ImportID:  importID,
-			Duration:  time.Since(startTime),
-			Errors:    []string{err.Error()},
-			CreatedAt: time.Now(),
-		}, err
-	}
-
-	// Update result with common fields
-	result.ImportID = importID
-	result.PluginName = "sma"
-	result.Format = "sma"
-	result.Duration = time.Since(startTime)
-	result.CreatedAt = time.Now()
-
-	s.logger.Info("SMA import completed",
+	// Non-dry-run persistence is not yet implemented. Refuse rather than
+	// fabricate success: the previous placeholder returned success:true with
+	// records_imported>0 while writing nothing, silently discarding the
+	// caller's data (#272). Fail closed until real persistence lands; callers
+	// can re-run with dry_run to preview.
+	s.logger.Warn("Refusing non-dry-run SMA import: persistence not yet implemented",
 		"import_id", importID,
-		"success", result.Success,
-		"records_imported", result.RecordsImported,
-		"records_skipped", result.RecordsSkipped,
-		"duration", result.Duration,
+		"devices", len(archive.Devices),
+		"templates", len(archive.Templates),
+		"discovered", len(archive.Discovered),
 	)
 
-	return result, nil
+	err := fmt.Errorf("SMA import persistence is not yet implemented; re-run with dry_run to preview (#272)")
+	return &sync.ImportResult{
+		Success:    false,
+		ImportID:   importID,
+		PluginName: "sma",
+		Format:     "sma",
+		Duration:   time.Since(startTime),
+		Errors:     []string{err.Error()},
+		CreatedAt:  time.Now(),
+	}, err
 }
 
 // validateSMAFormat validates the basic structure and version of an SMA archive
@@ -286,169 +280,4 @@ func (s *SMAPlugin) generateDryRunResult(importID string, archive *SMAArchive, d
 		},
 		CreatedAt: time.Now(),
 	}, nil
-}
-
-// performImport performs the actual import operation
-func (s *SMAPlugin) performImport(ctx context.Context, archive *SMAArchive, config sync.ImportConfig) (*sync.ImportResult, error) {
-	var changes []sync.ImportChange
-	var errors []string
-	var warnings []string
-
-	recordsImported := 0
-	recordsSkipped := 0
-
-	// TODO: Implement actual database operations
-	// For now, this is a placeholder implementation
-
-	s.logger.Info("Performing SMA import",
-		"devices", len(archive.Devices),
-		"templates", len(archive.Templates),
-		"discovered", len(archive.Discovered),
-	)
-
-	// Import templates first (dependencies for devices)
-	for _, template := range archive.Templates {
-		if err := s.importTemplate(ctx, &template, config, &changes); err != nil {
-			errors = append(errors, fmt.Sprintf("failed to import template %s: %v", template.Name, err))
-			recordsSkipped++
-		} else {
-			recordsImported++
-		}
-	}
-
-	// Import devices
-	for _, device := range archive.Devices {
-		if err := s.importDevice(ctx, &device, config, &changes); err != nil {
-			errors = append(errors, fmt.Sprintf("failed to import device %s: %v", device.MAC, err))
-			recordsSkipped++
-		} else {
-			recordsImported++
-		}
-	}
-
-	// Import discovered devices
-	for _, discovered := range archive.Discovered {
-		if err := s.importDiscoveredDevice(ctx, &discovered, config, &changes); err != nil {
-			errors = append(errors, fmt.Sprintf("failed to import discovered device %s: %v", discovered.MAC, err))
-			recordsSkipped++
-		} else {
-			recordsImported++
-		}
-	}
-
-	// Import network settings if present and configured
-	if archive.NetworkSettings != nil {
-		if err := s.importNetworkSettings(ctx, archive.NetworkSettings, config); err != nil {
-			warnings = append(warnings, fmt.Sprintf("failed to import network settings: %v", err))
-		} else {
-			s.logger.Info("Network settings imported successfully")
-		}
-	}
-
-	// Import plugin configurations if present
-	if len(archive.PluginConfigs) > 0 {
-		imported, skipped := s.importPluginConfigurations(ctx, archive.PluginConfigs, config)
-		recordsImported += imported
-		recordsSkipped += skipped
-	}
-
-	success := len(errors) == 0 || recordsImported > 0
-
-	return &sync.ImportResult{
-		Success:         success,
-		RecordsImported: recordsImported,
-		RecordsSkipped:  recordsSkipped,
-		Changes:         changes,
-		Errors:          errors,
-		Warnings:        warnings,
-		Metadata: map[string]interface{}{
-			"sma_version":      archive.SMAVersion,
-			"format_version":   archive.FormatVersion,
-			"source_system":    archive.Metadata.SystemInfo.Hostname,
-			"source_export_id": archive.Metadata.ExportID,
-		},
-	}, nil
-}
-
-// importTemplate imports a single template (placeholder implementation)
-func (s *SMAPlugin) importTemplate(ctx context.Context, template *sync.TemplateData, config sync.ImportConfig, changes *[]sync.ImportChange) error {
-	s.logger.Info("Importing template", "name", template.Name, "device_type", template.DeviceType)
-
-	// TODO: Implement actual template import logic
-	// This would involve:
-	// 1. Check if template already exists
-	// 2. Handle conflicts based on merge strategy
-	// 3. Insert/update template in database
-	// 4. Record changes
-
-	*changes = append(*changes, sync.ImportChange{
-		Type:       "create", // or "update"
-		Resource:   "template",
-		ResourceID: template.Name,
-		NewValue:   template,
-	})
-
-	return nil
-}
-
-// importDevice imports a single device (placeholder implementation)
-func (s *SMAPlugin) importDevice(ctx context.Context, device *sync.DeviceData, config sync.ImportConfig, changes *[]sync.ImportChange) error {
-	s.logger.Info("Importing device", "mac", device.MAC, "name", device.Name, "type", device.Type)
-
-	// TODO: Implement actual device import logic
-	// This would involve:
-	// 1. Check if device already exists (by MAC address)
-	// 2. Handle conflicts based on merge strategy
-	// 3. Insert/update device in database
-	// 4. Import associated configuration
-	// 5. Record changes
-
-	*changes = append(*changes, sync.ImportChange{
-		Type:       "create", // or "update"
-		Resource:   "device",
-		ResourceID: device.MAC,
-		NewValue:   device,
-	})
-
-	return nil
-}
-
-// importDiscoveredDevice imports a single discovered device (placeholder implementation)
-func (s *SMAPlugin) importDiscoveredDevice(ctx context.Context, discovered *sync.DiscoveredDeviceData, config sync.ImportConfig, changes *[]sync.ImportChange) error {
-	s.logger.Info("Importing discovered device", "mac", discovered.MAC, "model", discovered.Model)
-
-	// TODO: Implement actual discovered device import logic
-
-	*changes = append(*changes, sync.ImportChange{
-		Type:       "create",
-		Resource:   "discovered_device",
-		ResourceID: discovered.MAC,
-		NewValue:   discovered,
-	})
-
-	return nil
-}
-
-// importNetworkSettings imports network settings (placeholder implementation)
-func (s *SMAPlugin) importNetworkSettings(ctx context.Context, settings *NetworkSettings, config sync.ImportConfig) error {
-	s.logger.Info("Importing network settings", "wifi_networks", len(settings.WiFiNetworks))
-
-	// TODO: Implement actual network settings import
-	// This would involve updating system network configuration
-
-	return nil
-}
-
-// importPluginConfigurations imports plugin configurations (placeholder implementation)
-func (s *SMAPlugin) importPluginConfigurations(ctx context.Context, configs []PluginConfiguration, config sync.ImportConfig) (imported, skipped int) {
-	for _, pluginConfig := range configs {
-		s.logger.Info("Importing plugin configuration", "plugin", pluginConfig.PluginName, "enabled", pluginConfig.Enabled)
-
-		// TODO: Implement actual plugin configuration import
-		// This would involve updating plugin settings in the registry
-
-		imported++
-	}
-
-	return imported, skipped
 }
