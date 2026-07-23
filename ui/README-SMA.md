@@ -26,9 +26,10 @@ The SMA format is a specialized archive format designed for comprehensive backup
 
 > **Import is only partly functional.** The generic `POST /api/v1/import` route
 > (`plugin_name: "sma"`) dispatches to the registered SMA plugin, and validation +
-> dry-run **preview** work. But non-dry-run persistence is unimplemented (#272):
-> `performImport` is a placeholder that reports simulated success without writing
-> to the DB. And there is no import UI — the app's SMA import helpers target
+> dry-run **preview** work. But non-dry-run persistence is unimplemented: a real
+> import now **fails closed** with HTTP 501 `NOT_IMPLEMENTED` instead of the old
+> fabricated success (#272 removed the fake; real persistence is tracked in #284).
+> And there is no import UI — the app's SMA import helpers target
 > non-existent `/import/sma*` routes that 404. The capabilities below describe the
 > intended UI, not current behavior.
 
@@ -71,7 +72,8 @@ The SMA format is a specialized archive format designed for comprehensive backup
 > the intended UI workflow. The app has no SMA import screen and its SMA import
 > helpers point at non-existent `/import/sma*` routes. The generic
 > `POST /api/v1/import` (`plugin_name: "sma"`) does dispatch to the plugin, but
-> only preview works — non-dry-run persistence is unimplemented (#272).
+> only preview works — a non-dry-run import fails closed with 501, persistence
+> unimplemented (#284).
 
 1. **Open Import Dialog**
    - Use the SMA import functionality (implementation depends on UI structure)
@@ -161,7 +163,7 @@ interface SMAExportConfiguration {
 > Intended client-side config for a future import UI. It does **not** match the
 > backend `ImportOptions` (`dry_run` / `force_overwrite` / `validate_only` /
 > `backup_before` — no `merge_strategy`, no `import_sections`). Non-dry-run
-> restore is also unimplemented on the backend (#272).
+> restore is also unimplemented on the backend — it fails closed with 501 (#284).
 
 ```typescript
 interface SMAImportConfiguration {
@@ -297,14 +299,16 @@ SMA **import** runs through the generic import route — there is no dedicated
 
 - `POST /api/v1/import` with `{ "plugin_name": "sma", "source": { "type": "file"|"data", ... } }`
   (the `sma` plugin is registered in the sync engine; `source.type: url` is not
-  implemented). **Preview/validation only** — non-dry-run persistence is a stub
-  that fakes success without writing to the DB (#272).
+  implemented). **Preview/validation only** — a non-dry-run import fails closed
+  with HTTP 501 `NOT_IMPLEMENTED` (#272 removed the old fake success; real
+  persistence is tracked in #284).
 - `POST /api/v1/import/preview` - same body, dry-run preview (the functional path)
 
 **Not registered (these 404):** `/import/sma`, `/import/sma-preview`,
 `/import/sma/{id}`, and standalone `GET /export/sma/{id}`. The app's SMA import
 helpers still target `/import/sma*`, so the *frontend* import path is broken; and
-even the generic backend route only previews, it does not yet restore (#272).
+even the generic backend route only previews, it does not yet restore — a
+non-dry-run import fails closed with 501 (#284).
 
 ### Response Formats
 
@@ -354,7 +358,7 @@ src/components/
 └── SMAConfigForm.vue       # SMA export configuration
 # Note: there is no SMA import UI. The generic POST /api/v1/import route
 # (plugin_name: "sma") dispatches to the plugin but only previews — non-dry-run
-# restore is unimplemented (#272). The app's SMA import helpers also target
+# restore is unimplemented — fails closed with 501 (#284). The app's SMA import helpers also target
 # non-existent /import/sma* paths that 404. The former SMAImportForm.vue was an
 # unmounted prototype and has been removed.
 

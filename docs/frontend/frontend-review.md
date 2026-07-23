@@ -291,7 +291,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 #### Import (5 registered endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/import` | POST | Generic import — SMA runs here with `plugin_name: "sma"` (⚠️ preview works; non-dry-run restore is a stub, #272) |
+| `/import` | POST | Generic import — SMA runs here with `plugin_name: "sma"` (⚠️ preview works; non-dry-run restore fails closed → 501, persistence #284) |
 | `/import/preview` | POST | Preview import operation (same body, dry-run) |
 | `/import/history` | GET | List all imports |
 | `/import/{id}` | GET | Get import result |
@@ -302,8 +302,10 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 
 > Note: the frontend SMA import helpers target the struck `/import/sma*` paths
 > (which 404). The generic `/import` route dispatches to the SMA plugin but only
-> **previews** correctly — non-dry-run restore persists nothing and fakes success
-> (#272). So SMA restore is not usable end-to-end from either the API or the UI.
+> **previews** correctly — a non-dry-run restore now **fails closed** with HTTP
+> 501 `NOT_IMPLEMENTED` rather than persisting nothing behind a fake success (#272
+> removed the fake; real persistence is tracked in #284). So SMA restore is not
+> usable end-to-end from either the API or the UI yet.
 
 #### Plugins (6 endpoints)
 | Endpoint | Method | Purpose |
