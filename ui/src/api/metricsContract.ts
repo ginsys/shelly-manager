@@ -214,7 +214,8 @@ function validDeviceStatusChange(v: unknown): boolean {
     isStr(v.device_id) &&
     isStr(v.device_name) &&
     isStr(v.old_status) &&
-    isStr(v.new_status)
+    isStr(v.new_status) &&
+    isStr(v.timestamp)
   )
 }
 
@@ -224,7 +225,8 @@ function validDriftDetected(v: unknown): boolean {
     isStr(v.device_id) &&
     isStr(v.device_name) &&
     isNum(v.drift_count) &&
-    isStr(v.severity)
+    isStr(v.severity) &&
+    isStr(v.timestamp)
   )
 }
 
