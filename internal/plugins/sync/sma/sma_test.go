@@ -330,6 +330,53 @@ func TestSMAPlugin_ImportFromData_DryRun(t *testing.T) {
 	assert.Contains(t, result.Warnings[0], "dry run")
 }
 
+// TestSMAPlugin_ImportFromData_NonDryRunFailsClosed asserts that a real
+// (non-dry-run) import refuses rather than fabricating success. Persistence is
+// not yet implemented (#272); until it is, the import must fail closed so
+// callers are never told records were imported when nothing was written.
+func TestSMAPlugin_ImportFromData_NonDryRunFailsClosed(t *testing.T) {
+	plugin := NewPlugin().(*SMAPlugin)
+	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
+	err := plugin.Initialize(logger)
+	require.NoError(t, err)
+
+	archive := SMAArchive{
+		SMAVersion:    SMAVersion,
+		FormatVersion: FormatVersion,
+		Metadata: SMAMetadata{
+			ExportID:  "test-import",
+			CreatedAt: time.Now(),
+			CreatedBy: "test-user",
+		},
+		Devices: []sync.DeviceData{
+			{MAC: "AA:BB:CC:DD:EE:FF", Name: "Test Device", Type: "shelly1"},
+		},
+		Templates: []sync.TemplateData{
+			{Name: "Test Template", DeviceType: "shelly1"},
+		},
+	}
+
+	jsonData, err := json.Marshal(archive)
+	require.NoError(t, err)
+
+	config := sync.ImportConfig{
+		Options: sync.ImportOptions{
+			DryRun: false,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := plugin.ImportFromData(ctx, jsonData, config)
+
+	// Must surface an error, not a fabricated success.
+	require.Error(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.Success)
+	assert.Zero(t, result.RecordsImported, "must not claim records imported when nothing is persisted")
+	assert.Empty(t, result.Changes, "must not fabricate change entries")
+	assert.NotEmpty(t, result.Errors)
+}
+
 func TestSMAPlugin_ValidateSMAFormat(t *testing.T) {
 	plugin := NewPlugin().(*SMAPlugin)
 	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
