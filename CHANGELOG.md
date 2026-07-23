@@ -4,7 +4,25 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Removed
+- Plugin configuration, connection testing and enable/disable are removed from
+  the UI and API client (#264). The frontend called `GET/PUT
+  /export/plugins/{name}/config` and `POST /export/plugins/{name}/test` plus an
+  enable/disable toggle built on `/config` — none of those routes exist on the
+  backend, and there is no server-side model for stored plugin configuration
+  (config is supplied per export/import request). The dead API functions, store
+  actions, the card's Configure/Test/Enable-Disable controls and
+  `PluginConfigForm.vue` were deleted (no HTTP 501 stubs — the routes never
+  existed). Plugins are now read-only: list, per-category grouping, a read-only
+  **schema viewer**, and read-only details. A product model for stored plugin
+  configuration/testing/enablement is tracked as a design vertical (#290).
+
 ### Changed
+- Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`
+  (list item) and `PluginDetail = { info, capabilities }`, replacing a permissive
+  superset. Plugin status is backend-hardcoded, so a listed plugin is presented
+  as "Registered" only; the fictional status filter/sort, configured/disabled/
+  error statistics and `health` rendering were removed.
 - Drift detection schedules now fail closed. The scheduler
   (`configuration.NewScheduler`) has no callers — schedules were stored but never
   executed, so `next_run` was never set, `run_count` never advanced and the run
