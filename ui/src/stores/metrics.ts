@@ -177,8 +177,8 @@ export const useMetricsStore = defineStore('metrics', () => {
 
   function appendEvent(msg: EventMessage) {
     eventSeq++
-    let severity = 'info'
-    let message = ''
+    let severity: string
+    let message: string
     switch (msg.type) {
       case 'alert':
         severity = msg.data.severity
@@ -337,6 +337,11 @@ export const useMetricsStore = defineStore('metrics', () => {
     stopPolling()
     stopWatchdog()
     disconnectWS()
+    // The store is a shared singleton; reset freshness so a remount starts from
+    // polling (not a stale "live" left over from the previous session, which
+    // would show a false LIVE badge and skip the initial REST fetch).
+    feedState.value = 'idle'
+    lastAppliedMetricsAt.value = null
   }
 
   return {

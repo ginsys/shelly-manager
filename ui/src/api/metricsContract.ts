@@ -141,11 +141,58 @@ function validSystemStatus(v: unknown): v is SystemStatus {
   )
 }
 
+function validDevice(v: unknown): v is DeviceMetric {
+  return (
+    isObj(v) &&
+    isStr(v.id) &&
+    isStr(v.name) &&
+    isStr(v.type) &&
+    isStr(v.status) &&
+    isBool(v.config_synced) &&
+    isStr(v.last_seen)
+  )
+}
+
+function validDrift(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isNum(v.total_drift_issues) &&
+    isNumberRecord(v.severity_distribution) &&
+    isNumberRecord(v.category_distribution) &&
+    Array.isArray(v.trend_analysis)
+  )
+}
+
+function validNotification(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isNum(v.total_sent) &&
+    isNum(v.total_failed) &&
+    isNumberRecord(v.channel_breakdown) &&
+    isNumberRecord(v.alert_level_breakdown) &&
+    isNum(v.average_latency_seconds)
+  )
+}
+
+function validResolution(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isNum(v.total_resolutions) &&
+    isNumberRecord(v.auto_fix_success_rate) &&
+    isNumberRecord(v.resolutions_by_category) &&
+    isNum(v.average_review_time_seconds)
+  )
+}
+
+// Validate every documented DashboardMetrics field so a partial frame can't be
+// cast to a complete snapshot and leave consumers reading undefined.
 function validDashboard(v: unknown): boolean {
   if (!isObj(v)) return false
   if (!validSystemStatus(v.system_status)) return false
-  if (!Array.isArray(v.device_metrics) || !v.device_metrics.every(isObj)) return false
-  if (!isObj(v.drift_metrics) || !isNumberRecord(v.drift_metrics.severity_distribution)) return false
+  if (!Array.isArray(v.device_metrics) || !v.device_metrics.every(validDevice)) return false
+  if (!validDrift(v.drift_metrics)) return false
+  if (!validNotification(v.notification_metrics)) return false
+  if (!validResolution(v.resolution_metrics)) return false
   return true
 }
 

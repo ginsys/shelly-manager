@@ -129,9 +129,12 @@ export function useWebSocket<T = unknown>(
         status.value = 'open'
         reconnectAttempts.value = 0
         connectedAt = Date.now()
-        // Deliberately do NOT stamp lastMessageAt here: opening a socket is not
-        // receiving data. The "live" indicator downstream must reflect applied
-        // payloads, never mere connection state (#247).
+        // Clear the previous connection's message time: it belongs to a socket
+        // that is gone. Leaving it would make the heartbeat measure the new
+        // socket against an old timestamp and recycle it on the first tick after
+        // a long outage. Deliberately null (not Date.now()): opening a socket is
+        // not receiving data, so it must never mark the feed live (#247).
+        lastMessageAt.value = null
         startHeartbeat()
         onOpen?.(event)
       }
