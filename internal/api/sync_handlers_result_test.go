@@ -49,7 +49,7 @@ func (m *mockSyncPlugin) Import(_ context.Context, _ sync.ImportSource, _ sync.I
 }
 
 // notImplementedImportPlugin fails closed on import the way a plugin with no
-// persistence layer does (e.g. SMA until #272 lands): it wraps
+// persistence layer does (e.g. SMA until #284 lands): it wraps
 // sync.ErrImportNotImplemented so the handler can map it to a 501.
 type notImplementedImportPlugin struct{ mockSyncPlugin }
 

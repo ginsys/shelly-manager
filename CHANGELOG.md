@@ -25,7 +25,8 @@ All notable changes to this project are documented here. The project follows Con
   success but silently lost data. Persistence is not built yet (a larger
   follow-up), so a real import now fails closed: the generic import endpoint
   returns `501 Not Implemented` (`NOT_IMPLEMENTED`) instead of a fabricated
-  success or an opaque `500`. Dry-run preview is unchanged. (#272)
+  success or an opaque `500`. Dry-run preview is unchanged. Building the actual
+  persistence is tracked separately in #284. (#272)
 - Existing databases could not start the server after upgrading: AutoMigrate
   emitted `ALTER TABLE config_templates ADD scope text NOT NULL`, which SQLite
   refuses on a populated table and PostgreSQL rejects for the NULLs it would
