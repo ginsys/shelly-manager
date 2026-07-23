@@ -19,21 +19,6 @@
         </select>
       </div>
 
-      <div class="filter-group">
-        <label class="filter-label">Status:</label>
-        <select
-          :value="statusFilter"
-          @change="emit('update:statusFilter', ($event.target as HTMLSelectElement).value)"
-          class="filter-select"
-        >
-          <option value="">All Statuses</option>
-          <option value="configured">Configured & Enabled</option>
-          <option value="available">Available (Not Configured)</option>
-          <option value="disabled">Configured & Disabled</option>
-          <option value="error">Error</option>
-        </select>
-      </div>
-
       <div class="filter-group search-group">
         <label class="filter-label">Search:</label>
         <input
@@ -58,7 +43,6 @@ interface PluginCategory {
 
 interface Props {
   selectedCategory: string
-  statusFilter: string
   searchQuery: string
   categories: PluginCategory[]
 }
@@ -67,7 +51,6 @@ defineProps<Props>()
 
 const emit = defineEmits<{
   'update:selectedCategory': [value: string]
-  'update:statusFilter': [value: string]
   'update:searchQuery': [value: string]
 }>()
 

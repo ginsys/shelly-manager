@@ -9,6 +9,7 @@ import {
   validatePluginConfig,
   generateDefaultConfig,
   type Plugin,
+  type PluginDetail,
   type PluginSchema,
   type PluginConfig,
   type PluginCategory,
@@ -26,8 +27,9 @@ export const usePluginStore = defineStore('plugin', {
     error: '' as string | '',
     meta: undefined as Metadata | undefined,
     
-    // Current plugin state (for detailed view)
-    currentPlugin: null as Plugin | null,
+    // Current plugin detail state ({ info, capabilities } from the detail
+    // endpoint — a different shape from the list item).
+    currentPlugin: null as PluginDetail | null,
     currentPluginSchema: null as PluginSchema | null,
     currentPluginConfig: null as PluginConfig | null,
     currentLoading: false,
@@ -40,8 +42,7 @@ export const usePluginStore = defineStore('plugin', {
     // Filter and search state
     selectedCategory: '' as string,
     searchQuery: '' as string,
-    statusFilter: '' as string, // 'all', 'configured', 'available', 'error'
-    
+
     // Testing state
     testingPlugins: new Set<string>(),
     testResults: new Map<string, PluginTestResult>(),
@@ -75,32 +76,16 @@ export const usePluginStore = defineStore('plugin', {
           p.capabilities.some(cap => cap.toLowerCase().includes(query))
         )
       }
-      
-      // Filter by status
-      if (state.statusFilter) {
-        switch (state.statusFilter) {
-          case 'configured':
-            filtered = filtered.filter(p => p.status.configured && p.status.enabled)
-            break
-          case 'available':
-            filtered = filtered.filter(p => p.status.available && !p.status.configured)
-            break
-          case 'error':
-            filtered = filtered.filter(p => p.status.error)
-            break
-          case 'disabled':
-            filtered = filtered.filter(p => p.status.configured && !p.status.enabled)
-            break
-        }
-      }
-      
+
+      // No status filter: the backend hardcodes plugin status, so filtering by
+      // it would be fiction (#266). Category + search are the real filters.
       return filtered
     },
 
     /**
      * Get plugins grouped by category
      */
-    pluginsByCategory(state): Record<string, Plugin[]> {
+    pluginsByCategory(): Record<string, Plugin[]> {
       const groups: Record<string, Plugin[]> = {}
 
       // Use the filteredPlugins getter to populate categories
@@ -112,49 +97,28 @@ export const usePluginStore = defineStore('plugin', {
         groups[plugin.category].push(plugin)
       }
 
-      // Sort plugins within each category
+      // Sort plugins within each category by display name. (No status-based
+      // sort: plugin status is backend-hardcoded, so ordering by it is fiction.)
       for (const category in groups) {
-        groups[category].sort((a, b) => {
-          // Sort by status first (configured > available > error > unavailable)
-          const statusOrder = { ready: 0, 'not-configured': 1, disabled: 2, error: 3, unavailable: 4 }
-          const aStatus = (this as any).getPluginStatusClass(a.status) as string
-          const bStatus = (this as any).getPluginStatusClass(b.status) as string
-
-          if (statusOrder[aStatus as keyof typeof statusOrder] !== statusOrder[bStatus as keyof typeof statusOrder]) {
-            return (statusOrder[aStatus as keyof typeof statusOrder] || 5) - (statusOrder[bStatus as keyof typeof statusOrder] || 5)
-          }
-
-          // Then by display name
-          return a.display_name.localeCompare(b.display_name)
-        })
+        groups[category].sort((a, b) => a.display_name.localeCompare(b.display_name))
       }
 
       return groups
     },
 
     /**
-     * Get plugin statistics
+     * Get plugin statistics. Only truthful counts: total registered plugins and
+     * per-category counts (from the backend). Configured/enabled/error tallies
+     * were fiction (backend hardcodes status) and were removed in #266.
      */
     pluginStats: (state) => {
-      const total = state.plugins.length
-      const configured = state.plugins.filter(p => p.status.configured && p.status.enabled).length
-      const available = state.plugins.filter(p => p.status.available && !p.status.configured).length
-      const disabled = state.plugins.filter(p => p.status.configured && !p.status.enabled).length
-      const error = state.plugins.filter(p => p.status.error).length
-      const unavailable = state.plugins.filter(p => !p.status.available).length
-      
       const byCategory = state.categories.reduce((acc, cat) => {
         acc[cat.name] = cat.plugin_count
         return acc
       }, {} as Record<string, number>)
-      
+
       return {
-        total,
-        configured,
-        available,
-        disabled,
-        error,
-        unavailable,
+        total: state.plugins.length,
         byCategory
       }
     },
@@ -171,17 +135,6 @@ export const usePluginStore = defineStore('plugin', {
      */
     getTestResult: (state) => (name: string) => {
       return state.testResults.get(name)
-    },
-
-    /**
-     * Get plugin status display class
-     */
-    getPluginStatusClass: () => (status: Plugin['status']) => {
-      if (!status.available) return 'unavailable'
-      if (status.error) return 'error'
-      if (!status.configured) return 'not-configured'
-      if (!status.enabled) return 'disabled'
-      return 'ready'
     },
 
     /**
@@ -331,7 +284,7 @@ export const usePluginStore = defineStore('plugin', {
         this.configurationCache.set(name, updatedConfig)
         
         // Update current config if it matches
-        if (this.currentPlugin?.name === name) {
+        if (this.currentPlugin?.info.name === name) {
           this.currentPluginConfig = updatedConfig
           this.configFormData = { ...config }
         }
@@ -341,7 +294,6 @@ export const usePluginStore = defineStore('plugin', {
         if (pluginIndex !== -1) {
           this.plugins[pluginIndex].status.configured = true
           this.plugins[pluginIndex].status.enabled = enabled
-          this.plugins[pluginIndex].status.error = undefined
         }
         
         return updatedConfig
@@ -418,10 +370,6 @@ export const usePluginStore = defineStore('plugin', {
 
     setSearchQuery(query: string) {
       this.searchQuery = query
-    },
-
-    setStatusFilter(filter: string) {
-      this.statusFilter = filter
     },
 
     /**

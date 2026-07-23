@@ -23,12 +23,10 @@
           </div>
 
           <div class="row q-gutter-md">
-            <q-chip
-              :color="getStatusColor(statusClass)"
-              text-color="white"
-              :icon="getStatusIcon(statusClass)"
-            >
-              {{ statusClass }}
+            <!-- Backend hardcodes status; present registration only, not
+                 configured/enabled state (#266). -->
+            <q-chip color="blue-grey" text-color="white" icon="check_circle">
+              Registered
             </q-chip>
             <q-chip outline>
               <q-icon name="category" class="q-mr-xs" />
@@ -134,8 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { usePluginStore } from '../stores/plugin'
+import { ref } from 'vue'
 import type { Plugin } from '../api/plugin'
 
 interface Props {
@@ -146,20 +143,16 @@ interface Emits {
   (event: 'close'): void
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 const emit = defineEmits<Emits>()
-const pluginStore = usePluginStore()
 
 const activeTab = ref('overview')
 
-// Derived status label ('ready' | 'not-configured' | 'disabled' | 'error' | 'unavailable').
 // This view is read-only and renders entirely from the list-DTO `plugin` prop
-// (GET /export/plugins). Configuration and enable/disable are intentionally not
-// here — their backend routes do not exist yet (#264), and the per-plugin detail
-// endpoint is not wired.
-const statusClass = computed(() =>
-  props.plugin ? pluginStore.getPluginStatusClass(props.plugin.status) : 'unavailable'
-)
+// (GET /export/plugins). Status is presented as "Registered" only — the backend
+// hardcodes configured/enabled, so those are not shown as meaningful (#266).
+// Configuration/enable/disable are not here; their backend routes do not exist
+// (#264).
 
 const getPluginColor = (category: string): string => {
   const colors: Record<string, string> = {
@@ -179,28 +172,6 @@ const getPluginIcon = (category: string): string => {
     custom: 'extension'
   }
   return icons[category] || 'extension'
-}
-
-const getStatusColor = (status: string): string => {
-  const colors: Record<string, string> = {
-    ready: 'green',
-    'not-configured': 'grey',
-    disabled: 'orange',
-    error: 'red',
-    unavailable: 'grey'
-  }
-  return colors[status] || 'grey'
-}
-
-const getStatusIcon = (status: string): string => {
-  const icons: Record<string, string> = {
-    ready: 'check_circle',
-    'not-configured': 'settings',
-    disabled: 'pause_circle',
-    error: 'error',
-    unavailable: 'block'
-  }
-  return icons[status] || 'help'
 }
 </script>
 

@@ -6,6 +6,7 @@ import {
   getPluginSchema,
   validatePluginConfig,
   type Plugin,
+  type PluginDetail,
   type PluginSchema,
 } from '../plugin'
 import type { APIResponse } from '../types'
@@ -155,25 +156,34 @@ describe('Plugin API Client', () => {
   })
 
   describe('getPlugin', () => {
-    const mockPlugin: Plugin = {
-      name: 'backup-plugin',
-      display_name: 'Backup Plugin',
-      version: '1.0.0',
-      description: 'System backup plugin',
-      category: 'backup',
-      capabilities: ['backup', 'export', 'restore'],
-      status: {
-        available: true,
-        configured: true,
-        enabled: true,
-      }
+    // The detail endpoint returns `{ info, capabilities }` — a different shape
+    // from the list item, so getPlugin resolves to PluginDetail (#266).
+    const mockDetail: PluginDetail = {
+      info: {
+        name: 'backup-plugin',
+        version: '1.0.0',
+        description: 'System backup plugin',
+        author: 'Test Author',
+        license: 'MIT',
+        supported_formats: ['json', 'yaml'],
+        tags: ['backup'],
+        category: 'backup',
+      },
+      capabilities: {
+        supports_incremental: true,
+        supports_scheduling: false,
+        requires_authentication: false,
+        supported_outputs: ['file'],
+        max_data_size: 0,
+        concurrency_level: 1,
+      },
     }
 
     it('should fetch plugin details successfully', async () => {
-      const mockResponse: AxiosResponse<APIResponse<Plugin>> = {
+      const mockResponse: AxiosResponse<APIResponse<PluginDetail>> = {
         data: {
           success: true,
-          data: mockPlugin,
+          data: mockDetail,
           timestamp: '2023-01-01T00:00:00Z',
           request_id: 'req-123'
         },
@@ -188,9 +198,9 @@ describe('Plugin API Client', () => {
       const result = await getPlugin('backup-plugin')
 
       expect(mockApi.get).toHaveBeenCalledWith('/export/plugins/backup-plugin')
-      expect(result).toEqual(mockPlugin)
-      expect(result.name).toBe('backup-plugin')
-      expect(result.status.configured).toBe(true)
+      expect(result).toEqual(mockDetail)
+      expect(result.info.name).toBe('backup-plugin')
+      expect(result.capabilities.supports_incremental).toBe(true)
     })
 
     it('should handle plugin not found', async () => {

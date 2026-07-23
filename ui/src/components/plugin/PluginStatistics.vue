@@ -5,38 +5,33 @@
         <span class="stat-label">Total Plugins:</span>
         <span class="stat-value">{{ statistics.total }}</span>
       </div>
-      <div class="card">
-        <span class="stat-label">Configured:</span>
-        <span class="stat-value success">{{ statistics.configured }}</span>
-      </div>
-      <div class="card">
-        <span class="stat-label">Available:</span>
-        <span class="stat-value available">{{ statistics.available }}</span>
-      </div>
-      <div class="card">
-        <span class="stat-label">Disabled:</span>
-        <span class="stat-value disabled">{{ statistics.disabled }}</span>
-      </div>
-      <div class="card">
-        <span class="stat-label">Issues:</span>
-        <span class="stat-value error">{{ statistics.error }}</span>
+      <!-- Only truthful counts: total + per-category. Configured/enabled/error
+           tallies were fiction (backend hardcodes status) and were removed. -->
+      <div
+        v-for="[category, count] in categoryEntries"
+        :key="category"
+        class="card"
+      >
+        <span class="stat-label">{{ category }}:</span>
+        <span class="stat-value">{{ count }}</span>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
 interface PluginStats {
   total: number
-  configured: number
-  available: number
-  disabled: number
-  error: number
+  byCategory: Record<string, number>
 }
 
-defineProps<{
+const props = defineProps<{
   statistics: PluginStats
 }>()
+
+const categoryEntries = computed(() => Object.entries(props.statistics.byCategory))
 </script>
 
 <style scoped>
