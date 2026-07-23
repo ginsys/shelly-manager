@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Fixed
+- Real-time metrics over WebSocket never actually worked and reported a false
+  "LIVE": the backend emitted `initial_metrics`/`metrics_update`/`alert`/
+  `device_status_change`/`drift_detected` while the frontend only accepted a
+  disjoint set (`status`/`health`/`system`/…), so every live frame was discarded
+  yet the badge turned green on connect. The message types are now named Go
+  constants mirrored by a frontend manifest and enforced across the boundary by a
+  contract test; the store validates every frame at runtime, hydrates from both
+  snapshot types, and drives a truthful "LIVE" from an explicit freshness state
+  machine (idle→polling→live→stale) with a reactive watchdog — connection state
+  alone never marks the feed live. REST polling stays active until the first
+  snapshot is applied and can't be clobbered by a late response; the stale socket
+  is recycled on heartbeat timeout and late frames from a superseded socket are
+  ignored; `alert`/`device_status_change`/`drift_detected` feed a live-events
+  panel. Charts drop the fictional CPU/memory/disk series (no backend telemetry)
+  for a real device-count trend. (#247)
+
 ### Security
 - Require the configured admin key on all four bulk configuration endpoints
   (`POST /api/v1/config/bulk-import`, `/bulk-export`, `/bulk-drift-detect`,

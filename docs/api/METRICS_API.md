@@ -82,31 +82,46 @@ ws.onmessage = (e) => console.log(JSON.parse(e.data));
 ws.onclose = () => console.log("closed");
 ```
 
-### Message Types (typical)
+### Message Types
 
-- Dashboard update:
-```
+The server emits exactly the types below. The source of truth is
+`internal/metrics/websocket.go` (`AllMessageTypes()`); the frontend mirror is
+`ui/src/api/metricsMessages.ts`, and a cross-language contract test
+(`TestMessageTypeManifestParity`) fails CI if the two diverge. Every frame is
+`{ "type": <one of below>, "timestamp": "<RFC3339>", "data": {…} }`.
+
+| `type` | When | `data` |
+|--------|------|--------|
+| `initial_metrics` | Once, immediately after a client connects | Full `DashboardMetrics` snapshot |
+| `metrics_update` | Every 5s | Full `DashboardMetrics` snapshot |
+| `alert` | `/metrics/test-alert` or backend sources | `{ alert_type, message, severity }` |
+| `device_status_change` | A device goes online/offline | `{ device_id, device_name, old_status, new_status, timestamp }` |
+| `drift_detected` | Configuration drift detected | `{ device_id, device_name, drift_count, severity, timestamp }` |
+
+`DashboardMetrics` = `{ system_status, device_metrics[], drift_metrics, notification_metrics, resolution_metrics }`.
+`system_status` = `{ uptime_seconds, metrics_enabled, last_collection_time, total_devices, online_devices, devices_with_drift }` — note there is **no** CPU/memory/disk telemetry; charts derive from device/drift counts.
+
+Snapshot (`initial_metrics` / `metrics_update`):
+```json
 {
-  "type": "dashboard",
-  "timestamp": "...",
+  "type": "metrics_update",
+  "timestamp": "2026-01-01T00:00:00Z",
   "data": {
-    // aggregated counters and gauges suitable for live UI
+    "system_status": { "total_devices": 10, "online_devices": 7, "devices_with_drift": 2, "uptime_seconds": 3600, "metrics_enabled": true, "last_collection_time": "2026-01-01T00:00:00Z" },
+    "device_metrics": [ { "id": "1", "name": "Living Room", "type": "shelly1", "status": "online", "config_synced": true, "last_seen": "2026-01-01T00:00:00Z" } ],
+    "drift_metrics": { "total_drift_issues": 3, "severity_distribution": { "high": 1, "low": 2 }, "category_distribution": {}, "trend_analysis": [] },
+    "notification_metrics": { "total_sent": 0, "total_failed": 0, "channel_breakdown": {}, "alert_level_breakdown": {}, "average_latency_seconds": 0 },
+    "resolution_metrics": { "total_resolutions": 0, "auto_fix_success_rate": {}, "resolutions_by_category": {}, "average_review_time_seconds": 0 }
   }
 }
 ```
 
-- Alert broadcast (from `/metrics/test-alert` or back-end sources):
+Alert:
+```json
+{ "type": "alert", "timestamp": "…", "data": { "alert_type": "test", "severity": "warning", "message": "…" } }
 ```
-{
-  "type": "alert",
-  "timestamp": "...",
-  "data": {
-    "alert_type": "test|sql_injection|xss_attempt|...",
-    "severity": "info|low|medium|high|critical",
-    "message": "..."
-  }
-}
-```
+
+**Client contract.** Treat the type set as a closed enum: an unrecognized `type`, or a payload that fails validation, must be surfaced (logged/counted) rather than silently applied, and must not be treated as a live feed. The reference UI keeps REST polling active until the first valid snapshot is applied, reports "live" only while snapshots keep arriving (a watchdog demotes a silent feed back to polling), and applies `device_status_change`/`drift_detected`/`alert` to a live-events feed.
 
 ## Production guidance
 

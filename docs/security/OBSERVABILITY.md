@@ -121,61 +121,58 @@ const ws = new WebSocket(`ws://localhost:8080/api/v1/metrics/ws?token=${encodeUR
 
 ### Message Format
 
-The WebSocket sends periodic metrics updates in JSON format:
+The server emits five message types, each `{ "type", "timestamp": "<RFC3339>", "data" }`.
+The authoritative set lives in `internal/metrics/websocket.go` (`AllMessageTypes()`),
+is mirrored in `ui/src/api/metricsMessages.ts`, and is enforced across the boundary
+by a contract test. See [Metrics API — Message Types](../api/METRICS_API.md#message-types)
+for the full payloads.
+
+- `initial_metrics` / `metrics_update` — a full `DashboardMetrics` snapshot
+  (`system_status`, `device_metrics[]`, `drift_metrics`, `notification_metrics`,
+  `resolution_metrics`). `initial_metrics` is sent once on connect; `metrics_update`
+  every 5s.
+- `alert`, `device_status_change`, `drift_detected` — discrete events.
+
+Snapshot example:
 
 ```json
 {
-  "type": "system",
+  "type": "metrics_update",
+  "timestamp": "2026-01-15T10:30:00Z",
   "data": {
-    "cpu": 15.2,
-    "memory": 45.8,
-    "disk": 62.3,
-    "timestamp": "2025-01-15T10:30:00Z"
-  },
-  "timestamp": "2025-01-15T10:30:00Z"
+    "system_status": { "total_devices": 25, "online_devices": 23, "devices_with_drift": 2, "uptime_seconds": 3600, "metrics_enabled": true, "last_collection_time": "2026-01-15T10:30:00Z" },
+    "device_metrics": [],
+    "drift_metrics": { "total_drift_issues": 3, "severity_distribution": { "high": 1, "low": 2 }, "category_distribution": {}, "trend_analysis": [] },
+    "notification_metrics": { "total_sent": 0, "total_failed": 0, "channel_breakdown": {}, "alert_level_breakdown": {}, "average_latency_seconds": 0 },
+    "resolution_metrics": { "total_resolutions": 0, "auto_fix_success_rate": {}, "resolutions_by_category": {}, "average_review_time_seconds": 0 }
+  }
 }
 ```
 
-```json
-{
-  "type": "devices",
-  "data": {
-    "total": 25,
-    "online": 23,
-    "offline": 2
-  },
-  "timestamp": "2025-01-15T10:30:00Z"
-}
-```
-
-```json
-{
-  "type": "drift",
-  "data": {
-    "total_drifts": 3,
-    "unresolved": 2,
-    "resolved": 1
-  },
-  "timestamp": "2025-01-15T10:30:00Z"
-}
-```
+> There is **no** CPU/memory/disk telemetry in `system_status`; the dashboard's
+> trend chart is built from device/drift counts, not host resource usage.
 
 ### Update Frequency
 
-- Metrics are broadcast every 5 seconds by default
-- System metrics (CPU, memory, disk) update every 5s
-- Device counts update on change or every 30s
-- Drift summaries update on change or every 60s
+- Snapshots (`metrics_update`) are broadcast every 5 seconds; `initial_metrics`
+  is sent once immediately on connect.
+- Event messages (`alert` / `device_status_change` / `drift_detected`) are pushed
+  as they occur.
 
 ### Automatic Failover
 
-The UI automatically falls back to REST polling if WebSocket connection fails:
+The UI treats WebSocket as an accelerator over REST, keyed to *applied data*, not
+connection state:
 
-- **Initial connection timeout**: 5 seconds
-- **Reconnection attempts**: 3 attempts with exponential backoff
-- **Backoff delays**: 1s, 2s, 4s
-- **Fallback polling interval**: 30 seconds via REST API
-- **Heartbeat timeout**: 30 seconds of no messages triggers reconnection
+- REST polling (every 30s) stays active until the **first valid snapshot is applied**,
+  and resumes if the feed goes stale — an open socket alone is never treated as "live".
+- A reactive watchdog demotes the feed from `live` to `stale` once ~20s pass with no
+  applied snapshot, re-enabling REST.
+- The client heartbeat recycles the socket (close-then-connect) after ~45s of silence;
+  reconnection uses exponential backoff with jitter.
+- A late frame from a superseded socket (e.g. during a recycle) is ignored via a
+  connection-generation guard, and any frame that fails validation is surfaced rather
+  than applied.
 
 ### WebSocket Lifecycle
 
