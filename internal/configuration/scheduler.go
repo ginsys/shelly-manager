@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,6 +14,15 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
+
+// ErrSchedulingNotImplemented is the canonical message for drift-schedule
+// operations that imply execution. The scheduler in this file has zero callers
+// (NewScheduler is never wired), so schedules are stored but never run. Until
+// the real execution vertical lands (#279), the API fails these operations
+// closed with an HTTP 501 rather than faking success or asserting run history
+// that cannot exist (#270). Handlers short-circuit on this message; it is not
+// propagated as an error through the service layer.
+var ErrSchedulingNotImplemented = errors.New("drift schedule execution is not implemented in this release")
 
 // Scheduler manages automated drift detection schedules
 type Scheduler struct {

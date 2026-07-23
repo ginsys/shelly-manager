@@ -1002,14 +1002,6 @@ func (s *ShellyService) GetDriftSchedules() ([]configuration.DriftDetectionSched
 	return schedules, nil
 }
 
-// CreateDriftSchedule creates a new drift detection schedule
-func (s *ShellyService) CreateDriftSchedule(schedule configuration.DriftDetectionSchedule) (*configuration.DriftDetectionSchedule, error) {
-	if err := s.DB.GetDB().Create(&schedule).Error; err != nil {
-		return nil, fmt.Errorf("failed to create drift schedule: %w", err)
-	}
-	return &schedule, nil
-}
-
 // GetDriftSchedule returns a specific drift detection schedule
 func (s *ShellyService) GetDriftSchedule(scheduleID uint) (*configuration.DriftDetectionSchedule, error) {
 	var schedule configuration.DriftDetectionSchedule
@@ -1019,64 +1011,12 @@ func (s *ShellyService) GetDriftSchedule(scheduleID uint) (*configuration.DriftD
 	return &schedule, nil
 }
 
-// UpdateDriftSchedule updates an existing drift detection schedule
-func (s *ShellyService) UpdateDriftSchedule(scheduleID uint, updates configuration.DriftDetectionSchedule) (*configuration.DriftDetectionSchedule, error) {
-	var schedule configuration.DriftDetectionSchedule
-	if err := s.DB.GetDB().First(&schedule, scheduleID).Error; err != nil {
-		return nil, fmt.Errorf("drift schedule not found: %w", err)
-	}
-
-	if err := s.DB.GetDB().Model(&schedule).Updates(updates).Error; err != nil {
-		return nil, fmt.Errorf("failed to update drift schedule: %w", err)
-	}
-
-	// Reload the updated schedule
-	if err := s.DB.GetDB().First(&schedule, scheduleID).Error; err != nil {
-		return nil, fmt.Errorf("failed to reload updated schedule: %w", err)
-	}
-
-	return &schedule, nil
-}
-
 // DeleteDriftSchedule removes a drift detection schedule
 func (s *ShellyService) DeleteDriftSchedule(scheduleID uint) error {
 	if err := s.DB.GetDB().Delete(&configuration.DriftDetectionSchedule{}, scheduleID).Error; err != nil {
 		return fmt.Errorf("failed to delete drift schedule: %w", err)
 	}
 	return nil
-}
-
-// ToggleDriftSchedule toggles the enabled status of a drift detection schedule
-func (s *ShellyService) ToggleDriftSchedule(scheduleID uint) (*configuration.DriftDetectionSchedule, error) {
-	var schedule configuration.DriftDetectionSchedule
-	if err := s.DB.GetDB().First(&schedule, scheduleID).Error; err != nil {
-		return nil, fmt.Errorf("drift schedule not found: %w", err)
-	}
-
-	// Toggle the enabled status
-	schedule.Enabled = !schedule.Enabled
-
-	if err := s.DB.GetDB().Save(&schedule).Error; err != nil {
-		return nil, fmt.Errorf("failed to toggle drift schedule: %w", err)
-	}
-
-	return &schedule, nil
-}
-
-// GetDriftScheduleRuns returns the execution history for a schedule
-func (s *ShellyService) GetDriftScheduleRuns(scheduleID uint, limit int) ([]configuration.DriftDetectionRun, error) {
-	var runs []configuration.DriftDetectionRun
-	query := s.DB.GetDB().Where("schedule_id = ?", scheduleID).Order("created_at DESC")
-
-	if limit > 0 {
-		query = query.Limit(limit)
-	}
-
-	if err := query.Find(&runs).Error; err != nil {
-		return nil, fmt.Errorf("failed to get drift schedule runs: %w", err)
-	}
-
-	return runs, nil
 }
 
 // Comprehensive Drift Reporting Methods

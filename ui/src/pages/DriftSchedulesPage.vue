@@ -2,7 +2,17 @@
   <div class="page">
     <div class="page-header">
       <h1>Drift Detection Schedules</h1>
-      <button class="btn primary" @click="showCreateDialog = true">Create Schedule</button>
+    </div>
+
+    <!-- Fail-closed notice (#270): schedules are stored but never executed. -->
+    <div class="notice" role="status">
+      <strong>Drift schedules are not executed in this release.</strong>
+      <p>
+        Stored schedules are shown for inspection and deletion only. Creating, editing,
+        enabling and run history are unavailable until scheduled execution ships
+        (tracked in issue #279). Any schedule below is inert persisted data, not an
+        operational job.
+      </p>
     </div>
 
     <div v-if="store.loading" class="loading">Loading schedules...</div>
@@ -10,8 +20,7 @@
 
     <div v-else class="content">
       <div v-if="store.schedules.length === 0" class="empty">
-        <p>No drift detection schedules configured.</p>
-        <p>Click "Create Schedule" to set up automated drift detection.</p>
+        <p>No drift detection schedules stored.</p>
       </div>
 
       <div v-else class="schedules-list">
@@ -19,7 +28,6 @@
           v-for="schedule in store.schedules"
           :key="schedule.id"
           class="schedule-card"
-          :class="{ disabled: !schedule.enabled }"
         >
           <div class="schedule-header">
             <div class="schedule-info">
@@ -27,47 +35,37 @@
               <p v-if="schedule.description" class="description">{{ schedule.description }}</p>
             </div>
             <div class="schedule-status">
-              <span class="status-badge" :class="{ enabled: schedule.enabled }">
-                {{ schedule.enabled ? 'Enabled' : 'Disabled' }}
-              </span>
+              <span class="status-badge">Stored (inactive)</span>
             </div>
           </div>
 
           <div class="schedule-details">
             <div class="detail-item">
-              <span class="label">Cron Schedule:</span>
+              <span class="label">Cron Schedule</span>
               <span class="value"><code>{{ schedule.cron_spec }}</code></span>
             </div>
             <div v-if="schedule.device_ids && schedule.device_ids.length > 0" class="detail-item">
-              <span class="label">Devices:</span>
+              <span class="label">Devices</span>
               <span class="value">{{ schedule.device_ids.length }} device(s)</span>
             </div>
-            <div v-if="schedule.device_filter" class="detail-item">
-              <span class="label">Device Filter:</span>
-              <span class="value">{{ schedule.device_filter }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="label">Run Count:</span>
-              <span class="value">{{ schedule.run_count }}</span>
-            </div>
-            <div v-if="schedule.last_run" class="detail-item">
-              <span class="label">Last Run:</span>
-              <span class="value">{{ formatDate(schedule.last_run) }}</span>
-            </div>
-            <div v-if="schedule.next_run" class="detail-item">
-              <span class="label">Next Run:</span>
-              <span class="value">{{ formatDate(schedule.next_run) }}</span>
+            <div v-if="hasFilter(schedule.device_filter)" class="detail-item">
+              <span class="label">Device Filter (stored JSON)</span>
+              <pre class="value filter-json">{{ formatFilter(schedule.device_filter) }}</pre>
             </div>
           </div>
 
+          <div class="stored-meta">
+            <span class="stored-meta-label">Persisted values (not executed):</span>
+            <span class="stored-meta-item">Stored enabled flag: {{ schedule.enabled ? 'true' : 'false' }}</span>
+            <span class="stored-meta-item">Run count: {{ schedule.run_count }}</span>
+            <span v-if="schedule.last_run" class="stored-meta-item">Last run: {{ formatDate(schedule.last_run) }}</span>
+            <span v-if="schedule.next_run" class="stored-meta-item">Next run: {{ formatDate(schedule.next_run) }}</span>
+            <span class="stored-meta-item">Run history: unavailable</span>
+          </div>
+
           <div class="schedule-actions">
-            <button class="btn-icon" title="Toggle" @click="handleToggle(schedule.id)">
-              {{ schedule.enabled ? '⏸' : '▶' }}
-            </button>
-            <button class="btn-icon" title="View Runs" @click="viewRuns(schedule.id)">📊</button>
-            <button class="btn-icon" title="Edit" @click="editSchedule(schedule)">✏️</button>
             <button class="btn-icon danger" title="Delete" @click="handleDelete(schedule.id)">
-              🗑️
+              🗑️ Delete
             </button>
           </div>
         </div>
@@ -94,191 +92,42 @@
         </button>
       </div>
     </div>
-
-    <!-- Create/Edit Dialog -->
-    <div v-if="showCreateDialog || editingSchedule" class="modal" @click.self="closeDialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2>{{ editingSchedule ? 'Edit Schedule' : 'Create Schedule' }}</h2>
-          <button class="btn-close" @click="closeDialog">×</button>
-        </div>
-        <form @submit.prevent="handleSubmit">
-          <div class="form-field">
-            <label for="name">Name *</label>
-            <input
-              id="name"
-              v-model="formData.name"
-              type="text"
-              required
-              class="form-input"
-            />
-          </div>
-
-          <div class="form-field">
-            <label for="description">Description</label>
-            <textarea
-              id="description"
-              v-model="formData.description"
-              class="form-textarea"
-              rows="2"
-            />
-          </div>
-
-          <div class="form-field">
-            <label for="cronSpec">Cron Schedule *</label>
-            <input
-              id="cronSpec"
-              v-model="formData.cron_spec"
-              type="text"
-              required
-              class="form-input"
-              placeholder="0 */6 * * *"
-            />
-            <small>Standard cron expression. Presets:
-              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 * * * *'">hourly</button>
-              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 */6 * * *'">every 6h</button>
-              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 0 * * *'">daily</button>
-              <button type="button" class="cron-preset" @click="formData.cron_spec = '0 0 * * 0'">weekly</button>
-            </small>
-          </div>
-
-          <div class="form-field">
-            <label for="deviceIds">Device IDs (comma-separated)</label>
-            <input
-              id="deviceIds"
-              v-model="deviceIdsInput"
-              type="text"
-              class="form-input"
-              placeholder="e.g., 1,2,3"
-            />
-          </div>
-
-          <div class="form-field">
-            <label for="deviceFilter">Device Filter Expression</label>
-            <input
-              id="deviceFilter"
-              v-model="formData.deviceFilter"
-              type="text"
-              class="form-input"
-              placeholder="e.g., type:shelly1"
-            />
-          </div>
-
-          <div class="form-field checkbox">
-            <input
-              id="enabled"
-              v-model="formData.enabled"
-              type="checkbox"
-              class="form-checkbox"
-            />
-            <label for="enabled">Enabled</label>
-          </div>
-
-          <div class="form-actions">
-            <button type="button" class="btn" @click="closeDialog">Cancel</button>
-            <button type="submit" class="btn primary">
-              {{ editingSchedule ? 'Update' : 'Create' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
 import { useDriftStore } from '@/stores/drift'
-import type { DriftSchedule, CreateDriftScheduleRequest } from '@/api/drift'
 
-const router = useRouter()
 const store = useDriftStore()
 
 const page = ref(1)
 const pageSize = ref(25)
-const showCreateDialog = ref(false)
-const editingSchedule = ref<DriftSchedule | null>(null)
-const deviceIdsInput = ref('')
-
-const formData = ref<CreateDriftScheduleRequest>({
-  name: '',
-  description: '',
-  cron_spec: '0 0 * * *',
-  device_ids: [],
-  device_filter: '',
-  enabled: true
-})
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString()
 }
 
-function resetForm() {
-  formData.value = {
-    name: '',
-    description: '',
-    cron_spec: '0 0 * * *',
-    device_ids: [],
-    device_filter: '',
-    enabled: true
-  }
-  deviceIdsInput.value = ''
+// device_filter is stored as a raw backend JSON value; render it read-only.
+function hasFilter(filter: unknown): boolean {
+  if (filter === null || filter === undefined) return false
+  if (typeof filter === 'string') return filter.trim() !== '' && filter.trim() !== 'null'
+  return true
 }
 
-function editSchedule(schedule: DriftSchedule) {
-  editingSchedule.value = schedule
-  formData.value = {
-    name: schedule.name,
-    description: schedule.description,
-    cron_spec: schedule.cron_spec,
-    device_ids: schedule.device_ids || [],
-    device_filter: schedule.device_filter || '',
-    enabled: schedule.enabled
-  }
-  deviceIdsInput.value = (schedule.device_ids || []).join(',')
-}
-
-function closeDialog() {
-  showCreateDialog.value = false
-  editingSchedule.value = null
-  resetForm()
-}
-
-async function handleSubmit() {
-  try {
-    // Parse device IDs
-    if (deviceIdsInput.value.trim()) {
-      formData.value.device_ids = deviceIdsInput.value
-        .split(',')
-        .map(id => parseInt(id.trim()))
-        .filter(id => !isNaN(id))
-    } else {
-      formData.value.device_ids = undefined
+function formatFilter(filter: unknown): string {
+  if (typeof filter === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(filter), null, 2)
+    } catch {
+      return filter
     }
-
-    if (editingSchedule.value) {
-      await store.update(editingSchedule.value.id, formData.value)
-    } else {
-      await store.create(formData.value)
-    }
-    closeDialog()
-    await store.fetchSchedules(page.value, pageSize.value)
-  } catch (e: any) {
-    alert(e?.message || 'Failed to save schedule')
   }
-}
-
-async function handleToggle(id: number) {
-  try {
-    await store.toggle(id)
-  } catch (e: any) {
-    alert(e?.message || 'Failed to toggle schedule')
-  }
+  return JSON.stringify(filter, null, 2)
 }
 
 async function handleDelete(id: number) {
-  if (!confirm('Are you sure you want to delete this schedule?')) {
+  if (!confirm('Delete this stored schedule? This only removes persisted data.')) {
     return
   }
   try {
@@ -286,10 +135,6 @@ async function handleDelete(id: number) {
   } catch (e: any) {
     alert(e?.message || 'Failed to delete schedule')
   }
-}
-
-function viewRuns(scheduleId: number) {
-  router.push(`/drift/schedules/${scheduleId}/runs`)
 }
 
 async function handlePageChange(newPage: number) {
@@ -311,13 +156,34 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .page-header h1 {
   margin: 0;
   font-size: 24px;
   color: #1f2937;
+}
+
+.notice {
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: #fef9c3;
+  border: 1px solid #eab308;
+  border-radius: 8px;
+  color: #713f12;
+}
+
+.notice strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.notice p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .loading,
@@ -349,15 +215,8 @@ onMounted(() => {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  transition: box-shadow 0.2s;
-}
-
-.schedule-card:hover {
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.schedule-card.disabled {
-  opacity: 0.6;
+  /* Neutral, non-operational styling: stored data, never an active job. */
+  opacity: 0.85;
 }
 
 .schedule-header {
@@ -381,16 +240,11 @@ onMounted(() => {
 
 .status-badge {
   padding: 4px 12px;
-  background: #fee2e2;
-  color: #991b1b;
+  background: #e2e8f0;
+  color: #475569;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-}
-
-.status-badge.enabled {
-  background: #dcfce7;
-  color: #166534;
 }
 
 .schedule-details {
@@ -420,6 +274,32 @@ onMounted(() => {
   color: #1f2937;
 }
 
+.filter-json {
+  margin: 0;
+  padding: 8px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.stored-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.stored-meta-label {
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
 .schedule-actions {
   display: flex;
   gap: 8px;
@@ -432,12 +312,7 @@ onMounted(() => {
   background: #fff;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
-  transition: background 0.2s;
-}
-
-.btn-icon:hover {
-  background: #f8fafc;
+  font-size: 14px;
 }
 
 .btn-icon.danger {
@@ -478,129 +353,5 @@ onMounted(() => {
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.btn.primary {
-  background: #2563eb;
-  color: white;
-  border-color: #2563eb;
-}
-
-.btn.primary:hover {
-  background: #1d4ed8;
-}
-
-.modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  padding: 24px;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.modal-header h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.btn-close {
-  padding: 4px 8px;
-  border: none;
-  background: transparent;
-  font-size: 24px;
-  cursor: pointer;
-  color: #6b7280;
-}
-
-.btn-close:hover {
-  color: #1f2937;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-
-.form-field.checkbox {
-  flex-direction: row;
-  align-items: center;
-}
-
-.form-field.checkbox label {
-  margin-left: 8px;
-}
-
-.form-field label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.form-field small {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.cron-preset {
-  margin-left: 6px;
-  padding: 2px 6px;
-  font-size: 11px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.cron-preset:hover {
-  background: #e5e7eb;
-}
-
-.form-input,
-.form-textarea {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 14px;
-}
-
-.form-textarea {
-  resize: vertical;
-}
-
-.form-checkbox {
-  width: 20px;
-  height: 20px;
-}
-
-.form-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 20px;
 }
 </style>

@@ -213,15 +213,26 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/configuration/bulk-validate` | POST | Bulk validate multiple configurations |
 
 #### Drift Detection (11 endpoints)
+
+> **Fail-closed (#270):** drift schedules are stored but not executed in this
+> release. Create / update / toggle / runs return HTTP 501; the UI exposes
+> inspection and deletion only. Scheduled execution is tracked as #279.
+>
+> ![Drift schedules fail-closed UI](images/drift-schedules-fail-closed.png)
+>
+> The page shows a "not executed" notice, renders every schedule (including
+> `enabled=true` rows) as neutral "Stored (inactive)" with `device_filter` as
+> read-only JSON, labels run history unavailable, and offers deletion only.
+
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/config/drift-schedules` | GET | List drift detection schedules with pagination |
 | `/config/drift-schedules/{id}` | GET | Get single drift schedule details |
-| `/config/drift-schedules` | POST | Create new drift detection schedule |
-| `/config/drift-schedules/{id}` | PUT | Update existing drift schedule |
+| `/config/drift-schedules` | POST | ⛔ 501 — creation not implemented (#270) |
+| `/config/drift-schedules/{id}` | PUT | ⛔ 501 — update not implemented (#270) |
 | `/config/drift-schedules/{id}` | DELETE | Delete drift schedule |
-| `/config/drift-schedules/{id}/toggle` | POST | Toggle drift schedule enabled status |
-| `/config/drift-schedules/{id}/runs` | GET | Get drift schedule run history |
+| `/config/drift-schedules/{id}/toggle` | POST | ⛔ 501 — toggle not implemented (#270) |
+| `/config/drift-schedules/{id}/runs` | GET | ⛔ 501 — run history not implemented (#270) |
 | `/config/drift-reports` | GET | Get drift reports with filtering |
 | `/config/drift-trends` | GET | Get drift trends over time period |
 | `/config/drift-trends/{id}/resolve` | POST | Resolve a drift report |
@@ -402,14 +413,17 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 - `POST /api/v1/config/bulk-drift-detect` - Bulk drift detect
 - `POST /api/v1/config/bulk-drift-detect-enhanced` - Enhanced bulk drift
 
-#### Drift Detection Schedules (7 unused)
-- `GET /api/v1/config/drift-schedules` - List schedules
-- `POST /api/v1/config/drift-schedules` - Create schedule
-- `GET /api/v1/config/drift-schedules/{id}` - Get schedule
-- `PUT /api/v1/config/drift-schedules/{id}` - Update schedule
-- `DELETE /api/v1/config/drift-schedules/{id}` - Delete schedule
-- `POST /api/v1/config/drift-schedules/{id}/toggle` - Toggle schedule
-- `GET /api/v1/config/drift-schedules/{id}/runs` - Get run history
+#### Drift Detection Schedules — fail-closed (#270)
+Schedules are stored but never executed. The UI (`DriftSchedulesPage.vue`) wires
+list/detail/delete for inspection and cleanup only; the four execution-implying
+routes return HTTP 501. Real execution is #279.
+- `GET /api/v1/config/drift-schedules` - List schedules ✅
+- `POST /api/v1/config/drift-schedules` - Create schedule ⛔ 501
+- `GET /api/v1/config/drift-schedules/{id}` - Get schedule ✅
+- `PUT /api/v1/config/drift-schedules/{id}` - Update schedule ⛔ 501
+- `DELETE /api/v1/config/drift-schedules/{id}` - Delete schedule ✅
+- `POST /api/v1/config/drift-schedules/{id}/toggle` - Toggle schedule ⛔ 501
+- `GET /api/v1/config/drift-schedules/{id}/runs` - Get run history ⛔ 501
 
 #### Drift Reporting (4 unused)
 - `GET /api/v1/config/drift-reports` - Get all reports
