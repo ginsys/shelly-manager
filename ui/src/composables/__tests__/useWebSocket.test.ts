@@ -244,6 +244,41 @@ describe('useWebSocket', () => {
     scope.stop()
   })
 
+  it('does not immediately recycle a fresh socket after a stale prior connection', async () => {
+    const scope = effectScope()
+    const ws = scope.run(() => useWebSocket({
+      url: 'ws://test',
+      autoConnect: false,
+      reconnect: true,
+      reconnectInterval: 100,
+      heartbeatInterval: 100,
+      heartbeatTimeout: 200
+    }))!
+
+    ws.connect()
+    const s1 = wsInstances[wsInstances.length - 1]
+    s1.simulateOpen()
+    s1.simulateMessage({ type: 'x' }) // stamps lastMessageAt on the FIRST connection
+    await nextTick()
+
+    // Abnormal drop schedules a reconnect.
+    s1.close(1006, 'drop')
+    await vi.advanceTimersByTimeAsync(500) // fire backoff -> new connect()
+    const s2 = wsInstances[wsInstances.length - 1]
+    expect(s2).not.toBe(s1)
+
+    s2.simulateOpen() // fresh connection; baseline must reset, not inherit s1's time
+    const countAfterReopen = wsInstances.length
+
+    // One heartbeat tick, still within heartbeatTimeout of the NEW open. The old
+    // message time must not be used as the baseline, so no recycle should occur.
+    vi.advanceTimersByTime(150)
+    await nextTick()
+    expect(wsInstances.length).toBe(countAfterReopen)
+
+    scope.stop()
+  })
+
   it('should disconnect cleanly', async () => {
     const scope = effectScope()
     const ws = scope.run(() => useWebSocket({ url: 'ws://test', autoConnect: false }))!

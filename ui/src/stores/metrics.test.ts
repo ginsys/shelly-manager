@@ -102,6 +102,15 @@ describe('useMetricsStore', () => {
       expect(store.wsConnected).toBe(false)
       expect(store.lastAppliedMetricsAt).toBe(null)
     })
+
+    it('resets freshness on cleanup so a remount is not falsely live', () => {
+      store.handleWSMessage(msg('metrics_update', dashboardFixture()))
+      expect(store.feedState).toBe('live')
+
+      store.cleanup()
+      expect(store.feedState).toBe('idle')
+      expect(store.lastAppliedMetricsAt).toBe(null)
+    })
   })
 
   describe('snapshot hydration', () => {
@@ -158,6 +167,18 @@ describe('useMetricsStore', () => {
     it('rejects a non-object frame', () => {
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
       store.handleWSMessage('not an object')
+      expect(store.invalidMessageCount).toBe(1)
+      spy.mockRestore()
+    })
+
+    it('rejects a partial dashboard missing notification/resolution metrics', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const partial = dashboardFixture()
+      delete (partial as Record<string, unknown>).notification_metrics
+      store.handleWSMessage(msg('metrics_update', partial))
+
+      expect(store.isRealtimeActive).toBe(false)
+      expect(store.systemStatus).toBe(null)
       expect(store.invalidMessageCount).toBe(1)
       spy.mockRestore()
     })
