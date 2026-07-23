@@ -103,7 +103,7 @@ ui/
 | **GitOps Export** | `/export/gitops` | IaC exports (Terraform, Ansible, K8s) | Active |
 | **Export History** | `/export/history` | View past exports with filtering | Active |
 | **Import History** | `/import/history` | View past imports with filtering | Active |
-| **Plugins** | `/plugins` | Browse, configure, and test plugins | Active |
+| **Plugins** | `/plugins` | Browse plugins and inspect schemas (read-only) | Active |
 | **Metrics Dashboard** | `/dashboard` | Real-time system metrics with WebSocket | Active |
 | **Stats** | `/stats` | Statistics view | **Unreachable** |
 | **Admin** | `/admin` | Admin key rotation | Active |
@@ -120,9 +120,9 @@ Devices Page → Click device → Device Detail Page
 Select options → Preview → Create → Download from History
 ```
 
-**Plugin Configuration:**
+**Plugin Inspection (read-only, #264):**
 ```
-Plugin List → Select plugin → View schema → Configure → Test → Save
+Plugin List → Select plugin → View schema / Details
 ```
 
 **Backup/Restore:**
@@ -170,7 +170,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Export/Backup | 21 | 21 | 0 | 100% |
 | Export Schedules | 6 | 6 | 0 | 100% |
 | Import | 10 | 7 | 3 | 70% |
-| Plugins | 6 | 6 | 0 | 100% |
+| Plugins | 3 | 3 | 0 | 100% (read-only; config/test unbacked, see #264) |
 | Metrics | 15 | 15 | 0 | 100% |
 | Notifications | 8 | 0 | 8 | 0% |
 | Discovery & Provisioning | 3 | 0 | 3 | 0% |
@@ -318,29 +318,31 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 > removed the fake; real persistence is tracked in #284). So SMA restore is not
 > usable end-to-end from either the API or the UI yet.
 
-#### Plugins (6 endpoints)
+#### Plugins (3 real endpoints — read-only UI)
 
-> **Frontend types (#266):** the list endpoint (`GET /export/plugins`) and the
-> detail endpoint (`GET /export/plugins/{name}`) return **different shapes**, now
-> modelled as separate exact DTOs: `Plugin` (list item) and
-> `PluginDetail = { info, capabilities }`. The permissive superset (with
-> `health`/`config_schema`/`example_config`/`metadata`) is gone, so consumers can
-> no longer read list-absent fields. Plugin `status` is backend-hardcoded, so the
-> UI presents a listed plugin as **"Registered"** only — not configured/enabled —
-> and the fictional status filter, status sort, and configured/disabled/error
-> statistics were removed.
+> **Read-only (#264, #266).** The plugin UI is inspection-only: list, per-category
+> grouping, read-only **schema view**, and read-only details. There is **no
+> backend model** for stored plugin config or a plugin `Test()` — config lives on
+> individual export/import requests. The frontend previously called phantom
+> `/config` (GET/PUT) and `/test` routes and an enable/disable toggle built on
+> them; those functions, store actions, UI controls and `PluginConfigForm.vue`
+> were **removed** in #264 (no 501 stubs — the routes never existed). A real
+> product model for stored plugin configuration/testing/enablement is tracked as
+> a separate design vertical (#290).
 >
-> The `/config` (GET/PUT) and `/test` routes below **do not exist on the backend**
-> — tracked and resolved in #264.
+> Types (#266): the list endpoint and the detail endpoint return **different
+> shapes**, modelled as exact `Plugin` (list) and `PluginDetail = { info,
+> capabilities }`. Plugin `status` is backend-hardcoded, so a listed plugin is
+> presented as **"Registered"** only; the fictional status filter/sort/stats and
+> the `health` rendering were removed.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/export/plugins` | GET | List all plugins by category |
 | `/export/plugins/{name}` | GET | Get plugin details (`{ info, capabilities }`) |
-| `/export/plugins/{name}/schema` | GET | Get plugin config schema |
-| `/export/plugins/{name}/config` | GET | ⚠️ Phantom route — not registered (#264) |
-| `/export/plugins/{name}/config` | PUT | ⚠️ Phantom route — not registered (#264) |
-| `/export/plugins/{name}/test` | POST | ⚠️ Phantom route — not registered (#264) |
+| `/export/plugins/{name}/schema` | GET | Get plugin config schema (read-only viewer) |
+
+**Removed (unbacked, #264):** `GET/PUT /export/plugins/{name}/config`, `POST /export/plugins/{name}/test`, and the config/test/toggle UI.
 
 #### Metrics (15 endpoints + WebSocket)
 | Endpoint | Method | Purpose |

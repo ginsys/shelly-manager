@@ -1,7 +1,5 @@
 {
   "src/components/ExportPreviewForm.vue": 10,
   "src/components/ImportPreviewForm.vue": 8,
-  "src/components/PluginConfigForm.vue": 2,
-  "src/components/ScheduleForm.vue": 4,
-  "src/pages/PluginManagementPage.vue": 2
+  "src/components/ScheduleForm.vue": 4
 }

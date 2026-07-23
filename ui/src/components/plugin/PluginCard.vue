@@ -37,58 +37,14 @@
       </span>
     </div>
 
-    <!-- Test Result Display -->
-    <div v-if="testResult" class="test-result">
-      <div
-        class="test-indicator"
-        :class="{ success: testResult.success, error: !testResult.success }"
-      >
-        <span class="test-icon">
-          {{ testResult.success ? '✅' : '❌' }}
-        </span>
-        <span class="test-text">
-          Test: {{ testResult.success ? 'Passed' : 'Failed' }}
-          <span v-if="testResult.duration_ms">
-            ({{ testResult.duration_ms }}ms)
-          </span>
-        </span>
-      </div>
-
-      <div v-if="testResult.message" class="test-message">
-        {{ testResult.message }}
-      </div>
-    </div>
-
-    <!-- Plugin Actions -->
+    <!-- Plugin Actions. Configuration, testing and enable/disable were removed
+         as unbacked (#264); only read-only inspection remains. -->
     <div class="plugin-actions">
       <button
-        v-if="plugin.status.available"
-        class="action-button configure-btn"
-        @click="emit('configure', plugin)"
-        :disabled="currentLoading"
+        class="action-button view-schema-btn"
+        @click="emit('view-schema', plugin)"
       >
-        ⚙️ {{ plugin.status.configured ? 'Reconfigure' : 'Configure' }}
-      </button>
-
-      <button
-        v-if="plugin.status.configured"
-        class="action-button toggle-btn"
-        :class="{ enabled: plugin.status.enabled }"
-        @click="emit('toggle', plugin)"
-        :disabled="currentLoading"
-      >
-        {{ plugin.status.enabled ? '⏸️ Disable' : '▶️ Enable' }}
-      </button>
-
-      <button
-        v-if="plugin.status.available"
-        class="action-button test-btn"
-        @click="emit('test', plugin)"
-        :disabled="isPluginTesting || currentLoading"
-      >
-        <span v-if="isPluginTesting">⏳</span>
-        <span v-else>🧪</span>
-        Test
+        📄 View schema
       </button>
 
       <button
@@ -104,25 +60,14 @@
 <script setup lang="ts">
 import { type Plugin } from '@/api/plugin'
 
-interface TestResult {
-  success: boolean
-  message?: string
-  duration_ms?: number
-}
-
 interface Props {
   plugin: Plugin
-  testResult?: TestResult
-  isPluginTesting: boolean
-  currentLoading: boolean
 }
 
 defineProps<Props>()
 
 const emit = defineEmits<{
-  configure: [plugin: Plugin]
-  toggle: [plugin: Plugin]
-  test: [plugin: Plugin]
+  'view-schema': [plugin: Plugin]
   details: [plugin: Plugin]
 }>()
 </script>
@@ -210,36 +155,6 @@ const emit = defineEmits<{
   color: #6b7280;
 }
 
-.test-result {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  padding: 8px;
-  margin-bottom: 16px;
-}
-
-.test-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
-  margin-bottom: 4px;
-}
-
-.test-indicator.success .test-text {
-  color: #10b981;
-}
-
-.test-indicator.error .test-text {
-  color: #ef4444;
-}
-
-.test-message {
-  font-size: 0.75rem;
-  color: #6b7280;
-  line-height: 1.4;
-}
-
 .plugin-actions {
   display: flex;
   flex-wrap: wrap;
@@ -270,28 +185,10 @@ const emit = defineEmits<{
   cursor: not-allowed;
 }
 
-.configure-btn:hover:not(:disabled) {
+.view-schema-btn:hover:not(:disabled) {
   background: #dbeafe;
   border-color: #3b82f6;
   color: #1e40af;
-}
-
-.toggle-btn.enabled:hover:not(:disabled) {
-  background: #fef3c7;
-  border-color: #f59e0b;
-  color: #92400e;
-}
-
-.toggle-btn:not(.enabled):hover:not(:disabled) {
-  background: #dcfce7;
-  border-color: #10b981;
-  color: #065f46;
-}
-
-.test-btn:hover:not(:disabled) {
-  background: #ede9fe;
-  border-color: #8b5cf6;
-  color: #6b21a8;
 }
 
 .details-btn:hover:not(:disabled) {

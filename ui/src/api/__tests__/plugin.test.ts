@@ -4,7 +4,6 @@ import {
   listPlugins,
   getPlugin,
   getPluginSchema,
-  validatePluginConfig,
   type Plugin,
   type PluginDetail,
   type PluginSchema,
@@ -295,118 +294,6 @@ describe('Plugin API Client', () => {
       await expect(getPluginSchema('plugin-without-schema')).rejects.toThrow('Schema not available')
     })
   })
-
-  describe('validatePluginConfig', () => {
-    const mockSchema: PluginSchema = {
-      type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          title: 'Name',
-          minLength: 1,
-          maxLength: 50
-        },
-        count: {
-          type: 'integer',
-          minimum: 0,
-          maximum: 100
-        },
-        enabled: {
-          type: 'boolean'
-        },
-        tags: {
-          type: 'array',
-          items: { type: 'string' }
-        }
-      },
-      required: ['name', 'count']
-    }
-
-    it('should validate valid configuration', () => {
-      const config = {
-        name: 'test-config',
-        count: 5,
-        enabled: true,
-        tags: ['tag1', 'tag2']
-      }
-
-      const errors = validatePluginConfig(config, mockSchema)
-
-      expect(errors).toEqual([])
-    })
-
-    it('should detect missing required fields', () => {
-      const config = {
-        enabled: true
-      }
-
-      const errors = validatePluginConfig(config, mockSchema)
-
-      expect(errors.length).toBeGreaterThan(0)
-      expect(errors.some(e => e.includes("'name'") && e.includes('required'))).toBe(true)
-      expect(errors.some(e => e.includes("'count'") && e.includes('required'))).toBe(true)
-    })
-
-    it('should detect type mismatches', () => {
-      const config = {
-        name: 123, // should be string
-        count: 'invalid', // should be number
-        enabled: 'yes' // should be boolean
-      }
-
-      const errors = validatePluginConfig(config, mockSchema)
-
-      expect(errors.length).toBeGreaterThan(0)
-      expect(errors.some(e => e.includes("'name'") && e.includes('string'))).toBe(true)
-      expect(errors.some(e => e.includes("'count'") && e.includes('number'))).toBe(true)
-      expect(errors.some(e => e.includes("'enabled'") && e.includes('boolean'))).toBe(true)
-    })
-
-    it('should validate string constraints', () => {
-      const config = {
-        name: '', // violates minLength
-        count: 5
-      }
-
-      const errors = validatePluginConfig(config, mockSchema)
-
-      // Empty string should trigger required validation
-      expect(errors.some(e => e.includes("'name'") && e.includes('required'))).toBe(true)
-    })
-
-    it('should validate number constraints', () => {
-      const config = {
-        name: 'valid',
-        count: -1 // violates minimum
-      }
-
-      const errors = validatePluginConfig(config, mockSchema)
-
-      expect(errors.some(e => e.includes("'count'") && e.includes('at least 0'))).toBe(true)
-    })
-
-    it('should validate array types', () => {
-      const config = {
-        name: 'valid',
-        count: 5,
-        tags: [123, 'valid'] // mixed types in array
-      }
-
-      const errors = validatePluginConfig(config, mockSchema)
-
-      expect(errors.some(e => e.includes('tags[0]') && e.includes('string'))).toBe(true)
-    })
-
-    it('should handle empty schema', () => {
-      const config = { any: 'value' }
-      const emptySchema: PluginSchema = { type: 'object', properties: {} }
-
-      const errors = validatePluginConfig(config, emptySchema)
-
-      expect(errors).toEqual([])
-    })
-  })
-
   describe('Edge Cases and Error Handling', () => {
     it('should handle malformed API responses', async () => {
       const mockResponse: AxiosResponse<any> = {
