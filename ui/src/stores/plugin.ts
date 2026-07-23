@@ -23,13 +23,6 @@ export const usePluginStore = defineStore('plugin', {
     error: '' as string | '',
     meta: undefined as Metadata | undefined,
 
-    // Read-only schema inspection. `schemaCacheGeneration` is bumped whenever the
-    // cache is cleared (refresh); an in-flight load captures the generation and
-    // discards its result if a clear happened meanwhile, so a pre-refresh
-    // response can't repopulate the cache after it was invalidated.
-    schemaCache: new Map<string, PluginSchema>(),
-    schemaCacheGeneration: 0,
-
     // Filter and search state
     selectedCategory: '' as string,
     searchQuery: '' as string,
@@ -97,13 +90,6 @@ export const usePluginStore = defineStore('plugin', {
         byCategory
       }
     },
-
-    /**
-     * Get cached plugin schema
-     */
-    getCachedSchema: (state) => (name: string) => {
-      return state.schemaCache.get(name)
-    },
   },
 
   actions: {
@@ -136,38 +122,15 @@ export const usePluginStore = defineStore('plugin', {
     },
 
     /**
-     * Load a plugin's configuration schema for read-only inspection, with
-     * caching. Throws on load failure so callers can distinguish a fetch error
-     * from a plugin that simply publishes no schema (an empty schema).
-     *
-     * The cache is first-writer-wins: once a schema for a name is cached, a
-     * later-resolving response for the same name does not overwrite it. This
-     * makes concurrent/out-of-order loads for the same plugin deterministic and
-     * keeps the cache consistent with whatever a caller already observed.
+     * Fetch a plugin's configuration schema for read-only inspection. Not
+     * cached: plugin schemas are compiled into the server and constant, so a
+     * fetch per "View schema" click is cheap and always current. Callers guard
+     * their own view against out-of-order responses (see the schema modal's
+     * request token in PluginManagementPage). Throws on load failure so callers
+     * can distinguish a fetch error from a plugin that publishes no schema.
      */
     async loadPluginSchema(name: string): Promise<PluginSchema> {
-      const cached = this.schemaCache.get(name)
-      if (cached) {
-        return cached
-      }
-
-      const generation = this.schemaCacheGeneration
-      const schema = await getPluginSchema(name)
-
-      // A refresh() cleared the cache while this request was in flight: don't
-      // repopulate it with a now-stale response. Return it to this caller but
-      // leave the cache empty so the next load fetches fresh.
-      if (generation !== this.schemaCacheGeneration) {
-        return schema
-      }
-      // First-writer-wins: a concurrent response for the same name already
-      // populated the cache.
-      const settled = this.schemaCache.get(name)
-      if (settled) {
-        return settled
-      }
-      this.schemaCache.set(name, schema)
-      return schema
+      return getPluginSchema(name)
     },
 
     setCategory(category: string) {
@@ -186,8 +149,6 @@ export const usePluginStore = defineStore('plugin', {
      * Refresh plugin list
      */
     async refresh() {
-      this.schemaCache.clear()
-      this.schemaCacheGeneration++ // invalidate any in-flight schema loads
       await this.fetchPlugins(this.selectedCategory || undefined)
     },
   },

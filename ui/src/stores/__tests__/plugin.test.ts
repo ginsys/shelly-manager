@@ -72,7 +72,6 @@ describe('Plugin Store', () => {
       expect(store.error).toBe('')
       expect(store.selectedCategory).toBe('')
       expect(store.searchQuery).toBe('')
-      expect(store.schemaCache.size).toBe(0)
     })
   })
 
@@ -160,71 +159,19 @@ describe('Plugin Store', () => {
     })
 
     describe('loadPluginSchema', () => {
-      it('loads and caches the schema for read-only inspection', async () => {
+      it('fetches the schema for read-only inspection', async () => {
         vi.mocked(pluginApi.getPluginSchema).mockResolvedValue(mockSchema)
 
         const result = await store.loadPluginSchema('test-plugin')
 
         expect(result).toEqual(mockSchema)
-        expect(store.getCachedSchema('test-plugin')).toEqual(mockSchema)
-      })
-
-      it('returns the cached schema without a second request', async () => {
-        vi.mocked(pluginApi.getPluginSchema).mockResolvedValue(mockSchema)
-
-        await store.loadPluginSchema('test-plugin')
-        await store.loadPluginSchema('test-plugin')
-
-        expect(pluginApi.getPluginSchema).toHaveBeenCalledTimes(1)
+        expect(pluginApi.getPluginSchema).toHaveBeenCalledWith('test-plugin')
       })
 
       it('propagates load failures (so callers can show an error)', async () => {
         vi.mocked(pluginApi.getPluginSchema).mockRejectedValue(new Error('Schema not available'))
 
         await expect(store.loadPluginSchema('test-plugin')).rejects.toThrow('Schema not available')
-      })
-
-      it('cache is first-writer-wins: a late response does not overwrite a cached one', async () => {
-        const resolvers: Array<(s: PluginSchema) => void> = []
-        vi.mocked(pluginApi.getPluginSchema).mockImplementation(
-          () => new Promise<PluginSchema>(res => { resolvers.push(res) })
-        )
-        const first: PluginSchema = { ...mockSchema, title: 'first' }
-        const second: PluginSchema = { ...mockSchema, title: 'second' }
-
-        // Two concurrent loads for the same plugin (cache empty for both).
-        const p1 = store.loadPluginSchema('x')
-        const p2 = store.loadPluginSchema('x')
-        expect(pluginApi.getPluginSchema).toHaveBeenCalledTimes(2)
-
-        // The second request resolves first and populates the cache.
-        resolvers[1](second)
-        await expect(p2).resolves.toEqual(second)
-        expect(store.getCachedSchema('x')).toEqual(second)
-
-        // The first request resolves last: it must NOT overwrite the cache, and
-        // it returns the already-cached value.
-        resolvers[0](first)
-        await expect(p1).resolves.toEqual(second)
-        expect(store.getCachedSchema('x')).toEqual(second)
-      })
-
-      it('a response resolving after refresh() does not repopulate the cleared cache', async () => {
-        const resolvers: Array<(s: PluginSchema) => void> = []
-        vi.mocked(pluginApi.getPluginSchema).mockImplementation(
-          () => new Promise<PluginSchema>(res => { resolvers.push(res) })
-        )
-        vi.mocked(pluginApi.listPlugins).mockResolvedValue({ plugins: [], categories: [], meta: undefined })
-        const stale: PluginSchema = { ...mockSchema, title: 'stale' }
-
-        // Schema load in flight, then a refresh clears + invalidates.
-        const p = store.loadPluginSchema('x')
-        await store.refresh()
-
-        // The pre-refresh response resolves late: cache must stay empty.
-        resolvers[0](stale)
-        await p
-        expect(store.getCachedSchema('x')).toBeUndefined()
       })
     })
 
@@ -249,13 +196,11 @@ describe('Plugin Store', () => {
     })
 
     describe('refresh', () => {
-      it('should clear the schema cache and refetch', async () => {
-        store.schemaCache.set('test', mockSchema)
+      it('should refetch the plugin list', async () => {
         vi.mocked(pluginApi.listPlugins).mockResolvedValue({ plugins: [], categories: [], meta: undefined })
 
         await store.refresh()
 
-        expect(store.schemaCache.size).toBe(0)
         expect(pluginApi.listPlugins).toHaveBeenCalled()
       })
     })
