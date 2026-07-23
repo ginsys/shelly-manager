@@ -79,6 +79,16 @@ export function useWebSocket<T = unknown>(
   let socket: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  // Monotonic connection generation. Every connect()/disconnect() bumps it; each
+  // socket's event handlers capture the generation active when they were bound and
+  // bail if it no longer matches. This stops a superseded socket (e.g. the stale
+  // one left OPEN during a heartbeat-timeout recycle) from mutating state after we
+  // have moved on — late onmessage/onclose from an old socket become no-ops.
+  let generation = 0
+  // Wall-clock time the current socket opened, used as the heartbeat baseline until
+  // the first message arrives so a socket that opens but never delivers still times
+  // out and gets recycled.
+  let connectedAt = 0
 
   // Computed
   const isConnected = computed(() => status.value === 'open')
@@ -98,7 +108,16 @@ export function useWebSocket<T = unknown>(
       return
     }
 
-    disconnect()
+    // Open a new generation and tear down any lingering (closing/closed) socket
+    // plus a pending reconnect. Handlers below capture `myGen`; a later
+    // connect()/disconnect() bumps `generation`, neutralising this socket.
+    const myGen = ++generation
+    clearReconnectTimer()
+    stopHeartbeat()
+    if (socket) {
+      try { socket.close() } catch { /* already closing */ }
+      socket = null
+    }
 
     try {
       status.value = 'connecting'
@@ -106,14 +125,19 @@ export function useWebSocket<T = unknown>(
       socket = new WebSocket(wsUrl, protocols)
 
       socket.onopen = (event) => {
+        if (myGen !== generation) return
         status.value = 'open'
         reconnectAttempts.value = 0
-        lastMessageAt.value = Date.now()
+        connectedAt = Date.now()
+        // Deliberately do NOT stamp lastMessageAt here: opening a socket is not
+        // receiving data. The "live" indicator downstream must reflect applied
+        // payloads, never mere connection state (#247).
         startHeartbeat()
         onOpen?.(event)
       }
 
       socket.onmessage = (event) => {
+        if (myGen !== generation) return
         lastMessageAt.value = Date.now()
         try {
           const parsed = JSON.parse(event.data) as T
@@ -125,6 +149,7 @@ export function useWebSocket<T = unknown>(
       }
 
       socket.onclose = (event) => {
+        if (myGen !== generation) return
         status.value = 'closed'
         socket = null
         stopHeartbeat()
@@ -141,6 +166,7 @@ export function useWebSocket<T = unknown>(
       }
 
       socket.onerror = (event) => {
+        if (myGen !== generation) return
         error.value = event
         onError?.(event)
       }
@@ -156,14 +182,17 @@ export function useWebSocket<T = unknown>(
    * Disconnect from WebSocket server
    */
   function disconnect() {
+    // Bump the generation first so the closing socket's pending onclose/onmessage
+    // (and any in-flight recycle) can't mutate state once we intend to tear down.
+    generation++
+    stopHeartbeat()
+    clearReconnectTimer()
     if (socket) {
       status.value = 'closing'
-      socket.close(1000, 'Client disconnect')
+      try { socket.close(1000, 'Client disconnect') } catch { /* already closing */ }
       socket = null
     }
     status.value = 'closed'
-    stopHeartbeat()
-    clearReconnectTimer()
   }
 
   /**
@@ -215,8 +244,14 @@ export function useWebSocket<T = unknown>(
   function startHeartbeat() {
     stopHeartbeat()
     heartbeatTimer = setInterval(() => {
-      if (lastMessageAt.value && Date.now() - lastMessageAt.value > heartbeatTimeout) {
-        console.warn('WebSocket heartbeat timeout, reconnecting...')
+      // Baseline is the last message, or the connect time if none has arrived yet.
+      const since = lastMessageAt.value ?? connectedAt
+      if (since && Date.now() - since > heartbeatTimeout) {
+        console.warn('WebSocket heartbeat timeout, recycling socket')
+        // Force-close the stale (still-OPEN) socket before reconnecting. A bare
+        // connect() would early-return because the old socket is still OPEN,
+        // leaving it to linger forever (#247).
+        disconnect()
         connect()
       }
     }, heartbeatInterval)
