@@ -208,6 +208,24 @@ describe('Plugin Store', () => {
         await expect(p1).resolves.toEqual(second)
         expect(store.getCachedSchema('x')).toEqual(second)
       })
+
+      it('a response resolving after refresh() does not repopulate the cleared cache', async () => {
+        const resolvers: Array<(s: PluginSchema) => void> = []
+        vi.mocked(pluginApi.getPluginSchema).mockImplementation(
+          () => new Promise<PluginSchema>(res => { resolvers.push(res) })
+        )
+        vi.mocked(pluginApi.listPlugins).mockResolvedValue({ plugins: [], categories: [], meta: undefined })
+        const stale: PluginSchema = { ...mockSchema, title: 'stale' }
+
+        // Schema load in flight, then a refresh clears + invalidates.
+        const p = store.loadPluginSchema('x')
+        await store.refresh()
+
+        // The pre-refresh response resolves late: cache must stay empty.
+        resolvers[0](stale)
+        await p
+        expect(store.getCachedSchema('x')).toBeUndefined()
+      })
     })
 
     describe('filter management', () => {

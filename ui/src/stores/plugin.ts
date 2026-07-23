@@ -23,8 +23,12 @@ export const usePluginStore = defineStore('plugin', {
     error: '' as string | '',
     meta: undefined as Metadata | undefined,
 
-    // Read-only schema inspection
+    // Read-only schema inspection. `schemaCacheGeneration` is bumped whenever the
+    // cache is cleared (refresh); an in-flight load captures the generation and
+    // discards its result if a clear happened meanwhile, so a pre-refresh
+    // response can't repopulate the cache after it was invalidated.
     schemaCache: new Map<string, PluginSchema>(),
+    schemaCacheGeneration: 0,
 
     // Filter and search state
     selectedCategory: '' as string,
@@ -147,7 +151,17 @@ export const usePluginStore = defineStore('plugin', {
         return cached
       }
 
+      const generation = this.schemaCacheGeneration
       const schema = await getPluginSchema(name)
+
+      // A refresh() cleared the cache while this request was in flight: don't
+      // repopulate it with a now-stale response. Return it to this caller but
+      // leave the cache empty so the next load fetches fresh.
+      if (generation !== this.schemaCacheGeneration) {
+        return schema
+      }
+      // First-writer-wins: a concurrent response for the same name already
+      // populated the cache.
       const settled = this.schemaCache.get(name)
       if (settled) {
         return settled
@@ -173,6 +187,7 @@ export const usePluginStore = defineStore('plugin', {
      */
     async refresh() {
       this.schemaCache.clear()
+      this.schemaCacheGeneration++ // invalidate any in-flight schema loads
       await this.fetchPlugins(this.selectedCategory || undefined)
     },
   },
