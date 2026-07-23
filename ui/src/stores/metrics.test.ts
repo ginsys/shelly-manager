@@ -1,89 +1,82 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useMetricsStore, type WSMessage } from './metrics'
+import { useMetricsStore } from './metrics'
+import { getSystemMetrics, getDevicesMetrics, getDriftSummary } from '@/api/metrics'
 
-// Mock WebSocket
-class MockWebSocket {
+// Backend REST /metrics/system returns a SystemStatus (counts, no cpu/mem/disk).
+vi.mock('@/api/metrics', () => ({
+  getMetricsStatus: vi.fn().mockResolvedValue({ enabled: true, uptime_seconds: 3600 }),
+  getMetricsHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
+  getSystemMetrics: vi.fn(),
+  getDevicesMetrics: vi.fn(),
+  getDriftSummary: vi.fn(),
+}))
+
+// Minimal WebSocket stub; these tests drive the store's message handler directly
+// rather than through a live socket (the composable has its own tests).
+class StubWebSocket {
   static CONNECTING = 0
   static OPEN = 1
   static CLOSING = 2
   static CLOSED = 3
+  readyState = StubWebSocket.CONNECTING
+  onopen: ((e: Event) => void) | null = null
+  onclose: ((e: CloseEvent) => void) | null = null
+  onerror: ((e: Event) => void) | null = null
+  onmessage: ((e: MessageEvent) => void) | null = null
+  constructor(public url: string) {}
+  close() {}
+  send() {}
+}
+global.WebSocket = StubWebSocket as any
 
-  readyState = MockWebSocket.CONNECTING
-  onopen: ((event: Event) => void) | null = null
-  onclose: ((event: CloseEvent) => void) | null = null
-  onerror: ((event: Event) => void) | null = null
-  onmessage: ((event: MessageEvent) => void) | null = null
+// --- Backend-shaped fixtures ---
 
-  constructor(public url: string) {
-    // Simulate async connection
-    setTimeout(() => {
-      this.readyState = MockWebSocket.OPEN
-      this.onopen?.(new Event('open'))
-    }, 10)
-  }
-
-  close(code?: number, reason?: string) {
-    this.readyState = MockWebSocket.CLOSED
-    const event = new CloseEvent('close', { code, reason })
-    this.onclose?.(event)
-  }
-
-  send(data: string) {
-    if (this.readyState !== MockWebSocket.OPEN) {
-      throw new Error('WebSocket not open')
-    }
-  }
-
-  // Test helper to simulate receiving messages
-  simulateMessage(data: any) {
-    if (this.onmessage) {
-      const event = new MessageEvent('message', { data: JSON.stringify(data) })
-      this.onmessage(event)
-    }
+function systemStatusFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    uptime_seconds: 3600,
+    metrics_enabled: true,
+    last_collection_time: '2026-01-01T00:00:00Z',
+    total_devices: 10,
+    online_devices: 7,
+    devices_with_drift: 2,
+    ...overrides,
   }
 }
 
-// Mock the API functions
-vi.mock('@/api/metrics', () => ({
-  getMetricsStatus: vi.fn().mockResolvedValue({ enabled: true, uptime_seconds: 3600 }),
-  getMetricsHealth: vi.fn().mockResolvedValue({ status: 'healthy' }),
-  getSystemMetrics: vi.fn().mockResolvedValue({
-    cpu: 25,
-    memory: 60,
-    timestamp: '2023-01-01T00:00:00Z'
-  }),
-  getDevicesMetrics: vi.fn().mockResolvedValue({ device1: 10, device2: 20 }),
-  getDriftSummary: vi.fn().mockResolvedValue({ drift1: 5 }),
-  openMetricsWebSocket: vi.fn((callback) => {
-    const ws = new MockWebSocket('ws://localhost/metrics/ws')
-    ws.onmessage = (event) => {
-      try {
-        callback(JSON.parse(event.data))
-      } catch (e) {
-        // ignore
-      }
-    }
-    return ws as any
-  })
-}))
-
-// Set MockWebSocket as global WebSocket
-global.WebSocket = MockWebSocket as any
-
-// Track WebSocket instances for testing
-let wsInstances: MockWebSocket[] = []
-const OriginalMockWebSocket = MockWebSocket
-global.WebSocket = class extends OriginalMockWebSocket {
-  constructor(url: string) {
-    super(url)
-    wsInstances.push(this)
+function dashboardFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    system_status: systemStatusFixture(),
+    device_metrics: [
+      { id: '1', name: 'A', type: 'shelly1', status: 'online', config_synced: true, last_seen: '2026-01-01T00:00:00Z' },
+      { id: '2', name: 'B', type: 'shelly1', status: 'offline', config_synced: false, last_seen: '2026-01-01T00:00:00Z' },
+    ],
+    drift_metrics: {
+      total_drift_issues: 3,
+      severity_distribution: { high: 1, low: 2 },
+      category_distribution: {},
+      trend_analysis: [],
+    },
+    notification_metrics: {
+      total_sent: 0,
+      total_failed: 0,
+      channel_breakdown: {},
+      alert_level_breakdown: {},
+      average_latency_seconds: 0,
+    },
+    resolution_metrics: {
+      total_resolutions: 0,
+      auto_fix_success_rate: {},
+      resolutions_by_category: {},
+      average_review_time_seconds: 0,
+    },
+    ...overrides,
   }
-} as any
+}
 
-// Mock requestAnimationFrame
-global.requestAnimationFrame = vi.fn((cb) => setTimeout(cb, 16))
-global.cancelAnimationFrame = vi.fn()
+function msg(type: string, data: unknown, timestamp = '2026-01-01T00:00:00Z') {
+  return { type, timestamp, data }
+}
 
 describe('useMetricsStore', () => {
   let store: ReturnType<typeof useMetricsStore>
@@ -91,302 +84,189 @@ describe('useMetricsStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     store = useMetricsStore()
-    wsInstances = []
-    vi.clearAllMocks()
-    vi.clearAllTimers()
-    vi.useFakeTimers()
+    vi.mocked(getSystemMetrics).mockResolvedValue(systemStatusFixture({ total_devices: 5, online_devices: 3, devices_with_drift: 1 }))
+    vi.mocked(getDevicesMetrics).mockResolvedValue({ devices: [] })
+    vi.mocked(getDriftSummary).mockResolvedValue(dashboardFixture().drift_metrics)
   })
 
   afterEach(() => {
-    vi.useRealTimers()
     store.cleanup()
+    vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
-  // Helper to get the current WebSocket instance
-  function getWebSocket(): MockWebSocket | null {
-    return wsInstances.length > 0 ? wsInstances[wsInstances.length - 1] : null
-  }
-
-  describe('WebSocket state management', () => {
-    it('initializes with disconnected state', () => {
-      expect(store.wsConnected).toBe(false)
-      expect(store.wsReconnectAttempts).toBe(0)
-      expect(store.lastMessageAt).toBe(null)
+  describe('initial state', () => {
+    it('is not live and not connected', () => {
+      expect(store.feedState).toBe('idle')
       expect(store.isRealtimeActive).toBe(false)
-    })
-
-    it('connects WebSocket and updates state', async () => {
-      store.connectWS()
-      
-      // Fast-forward to simulate connection
-      await vi.advanceTimersByTimeAsync(20)
-      
-      expect(store.wsConnected).toBe(true)
-      expect(store.wsReconnectAttempts).toBe(0)
-      expect(store.lastMessageAt).toBeTruthy()
-    })
-
-    it('handles WebSocket messages correctly', async () => {
-      store.connectWS()
-      await vi.advanceTimersByTimeAsync(20)
-
-      const testMessage: WSMessage = {
-        type: 'system',
-        data: { cpu: 50, memory: 75, timestamp: '2023-01-01T00:01:00Z' },
-        timestamp: '2023-01-01T00:01:00Z'
-      }
-
-      // Simulate receiving message
-      const ws = getWebSocket()
-      ws?.simulateMessage(testMessage)
-
-      // Wait for requestAnimationFrame
-      await vi.advanceTimersByTimeAsync(20)
-
-      expect(store.system).toBeTruthy()
-      expect(store.system?.cpu).toEqual([50])
-      expect(store.system?.memory).toEqual([75])
-      expect(store.lastMessageAt).toBeTruthy()
-    })
-
-    it('handles unknown message types gracefully', async () => {
-      store.connectWS()
-      await vi.advanceTimersByTimeAsync(20)
-
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
-      const testMessage = {
-        type: 'unknown',
-        data: { test: 'data' },
-        timestamp: '2023-01-01T00:01:00Z'
-      }
-
-      const ws = getWebSocket()
-      ws?.simulateMessage(testMessage)
-      
-      await vi.advanceTimersByTimeAsync(20)
-      
-      expect(consoleSpy).toHaveBeenCalledWith('Unknown WebSocket message type:', 'unknown')
-      consoleSpy.mockRestore()
-    })
-  })
-
-  // NOTE: Reconnection logic tests removed - now handled by useWebSocket composable
-  // See: src/composables/__tests__/useWebSocket.test.ts
-  describe.skip('reconnection logic', () => {
-    it('schedules reconnection with exponential backoff', () => {
-      store.connectWS()
-
-      // Simulate WebSocket close
-      const ws = store._ws as any
-      ws.close(1006, 'Connection lost')
-
       expect(store.wsConnected).toBe(false)
-      expect(store.wsReconnectAttempts).toBe(0) // First attempt not counted yet
-
-      // Check that reconnect timer is set
-      expect(store._reconnectTimer).toBeTruthy()
-    })
-
-    it('does not reconnect on normal close codes', () => {
-      store.connectWS()
-
-      const ws = store._ws as any
-      ws.close(1000, 'Normal closure')
-
-      expect(store.wsConnected).toBe(false)
-      expect(store._reconnectTimer).toBe(0) // No reconnect scheduled
-    })
-
-    it('increases reconnect attempts on multiple failures', () => {
-      expect(store.wsReconnectAttempts).toBe(0)
-      
-      // First failure
-      store.scheduleReconnect()
-      expect(store._reconnectTimer).toBeTruthy()
-      
-      // Second failure without waiting for timer
-      store.clearReconnectTimer()
-      store.wsReconnectAttempts = 1
-      store.scheduleReconnect()
-      expect(store._reconnectTimer).toBeTruthy()
-      
-      // Third failure
-      store.clearReconnectTimer()
-      store.wsReconnectAttempts = 2
-      store.scheduleReconnect()
-      expect(store._reconnectTimer).toBeTruthy()
-      
-      // Attempts should increase as expected
-      expect(store.wsReconnectAttempts).toBe(2)
+      expect(store.lastAppliedMetricsAt).toBe(null)
     })
   })
 
-  describe('system metrics ring buffer', () => {
-    it('maintains bounded ring buffer for system metrics', () => {
-      // Add 60 data points (more than maxLength of 50)
-      for (let i = 0; i < 60; i++) {
-        store.updateSystemMetrics({
-          cpu: i,
-          memory: i * 2,
-          timestamp: `2023-01-01T00:${i.toString().padStart(2, '0')}:00Z`
-        })
-      }
-      
-      expect(store.system?.timestamps.length).toBe(50)
-      expect(store.system?.cpu.length).toBe(50)
-      expect(store.system?.memory.length).toBe(50)
-      
-      // Check that the latest data is preserved
-      expect(store.system?.cpu[49]).toBe(59)
-      expect(store.system?.memory[49]).toBe(118)
-    })
+  describe('snapshot hydration', () => {
+    it('hydrates from initial_metrics and marks the feed live', () => {
+      store.handleWSMessage(msg('initial_metrics', dashboardFixture()))
 
-    it('handles optional disk metrics', () => {
-      store.updateSystemMetrics({
-        cpu: 25,
-        memory: 50,
-        disk: 75,
-        timestamp: '2023-01-01T00:00:00Z'
-      })
-      
-      expect(store.system?.disk).toEqual([75])
-      
-      // Add data without disk
-      store.updateSystemMetrics({
-        cpu: 30,
-        memory: 55,
-        timestamp: '2023-01-01T00:01:00Z'
-      })
-      
-      expect(store.system?.disk).toEqual([75]) // Unchanged
-    })
-  })
-
-  // NOTE: Heartbeat tests removed - now handled by useWebSocket composable
-  // See: src/composables/__tests__/useWebSocket.test.ts
-  describe.skip('heartbeat and timeout detection', () => {
-    it('detects realtime activity correctly', () => {
-      store.wsConnected = true
-      store.lastMessageAt = Date.now()
-      
+      expect(store.systemStatus?.online_devices).toBe(7)
+      expect(store.deviceMetrics.length).toBe(2)
+      expect(store.drift?.severity_distribution).toEqual({ high: 1, low: 2 })
+      expect(store.series.online).toEqual([7])
+      expect(store.series.total).toEqual([10])
+      expect(store.feedState).toBe('live')
       expect(store.isRealtimeActive).toBe(true)
-      
-      // Simulate old message
-      store.lastMessageAt = Date.now() - 70000 // 70 seconds ago
+      expect(store.lastAppliedMetricsAt).not.toBe(null)
+    })
+
+    it('also hydrates from metrics_update', () => {
+      store.handleWSMessage(msg('metrics_update', dashboardFixture({ system_status: systemStatusFixture({ online_devices: 4 }) })))
+      expect(store.systemStatus?.online_devices).toBe(4)
+      expect(store.isRealtimeActive).toBe(true)
+    })
+
+    it('derives device status distribution', () => {
+      store.handleWSMessage(msg('initial_metrics', dashboardFixture()))
+      expect(store.deviceStatusCounts).toEqual({ online: 1, offline: 1 })
+    })
+  })
+
+  describe('invalid frames are surfaced, never applied', () => {
+    it('rejects an unknown message type without marking the feed live', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      store.handleWSMessage(msg('totally_unknown', { anything: true }))
+
+      expect(store.isRealtimeActive).toBe(false)
+      expect(store.feedState).toBe('idle')
+      expect(store.invalidMessageCount).toBe(1)
+      expect(store.lastInvalidReason).toContain('unknown message type')
+      expect(spy).toHaveBeenCalled()
+      spy.mockRestore()
+    })
+
+    it('rejects a metrics message with a malformed payload', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      // Missing system_status counts.
+      store.handleWSMessage(msg('metrics_update', { device_metrics: [], drift_metrics: {} }))
+
+      expect(store.isRealtimeActive).toBe(false)
+      expect(store.systemStatus).toBe(null)
+      expect(store.invalidMessageCount).toBe(1)
+      expect(store.lastInvalidReason).toContain('invalid dashboard payload')
+      spy.mockRestore()
+    })
+
+    it('rejects a non-object frame', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      store.handleWSMessage('not an object')
+      expect(store.invalidMessageCount).toBe(1)
+      spy.mockRestore()
+    })
+  })
+
+  describe('events are never dropped and never mark the feed live', () => {
+    it('appends every event in order', () => {
+      store.handleWSMessage(msg('alert', { alert_type: 'test', message: 'boom', severity: 'warning' }))
+      store.handleWSMessage(msg('device_status_change', {
+        device_id: '1', device_name: 'Living Room', old_status: 'online', new_status: 'offline',
+      }))
+      store.handleWSMessage(msg('drift_detected', {
+        device_id: '1', device_name: 'Living Room', drift_count: 3, severity: 'high',
+      }))
+
+      expect(store.events.map((e) => e.kind)).toEqual(['alert', 'device_status_change', 'drift_detected'])
+      expect(store.events[1].message).toBe('Living Room: online → offline')
+      expect(store.events[1].severity).toBe('warning')
+      expect(store.events[2].message).toContain('3 issues')
+      // Events do not, by themselves, make the feed "live".
       expect(store.isRealtimeActive).toBe(false)
     })
 
-    it('starts and stops heartbeat correctly', async () => {
-      store.startHeartbeat()
-      expect(store._heartbeatTimer).toBeTruthy()
-      
-      store.stopHeartbeat()
-      expect(store._heartbeatTimer).toBe(0)
-    })
-
-    it('triggers reconnection on heartbeat timeout', async () => {
-      const connectSpy = vi.spyOn(store, 'connectWS')
-      
-      store.lastMessageAt = Date.now() - 50000 // 50 seconds ago
-      store.startHeartbeat()
-      
-      // Fast forward past heartbeat check
-      await vi.advanceTimersByTimeAsync(16000)
-      
-      expect(connectSpy).toHaveBeenCalled()
+    it('does not coalesce a burst of events', () => {
+      for (let i = 0; i < 5; i++) {
+        store.handleWSMessage(msg('alert', { alert_type: 'a', message: `m${i}`, severity: 'info' }))
+      }
+      expect(store.events.length).toBe(5)
+      expect(store.events.map((e) => e.message)).toEqual(['m0', 'm1', 'm2', 'm3', 'm4'])
     })
   })
 
-  // NOTE: Polling tests simplified - WebSocket disconnect handling is in useWebSocket
-  // See: src/composables/__tests__/useWebSocket.test.ts
-  describe.skip('polling fallback behavior', () => {
-    it('polls only when WebSocket disconnected', async () => {
-      const fetchSpy = vi.spyOn(store, 'fetchSummaries')
-      
-      store.wsConnected = false
+  describe('REST fallback and stale-REST protection', () => {
+    it('polls until the first snapshot is applied, then pauses while live', async () => {
+      vi.useFakeTimers()
+      const spy = vi.mocked(getSystemMetrics)
+
       store.startPolling(1000)
-      
+      expect(spy).toHaveBeenCalledTimes(1) // immediate fetch on start
+
+      store.handleWSMessage(msg('metrics_update', dashboardFixture()))
+      expect(store.feedState).toBe('live')
+
+      spy.mockClear()
       await vi.advanceTimersByTimeAsync(1100)
-      
-      expect(fetchSpy).toHaveBeenCalled()
-      
-      // Connect WebSocket and verify polling stops calling fetch
-      fetchSpy.mockClear()
-      store.wsConnected = true
-      
-      await vi.advanceTimersByTimeAsync(1100)
-      
-      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(spy).not.toHaveBeenCalled() // poll tick skipped because live
     })
 
-    it('resumes polling when WebSocket disconnects', async () => {
-      const startPollingSpy = vi.spyOn(store, 'startPolling')
-      
-      store.connectWS()
-      await vi.advanceTimersByTimeAsync(20)
-      
-      // Simulate WebSocket close
-      const ws = store._ws as any
-      ws.close(1006, 'Connection lost')
-      
-      expect(startPollingSpy).toHaveBeenCalled()
+    it('discards a REST response when the feed is already live', async () => {
+      store.handleWSMessage(msg('metrics_update', dashboardFixture()))
+      expect(store.systemStatus?.online_devices).toBe(7)
+
+      await store.fetchSummaries() // REST would report online_devices: 3
+      expect(store.systemStatus?.online_devices).toBe(7) // unchanged
+    })
+
+    it('discards a REST response if a WS snapshot lands mid-flight', async () => {
+      // While the REST request is in flight, a WS snapshot is applied.
+      vi.mocked(getSystemMetrics).mockImplementationOnce(async () => {
+        store.handleWSMessage(msg('metrics_update', dashboardFixture({ system_status: systemStatusFixture({ online_devices: 7 }) })))
+        return systemStatusFixture({ online_devices: 999 })
+      })
+
+      await store.fetchSummaries()
+      // The WS value (7) must win over the stale REST value (999).
+      expect(store.systemStatus?.online_devices).toBe(7)
+    })
+
+    it('applies REST data when not live', async () => {
+      await store.fetchSummaries()
+      expect(store.systemStatus?.online_devices).toBe(3) // from REST fixture
+      expect(store.isRealtimeActive).toBe(false) // REST never marks live
     })
   })
 
-  // NOTE: Cleanup tests removed - WebSocket cleanup is in useWebSocket composable
-  // See: src/composables/__tests__/useWebSocket.test.ts
-  describe.skip('cleanup', () => {
-    it('cleans up all resources', () => {
-      store.connectWS()
-      store.startPolling()
-      store.startHeartbeat()
-      
-      // Verify things were set up
-      expect(store._ws).toBeTruthy()
-      expect(store._timer).toBeTruthy()
-      expect(store._heartbeatTimer).toBeTruthy()
-      
-      const stopPollingSpy = vi.spyOn(store, 'stopPolling')
-      const disconnectWSSpy = vi.spyOn(store, 'disconnectWS')
-      const clearReconnectSpy = vi.spyOn(store, 'clearReconnectTimer')
-      
-      store.cleanup()
-      
-      // Check that cleanup methods were called
-      expect(stopPollingSpy).toHaveBeenCalled()
-      expect(disconnectWSSpy).toHaveBeenCalled()
-      expect(clearReconnectSpy).toHaveBeenCalled()
-      expect(store.wsConnected).toBe(false)
-      expect(store._ws).toBe(null)
-      expect(store._animationFrameId).toBe(0)
-      
-      stopPollingSpy.mockRestore()
-      disconnectWSSpy.mockRestore()
-      clearReconnectSpy.mockRestore()
+  describe('watchdog freshness', () => {
+    it('transitions live -> stale when snapshots stop arriving', () => {
+      vi.useFakeTimers()
+      store.startPolling(60000) // also starts the watchdog
+      store.handleWSMessage(msg('metrics_update', dashboardFixture()))
+      expect(store.feedState).toBe('live')
+
+      // Past STALE_MS (20s); watchdog ticks every 5s.
+      vi.advanceTimersByTime(26000)
+      expect(store.feedState).toBe('stale')
+      expect(store.isRealtimeActive).toBe(false)
+    })
+
+    it('returns to live when snapshots resume', () => {
+      vi.useFakeTimers()
+      store.startPolling(60000)
+      store.handleWSMessage(msg('metrics_update', dashboardFixture()))
+      vi.advanceTimersByTime(26000)
+      expect(store.feedState).toBe('stale')
+
+      store.handleWSMessage(msg('metrics_update', dashboardFixture()))
+      expect(store.feedState).toBe('live')
     })
   })
 
-  // NOTE: Message throttling test removed - testing internal implementation detail
-  describe.skip('message throttling', () => {
-    it('processes messages in sequence (not truly throttled in test environment)', async () => {
-      store.connectWS()
-      await vi.advanceTimersByTimeAsync(20)
-      
-      const ws = store._ws as any
-      
-      // Send multiple messages
-      ws.simulateMessage({ type: 'system', data: { cpu: 10 }, timestamp: '2023-01-01T00:00:00Z' })
-      await vi.advanceTimersByTimeAsync(20)
-      
-      ws.simulateMessage({ type: 'system', data: { cpu: 20 }, timestamp: '2023-01-01T00:00:01Z' })
-      await vi.advanceTimersByTimeAsync(20)
-      
-      ws.simulateMessage({ type: 'system', data: { cpu: 30 }, timestamp: '2023-01-01T00:00:02Z' })
-      await vi.advanceTimersByTimeAsync(20)
-      
-      // All messages should be processed in sequence
-      expect(store.system?.cpu).toEqual([10, 20, 30])
+  describe('series ring buffer', () => {
+    it('bounds the device-count series to maxLength', () => {
+      for (let i = 0; i < 60; i++) {
+        store.handleWSMessage(msg('metrics_update', dashboardFixture({
+          system_status: systemStatusFixture({ online_devices: i }),
+        }), `2026-01-01T00:${String(i).padStart(2, '0')}:00Z`))
+      }
+      expect(store.series.online.length).toBe(50)
+      expect(store.series.online[49]).toBe(59)
     })
   })
 })
