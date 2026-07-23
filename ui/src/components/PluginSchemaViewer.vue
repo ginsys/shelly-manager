@@ -5,23 +5,10 @@
         <h3>Configuration Schema</h3>
         <span v-if="schema.title" class="schema-subtitle">{{ schema.title }}</span>
       </div>
-      
-      <div class="schema-actions">
-        <button 
-          class="action-btn example-btn"
-          @click="loadExample"
-          title="Load example configuration"
-        >
-          📝 Example
-        </button>
-        <button 
-          class="action-btn export-btn"
-          @click="exportSchema"
-          title="Export schema as JSON"
-        >
-          📤 Export
-        </button>
-      </div>
+      <!-- Read-only: this view shows the schema-declared fields, constraints and
+           defaults only. It does not generate, edit, test or persist any
+           configuration (#264). -->
+      <span class="read-only-badge" title="Read-only">Read-only</span>
     </div>
 
     <div v-if="schema.description" class="schema-description">
@@ -30,7 +17,7 @@
 
     <!-- Schema Properties -->
     <div class="schema-content">
-      <div v-if="schema.properties" class="properties-section">
+      <div v-if="hasProperties" class="properties-section">
         <h4>Configuration Properties</h4>
         
         <div class="properties-list">
@@ -145,69 +132,52 @@
         </div>
       </div>
 
-      <!-- Schema Examples -->
+      <!-- Schema Examples (read-only display of schema-declared examples) -->
       <div v-if="schema.examples?.length" class="examples-section">
         <h4>Complete Configuration Examples</h4>
         <div class="schema-examples">
-          <div 
-            v-for="(example, index) in schema.examples" 
+          <div
+            v-for="(example, index) in schema.examples"
             :key="index"
             class="schema-example"
           >
             <div class="example-header">
               <span class="example-title">Example {{ index + 1 }}</span>
-              <button 
-                class="example-load-btn"
-                @click="loadSchemaExample(example)"
-                title="Load this example"
-              >
-                📥 Load
-              </button>
             </div>
             <pre class="example-code">{{ JSON.stringify(example, null, 2) }}</pre>
           </div>
         </div>
       </div>
 
-      <!-- No Schema Available -->
-      <div v-if="!schema.properties && !schema.examples?.length" class="no-schema">
+      <!-- No Schema Published -->
+      <div v-if="!hasProperties && !schema.examples?.length" class="no-schema">
         <div class="no-schema-icon">📄</div>
-        <h4>No Schema Available</h4>
-        <p>This plugin doesn't provide a configuration schema. You can still configure it using a custom JSON object.</p>
-        
-        <div class="manual-config-tips">
-          <h5>Manual Configuration Tips:</h5>
-          <ul>
-            <li>Check the plugin documentation for supported configuration options</li>
-            <li>Start with an empty object <code>{}</code> and add properties as needed</li>
-            <li>Use the test feature to validate your configuration</li>
-            <li>Look at similar plugins for configuration patterns</li>
-          </ul>
-        </div>
+        <h4>No configuration schema published</h4>
+        <p>This plugin does not publish a configuration schema.</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { type PluginSchema, type PluginSchemaProperty } from '@/api/plugin'
 
-// Props
+// Read-only schema viewer (#264): renders the schema-declared fields,
+// constraints and defaults for inspection. It intentionally does not generate,
+// edit, test or persist configuration — there is no backend model for stored
+// plugin config.
 interface Props {
   schema: PluginSchema
-  plugin?: any
 }
 
 const props = withDefaults(defineProps<Props>(), {
   schema: () => ({ type: 'object', properties: {} }),
-  plugin: null
 })
 
-// Emits
-const emit = defineEmits<{
-  loadExample: [config: Record<string, any>]
-  exportSchema: [schema: PluginSchema]
-}>()
+const hasProperties = computed(
+  () => !!props.schema.properties && Object.keys(props.schema.properties).length > 0
+)
 
 /**
  * Check if a field is required
@@ -254,84 +224,12 @@ function formatValue(value: any): string {
   if (typeof value === 'string') {
     return value.length > 30 ? `"${value.substring(0, 30)}..."` : `"${value}"`
   }
-  
+
   if (typeof value === 'object') {
     return JSON.stringify(value)
   }
-  
+
   return String(value)
-}
-
-/**
- * Load example configuration
- */
-function loadExample() {
-  if (props.plugin?.example_config) {
-    emit('loadExample', props.plugin.example_config)
-  } else if (props.schema.examples?.length) {
-    emit('loadExample', props.schema.examples[0])
-  } else {
-    // Generate a default example from schema
-    const example = generateDefaultExample()
-    emit('loadExample', example)
-  }
-}
-
-/**
- * Load a specific schema example
- */
-function loadSchemaExample(example: Record<string, any>) {
-  emit('loadExample', example)
-}
-
-/**
- * Export schema
- */
-function exportSchema() {
-  emit('exportSchema', props.schema)
-}
-
-/**
- * Generate default example from schema
- */
-function generateDefaultExample(): Record<string, any> {
-  const example: Record<string, any> = {}
-  
-  if (!props.schema.properties) {
-    return example
-  }
-  
-  for (const [fieldName, property] of Object.entries(props.schema.properties)) {
-    if (property.examples?.length) {
-      example[fieldName] = property.examples[0]
-    } else if (property.default !== undefined) {
-      example[fieldName] = property.default
-    } else if (property.enum?.length) {
-      example[fieldName] = property.enum[0]
-    } else {
-      // Generate based on type
-      switch (property.type) {
-        case 'string':
-          example[fieldName] = property.format === 'email' ? 'user@example.com' : 'example_value'
-          break
-        case 'number':
-        case 'integer':
-          example[fieldName] = property.minimum || 0
-          break
-        case 'boolean':
-          example[fieldName] = false
-          break
-        case 'array':
-          example[fieldName] = []
-          break
-        case 'object':
-          example[fieldName] = {}
-          break
-      }
-    }
-  }
-  
-  return example
 }
 </script>
 
@@ -364,39 +262,14 @@ function generateDefaultExample(): Record<string, any> {
   font-weight: 500;
 }
 
-.schema-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
-  padding: 6px 12px;
-  border-radius: 4px;
+.read-only-badge {
+  background: #e2e8f0;
+  color: #475569;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 0.75rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.action-btn:hover {
-  background: #e5e7eb;
-}
-
-.example-btn:hover {
-  background: #ede9fe;
-  border-color: #8b5cf6;
-  color: #6b21a8;
-}
-
-.export-btn:hover {
-  background: #dbeafe;
-  border-color: #3b82f6;
-  color: #1e40af;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .schema-description {
@@ -670,24 +543,6 @@ function generateDefaultExample(): Record<string, any> {
   font-size: 0.875rem;
 }
 
-.example-load-btn {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 4px 8px;
-  border-radius: 3px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.example-load-btn:hover {
-  background: #059669;
-}
-
 .example-code {
   padding: 16px;
   background: #1f2937;
@@ -717,40 +572,6 @@ function generateDefaultExample(): Record<string, any> {
 
 .no-schema p {
   margin: 0 0 24px 0;
-}
-
-.manual-config-tips {
-  text-align: left;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 16px;
-  margin-top: 20px;
-}
-
-.manual-config-tips h5 {
-  margin: 0 0 12px 0;
-  color: #374151;
-  font-size: 0.875rem;
-}
-
-.manual-config-tips ul {
-  margin: 0;
-  padding-left: 20px;
-  color: #4b5563;
-  font-size: 0.875rem;
-}
-
-.manual-config-tips li {
-  margin-bottom: 6px;
-  line-height: 1.5;
-}
-
-.manual-config-tips code {
-  background: #f3f4f6;
-  padding: 1px 4px;
-  border-radius: 2px;
-  font-size: 0.8125rem;
 }
 
 /* Responsive design */

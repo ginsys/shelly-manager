@@ -62,12 +62,7 @@
             v-for="plugin in categoryPlugins"
             :key="plugin.name"
             :plugin="plugin"
-            :testResult="getTestResult(plugin.name)"
-            :isPluginTesting="isPluginTesting(plugin.name)"
-            :currentLoading="currentLoading"
-            @configure="openConfigModal"
-            @toggle="togglePlugin"
-            @test="testPlugin"
+            @view-schema="openSchemaModal"
             @details="viewPluginDetails"
           />
         </div>
@@ -94,22 +89,16 @@
       </button>
     </div>
 
-    <!-- Plugin Configuration Modal -->
-    <div v-if="showConfigModal" class="modal-overlay" @click="closeConfigModal">
+    <!-- Plugin Schema Modal (read-only inspection; #264) -->
+    <div v-if="showSchemaModal" class="modal-overlay" @click="closeSchemaModal">
       <div class="modal-content config-modal" @click.stop>
-        <Suspense>
-          <template #default>
-            <PluginConfigForm
-              v-if="configModalPlugin"
-              :plugin="configModalPlugin"
-              @close="closeConfigModal"
-              @saved="handleConfigSaved"
-            />
-          </template>
-          <template #fallback>
-            <div class="modal-loading">Loading configuration form...</div>
-          </template>
-        </Suspense>
+        <div class="schema-modal-header">
+          <h2>{{ schemaModalPlugin?.display_name }} — configuration schema</h2>
+          <button class="btn-close" @click="closeSchemaModal">×</button>
+        </div>
+        <div v-if="schemaLoading" class="modal-loading">Loading schema…</div>
+        <div v-else-if="schemaError" class="error-alert">⚠️ {{ schemaError }}</div>
+        <PluginSchemaViewer v-else-if="schema" :schema="schema" />
       </div>
     </div>
 
@@ -122,7 +111,6 @@
               v-if="detailsModalPlugin"
               :plugin="detailsModalPlugin"
               @close="closeDetailsModal"
-              @configure="openConfigFromDetails"
             />
           </template>
           <template #fallback>
@@ -145,37 +133,39 @@ import { computed, onMounted, reactive, ref, defineAsyncComponent } from 'vue'
 import { usePluginStore } from '@/stores/plugin'
 import {
   getPluginCategoryInfo,
-  type Plugin
+  type Plugin,
+  type PluginSchema
 } from '@/api/plugin'
 import PluginStatistics from '@/components/plugin/PluginStatistics.vue'
 import PluginFilterBar from '@/components/plugin/PluginFilterBar.vue'
 import PluginCard from '@/components/plugin/PluginCard.vue'
 
-// Lazy load heavy form components
-const PluginConfigForm = defineAsyncComponent(() => import('@/components/PluginConfigForm.vue'))
+// Lazy load heavy components
+const PluginSchemaViewer = defineAsyncComponent(() => import('@/components/PluginSchemaViewer.vue'))
 const PluginDetailsView = defineAsyncComponent(() => import('@/components/PluginDetailsView.vue'))
 
 // Store
 const pluginStore = usePluginStore()
 
 // Computed properties from store
-const plugins = computed(() => pluginStore.plugins)
 const categories = computed(() => pluginStore.categories)
 const filteredPlugins = computed(() => pluginStore.filteredPlugins)
 const pluginsByCategory = computed(() => pluginStore.pluginsByCategory)
 const pluginStats = computed(() => pluginStore.pluginStats)
 const loading = computed(() => pluginStore.loading)
 const error = computed(() => pluginStore.error)
-const currentLoading = computed(() => pluginStore.currentLoading)
 
 // Reactive filters
 const selectedCategory = ref('')
 const searchQuery = ref('')
 
 // Modal state
-const showConfigModal = ref(false)
+const showSchemaModal = ref(false)
+const schemaModalPlugin = ref<Plugin | null>(null)
+const schema = ref<PluginSchema | null>(null)
+const schemaLoading = ref(false)
+const schemaError = ref('')
 const showDetailsModal = ref(false)
-const configModalPlugin = ref<Plugin | null>(null)
 const detailsModalPlugin = ref<Plugin | null>(null)
 
 // Message state
@@ -202,36 +192,32 @@ function refreshData() {
 }
 
 /**
- * Open configuration modal for a plugin
+ * Open the read-only schema modal for a plugin (#264). Loads the plugin's
+ * configuration schema for inspection; there is no editing, testing or saving.
  */
-function openConfigModal(plugin: Plugin) {
-  configModalPlugin.value = plugin
-  showConfigModal.value = true
+async function openSchemaModal(plugin: Plugin) {
+  schemaModalPlugin.value = plugin
+  schema.value = null
+  schemaError.value = ''
+  schemaLoading.value = true
+  showSchemaModal.value = true
+  try {
+    schema.value = await pluginStore.loadPluginSchema(plugin.name)
+  } catch (err: any) {
+    schemaError.value = err?.message || 'Failed to load configuration schema'
+  } finally {
+    schemaLoading.value = false
+  }
 }
 
 /**
- * Close configuration modal
+ * Close the schema modal
  */
-function closeConfigModal() {
-  showConfigModal.value = false
-  configModalPlugin.value = null
-}
-
-/**
- * Handle configuration saved
- */
-function handleConfigSaved(plugin: Plugin) {
-  showMessage(`Configuration saved for ${plugin.display_name}`, 'success')
-  closeConfigModal()
-  refreshData() // Refresh to get updated status
-}
-
-/**
- * Open configuration modal from details view
- */
-function openConfigFromDetails(plugin: Plugin) {
-  closeDetailsModal()
-  openConfigModal(plugin)
+function closeSchemaModal() {
+  showSchemaModal.value = false
+  schemaModalPlugin.value = null
+  schema.value = null
+  schemaError.value = ''
 }
 
 /**
@@ -248,50 +234,6 @@ function viewPluginDetails(plugin: Plugin) {
 function closeDetailsModal() {
   showDetailsModal.value = false
   detailsModalPlugin.value = null
-}
-
-/**
- * Toggle plugin enabled/disabled state
- */
-async function togglePlugin(plugin: Plugin) {
-  try {
-    await pluginStore.togglePlugin(plugin.name)
-    const action = plugin.status.enabled ? 'disabled' : 'enabled'
-    showMessage(`${plugin.display_name} ${action} successfully`, 'success')
-  } catch (err: any) {
-    showMessage(err.message || `Failed to toggle ${plugin.display_name}`, 'error')
-  }
-}
-
-/**
- * Test plugin configuration
- */
-async function testPlugin(plugin: Plugin) {
-  try {
-    const result = await pluginStore.testPluginConfiguration(plugin.name)
-    
-    if (result.success) {
-      showMessage(`${plugin.display_name} test passed successfully`, 'success')
-    } else {
-      showMessage(`${plugin.display_name} test failed: ${result.message || 'Unknown error'}`, 'error')
-    }
-  } catch (err: any) {
-    showMessage(err.message || `Failed to test ${plugin.display_name}`, 'error')
-  }
-}
-
-/**
- * Check if plugin is being tested
- */
-function isPluginTesting(name: string) {
-  return pluginStore.isPluginTesting(name)
-}
-
-/**
- * Get test result for plugin
- */
-function getTestResult(name: string) {
-  return pluginStore.getTestResult(name)
 }
 
 /**
@@ -513,6 +455,33 @@ function showMessage(text: string, type: 'success' | 'error') {
 .config-modal {
   width: 100%;
   max-width: 800px;
+}
+
+.schema-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.schema-modal-header h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  color: #1f2937;
+}
+
+.btn-close {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.btn-close:hover {
+  color: #1f2937;
 }
 
 .details-modal {
