@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -295,6 +296,14 @@ func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Import failed", "plugin", importRequest.PluginName, "error", err)
+		// A plugin that has no persistence yet fails closed with
+		// ErrImportNotImplemented. Surface that as a client-visible 501 so
+		// callers can tell "unsupported, retry with dry_run" apart from a
+		// generic server fault (which WriteInternalError hides behind a 500).
+		if errors.Is(err, sync.ErrImportNotImplemented) {
+			apiresp.NewResponseWriter(ih.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, err.Error(), nil)
+			return
+		}
 		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
 		return
 	}
