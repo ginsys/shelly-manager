@@ -191,33 +191,44 @@ function refreshData() {
   })
 }
 
+// Monotonic token guarding against out-of-order schema loads: opening plugin B
+// before plugin A resolves must not render A's schema under B's heading. Only
+// the latest request applies its result; closing invalidates any in-flight one.
+let schemaRequestId = 0
+
 /**
  * Open the read-only schema modal for a plugin (#264). Loads the plugin's
  * configuration schema for inspection; there is no editing, testing or saving.
  */
 async function openSchemaModal(plugin: Plugin) {
+  const requestId = ++schemaRequestId
   schemaModalPlugin.value = plugin
   schema.value = null
   schemaError.value = ''
   schemaLoading.value = true
   showSchemaModal.value = true
   try {
-    schema.value = await pluginStore.loadPluginSchema(plugin.name)
+    const result = await pluginStore.loadPluginSchema(plugin.name)
+    if (requestId !== schemaRequestId) return // superseded by a newer open/close
+    schema.value = result
   } catch (err: any) {
+    if (requestId !== schemaRequestId) return
     schemaError.value = err?.message || 'Failed to load configuration schema'
   } finally {
-    schemaLoading.value = false
+    if (requestId === schemaRequestId) schemaLoading.value = false
   }
 }
 
 /**
- * Close the schema modal
+ * Close the schema modal (invalidates any in-flight schema request).
  */
 function closeSchemaModal() {
+  schemaRequestId++
   showSchemaModal.value = false
   schemaModalPlugin.value = null
   schema.value = null
   schemaError.value = ''
+  schemaLoading.value = false
 }
 
 /**

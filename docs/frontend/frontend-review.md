@@ -344,6 +344,10 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 
 **Removed (unbacked, #264):** `GET/PUT /export/plugins/{name}/config`, `POST /export/plugins/{name}/test`, and the config/test/toggle UI.
 
+The remaining "View schema" action opens a read-only viewer:
+
+![Read-only plugin schema viewer](images/plugin-schema-viewer-readonly.png)
+
 #### Metrics (15 endpoints + WebSocket)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
