@@ -252,6 +252,20 @@ describe('useMetricsStore', () => {
       expect(store.systemStatus?.online_devices).toBe(3) // from REST fixture
       expect(store.isRealtimeActive).toBe(false) // REST never marks live
     })
+
+    it('discards an in-flight REST fetch that resolves after cleanup', async () => {
+      let resolveSystem: (v: unknown) => void = () => {}
+      vi.mocked(getSystemMetrics).mockImplementationOnce(
+        () => new Promise((res) => { resolveSystem = res })
+      )
+
+      const pending = store.fetchSummaries() // awaits getSystemMetrics
+      store.cleanup() // bumps the fetch epoch
+      resolveSystem(systemStatusFixture({ online_devices: 42 }))
+      await pending
+
+      expect(store.systemStatus).toBe(null) // torn-down store not repopulated
+    })
   })
 
   describe('watchdog freshness', () => {

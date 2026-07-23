@@ -8,7 +8,7 @@
  * frames (wrong shape, unknown type, missing fields) so bad data is surfaced and
  * never applied — a typed union alone cannot vet bytes off the wire.
  */
-import { METRICS_WS_MESSAGE_TYPES, type MetricsWsMessageType } from './metricsMessages'
+import { METRICS_WS_MESSAGE_TYPES, assertNever, type MetricsWsMessageType } from './metricsMessages'
 
 // --- Payload shapes (json tags from the Go structs) ---
 
@@ -108,6 +108,14 @@ export type EventMessage = Extract<
 export function isDashboardMessage(msg: MetricsWsMessage): msg is DashboardMessage {
   return msg.type === 'initial_metrics' || msg.type === 'metrics_update'
 }
+
+// Compile-time guarantee that the hand-written MetricsWsMessage union enumerates
+// every manifest type. If a type is added to METRICS_WS_MESSAGE_TYPES without a
+// corresponding Envelope in the union, `_MissingFromUnion` is non-never and this
+// assignment fails `vue-tsc`.
+type _MissingFromUnion = Exclude<MetricsWsMessageType, MetricsWsMessage['type']>
+const _assertUnionCoversManifest: _MissingFromUnion extends never ? true : never = true
+void _assertUnionCoversManifest
 
 // --- Runtime validation ---
 
@@ -260,6 +268,10 @@ export function parseMetricsWsMessage(raw: unknown): ParseResult {
     case 'drift_detected':
       if (!validDriftDetected(data)) return { ok: false, reason: 'invalid drift_detected payload', type }
       break
+    default:
+      // Exhaustiveness: a manifest type without a validation case above fails
+      // vue-tsc here (t is no longer `never`), forcing a case to be added.
+      return assertNever(t)
   }
   return { ok: true, message: raw as unknown as MetricsWsMessage }
 }

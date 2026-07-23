@@ -87,6 +87,9 @@ export const useMetricsStore = defineStore('metrics', () => {
   // Monotonic counter bumped on every applied WS snapshot; used to detect that
   // WS data landed while a REST request was in flight (stale-REST protection).
   let metricsApplySeq = 0
+  // Bumped on cleanup so a REST request that resolves after teardown is discarded
+  // instead of repopulating the reset singleton.
+  let fetchEpoch = 0
 
   // Diagnostics for invalid frames (surfaced, not swallowed).
   const lastInvalidReason = ref<string | null>(null)
@@ -251,6 +254,7 @@ export const useMetricsStore = defineStore('metrics', () => {
     // snapshot lands (or the feed goes live) while these requests are in flight,
     // discard the REST results so we never overwrite fresher WS data.
     const seqAtStart = metricsApplySeq
+    const epochAtStart = fetchEpoch
 
     const [systemRes, devicesRes, driftRes] = await Promise.allSettled([
       getSystemMetrics(),
@@ -258,8 +262,8 @@ export const useMetricsStore = defineStore('metrics', () => {
       getDriftSummary(),
     ])
 
-    if (feedState.value === 'live' || metricsApplySeq !== seqAtStart) {
-      return // superseded by WS while awaiting
+    if (fetchEpoch !== epochAtStart || feedState.value === 'live' || metricsApplySeq !== seqAtStart) {
+      return // torn down, or superseded by WS, while awaiting
     }
 
     if (systemRes.status === 'fulfilled' && systemRes.value) {
@@ -337,6 +341,9 @@ export const useMetricsStore = defineStore('metrics', () => {
     stopPolling()
     stopWatchdog()
     disconnectWS()
+    // Invalidate any REST request still in flight so it can't repopulate the
+    // store after teardown.
+    fetchEpoch++
     // The store is a shared singleton; reset freshness so a remount starts from
     // polling (not a stale "live" left over from the previous session, which
     // would show a false LIVE badge and skip the initial REST fetch).
