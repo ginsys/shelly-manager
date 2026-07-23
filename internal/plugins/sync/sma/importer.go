@@ -125,7 +125,7 @@ func (s *SMAPlugin) ImportFromData(ctx context.Context, data []byte, config sync
 		"discovered", len(archive.Discovered),
 	)
 
-	err := fmt.Errorf("SMA import persistence is not yet implemented; re-run with dry_run to preview (#272): %w", sync.ErrImportNotImplemented)
+	err := fmt.Errorf("SMA import persistence is not yet implemented; re-run with dry_run to preview (#284): %w", sync.ErrImportNotImplemented)
 	return &sync.ImportResult{
 		Success:    false,
 		ImportID:   importID,

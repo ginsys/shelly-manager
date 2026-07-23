@@ -332,7 +332,7 @@ func TestSMAPlugin_ImportFromData_DryRun(t *testing.T) {
 
 // TestSMAPlugin_ImportFromData_NonDryRunFailsClosed asserts that a real
 // (non-dry-run) import refuses rather than fabricating success. Persistence is
-// not yet implemented (#272); until it is, the import must fail closed so
+// not yet implemented (#284); until it is, the import must fail closed so
 // callers are never told records were imported when nothing was written.
 func TestSMAPlugin_ImportFromData_NonDryRunFailsClosed(t *testing.T) {
 	plugin := NewPlugin().(*SMAPlugin)
@@ -368,8 +368,13 @@ func TestSMAPlugin_ImportFromData_NonDryRunFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	result, err := plugin.ImportFromData(ctx, jsonData, config)
 
-	// Must surface an error, not a fabricated success.
+	// Must surface an error, not a fabricated success. Assert the concrete
+	// sentinel so the SMA->501 contract cannot silently regress: the handler
+	// keys its 501 mapping off errors.Is(err, sync.ErrImportNotImplemented),
+	// so if this path stopped wrapping the sentinel the real endpoint would
+	// fall back to a generic 500 while a looser require.Error still passed.
 	require.Error(t, err)
+	require.ErrorIs(t, err, sync.ErrImportNotImplemented)
 	require.NotNil(t, result)
 	assert.False(t, result.Success)
 	assert.Zero(t, result.RecordsImported, "must not claim records imported when nothing is persisted")

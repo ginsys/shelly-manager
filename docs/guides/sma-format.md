@@ -274,12 +274,13 @@ Content-Type: application/json
 > runs through the **generic** import endpoint with `plugin_name: "sma"`. The
 > request body is JSON (not multipart).
 >
-> **⚠️ Non-dry-run import is not implemented yet (#272).** SMA persistence has
+> **⚠️ Non-dry-run import is not implemented yet (#284).** SMA persistence has
 > not been built. Validation and dry-run **preview** work; a real (non-dry-run)
 > import now **fails closed** — it returns HTTP `501 Not Implemented` with error
 > code `NOT_IMPLEMENTED` and does **not** write anything. (Previously it returned
-> a fabricated `success: true`; that has been removed.) Re-run with `dry_run` to
-> preview the changes that would be made once persistence lands.
+> a fabricated `success: true`; removing that fake-success is #272, and #284
+> tracks building real persistence.) Re-run with `dry_run` to preview the changes
+> that would be made once persistence lands.
 
 ```http
 POST /api/v1/import
@@ -304,7 +305,7 @@ Content-Type: application/json
 - `options` maps to the backend `ImportOptions`: `dry_run`, `force_overwrite`,
   `validate_only`, `backup_before`. Only `dry_run` is acted on today: any request
   that is not a dry run (including `validate_only` on its own) fails closed with
-  `501 Not Implemented` because SMA persistence is not built yet (#272).
+  `501 Not Implemented` because SMA persistence is not built yet (#284).
   `force_overwrite` and `backup_before` are decoded but unused.
 
 Use `POST /api/v1/import/preview` with the same body for a dry-run preview (it
