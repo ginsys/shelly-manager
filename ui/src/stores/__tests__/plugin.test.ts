@@ -183,6 +183,31 @@ describe('Plugin Store', () => {
 
         await expect(store.loadPluginSchema('test-plugin')).rejects.toThrow('Schema not available')
       })
+
+      it('cache is first-writer-wins: a late response does not overwrite a cached one', async () => {
+        const resolvers: Array<(s: PluginSchema) => void> = []
+        vi.mocked(pluginApi.getPluginSchema).mockImplementation(
+          () => new Promise<PluginSchema>(res => { resolvers.push(res) })
+        )
+        const first: PluginSchema = { ...mockSchema, title: 'first' }
+        const second: PluginSchema = { ...mockSchema, title: 'second' }
+
+        // Two concurrent loads for the same plugin (cache empty for both).
+        const p1 = store.loadPluginSchema('x')
+        const p2 = store.loadPluginSchema('x')
+        expect(pluginApi.getPluginSchema).toHaveBeenCalledTimes(2)
+
+        // The second request resolves first and populates the cache.
+        resolvers[1](second)
+        await expect(p2).resolves.toEqual(second)
+        expect(store.getCachedSchema('x')).toEqual(second)
+
+        // The first request resolves last: it must NOT overwrite the cache, and
+        // it returns the already-cached value.
+        resolvers[0](first)
+        await expect(p1).resolves.toEqual(second)
+        expect(store.getCachedSchema('x')).toEqual(second)
+      })
     })
 
     describe('filter management', () => {

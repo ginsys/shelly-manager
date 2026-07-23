@@ -135,6 +135,11 @@ export const usePluginStore = defineStore('plugin', {
      * Load a plugin's configuration schema for read-only inspection, with
      * caching. Throws on load failure so callers can distinguish a fetch error
      * from a plugin that simply publishes no schema (an empty schema).
+     *
+     * The cache is first-writer-wins: once a schema for a name is cached, a
+     * later-resolving response for the same name does not overwrite it. This
+     * makes concurrent/out-of-order loads for the same plugin deterministic and
+     * keeps the cache consistent with whatever a caller already observed.
      */
     async loadPluginSchema(name: string): Promise<PluginSchema> {
       const cached = this.schemaCache.get(name)
@@ -143,6 +148,10 @@ export const usePluginStore = defineStore('plugin', {
       }
 
       const schema = await getPluginSchema(name)
+      const settled = this.schemaCache.get(name)
+      if (settled) {
+        return settled
+      }
       this.schemaCache.set(name, schema)
       return schema
     },

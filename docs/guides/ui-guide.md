@@ -371,64 +371,41 @@ Similar to export history, with import-specific features:
 
 ## Plugin Management
 
-### Plugin Discovery and Configuration
+> **Read-only in this release (#264).** The plugin UI is inspection-only.
+> Configuring, testing and enabling/disabling plugins is **not available**: those
+> actions called backend routes that do not exist, and there is no server-side
+> model for stored plugin configuration (plugin config is supplied per
+> export/import request). A real product model is tracked as a design vertical
+> (#290). The former `PluginConfigForm`, "Test" and enable/disable controls have
+> been removed.
 
-#### Plugin Management Interface
+### Plugin Discovery and Inspection
 
 **Navigation**: Export/Import > Plugin Management
 
 **Plugin List View**:
-- **Available Plugins**: List of all available plugins
-- **Status Indicators**: Enabled/disabled status with health checks
-- **Configuration Access**: Quick access to plugin configuration
-- **Documentation Links**: Links to plugin-specific documentation
+- **Registered Plugins**: All plugins compiled into the server, grouped by
+  category, with a neutral **"Registered"** badge. Status is not presented as
+  configured/enabled — the backend does not track that.
+- **Search and Category filter**: Narrow the list by name/capability or category.
+- **Per-plugin actions**: **View schema** and **Details** only (both read-only).
 
-#### Plugin Configuration Forms
+#### View Schema (read-only)
 
-Each plugin has its own configuration interface:
+"View schema" opens a read-only viewer of the plugin's configuration schema
+(`GET /export/plugins/{name}/schema`):
 
-```vue
-<PluginConfigForm
-  :plugin="selectedPlugin"
-  :schema="pluginSchema"
-  v-model="pluginConfig"
-  :show-validation="true"
-/>
-```
+- **Declared fields**: name, type, title and description for each property.
+- **Constraints and defaults**: min/max, length, pattern, format, enum options,
+  and schema-declared default values — shown for reference only.
+- **No editing/testing/saving**: nothing is generated or persisted.
+- A plugin that publishes no schema shows **"No configuration schema published."**
 
-**Configuration Features**:
-- **Dynamic Forms**: Forms generated from plugin schemas
-- **Validation**: Real-time validation of plugin settings
-- **Testing**: Built-in test functionality for plugin validation
-- **Reset Options**: Easy reset to default configurations
+#### Details (read-only)
 
-#### Plugin Testing Interface
-
-**Test Capabilities**:
-- **Connection Testing**: Test external service connections
-- **Format Validation**: Validate export/import format support
-- **Sample Operations**: Run sample export/import operations
-- **Error Simulation**: Test error handling capabilities
-
-### Built-in Plugin Interfaces
-
-#### SMA Plugin Configuration
-- **Compression Settings**: Compression level and options
-- **Metadata Options**: Export metadata configuration
-- **Validation Settings**: Integrity checking options
-- **Performance Tuning**: Memory and processing options
-
-#### Terraform Plugin Configuration
-- **Provider Settings**: Terraform provider configuration
-- **Resource Naming**: Resource naming conventions
-- **Module Organization**: Module structure preferences
-- **Variable Management**: Variable handling options
-
-#### Ansible Plugin Configuration
-- **Playbook Structure**: Playbook organization preferences
-- **Task Grouping**: Task organization strategies
-- **Variable Management**: Ansible variable handling
-- **Inventory Integration**: Inventory file generation options
+The Details view shows the plugin's name, description, version, category and
+capabilities from the list DTO. It offers no configuration or enable/disable
+actions.
 
 ## Metrics Dashboard
 
