@@ -8,7 +8,6 @@ const viewports = [
 
 const routes = [
   '/',
-  '/export/schedules',
   '/export/backup',
   '/plugins'
 ];

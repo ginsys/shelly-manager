@@ -33,10 +33,6 @@
           >
             <div class="dropdown-section">
               <div class="dropdown-section-title">Export</div>
-              <router-link class="dropdown-item" to="/export/schedules" role="menuitem">
-                <span class="dropdown-icon" aria-hidden="true">📅</span>
-                Schedule Management
-              </router-link>
               <router-link class="dropdown-item" to="/export/backup" role="menuitem">
                 <span class="dropdown-icon" aria-hidden="true">💾</span>
                 Backup Management
@@ -145,13 +141,6 @@ const breadcrumbs = computed(() => {
       crumbs.push(
         { text: 'Devices', to: '/' },
         { text: 'Device Details' }
-      )
-      break
-      
-    case 'export-schedules':
-      crumbs.push(
-        { text: 'Export & Import', to: null },
-        { text: 'Schedule Management' }
       )
       break
       

@@ -1,28 +1,40 @@
-import { ungzip } from 'pako'
+import { Inflate } from 'pako'
+import { canonicalize } from './jcs'
 import { sha256Hex } from './sha256'
+import { parseStrictJSON } from './strict-json'
 
-/**
- * SMA Format Parser for Shelly Manager Archive files
- * Handles parsing, validation, and extraction of compressed SMA files
- */
+const DEFAULT_MAX_SIZE = 100 * 1024 * 1024
+const FORMAT_VERSION = '2026.1'
+const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const checksum = /^sha256:[0-9a-f]{64}$/
 
 export interface SMAMetadata {
   export_id: string
   created_at: string
-  created_by?: string
-  export_type: 'manual' | 'scheduled' | 'api'
+  created_by: string
+  export_type: 'manual' | 'api'
   system_info: {
     version: string
     database_type: 'sqlite' | 'postgresql' | 'mysql'
     hostname: string
-    total_size_bytes: number
-    compression_ratio: number
+    total_size_bytes: 0
+    compression_ratio: 0
   }
   integrity: {
     checksum: string
     record_count: number
-    file_count: number
+    file_count: 1
   }
+}
+
+export interface SMADeviceConfiguration {
+  device_id: number
+  template_id?: number
+  config: Record<string, unknown>
+  last_synced?: string
+  sync_status: string
+  updated_at: string
 }
 
 export interface SMADevice {
@@ -30,30 +42,25 @@ export interface SMADevice {
   mac: string
   ip: string
   type: string
-  name?: string
-  model?: string
-  firmware?: string
-  status: 'online' | 'offline' | 'unknown'
+  name: string
+  model: string
+  firmware: string
+  status: string
   last_seen: string
-  settings?: Record<string, any>
-  configuration?: {
-    template_id?: number
-    config?: Record<string, any>
-    last_synced?: string
-    sync_status?: 'synced' | 'pending' | 'failed'
-  }
+  settings: Record<string, unknown>
+  configuration?: SMADeviceConfiguration
   created_at: string
   updated_at: string
 }
 
 export interface SMATemplate {
   id: number
-  name: string
-  description?: string
-  device_type: string
   generation: number
-  config: Record<string, any>
-  variables?: Record<string, any>
+  name: string
+  description: string
+  device_type: string
+  config: Record<string, unknown>
+  variables: Record<string, unknown>
   is_default: boolean
   created_at: string
   updated_at: string
@@ -63,51 +70,40 @@ export interface SMADiscoveredDevice {
   mac: string
   ssid: string
   model: string
-  generation: number
   ip: string
-  signal: number
   agent_id: string
+  generation: number
+  signal: number
   discovered: string
 }
 
 export interface SMANetworkSettings {
-  wifi_networks: Array<{
-    ssid: string
-    security: string
-    priority: number
-  }>
-  mqtt_config: {
+  wifi_networks: Array<{ ssid: string; security: string; priority: number }>
+  ntp_servers: string[]
+  mqtt_config?: {
     server: string
-    port: number
     username: string
+    port: number
     retain: boolean
     qos: number
   }
-  ntp_servers: string[]
 }
 
 export interface SMAPluginConfig {
   plugin_name: string
   version: string
-  config: Record<string, any>
+  config: Record<string, unknown>
   enabled: boolean
 }
 
 export interface SMASystemSettings {
   log_level: string
-  api_settings: {
-    rate_limit: number
-    cors_enabled: boolean
-  }
-  database_settings: {
-    connection_pool_size: number
-    query_timeout: string
-  }
+  api_settings: Record<string, unknown>
+  database_settings: Record<string, unknown>
 }
 
 export interface SMAArchive {
-  sma_version: string
-  format_version: string
+  format_version: '2026.1'
   metadata: SMAMetadata
   devices: SMADevice[]
   templates: SMATemplate[]
@@ -118,8 +114,6 @@ export interface SMAArchive {
 }
 
 export interface SMAParseOptions {
-  validateChecksum?: boolean
-  validateStructure?: boolean
   maxSizeBytes?: number
 }
 
@@ -127,7 +121,6 @@ export interface SMAParseResult {
   success: boolean
   archive?: SMAArchive
   error?: string
-  warnings?: string[]
   parseInfo: {
     originalSize: number
     compressedSize: number
@@ -136,396 +129,242 @@ export interface SMAParseResult {
   }
 }
 
-export interface SMAValidationResult {
-  valid: boolean
-  errors: string[]
-  warnings: string[]
-  summary: {
-    smaVersion: string
-    formatVersion: string
-    deviceCount: number
-    templateCount: number
-    discoveredDeviceCount: number
-    pluginConfigCount: number
-    estimatedDataIntegrity: number // 0-100%
-  }
-}
-
-/**
- * Parse SMA file from ArrayBuffer
- */
-export async function parseSMAFile(
-  buffer: ArrayBuffer, 
-  options: SMAParseOptions = {}
-): Promise<SMAParseResult> {
-  const startTime = performance.now()
-  const compressedSize = buffer.byteLength
-  const warnings: string[] = []
-
+export async function parseSMAFile(buffer: ArrayBuffer, options: SMAParseOptions = {}): Promise<SMAParseResult> {
+  const started = performance.now()
+  const input = new Uint8Array(buffer)
+  const limit = options.maxSizeBytes ?? DEFAULT_MAX_SIZE
+  let normalized: Uint8Array<ArrayBufferLike> = new Uint8Array()
   try {
-    // Check maximum size
-    if (options.maxSizeBytes && compressedSize > options.maxSizeBytes) {
-      return {
-        success: false,
-        error: `File size ${formatBytes(compressedSize)} exceeds maximum allowed size ${formatBytes(options.maxSizeBytes)}`,
-        parseInfo: {
-          originalSize: 0,
-          compressedSize,
-          compressionRatio: 0,
-          parseTimeMs: performance.now() - startTime
-        }
-      }
-    }
-
-    // Decompress using Gzip
-    let decompressedData: string
-    let originalSize: number
-    
-    try {
-      const uint8Array = new Uint8Array(buffer)
-      const decompressed = ungzip(uint8Array, { toText: true })
-      decompressedData = decompressed
-      // decompressed is a string; measure the uncompressed size in bytes (UTF-8),
-      // not UTF-16 code units, so the ratio is correct for non-ASCII content.
-      originalSize = new TextEncoder().encode(decompressed).length
-    } catch (decompressError) {
-      return {
-        success: false,
-        error: `Failed to decompress SMA file: ${decompressError}`,
-        parseInfo: {
-          originalSize: 0,
-          compressedSize,
-          compressionRatio: 0,
-          parseTimeMs: performance.now() - startTime
-        }
-      }
-    }
-
-    // Parse JSON
-    let archive: SMAArchive
-    try {
-      archive = JSON.parse(decompressedData) as SMAArchive
-    } catch (jsonError) {
-      return {
-        success: false,
-        error: `Failed to parse JSON content: ${jsonError}`,
-        parseInfo: {
-          originalSize,
-          compressedSize,
-          compressionRatio: compressedSize / originalSize,
-          parseTimeMs: performance.now() - startTime
-        }
-      }
-    }
-
-    // Validate checksum if requested (and one is present). Recompute over the
-    // same canonical form the generator hashed: the archive with its checksum
-    // field blanked.
-    if (options.validateChecksum !== false && archive.metadata.integrity.checksum) {
-      const expectedChecksum = archive.metadata.integrity.checksum.replace('sha256:', '')
-      const storedChecksum = archive.metadata.integrity.checksum
-      archive.metadata.integrity.checksum = ''
-      const calculatedChecksum = await sha256Hex(JSON.stringify(archive, null, 2))
-      archive.metadata.integrity.checksum = storedChecksum
-
-      if (calculatedChecksum !== expectedChecksum) {
-        return {
-          success: false,
-          error: `Checksum validation failed. Expected: ${expectedChecksum}, Got: ${calculatedChecksum}`,
-          parseInfo: {
-            originalSize,
-            compressedSize,
-            compressionRatio: compressedSize / originalSize,
-            parseTimeMs: performance.now() - startTime
-          }
-        }
-      }
-    }
-
-    // Validate structure if requested
-    if (options.validateStructure !== false) {
-      const validation = validateSMAStructure(archive)
-      if (!validation.valid) {
-        return {
-          success: false,
-          error: `Structure validation failed: ${validation.errors.join(', ')}`,
-          parseInfo: {
-            originalSize,
-            compressedSize,
-            compressionRatio: compressedSize / originalSize,
-            parseTimeMs: performance.now() - startTime
-          }
-        }
-      }
-      warnings.push(...validation.warnings)
-    }
-
-    // Success
+    if (!Number.isSafeInteger(limit) || limit <= 0) throw new Error('maxSizeBytes must be a positive safe integer')
+    normalized = isGzip(input) ? inflateBounded(input, limit) : input
+    if (normalized.byteLength > limit) throw new Error('normalized SMA data exceeds the configured limit')
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(normalized)
+    const parsed = parseStrictJSON(text)
+    validateSMAArchive(parsed)
+    const archive = parsed as SMAArchive
+    const supplied = archive.metadata.integrity.checksum
+    archive.metadata.integrity.checksum = ''
+    const actual = `sha256:${await sha256Hex(canonicalize(archive))}`
+    archive.metadata.integrity.checksum = supplied
+    if (actual !== supplied) throw new Error('SMA checksum mismatch')
     return {
       success: true,
       archive,
-      warnings,
-      parseInfo: {
-        originalSize,
-        compressedSize,
-        compressionRatio: compressedSize / originalSize,
-        parseTimeMs: performance.now() - startTime
-      }
+      parseInfo: info(normalized.byteLength, input.byteLength, started),
     }
-
   } catch (error) {
     return {
       success: false,
-      error: `Unexpected error parsing SMA file: ${error}`,
-      parseInfo: {
-        originalSize: 0,
-        compressedSize,
-        compressionRatio: 0,
-        parseTimeMs: performance.now() - startTime
-      }
+      error: error instanceof Error ? error.message : String(error),
+      parseInfo: info(normalized.byteLength, input.byteLength, started),
     }
   }
 }
 
-/**
- * Parse SMA file from File object
- */
-export async function parseSMAFromFile(
-  file: File, 
-  options: SMAParseOptions = {}
-): Promise<SMAParseResult> {
+export async function parseSMAFromFile(file: File, options: SMAParseOptions = {}): Promise<SMAParseResult> {
   try {
-    const buffer = await file.arrayBuffer()
-    return await parseSMAFile(buffer, options)
+    return await parseSMAFile(await file.arrayBuffer(), options)
   } catch (error) {
     return {
       success: false,
-      error: `Failed to read file: ${error}`,
-      parseInfo: {
-        originalSize: 0,
-        compressedSize: file.size,
-        compressionRatio: 0,
-        parseTimeMs: 0
-      }
+      error: error instanceof Error ? error.message : String(error),
+      parseInfo: { originalSize: 0, compressedSize: file.size, compressionRatio: 0, parseTimeMs: 0 },
     }
   }
 }
 
-/**
- * Validate SMA archive structure
- */
-export function validateSMAStructure(archive: any): SMAValidationResult {
-  const errors: string[] = []
-  const warnings: string[] = []
+function isGzip(data: Uint8Array): boolean {
+  return data.byteLength >= 2 && data[0] === 0x1f && data[1] === 0x8b
+}
 
-  try {
-    // Check required top-level fields
-    if (!archive.sma_version) errors.push('Missing sma_version')
-    if (!archive.format_version) errors.push('Missing format_version')
-    if (!archive.metadata) errors.push('Missing metadata')
-    if (!Array.isArray(archive.devices)) errors.push('Missing or invalid devices array')
-    if (!Array.isArray(archive.templates)) errors.push('Missing or invalid templates array')
-
-    // Validate SMA version compatibility
-    if (archive.sma_version) {
-      const version = parseFloat(archive.sma_version)
-      if (version > 1.0) {
-        warnings.push(`SMA version ${archive.sma_version} is newer than supported version 1.0`)
-      } else if (version < 1.0) {
-        warnings.push(`SMA version ${archive.sma_version} is older than current version 1.0`)
-      }
+function inflateBounded(data: Uint8Array, limit: number): Uint8Array {
+  const inflate = new Inflate()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  inflate.onData = chunk => {
+    if (total + chunk.byteLength > limit) {
+      throw new Error('normalized SMA data exceeds the configured limit')
     }
+    chunks.push(chunk)
+    total += chunk.byteLength
+  }
+  inflate.push(data, true)
+  if (inflate.err) throw new Error(inflate.msg || 'malformed gzip input')
+  const output = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    output.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return output
+}
 
-    // Validate metadata structure
-    if (archive.metadata) {
-      if (!archive.metadata.export_id) errors.push('Missing metadata.export_id')
-      if (!archive.metadata.created_at) errors.push('Missing metadata.created_at')
-      if (!archive.metadata.integrity) errors.push('Missing metadata.integrity')
-      
-      if (archive.metadata.integrity) {
-        if (!archive.metadata.integrity.checksum) errors.push('Missing metadata.integrity.checksum')
-        if (typeof archive.metadata.integrity.record_count !== 'number') {
-          errors.push('Missing or invalid metadata.integrity.record_count')
-        }
-      }
-    }
+export function validateSMAArchive(value: unknown): asserts value is SMAArchive {
+  const root = object(value, 'root')
+  if (root.format_version !== FORMAT_VERSION) throw new Error(`format_version must be ${FORMAT_VERSION}`)
+  keys(root, [
+    'format_version', 'metadata', 'devices', 'templates', 'discovered_devices',
+    'network_settings', 'plugin_configurations', 'system_settings',
+  ])
+  const metadata = object(root.metadata, 'metadata')
+  keys(metadata, ['export_id', 'created_at', 'created_by', 'export_type', 'system_info', 'integrity'])
+  string(metadata.export_id, 'export_id', false)
+  if (!uuid.test(metadata.export_id as string)) throw new Error('export_id must be a lowercase UUID')
+  canonicalTimestamp(metadata.created_at, 'created_at')
+  string(metadata.created_by, 'created_by', false)
+  if (metadata.export_type !== 'manual' && metadata.export_type !== 'api') throw new Error('invalid export_type')
+  const system = object(metadata.system_info, 'system_info')
+  keys(system, ['version', 'database_type', 'hostname', 'total_size_bytes', 'compression_ratio'])
+  string(system.version, 'version', false)
+  string(system.hostname, 'hostname', false)
+  if (!['sqlite', 'postgresql', 'mysql'].includes(system.database_type as string)) throw new Error('invalid database_type')
+  if (system.total_size_bytes !== 0 || system.compression_ratio !== 0) throw new Error('system size values must be zero')
+  const integrity = object(metadata.integrity, 'integrity')
+  keys(integrity, ['checksum', 'record_count', 'file_count'])
+  if (typeof integrity.checksum !== 'string' || !checksum.test(integrity.checksum)) throw new Error('invalid checksum')
+  safeInteger(integrity.record_count, 'record_count')
+  if (integrity.file_count !== 1) throw new Error('file_count must be 1')
 
-    // Validate device references
-    const templateIds = new Set((archive.templates || []).map((t: any) => t.id))
-    const deviceTemplateRefs = (archive.devices || [])
-      .filter((d: any) => d.configuration?.template_id)
-      .map((d: any) => d.configuration.template_id)
+  const devices = array(root.devices, 'devices')
+  devices.forEach((entry, index) => validateDevice(object(entry, `devices[${index}]`)))
+  const templates = array(root.templates, 'templates')
+  templates.forEach((entry, index) => validateTemplate(object(entry, `templates[${index}]`)))
+  const discovered = array(root.discovered_devices, 'discovered_devices')
+  discovered.forEach((entry, index) => validateDiscovered(object(entry, `discovered_devices[${index}]`)))
+  if (devices.length + templates.length + discovered.length === 0) throw new Error('SMA archive is empty')
+  if (integrity.record_count !== devices.length + templates.length + discovered.length) {
+    throw new Error('record_count does not match archive contents')
+  }
+  validateNetwork(object(root.network_settings, 'network_settings'))
+  array(root.plugin_configurations, 'plugin_configurations').forEach(entry => {
+    const plugin = object(entry, 'plugin configuration')
+    keys(plugin, ['plugin_name', 'version', 'config', 'enabled'])
+    string(plugin.plugin_name, 'plugin_name', true)
+    string(plugin.version, 'version', true)
+    object(plugin.config, 'config')
+    if (typeof plugin.enabled !== 'boolean') throw new Error('enabled must be boolean')
+  })
+  const settings = object(root.system_settings, 'system_settings')
+  keys(settings, ['log_level', 'api_settings', 'database_settings'])
+  string(settings.log_level, 'log_level', false)
+  object(settings.api_settings, 'api_settings')
+  object(settings.database_settings, 'database_settings')
+}
 
-    for (const templateId of deviceTemplateRefs) {
-      if (!templateIds.has(templateId)) {
-        warnings.push(`Device references non-existent template ID: ${templateId}`)
-      }
-    }
-
-    // Record count validation
-    if (archive.metadata?.integrity?.record_count) {
-      const actualCount = (archive.devices?.length || 0) + 
-                         (archive.templates?.length || 0) + 
-                         (archive.discovered_devices?.length || 0)
-      const expectedCount = archive.metadata.integrity.record_count
-
-      if (actualCount !== expectedCount) {
-        warnings.push(`Record count mismatch: expected ${expectedCount}, found ${actualCount}`)
-      }
-    }
-
-    // Calculate data integrity score
-    let integrityScore = 100
-    if (errors.length > 0) integrityScore -= errors.length * 20
-    if (warnings.length > 0) integrityScore -= warnings.length * 5
-    integrityScore = Math.max(0, integrityScore)
-
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings,
-      summary: {
-        smaVersion: archive.sma_version || 'unknown',
-        formatVersion: archive.format_version || 'unknown',
-        deviceCount: archive.devices?.length || 0,
-        templateCount: archive.templates?.length || 0,
-        discoveredDeviceCount: archive.discovered_devices?.length || 0,
-        pluginConfigCount: archive.plugin_configurations?.length || 0,
-        estimatedDataIntegrity: integrityScore
-      }
-    }
-
-  } catch (error) {
-    return {
-      valid: false,
-      errors: [`Structure validation error: ${error}`],
-      warnings: [],
-      summary: {
-        smaVersion: 'unknown',
-        formatVersion: 'unknown',
-        deviceCount: 0,
-        templateCount: 0,
-        discoveredDeviceCount: 0,
-        pluginConfigCount: 0,
-        estimatedDataIntegrity: 0
-      }
-    }
+function validateDevice(device: Record<string, unknown>): void {
+  keys(device, [
+    'id', 'mac', 'ip', 'type', 'name', 'model', 'firmware', 'status', 'last_seen',
+    'settings', 'created_at', 'updated_at',
+  ], ['configuration'])
+  safeInteger(device.id, 'id')
+  for (const name of ['mac', 'ip', 'type', 'name', 'model', 'firmware', 'status']) string(device[name], name, true)
+  for (const name of ['last_seen', 'created_at', 'updated_at']) canonicalTimestamp(device[name], name)
+  object(device.settings, 'settings')
+  if ('configuration' in device) {
+    const config = object(device.configuration, 'configuration')
+    keys(config, ['device_id', 'config', 'sync_status', 'updated_at'], ['template_id', 'last_synced'])
+    safeInteger(config.device_id, 'device_id')
+    if ('template_id' in config) safeInteger(config.template_id, 'template_id')
+    object(config.config, 'config')
+    string(config.sync_status, 'sync_status', true)
+    canonicalTimestamp(config.updated_at, 'updated_at')
+    if ('last_synced' in config) canonicalTimestamp(config.last_synced, 'last_synced')
   }
 }
 
-/**
- * Extract metadata from SMA file without full parsing
- */
-export async function extractSMAMetadata(buffer: ArrayBuffer): Promise<{
-  success: boolean
-  metadata?: SMAMetadata
-  error?: string
-}> {
-  try {
-    const uint8Array = new Uint8Array(buffer)
-    const decompressed = ungzip(uint8Array, { toText: true })
-    
-    // Parse just enough to get metadata
-    const partialParse = JSON.parse(decompressed)
-    
-    if (!partialParse.metadata) {
-      return { success: false, error: 'No metadata found in SMA file' }
-    }
+function validateTemplate(template: Record<string, unknown>): void {
+  keys(template, [
+    'id', 'generation', 'name', 'description', 'device_type', 'config', 'variables',
+    'is_default', 'created_at', 'updated_at',
+  ])
+  safeInteger(template.id, 'id')
+  safeInteger(template.generation, 'generation')
+  for (const name of ['name', 'description', 'device_type']) string(template[name], name, true)
+  object(template.config, 'config')
+  object(template.variables, 'variables')
+  if (typeof template.is_default !== 'boolean') throw new Error('is_default must be boolean')
+  canonicalTimestamp(template.created_at, 'created_at')
+  canonicalTimestamp(template.updated_at, 'updated_at')
+}
 
-    return { success: true, metadata: partialParse.metadata }
-  } catch (error) {
-    return { success: false, error: `Failed to extract metadata: ${error}` }
+function validateDiscovered(device: Record<string, unknown>): void {
+  keys(device, ['mac', 'ssid', 'model', 'ip', 'agent_id', 'generation', 'signal', 'discovered'])
+  for (const name of ['mac', 'ssid', 'model', 'ip', 'agent_id']) string(device[name], name, true)
+  safeInteger(device.generation, 'generation')
+  safeInteger(device.signal, 'signal', true)
+  canonicalTimestamp(device.discovered, 'discovered')
+}
+
+function validateNetwork(network: Record<string, unknown>): void {
+  keys(network, ['wifi_networks', 'ntp_servers'], ['mqtt_config'])
+  array(network.wifi_networks, 'wifi_networks').forEach(entry => {
+    const wifi = object(entry, 'wifi entry')
+    keys(wifi, ['ssid', 'security', 'priority'])
+    string(wifi.ssid, 'ssid', true)
+    string(wifi.security, 'security', true)
+    safeInteger(wifi.priority, 'priority')
+  })
+  array(network.ntp_servers, 'ntp_servers').forEach(server => string(server, 'ntp server', true))
+  if ('mqtt_config' in network) {
+    const mqtt = object(network.mqtt_config, 'mqtt_config')
+    keys(mqtt, ['server', 'username', 'port', 'retain', 'qos'])
+    string(mqtt.server, 'server', true)
+    string(mqtt.username, 'username', true)
+    safeInteger(mqtt.port, 'port')
+    safeInteger(mqtt.qos, 'qos')
+    if ((mqtt.port as number) < 1 || (mqtt.port as number) > 65535) throw new Error('invalid MQTT port')
+    if ((mqtt.qos as number) < 0 || (mqtt.qos as number) > 2) throw new Error('invalid MQTT qos')
+    if (typeof mqtt.retain !== 'boolean') throw new Error('retain must be boolean')
   }
 }
 
-/**
- * Get compatible import sections from SMA archive
- */
-export function getSMAImportSections(archive: SMAArchive): string[] {
-  const sections: string[] = []
-  
-  if (archive.devices && archive.devices.length > 0) sections.push('devices')
-  if (archive.templates && archive.templates.length > 0) sections.push('templates')
-  if (archive.discovered_devices && archive.discovered_devices.length > 0) sections.push('discovered_devices')
-  if (archive.network_settings) sections.push('network_settings')
-  if (archive.plugin_configurations && archive.plugin_configurations.length > 0) sections.push('plugin_configurations')
-  if (archive.system_settings) sections.push('system_settings')
-  
-  return sections
+function object(value: unknown, name: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be a non-null object`)
+  return value as Record<string, unknown>
 }
 
-/**
- * Filter SMA archive to specific sections
- */
-export function filterSMAArchive(archive: SMAArchive, sections: string[]): Partial<SMAArchive> {
-  const filtered: Partial<SMAArchive> = {
-    sma_version: archive.sma_version,
-    format_version: archive.format_version,
-    metadata: {
-      ...archive.metadata,
-      integrity: {
-        ...archive.metadata.integrity,
-        // Recalculate record count for filtered data
-        record_count: 0 // Will be calculated below
-      }
-    }
-  }
-
-  let recordCount = 0
-
-  if (sections.includes('devices') && archive.devices) {
-    filtered.devices = archive.devices
-    recordCount += archive.devices.length
-  }
-
-  if (sections.includes('templates') && archive.templates) {
-    filtered.templates = archive.templates
-    recordCount += archive.templates.length
-  }
-
-  if (sections.includes('discovered_devices') && archive.discovered_devices) {
-    filtered.discovered_devices = archive.discovered_devices
-    recordCount += archive.discovered_devices.length
-  }
-
-  if (sections.includes('network_settings') && archive.network_settings) {
-    filtered.network_settings = archive.network_settings
-  }
-
-  if (sections.includes('plugin_configurations') && archive.plugin_configurations) {
-    filtered.plugin_configurations = archive.plugin_configurations
-  }
-
-  if (sections.includes('system_settings') && archive.system_settings) {
-    filtered.system_settings = archive.system_settings
-  }
-
-  // Update record count
-  if (filtered.metadata) {
-    filtered.metadata.integrity.record_count = recordCount
-  }
-
-  return filtered
+function array(value: unknown, name: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${name} must be a non-null array`)
+  return value
 }
 
-// Helper functions
-
-/**
- * Format bytes to human readable string
- */
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+function keys(value: Record<string, unknown>, required: string[], optional: string[] = []): void {
+  const allowed = new Set([...required, ...optional])
+  for (const name of required) if (!Object.prototype.hasOwnProperty.call(value, name)) throw new Error(`missing required field ${name}`)
+  for (const name of Object.keys(value)) if (!allowed.has(name)) throw new Error(`unknown field ${name}`)
 }
 
-/**
- * Check if browser supports required features
- */
+function string(value: unknown, name: string, empty: boolean): asserts value is string {
+  if (typeof value !== 'string' || (!empty && value.length === 0)) throw new Error(`${name} must be a string`)
+}
+
+function safeInteger(value: unknown, name: string, signed = false): asserts value is number {
+  if (!Number.isSafeInteger(value) || (!signed && (value as number) < 0)) throw new Error(`${name} must be a safe integer`)
+}
+
+function canonicalTimestamp(value: unknown, name: string): void {
+  string(value, name, false)
+  const match = timestamp.exec(value)
+  if (!match || Number.isNaN(Date.parse(value))) throw new Error(`${name} must be a canonical UTC timestamp`)
+  const [date, clock] = value.split('T')
+  const [year, month, day] = date.split('-').map(Number)
+  const [hour, minute, second] = clock.slice(0, 8).split(':').map(Number)
+  const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  if (month < 1 || month > 12 || day < 1 || day > maxDay ||
+      hour > 23 || minute > 59 || second > 59) {
+    throw new Error(`${name} must be a real calendar instant`)
+  }
+}
+
+function info(originalSize: number, compressedSize: number, started: number) {
+  return {
+    originalSize,
+    compressedSize,
+    compressionRatio: originalSize === 0 ? 0 : compressedSize / originalSize,
+    parseTimeMs: performance.now() - started,
+  }
+}
+
 export function isSMAParsingSupported(): boolean {
-  return typeof crypto !== 'undefined' &&
-         typeof ungzip === 'function' &&
-         typeof performance !== 'undefined'
+  return typeof TextDecoder !== 'undefined' && typeof Inflate === 'function'
 }

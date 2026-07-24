@@ -167,7 +167,6 @@ func (a *LegacySyncPluginAdapter) Capabilities() plugins.PluginCapabilities {
 	caps := a.legacyPlugin.Capabilities()
 	return plugins.PluginCapabilities{
 		SupportsIncremental:    caps.SupportsIncremental,
-		SupportsScheduling:     caps.SupportsScheduling,
 		RequiresAuthentication: caps.RequiresAuthentication,
 		SupportedOutputs:       caps.SupportedOutputs,
 		MaxDataSize:            caps.MaxDataSize,

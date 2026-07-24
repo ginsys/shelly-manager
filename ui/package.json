@@ -20,6 +20,7 @@
     "test:e2e:smoke": "playwright test --config=playwright-smoke.config.ts",
     "test:e2e:critical": "playwright test tests/e2e/critical --workers=2",
     "test:e2e:quick": "playwright test tests/e2e/smoke tests/e2e/critical --workers=2",
+    "test:e2e:mocked": "playwright test --config=playwright-mocked.config.ts",
     "test:e2e:full": "playwright test --workers=2",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",

@@ -123,7 +123,6 @@ func (p *Plugin) Capabilities() plugins.PluginCapabilities {
 	legacyCaps := p.OPNSensePlugin.Capabilities()
 	return plugins.PluginCapabilities{
 		SupportsIncremental:    legacyCaps.SupportsIncremental,
-		SupportsScheduling:     legacyCaps.SupportsScheduling,
 		RequiresAuthentication: legacyCaps.RequiresAuthentication,
 		SupportedOutputs:       legacyCaps.SupportedOutputs,
 		MaxDataSize:            legacyCaps.MaxDataSize,

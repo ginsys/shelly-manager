@@ -59,9 +59,6 @@ func (p *Plugin) ValidateConfig(config map[string]interface{}) error {
 				return fmt.Errorf("invalid output_path: %w", err)
 			}
 		}
-		if err := os.MkdirAll(v, 0755); err != nil {
-			return fmt.Errorf("invalid output_path: %w", err)
-		}
 	}
 	return nil
 }
@@ -191,7 +188,11 @@ func (p *Plugin) Import(ctx context.Context, source sync.ImportSource, config sy
 }
 
 func (p *Plugin) Capabilities() sync.PluginCapabilities {
-	return sync.PluginCapabilities{SupportsScheduling: true, SupportedOutputs: []string{"file"}, ConcurrencyLevel: 1}
+	return sync.PluginCapabilities{
+		SupportedOutputs: []string{"file"},
+		MaxDataSize:      100 * 1024 * 1024,
+		ConcurrencyLevel: 1,
+	}
 }
 
 func (p *Plugin) Initialize(logger *logging.Logger) error { p.logger = logger; return nil }

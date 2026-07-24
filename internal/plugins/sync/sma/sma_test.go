@@ -1,11 +1,18 @@
 package sma
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"math"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,638 +23,540 @@ import (
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
-func TestSMAPlugin_Info(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	info := plugin.Info()
-
-	assert.Equal(t, "sma", info.Name)
-	assert.Equal(t, "1.0.0", info.Version)
-	assert.Contains(t, info.SupportedFormats, "sma")
-	assert.Equal(t, sync.CategoryBackup, info.Category)
-}
-
-func TestSMAPlugin_ConfigSchema(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	schema := plugin.ConfigSchema()
-
-	assert.Equal(t, "1.0", schema.Version)
-	assert.Contains(t, schema.Properties, "output_path")
-	assert.Contains(t, schema.Properties, "compression_level")
-	assert.Contains(t, schema.Properties, "include_discovered")
-	assert.Contains(t, schema.Properties, "exclude_sensitive")
-
-	// Check default values
-	assert.Equal(t, "/var/backups/shelly-manager", schema.Properties["output_path"].Default)
-	assert.Equal(t, 6.0, schema.Properties["compression_level"].Default)
-	assert.Equal(t, true, schema.Properties["include_discovered"].Default)
-	assert.Equal(t, true, schema.Properties["exclude_sensitive"].Default)
-}
-
-func TestSMAPlugin_ValidateConfig(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
-	require.NoError(t, err)
-
-	tests := []struct {
-		name      string
-		config    map[string]interface{}
-		wantError bool
-	}{
-		{
-			name: "valid config",
-			config: map[string]interface{}{
-				"output_path":       "/tmp/test",
-				"compression_level": 6.0,
-			},
-			wantError: false,
-		},
-		{
-			name: "invalid compression level - too low",
-			config: map[string]interface{}{
-				"compression_level": 0.0,
-			},
-			wantError: true,
-		},
-		{
-			name: "invalid compression level - too high",
-			config: map[string]interface{}{
-				"compression_level": 10.0,
-			},
-			wantError: true,
-		},
-		{
-			name: "invalid compression level - not number",
-			config: map[string]interface{}{
-				"compression_level": "invalid",
-			},
-			wantError: true,
-		},
-		{
-			name: "invalid output_path - not string",
-			config: map[string]interface{}{
-				"output_path": 123,
-			},
-			wantError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := plugin.ValidateConfig(tt.config)
-			if tt.wantError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestSMAPlugin_Export(t *testing.T) {
-	// Create temporary directory for test
-	tempDir := t.TempDir()
-
-	// Create plugin and initialize
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
-	require.NoError(t, err)
-
-	// Create test data
-	testData := &sync.ExportData{
-		Devices: []sync.DeviceData{
-			{
-				ID:       1,
-				MAC:      "AA:BB:CC:DD:EE:FF",
-				IP:       "192.168.1.100",
-				Type:     "shelly1",
-				Name:     "Test Switch",
-				Model:    "SHSW-1",
-				Firmware: "20231215-111232/v1.14.1-rc1",
-				Status:   "online",
-				LastSeen: time.Now(),
-				Settings: map[string]interface{}{
-					"name": "Test Switch",
-				},
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			},
-		},
-		Templates: []sync.TemplateData{
-			{
-				ID:          1,
-				Name:        "Test Template",
-				Description: "A test template",
-				DeviceType:  "shelly1",
-				Generation:  1,
-				Config:      map[string]interface{}{"test": "value"},
-				Variables:   map[string]interface{}{"var": "test"},
-				IsDefault:   true,
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
-			},
-		},
-		DiscoveredDevices: []sync.DiscoveredDeviceData{
-			{
-				MAC:        "BB:CC:DD:EE:FF:AA",
-				SSID:       "ShellySwitch-123456",
-				Model:      "SHSW-25",
-				Generation: 1,
-				IP:         "192.168.1.101",
-				Signal:     -45,
-				AgentID:    "agent-001",
-				Discovered: time.Now(),
-			},
-		},
+func validExportData() *sync.ExportData {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 123, time.UTC)
+	return &sync.ExportData{
+		Devices: []sync.DeviceData{{
+			ID: 1, MAC: "aabbccddeeff", IP: "192.0.2.1", Type: "switch",
+			Name: "Kitchen", Model: "Shelly", Firmware: "1", Status: "online",
+			LastSeen: now, Settings: nil, CreatedAt: now, UpdatedAt: now,
+		}},
 		Metadata: sync.ExportMetadata{
-			ExportID:      "test-export-123",
-			RequestedBy:   "test-user",
-			ExportType:    "manual",
-			TotalDevices:  1,
-			TotalConfigs:  1,
-			SystemVersion: "v0.5.4-alpha",
-			DatabaseType:  "sqlite",
+			ExportID: "123e4567-e89b-42d3-a456-426614174000", RequestedBy: "shelly-manager",
+			ExportType: "manual", SystemVersion: "test", DatabaseType: "sqlite",
 		},
-		Timestamp: time.Now(),
+		Timestamp: now,
 	}
+}
 
-	// Create export config
-	config := sync.ExportConfig{
-		PluginName: "sma",
-		Format:     "sma",
-		Config: map[string]interface{}{
-			"output_path":        tempDir,
-			"compression_level":  6.0,
-			"include_discovered": true,
-			"exclude_sensitive":  true,
-		},
-	}
+func initializedPlugin(t *testing.T) *SMAPlugin {
+	t.Helper()
+	plugin := NewPlugin().(*SMAPlugin)
+	require.NoError(t, plugin.Initialize(logging.GetDefault()))
+	return plugin
+}
 
-	// Perform export
-	ctx := context.Background()
-	result, err := plugin.Export(ctx, testData, config)
-
-	// Verify result
+func generatedArchive(t *testing.T) ([]byte, map[string]interface{}) {
+	t.Helper()
+	plugin := initializedPlugin(t)
+	tree, _, err := plugin.prepareArchive(validExportData(), sync.ExportConfig{
+		Config: map[string]interface{}{"include_discovered": true},
+	})
 	require.NoError(t, err)
-	assert.True(t, result.Success)
-	assert.Equal(t, "sma", result.PluginName)
-	assert.Equal(t, "sma", result.Format)
-	assert.Greater(t, result.RecordCount, 0)
-	assert.Greater(t, result.FileSize, int64(0))
-	assert.NotEmpty(t, result.Checksum)
-	assert.Contains(t, result.OutputPath, tempDir)
+	data, _, err := finalizeArchiveTree(tree)
+	require.NoError(t, err)
+	return data, tree
+}
 
-	// Verify file was created
-	assert.FileExists(t, result.OutputPath)
+func TestGenerateAndDryRunImportRoundTrip(t *testing.T) {
+	plugin := initializedPlugin(t)
+	output := t.TempDir()
+	result, err := plugin.Export(context.Background(), validExportData(), sync.ExportConfig{
+		Format: "sma",
+		Config: map[string]interface{}{"output_path": output, "compression_level": float64(6)},
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Equal(t, 1, result.RecordCount)
 
-	// Verify file is compressed and contains valid JSON
 	file, err := os.Open(result.OutputPath)
 	require.NoError(t, err)
-	defer func() { _ = file.Close() }()
-
-	gzipReader, err := gzip.NewReader(file)
+	defer func() { require.NoError(t, file.Close()) }()
+	header := make([]byte, 2)
+	_, err = io.ReadFull(file, header)
 	require.NoError(t, err)
-	defer func() { _ = gzipReader.Close() }()
+	assert.Equal(t, []byte{0x1f, 0x8b}, header)
 
-	jsonData, err := io.ReadAll(gzipReader)
+	importResult, err := plugin.ImportFromFile(context.Background(), result.OutputPath, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true, ValidateOnly: true},
+	})
 	require.NoError(t, err)
-
-	var archive SMAArchive
-	err = json.Unmarshal(jsonData, &archive)
-	require.NoError(t, err)
-
-	// Verify archive structure
-	assert.Equal(t, SMAVersion, archive.SMAVersion)
-	assert.Equal(t, FormatVersion, archive.FormatVersion)
-	assert.Equal(t, testData.Metadata.ExportID, archive.Metadata.ExportID)
-	assert.Len(t, archive.Devices, 1)
-	assert.Len(t, archive.Templates, 1)
-	assert.Len(t, archive.Discovered, 1)
-	assert.Equal(t, testData.Devices[0].MAC, archive.Devices[0].MAC)
+	assert.True(t, importResult.Success)
+	assert.Equal(t, 1, importResult.RecordsImported)
 }
 
-func TestSMAPlugin_Preview(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
+func TestRawAndGzipNormalizationLimits(t *testing.T) {
+	raw := []byte(`{"ok":true}`)
+	normalized, err := normalizeSMAInput(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
+	assert.Equal(t, raw, normalized)
 
-	testData := &sync.ExportData{
-		Devices:           make([]sync.DeviceData, 5),
-		Templates:         make([]sync.TemplateData, 2),
-		DiscoveredDevices: make([]sync.DiscoveredDeviceData, 3),
-		Configurations:    make([]sync.ConfigurationData, 5),
-		Metadata: sync.ExportMetadata{
-			ExportID:      "preview-test",
-			TotalDevices:  5,
-			TotalConfigs:  5,
-			SystemVersion: "v0.5.4-alpha",
-		},
-	}
-
-	config := sync.ExportConfig{
-		Config: map[string]interface{}{
-			"include_discovered": true,
-			"compression_level":  6.0,
-		},
-	}
-
-	ctx := context.Background()
-	result, err := plugin.Preview(ctx, testData, config)
-
-	require.NoError(t, err)
-	assert.True(t, result.Success)
-	assert.Greater(t, result.RecordCount, 0)
-	assert.Greater(t, result.EstimatedSize, int64(0))
-	assert.NotEmpty(t, result.SampleData)
-
-	preview := string(result.SampleData)
-	assert.Contains(t, preview, "SMA Archive Preview")
-	assert.Contains(t, preview, "Devices: 5")
-	assert.Contains(t, preview, "Templates: 2")
-	assert.Contains(t, preview, "Discovered Devices: 3")
-	assert.Contains(t, preview, SMAVersion)
-}
-
-func TestSMAPlugin_ImportFromData_DryRun(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
-	require.NoError(t, err)
-
-	// Create test SMA archive
-	archive := SMAArchive{
-		SMAVersion:    SMAVersion,
-		FormatVersion: FormatVersion,
-		Metadata: SMAMetadata{
-			ExportID:  "test-import",
-			CreatedAt: time.Now(),
-			CreatedBy: "test-user",
-			Integrity: IntegrityInfo{
-				RecordCount: 3,
-			},
-		},
-		Devices: []sync.DeviceData{
-			{
-				MAC:  "AA:BB:CC:DD:EE:FF",
-				Name: "Test Device",
-				Type: "shelly1",
-			},
-		},
-		Templates: []sync.TemplateData{
-			{
-				Name:       "Test Template",
-				DeviceType: "shelly1",
-			},
-		},
-		Discovered: []sync.DiscoveredDeviceData{
-			{
-				MAC:   "BB:CC:DD:EE:FF:AA",
-				Model: "SHSW-25",
-			},
-		},
-	}
-
-	jsonData, err := json.Marshal(archive)
-	require.NoError(t, err)
-
-	config := sync.ImportConfig{
-		Options: sync.ImportOptions{
-			DryRun: true,
-		},
-	}
-
-	ctx := context.Background()
-	result, err := plugin.ImportFromData(ctx, jsonData, config)
-
-	require.NoError(t, err)
-	assert.True(t, result.Success)
-	assert.Equal(t, "sma", result.PluginName)
-	assert.Equal(t, "sma", result.Format)
-	assert.Equal(t, 3, result.RecordsImported)
-	assert.Len(t, result.Changes, 3)
-	assert.Contains(t, result.Warnings[0], "dry run")
-}
-
-// TestSMAPlugin_ImportFromData_NonDryRunFailsClosed asserts that a real
-// (non-dry-run) import refuses rather than fabricating success. Persistence is
-// not yet implemented (#284); until it is, the import must fail closed so
-// callers are never told records were imported when nothing was written.
-func TestSMAPlugin_ImportFromData_NonDryRunFailsClosed(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
-	require.NoError(t, err)
-
-	archive := SMAArchive{
-		SMAVersion:    SMAVersion,
-		FormatVersion: FormatVersion,
-		Metadata: SMAMetadata{
-			ExportID:  "test-import",
-			CreatedAt: time.Now(),
-			CreatedBy: "test-user",
-		},
-		Devices: []sync.DeviceData{
-			{MAC: "AA:BB:CC:DD:EE:FF", Name: "Test Device", Type: "shelly1"},
-		},
-		Templates: []sync.TemplateData{
-			{Name: "Test Template", DeviceType: "shelly1"},
-		},
-	}
-
-	jsonData, err := json.Marshal(archive)
-	require.NoError(t, err)
-
-	config := sync.ImportConfig{
-		Options: sync.ImportOptions{
-			DryRun: false,
-		},
-	}
-
-	ctx := context.Background()
-	result, err := plugin.ImportFromData(ctx, jsonData, config)
-
-	// Must surface an error, not a fabricated success. Assert the concrete
-	// sentinel so the SMA->501 contract cannot silently regress: the handler
-	// keys its 501 mapping off errors.Is(err, sync.ErrImportNotImplemented),
-	// so if this path stopped wrapping the sentinel the real endpoint would
-	// fall back to a generic 500 while a looser require.Error still passed.
+	_, err = normalizeSMAInput(bytes.NewReader(raw), int64(len(raw)-1))
 	require.Error(t, err)
-	require.ErrorIs(t, err, sync.ErrImportNotImplemented)
-	require.NotNil(t, result)
-	assert.False(t, result.Success)
-	assert.Zero(t, result.RecordsImported, "must not claim records imported when nothing is persisted")
-	assert.Empty(t, result.Changes, "must not fabricate change entries")
-	assert.NotEmpty(t, result.Errors)
+
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	_, err = writer.Write(raw)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	normalized, err = normalizeSMAInput(bytes.NewReader(compressed.Bytes()), int64(len(raw)))
+	require.NoError(t, err)
+	assert.Equal(t, raw, normalized)
+
+	truncated := compressed.Bytes()[:compressed.Len()-2]
+	_, err = normalizeSMAInput(bytes.NewReader(truncated), int64(len(raw)+1))
+	require.Error(t, err)
+
+	malformed := []byte{0x1f, 0x8b, 0, 1}
+	_, err = normalizeSMAInput(bytes.NewReader(malformed), int64(len(raw)+1))
+	require.EqualError(t, err, "malformed gzip input")
 }
 
-func TestSMAPlugin_ValidateSMAFormat(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
+func TestStrictJSONRejectsDuplicatesSurrogatesAndDepth(t *testing.T) {
+	_, err := parseStrictJSON([]byte(`{"a":1,"a":2}`), 64)
+	require.ErrorContains(t, err, "duplicate")
+	_, err = parseStrictJSON([]byte(`{"a":"\ud800"}`), 64)
+	require.ErrorContains(t, err, "surrogate")
+
+	value := `0`
+	for range 63 {
+		value = `[` + value + `]`
+	}
+	_, err = parseStrictJSON([]byte(value), 64)
+	require.NoError(t, err)
+	value = `[` + value + `]`
+	_, err = parseStrictJSON([]byte(value), 64)
+	require.NoError(t, err)
+	_, err = parseStrictJSON([]byte(`[`+value+`]`), 64)
+	require.ErrorContains(t, err, "depth")
+}
+
+func TestStrictJSONSafeNumberProfile(t *testing.T) {
+	for _, value := range []string{
+		`5e-324`,
+		`9007199254740991`,
+		`-9007199254740991`,
+	} {
+		tree, err := parseStrictJSON([]byte(value), 64)
+		require.NoError(t, err, value)
+		require.NoError(t, validateSafeNumbers(tree), value)
+	}
+	for _, value := range []string{
+		`1.7976931348623157e308`,
+		`1e309`,
+		`1e-400`,
+		`-1e-400`,
+		`9007199254740992`,
+		`-9007199254740992`,
+	} {
+		tree, err := parseStrictJSON([]byte(value), 64)
+		require.NoError(t, err, value)
+		require.Error(t, validateSafeNumbers(tree), value)
+	}
+}
+
+func TestChecksumAndClosedSchemaAreEnforced(t *testing.T) {
+	data, _ := generatedArchive(t)
+	plugin := initializedPlugin(t)
+	_, err := plugin.ImportFromData(context.Background(), data, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true},
+	})
 	require.NoError(t, err)
 
+	var tree map[string]interface{}
+	tree = nil
+	require.NoError(t, json.Unmarshal(data, &tree))
+	tree["extra"] = true
+	modified, err := json.Marshal(tree)
+	require.NoError(t, err)
+	_, err = plugin.ImportFromData(context.Background(), modified, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true},
+	})
+	require.ErrorIs(t, err, sync.ErrInvalidImportData)
+
+	tree = nil
+	require.NoError(t, json.Unmarshal(data, &tree))
+	tree["devices"] = nil
+	modified, err = json.Marshal(tree)
+	require.NoError(t, err)
+	_, err = plugin.ImportFromData(context.Background(), modified, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true},
+	})
+	require.ErrorIs(t, err, sync.ErrInvalidImportData)
+	require.ErrorContains(t, err, "non-null array")
+
+	require.NoError(t, json.Unmarshal(data, &tree))
+	tree["format_version"] = "2024.1"
+	modified, err = json.Marshal(tree)
+	require.NoError(t, err)
+	_, err = plugin.ImportFromData(context.Background(), modified, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true},
+	})
+	require.ErrorIs(t, err, sync.ErrInvalidImportData)
+	require.ErrorContains(t, err, "2026.1")
+}
+
+func TestConfigurationJoiningAndNilMapEquivalence(t *testing.T) {
+	data := validExportData()
+	nested := sync.ConfigurationData{
+		DeviceID: 1, Config: nil, SyncStatus: "", UpdatedAt: data.Timestamp,
+	}
+	data.Devices[0].Configuration = &nested
+	data.Configurations = []sync.ConfigurationData{{
+		DeviceID: 1, Config: map[string]interface{}{}, SyncStatus: "", UpdatedAt: data.Timestamp,
+	}}
+	plugin := initializedPlugin(t)
+	_, prepared, err := plugin.prepareArchive(data, sync.ExportConfig{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, prepared.recordCount)
+
+	data.Configurations[0].Config["different"] = true
+	_, _, err = plugin.prepareArchive(data, sync.ExportConfig{})
+	require.ErrorContains(t, err, "conflicting")
+	assert.NotErrorIs(t, err, sync.ErrInvalidExportData)
+}
+
+func TestConfigurationJoinRejectsStoredDataInconsistencies(t *testing.T) {
 	tests := []struct {
-		name      string
-		archive   SMAArchive
-		wantError bool
+		name   string
+		mutate func(*sync.ExportData)
+		match  string
 	}{
 		{
-			name: "valid archive",
-			archive: SMAArchive{
-				SMAVersion:    "1.0",
-				FormatVersion: "2024.1",
-				Metadata: SMAMetadata{
-					ExportID:  "test",
-					CreatedAt: time.Now(),
-				},
-				Devices: []sync.DeviceData{
-					{MAC: "AA:BB:CC:DD:EE:FF"},
-				},
+			name: "duplicate device",
+			mutate: func(data *sync.ExportData) {
+				data.Devices = append(data.Devices, data.Devices[0])
 			},
-			wantError: false,
+			match: "duplicate device",
 		},
 		{
-			name: "missing SMA version",
-			archive: SMAArchive{
-				FormatVersion: "2024.1",
-				Metadata: SMAMetadata{
-					ExportID:  "test",
-					CreatedAt: time.Now(),
-				},
+			name: "nested id mismatch",
+			mutate: func(data *sync.ExportData) {
+				data.Devices[0].Configuration = &sync.ConfigurationData{DeviceID: 2}
 			},
-			wantError: true,
+			match: "configuration for device",
 		},
 		{
-			name: "unsupported SMA version",
-			archive: SMAArchive{
-				SMAVersion:    "2.0",
-				FormatVersion: "2024.1",
-				Metadata: SMAMetadata{
-					ExportID:  "test",
-					CreatedAt: time.Now(),
-				},
+			name: "duplicate standalone",
+			mutate: func(data *sync.ExportData) {
+				data.Configurations = []sync.ConfigurationData{{DeviceID: 1}, {DeviceID: 1}}
 			},
-			wantError: true,
+			match: "duplicate standalone",
 		},
 		{
-			name: "missing export ID",
-			archive: SMAArchive{
-				SMAVersion:    "1.0",
-				FormatVersion: "2024.1",
-				Metadata: SMAMetadata{
-					CreatedAt: time.Now(),
-				},
+			name: "orphan standalone",
+			mutate: func(data *sync.ExportData) {
+				data.Configurations = []sync.ConfigurationData{{DeviceID: 2}}
 			},
-			wantError: true,
-		},
-		{
-			name: "empty archive",
-			archive: SMAArchive{
-				SMAVersion:    "1.0",
-				FormatVersion: "2024.1",
-				Metadata: SMAMetadata{
-					ExportID:  "test",
-					CreatedAt: time.Now(),
-				},
-				Devices:   []sync.DeviceData{},
-				Templates: []sync.TemplateData{},
-			},
-			wantError: true,
+			match: "orphan standalone",
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := plugin.validateSMAFormat(&tt.archive)
-			if tt.wantError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
+			data := validExportData()
+			tt.mutate(data)
+			_, _, err := initializedPlugin(t).prepareArchive(data, sync.ExportConfig{})
+			require.ErrorContains(t, err, tt.match)
+			require.NotErrorIs(t, err, sync.ErrInvalidExportData)
+		})
+	}
+}
+
+func TestDiscoveredOnlyArchiveIsValidAndEmptyIsNot(t *testing.T) {
+	data := validExportData()
+	data.Devices = nil
+	data.DiscoveredDevices = []sync.DiscoveredDeviceData{{
+		MAC: "aabb", Discovered: data.Timestamp,
+	}}
+	plugin := initializedPlugin(t)
+	_, prepared, err := plugin.prepareArchive(data, sync.ExportConfig{
+		Config: map[string]interface{}{"include_discovered": true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, prepared.recordCount)
+
+	_, _, err = plugin.prepareArchive(data, sync.ExportConfig{
+		Config: map[string]interface{}{"include_discovered": false},
+	})
+	require.ErrorIs(t, err, sync.ErrInvalidExportData)
+}
+
+func TestSafeBooleanDefaultsAndOverrides(t *testing.T) {
+	data := validExportData()
+	data.Devices[0].Settings = map[string]interface{}{
+		"password": "secret",
+		"nested":   map[string]interface{}{"api_key": "key"},
+	}
+	data.DiscoveredDevices = []sync.DiscoveredDeviceData{{
+		MAC: "discovered", Discovered: data.Timestamp,
+	}}
+	plugin := initializedPlugin(t)
+
+	tree, prepared, err := plugin.prepareArchive(data, sync.ExportConfig{})
+	require.NoError(t, err)
+	require.Equal(t, 2, prepared.recordCount)
+	settings := tree["devices"].([]interface{})[0].(map[string]interface{})["settings"].(map[string]interface{})
+	require.Equal(t, "[REDACTED]", settings["password"])
+	require.Equal(t, "[REDACTED]", settings["nested"].(map[string]interface{})["api_key"])
+
+	tree, prepared, err = plugin.prepareArchive(data, sync.ExportConfig{
+		Config: map[string]interface{}{
+			"include_discovered": false,
+			"exclude_sensitive":  false,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, prepared.recordCount)
+	settings = tree["devices"].([]interface{})[0].(map[string]interface{})["settings"].(map[string]interface{})
+	require.Equal(t, "secret", settings["password"])
+	require.Empty(t, tree["discovered_devices"])
+
+	for _, name := range []string{"include_discovered", "exclude_sensitive"} {
+		t.Run(name+"_type", func(t *testing.T) {
+			config := map[string]interface{}{name: "true"}
+			require.ErrorContains(t, plugin.ValidateConfig(config), "must be a boolean")
+			_, _, err := plugin.prepareArchive(data, sync.ExportConfig{Config: config})
+			require.ErrorContains(t, err, "must be a boolean")
+		})
+	}
+}
+
+func TestRequiredNilCollectionsAndMapsNormalize(t *testing.T) {
+	data := validExportData()
+	data.Devices[0].Settings = nil
+	tree, _, err := initializedPlugin(t).prepareArchive(data, sync.ExportConfig{})
+	require.NoError(t, err)
+	require.IsType(t, []interface{}{}, tree["templates"])
+	require.IsType(t, []interface{}{}, tree["discovered_devices"])
+	device := tree["devices"].([]interface{})[0].(map[string]interface{})
+	require.Equal(t, map[string]interface{}{}, device["settings"])
+	require.Equal(t, []interface{}{}, tree["plugin_configurations"])
+}
+
+func TestPreviewUsesJoinedRecordSemantics(t *testing.T) {
+	data := validExportData()
+	data.Configurations = []sync.ConfigurationData{{
+		DeviceID: 1, Config: map[string]interface{}{}, UpdatedAt: data.Timestamp,
+	}}
+	preview, err := initializedPlugin(t).Preview(context.Background(), data, sync.ExportConfig{
+		Config: map[string]interface{}{"compression_level": float64(9)},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, preview.RecordCount)
+	require.NotZero(t, preview.EstimatedSize)
+}
+
+type countingMarshaler struct {
+	calls *int
+}
+
+func (value countingMarshaler) MarshalJSON() ([]byte, error) {
+	*value.calls++
+	return []byte(`{"value":1}`), nil
+}
+
+func TestCustomJSONMarshalerIsInvokedExactlyOnce(t *testing.T) {
+	calls := 0
+	data := validExportData()
+	data.Devices[0].Settings = map[string]interface{}{
+		"custom": countingMarshaler{calls: &calls},
+	}
+	_, _, err := initializedPlugin(t).prepareArchive(data, sync.ExportConfig{})
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+}
+
+func TestGeneratedTreeRejectsExcessiveDepthAsOperationalError(t *testing.T) {
+	var nested interface{} = "leaf"
+	for range 60 {
+		nested = []interface{}{nested}
+	}
+	data := validExportData()
+	data.Devices[0].Settings = map[string]interface{}{"deep": nested}
+	_, _, err := initializedPlugin(t).prepareArchive(data, sync.ExportConfig{})
+	require.NoError(t, err)
+
+	nested = []interface{}{nested}
+	data.Devices[0].Settings = map[string]interface{}{"deep": nested}
+	_, _, err = initializedPlugin(t).prepareArchive(data, sync.ExportConfig{})
+	require.ErrorContains(t, err, "depth")
+	require.NotErrorIs(t, err, sync.ErrInvalidExportData)
+}
+
+func TestNonDryRunFailsClosed(t *testing.T) {
+	data, _ := generatedArchive(t)
+	plugin := initializedPlugin(t)
+	_, err := plugin.ImportFromData(context.Background(), data, sync.ImportConfig{})
+	require.ErrorIs(t, err, sync.ErrImportNotImplemented)
+}
+
+func TestValidateConfigHasNoFilesystemSideEffect(t *testing.T) {
+	plugin := initializedPlugin(t)
+	path := filepath.Join(t.TempDir(), "not-created")
+	require.NoError(t, plugin.ValidateConfig(map[string]interface{}{"output_path": path}))
+	_, err := os.Stat(path)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestCapabilitiesAdvertiseNormalizedLimit(t *testing.T) {
+	assert.Equal(t, defaultNormalizedLimit, initializedPlugin(t).Capabilities().MaxDataSize)
+}
+
+func TestConfigSchemaAdvertisesOnlyEffectiveCreationOptions(t *testing.T) {
+	properties := initializedPlugin(t).ConfigSchema().Properties
+	require.Contains(t, properties, "include_discovered")
+	require.Contains(t, properties, "exclude_sensitive")
+	require.NotContains(t, properties, "include_checksums")
+	require.NotContains(t, properties, "include_network_settings")
+	require.NotContains(t, properties, "include_plugin_configs")
+	require.NotContains(t, properties, "include_system_settings")
+}
+
+type failingAtomicFile struct {
+	*os.File
+	syncErr  error
+	closeErr error
+}
+
+func (file *failingAtomicFile) Sync() error {
+	if file.syncErr != nil {
+		return file.syncErr
+	}
+	return file.File.Sync()
+}
+
+func (file *failingAtomicFile) Close() error {
+	err := file.File.Close()
+	if file.closeErr != nil {
+		return file.closeErr
+	}
+	return err
+}
+
+type failingFileOperations struct {
+	syncErr   error
+	closeErr  error
+	renameErr error
+}
+
+func (operations failingFileOperations) CreateTemp(dir, pattern string) (atomicFile, error) {
+	file, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return nil, err
+	}
+	return &failingAtomicFile{File: file, syncErr: operations.syncErr, closeErr: operations.closeErr}, nil
+}
+
+func (operations failingFileOperations) Rename(oldPath, newPath string) error {
+	if operations.renameErr != nil {
+		return operations.renameErr
+	}
+	return os.Rename(oldPath, newPath)
+}
+
+func (failingFileOperations) Remove(path string) error { return os.Remove(path) }
+
+func TestAtomicPublicationCleansUpEveryInjectedFailure(t *testing.T) {
+	failure := errors.New("injected failure")
+	tests := []struct {
+		name       string
+		operations failingFileOperations
+	}{
+		{name: "sync", operations: failingFileOperations{syncErr: failure}},
+		{name: "close", operations: failingFileOperations{closeErr: failure}},
+		{name: "rename", operations: failingFileOperations{renameErr: failure}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			finalPath := filepath.Join(dir, "archive.sma")
+			plugin := initializedPlugin(t)
+			plugin.files = tt.operations
+			_, err := plugin.publishAtomic(finalPath, []byte(`{"ok":true}`), 6)
+			require.ErrorIs(t, err, failure)
+			_, statErr := os.Stat(finalPath)
+			require.ErrorIs(t, statErr, os.ErrNotExist)
+			entries, readErr := os.ReadDir(dir)
+			require.NoError(t, readErr)
+			for _, entry := range entries {
+				require.False(t, strings.HasPrefix(entry.Name(), ".sma-"), entry.Name())
 			}
 		})
 	}
 }
 
-func TestSMAPlugin_ExcludeSensitiveData(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
+func TestSharedCanonicalArchiveAndDigest(t *testing.T) {
+	base := filepath.Join("..", "..", "..", "..", "testdata", "sma")
+	canonical, err := os.ReadFile(filepath.Join(base, "archive-2026.1.canonical.json"))
 	require.NoError(t, err)
+	require.NotEmpty(t, canonical)
+	require.NotEqual(t, byte('\n'), canonical[len(canonical)-1])
 
-	archive := SMAArchive{
-		NetworkSettings: &NetworkSettings{
-			MQTTConfig: &MQTTConfig{
-				Username: "secret-username",
-			},
-		},
-		PluginConfigs: []PluginConfiguration{
-			{
-				PluginName: "test-plugin",
-				Config: map[string]interface{}{
-					"api_key":  "secret-key",
-					"password": "secret-password",
-					"username": "normal-username",
-				},
-			},
-		},
-		Devices: []sync.DeviceData{
-			{
-				Settings: map[string]interface{}{
-					"wifi_password": "secret-wifi",
-					"device_name":   "normal-name",
-				},
-			},
-		},
-	}
+	tree, err := parseStrictJSON(canonical, 64)
+	require.NoError(t, err)
+	require.NoError(t, validateArchiveTree(tree))
+	roundTrip, err := canonicalizeTree(tree)
+	require.NoError(t, err)
+	require.Equal(t, canonical, roundTrip)
 
-	plugin.excludeSensitiveData(&archive)
+	sidecar, err := os.ReadFile(filepath.Join(base, "archive-2026.1.sha256"))
+	require.NoError(t, err)
+	root := tree.(map[string]interface{})
+	integrity := root["metadata"].(map[string]interface{})["integrity"].(map[string]interface{})
+	supplied := integrity["checksum"]
+	require.Equal(t, strings.TrimSpace(string(sidecar)), supplied)
+	integrity["checksum"] = ""
+	checksumInput, err := canonicalizeTree(root)
+	require.NoError(t, err)
+	require.Equal(t, strings.TrimSpace(string(sidecar)), checksumBytes(checksumInput))
+	integrity["checksum"] = supplied
 
-	// Check that sensitive fields were redacted
-	assert.Equal(t, "[REDACTED]", archive.NetworkSettings.MQTTConfig.Username)
-	assert.Equal(t, "[REDACTED]", archive.PluginConfigs[0].Config["api_key"])
-	assert.Equal(t, "[REDACTED]", archive.PluginConfigs[0].Config["password"])
-	assert.Equal(t, "normal-username", archive.PluginConfigs[0].Config["username"]) // Not sensitive
-	assert.Equal(t, "[REDACTED]", archive.Devices[0].Settings["wifi_password"])
-	assert.Equal(t, "normal-name", archive.Devices[0].Settings["device_name"]) // Not sensitive
+	result, err := initializedPlugin(t).ImportFromData(context.Background(), canonical, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true, ValidateOnly: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RecordsImported)
 }
 
-func TestSMAPlugin_IsSensitiveField(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
+func TestSharedNumericAndIdentityVectors(t *testing.T) {
+	base := filepath.Join("..", "..", "..", "..", "testdata", "sma")
+	var numbers []struct {
+		Text     string `json:"text"`
+		Binary64 string `json:"binary64"`
+		Admitted bool   `json:"admitted"`
+	}
+	raw, err := os.ReadFile(filepath.Join(base, "numeric-vectors.json"))
 	require.NoError(t, err)
-
-	sensitiveFields := []string{
-		"password", "passwd", "pwd", "secret", "key", "token",
-		"api_key", "apikey", "auth", "credential", "private",
-		"PASSWORD", "Secret", "API_KEY", "wifi_password",
+	require.NoError(t, json.Unmarshal(raw, &numbers))
+	for _, vector := range numbers {
+		t.Run("number_"+vector.Text, func(t *testing.T) {
+			number, _ := strconv.ParseFloat(vector.Text, 64)
+			require.Equal(t, vector.Binary64, fmt.Sprintf("%016x", math.Float64bits(number)))
+			tree, parseErr := parseStrictJSON([]byte(vector.Text), 64)
+			require.NoError(t, parseErr)
+			admissionErr := validateSafeNumbers(tree)
+			require.Equal(t, vector.Admitted, admissionErr == nil, admissionErr)
+		})
 	}
 
-	normalFields := []string{
-		"username", "name", "id", "type", "status",
-		"hostname", "port", "timeout", "enabled",
+	var identities struct {
+		Timestamps []struct {
+			Value string `json:"value"`
+			Valid bool   `json:"valid"`
+		} `json:"timestamps"`
+		UUIDs []struct {
+			Value string `json:"value"`
+			Valid bool   `json:"valid"`
+		} `json:"uuids"`
 	}
-
-	for _, field := range sensitiveFields {
-		assert.True(t, plugin.isSensitiveField(field),
-			"Field '%s' should be considered sensitive", field)
-	}
-
-	for _, field := range normalFields {
-		assert.False(t, plugin.isSensitiveField(field),
-			"Field '%s' should not be considered sensitive", field)
-	}
-}
-
-func TestSMAPlugin_Capabilities(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	caps := plugin.Capabilities()
-
-	assert.False(t, caps.SupportsIncremental)
-	assert.True(t, caps.SupportsScheduling)
-	assert.False(t, caps.RequiresAuthentication)
-	assert.Contains(t, caps.SupportedOutputs, "file")
-	assert.Greater(t, caps.MaxDataSize, int64(0))
-	assert.Equal(t, 1, caps.ConcurrencyLevel)
-}
-
-func TestSMAPlugin_ImportFromFile_FileNotExists(t *testing.T) {
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
+	raw, err = os.ReadFile(filepath.Join(base, "identity-vectors.json"))
 	require.NoError(t, err)
-
-	config := sync.ImportConfig{}
-	ctx := context.Background()
-
-	result, err := plugin.ImportFromFile(ctx, "/nonexistent/file.sma", config)
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "does not exist")
-}
-
-func TestSMAPlugin_Integration_ExportImport(t *testing.T) {
-	// Create temporary directory
-	tempDir := t.TempDir()
-
-	// Create plugin
-	plugin := NewPlugin().(*SMAPlugin)
-	logger, _ := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
-	err := plugin.Initialize(logger)
-	require.NoError(t, err)
-
-	// Create test data
-	originalData := &sync.ExportData{
-		Devices: []sync.DeviceData{
-			{
-				MAC:  "AA:BB:CC:DD:EE:FF",
-				Name: "Integration Test Device",
-				Type: "shelly1",
-			},
-		},
-		Templates: []sync.TemplateData{
-			{
-				Name:       "Integration Test Template",
-				DeviceType: "shelly1",
-			},
-		},
-		Metadata: sync.ExportMetadata{
-			ExportID:      "integration-test",
-			RequestedBy:   "test",
-			ExportType:    "manual",
-			SystemVersion: "v0.5.4-alpha",
-			DatabaseType:  "sqlite",
-		},
-		Timestamp: time.Now(),
+	require.NoError(t, json.Unmarshal(raw, &identities))
+	for _, vector := range identities.Timestamps {
+		err := requireTimestamp(vector.Value, "timestamp")
+		require.Equal(t, vector.Valid, err == nil, vector.Value)
 	}
-
-	// Export
-	exportConfig := sync.ExportConfig{
-		PluginName: "sma",
-		Format:     "sma",
-		Config: map[string]interface{}{
-			"output_path":        tempDir,
-			"compression_level":  6.0,
-			"include_discovered": false,
-		},
+	for _, vector := range identities.UUIDs {
+		require.Equal(t, vector.Valid, isLowerUUID(vector.Value), vector.Value)
 	}
-
-	ctx := context.Background()
-	exportResult, err := plugin.Export(ctx, originalData, exportConfig)
-	require.NoError(t, err)
-	require.True(t, exportResult.Success)
-
-	// Import (dry run)
-	importConfig := sync.ImportConfig{
-		Options: sync.ImportOptions{
-			DryRun: true,
-		},
-	}
-
-	importResult, err := plugin.ImportFromFile(ctx, exportResult.OutputPath, importConfig)
-	require.NoError(t, err)
-	require.True(t, importResult.Success)
-
-	// Verify import detected correct number of records
-	assert.Equal(t, 2, importResult.RecordsImported) // 1 device + 1 template
-	assert.Len(t, importResult.Changes, 2)
-
-	// Verify changes contain expected resources
-	var deviceChange, templateChange *sync.ImportChange
-	for _, change := range importResult.Changes {
-		switch change.Resource {
-		case "device":
-			deviceChange = &change
-		case "template":
-			templateChange = &change
-		}
-	}
-
-	require.NotNil(t, deviceChange)
-	require.NotNil(t, templateChange)
-	assert.Equal(t, "AA:BB:CC:DD:EE:FF", deviceChange.ResourceID)
-	assert.Equal(t, "Integration Test Template", templateChange.ResourceID)
 }

@@ -203,7 +203,7 @@ test.describe('Smoke Tests - Application Health', () => {
     })
     
     // Navigate through main pages
-    const pages = ['/', '/devices', '/export-schedules', '/plugin-management']
+    const pages = ['/', '/devices', '/export/history', '/import/history', '/plugins']
     
     for (const pagePath of pages) {
       await page.goto(pagePath)

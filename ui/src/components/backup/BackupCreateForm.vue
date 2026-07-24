@@ -11,13 +11,6 @@
           <option value="sma">Content Export: SMA</option>
         </select>
       </div>
-      <div class="form-field">
-        <label class="field-label">Run Mode</label>
-        <select v-model="localRunMode" class="form-select">
-          <option value="now">Run Now</option>
-          <option value="schedule">Schedule</option>
-        </select>
-      </div>
     </div>
     <div class="grid-2">
       <div class="form-field">
@@ -46,29 +39,6 @@
       <div class="form-field">
         <label class="field-label">Output Directory</label>
         <input v-model="localCreateOutputDir" class="form-input" placeholder="./data/backups" />
-      </div>
-    </div>
-
-    <!-- Schedule options -->
-    <div class="grid-2" v-if="localRunMode === 'schedule'">
-      <div class="form-field">
-        <label class="field-label">Schedule Interval</label>
-        <select v-model="localSchedulePreset" class="form-select" @change="applyIntervalPreset">
-          <option value="">Custom…</option>
-          <option value="15 minutes">Every 15 minutes</option>
-          <option value="1 hour">Every hour</option>
-          <option value="6 hours">Every 6 hours</option>
-          <option value="24 hours">Daily</option>
-        </select>
-        <input v-model="localScheduleInterval" class="form-input" placeholder="e.g. 1 hour, 24 hours" style="margin-top:8px" />
-        <div class="field-help">Use format like "15 minutes", "1 hour", or "1 day".</div>
-      </div>
-      <div class="form-field">
-        <label class="field-label">Enabled</label>
-        <select v-model="localScheduleEnabled" class="form-select">
-          <option :value="true">Enabled</option>
-          <option :value="false">Disabled</option>
-        </select>
       </div>
     </div>
 
@@ -132,18 +102,6 @@
             <span>Include discovered devices</span>
           </label>
           <label class="checkbox-label">
-            <input type="checkbox" v-model="localSmaOptions.include_network_settings" />
-            <span>Include network settings</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="localSmaOptions.include_plugin_configs" />
-            <span>Include plugin configurations</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="localSmaOptions.include_system_settings" />
-            <span>Include system settings</span>
-          </label>
-          <label class="checkbox-label">
             <input type="checkbox" v-model="localSmaOptions.exclude_sensitive" />
             <span>Exclude sensitive data</span>
           </label>
@@ -180,23 +138,16 @@ interface YamlOptions {
 interface SmaOptions {
   compression_level: number
   include_discovered: boolean
-  include_network_settings: boolean
-  include_plugin_configs: boolean
-  include_system_settings: boolean
   exclude_sensitive: boolean
 }
 
 interface Props {
   createType: string
-  runMode: string
   createName: string
   createDesc: string
   createCompression: string
   createOutputDir: string
   exportOutputDir: string
-  scheduleEnabled: boolean
-  scheduleInterval: string
-  schedulePreset: string
   jsonOptions: JsonOptions
   yamlOptions: YamlOptions
   jsonCompression: string
@@ -212,15 +163,11 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:createType': [value: string]
-  'update:runMode': [value: string]
   'update:createName': [value: string]
   'update:createDesc': [value: string]
   'update:createCompression': [value: string]
   'update:createOutputDir': [value: string]
   'update:exportOutputDir': [value: string]
-  'update:scheduleEnabled': [value: boolean]
-  'update:scheduleInterval': [value: string]
-  'update:schedulePreset': [value: string]
   'update:jsonOptions': [value: JsonOptions]
   'update:yamlOptions': [value: YamlOptions]
   'update:jsonCompression': [value: string]
@@ -231,15 +178,11 @@ const emit = defineEmits<{
 
 // Local state with watchers for two-way binding
 const localCreateType = ref(props.createType)
-const localRunMode = ref(props.runMode)
 const localCreateName = ref(props.createName)
 const localCreateDesc = ref(props.createDesc)
 const localCreateCompression = ref(props.createCompression)
 const localCreateOutputDir = ref(props.createOutputDir)
 const localExportOutputDir = ref(props.exportOutputDir)
-const localScheduleEnabled = ref(props.scheduleEnabled)
-const localScheduleInterval = ref(props.scheduleInterval)
-const localSchedulePreset = ref(props.schedulePreset)
 const localJsonOptions = reactive({ ...props.jsonOptions })
 const localYamlOptions = reactive({ ...props.yamlOptions })
 const localJsonCompression = ref(props.jsonCompression)
@@ -248,26 +191,17 @@ const localSmaOptions = reactive({ ...props.smaOptions })
 
 // Watch local changes and emit
 watch(localCreateType, (val) => emit('update:createType', val))
-watch(localRunMode, (val) => emit('update:runMode', val))
 watch(localCreateName, (val) => emit('update:createName', val))
 watch(localCreateDesc, (val) => emit('update:createDesc', val))
 watch(localCreateCompression, (val) => emit('update:createCompression', val))
 watch(localCreateOutputDir, (val) => emit('update:createOutputDir', val))
 watch(localExportOutputDir, (val) => emit('update:exportOutputDir', val))
-watch(localScheduleEnabled, (val) => emit('update:scheduleEnabled', val))
-watch(localScheduleInterval, (val) => emit('update:scheduleInterval', val))
-watch(localSchedulePreset, (val) => emit('update:schedulePreset', val))
 watch(localJsonOptions, (val) => emit('update:jsonOptions', { ...val }), { deep: true })
 watch(localYamlOptions, (val) => emit('update:yamlOptions', { ...val }), { deep: true })
 watch(localJsonCompression, (val) => emit('update:jsonCompression', val))
 watch(localYamlCompression, (val) => emit('update:yamlCompression', val))
 watch(localSmaOptions, (val) => emit('update:smaOptions', { ...val }), { deep: true })
 
-function applyIntervalPreset() {
-  if (localSchedulePreset.value) {
-    localScheduleInterval.value = localSchedulePreset.value
-  }
-}
 </script>
 
 <style scoped>

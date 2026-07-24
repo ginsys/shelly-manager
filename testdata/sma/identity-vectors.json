@@ -1,0 +1,13 @@
+{
+  "timestamps": [
+    {"value":"2026-01-02T03:04:05Z","valid":true},
+    {"value":"2026-01-02T03:04:05.123456789Z","valid":true},
+    {"value":"2026-02-29T03:04:05Z","valid":false},
+    {"value":"2026-01-02T03:04:05+00:00","valid":false}
+  ],
+  "uuids": [
+    {"value":"123e4567-e89b-42d3-a456-426614174000","valid":true},
+    {"value":"123E4567-E89B-42D3-A456-426614174000","valid":false},
+    {"value":"not-a-uuid","valid":false}
+  ]
+}

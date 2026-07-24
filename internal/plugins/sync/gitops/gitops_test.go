@@ -482,10 +482,6 @@ func TestGitOpsExporter_Capabilities(t *testing.T) {
 		t.Error("GitOps should not support incremental exports")
 	}
 
-	if !caps.SupportsScheduling {
-		t.Error("GitOps should support scheduling")
-	}
-
 	if caps.RequiresAuthentication {
 		t.Error("GitOps should not require authentication")
 	}

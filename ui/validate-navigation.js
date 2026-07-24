@@ -7,7 +7,6 @@ const puppeteer = require('puppeteer');
 
 const testRoutes = [
   { path: '/', name: 'Devices', shouldContain: 'Devices' },
-  { path: '/export/schedules', name: 'Schedule Management', shouldContain: 'Schedule Management' },
   { path: '/export/backup', name: 'Backup Management', shouldContain: 'Backup' },
   { path: '/export/gitops', name: 'GitOps Export', shouldContain: 'GitOps' },
   { path: '/export/history', name: 'Export History', shouldContain: 'Export History' },

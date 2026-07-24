@@ -16,7 +16,7 @@ A Golang application for managing Shelly smart home devices. **In development.**
 
 - Device discovery and management (Gen1 & Gen2+ devices)
 - Configuration templates with inheritance and validation
-- Export/import with multiple formats and scheduled operations
+- Registry-backed export and preview across multiple formats
 - Real-time metrics via WebSocket
 - Web UI with configuration wizards and diff tools
 - Multi-channel notifications (email, webhook, Slack)
@@ -57,9 +57,12 @@ Shelly Manager supports multiple export formats for backing up and sharing devic
 
 ### SMA Archive (`.sma`)
 - **Use Case**: Shelly Manager Archive format
-- **Format**: Multi-format archive with metadata
-- **Compression**: Built-in compression
-- **Best For**: Complete exports with all formats included
+- **Format**: Strict `2026.1` JSON schema with RFC 8785 SHA-256 integrity
+- **Compression**: Always GZIP; import preview also accepts raw JSON
+- **Limits**: 100 MiB normalized archive data, 10 MiB HTTP request body,
+  7 MiB browser source before base64 encoding
+- **Import**: Browser and API dry-run preview only; persistence fails closed
+  with HTTP 501 until implemented
 
 ### Compression Options
 
@@ -126,10 +129,10 @@ docker-compose up -d
 REST API with standardized `{success: true/false, data/error}` responses.
 
 See documentation:
-- [Export/Import API](docs/API_EXPORT_IMPORT.md)
+- [Export/Import API](docs/api/API_EXPORT_IMPORT.md)
 - [Notification API](docs/API_NOTIFICATION.md)
 - [Metrics API](docs/METRICS_API.md)
-- [SMA Format](docs/sma-format.md)
+- [SMA Format](docs/guides/sma-format.md)
 
 ## Configuration
 

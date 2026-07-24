@@ -562,35 +562,6 @@ components:
         options:
           $ref: '#/components/schemas/ExportOptions'
 
-    ExportSchedule:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        description:
-          type: string
-        enabled:
-          type: boolean
-        cron:
-          type: string
-        plugin_name:
-          type: string
-        format:
-          type: string
-        config:
-          type: object
-        last_run_at:
-          type: string
-          format: date-time
-        next_run_at:
-          type: string
-          format: date-time
-        created_at:
-          type: string
-          format: date-time
-
     # Notification Models
     NotificationChannel:
       type: object
@@ -1816,6 +1787,7 @@ paths:
           required: true
           schema:
             type: string
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       responses:
         '200':
           description: Export result
@@ -1843,6 +1815,7 @@ paths:
           required: true
           schema:
             type: string
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       responses:
         '200':
           description: Export file
@@ -1851,137 +1824,6 @@ paths:
               schema:
                 type: string
                 format: binary
-
-  /api/v1/export/schedules:
-    get:
-      tags: [Export]
-      summary: List export schedules
-      operationId: listExportSchedules
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      responses:
-        '200':
-          description: Export schedules
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/APIResponse'
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/ExportSchedule'
-
-    post:
-      tags: [Export]
-      summary: Create export schedule
-      operationId: createExportSchedule
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ExportSchedule'
-      responses:
-        '201':
-          description: Schedule created
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/APIResponse'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/ExportSchedule'
-
-  /api/v1/export/schedules/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-
-    get:
-      tags: [Export]
-      summary: Get export schedule
-      operationId: getExportSchedule
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      responses:
-        '200':
-          description: Schedule details
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/APIResponse'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/ExportSchedule'
-
-    put:
-      tags: [Export]
-      summary: Update export schedule
-      operationId: updateExportSchedule
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ExportSchedule'
-      responses:
-        '200':
-          description: Schedule updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIResponse'
-
-    delete:
-      tags: [Export]
-      summary: Delete export schedule
-      operationId: deleteExportSchedule
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      responses:
-        '204':
-          description: Schedule deleted
-
-  /api/v1/export/schedules/{id}/run:
-    post:
-      tags: [Export]
-      summary: Run export schedule manually
-      operationId: runExportSchedule
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Schedule run initiated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/export/history:
     get:

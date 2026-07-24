@@ -44,7 +44,6 @@ export interface PluginInfo {
 
 export interface PluginCapabilities {
   supports_incremental: boolean
-  supports_scheduling: boolean
   requires_authentication: boolean
   supported_outputs: string[]
   max_data_size: number
@@ -57,30 +56,23 @@ export interface PluginDetail {
 }
 
 export interface PluginSchema {
-  type: string
+  version: string
   properties: Record<string, PluginSchemaProperty>
-  required?: string[]
-  title?: string
-  description?: string
+  required: string[] | null
   examples?: Record<string, any>[]
 }
 
 export interface PluginSchemaProperty {
-  type: string
-  title?: string
-  description?: string
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object'
+  description: string
   default?: any
   enum?: any[]
-  format?: string
   minimum?: number
   maximum?: number
-  minLength?: number
-  maxLength?: number
   pattern?: string
   items?: PluginSchemaProperty
   properties?: Record<string, PluginSchemaProperty>
-  required?: string[]
-  examples?: any[]
+  sensitive?: boolean
 }
 
 export interface PluginCategory {

@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -36,9 +38,6 @@ type SyncEngine struct {
 	exportResults map[string]*ExportResult
 	importResults map[string]*ImportResult
 
-	// Scheduling (in-memory for now)
-	schedules map[string]*ExportSchedule
-
 	// Security: Base directories for path validation
 	// If set, file imports/exports are restricted to these directories
 	importBaseDir string
@@ -56,7 +55,6 @@ func NewSyncEngine(dbManager DatabaseManagerInterface, logger *logging.Logger) *
 		logger:        logger,
 		exportResults: make(map[string]*ExportResult),
 		importResults: make(map[string]*ImportResult),
-		schedules:     make(map[string]*ExportSchedule),
 	}
 }
 
@@ -210,7 +208,7 @@ func (e *SyncEngine) GetPlugin(name string) (SyncPlugin, error) {
 
 	plugin, exists := e.plugins[name]
 	if !exists {
-		return nil, fmt.Errorf("plugin %s is not registered", name)
+		return nil, fmt.Errorf("%w: %s", ErrPluginNotFound, name)
 	}
 
 	return plugin, nil
@@ -229,84 +227,32 @@ func (e *SyncEngine) Export(ctx context.Context, request ExportRequest) (*Export
 		"format", request.Format,
 	)
 
-	// Security: Validate output path if specified in config
-	if outputPath, ok := request.Config["output_path"].(string); ok && outputPath != "" {
-		if validatedPath, err := e.validateOutputPath(outputPath); err != nil {
-			e.logger.Warn("Export output path validation failed",
-				"export_id", exportID,
-				"path", outputPath,
-				"error", err,
-			)
-			return &ExportResult{
-				Success:   false,
-				ExportID:  exportID,
-				Errors:    []string{fmt.Sprintf("output path validation failed: %v", err)},
-				CreatedAt: time.Now(),
-			}, err
-		} else if validatedPath != "" {
-			// Use the validated path
-			request.Config["output_path"] = validatedPath
-		}
-	}
-
-	// Also validate output.destination if specified
-	if request.Output.Destination != "" {
-		if validatedPath, err := e.validateExportPath(request.Output.Destination); err != nil {
-			e.logger.Warn("Export destination path validation failed",
-				"export_id", exportID,
-				"path", request.Output.Destination,
-				"error", err,
-			)
-			return &ExportResult{
-				Success:   false,
-				ExportID:  exportID,
-				Errors:    []string{fmt.Sprintf("output destination validation failed: %v", err)},
-				CreatedAt: time.Now(),
-			}, err
-		} else {
-			request.Output.Destination = validatedPath
-		}
-	}
-
-	// Get the plugin
-	plugin, err := e.GetPlugin(request.PluginName)
+	plugin, err := e.validateRequest(&request, true)
 	if err != nil {
-		return &ExportResult{
-			Success:   false,
-			ExportID:  exportID,
-			Errors:    []string{err.Error()},
-			CreatedAt: time.Now(),
-		}, err
-	}
-
-	// Validate plugin configuration
-	if validationErr := plugin.ValidateConfig(request.Config); validationErr != nil {
-		return &ExportResult{
-			Success:   false,
-			ExportID:  exportID,
-			Errors:    []string{fmt.Sprintf("invalid configuration: %v", validationErr)},
-			CreatedAt: time.Now(),
-		}, err
+		return failedExportResult(exportID, request, startTime, err), err
 	}
 
 	// Load data from database
 	data, err := e.loadExportData(ctx, request.Filters)
 	if err != nil {
-		return &ExportResult{
-			Success:   false,
-			ExportID:  exportID,
-			Errors:    []string{fmt.Sprintf("failed to load data: %v", err)},
-			CreatedAt: time.Now(),
-		}, err
+		wrapped := fmt.Errorf("failed to load data: %w", err)
+		return failedExportResult(exportID, request, startTime, wrapped), wrapped
 	}
 
 	// Enhance metadata with export information
 	data.Metadata.ExportID = exportID
-	data.Metadata.ExportType = "manual"
+	data.Metadata.RequestedBy = strings.TrimSpace(request.CreatedBy)
+	if data.Metadata.RequestedBy == "" {
+		data.Metadata.RequestedBy = "shelly-manager"
+	}
+	data.Metadata.ExportType = strings.TrimSpace(request.ExportType)
+	if data.Metadata.ExportType == "" {
+		data.Metadata.ExportType = "manual"
+	}
 	data.Timestamp = time.Now()
 
 	// Create export config
-	config := ExportConfig(request)
+	config := exportConfigFromRequest(request)
 
 	// Perform the export
 	result, err := plugin.Export(ctx, data, config)
@@ -316,13 +262,7 @@ func (e *SyncEngine) Export(ctx context.Context, request ExportRequest) (*Export
 			"plugin", request.PluginName,
 			"error", err,
 		)
-		return &ExportResult{
-			Success:   false,
-			ExportID:  exportID,
-			Errors:    []string{err.Error()},
-			Duration:  time.Since(startTime),
-			CreatedAt: time.Now(),
-		}, err
+		return failedExportResult(exportID, request, startTime, err), err
 	}
 
 	// Update result with common fields
@@ -353,6 +293,29 @@ func (e *SyncEngine) Export(ctx context.Context, request ExportRequest) (*Export
 	return result, nil
 }
 
+func failedExportResult(exportID string, request ExportRequest, started time.Time, err error) *ExportResult {
+	return &ExportResult{
+		Success:    false,
+		ExportID:   exportID,
+		PluginName: request.PluginName,
+		Format:     request.Format,
+		Errors:     []string{err.Error()},
+		Duration:   time.Since(started),
+		CreatedAt:  time.Now(),
+	}
+}
+
+func exportConfigFromRequest(request ExportRequest) ExportConfig {
+	return ExportConfig{
+		PluginName: request.PluginName,
+		Format:     request.Format,
+		Config:     request.Config,
+		Filters:    request.Filters,
+		Output:     request.Output,
+		Options:    request.Options,
+	}
+}
+
 // Preview generates a preview of what would be exported
 func (e *SyncEngine) Preview(ctx context.Context, request ExportRequest) (*PreviewResult, error) {
 	e.logger.Info("Starting export preview",
@@ -360,15 +323,9 @@ func (e *SyncEngine) Preview(ctx context.Context, request ExportRequest) (*Previ
 		"format", request.Format,
 	)
 
-	// Get the plugin
-	plugin, err := e.GetPlugin(request.PluginName)
+	plugin, err := e.validateRequest(&request, true)
 	if err != nil {
 		return nil, err
-	}
-
-	// Validate plugin configuration
-	if validationErr := plugin.ValidateConfig(request.Config); validationErr != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	// Load data from database
@@ -376,9 +333,17 @@ func (e *SyncEngine) Preview(ctx context.Context, request ExportRequest) (*Previ
 	if err != nil {
 		return nil, fmt.Errorf("failed to load data: %w", err)
 	}
+	data.Metadata.RequestedBy = strings.TrimSpace(request.CreatedBy)
+	if data.Metadata.RequestedBy == "" {
+		data.Metadata.RequestedBy = "shelly-manager"
+	}
+	data.Metadata.ExportType = strings.TrimSpace(request.ExportType)
+	if data.Metadata.ExportType == "" {
+		data.Metadata.ExportType = "manual"
+	}
 
 	// Create export config
-	config := ExportConfig(request)
+	config := exportConfigFromRequest(request)
 
 	// Generate preview
 	preview, err := plugin.Preview(ctx, data, config)
@@ -412,29 +377,17 @@ func (e *SyncEngine) Import(ctx context.Context, request ImportRequest) (*Import
 		"format", request.Format,
 	)
 
-	// Security: Validate file paths if import source is file-based
-	if request.Source.Type == "file" && request.Source.Path != "" {
-		if validatedPath, err := e.validateImportPath(request.Source.Path); err != nil {
-			e.logger.Warn("Import path validation failed",
-				"import_id", importID,
-				"path", request.Source.Path,
-				"error", err,
-			)
-			return &ImportResult{
-				Success:   false,
-				ImportID:  importID,
-				Errors:    []string{fmt.Sprintf("path validation failed: %v", err)},
-				CreatedAt: time.Now(),
-			}, err
-		} else {
-			// Use the validated path
-			request.Source.Path = validatedPath
-		}
+	plugin, pluginErr := e.GetPlugin(request.PluginName)
+	if pluginErr != nil {
+		return &ImportResult{
+			Success:   false,
+			ImportID:  importID,
+			Errors:    []string{pluginErr.Error()},
+			CreatedAt: time.Now(),
+		}, pluginErr
 	}
 
-	// Get the plugin
-	plugin, err := e.GetPlugin(request.PluginName)
-	if err != nil {
+	if err := validatePluginFormat(plugin, request.Format); err != nil {
 		return &ImportResult{
 			Success:   false,
 			ImportID:  importID,
@@ -443,14 +396,27 @@ func (e *SyncEngine) Import(ctx context.Context, request ImportRequest) (*Import
 		}, err
 	}
 
-	// Validate plugin configuration
 	if validationErr := plugin.ValidateConfig(request.Config); validationErr != nil {
+		err := fmt.Errorf("%w: %v", ErrInvalidPluginConfig, validationErr)
 		return &ImportResult{
 			Success:   false,
 			ImportID:  importID,
-			Errors:    []string{fmt.Sprintf("invalid configuration: %v", validationErr)},
+			Errors:    []string{err.Error()},
 			CreatedAt: time.Now(),
-		}, validationErr
+		}, err
+	}
+
+	if request.Source.Type == "file" && request.Source.Path != "" {
+		validatedPath, pathErr := e.validateImportPath(request.Source.Path)
+		if pathErr != nil {
+			return &ImportResult{
+				Success:   false,
+				ImportID:  importID,
+				Errors:    []string{fmt.Sprintf("path validation failed: %v", pathErr)},
+				CreatedAt: time.Now(),
+			}, pathErr
+		}
+		request.Source.Path = validatedPath
 	}
 
 	// Create import config
@@ -507,32 +473,51 @@ func (e *SyncEngine) Import(ctx context.Context, request ImportRequest) (*Import
 
 // ValidateExport validates an export configuration without performing the export
 func (e *SyncEngine) ValidateExport(request ExportRequest) error {
-	// Get the plugin
-	plugin, err := e.GetPlugin(request.PluginName)
-	if err != nil {
-		return err
-	}
+	_, err := e.validateRequest(&request, true)
+	return err
+}
 
-	// Validate plugin configuration
-	if validationErr := plugin.ValidateConfig(request.Config); validationErr != nil {
-		return fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	// Validate that the plugin supports the requested format
-	info := plugin.Info()
-	formatSupported := false
-	for _, format := range info.SupportedFormats {
-		if format == request.Format {
-			formatSupported = true
-			break
+func validatePluginFormat(plugin SyncPlugin, format string) error {
+	for _, supported := range plugin.Info().SupportedFormats {
+		if supported == format {
+			return nil
 		}
 	}
+	return fmt.Errorf("%w: plugin %s does not support %q", ErrUnsupportedFormat, plugin.Info().Name, format)
+}
 
-	if !formatSupported {
-		return fmt.Errorf("plugin %s does not support format %s", request.PluginName, request.Format)
+// validateRequest preserves the public validation precedence: registry lookup,
+// format, plugin configuration, then engine-owned path checks.
+func (e *SyncEngine) validateRequest(request *ExportRequest, normalizePaths bool) (SyncPlugin, error) {
+	plugin, err := e.GetPlugin(request.PluginName)
+	if err != nil {
+		return nil, err
 	}
-
-	return nil
+	if err := validatePluginFormat(plugin, request.Format); err != nil {
+		return nil, err
+	}
+	if err := plugin.ValidateConfig(request.Config); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidPluginConfig, err)
+	}
+	if outputPath, ok := request.Config["output_path"].(string); ok && outputPath != "" {
+		validated, err := e.validateOutputPath(outputPath)
+		if err != nil {
+			return nil, fmt.Errorf("%w: output_path: %v", ErrInvalidExportPath, err)
+		}
+		if normalizePaths {
+			request.Config["output_path"] = validated
+		}
+	}
+	if request.Output.Destination != "" {
+		validated, err := e.validateExportPath(request.Output.Destination)
+		if err != nil {
+			return nil, fmt.Errorf("%w: output destination: %v", ErrInvalidExportPath, err)
+		}
+		if normalizePaths {
+			request.Output.Destination = validated
+		}
+	}
+	return plugin, nil
 }
 
 // Shutdown cleanly shuts down the export engine
@@ -571,8 +556,8 @@ func (e *SyncEngine) SaveExportHistory(ctx context.Context, request ExportReques
 	}
 	rec := &database.ExportHistory{
 		ExportID:   result.ExportID,
-		PluginName: result.PluginName,
-		Format:     result.Format,
+		PluginName: request.PluginName,
+		Format:     request.Format,
 		Name: func() string {
 			if request.Config != nil {
 				if v, ok := request.Config["name"].(string); ok {
@@ -818,18 +803,140 @@ func (e *SyncEngine) loadExportData(ctx context.Context, filters ExportFilters) 
 	// Convert devices to export format
 	exportDevices := make([]DeviceData, len(devices))
 	for i, device := range devices {
+		settings, err := parseJSONToMap(device.Settings)
+		if err != nil {
+			return nil, fmt.Errorf("device %d settings: %w", device.ID, err)
+		}
+		model := device.Type
+		if storedModel, ok := settings["model"].(string); ok && strings.TrimSpace(storedModel) != "" {
+			model = storedModel
+		}
 		exportDevices[i] = DeviceData{
 			ID:        device.ID,
 			MAC:       device.MAC,
 			IP:        device.IP,
 			Type:      device.Type,
 			Name:      device.Name,
+			Model:     model,
 			Firmware:  device.Firmware,
 			Status:    device.Status,
 			LastSeen:  device.LastSeen,
-			Settings:  parseJSONToMap(device.Settings),
+			Settings:  settings,
 			CreatedAt: device.CreatedAt,
 			UpdatedAt: device.UpdatedAt,
+		}
+	}
+
+	// Load the persisted per-device configuration rows. DesiredConfig is the
+	// authoritative export payload when present; the older device_configs row
+	// supplies its synchronization metadata and remains the fallback for
+	// installations that have not populated DesiredConfig yet.
+	configRows := make([]configuration.DeviceConfig, 0)
+	if db.Migrator().HasTable(&configuration.DeviceConfig{}) && len(devices) > 0 {
+		deviceIDs := make([]uint, len(devices))
+		for i := range devices {
+			deviceIDs[i] = devices[i].ID
+		}
+		if err := db.WithContext(ctx).
+			Where("device_id IN ?", deviceIDs).
+			Find(&configRows).Error; err != nil {
+			return nil, fmt.Errorf("failed to load device configurations: %w", err)
+		}
+	}
+	configByDevice := make(map[uint]configuration.DeviceConfig, len(configRows))
+	for _, stored := range configRows {
+		if _, duplicate := configByDevice[stored.DeviceID]; duplicate {
+			return nil, fmt.Errorf("duplicate stored configurations for device %d", stored.DeviceID)
+		}
+		configByDevice[stored.DeviceID] = stored
+	}
+
+	configurations := make([]ConfigurationData, 0, len(devices))
+	configuredDevices := make(map[uint]bool, len(devices))
+	for _, device := range devices {
+		stored, hasStored := configByDevice[device.ID]
+		raw := strings.TrimSpace(device.DesiredConfig)
+		hasDesired := raw != "" && raw != "{}" && raw != "null"
+		if !hasDesired && hasStored {
+			raw = string(stored.Config)
+		}
+		if !hasDesired && !hasStored {
+			continue
+		}
+		config, err := parseJSONToMap(raw)
+		if err != nil {
+			return nil, fmt.Errorf("device %d desired configuration: %w", device.ID, err)
+		}
+		item := ConfigurationData{
+			DeviceID:   device.ID,
+			Config:     config,
+			SyncStatus: "pending",
+			UpdatedAt:  device.UpdatedAt,
+		}
+		if device.ConfigApplied {
+			item.SyncStatus = "synced"
+		}
+		if hasStored {
+			item.TemplateID = stored.TemplateID
+			item.LastSynced = stored.LastSynced
+			if !hasDesired && stored.SyncStatus != "" {
+				item.SyncStatus = stored.SyncStatus
+			}
+			if !stored.UpdatedAt.IsZero() {
+				item.UpdatedAt = stored.UpdatedAt
+			}
+		}
+		configurations = append(configurations, item)
+		configuredDevices[device.ID] = true
+	}
+
+	if filters.HasConfig != nil {
+		filteredDevices := make([]DeviceData, 0, len(exportDevices))
+		for _, device := range exportDevices {
+			if configuredDevices[device.ID] == *filters.HasConfig {
+				filteredDevices = append(filteredDevices, device)
+			}
+		}
+		exportDevices = filteredDevices
+		filteredConfigurations := make([]ConfigurationData, 0, len(configurations))
+		for _, item := range configurations {
+			if *filters.HasConfig {
+				filteredConfigurations = append(filteredConfigurations, item)
+			}
+		}
+		configurations = filteredConfigurations
+	}
+
+	// Load reusable templates with their full configuration payload.
+	var storedTemplates []configuration.ConfigTemplate
+	templateQuery := db.WithContext(ctx)
+	if len(filters.TemplateIDs) > 0 {
+		templateQuery = templateQuery.Where("id IN ?", filters.TemplateIDs)
+	}
+	if err := templateQuery.Find(&storedTemplates).Error; err != nil {
+		return nil, fmt.Errorf("failed to load configuration templates: %w", err)
+	}
+	templates := make([]TemplateData, len(storedTemplates))
+	for i, stored := range storedTemplates {
+		config, err := parseJSONBytesToMap(stored.Config)
+		if err != nil {
+			return nil, fmt.Errorf("template %d config: %w", stored.ID, err)
+		}
+		variables, err := parseJSONBytesToMap(stored.Variables)
+		if err != nil {
+			return nil, fmt.Errorf("template %d variables: %w", stored.ID, err)
+		}
+		templates[i] = TemplateData{
+			ID:          stored.ID,
+			Name:        stored.Name,
+			Description: stored.Description,
+			DeviceType:  stored.DeviceType,
+			Generation:  stored.Generation,
+			Config:      config,
+			Variables:   variables,
+			IsDefault:   stored.IsDefault,
+			CreatedAt:   stored.CreatedAt,
+			UpdatedAt:   stored.UpdatedAt,
 		}
 	}
 
@@ -859,6 +966,7 @@ func (e *SyncEngine) loadExportData(ctx context.Context, filters ExportFilters) 
 	// Create metadata
 	metadata := ExportMetadata{
 		TotalDevices:  len(exportDevices),
+		TotalConfigs:  len(configurations),
 		FilterApplied: e.hasFilters(filters),
 		SystemVersion: "v0.5.3-alpha", // TODO: Get from build info
 		DatabaseType:  e.dbManager.GetProvider().Name(),
@@ -866,156 +974,32 @@ func (e *SyncEngine) loadExportData(ctx context.Context, filters ExportFilters) 
 
 	return &ExportData{
 		Devices:           exportDevices,
-		Configurations:    []ConfigurationData{}, // TODO: Load configurations
-		Templates:         []TemplateData{},      // TODO: Load templates
+		Configurations:    configurations,
+		Templates:         templates,
 		DiscoveredDevices: discoveredDevices,
 		Metadata:          metadata,
 		Timestamp:         time.Now(),
 	}, nil
 }
 
-// ---- Scheduling (simple in-memory implementation) ----
-
-// ExportSchedule defines a scheduled export job
-type ExportSchedule struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	IntervalSec int                    `json:"interval_sec"` // simple interval scheduling
-	Enabled     bool                   `json:"enabled"`
-	Request     ExportRequest          `json:"request"`
-	LastRun     *time.Time             `json:"last_run,omitempty"`
-	NextRun     *time.Time             `json:"next_run,omitempty"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// ExportScheduleRequest is used to create/update schedules
-type ExportScheduleRequest struct {
-	Name        string        `json:"name"`
-	IntervalSec int           `json:"interval_sec"`
-	Enabled     bool          `json:"enabled"`
-	Request     ExportRequest `json:"request"`
-}
-
-// ListSchedules lists all schedules
-func (e *SyncEngine) ListSchedules() []*ExportSchedule {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	list := make([]*ExportSchedule, 0, len(e.schedules))
-	for _, s := range e.schedules {
-		list = append(list, s)
-	}
-	return list
-}
-
-// CreateSchedule creates a new schedule
-func (e *SyncEngine) CreateSchedule(req ExportScheduleRequest) (*ExportSchedule, error) {
-	if req.Name == "" {
-		return nil, fmt.Errorf("name is required")
-	}
-	if req.IntervalSec <= 0 {
-		return nil, fmt.Errorf("interval_sec must be > 0")
-	}
-	if req.Request.PluginName == "" || req.Request.Format == "" {
-		return nil, fmt.Errorf("request.plugin_name and request.format are required")
-	}
-	// basic validation against plugin
-	if err := e.ValidateExport(req.Request); err != nil {
-		return nil, err
-	}
-	now := time.Now()
-	id := uuid.New().String()
-	next := now.Add(time.Duration(req.IntervalSec) * time.Second)
-	sch := &ExportSchedule{
-		ID:          id,
-		Name:        req.Name,
-		IntervalSec: req.IntervalSec,
-		Enabled:     req.Enabled,
-		Request:     req.Request,
-		LastRun:     nil,
-		NextRun:     &next,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	e.mutex.Lock()
-	e.schedules[id] = sch
-	e.mutex.Unlock()
-	return sch, nil
-}
-
-// GetSchedule retrieves a schedule by ID
-func (e *SyncEngine) GetSchedule(id string) (*ExportSchedule, bool) {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	s, ok := e.schedules[id]
-	return s, ok
-}
-
-// UpdateSchedule updates a schedule by ID
-func (e *SyncEngine) UpdateSchedule(id string, req ExportScheduleRequest) (*ExportSchedule, error) {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	sch, ok := e.schedules[id]
-	if !ok {
-		return nil, fmt.Errorf("schedule not found")
-	}
-	if req.Name != "" {
-		sch.Name = req.Name
-	}
-	if req.IntervalSec > 0 {
-		sch.IntervalSec = req.IntervalSec
-	}
-	sch.Enabled = req.Enabled
-	if req.Request.PluginName != "" {
-		sch.Request = req.Request
-	}
-	now := time.Now()
-	sch.UpdatedAt = now
-	next := now.Add(time.Duration(sch.IntervalSec) * time.Second)
-	sch.NextRun = &next
-	return sch, nil
-}
-
-// DeleteSchedule deletes a schedule by ID
-func (e *SyncEngine) DeleteSchedule(id string) error {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	if _, ok := e.schedules[id]; !ok {
-		return fmt.Errorf("schedule not found")
-	}
-	delete(e.schedules, id)
-	return nil
-}
-
-// RunSchedule triggers the export for a schedule immediately
-func (e *SyncEngine) RunSchedule(ctx context.Context, id string) (*ExportResult, error) {
-	e.mutex.RLock()
-	sch, ok := e.schedules[id]
-	e.mutex.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("schedule not found")
-	}
-	// Execute export now
-	res, err := e.Export(ctx, sch.Request)
-	// Update last/next run timestamps
-	now := time.Now()
-	e.mutex.Lock()
-	if ok {
-		sch.LastRun = &now
-		next := now.Add(time.Duration(sch.IntervalSec) * time.Second)
-		sch.NextRun = &next
-		sch.UpdatedAt = now
-	}
-	e.mutex.Unlock()
-	return res, err
-}
-
 // Helper functions
 
-func parseJSONToMap(jsonStr string) map[string]interface{} {
-	// TODO: Implement JSON parsing
-	return make(map[string]interface{})
+func parseJSONToMap(jsonText string) (map[string]interface{}, error) {
+	return parseJSONBytesToMap([]byte(jsonText))
+}
+
+func parseJSONBytesToMap(data []byte) (map[string]interface{}, error) {
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return map[string]interface{}{}, nil
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("invalid JSON object: %w", err)
+	}
+	if result == nil {
+		return nil, fmt.Errorf("JSON object must not be null")
+	}
+	return result, nil
 }
 
 func (filters ExportFilters) excludeDiscoveredDevices() bool {

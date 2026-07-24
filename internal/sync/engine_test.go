@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -77,7 +78,6 @@ func (m *MockPlugin) Preview(ctx context.Context, data *ExportData, config Expor
 func (m *MockPlugin) Capabilities() PluginCapabilities {
 	return PluginCapabilities{
 		SupportsIncremental:    false,
-		SupportsScheduling:     true,
 		RequiresAuthentication: false,
 		SupportedOutputs:       []string{"file"},
 		MaxDataSize:            1024 * 1024,
@@ -319,6 +319,46 @@ func TestExportEngine_ValidateExport(t *testing.T) {
 	err = engine.ValidateExport(request)
 	if err == nil {
 		t.Error("Should return error when config validation fails")
+	}
+}
+
+func TestValidateExportStableErrorsAndPrecedence(t *testing.T) {
+	engine := NewExportEngine(createMockDatabase(), logging.GetDefault())
+	engine.SetExportBaseDir(t.TempDir())
+	plugin := &MockPlugin{
+		name:        "test-plugin",
+		formats:     []string{"json"},
+		configError: &PluginError{"invalid config"},
+	}
+	if err := engine.RegisterPlugin(plugin); err != nil {
+		t.Fatal(err)
+	}
+
+	err := engine.ValidateExport(ExportRequest{
+		PluginName: "missing",
+		Format:     "invalid",
+		Config:     map[string]interface{}{"output_path": "../outside"},
+	})
+	if !errors.Is(err, ErrPluginNotFound) {
+		t.Fatalf("unknown plugin must win precedence, got %v", err)
+	}
+
+	err = engine.ValidateExport(ExportRequest{
+		PluginName: "test-plugin",
+		Format:     "invalid",
+		Config:     map[string]interface{}{"output_path": "../outside"},
+	})
+	if !errors.Is(err, ErrUnsupportedFormat) {
+		t.Fatalf("unsupported format must precede config and path validation, got %v", err)
+	}
+
+	err = engine.ValidateExport(ExportRequest{
+		PluginName: "test-plugin",
+		Format:     "json",
+		Config:     map[string]interface{}{"output_path": "../outside"},
+	})
+	if !errors.Is(err, ErrInvalidPluginConfig) {
+		t.Fatalf("plugin configuration must precede path validation, got %v", err)
 	}
 }
 

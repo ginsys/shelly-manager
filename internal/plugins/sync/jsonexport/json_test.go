@@ -42,11 +42,6 @@ func TestPlugin_Metadata(t *testing.T) {
 		t.Error("Expected 'compression_algo' property in schema")
 	}
 
-	// Test Capabilities
-	caps := p.Capabilities()
-	if !caps.SupportsScheduling {
-		t.Error("Expected plugin to support scheduling")
-	}
 }
 
 func TestPlugin_Initialize(t *testing.T) {
@@ -84,11 +79,11 @@ func TestPlugin_ValidateConfig(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name: "invalid output path",
+			name: "nonexistent output path is side effect free",
 			config: map[string]interface{}{
 				"output_path": "/nonexistent/invalid/path/that/cannot/be/created",
 			},
-			wantError: true,
+			wantError: false,
 		},
 	}
 
@@ -100,6 +95,16 @@ func TestPlugin_ValidateConfig(t *testing.T) {
 				t.Errorf("ValidateConfig() error = %v, wantError %v", err, tt.wantError)
 			}
 		})
+	}
+}
+
+func TestPlugin_ValidateConfigRejectsPathOutsideBaseDir(t *testing.T) {
+	p := NewPlugin().(*Plugin)
+	p.SetBaseDir(t.TempDir())
+
+	err := p.ValidateConfig(map[string]interface{}{"output_path": "../outside"})
+	if err == nil {
+		t.Fatal("ValidateConfig() accepted an output path outside the configured base directory")
 	}
 }
 
