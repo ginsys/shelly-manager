@@ -1,347 +1,146 @@
-# SMA (Shelly Management Archive) Format Specification
+# Shelly Management Archive (SMA) 2026.1
 
-## Overview
+SMA is Shelly Manager's deterministic, integrity-protected exchange format.
+`format_version: "2026.1"` is the only supported wire version. There is no
+legacy-version migration or compatibility mode.
 
-The **Shelly Management Archive (SMA)** format is a structured, compressed archive format designed specifically for exporting and importing complete Shelly device management configurations, data, and metadata.
+Generated `.sma` files are gzip-compressed JSON. Imports magic-detect gzip and
+also accept raw JSON as a transport representation. In both cases the
+normalized JSON is limited to 100 MiB. The HTTP API has its own 10 MiB request
+limit, and the browser preview rejects source data over 7 MiB before base64
+encoding.
 
-## Format Structure
+## Root document
 
-### File Extension
-- `.sma` - Standard SMA format file
-
-### Format Type
-- **JSON-based**: Human-readable and parseable format
-- **Compressed**: Gzip compression for reduced file size
-- **Versioned**: Forward and backward compatibility support
-
-### Archive Structure
+The root is closed and requires all of these non-null members:
 
 ```json
 {
-  "sma_version": "1.0",
-  "format_version": "2024.1",
-  "metadata": {
-    "export_id": "uuid",
-    "created_at": "2024-01-15T10:30:00Z",
-    "created_by": "user@example.com",
-    "export_type": "manual|scheduled|api",
-    "system_info": {
-      "version": "v0.5.4-alpha",
-      "database_type": "sqlite|postgresql|mysql",
-      "hostname": "shelly-manager-prod",
-      "total_size_bytes": 12345678,
-      "compression_ratio": 0.35
-    },
-    "integrity": {
-      "checksum": "sha256:abcd1234...",
-      "record_count": 150,
-      "file_count": 5
-    }
-  },
-  "devices": [
-    {
-      "id": 1,
-      "mac": "AB:CD:EF:12:34:56",
-      "ip": "192.168.1.100",
-      "type": "shelly1",
-      "name": "Living Room Switch",
-      "model": "SHSW-1",
-      "firmware": "20231215-111232/v1.14.1-rc1",
-      "status": "online|offline|unknown",
-      "last_seen": "2024-01-15T10:25:00Z",
-      "settings": {
-        "device_specific_settings": "JSON object"
-      },
-      "configuration": {
-        "template_id": 1,
-        "config": {
-          "device_specific_config": "JSON object"
-        },
-        "last_synced": "2024-01-15T09:00:00Z",
-        "sync_status": "synced|pending|failed"
-      },
-      "created_at": "2024-01-01T00:00:00Z",
-      "updated_at": "2024-01-15T10:00:00Z"
-    }
-  ],
-  "templates": [
-    {
-      "id": 1,
-      "name": "Standard Switch Template",
-      "description": "Default configuration for Shelly 1 switches",
-      "device_type": "shelly1",
-      "generation": 1,
-      "config": {
-        "template_specific_config": "JSON object"
-      },
-      "variables": {
-        "template_variables": "JSON object"
-      },
-      "is_default": true,
-      "created_at": "2024-01-01T00:00:00Z",
-      "updated_at": "2024-01-15T10:00:00Z"
-    }
-  ],
-  "discovered_devices": [
-    {
-      "mac": "AB:CD:EF:12:34:57",
-      "ssid": "ShellySwitch-123456",
-      "model": "SHSW-25",
-      "generation": 1,
-      "ip": "192.168.1.101",
-      "signal": -45,
-      "agent_id": "agent-001",
-      "discovered": "2024-01-15T10:20:00Z"
-    }
-  ],
+  "format_version": "2026.1",
+  "metadata": {},
+  "devices": [],
+  "templates": [],
+  "discovered_devices": [],
   "network_settings": {
-    "wifi_networks": [
-      {
-        "ssid": "HomeNetwork",
-        "security": "WPA2",
-        "priority": 1
-      }
-    ],
-    "mqtt_config": {
-      "server": "mqtt.local",
-      "port": 1883,
-      "username": "shelly",
-      "retain": false,
-      "qos": 0
-    },
-    "ntp_servers": ["pool.ntp.org", "time.google.com"]
+    "wifi_networks": [],
+    "ntp_servers": []
   },
-  "plugin_configurations": [
-    {
-      "plugin_name": "backup",
-      "version": "1.0.0",
-      "config": {
-        "output_path": "/var/backups/shelly-manager",
-        "compression": true,
-        "backup_type": "full"
-      },
-      "enabled": true
-    }
-  ],
+  "plugin_configurations": [],
   "system_settings": {
     "log_level": "info",
-    "api_settings": {
-      "rate_limit": 100,
-      "cors_enabled": true
-    },
-    "database_settings": {
-      "connection_pool_size": 10,
-      "query_timeout": "30s"
-    }
+    "api_settings": {},
+    "database_settings": {}
   }
 }
 ```
 
-## File Format Details
+An archive must contain at least one device, template, or discovered device
+after filters are applied. Discovered-only archives are valid. Required nil
+slices and maps are generated as `[]` and `{}`; a `null` required collection is
+invalid. Optional objects are omitted rather than serialized as `null`.
 
-### Compression
-- **Algorithm**: Gzip (RFC 1952)
-- **Level**: Level 6 (balanced compression/speed)
-- **Extension**: `.sma` files are compressed JSON
+Every modeled object is closed. The only open maps are device `settings`,
+device-configuration `config`, template `config` and `variables`,
+plugin-configuration `config`, and system `api_settings` and
+`database_settings`.
 
-### Integrity Verification
-- **Checksum**: SHA-256 hash of uncompressed JSON content
-- **Record Counting**: Verification of expected vs actual record counts
-- **Format Validation**: JSON schema validation against SMA specification
+## Metadata and integrity
 
-### Version Compatibility
+`metadata` contains:
 
-#### SMA Version (`sma_version`)
-- **Current**: `1.0`
-- **Compatibility**: Major version changes indicate breaking changes
-- **Migration**: Automatic migration between compatible versions
+- a lowercase UUID `export_id`;
+- a canonical UTC `created_at`;
+- non-empty `created_by`;
+- `export_type`, either `manual` or `api`;
+- required `system_info` and `integrity` objects.
 
-#### Format Version (`format_version`)
-- **Current**: `2024.1`
-- **Purpose**: Database schema and field evolution tracking
-- **Updates**: Released with Shelly Manager versions
+API exports use `created_by: "api"` and `export_type: "api"`. Internal exports
+default to `shelly-manager` and `manual`; browser generation defaults to
+`shelly-manager-ui`. Authentication headers and keys never become archive
+provenance.
 
-## Data Sections
+System database providers are normalized to `sqlite`, `postgresql`, or
+`mysql`; unknown providers are rejected. `total_size_bytes` and
+`compression_ratio` are currently exactly zero.
 
-### Core Data
-1. **Devices**: Complete device inventory with settings and configurations
-2. **Templates**: Configuration templates and their variables
-3. **Discovered Devices**: Unmanaged devices found during discovery
+Integrity is mandatory:
 
-### Extended Data
-4. **Network Settings**: WiFi, MQTT, and network configuration
-5. **Plugin Configurations**: Enabled plugins and their settings
-6. **System Settings**: Application-level configuration
+- `checksum` is `sha256:` plus 64 lowercase hexadecimal characters;
+- `record_count` equals devices + templates + discovered devices;
+- `file_count` is exactly `1`.
 
-### Metadata
-- **Export Information**: Who, when, why the archive was created
-- **System Information**: Source system details and versions
-- **Integrity Information**: Checksums and verification data
+The checksum is SHA-256 of RFC 8785 canonical JSON with `checksum` temporarily
+set to the empty string. It never covers gzip bytes. Numeric input must be
+finite and interoperable as JavaScript binary64; integer-valued numbers must be
+within the JavaScript safe-integer range.
 
-## Import Behavior
+## Time and structure rules
 
-### Conflict Resolution
-- **Device MAC Conflicts**: Update existing devices with imported data
-- **Template Name Conflicts**: Create new template with suffix `_imported`
-- **Configuration Conflicts**: Prompt user or use configurable merge strategy
+Timestamps are real UTC calendar instants matching
+`YYYY-MM-DDTHH:mm:ss[.1-9 digits]Z`. Canonical strings are retained exactly.
+Go values are normalized with UTC `RFC3339Nano`; JavaScript `Date` values use
+`toISOString()`.
 
-### Validation Rules
-1. **Schema Validation**: Ensure JSON matches SMA specification
-2. **Integrity Verification**: Verify checksums and record counts
-3. **Dependency Validation**: Ensure templates exist for device configurations
-4. **Network Validation**: Validate IP addresses and network settings
+Import uses strict JSON parsing: valid UTF-8, no duplicate object names, no lone
+surrogates, valid JSON number syntax, one root value, and maximum container
+depth 64. Unknown fields are rejected.
 
-### Import Options
-- **Dry Run**: Preview changes without applying them
-- **Selective Import**: Import only specific sections (devices, templates, etc.)
-- **Merge Strategy**: Overwrite, merge, or skip existing data
-- **Backup Before Import**: Create backup before applying changes
+Devices, templates, discovered devices, Wi-Fi entries, MQTT configuration,
+plugin configuration, and system settings follow the fields exposed by the
+`2026.1` schema. IDs, generations, priorities, and configuration references are
+non-negative safe integers. Signal is a signed safe integer. MQTT port is
+1–65535 and QoS is 0–2.
 
-## Security Considerations
+## Device configurations
 
-### Sensitive Data Handling
-- **Passwords**: WiFi passwords and MQTT credentials are included
-- **API Keys**: Plugin configurations may contain sensitive keys
-- **Network Information**: Internal network topology is exposed
+Stored standalone device configurations are joined into their device before
+preview and generation. Duplicate devices, duplicate or orphan
+configurations, nested device-ID mismatches, and conflicting nested/standalone
+copies are operational data failures. Equivalent nil and empty `config` maps
+both normalize to `{}` and do not conflict. Configurations are not a top-level
+archive field and are not counted separately.
 
-### Security Recommendations
-1. **Encryption**: Encrypt SMA files when storing or transmitting
-2. **Access Control**: Restrict access to SMA files
-3. **Audit Trail**: Log all import/export operations
-4. **Data Sanitization**: Option to exclude sensitive fields
+## Generation and import
 
-## Performance Characteristics
+Generation materializes one validated generic tree, computes its integrity
+value, serializes it, and always writes gzip. File exports use a same-directory
+temporary file, close gzip successfully, sync and close the file, then rename
+atomically. A failure removes the temporary file and never publishes a partial
+destination.
 
-### File Size Estimates
-- **Small Installation**: 50 devices → ~500KB compressed
-- **Medium Installation**: 200 devices → ~2MB compressed  
-- **Large Installation**: 1000 devices → ~10MB compressed
+SMA creation accepts `output_path`, `compression_level`,
+`include_discovered`, and `exclude_sensitive` as plugin configuration. The
+two boolean fields must be booleans and both default to `true` when omitted, so
+server-side exports include discovered devices and redact sensitive keys even
+when a caller does not materialize schema defaults. The
+required network, plugin-configuration, and system sections currently use
+their documented empty defaults; no inclusion toggles are advertised for data
+sources that the engine does not yet provide.
 
-### Processing Performance
-- **Export Time**: ~1-5 seconds for typical installations
-- **Import Time**: ~2-10 seconds depending on conflict resolution
-- **Memory Usage**: ~2-3x uncompressed file size during processing
+Import normalizes raw/gzip input, completes strict lexical and depth checks,
+validates the closed schema and counts, then verifies the RFC 8785 checksum.
+Dry-run and validate-only imports return a preview. Applying an SMA archive is
+not implemented yet and returns HTTP 501 (`ErrImportNotImplemented`) rather
+than reporting a false success.
 
-## CLI Usage Examples
+## API example
 
-### Export to SMA Format
-```bash
-# Export all data to SMA format
-shelly-manager export --format sma --output /backups/
-
-# Export specific devices only
-shelly-manager export --format sma --devices 1,2,3 --output /backups/
-
-# Export with custom compression
-shelly-manager export --format sma --compress --output /backups/
-```
-
-### Import from SMA Format
-```bash
-# Import from SMA file
-shelly-manager import --format sma --file /backups/shelly-backup-20240115.sma
-
-# Dry run to preview changes
-shelly-manager import --format sma --file backup.sma --dry-run
-
-# Import only devices and templates
-shelly-manager import --format sma --file backup.sma --sections devices,templates
-```
-
-## API Endpoints
-
-### Export SMA
-```http
-POST /api/v1/export/sma
-Content-Type: application/json
-
-{
-  "format": "sma",
-  "filters": {
-    "device_ids": [1, 2, 3],
-    "include_discovered": true
-  },
-  "options": {
-    "compression": true,
-    "include_metadata": true
-  }
-}
-```
-
-### Import SMA
-
-> There is **no** dedicated `POST /api/v1/import/sma` route (it 404s). SMA import
-> runs through the **generic** import endpoint with `plugin_name: "sma"`. The
-> request body is JSON (not multipart).
->
-> **⚠️ Non-dry-run import is not implemented yet (#284).** SMA persistence has
-> not been built. Validation and dry-run **preview** work; a real (non-dry-run)
-> import now **fails closed** — it returns HTTP `501 Not Implemented` with error
-> code `NOT_IMPLEMENTED` and does **not** write anything. (Previously it returned
-> a fabricated `success: true`; removing that fake-success is #272, and #284
-> tracks building real persistence.) Re-run with `dry_run` to preview the changes
-> that would be made once persistence lands.
-
-```http
-POST /api/v1/import
-Content-Type: application/json
-
+```json
 {
   "plugin_name": "sma",
+  "format": "sma",
   "source": {
-    "type": "file",
-    "path": "/path/to/backup.sma"
+    "type": "data",
+    "data": "<base64 encoded .sma or JSON bytes>"
   },
+  "config": {},
   "options": {
     "dry_run": true,
-    "force_overwrite": false,
-    "backup_before": true
+    "validate_only": true
   }
 }
 ```
 
-- `source.type`: `file` (reads `source.path`) or `data` (inline `source.data`);
-  `url` is not implemented.
-- `options` maps to the backend `ImportOptions`: `dry_run`, `force_overwrite`,
-  `validate_only`, `backup_before`. Only `dry_run` is acted on today: any request
-  that is not a dry run (including `validate_only` on its own) fails closed with
-  `501 Not Implemented` because SMA persistence is not built yet (#284).
-  `force_overwrite` and `backup_before` are decoded but unused.
-
-Use `POST /api/v1/import/preview` with the same body for a dry-run preview (it
-forces `dry_run`, so it is the path that works today). Both routes go through
-`requireAdmin`, which enforces the admin key **only when `security.admin_api_key`
-is configured** — with the shipped-empty default it permits all requests, so
-these endpoints are open unless an admin key is set.
-
-## Error Handling
-
-### Common Errors
-- **Format Version Mismatch**: SMA version not supported
-- **Integrity Check Failed**: Checksum mismatch or corrupted data
-- **Schema Validation Failed**: JSON structure doesn't match specification
-- **Dependency Missing**: Template referenced by device doesn't exist
-
-### Recovery Strategies
-- **Version Migration**: Automatic migration for compatible versions
-- **Partial Import**: Import valid records, report failures
-- **Rollback**: Restore from pre-import backup on critical failures
-- **Data Repair**: Attempt to fix common data inconsistencies
-
-## Future Enhancements
-
-### Version 1.1 (Planned)
-- **Incremental Archives**: Export only changes since last backup
-- **Encryption Support**: Built-in encryption for sensitive data
-- **Multi-Site Support**: Export/Import across multiple Shelly Manager instances
-
-### Version 2.0 (Future)
-- **Binary Format**: More efficient binary representation
-- **Streaming Support**: Support for very large installations
-- **Cloud Integration**: Direct export/import to/from cloud storage
-
----
-
-**Specification Version**: 1.0  
-**Last Updated**: 2024-01-15  
-**Compatible Shelly Manager Versions**: v0.5.4+
+Send this body to `POST /api/v1/import/preview`. The browser exposes data-based
+import preview only for a registered plugin named `sma` that advertises the
+`sma` format.

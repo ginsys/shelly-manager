@@ -1,6 +1,8 @@
 import api from './client'
 import type { APIResponse, Metadata } from './types'
 
+export const BROWSER_DATA_IMPORT_PLUGINS = ['sma'] as const
+
 export interface ImportHistoryItem {
   id: number
   import_id: string
@@ -61,8 +63,18 @@ export interface ImportResult {
   records_imported?: number
   records_skipped?: number
   duration?: string
-  changes?: any[]
+  changes?: ImportChange[]
+  errors?: string[]
   warnings?: string[]
+}
+
+export interface ImportChange {
+  type: 'create' | 'update' | 'delete'
+  resource: string
+  resource_id: string
+  old_value?: unknown
+  new_value: unknown
+  field?: string
 }
 
 export async function getImportResult(id: string): Promise<ImportResult> {
@@ -73,16 +85,36 @@ export async function getImportResult(id: string): Promise<ImportResult> {
   return res.data.data
 }
 
+export type ImportSource =
+  | { type: 'data'; data: string }
+  | { type: 'file'; path: string }
+  | { type: 'url'; url: string }
+
+export interface ImportOptions {
+  dry_run: boolean
+  validate_only: boolean
+}
+
 export interface ImportRequest {
   plugin_name: string
   format: string
-  source?: Record<string, any>
-  config?: Record<string, any>
-  options?: Record<string, any>
+  source: ImportSource
+  config: Record<string, unknown>
+  options: ImportOptions
 }
 
-export async function previewImport(req: ImportRequest): Promise<{ preview: any; summary: any }> {
-  const res = await api.post<APIResponse<{ preview: any; summary: any }>>('/import/preview', req)
+export interface ImportPreviewResponse {
+  preview: ImportResult
+  changes_count: number
+  summary: {
+    will_create: number
+    will_update: number
+    will_delete: number
+  }
+}
+
+export async function previewImport(req: ImportRequest): Promise<ImportPreviewResponse> {
+  const res = await api.post<APIResponse<ImportPreviewResponse>>('/import/preview', req)
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.error?.message || 'Preview failed')
   }

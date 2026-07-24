@@ -10,7 +10,15 @@ import (
 // client-visible 501 (not a generic 500) so callers know the operation is
 // unsupported and can retry with a dry-run preview rather than treating it as a
 // transient server fault.
-var ErrImportNotImplemented = errors.New("import persistence not implemented")
+var (
+	ErrImportNotImplemented = errors.New("import persistence not implemented")
+	ErrInvalidPluginConfig  = errors.New("invalid plugin configuration")
+	ErrPluginNotFound       = errors.New("plugin not found")
+	ErrUnsupportedFormat    = errors.New("unsupported format")
+	ErrInvalidImportData    = errors.New("invalid import data")
+	ErrInvalidExportData    = errors.New("invalid export data")
+	ErrInvalidExportPath    = errors.New("invalid export path")
+)
 
 // ExportData contains all data that can be exported
 type ExportData struct {
@@ -79,7 +87,7 @@ type DiscoveredDeviceData struct {
 type ExportMetadata struct {
 	ExportID       string `json:"export_id"`
 	RequestedBy    string `json:"requested_by"`
-	ExportType     string `json:"export_type"` // "manual", "scheduled", "api"
+	ExportType     string `json:"export_type"` // "manual", "api"
 	TotalDevices   int    `json:"total_devices"`
 	TotalConfigs   int    `json:"total_configs"`
 	FilterApplied  bool   `json:"filter_applied"`
@@ -96,6 +104,12 @@ type ExportRequest struct {
 	Filters    ExportFilters          `json:"filters"`
 	Output     OutputConfig           `json:"output"`
 	Options    ExportOptions          `json:"options"`
+
+	// Archive provenance is assigned by trusted callers and is never decoded
+	// from the request body. Direct engine callers receive the manual/internal
+	// defaults.
+	CreatedBy  string `json:"-"`
+	ExportType string `json:"-"`
 }
 
 // ImportRequest represents a request to import data

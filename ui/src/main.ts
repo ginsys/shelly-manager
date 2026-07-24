@@ -69,12 +69,6 @@ const router = createRouter({
     },
 
     // Export & Import routes
-    { 
-      path: '/export/schedules', 
-      name: 'export-schedules',
-      component: () => import('./pages/ExportSchedulesPage.vue'),
-      meta: { title: 'Schedule Management', category: 'export' }
-    },
     // Consolidated: content exports are integrated into Backups & Exports page
     { 
       path: '/export/backup', 

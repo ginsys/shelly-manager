@@ -1,283 +1,242 @@
 package sma
 
 import (
+	"bufio"
 	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
-// ImportFromFile imports data from an SMA file
-func (s *SMAPlugin) ImportFromFile(ctx context.Context, filePath string, config sync.ImportConfig) (*sync.ImportResult, error) {
-	s.logger.Info("Starting SMA import from file", "path", filePath)
+type normalizationError struct {
+	kind string
+	err  error
+}
 
-	// Validate file path against base directory to prevent path traversal
+func (e *normalizationError) Error() string { return e.kind }
+func (e *normalizationError) Unwrap() error { return e.err }
+
+// normalizeSMAInput bounds the normalized JSON representation. It recognizes
+// gzip only by its magic bytes; all other input is treated as raw JSON.
+func normalizeSMAInput(input io.Reader, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		return nil, &normalizationError{kind: "invalid normalized-data limit"}
+	}
+	buffered := bufio.NewReader(input)
+	header, err := buffered.Peek(2)
+	if err != nil && err != io.EOF && err != bufio.ErrBufferFull {
+		return nil, &normalizationError{kind: "failed to read input", err: err}
+	}
+
+	var normalized io.Reader = buffered
+	var gzipReader *gzip.Reader
+	if len(header) == 2 && header[0] == 0x1f && header[1] == 0x8b {
+		gzipReader, err = gzip.NewReader(buffered)
+		if err != nil {
+			return nil, &normalizationError{kind: "malformed gzip input", err: err}
+		}
+		defer func() { _ = gzipReader.Close() }()
+		normalized = gzipReader
+	}
+
+	data, readErr := io.ReadAll(io.LimitReader(normalized, limit+1))
+	oversized := int64(len(data)) > limit
+	if oversized && gzipReader != nil {
+		// Do not retain more output, but consume the stream so truncated bodies
+		// and bad gzip trailers/checksums are still detected.
+		if _, err := io.Copy(io.Discard, gzipReader); err != nil {
+			return nil, &normalizationError{kind: "malformed gzip input", err: err}
+		}
+	}
+	if readErr != nil {
+		kind := "failed to read input"
+		if gzipReader != nil {
+			kind = "malformed gzip input"
+		}
+		return nil, &normalizationError{kind: kind, err: readErr}
+	}
+	if oversized {
+		return nil, &normalizationError{kind: "normalized input exceeds the configured limit"}
+	}
+	return data, nil
+}
+
+func (s *SMAPlugin) ImportFromFile(ctx context.Context, filePath string, config sync.ImportConfig) (*sync.ImportResult, error) {
 	if s.baseDir != "" {
-		validatedPath, err := security.ValidatePath(s.baseDir, filePath)
+		validated, err := security.ValidatePath(s.baseDir, filePath)
 		if err != nil {
 			return nil, fmt.Errorf("path validation failed: %w", err)
 		}
-		filePath = validatedPath
+		filePath = validated
 	}
-
-	// Validate file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("SMA file does not exist: %s", filePath)
-	}
-
-	// Open and read the file
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open SMA file: %w", err)
+		return nil, fmt.Errorf("open SMA input: %w", err)
 	}
-	defer func() {
-		if closeErr := file.Close(); closeErr != nil {
-			s.logger.Warn("Failed to close SMA file", "error", closeErr)
-		}
-	}()
-
-	// Read compressed data
-	gzipReader, err := gzip.NewReader(file)
+	defer func() { _ = file.Close() }()
+	normalized, err := normalizeSMAInput(file, s.importLimit())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gzip reader (file may not be compressed): %w", err)
+		return invalidImportResult("normalize SMA input", err)
 	}
-	defer func() {
-		if closeErr := gzipReader.Close(); closeErr != nil {
-			s.logger.Warn("Failed to close gzip reader", "error", closeErr)
-		}
-	}()
-
-	// Read all data
-	jsonData, err := io.ReadAll(gzipReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read compressed data: %w", err)
-	}
-
-	return s.ImportFromData(ctx, jsonData, config)
+	return s.importNormalized(ctx, normalized, config)
 }
 
-// ImportFromData imports data from raw JSON bytes
 func (s *SMAPlugin) ImportFromData(ctx context.Context, data []byte, config sync.ImportConfig) (*sync.ImportResult, error) {
-	startTime := time.Now()
-	importID := fmt.Sprintf("sma-import-%d", time.Now().Unix())
+	normalized, err := normalizeSMAInput(bytesReader(data), s.importLimit())
+	if err != nil {
+		return invalidImportResult("normalize SMA input", err)
+	}
+	return s.importNormalized(ctx, normalized, config)
+}
 
-	s.logger.Info("Starting SMA import from data", "size", len(data))
+func (s *SMAPlugin) importLimit() int64 {
+	if s.normalizedLimit > 0 {
+		return s.normalizedLimit
+	}
+	return defaultNormalizedLimit
+}
 
-	// Parse SMA archive
+func (s *SMAPlugin) importNormalized(_ context.Context, data []byte, config sync.ImportConfig) (*sync.ImportResult, error) {
+	start := time.Now()
+	treeValue, parseErr := parseStrictJSON(data, 64)
+	if parseErr != nil {
+		return invalidImportResult("invalid JSON", parseErr)
+	}
+	root, ok := treeValue.(map[string]interface{})
+	if !ok {
+		return invalidImportResult("invalid SMA structure", fmt.Errorf("root must be an object"))
+	}
+	version, ok := root["format_version"].(string)
+	if !ok || version != FormatVersion {
+		return invalidImportResult("unsupported SMA format", fmt.Errorf("format_version must be %q", FormatVersion))
+	}
+	if validationErr := validateArchiveTree(root); validationErr != nil {
+		return invalidImportResult("invalid SMA structure", validationErr)
+	}
+
+	metadata := root["metadata"].(map[string]interface{})
+	integrity := metadata["integrity"].(map[string]interface{})
+	suppliedChecksum, _ := integrity["checksum"].(string)
+	if !checksumPattern.MatchString(suppliedChecksum) {
+		return invalidImportResult("integrity failure", fmt.Errorf("checksum is missing or malformed"))
+	}
+	devices := root["devices"].([]interface{})
+	templates := root["templates"].([]interface{})
+	discovered := root["discovered_devices"].([]interface{})
+	expectedRecords, err := requireSafeInteger(integrity["record_count"], "record_count", false)
+	if err != nil || expectedRecords != int64(len(devices)+len(templates)+len(discovered)) {
+		return invalidImportResult("integrity failure", fmt.Errorf("record_count does not match archive contents"))
+	}
+	fileCount, err := requireSafeInteger(integrity["file_count"], "file_count", false)
+	if err != nil || fileCount != 1 {
+		return invalidImportResult("integrity failure", fmt.Errorf("file_count must be 1"))
+	}
+
+	integrity["checksum"] = ""
+	canonical, err := canonicalizeTree(root)
+	integrity["checksum"] = suppliedChecksum
+	if err != nil {
+		return invalidImportResult("integrity failure", err)
+	}
+	if checksumBytes(canonical) != suppliedChecksum {
+		return invalidImportResult("integrity failure", fmt.Errorf("checksum mismatch"))
+	}
+
+	restored, err := json.Marshal(root)
+	if err != nil {
+		return invalidImportResult("invalid SMA structure", err)
+	}
 	var archive SMAArchive
-	if err := json.Unmarshal(data, &archive); err != nil {
-		return &sync.ImportResult{
-			Success:   false,
-			ImportID:  importID,
-			Duration:  time.Since(startTime),
-			Errors:    []string{fmt.Sprintf("failed to parse SMA JSON: %v", err)},
-			CreatedAt: time.Now(),
-		}, fmt.Errorf("failed to parse SMA archive: %w", err)
+	if err := json.Unmarshal(restored, &archive); err != nil {
+		return invalidImportResult("invalid SMA structure", err)
 	}
-
-	// Validate SMA format
-	if err := s.validateSMAFormat(&archive); err != nil {
-		return &sync.ImportResult{
-			Success:   false,
-			ImportID:  importID,
-			Duration:  time.Since(startTime),
-			Errors:    []string{fmt.Sprintf("SMA format validation failed: %v", err)},
-			CreatedAt: time.Now(),
-		}, fmt.Errorf("SMA format validation failed: %w", err)
-	}
-
-	// Verify integrity if checksum is provided
-	if archive.Metadata.Integrity.Checksum != "" {
-		if err := s.verifyIntegrity(&archive, data); err != nil {
-			return &sync.ImportResult{
-				Success:   false,
-				ImportID:  importID,
-				Duration:  time.Since(startTime),
-				Errors:    []string{fmt.Sprintf("integrity verification failed: %v", err)},
-				Warnings:  []string{"Data may be corrupted or tampered with"},
-				CreatedAt: time.Now(),
-			}, fmt.Errorf("integrity verification failed: %w", err)
-		}
-	}
-
-	// Handle dry run
+	importID := fmt.Sprintf("sma-import-%d", time.Now().UnixNano())
 	if config.Options.DryRun {
-		return s.generateDryRunResult(importID, &archive, time.Since(startTime))
+		return s.generateDryRunResult(importID, &archive, time.Since(start))
 	}
 
-	// Non-dry-run persistence is not yet implemented. Refuse rather than
-	// fabricate success: the previous placeholder returned success:true with
-	// records_imported>0 while writing nothing, silently discarding the
-	// caller's data (#272). Fail closed until real persistence lands; callers
-	// can re-run with dry_run to preview.
-	s.logger.Warn("Refusing non-dry-run SMA import: persistence not yet implemented",
-		"import_id", importID,
-		"devices", len(archive.Devices),
-		"templates", len(archive.Templates),
-		"discovered", len(archive.Discovered),
+	notImplemented := fmt.Errorf(
+		"SMA import persistence is not yet implemented; re-run with dry_run to preview (#284): %w",
+		sync.ErrImportNotImplemented,
 	)
-
-	err := fmt.Errorf("SMA import persistence is not yet implemented; re-run with dry_run to preview (#284): %w", sync.ErrImportNotImplemented)
 	return &sync.ImportResult{
 		Success:    false,
 		ImportID:   importID,
 		PluginName: "sma",
 		Format:     "sma",
-		Duration:   time.Since(startTime),
-		Errors:     []string{err.Error()},
+		Duration:   time.Since(start),
+		Errors:     []string{notImplemented.Error()},
 		CreatedAt:  time.Now(),
+	}, notImplemented
+}
+
+func invalidImportResult(kind string, cause error) (*sync.ImportResult, error) {
+	err := fmt.Errorf("%w: %s: %v", sync.ErrInvalidImportData, kind, cause)
+	return &sync.ImportResult{
+		Success:   false,
+		ImportID:  fmt.Sprintf("sma-import-%d", time.Now().UnixNano()),
+		Errors:    []string{err.Error()},
+		CreatedAt: time.Now(),
 	}, err
 }
 
-// validateSMAFormat validates the basic structure and version of an SMA archive
-func (s *SMAPlugin) validateSMAFormat(archive *SMAArchive) error {
-	// Check SMA version compatibility
-	if archive.SMAVersion == "" {
-		return fmt.Errorf("missing SMA version")
-	}
-
-	// For now, we only support version 1.0
-	if archive.SMAVersion != "1.0" {
-		return fmt.Errorf("unsupported SMA version: %s (supported: 1.0)", archive.SMAVersion)
-	}
-
-	// Check format version
-	if archive.FormatVersion == "" {
-		return fmt.Errorf("missing format version")
-	}
-
-	// Validate required metadata
-	if archive.Metadata.ExportID == "" {
-		return fmt.Errorf("missing export ID in metadata")
-	}
-
-	if archive.Metadata.CreatedAt.IsZero() {
-		return fmt.Errorf("missing or invalid creation timestamp")
-	}
-
-	// Validate data sections exist
-	if len(archive.Devices) == 0 && len(archive.Templates) == 0 {
-		return fmt.Errorf("archive contains no devices or templates")
-	}
-
-	return nil
-}
-
-// verifyIntegrity verifies the integrity of the SMA archive
-func (s *SMAPlugin) verifyIntegrity(archive *SMAArchive, originalData []byte) error {
-	expectedChecksum := archive.Metadata.Integrity.Checksum
-
-	if expectedChecksum == "" {
-		s.logger.Info("No checksum provided, skipping integrity verification")
-		return nil
-	}
-
-	if !strings.HasPrefix(expectedChecksum, "sha256:") {
-		return fmt.Errorf("unsupported checksum format: %s", expectedChecksum)
-	}
-
-	// For checksum verification, we need to recalculate based on the data without the checksum
-	// Create a copy of the archive with empty checksum and recalculate
-	archiveCopy := *archive
-	archiveCopy.Metadata.Integrity.Checksum = ""
-
-	// Marshal the copy to get comparable JSON
-	comparableData, err := json.MarshalIndent(archiveCopy, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal archive for checksum verification: %w", err)
-	}
-
-	// Calculate checksum of the comparable data
-	hash := sha256.Sum256(comparableData)
-	actualChecksum := fmt.Sprintf("sha256:%x", hash)
-
-	if actualChecksum != expectedChecksum {
-		// Note: JSON formatting can cause checksum mismatches even with identical data
-		// This is a known limitation and would be improved in a production implementation
-		s.logger.Warn("Checksum verification failed - this may be due to JSON formatting differences",
-			"expected", expectedChecksum,
-			"actual", actualChecksum,
-		)
-		// For now, we'll continue with a warning rather than failing
-		// In production, you might want to make this configurable
-	}
-
-	// Verify record counts if provided
-	if archive.Metadata.Integrity.RecordCount > 0 {
-		actualRecordCount := len(archive.Devices) + len(archive.Templates) + len(archive.Discovered)
-		if actualRecordCount != archive.Metadata.Integrity.RecordCount {
-			return fmt.Errorf("record count mismatch: expected %d, got %d",
-				archive.Metadata.Integrity.RecordCount, actualRecordCount)
-		}
-	}
-
-	s.logger.Info("SMA integrity verification passed", "checksum", expectedChecksum)
-	return nil
-}
-
-// generateDryRunResult generates a preview of what would be imported
 func (s *SMAPlugin) generateDryRunResult(importID string, archive *SMAArchive, duration time.Duration) (*sync.ImportResult, error) {
-	var changes []sync.ImportChange
-
-	// Simulate device imports
+	changes := make([]sync.ImportChange, 0, len(archive.Devices)+len(archive.Templates)+len(archive.Discovered))
 	for _, device := range archive.Devices {
 		changes = append(changes, sync.ImportChange{
-			Type:       "create", // or "update" based on existence check
-			Resource:   "device",
-			ResourceID: device.MAC,
-			NewValue:   fmt.Sprintf("Device: %s (%s)", device.Name, device.Type),
+			Type: "create", Resource: "device", ResourceID: device.MAC,
+			NewValue: fmt.Sprintf("Device: %s (%s)", device.Name, device.Type),
 		})
 	}
-
-	// Simulate template imports
 	for _, template := range archive.Templates {
 		changes = append(changes, sync.ImportChange{
-			Type:       "create", // or "update" based on existence check
-			Resource:   "template",
-			ResourceID: template.Name,
-			NewValue:   fmt.Sprintf("Template: %s for %s", template.Name, template.DeviceType),
+			Type: "create", Resource: "template", ResourceID: template.Name,
+			NewValue: fmt.Sprintf("Template: %s for %s", template.Name, template.DeviceType),
 		})
 	}
-
-	// Simulate discovered device imports
 	for _, discovered := range archive.Discovered {
 		changes = append(changes, sync.ImportChange{
-			Type:       "create",
-			Resource:   "discovered_device",
-			ResourceID: discovered.MAC,
-			NewValue:   fmt.Sprintf("Discovered: %s (%s)", discovered.Model, discovered.MAC),
+			Type: "create", Resource: "discovered_device", ResourceID: discovered.MAC,
+			NewValue: fmt.Sprintf("Discovered: %s (%s)", discovered.Model, discovered.MAC),
 		})
 	}
-
-	estimatedImported := len(archive.Devices) + len(archive.Templates) + len(archive.Discovered)
-
 	return &sync.ImportResult{
 		Success:         true,
 		ImportID:        importID,
 		PluginName:      "sma",
 		Format:          "sma",
-		RecordsImported: estimatedImported,
-		RecordsSkipped:  0,
-		Duration:        duration,
+		RecordsImported: len(changes),
 		Changes:         changes,
-		Warnings: []string{
-			"This is a dry run - no actual changes were made",
-			"Actual import may differ based on existing data and conflicts",
-		},
+		Warnings:        []string{"This is a dry run - no actual changes were made"},
 		Metadata: map[string]interface{}{
-			"sma_version":    archive.SMAVersion,
 			"format_version": archive.FormatVersion,
 			"source_system":  archive.Metadata.SystemInfo.Hostname,
 			"dry_run":        true,
 		},
+		Duration:  duration,
 		CreatedAt: time.Now(),
 	}, nil
+}
+
+// bytesReader avoids importing bytes solely at call sites and keeps the
+// normalizer's reader contract explicit.
+type sliceReader struct {
+	data []byte
+	at   int
+}
+
+func bytesReader(data []byte) *sliceReader { return &sliceReader{data: data} }
+func (r *sliceReader) Read(target []byte) (int, error) {
+	if r.at >= len(r.data) {
+		return 0, io.EOF
+	}
+	count := copy(target, r.data[r.at:])
+	r.at += count
+	return count, nil
 }

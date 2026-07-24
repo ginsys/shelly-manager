@@ -190,10 +190,6 @@ func TestOPNSenseExporter_Capabilities(t *testing.T) {
 		t.Error("OPNSense exporter should support incremental exports")
 	}
 
-	if !capabilities.SupportsScheduling {
-		t.Error("OPNSense exporter should support scheduling")
-	}
-
 	if !capabilities.RequiresAuthentication {
 		t.Error("OPNSense exporter should require authentication")
 	}

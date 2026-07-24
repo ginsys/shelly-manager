@@ -178,7 +178,6 @@ func (tp *TemplatePlugin) Capabilities() PluginCapabilities {
 	// Return default capabilities for template plugins
 	return PluginCapabilities{
 		SupportsIncremental:    false,
-		SupportsScheduling:     true,
 		RequiresAuthentication: false,
 		SupportedOutputs:       []string{"file", "response"},
 		MaxDataSize:            1024 * 1024 * 10, // 10MB default

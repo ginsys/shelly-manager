@@ -20,7 +20,6 @@ Based on `/src/main.ts`, the following routes are configured:
 - ⬜ `/devices/:id` - DeviceDetailPage (name: 'device-detail')
 
 ### Export & Import Routes
-- ⬜ `/export/schedules` - ExportSchedulesPage (name: 'export-schedules')
 - ⬜ `/export/backup` - BackupManagementPage (name: 'export-backup')
 - ⬜ `/export/gitops` - GitOpsExportPage (name: 'export-gitops')
 - ⬜ `/export/history` - ExportHistoryPage (name: 'export-history')

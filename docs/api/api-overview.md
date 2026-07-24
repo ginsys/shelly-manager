@@ -244,20 +244,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 12. Export Scheduling (6 endpoints)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/export/schedules` | List export schedules |
-| POST | `/api/v1/export/schedules` | Create schedule (cron-based) |
-| GET | `/api/v1/export/schedules/{id}` | Get schedule |
-| PUT | `/api/v1/export/schedules/{id}` | Update schedule |
-| DELETE | `/api/v1/export/schedules/{id}` | Delete schedule |
-| POST | `/api/v1/export/schedules/{id}/run` | Manually run schedule |
-
----
-
-### 13. Import Operations (10 endpoints)
+### 12. Import Operations (10 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -283,7 +270,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 14. Notification System (8 endpoints)
+### 13. Notification System (8 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -316,7 +303,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 15. Metrics & Monitoring (15 endpoints)
+### 14. Metrics & Monitoring (15 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -338,7 +325,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 16. Discovery & Provisioning (3 endpoints)
+### 15. Discovery & Provisioning (3 endpoints)
 
 | Method | Endpoint | Description | Input |
 |--------|----------|-------------|-------|
@@ -348,7 +335,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 17. Provisioner Agent Management (9 endpoints)
+### 16. Provisioner Agent Management (9 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -364,7 +351,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 18. DHCP (1 endpoint)
+### 17. DHCP (1 endpoint)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -372,7 +359,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 19. Admin Operations (1 endpoint)
+### 18. Admin Operations (1 endpoint)
 
 | Method | Endpoint | Description | Input |
 |--------|----------|-------------|-------|

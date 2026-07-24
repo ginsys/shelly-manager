@@ -106,7 +106,6 @@ const (
 // PluginCapabilities describes what a plugin can do
 type PluginCapabilities struct {
 	SupportsIncremental    bool     `json:"supports_incremental"`
-	SupportsScheduling     bool     `json:"supports_scheduling"`
 	RequiresAuthentication bool     `json:"requires_authentication"`
 	SupportedOutputs       []string `json:"supported_outputs"` // "file", "webhook", "api"
 	MaxDataSize            int64    `json:"max_data_size"`

@@ -20,7 +20,6 @@ tests/e2e/
 ├── devices.spec.ts            # Device management features
 ├── api.spec.ts                # API endpoint integration tests
 ├── plugin-management.spec.ts  # Plugin configuration tests
-├── schedule-management.spec.ts # Export schedule tests
 ├── backup-management.spec.ts  # Backup operations tests
 ├── gitops-export.spec.ts      # GitOps integration tests
 ├── fixtures/

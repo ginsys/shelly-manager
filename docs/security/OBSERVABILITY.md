@@ -46,7 +46,6 @@ Endpoints updated to include pagination support:
 - `GET /api/v1/export/history` (with `plugin` and `success` filters)
 - `GET /api/v1/import/history` (with `plugin` and `success` filters)
 - `GET /api/v1/export/plugins`
-- `GET /api/v1/export/schedules`
 
 ## Request ID Propagation
 

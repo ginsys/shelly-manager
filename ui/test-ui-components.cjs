@@ -40,7 +40,7 @@ async function testUIComponents() {
 
     // Test breadcrumb on a sub-page
     console.log('\n🍞 Testing Breadcrumb Navigation');
-    await page.goto('http://localhost:5174/export/schedules', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:5174/export/history', { waitUntil: 'networkidle' });
     
     const breadcrumbVisible = await page.locator('.breadcrumb').isVisible();
     const breadcrumbItems = await page.locator('.breadcrumb-item').count();
@@ -51,10 +51,9 @@ async function testUIComponents() {
     // Test forms on different pages
     console.log('\n📝 Testing Form Components');
     
-    // Export Schedules form
-    const scheduleForm = await page.locator('form, .form-section').count();
-    results.forms.schedules = scheduleForm > 0;
-    console.log(`  Schedule forms present: ${scheduleForm > 0 ? '✅' : '❌'}`);
+    const historyControls = await page.locator('form, .filter-group').count();
+    results.forms.exportHistory = historyControls > 0;
+    console.log(`  Export history controls present: ${historyControls > 0 ? '✅' : '❌'}`);
 
     // Test Plugin Management page
     await page.goto('http://localhost:5174/plugins', { waitUntil: 'networkidle' });

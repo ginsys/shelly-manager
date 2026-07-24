@@ -1,0 +1,11 @@
+[
+  {"text":"5e-324","binary64":"0000000000000001","admitted":true},
+  {"text":"1.7976931348623157e308","binary64":"7fefffffffffffff","admitted":false},
+  {"text":"9007199254740991","binary64":"433fffffffffffff","admitted":true},
+  {"text":"9007199254740992","binary64":"4340000000000000","admitted":false},
+  {"text":"-9007199254740991","binary64":"c33fffffffffffff","admitted":true},
+  {"text":"-9007199254740992","binary64":"c340000000000000","admitted":false},
+  {"text":"1e309","binary64":"7ff0000000000000","admitted":false},
+  {"text":"1e-400","binary64":"0000000000000000","admitted":false},
+  {"text":"-1e-400","binary64":"8000000000000000","admitted":false}
+]

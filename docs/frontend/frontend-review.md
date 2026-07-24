@@ -6,6 +6,14 @@
 
 ---
 
+> July 2026 update (#268): export preview now reads the live plugin registry
+> and recursive backend schemas; browser import preview is SMA-only and
+> registry-gated. The obsolete export scheduling page was removed. SMA uses
+> strict `2026.1`, and raw `vue-tsc` passes with a zero-error baseline.
+
+Preview captures: [registry-backed export](images/registry-export-preview.png)
+and [SMA browser import](images/sma-import-preview.png).
+
 ## Executive Summary
 
 The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 54% of backend API functionality (74/138 endpoints) through a well-organized, user-friendly interface.
@@ -85,7 +93,6 @@ ui/
 │  Shelly Manager    Devices  Export & Import ▼  Plugins  Metrics │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              ├── Schedule Management
                               ├── Backup Management
                               ├── GitOps Export
                               ├── Export History
@@ -98,7 +105,6 @@ ui/
 |------|-------|---------|--------|
 | **Devices** | `/` | Main landing - list all managed devices | Active |
 | **Device Detail** | `/devices/{id}` | View individual device configuration | Stub |
-| **Schedule Management** | `/export/schedules` | Create/edit recurring export schedules | Active |
 | **Backup Management** | `/export/backup` | Create backups, restore from backups | Active |
 | **GitOps Export** | `/export/gitops` | IaC exports (Terraform, Ansible, K8s) | Active |
 | **Export History** | `/export/history` | View past exports with filtering | Active |
@@ -168,7 +174,6 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | Drift Detection Schedules | 7 | 7 | 0 | 100% |
 | Drift Reporting | 4 | 4 | 0 | 100% |
 | Export/Backup | 21 | 21 | 0 | 100% |
-| Export Schedules | 6 | 6 | 0 | 100% |
 | Import | 10 | 7 | 3 | 70% |
 | Plugins | 3 | 3 | 0 | 100% (read-only; config/test unbacked, see #264) |
 | Metrics | 15 | 15 | 0 | 100% |
@@ -288,16 +293,6 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/export/gitops/{id}` | DELETE | Delete GitOps export |
 | `/export/gitops-preview` | POST | Preview GitOps export |
 | `/export/gitops-statistics` | GET | GitOps stats |
-
-#### Export - Schedules (6 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/export/schedules` | GET | List export schedules |
-| `/export/schedules` | POST | Create new schedule |
-| `/export/schedules/{id}` | GET | Get schedule details |
-| `/export/schedules/{id}` | PUT | Update schedule |
-| `/export/schedules/{id}` | DELETE | Delete schedule |
-| `/export/schedules/{id}/run` | POST | Manually run schedule |
 
 #### Import (5 registered endpoints)
 | Endpoint | Method | Purpose |
@@ -572,7 +567,6 @@ These metrics were targets from the original review. Actual current coverage nee
 | BackupManagementPage.vue | 1,625 | Backup/restore operations |
 | GitOpsExportPage.vue | 1,351 | IaC export |
 | PluginManagementPage.vue | 1,151 | Plugin browser/config |
-| ExportSchedulesPage.vue | 625 | Schedule management |
 | MetricsDashboardPage.vue | 281 | Real-time metrics |
 | ExportHistoryPage.vue | 70 | Export history |
 | ImportHistoryPage.vue | 57 | Import history |

@@ -170,7 +170,6 @@ describe('Plugin API Client', () => {
       },
       capabilities: {
         supports_incremental: true,
-        supports_scheduling: false,
         requires_authentication: false,
         supported_outputs: ['file'],
         max_data_size: 0,

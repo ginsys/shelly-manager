@@ -389,10 +389,6 @@ func TestBackupExporter_Capabilities(t *testing.T) {
 		t.Error("Backup should support incremental backups")
 	}
 
-	if !caps.SupportsScheduling {
-		t.Error("Backup should support scheduling")
-	}
-
 	if caps.RequiresAuthentication {
 		t.Error("Backup should not require authentication")
 	}

@@ -19,12 +19,6 @@ const routes = [
   
   // Export & Import routes
   { 
-    path: '/export/schedules', 
-    name: 'export-schedules',
-    component: () => Promise.resolve({ template: '<div>Export Schedules Page</div>' }),
-    meta: { title: 'Schedule Management', category: 'export' }
-  },
-  { 
     path: '/export/backup', 
     name: 'export-backup',
     component: () => Promise.resolve({ template: '<div>Export Backup Page</div>' }),
@@ -112,7 +106,7 @@ describe('Navigation Routes Configuration', () => {
     expect(routeNames).toContain('device-detail')
     
     // Export routes
-    expect(routeNames).toContain('export-schedules')
+    expect(routeNames).not.toContain('export-schedules')
     expect(routeNames).toContain('export-backup')
     expect(routeNames).toContain('export-gitops')
     expect(routeNames).toContain('export-history')
@@ -133,13 +127,10 @@ describe('Navigation Routes Configuration', () => {
     const exportRoutes = routes.filter(r => r.meta?.category === 'export')
     const importRoutes = routes.filter(r => r.meta?.category === 'import')
     
-    expect(exportRoutes).toHaveLength(5) // schedules, backup, gitops, history, detail
+    expect(exportRoutes).toHaveLength(4)
     expect(importRoutes).toHaveLength(2) // history, detail
     
     // Check specific export routes
-    const scheduleRoute = routes.find(r => r.name === 'export-schedules')
-    expect(scheduleRoute?.meta?.title).toBe('Schedule Management')
-    
     const backupRoute = routes.find(r => r.name === 'export-backup')
     expect(backupRoute?.meta?.title).toBe('Backup Management')
     
@@ -150,7 +141,6 @@ describe('Navigation Routes Configuration', () => {
   // Test individual route navigation
   const testRoutes = [
     { path: '/', name: 'devices' },
-    { path: '/export/schedules', name: 'export-schedules' },
     { path: '/export/backup', name: 'export-backup' },
     { path: '/export/gitops', name: 'export-gitops' },
     { path: '/export/history', name: 'export-history' },
@@ -193,7 +183,7 @@ describe('Navigation Routes Configuration', () => {
     // Verify path patterns are correct
     expect(pathPatterns).toContain('/')
     expect(pathPatterns).toContain('/devices/:id')
-    expect(pathPatterns).toContain('/export/schedules')
+    expect(pathPatterns).not.toContain('/export/schedules')
     expect(pathPatterns).toContain('/export/backup')
     expect(pathPatterns).toContain('/export/gitops')
     expect(pathPatterns).toContain('/export/history')
@@ -208,7 +198,7 @@ describe('Navigation Routes Configuration', () => {
 
   it('should categorize routes correctly for navigation menu', () => {
     const mainRoutes = ['devices', 'plugins', 'metrics', 'admin']
-    const exportRoutes = ['export-schedules', 'export-backup', 'export-gitops', 'export-history', 'export-detail']
+    const exportRoutes = ['export-backup', 'export-gitops', 'export-history', 'export-detail']
     const importRoutes = ['import-history', 'import-detail']
     const detailRoutes = ['device-detail', 'export-detail', 'import-detail']
     

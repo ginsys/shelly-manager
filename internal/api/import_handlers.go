@@ -111,8 +111,11 @@ func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) 
 	// Perform the import
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
+		if result != nil {
+			_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
+		}
 		ih.logger.Error("Backup restore failed", "error", err)
-		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		ih.writeSyncError(w, r, err)
 		return
 	}
 	_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
@@ -158,7 +161,7 @@ func (ih *ImportHandlers) ValidateBackup(w http.ResponseWriter, r *http.Request)
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Backup validation failed", "error", err)
-		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		ih.writeSyncError(w, r, err)
 		return
 	}
 
@@ -204,8 +207,11 @@ func (ih *ImportHandlers) ImportGitOps(w http.ResponseWriter, r *http.Request) {
 	// Perform the import
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
+		if result != nil {
+			_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
+		}
 		ih.logger.Error("GitOps import failed", "error", err)
-		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		ih.writeSyncError(w, r, err)
 		return
 	}
 	_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
@@ -254,7 +260,7 @@ func (ih *ImportHandlers) PreviewGitOpsImport(w http.ResponseWriter, r *http.Req
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("GitOps import preview failed", "error", err)
-		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		ih.writeSyncError(w, r, err)
 		return
 	}
 
@@ -295,16 +301,11 @@ func (ih *ImportHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	// Perform the import
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
-		ih.logger.Error("Import failed", "plugin", importRequest.PluginName, "error", err)
-		// A plugin that has no persistence yet fails closed with
-		// ErrImportNotImplemented. Surface that as a client-visible 501 so
-		// callers can tell "unsupported, retry with dry_run" apart from a
-		// generic server fault (which WriteInternalError hides behind a 500).
-		if errors.Is(err, sync.ErrImportNotImplemented) {
-			apiresp.NewResponseWriter(ih.logger).WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, err.Error(), nil)
-			return
+		if result != nil {
+			_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
 		}
-		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		ih.logger.Error("Import failed", "plugin", importRequest.PluginName, "error", err)
+		ih.writeSyncError(w, r, err)
 		return
 	}
 	_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
@@ -333,7 +334,7 @@ func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) 
 	result, err := ih.syncEngine.Import(r.Context(), importRequest)
 	if err != nil {
 		ih.logger.Error("Import preview failed", "plugin", importRequest.PluginName, "error", err)
-		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		ih.writeSyncError(w, r, err)
 		return
 	}
 
@@ -346,6 +347,23 @@ func (ih *ImportHandlers) PreviewImport(w http.ResponseWriter, r *http.Request) 
 			"will_delete": ih.countChangesByType(result.Changes, "delete"),
 		},
 	})
+}
+
+func (ih *ImportHandlers) writeSyncError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, sync.ErrInvalidPluginConfig),
+		errors.Is(err, sync.ErrPluginNotFound),
+		errors.Is(err, sync.ErrUnsupportedFormat),
+		errors.Is(err, sync.ErrInvalidImportData),
+		errors.Is(err, sync.ErrInvalidExportData):
+		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, err.Error())
+	case errors.Is(err, sync.ErrImportNotImplemented):
+		apiresp.NewResponseWriter(ih.logger).WriteError(
+			w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, err.Error(), nil,
+		)
+	default:
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+	}
 }
 
 // GetImportResult returns the result of an import operation

@@ -4,7 +4,29 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Changed
+- Export and import previews now use the registered plugin list and each
+  plugin's backend schema. Export preview supports every registered format;
+  browser import preview is deliberately limited to SMA data and enforces a
+  7 MiB pre-base64 upload limit. Schema forms preserve typed falsy values and
+  validate recursive array/object fields. (#268)
+- SMA is now a closed, strict `2026.1` format. Generated archives are
+  deterministic gzip files with RFC 8785 SHA-256 integrity, a 100 MiB
+  normalized-data limit, strict JSON/schema/number/depth validation, joined
+  persisted device settings/configurations and templates, and atomic
+  publication. Raw JSON is accepted only as an import representation.
+  Non-dry-run persistence remains unavailable and fails with HTTP 501. (#268)
+- Export/import audit identity uses trimmed `X-User-ID`, then `X-User`, and
+  otherwise `api`; credentials and network addresses are never recorded as the
+  requester. (#268)
+- Frontend type checking now has a zero-error baseline and raw `vue-tsc`
+  succeeds. (#268)
+
 ### Removed
+- Removed the inert sync export scheduling API, UI, capability flag, and
+  documentation. Drift, notification, and device/relay scheduling are
+  unchanged. Former export-schedule paths now return ordinary HTTP 404
+  responses. (#268)
 - Plugin configuration, connection testing and enable/disable are removed from
   the UI and API client (#264). The frontend called `GET/PUT
   /export/plugins/{name}/config` and `POST /export/plugins/{name}/test` plus an

@@ -29,7 +29,8 @@ This document describes the Export/Import endpoints, request/response schemas an
 - Backup download: `GET /api/v1/export/backup/{id}/download`
 - GitOps export: `POST /api/v1/export/gitops`
 - GitOps download: `GET /api/v1/export/gitops/{id}/download`
-- Schedules: CRUD + run under `/api/v1/export/schedules`
+- Export scheduling is not available. The former scheduling routes were
+  removed because no scheduler executed the stored definitions.
 
 ### Request schema (Generic Export)
 

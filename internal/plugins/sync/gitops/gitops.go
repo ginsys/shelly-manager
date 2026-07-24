@@ -107,12 +107,7 @@ func (g *GitOpsPlugin) ConfigSchema() sync.ConfigSchema {
 // ValidateConfig validates the plugin configuration
 func (g *GitOpsPlugin) ValidateConfig(config map[string]interface{}) error {
 	if outputPath, exists := config["output_path"]; exists {
-		if path, ok := outputPath.(string); ok {
-			// Check if directory can be created
-			if err := os.MkdirAll(path, 0755); err != nil {
-				return fmt.Errorf("invalid output_path: cannot create directory %s: %w", path, err)
-			}
-		} else {
+		if _, ok := outputPath.(string); !ok {
 			return fmt.Errorf("output_path must be a string")
 		}
 	}
@@ -396,7 +391,6 @@ func (g *GitOpsPlugin) Import(ctx context.Context, source sync.ImportSource, con
 func (g *GitOpsPlugin) Capabilities() sync.PluginCapabilities {
 	return sync.PluginCapabilities{
 		SupportsIncremental:    false,
-		SupportsScheduling:     true,
 		RequiresAuthentication: false,
 		SupportedOutputs:       []string{"file"},
 		MaxDataSize:            1024 * 1024 * 100, // 100MB

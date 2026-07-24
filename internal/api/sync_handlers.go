@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -117,14 +118,6 @@ func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
 	api.HandleFunc("/export/gitops", eh.CreateGitOpsExport).Methods("POST")
 	api.HandleFunc("/export/gitops/{id}/download", eh.DownloadGitOpsExport).Methods("GET")
 
-	// Scheduling endpoints (register before generic /export/{id} to avoid collisions)
-	api.HandleFunc("/export/schedules", eh.ListSchedules).Methods("GET")
-	api.HandleFunc("/export/schedules", eh.CreateSchedule).Methods("POST")
-	api.HandleFunc("/export/schedules/{id}", eh.GetSchedule).Methods("GET")
-	api.HandleFunc("/export/schedules/{id}", eh.UpdateSchedule).Methods("PUT")
-	api.HandleFunc("/export/schedules/{id}", eh.DeleteSchedule).Methods("DELETE")
-	api.HandleFunc("/export/schedules/{id}/run", eh.RunSchedule).Methods("POST")
-
 	// History & statistics endpoints
 	api.HandleFunc("/export/history", eh.ListExportHistory).Methods("GET")
 	api.HandleFunc("/export/history/{id}", eh.GetExportHistory).Methods("GET")
@@ -133,8 +126,9 @@ func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
 	// Generic export endpoints (after history to avoid route collisions)
 	api.HandleFunc("/export", eh.Export).Methods("POST")
 	api.HandleFunc("/export/preview", eh.PreviewExport).Methods("POST")
-	api.HandleFunc("/export/{id}", eh.GetExportResult).Methods("GET")
-	api.HandleFunc("/export/{id}/download", eh.DownloadExport).Methods("GET")
+	const exportIDPattern = `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`
+	api.HandleFunc("/export/{id:"+exportIDPattern+"}", eh.GetExportResult).Methods("GET")
+	api.HandleFunc("/export/{id:"+exportIDPattern+"}/download", eh.DownloadExport).Methods("GET")
 }
 
 // ListPlugins returns all available export plugins
@@ -329,10 +323,14 @@ func (eh *SyncHandlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 		Output:  sync.OutputConfig{Type: "file"},
 		Options: requestBody.Options,
 	}
+	markAPIExport(&exportRequest)
 
 	// Perform the export
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
+		if result != nil {
+			_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+		}
 		// Map unsupported operation to 501 for clearer UX
 		msg := err.Error()
 		if strings.Contains(msg, "does not support backup operations") {
@@ -345,7 +343,7 @@ func (eh *SyncHandlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		eh.logger.Error("Backup export failed", "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		eh.writeSyncError(w, r, err)
 		return
 	}
 	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
@@ -382,12 +380,16 @@ func (eh *SyncHandlers) CreateGitOpsExport(w http.ResponseWriter, r *http.Reques
 		},
 		Options: requestBody.Options,
 	}
+	markAPIExport(&exportRequest)
 
 	// Perform the export
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
+		if result != nil {
+			_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+		}
 		eh.logger.Error("GitOps export failed", "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		eh.writeSyncError(w, r, err)
 		return
 	}
 	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
@@ -418,10 +420,14 @@ func (eh *SyncHandlers) CreateJSONExport(w http.ResponseWriter, r *http.Request)
 		Output:     sync.OutputConfig{Type: "file"},
 		Options:    requestBody.Options,
 	}
+	markAPIExport(&exportRequest)
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
+		if result != nil {
+			_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+		}
 		eh.logger.Error("JSON export failed", "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		eh.writeSyncError(w, r, err)
 		return
 	}
 	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
@@ -452,10 +458,14 @@ func (eh *SyncHandlers) CreateSMAExport(w http.ResponseWriter, r *http.Request) 
 		Output:     sync.OutputConfig{Type: "file"},
 		Options:    requestBody.Options,
 	}
+	markAPIExport(&exportRequest)
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
+		if result != nil {
+			_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+		}
 		eh.logger.Error("SMA export failed", "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		eh.writeSyncError(w, r, err)
 		return
 	}
 	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
@@ -486,10 +496,14 @@ func (eh *SyncHandlers) CreateYAMLExport(w http.ResponseWriter, r *http.Request)
 		Output:     sync.OutputConfig{Type: "file"},
 		Options:    requestBody.Options,
 	}
+	markAPIExport(&exportRequest)
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
+		if result != nil {
+			_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+		}
 		eh.logger.Error("YAML export failed", "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		eh.writeSyncError(w, r, err)
 		return
 	}
 	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
@@ -509,19 +523,23 @@ func (eh *SyncHandlers) Export(w http.ResponseWriter, r *http.Request) {
 		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid export request")
 		return
 	}
+	markAPIExport(&exportRequest)
 
 	// Validate the export request
 	if err := eh.syncEngine.ValidateExport(exportRequest); err != nil {
 		eh.logger.Error("Export validation failed", "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, fmt.Sprintf("Validation failed: %v", err))
+		eh.writeSyncError(w, r, err)
 		return
 	}
 
 	// Perform the export
 	result, err := eh.syncEngine.Export(r.Context(), exportRequest)
 	if err != nil {
+		if result != nil {
+			_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
+		}
 		eh.logger.Error("Export failed", "plugin", exportRequest.PluginName, "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		eh.writeSyncError(w, r, err)
 		return
 	}
 	_ = eh.syncEngine.SaveExportHistory(r.Context(), exportRequest, result, requesterFrom(r))
@@ -541,12 +559,13 @@ func (eh *SyncHandlers) PreviewExport(w http.ResponseWriter, r *http.Request) {
 		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid export request")
 		return
 	}
+	markAPIExport(&exportRequest)
 
 	// Generate preview
 	preview, err := eh.syncEngine.Preview(r.Context(), exportRequest)
 	if err != nil {
 		eh.logger.Error("Export preview failed", "plugin", exportRequest.PluginName, "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		eh.writeSyncError(w, r, err)
 		return
 	}
 
@@ -557,6 +576,29 @@ func (eh *SyncHandlers) PreviewExport(w http.ResponseWriter, r *http.Request) {
 			"estimated_size": preview.EstimatedSize,
 		},
 	})
+}
+
+func (eh *SyncHandlers) writeSyncError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, sync.ErrInvalidPluginConfig),
+		errors.Is(err, sync.ErrPluginNotFound),
+		errors.Is(err, sync.ErrUnsupportedFormat),
+		errors.Is(err, sync.ErrInvalidImportData),
+		errors.Is(err, sync.ErrInvalidExportData),
+		errors.Is(err, sync.ErrInvalidExportPath):
+		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
+	case errors.Is(err, sync.ErrImportNotImplemented):
+		apiresp.NewResponseWriter(eh.logger).WriteError(
+			w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, err.Error(), nil,
+		)
+	default:
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+	}
+}
+
+func markAPIExport(request *sync.ExportRequest) {
+	request.CreatedBy = "api"
+	request.ExportType = "api"
 }
 
 // GetExportResult returns the result of an export operation
@@ -686,147 +728,6 @@ func setContentTypeForPath(w http.ResponseWriter, path string) {
 	default:
 		// leave default; http.ServeFile may infer
 	}
-}
-
-// Scheduling handlers
-
-// ListSchedules returns all export schedules
-func (eh *SyncHandlers) ListSchedules(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	schedules := eh.syncEngine.ListSchedules()
-	total := len(schedules)
-	pageSize := apiresp.GetQueryParamInt(r, "page_size", 0)
-	page := apiresp.GetQueryParamInt(r, "page", 1)
-	start, end := 0, total
-	if pageSize > 0 {
-		if page < 1 {
-			page = 1
-		}
-		start = (page - 1) * pageSize
-		if start > total {
-			start = total
-		}
-		end = start + pageSize
-		if end > total {
-			end = total
-		}
-	} else {
-		page = 1
-		pageSize = total
-	}
-	pageSchedules := schedules
-	if start != 0 || end != total {
-		pageSchedules = schedules[start:end]
-	}
-	totalPages := 1
-	if pageSize > 0 {
-		if total%pageSize == 0 {
-			totalPages = total / pageSize
-		} else {
-			totalPages = (total / pageSize) + 1
-		}
-		if total == 0 {
-			totalPages = 1
-		}
-	}
-	meta := &apiresp.Metadata{
-		Page: &apiresp.PaginationMeta{
-			Page:       page,
-			PageSize:   pageSize,
-			TotalPages: totalPages,
-			HasNext:    page < totalPages,
-			HasPrev:    page > 1,
-		},
-		Count:      intPtr(len(pageSchedules)),
-		TotalCount: intPtr(total),
-	}
-	apiresp.NewResponseWriter(eh.logger).WriteSuccessWithMeta(w, r, map[string]interface{}{
-		"schedules": pageSchedules,
-	}, meta)
-}
-
-// local helper
-// intPtr is defined in handlers.go; duplicate here avoided.
-
-// CreateSchedule creates a new export schedule
-func (eh *SyncHandlers) CreateSchedule(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	var req sync.ExportScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
-		return
-	}
-	sch, err := eh.syncEngine.CreateSchedule(req)
-	if err != nil {
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
-		return
-	}
-	apiresp.NewResponseWriter(eh.logger).WriteCreated(w, r, sch)
-}
-
-// GetSchedule returns a schedule by ID
-func (eh *SyncHandlers) GetSchedule(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	id := mux.Vars(r)["id"]
-	if sch, ok := eh.syncEngine.GetSchedule(id); ok {
-		apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, sch)
-		return
-	}
-	apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, "Export schedule")
-}
-
-// UpdateSchedule updates a schedule
-func (eh *SyncHandlers) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	id := mux.Vars(r)["id"]
-	var req sync.ExportScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid request body")
-		return
-	}
-	sch, err := eh.syncEngine.UpdateSchedule(id, req)
-	if err != nil {
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
-		return
-	}
-	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, sch)
-}
-
-// DeleteSchedule deletes a schedule
-func (eh *SyncHandlers) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	id := mux.Vars(r)["id"]
-	if err := eh.syncEngine.DeleteSchedule(id); err != nil {
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
-		return
-	}
-	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, map[string]string{"status": "deleted"})
-}
-
-// RunSchedule triggers a schedule immediately
-func (eh *SyncHandlers) RunSchedule(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	id := mux.Vars(r)["id"]
-	res, err := eh.syncEngine.RunSchedule(r.Context(), id)
-	if err != nil {
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, err.Error())
-		return
-	}
-	// Best-effort record keeping; construct minimal request context
-	_ = eh.syncEngine.SaveExportHistory(r.Context(), sync.ExportRequest{PluginName: res.PluginName, Format: res.Format}, res, requesterFrom(r))
-	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, res)
 }
 
 // Import performs a generic import using any plugin
@@ -1072,16 +973,13 @@ func parseIntDefault(s string, def int) int {
 	return def
 }
 
-// requesterFrom extracts a best-effort identifier for auditing purposes
+// requesterFrom returns only the explicit, non-secret audit identity headers.
 func requesterFrom(r *http.Request) string {
-	if v := r.Header.Get("X-User-ID"); v != "" {
+	if v := strings.TrimSpace(r.Header.Get("X-User-ID")); v != "" {
 		return v
 	}
-	if v := r.Header.Get("X-User"); v != "" {
+	if v := strings.TrimSpace(r.Header.Get("X-User")); v != "" {
 		return v
 	}
-	if v := r.Header.Get("Authorization"); v != "" {
-		return v
-	}
-	return r.RemoteAddr
+	return "api"
 }

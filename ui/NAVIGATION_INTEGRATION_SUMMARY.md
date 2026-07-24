@@ -13,7 +13,6 @@ Successfully completed comprehensive navigation integration for the Shelly Manag
 - `/devices/:id` → DeviceDetailPage
 
 **Export & Import Routes:**
-- `/export/schedules` → ExportSchedulesPage (Schedule Management)
 - `/export/backup` → BackupManagementPage (Backup Management) 
 - `/export/gitops` → GitOpsExportPage (GitOps Export)
 - `/export/history` → ExportHistoryPage (Export History)
@@ -39,7 +38,7 @@ Successfully completed comprehensive navigation integration for the Shelly Manag
 **Navigation Structure:**
 - **Devices** - Main device management
 - **Export & Import** dropdown:
-  - Export section: Schedule Management, Backup Management, GitOps Export, Export History
+  - Export section: Backup Management, GitOps Export, Export History
   - Import section: Import History
   - Visual icons for each menu item
   - Sectioned dropdown with dividers
@@ -67,7 +66,7 @@ Successfully completed comprehensive navigation integration for the Shelly Manag
 
 **Breadcrumb Examples:**
 - Device Details: `Home › Devices › Device Details`
-- Export Features: `Home › Export & Import › Schedule Management`
+- Export Features: `Home › Export & Import › Export History`
 - Export Details: `Home › Export & Import › Export History › Export Details`
 - Import Details: `Home › Export & Import › Import History › Import Details`
 
@@ -116,14 +115,13 @@ Successfully completed comprehensive navigation integration for the Shelly Manag
 ## Features Successfully Integrated
 
 ### ✅ All Completed Features Now Accessible:
-1. **Schedule Management UI** - `/export/schedules`
-2. **Backup Operations UI** - `/export/backup` 
-3. **GitOps Export UI** - `/export/gitops`
-4. **Plugin Management UI** - `/plugins`
-5. **SMA Format Support** - Integrated into backup forms
-6. **Export/Import History** - `/export/history`, `/import/history`
-7. **Metrics Dashboard** - `/dashboard`
-8. **Admin Settings** - `/admin`
+1. **Backup Operations UI** - `/export/backup`
+2. **GitOps Export UI** - `/export/gitops`
+3. **Plugin Management UI** - `/plugins`
+4. **SMA Format Support** - Integrated into backup forms
+5. **Export/Import History** - `/export/history`, `/import/history`
+6. **Metrics Dashboard** - `/dashboard`
+7. **Admin Settings** - `/admin`
 
 ## Success Criteria Achieved ✅
 

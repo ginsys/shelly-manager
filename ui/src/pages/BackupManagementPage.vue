@@ -7,15 +7,11 @@
     <!-- In-page Create Backup Panel -->
     <BackupCreateForm
       v-model:createType="createType"
-      v-model:runMode="runMode"
       v-model:createName="createName"
       v-model:createDesc="createDesc"
       v-model:createCompression="createCompression"
       v-model:createOutputDir="createOutputDir"
       v-model:exportOutputDir="exportOutputDir"
-      v-model:scheduleEnabled="scheduleEnabled"
-      v-model:scheduleInterval="scheduleInterval"
-      v-model:schedulePreset="schedulePreset"
       v-model:jsonOptions="jsonOptions"
       v-model:yamlOptions="yamlOptions"
       v-model:jsonCompression="jsonCompression"
@@ -106,6 +102,7 @@ import {
   createJSONExport,
   createYAMLExport,
   createSMAExport,
+  buildSMAExportConfig,
   deleteBackup,
   downloadBackupWithName,
   downloadExportWithName,
@@ -116,8 +113,6 @@ import {
     type RestoreRequest,
     type RestorePreview
   } from '@/api/export'
-  import { createSchedule, parseInterval, type ExportScheduleRequest } from '@/api/schedule'
-  import { useRoute } from 'vue-router'
 import api from '@/api/client'
 import type { Device, Metadata } from '@/api/types'
 import PaginationBar from '@/components/PaginationBar.vue'
@@ -149,9 +144,6 @@ const contentExports = ref<any[]>([])
 const smaOptions = reactive({
   compression_level: 6,
   include_discovered: true,
-  include_network_settings: false,
-  include_plugin_configs: true,
-  include_system_settings: true,
   exclude_sensitive: true,
 })
 const loading = ref(false)
@@ -176,16 +168,12 @@ const deleteConfirm = ref<BackupItem | null>(null)
   })
 
   // In-page create backup state
-  const runMode = ref<'now' | 'schedule'>('now')
   const createType = ref<'backup' | 'json' | 'yaml' | 'sma'>('backup')
   const createName = ref('')
   const createDesc = ref('')
   const createCompression = ref<'none' | 'gzip' | 'zip'>('gzip')
   const createOutputDir = ref('./data/backups')
   const exportOutputDir = ref('./data/exports')
-  const scheduleEnabled = ref(true)
-  const scheduleInterval = ref('24 hours')
-  const schedulePreset = ref('24 hours')
   const createSubmitting = ref(false)
   const createError2 = ref('')
   const providerName = ref('')
@@ -320,68 +308,11 @@ async function refreshData() {
   showMessage('Data refreshed successfully', 'success')
 }
 
-/**
- * Handle backup creation
- */
-function scrollToCreate() {
-  const el = document.getElementById('create-backup')
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 async function createBackupPanel() {
   createSubmitting.value = true
   createError2.value = ''
   try {
-    // Build a unified ExportRequest for scheduling when needed
-    const buildRequest = () => {
-      const base: any = { plugin_name: '', format: '', config: {}, filters: {}, options: {} }
-      if (createType.value === 'backup') {
-        base.plugin_name = 'backup'
-        base.format = 'sqlite'
-        base.config = {
-          output_path: createOutputDir.value,
-          compression: createCompression.value !== 'none',
-          compression_algo: createCompression.value === 'zip' ? 'zip' : 'gzip',
-          name: createName.value,
-          description: createDesc.value,
-        }
-      } else if (createType.value === 'json') {
-        base.plugin_name = 'json'
-        base.format = 'json'
-        base.config = { output_path: exportOutputDir.value, ...jsonOptions }
-      } else if (createType.value === 'yaml') {
-        base.plugin_name = 'yaml'
-        base.format = 'yaml'
-        base.config = { output_path: exportOutputDir.value, ...yamlOptions }
-      } else if (createType.value === 'sma') {
-        base.plugin_name = 'sma'
-        base.format = 'sma'
-        base.config = { output_path: exportOutputDir.value, compression_level: smaOptions.compression_level, include_checksums: true }
-        base.filters = {
-          include_discovered: smaOptions.include_discovered,
-          include_network_settings: smaOptions.include_network_settings,
-          include_plugin_configs: smaOptions.include_plugin_configs,
-          include_system_settings: smaOptions.include_system_settings,
-        }
-      }
-      return base
-    }
-
-    if (runMode.value === 'schedule') {
-      // Create schedule instead of running immediately
-      const req = buildRequest()
-      const seconds = parseInterval(scheduleInterval.value)
-      const sched: ExportScheduleRequest = {
-        name: createName.value || `${createType.value} schedule`,
-        interval_sec: seconds,
-        enabled: !!scheduleEnabled.value,
-        request: req,
-      }
-      await createSchedule(sched)
-      showMessage('Schedule created successfully', 'success')
-    } else {
-      // Immediate run paths (reuse specific endpoints for consistency)
-      if (createType.value === 'backup') {
+    if (createType.value === 'backup') {
         const payload: any = {
           name: createName.value,
           description: createDesc.value,
@@ -415,18 +346,12 @@ async function createBackupPanel() {
       await fetchContentExports()
     } else if (createType.value === 'sma') {
         await createSMAExport(
-          { output_path: exportOutputDir.value, compression_level: smaOptions.compression_level, include_checksums: true },
-          {
-            include_discovered: smaOptions.include_discovered,
-            include_network_settings: smaOptions.include_network_settings,
-            include_plugin_configs: smaOptions.include_plugin_configs,
-            include_system_settings: smaOptions.include_system_settings,
-          },
+          buildSMAExportConfig(exportOutputDir.value, smaOptions),
+          {},
           {}
         )
         showMessage('SMA export created successfully', 'success')
         await fetchContentExports()
-      }
     }
   } catch (err: any) {
     createError2.value = err.message || 'Failed to create backup'
@@ -573,8 +498,6 @@ function showMessage(text: string, type: 'success' | 'error') {
   }
 }
 
-  const route = useRoute()
-
   // Fetch provider info to label backup formats appropriately
   onMounted(async () => {
     try {
@@ -586,15 +509,6 @@ function showMessage(text: string, type: 'success' | 'error') {
       }
     } catch {}
 
-    // Handle deep-linking to schedule creation
-    const q = route.query as any
-    if (q && (q.schedule === '1' || q.schedule === 'true')) {
-      runMode.value = 'schedule'
-      if (q.type && ['backup','json','yaml','sma'].includes(String(q.type))) {
-        createType.value = q.type
-      }
-      scrollToCreate()
-    }
   })
 
 // Download a content export (JSON/YAML/SMA)

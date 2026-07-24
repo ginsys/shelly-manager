@@ -22,12 +22,26 @@ import {
   previewRestore,
   executeRestore,
   getRestoreResult,
+  buildSMAExportConfig,
   type BackupRequest 
 } from './export'
 
 describe('backup api', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('builds SMA plugin config without removed or inert options', () => {
+    expect(buildSMAExportConfig('/exports', {
+      compression_level: 7,
+      include_discovered: false,
+      exclude_sensitive: true,
+    })).toEqual({
+      output_path: '/exports',
+      compression_level: 7,
+      include_discovered: false,
+      exclude_sensitive: true,
+    })
   })
 
   describe('createBackup', () => {

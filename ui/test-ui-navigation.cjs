@@ -4,7 +4,6 @@ const { chromium } = require('playwright');
 
 const routes = [
   { path: '/', name: 'devices', title: 'Devices' },
-  { path: '/export/schedules', name: 'export-schedules', title: 'Schedule Management' },
   { path: '/export/backup', name: 'export-backup', title: 'Backup Management' },
   { path: '/export/gitops', name: 'export-gitops', title: 'GitOps Export' },
   { path: '/export/history', name: 'export-history', title: 'Export History' },

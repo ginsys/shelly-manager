@@ -337,7 +337,6 @@ func (o *OPNSensePlugin) Import(ctx context.Context, source sync.ImportSource, c
 func (o *OPNSensePlugin) Capabilities() sync.PluginCapabilities {
 	return sync.PluginCapabilities{
 		SupportsIncremental:    true,
-		SupportsScheduling:     true,
 		RequiresAuthentication: true,
 		SupportedOutputs:       []string{"api", "file"},
 		MaxDataSize:            1024 * 1024 * 100, // 100MB

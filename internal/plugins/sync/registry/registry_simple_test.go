@@ -79,7 +79,6 @@ func (m *SimpleMockPlugin) Import(ctx context.Context, source sync.ImportSource,
 func (m *SimpleMockPlugin) Capabilities() plugins.PluginCapabilities {
 	return plugins.PluginCapabilities{
 		SupportsIncremental:    true,
-		SupportsScheduling:     true,
 		RequiresAuthentication: false,
 		SupportedOutputs:       []string{"file", "api"},
 		MaxDataSize:            1024 * 1024, // 1MB
