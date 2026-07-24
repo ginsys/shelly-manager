@@ -7,10 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
+	"math"
 	"time"
 
-	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
@@ -68,14 +67,12 @@ func normalizeSMAInput(input io.Reader, limit int64) ([]byte, error) {
 }
 
 func (s *SMAPlugin) ImportFromFile(ctx context.Context, filePath string, config sync.ImportConfig) (*sync.ImportResult, error) {
-	if s.baseDir != "" {
-		validated, err := security.ValidatePath(s.baseDir, filePath)
-		if err != nil {
-			return nil, fmt.Errorf("path validation failed: %w", err)
-		}
-		filePath = validated
+	source, err := openApprovedRoot(s.importBaseDir, filePath, "import")
+	if err != nil {
+		return nil, err
 	}
-	file, err := os.Open(filePath)
+	defer func() { _ = source.close() }()
+	file, err := source.root.Open(source.relative)
 	if err != nil {
 		return nil, fmt.Errorf("open SMA input: %w", err)
 	}
@@ -187,7 +184,15 @@ func invalidImportResult(kind string, cause error) (*sync.ImportResult, error) {
 }
 
 func (s *SMAPlugin) generateDryRunResult(importID string, archive *SMAArchive, duration time.Duration) (*sync.ImportResult, error) {
-	changes := make([]sync.ImportChange, 0, len(archive.Devices)+len(archive.Templates)+len(archive.Discovered))
+	changeCapacity, err := checkedIntSum(
+		len(archive.Devices),
+		len(archive.Templates),
+		len(archive.Discovered),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("prepare dry-run changes: %w", err)
+	}
+	changes := make([]sync.ImportChange, 0, changeCapacity)
 	for _, device := range archive.Devices {
 		changes = append(changes, sync.ImportChange{
 			Type: "create", Resource: "device", ResourceID: device.MAC,
@@ -222,6 +227,17 @@ func (s *SMAPlugin) generateDryRunResult(importID string, archive *SMAArchive, d
 		Duration:  duration,
 		CreatedAt: time.Now(),
 	}, nil
+}
+
+func checkedIntSum(values ...int) (int, error) {
+	total := 0
+	for _, value := range values {
+		if value < 0 || total > math.MaxInt-value {
+			return 0, fmt.Errorf("integer addition overflow")
+		}
+		total += value
+	}
+	return total, nil
 }
 
 // bytesReader avoids importing bytes solely at call sites and keeps the

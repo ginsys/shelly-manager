@@ -2,11 +2,15 @@ package sma
 
 import (
 	"compress/gzip"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -542,32 +546,54 @@ func finalizeArchiveTree(tree map[string]interface{}) ([]byte, string, error) {
 
 type atomicFile interface {
 	io.Writer
-	Name() string
 	Sync() error
 	Close() error
 	Stat() (os.FileInfo, error)
 }
 
 type fileOperations interface {
-	CreateTemp(dir, pattern string) (atomicFile, error)
-	Rename(oldPath, newPath string) error
-	Remove(path string) error
+	CreateTemp(root *os.Root, dir, pattern string) (atomicFile, string, error)
+	Rename(root *os.Root, oldPath, newPath string) error
+	Remove(root *os.Root, path string) error
 }
 
 type osFileOperations struct{}
 
-func (osFileOperations) CreateTemp(dir, pattern string) (atomicFile, error) {
-	return os.CreateTemp(dir, pattern)
+func (osFileOperations) CreateTemp(root *os.Root, dir, pattern string) (atomicFile, string, error) {
+	for range 100 {
+		var random [8]byte
+		if _, err := rand.Read(random[:]); err != nil {
+			return nil, "", err
+		}
+		name := pattern
+		token := fmt.Sprintf("%x", random[:])
+		if wildcard := strings.LastIndexByte(name, '*'); wildcard >= 0 {
+			name = name[:wildcard] + token + name[wildcard+1:]
+		} else {
+			name += token
+		}
+		tempPath := filepath.Join(dir, name)
+		file, err := root.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return nil, "", err
+		}
+		return file, tempPath, nil
+	}
+	return nil, "", fmt.Errorf("create unique temporary archive: too many collisions")
 }
-func (osFileOperations) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
-func (osFileOperations) Remove(path string) error             { return os.Remove(path) }
+func (osFileOperations) Rename(root *os.Root, oldPath, newPath string) error {
+	return root.Rename(oldPath, newPath)
+}
+func (osFileOperations) Remove(root *os.Root, path string) error { return root.Remove(path) }
 
-func (s *SMAPlugin) publishAtomic(finalPath string, data []byte, level int) (size int64, err error) {
-	temp, err := s.files.CreateTemp(filepathDir(finalPath), ".sma-*.tmp")
+func (s *SMAPlugin) publishAtomic(root *os.Root, finalPath string, data []byte, level int) (size int64, err error) {
+	temp, tempPath, err := s.files.CreateTemp(root, filepath.Dir(finalPath), ".sma-*.tmp")
 	if err != nil {
 		return 0, fmt.Errorf("create temporary archive: %w", err)
 	}
-	tempPath := temp.Name()
 	renamed := false
 	closed := false
 	defer func() {
@@ -575,7 +601,7 @@ func (s *SMAPlugin) publishAtomic(finalPath string, data []byte, level int) (siz
 			_ = temp.Close()
 		}
 		if !renamed {
-			_ = s.files.Remove(tempPath)
+			_ = s.files.Remove(root, tempPath)
 		}
 	}()
 
@@ -603,20 +629,9 @@ func (s *SMAPlugin) publishAtomic(finalPath string, data []byte, level int) (siz
 		return 0, fmt.Errorf("close temporary archive: %w", err)
 	}
 	closed = true
-	if err = s.files.Rename(tempPath, finalPath); err != nil {
+	if err = s.files.Rename(root, tempPath, finalPath); err != nil {
 		return 0, fmt.Errorf("publish archive: %w", err)
 	}
 	renamed = true
 	return info.Size(), nil
-}
-
-func filepathDir(path string) string {
-	index := strings.LastIndexAny(path, `/\`)
-	if index < 0 {
-		return "."
-	}
-	if index == 0 {
-		return path[:1]
-	}
-	return path[:index]
 }

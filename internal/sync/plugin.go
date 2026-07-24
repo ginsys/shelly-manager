@@ -42,6 +42,16 @@ type PathRestrictedPlugin interface {
 	SetBaseDir(baseDir string)
 }
 
+// ExportPathRestrictedPlugin and ImportPathRestrictedPlugin let plugins apply
+// the engine's distinct approved roots at their filesystem boundary.
+type ExportPathRestrictedPlugin interface {
+	SetExportBaseDir(baseDir string)
+}
+
+type ImportPathRestrictedPlugin interface {
+	SetImportBaseDir(baseDir string)
+}
+
 // PluginInfo provides metadata about a plugin
 type PluginInfo struct {
 	Name             string         `json:"name"`

@@ -61,6 +61,7 @@ func generatedArchive(t *testing.T) ([]byte, map[string]interface{}) {
 func TestGenerateAndDryRunImportRoundTrip(t *testing.T) {
 	plugin := initializedPlugin(t)
 	output := t.TempDir()
+	plugin.SetBaseDir(output)
 	result, err := plugin.Export(context.Background(), validExportData(), sync.ExportConfig{
 		Format: "sma",
 		Config: map[string]interface{}{"output_path": output, "compression_level": float64(6)},
@@ -83,6 +84,91 @@ func TestGenerateAndDryRunImportRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, importResult.Success)
 	assert.Equal(t, 1, importResult.RecordsImported)
+}
+
+func TestFileOperationsRequireApprovedRoots(t *testing.T) {
+	plugin := initializedPlugin(t)
+	output := t.TempDir()
+	_, err := plugin.Export(context.Background(), validExportData(), sync.ExportConfig{
+		Format: "sma",
+		Config: map[string]interface{}{"output_path": output},
+	})
+	require.ErrorContains(t, err, "approved export base directory is required")
+
+	input := filepath.Join(output, "archive.sma")
+	require.NoError(t, os.WriteFile(input, []byte(`{}`), 0o600))
+	_, err = plugin.ImportFromFile(context.Background(), input, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true},
+	})
+	require.ErrorContains(t, err, "approved import base directory is required")
+}
+
+func TestRootedFileOperationsRejectTraversalAndSymlinkEscapes(t *testing.T) {
+	base := t.TempDir()
+	outside := t.TempDir()
+	plugin := initializedPlugin(t)
+	plugin.SetBaseDir(base)
+
+	_, err := plugin.Export(context.Background(), validExportData(), sync.ExportConfig{
+		Format: "sma",
+		Config: map[string]interface{}{"output_path": filepath.Join(base, "..", "outside")},
+	})
+	require.ErrorContains(t, err, "path traversal blocked")
+
+	_, err = plugin.ImportFromFile(context.Background(), filepath.Join(base, "..", "outside.sma"), sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true},
+	})
+	require.ErrorContains(t, err, "path traversal blocked")
+
+	outputLink := filepath.Join(base, "output-link")
+	require.NoError(t, os.Symlink(outside, outputLink))
+	_, err = plugin.Export(context.Background(), validExportData(), sync.ExportConfig{
+		Format: "sma",
+		Config: map[string]interface{}{"output_path": outputLink},
+	})
+	require.Error(t, err)
+
+	outsideArchive := filepath.Join(outside, "archive.sma")
+	require.NoError(t, os.WriteFile(outsideArchive, []byte(`{}`), 0o600))
+	inputLink := filepath.Join(base, "input.sma")
+	require.NoError(t, os.Symlink(outsideArchive, inputLink))
+	_, err = plugin.ImportFromFile(context.Background(), inputLink, sync.ImportConfig{
+		Options: sync.ImportOptions{DryRun: true},
+	})
+	require.ErrorContains(t, err, "open SMA input")
+}
+
+func TestRootedFileOperationsAllowValidRelativePaths(t *testing.T) {
+	base := t.TempDir()
+	plugin := initializedPlugin(t)
+	plugin.SetBaseDir(base)
+
+	result, err := plugin.Export(context.Background(), validExportData(), sync.ExportConfig{
+		Format: "sma",
+		Config: map[string]interface{}{"output_path": "nested"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(base, "nested"), filepath.Dir(result.OutputPath))
+
+	importResult, err := plugin.ImportFromFile(
+		context.Background(),
+		filepath.Join("nested", filepath.Base(result.OutputPath)),
+		sync.ImportConfig{Options: sync.ImportOptions{DryRun: true, ValidateOnly: true}},
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, importResult.RecordsImported)
+}
+
+func TestCheckedIntSumBoundaries(t *testing.T) {
+	total, err := checkedIntSum(math.MaxInt-2, 1, 1)
+	require.NoError(t, err)
+	require.Equal(t, math.MaxInt, total)
+
+	_, err = checkedIntSum(math.MaxInt, 1)
+	require.ErrorContains(t, err, "overflow")
+
+	_, err = checkedIntSum(1, -1)
+	require.ErrorContains(t, err, "overflow")
 }
 
 func TestRawAndGzipNormalizationLimits(t *testing.T) {
@@ -392,7 +478,9 @@ func TestNonDryRunFailsClosed(t *testing.T) {
 
 func TestValidateConfigHasNoFilesystemSideEffect(t *testing.T) {
 	plugin := initializedPlugin(t)
-	path := filepath.Join(t.TempDir(), "not-created")
+	base := t.TempDir()
+	plugin.SetExportBaseDir(base)
+	path := filepath.Join(base, "not-created")
 	require.NoError(t, plugin.ValidateConfig(map[string]interface{}{"output_path": path}))
 	_, err := os.Stat(path)
 	require.ErrorIs(t, err, os.ErrNotExist)
@@ -413,7 +501,7 @@ func TestConfigSchemaAdvertisesOnlyEffectiveCreationOptions(t *testing.T) {
 }
 
 type failingAtomicFile struct {
-	*os.File
+	atomicFile
 	syncErr  error
 	closeErr error
 }
@@ -422,11 +510,11 @@ func (file *failingAtomicFile) Sync() error {
 	if file.syncErr != nil {
 		return file.syncErr
 	}
-	return file.File.Sync()
+	return file.atomicFile.Sync()
 }
 
 func (file *failingAtomicFile) Close() error {
-	err := file.File.Close()
+	err := file.atomicFile.Close()
 	if file.closeErr != nil {
 		return file.closeErr
 	}
@@ -439,22 +527,31 @@ type failingFileOperations struct {
 	renameErr error
 }
 
-func (operations failingFileOperations) CreateTemp(dir, pattern string) (atomicFile, error) {
-	file, err := os.CreateTemp(dir, pattern)
+func (operations failingFileOperations) CreateTemp(
+	root *os.Root,
+	dir, pattern string,
+) (atomicFile, string, error) {
+	file, tempPath, err := (osFileOperations{}).CreateTemp(root, dir, pattern)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return &failingAtomicFile{File: file, syncErr: operations.syncErr, closeErr: operations.closeErr}, nil
+	return &failingAtomicFile{
+		atomicFile: file,
+		syncErr:    operations.syncErr,
+		closeErr:   operations.closeErr,
+	}, tempPath, nil
 }
 
-func (operations failingFileOperations) Rename(oldPath, newPath string) error {
+func (operations failingFileOperations) Rename(root *os.Root, oldPath, newPath string) error {
 	if operations.renameErr != nil {
 		return operations.renameErr
 	}
-	return os.Rename(oldPath, newPath)
+	return root.Rename(oldPath, newPath)
 }
 
-func (failingFileOperations) Remove(path string) error { return os.Remove(path) }
+func (failingFileOperations) Remove(root *os.Root, path string) error {
+	return root.Remove(path)
+}
 
 func TestAtomicPublicationCleansUpEveryInjectedFailure(t *testing.T) {
 	failure := errors.New("injected failure")
@@ -470,9 +567,12 @@ func TestAtomicPublicationCleansUpEveryInjectedFailure(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			finalPath := filepath.Join(dir, "archive.sma")
+			root, rootErr := os.OpenRoot(dir)
+			require.NoError(t, rootErr)
+			defer func() { require.NoError(t, root.Close()) }()
 			plugin := initializedPlugin(t)
 			plugin.files = tt.operations
-			_, err := plugin.publishAtomic(finalPath, []byte(`{"ok":true}`), 6)
+			_, err := plugin.publishAtomic(root, filepath.Base(finalPath), []byte(`{"ok":true}`), 6)
 			require.ErrorIs(t, err, failure)
 			_, statErr := os.Stat(finalPath)
 			require.ErrorIs(t, statErr, os.ErrNotExist)

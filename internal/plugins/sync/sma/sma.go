@@ -4,7 +4,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,15 +19,23 @@ const (
 	FormatVersion           = "2026.1"
 	defaultNormalizedLimit  = int64(100 * 1024 * 1024)
 	defaultCompressionLevel = 6
+	defaultOutputDirectory  = "shelly-sma"
 )
 
 // SMAPlugin implements the registry-backed SMA export/import format.
 type SMAPlugin struct {
 	logger          *logging.Logger
-	baseDir         string
+	exportBaseDir   string
+	importBaseDir   string
 	normalizedLimit int64
 	files           fileOperations
 }
+
+var (
+	_ sync.PathRestrictedPlugin       = (*SMAPlugin)(nil)
+	_ sync.ExportPathRestrictedPlugin = (*SMAPlugin)(nil)
+	_ sync.ImportPathRestrictedPlugin = (*SMAPlugin)(nil)
+)
 
 func NewPlugin() sync.SyncPlugin {
 	return &SMAPlugin{
@@ -126,7 +133,7 @@ func (s *SMAPlugin) ConfigSchema() sync.ConfigSchema {
 		Properties: map[string]sync.PropertySchema{
 			"output_path": {
 				Type: "string", Description: "Directory path for SMA files",
-				Default: "/var/backups/shelly-manager",
+				Default: "",
 			},
 			"compression_level": {
 				Type: "number", Description: "Gzip compression level (1-9)",
@@ -151,8 +158,11 @@ func (s *SMAPlugin) ValidateConfig(config map[string]interface{}) error {
 		if !ok {
 			return fmt.Errorf("output_path must be a string")
 		}
-		if s.baseDir != "" {
-			if _, err := security.ValidatePath(s.baseDir, path); err != nil {
+		if path != "" {
+			if s.exportBaseDir == "" {
+				return fmt.Errorf("approved export base directory is required for output_path")
+			}
+			if _, err := security.ValidatePath(s.exportBaseDir, path); err != nil {
 				return fmt.Errorf("invalid output_path: %w", err)
 			}
 		}
@@ -175,7 +185,16 @@ func (s *SMAPlugin) ValidateConfig(config map[string]interface{}) error {
 }
 
 func (s *SMAPlugin) SetBaseDir(baseDir string) {
-	s.baseDir = baseDir
+	s.SetExportBaseDir(baseDir)
+	s.SetImportBaseDir(baseDir)
+}
+
+func (s *SMAPlugin) SetExportBaseDir(baseDir string) {
+	s.exportBaseDir = baseDir
+}
+
+func (s *SMAPlugin) SetImportBaseDir(baseDir string) {
+	s.importBaseDir = baseDir
 }
 
 func (s *SMAPlugin) Export(_ context.Context, data *sync.ExportData, config sync.ExportConfig) (*sync.ExportResult, error) {
@@ -190,16 +209,17 @@ func (s *SMAPlugin) Export(_ context.Context, data *sync.ExportData, config sync
 	}
 
 	outputPath, _ := config.Config["output_path"].(string)
+	var destination *approvedRootPath
 	if outputPath == "" {
-		outputPath = "/tmp/shelly-sma"
+		destination, err = openDefaultExportRoot()
+	} else {
+		destination, err = openApprovedRoot(s.exportBaseDir, outputPath, "export")
 	}
-	if s.baseDir != "" {
-		outputPath, err = security.ValidatePath(s.baseDir, outputPath)
-		if err != nil {
-			return nil, fmt.Errorf("path validation failed: %w", err)
-		}
+	if err != nil {
+		return nil, err
 	}
-	if mkdirErr := os.MkdirAll(outputPath, 0o755); mkdirErr != nil {
+	defer func() { _ = destination.close() }()
+	if mkdirErr := destination.root.MkdirAll(destination.relative, 0o755); mkdirErr != nil {
 		return nil, fmt.Errorf("create output directory: %w", mkdirErr)
 	}
 
@@ -210,11 +230,12 @@ func (s *SMAPlugin) Export(_ context.Context, data *sync.ExportData, config sync
 	filename := fmt.Sprintf("shelly-archive-%s-%s.sma",
 		security.SanitizeFilename(start.UTC().Format("20060102-150405")),
 		security.SanitizeFilename(uuid.NewString()[:8]))
-	finalPath := filepath.Join(outputPath, filename)
-	fileSize, err := s.publishAtomic(finalPath, canonical, level)
+	finalRelativePath := filepath.Join(destination.relative, filename)
+	fileSize, err := s.publishAtomic(destination.root, finalRelativePath, canonical, level)
 	if err != nil {
 		return nil, err
 	}
+	finalPath := filepath.Join(destination.absolute(), filename)
 
 	return &sync.ExportResult{
 		Success:     true,
