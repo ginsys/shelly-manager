@@ -61,13 +61,27 @@ func NewSyncEngine(dbManager DatabaseManagerInterface, logger *logging.Logger) *
 // SetImportBaseDir sets the base directory for import path validation.
 // If set, file-based imports are restricted to paths within this directory.
 func (e *SyncEngine) SetImportBaseDir(dir string) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
 	e.importBaseDir = dir
+	for _, plugin := range e.plugins {
+		if restricted, ok := plugin.(ImportPathRestrictedPlugin); ok {
+			restricted.SetImportBaseDir(dir)
+		}
+	}
 }
 
 // SetExportBaseDir sets the base directory for export path validation.
 // If set, file-based exports are restricted to paths within this directory.
 func (e *SyncEngine) SetExportBaseDir(dir string) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
 	e.exportBaseDir = dir
+	for _, plugin := range e.plugins {
+		if restricted, ok := plugin.(ExportPathRestrictedPlugin); ok {
+			restricted.SetExportBaseDir(dir)
+		}
+	}
 }
 
 // GetExportResult retrieves a stored export result by ID
@@ -144,17 +158,15 @@ func (e *SyncEngine) RegisterPlugin(plugin SyncPlugin) error {
 		return fmt.Errorf("failed to initialize plugin %s: %w", info.Name, err)
 	}
 
-	// If the plugin supports path restrictions, set the base directory
-	// This prevents path traversal attacks by restricting file operations
-	if prp, ok := plugin.(PathRestrictedPlugin); ok {
-		// Use export base dir as the default for plugins (they primarily export)
-		if e.exportBaseDir != "" {
-			prp.SetBaseDir(e.exportBaseDir)
-			e.logger.Debug("Set base directory for plugin",
-				"plugin", info.Name,
-				"base_dir", e.exportBaseDir,
-			)
-		}
+	// Give plugins the distinct roots they must enforce at the filesystem
+	// boundary. Retain the legacy export-root hook for older plugins.
+	if restricted, ok := plugin.(ExportPathRestrictedPlugin); ok {
+		restricted.SetExportBaseDir(e.exportBaseDir)
+	} else if restricted, ok := plugin.(PathRestrictedPlugin); ok {
+		restricted.SetBaseDir(e.exportBaseDir)
+	}
+	if restricted, ok := plugin.(ImportPathRestrictedPlugin); ok {
+		restricted.SetImportBaseDir(e.importBaseDir)
 	}
 
 	e.plugins[info.Name] = plugin
