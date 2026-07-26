@@ -57,6 +57,45 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backe
 - Avoid follow‑up “forgot docs/tests” commits. If necessary during review, squash before merge.
 - Keep unrelated refactors out of feature commits. Submit them separately with clear scope.
 
+## Agent Gates (A1–A5)
+
+Process rules for AI agents (Claude Code, Codex, and any other) working in this repo.
+They constrain *how* work is done and are independent of any particular tool, harness or
+machine — everything below is checkable by anyone with a clone of this repository.
+
+- **A1 — Verify before planning.** Every factual claim about existing code, schemas,
+  endpoints, config keys or counts carries a `file:line` actually read in that session.
+  Anything uncitable goes in an explicit `ASSUMPTIONS` list, never stated as fact.
+  Recompute every number from source — a figure carried over from an earlier draft is not
+  verified. Never cite your own uncommitted change as evidence of an existing convention;
+  check the base branch.
+- **A2 — Destructive operations need a proven dry-run, not an asserted one.** Print the
+  exact command, then show that the dry-run ran and what it produced. A tool *accepting*
+  `--dry-run` is not proof it honoured it — external-dns webhook sidecars accept the flag
+  and mutate anyway. If it cannot be proven, say so and stop rather than proceeding.
+- **A3 — Stop means stop.** On "stop"/"wait"/"pause": no further edits, no further tool
+  calls, one-line acknowledgement only.
+- **A4 — No merge-ready claim without per-item evidence.** Read this checklist at the
+  *start* of the work, not at review time — that is the failure this gate exists to
+  prevent. For this repo:
+  - `make test-ci` passes locally (see "Build, Test, and Development Commands") — quote
+    the output, not just "tests pass"
+  - coverage ≥ 27.5% (`make test-coverage-check`)
+  - screenshot or GIF attached for any `ui/` change
+  - docs, root `README.md`, `CHANGELOG.md` (Unreleased) and `configs/*.yaml` updated in
+    the same commit
+  - PR links its issue; branch is `<type>/<issue>-<short-description>`
+- **A5 — Re-read your own diff before claiming done.** Classes that have actually
+  recurred here: stale-request races in async UI code (a late response rendering over a
+  newer selection), non-idempotent migrations — prove idempotency by running twice —
+  cross-test contamination from undisposed resources, and `$?` misuse around
+  `if ! cmd`. Report what you checked, not that you checked.
+
+Note on the type-check ratchet: `ui/typecheck-baseline.json` is `{}`; the real ratchet
+lives in `ui/scripts/typecheck-baseline/` and the count is computed at runtime. A
+baseline number quoted from a plan or issue is not verifiable statically — run
+`make typecheck-check`.
+
 ## Security & Configuration Tips
 - Do not commit secrets. Use `.env` and `configs/*.yaml`; see `.env.example` for keys (server, DB path, discovery, OPNSense, WiFi defaults).
 - Prefer Docker Compose for local runs that touch networks: `make docker-run`.
