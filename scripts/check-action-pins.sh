@@ -10,12 +10,16 @@
 # Allowed unpinned forms, and why:
 #   ./path                    — an action inside this repo; same commit as the caller.
 #   docker://image:tag        — not a git ref; image pinning is a container concern.
-#   go-kure/*/.github/workflows/x.yml@ref
-#                             — a first-party REUSABLE WORKFLOW. GitHub's own
-#                               sha_pinning_required policy exempts reusable
-#                               workflows; this checker matches that boundary
-#                               exactly rather than inventing a stricter one.
-#                               First-party COMPOSITE ACTIONS are not exempt.
+#
+# Vendored from gitlab.com/autops/wharf/dot-github's scripts/check-action-pins.sh,
+# which additionally exempts go-kure/*/.github/workflows/x.yml@ref (a first-party
+# REUSABLE WORKFLOW, exempt under GitHub's own sha_pinning_required policy in that
+# org). That exemption is deliberately NOT carried over here: this repository is
+# github.com/ginsys/shelly-manager (go.mod:1), unrelated to go-kure, so keeping it
+# would leave a third-party namespace exempt from the exact check this script
+# exists to enforce. If this repo ever gains its own first-party reusable
+# workflows that need the same GitHub-policy exemption, scope a new regex to
+# ginsys/shelly-manager's own path — do not reintroduce the go-kure one.
 #
 # Known limitation: this is a line-anchored grep, not a YAML parser. A `run: |`
 # block scalar whose shell text happens to start a line with `uses:` would be
@@ -35,13 +39,6 @@ ROOT="$(cd "$ROOT" && pwd)"
 errors=0
 fail() { echo "FAIL: $*" >&2; errors=$((errors + 1)); }
 
-# Reusable workflows are exempt from GitHub's sha_pinning_required policy
-# ("Reusable workflows can still be referenced by tag"), so this checker
-# exempts them too — deliberately mirroring the policy rather than being
-# stricter than it. First-party *composite actions* are NOT exempt from
-# that policy and are NOT exempt here.
-FIRST_PARTY_WORKFLOW_RE='^go-kure/[^/]+/\.github/workflows/[^@]+@'
-
 checked=0
 while IFS= read -r -d '' file; do
   # Strip a trailing `# comment` before matching so the `# v7` provenance
@@ -51,7 +48,6 @@ while IFS= read -r -d '' file; do
     case "$ref" in
       ./*|docker://*) continue ;;
     esac
-    if [[ "$ref" =~ $FIRST_PARTY_WORKFLOW_RE ]]; then continue; fi
     if [[ ! "$ref" =~ @[0-9a-f]{40}$ ]]; then
       fail "$(basename "$file"): unpinned action ref '$ref' (pin to a 40-char commit SHA, keep the tag as a trailing comment)"
     fi

@@ -2,7 +2,7 @@
 	lint fix hooks-install hooks-uninstall \
 	test test-unit test-integration test-race test-security test-all test-extra test-vitest \
 	test-coverage test-coverage-ci test-coverage-check \
-	test-ci check-go-version upgrade-go-version \
+	test-ci check-go-version upgrade-go-version check-action-pins \
 	ui-deps ui-deps-check typecheck-check \
 	ui-dev ui-build ui-preview test-e2e test-e2e-dev test-e2e-dev-ui test-smoke validate-integration \
 	benchmark example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
@@ -189,6 +189,13 @@ run-provisioner:
 check-go-version:
 	@./scripts/check-go-version.sh
 
+# Check every third-party GitHub Action is pinned to a 40-hex commit SHA
+# (CVE-2025-30066: a moved tag on tj-actions/changed-files leaked secrets
+# across ~23k repos that pinned by tag). Mirrors the action-pins CI job so a
+# regression fails `make test-ci` locally, not only in the GitHub job.
+check-action-pins:
+	@bash ./scripts/check-action-pins.sh .
+
 # Upgrade Go version in all project files (usage: make upgrade-go-version VERSION=1.24.0)
 upgrade-go-version:
 	@if [ -z "$(VERSION)" ]; then \
@@ -285,19 +292,21 @@ test-vitest: ui-deps-check
 # This is the most important test to run locally before committing
 test-ci:
 	@echo "Running complete CI test suite (matches GitHub Actions)..."
-	@echo "Step 1/7: Validating Go version consistency..."
+	@echo "Step 1/8: Validating Go version consistency..."
 	$(MAKE) check-go-version
-	@echo "Step 2/7: Installing dependencies..."
+	@echo "Step 2/8: Checking action pins..."
+	$(MAKE) check-action-pins
+	@echo "Step 3/8: Installing dependencies..."
 	$(MAKE) deps
-	@echo "Step 3/7: Running tests with coverage and race detection..."
+	@echo "Step 4/8: Running tests with coverage and race detection..."
 	$(MAKE) test-coverage-ci
-	@echo "Step 4/7: Checking coverage threshold..."
+	@echo "Step 5/8: Checking coverage threshold..."
 	$(MAKE) test-coverage-check
-	@echo "Step 5/7: Running linting..."
+	@echo "Step 6/8: Running linting..."
 	$(MAKE) lint
-	@echo "Step 6/7: Checking frontend type-check baseline..."
+	@echo "Step 7/8: Checking frontend type-check baseline..."
 	$(MAKE) typecheck-check
-	@echo "Step 7/7: Running frontend unit tests (vitest)..."
+	@echo "Step 8/8: Running frontend unit tests (vitest)..."
 	$(MAKE) test-vitest
 	@echo "✅ All CI tests passed! Ready to commit."
 
