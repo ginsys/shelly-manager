@@ -18,7 +18,8 @@ on:
       - 'configs/**'
       - 'deploy/docker/**'
       - 'ui/**'
-      - '.github/workflows/test.yml'
+      - '.github/workflows/**'
+      - 'scripts/check-action-pins.sh'
       - '.go-version'
   pull_request:
     branches: [ main ]
