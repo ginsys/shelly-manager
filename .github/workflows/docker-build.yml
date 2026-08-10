@@ -25,7 +25,7 @@ jobs:
       build_needed: ${{ steps.filter.outputs.docker_relevant }}
     steps:
       - name: Checkout repository at triggering ref
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Use the commit that triggered the Test workflow when workflow_run
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
@@ -33,7 +33,7 @@ jobs:
 
       - name: Detect changes relevant to Docker images
         id: filter
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           filters: |
@@ -95,7 +95,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Build images from the same commit that passed tests
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
@@ -115,10 +115,10 @@ jobs:
           echo "Generated version tag: ${VERSION}"
           
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
         
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
         with:
           driver-opts: |
             image=moby/buildkit:latest
@@ -132,7 +132,7 @@ jobs:
           docker system prune -f
           
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -140,7 +140,7 @@ jobs:
           
       - name: Extract metadata for Manager
         id: meta-manager
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-manager
           tags: |
@@ -155,7 +155,7 @@ jobs:
             
       - name: Extract metadata for Provisioner
         id: meta-provisioner
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-provisioner
           tags: |
@@ -169,7 +169,7 @@ jobs:
             org.opencontainers.image.created=${{ steps.version.outputs.date }}
             
       - name: Build and push Manager image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: ./deploy/docker/Dockerfile.manager
@@ -186,7 +186,7 @@ jobs:
             GOOS=linux
             
       - name: Build and push Provisioner image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: ./deploy/docker/Dockerfile.provisioner
