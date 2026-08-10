@@ -4,7 +4,7 @@
 
 ### Prerequisites
 - Go 1.23+
-- Node.js 18+
+- Node.js 22.22+ (Node 24 recommended, matches CI)
 - SQLite (for development)
 
 ### 1. Clone and Setup

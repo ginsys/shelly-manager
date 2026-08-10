@@ -32,7 +32,7 @@ tests/e2e/
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22.22+ (Node 24 recommended, matches CI)
 - Docker (for local backend)
 - Playwright browsers installed
 
