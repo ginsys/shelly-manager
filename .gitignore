@@ -83,3 +83,6 @@ node_modules/
 
 # Playwright MCP scratch artifacts
 .playwright-mcp/
+
+# Claude Code local settings (machine-specific, never tracked)
+.claude/settings.local.json
