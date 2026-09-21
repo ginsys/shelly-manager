@@ -34,9 +34,9 @@
   "dependencies": {
     "axios": "^1.20.0",
     "echarts": "^6.1.0",
-    "pako": "^3.0.1",
+    "pako": "^3.0.2",
     "pinia": "^4.0.3",
-    "quasar": "^2.32.0",
+    "quasar": "^2.33.0",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1"
   },
