@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@pinia/testing": "^2.0.1",
-    "@playwright/test": "^1.64.0",
+    "@playwright/test": "^1.64.1",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vitest/coverage-v8": "^4.1.12",
     "@vue/test-utils": "^2.5.1",
