@@ -36,12 +36,12 @@
     "echarts": "^6.1.0",
     "pako": "^3.0.2",
     "pinia": "^4.0.3",
-    "quasar": "^2.35.0",
+    "quasar": "^2.35.1",
     "vue": "^3.5.43",
     "vue-router": "^5.4.0"
   },
   "devDependencies": {
-    "@pinia/testing": "^2.0.1",
+    "@pinia/testing": "^2.0.2",
     "@playwright/test": "^1.64.1",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vitest/coverage-v8": "^4.1.12",
@@ -51,6 +51,6 @@
     "typescript": "^5.9.3",
     "vite": "^8.3.4",
     "vitest": "^4.1.4",
-    "vue-tsc": "^3.3.12"
+    "vue-tsc": "^3.3.13"
   }
 }
