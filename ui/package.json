@@ -43,8 +43,8 @@
   "devDependencies": {
     "@pinia/testing": "^2.0.1",
     "@playwright/test": "^1.64.0",
-    "@vitejs/plugin-vue": "^6.0.9",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vitest/coverage-v8": "^4.1.12",
     "@vue/test-utils": "^2.5.1",
     "jsdom": "^30.1.2",
     "terser": "^5.51.2",
