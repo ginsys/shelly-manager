@@ -118,9 +118,9 @@ stopped.
 ## Verifying an upgrade
 
 ```bash
-# point the server at the database explicitly; database.dsn, when set, takes
-# precedence over database.path
-SHELLY_DATABASE_PATH=/path/to/shelly.db ./shelly-manager server
+# point the server at the database explicitly; SHELLY_DATABASE_DSN overrides
+# both database.dsn and database.path from the config file
+SHELLY_DATABASE_DSN=/path/to/shelly.db ./shelly-manager server
 ```
 
 The `database` field of the `Shelly Manager initialized` log entry, and the
