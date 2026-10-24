@@ -163,14 +163,19 @@ func routeContractFiles(root string) (map[string]string, error) {
 			strings.HasSuffix(name, ".d.ts") {
 			return nil
 		}
-		if !strings.HasSuffix(name, ".ts") && !strings.HasSuffix(name, ".vue") && !strings.HasSuffix(name, ".tsx") {
-			return nil
-		}
 		rel, err := filepath.Rel(root, p)
 		if err != nil {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		switch filepath.Ext(name) {
+		case ".js", ".mjs", ".cjs", ".jsx":
+			// The scanner reads only TS and Vue; a JS file would be skipped silently.
+			return fmt.Errorf("%s: unsupported source extension; the route contract scans only .ts, .tsx and .vue", rel)
+		}
+		if !strings.HasSuffix(name, ".ts") && !strings.HasSuffix(name, ".vue") && !strings.HasSuffix(name, ".tsx") {
+			return nil
+		}
 		body, err := os.ReadFile(p)
 		if err != nil {
 			return err
@@ -490,19 +495,61 @@ func sortRoutePairs(out []routeContractPair) {
 	})
 }
 
+// routePrecedenceSamples are tried in order for every {param} of a call
+// template. The first value the expected route accepts on its own builds the
+// representative request, so a constrained route such as {id:<uuid>} is not
+// reported as shadowed by a value it would reject anyway.
+var routePrecedenceSamples = []string{"00000000-0000-0000-0000-000000000000", "1", "x"}
+
 func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeContractPrec, error) {
+	expected := map[string]*mux.Route{}
+	err := router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
+		tmpl, tmplErr := route.GetPathTemplate()
+		methods, methodErr := route.GetMethods()
+		if tmplErr != nil || methodErr != nil {
+			return nil
+		}
+		for _, method := range methods {
+			key := strings.ToUpper(method) + " " + normalizeRouteTemplate(tmpl)
+			if _, ok := expected[key]; !ok {
+				expected[key] = route
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	seen := map[string]bool{}
 	var out []routeContractPrec
 	for _, call := range calls {
-		if strings.Contains(call.Template, "{") {
-			continue
-		}
 		key := call.Method + " " + call.Template
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		req := httptest.NewRequest(call.Method, call.Template, nil)
+		reqPath := call.Template
+		if strings.Contains(call.Template, "{param}") {
+			want, ok := expected[key]
+			if !ok {
+				// No such pair; missingRoutePairs reports it.
+				continue
+			}
+			reqPath = ""
+			for _, sample := range routePrecedenceSamples {
+				p := strings.ReplaceAll(call.Template, "{param}", sample)
+				var m mux.RouteMatch
+				if want.Match(httptest.NewRequest(call.Method, p, nil), &m) && m.MatchErr == nil {
+					reqPath = p
+					break
+				}
+			}
+			if reqPath == "" {
+				return nil, fmt.Errorf("%s %s: no sample value satisfies the route's own constraints; extend routePrecedenceSamples", call.Method, call.Template)
+			}
+		}
+		req := httptest.NewRequest(call.Method, reqPath, nil)
 		var match mux.RouteMatch
 		if !router.Match(req, &match) || match.MatchErr != nil || match.Route == nil {
 			continue
@@ -651,6 +698,7 @@ type routeScanner struct {
 	i            int
 	line         int
 	canRegex     bool
+	member       bool // the previous token was a member-access dot (`.` or `?.`)
 	stop         bool
 	prevWord     string
 	isClientFile bool
@@ -874,10 +922,12 @@ func (s *routeScanner) scanOne() {
 		return
 	}
 	c := s.src[s.i]
+	member := s.member
+	s.member = false
 	switch {
 	case s.isIdentStart():
 		ident, line := s.readIdent()
-		s.afterIdent(ident, line)
+		s.afterIdent(ident, line, member)
 	case c >= '0' && c <= '9':
 		s.scanNumber()
 	case c == '\'' || c == '"':
@@ -889,7 +939,7 @@ func (s *routeScanner) scanOne() {
 	}
 }
 
-func (s *routeScanner) afterIdent(ident string, line int) {
+func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	prev := s.prevWord
 	s.prevWord = ident
 	switch ident {
@@ -911,7 +961,13 @@ func (s *routeScanner) afterIdent(ident string, line int) {
 		s.canRegex = false
 		return
 	}
-	if s.api[ident] && s.tryClientCall(line) {
+	// The client binding has one supported shape: api.<method>(url, ...).
+	// Any other use (called, indexed, aliased, passed on) could reach the
+	// server without yielding a pair, so it fails. cfg.api is a property.
+	if s.api[ident] && !member {
+		if !s.tryClientCall(line) {
+			s.fail(line, "unsupported use of api client %q; call %s.<method>(url, ...)", ident, ident)
+		}
 		return
 	}
 	if ident == "fetch" {
@@ -1024,6 +1080,10 @@ func (s *routeScanner) tryClientCall(line int) bool {
 		if !s.stop {
 			s.fail(line, "unsupported url argument for %s()", method)
 		}
+		return true
+	}
+	if !s.argEnds() {
+		s.fail(line, "unsupported url expression for %s(); pass one string or template literal", method)
 		return true
 	}
 	full, err := normalizeCallPath(routeContractAPIBase, raw)
@@ -1154,6 +1214,10 @@ func (s *routeScanner) finishTransport(line int, kind string) {
 			}
 			return
 		}
+		if !s.argEnds() {
+			s.fail(line, "unsupported transport url expression")
+			return
+		}
 		hit.Arg = "literal"
 		hit.Literal = raw
 	case s.isIdentStart():
@@ -1167,6 +1231,17 @@ func (s *routeScanner) finishTransport(line int, kind string) {
 	s.hits = append(s.hits, hit)
 	s.canRegex = true
 	s.prevWord = ""
+}
+
+// argEnds reports whether the url argument just read is the whole argument:
+// the next significant byte must close the call or start the next argument.
+// Otherwise '/devices' + suffix would be read as /devices.
+func (s *routeScanner) argEnds() bool {
+	mark := s.mark()
+	s.skipSpaceComments()
+	ok := s.peek(',') || s.peek(')')
+	s.restore(mark)
+	return ok
 }
 
 func (s *routeScanner) readPathArg() (string, bool) {
@@ -1802,6 +1877,7 @@ func (s *routeScanner) scanQuestion() {
 			s.i++
 			s.canRegex = false
 			s.prevWord = ""
+			s.member = true
 			return
 		}
 	}
@@ -1916,6 +1992,7 @@ func (s *routeScanner) scanDot() {
 	s.i++
 	s.canRegex = false
 	s.prevWord = ""
+	s.member = true
 }
 
 func (s *routeScanner) scanSlash() {

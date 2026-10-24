@@ -52,6 +52,6 @@
   {
     "method": "GET",
     "template": "/api/v1/version",
-    "issue": 253
+    "issue": 363
   }
 ]
