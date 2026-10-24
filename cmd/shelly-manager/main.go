@@ -559,7 +559,7 @@ func initApp() {
 	dbManager, err = database.NewManagerFromConfigWithLogger(cfg, logger)
 	if err != nil {
 		logger.WithFields(map[string]any{
-			"db_path":   cfg.Database.Path,
+			"database":  cfg.DatabaseTarget(),
 			"error":     err.Error(),
 			"component": "database",
 		}).Error("Failed to initialize database")
@@ -730,13 +730,13 @@ func initApp() {
 	}
 
 	logger.WithFields(map[string]any{
-		"db_path":   cfg.Database.Path,
+		"database":  cfg.DatabaseTarget(),
 		"networks":  cfg.Discovery.Networks,
 		"component": "app",
 	}).Info("Shelly Manager initialized")
 
 	fmt.Printf("Shelly Manager initialized\n")
-	fmt.Printf("Database: %s\n", cfg.Database.Path)
+	fmt.Printf("Database: %s\n", cfg.DatabaseTarget())
 	if len(cfg.Discovery.Networks) > 0 {
 		fmt.Printf("Discovery networks: %v\n", cfg.Discovery.Networks)
 	}

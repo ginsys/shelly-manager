@@ -118,11 +118,14 @@ stopped.
 ## Verifying an upgrade
 
 ```bash
-# point the server at the database explicitly — see issue #276: the
-# database.path setting is currently ignored because the database.dsn default
-# always wins, so a mis-set path silently uses data/shelly.db instead
-SHELLY_DATABASE_DSN=/path/to/shelly.db ./shelly-manager server
+# point the server at the database explicitly; database.dsn, when set, takes
+# precedence over database.path
+SHELLY_DATABASE_PATH=/path/to/shelly.db ./shelly-manager server
 ```
+
+The `database` field of the `Shelly Manager initialized` log entry, and the
+`Database:` line on stdout, name the database the server actually opened;
+check it before trusting the result.
 
 A successful repair logs one line with what it did:
 
