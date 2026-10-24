@@ -1,7 +1,6 @@
 package api
 
 import (
-	"os"
 	"sort"
 	"testing"
 
@@ -25,11 +24,8 @@ const testModeOnlyProductionRoute = "GET /api/v1/metrics/security"
 func TestTestModeRouterMatchesProductionRouteTable(t *testing.T) {
 	// make test / CI export this, which would make SetupRoutesWithSecurity
 	// return the test-mode router and hide the difference this test exists for.
+	// The constructor checks == "true", so empty disables it.
 	t.Setenv("SHELLY_SECURITY_VALIDATION_TEST_MODE", "")
-	// Setenv leaves the variable set to empty; the constructor checks == "true".
-	if os.Getenv("SHELLY_SECURITY_VALIDATION_TEST_MODE") == "true" {
-		t.Fatal("failed to disable test mode for the production router")
-	}
 
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
@@ -48,6 +44,10 @@ func TestTestModeRouterMatchesProductionRouteTable(t *testing.T) {
 	h.ImportHandlers = NewImportHandlers(engine, logger)
 
 	prod := SetupRoutesWithSecurity(h, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
+	// The production router starts the monitor's alert and cleanup goroutines.
+	sm, ok := h.securityMonitor.(*middleware.SecurityMonitor)
+	require.True(t, ok, "production router did not build a security monitor")
+	t.Cleanup(sm.Close)
 	testMode := SetupTestModeRoutes(h, logger)
 
 	prodRoutes := routeTable(t, prod)
