@@ -9,6 +9,10 @@ All notable changes to this project are documented here. The project follows Con
   mitigation (CVE-2026-111943). golangci-lint is 2.15.0. Module updates include
   prometheus/client_golang v1.25.0 and current golang.org/x releases.
   Dependabot again proposes golang.org/x minor updates.
+- Test mode (`SHELLY_SECURITY_VALIDATION_TEST_MODE`) registers the production
+  `/api/v1` route table. The security middleware stack stays off. `GET
+  /api/v1/metrics/security` remains production-only because it closes over the
+  security monitor, which test mode does not construct. (#252)
 - Export and import previews now use the registered plugin list and each
   plugin's backend schema. Export preview supports every registered format;
   browser import preview is deliberately limited to SMA data and enforces a
