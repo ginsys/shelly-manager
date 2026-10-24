@@ -16,12 +16,13 @@ logging:
 
 # Database configuration (supports SQLite, PostgreSQL, MySQL)
 database:
-  # Legacy field for backward compatibility
+  # SQLite database file, used when dsn is not set
   path: "data/shelly.db"
-  
+
   # Provider-based configuration
   provider: "sqlite"        # Database provider: "sqlite", "postgresql", "mysql"
-  dsn: "data/shelly.db"     # Data Source Name (connection string)
+  # Connection string; overrides path when set. Required for postgresql/mysql.
+  # dsn: "data/shelly.db"
   max_open_conns: 1         # Maximum open connections
   max_idle_conns: 1         # Maximum idle connections  
   conn_max_lifetime: 300    # Connection max lifetime (seconds)

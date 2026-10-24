@@ -223,9 +223,12 @@ func setDefaults() {
 	viper.SetDefault("logging.output", "stdout")
 
 	// Database defaults
-	viper.SetDefault("database.path", "data/shelly.db") // Legacy compatibility
+	viper.SetDefault("database.path", "data/shelly.db") // SQLite file when dsn is unset
 	viper.SetDefault("database.provider", "sqlite")
-	viper.SetDefault("database.dsn", "data/shelly.db")
+	// Empty, not a file name: GetDatabaseConfig falls back to database.path only
+	// when dsn is empty. The empty default still registers the key, so
+	// SHELLY_DATABASE_DSN is unmarshalled even when no config file sets dsn.
+	viper.SetDefault("database.dsn", "")
 	viper.SetDefault("database.max_open_conns", 1)
 	viper.SetDefault("database.max_idle_conns", 1)
 	viper.SetDefault("database.conn_max_lifetime", 300)  // 5 minutes

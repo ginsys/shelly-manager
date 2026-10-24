@@ -66,6 +66,16 @@ All notable changes to this project are documented here. The project follows Con
   separately as #279. (#270)
 
 ### Fixed
+- `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
+  `database.dsn` default always won, so every SQLite run used `data/shelly.db`
+  whatever `path` said. `dsn` still takes precedence when set explicitly; the
+  shipped `configs/shelly-manager.yaml` no longer sets it. Startup logs now name
+  the database actually opened, with network-provider DSNs redacted, instead of
+  the configured `path`. **Upgrade note:** if `path` names any other file, the
+  data written so far is in `data/shelly.db` (relative to the working
+  directory); move it to `path`, or point `path` at it, before upgrading. This
+  includes `configs/development.yaml` and the docker-compose
+  `SHELLY_DATABASE_PATH` setting. (#276)
 - `GET /config/drift-schedules/{id}` returned HTTP 500 instead of 404 for a
   missing schedule: the service wraps `gorm.ErrRecordNotFound` with `%w`, but the
   handler compared with `==`; it now uses `errors.Is`. (#270)
