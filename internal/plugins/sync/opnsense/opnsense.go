@@ -281,8 +281,8 @@ func (o *OPNSensePlugin) Preview(ctx context.Context, data *sync.ExportData, con
 	deviceMappings := o.convertToDeviceMappings(data, config.Config)
 
 	var sampleData strings.Builder
-	sampleData.WriteString(fmt.Sprintf("OPNSense Export Preview - Format: %s\n", config.Format))
-	sampleData.WriteString(fmt.Sprintf("Total Devices: %d\n\n", len(deviceMappings)))
+	fmt.Fprintf(&sampleData, "OPNSense Export Preview - Format: %s\n", config.Format)
+	fmt.Fprintf(&sampleData, "Total Devices: %d\n\n", len(deviceMappings))
 
 	switch config.Format {
 	case "dhcp_reservations":
@@ -292,18 +292,18 @@ func (o *OPNSensePlugin) Preview(ctx context.Context, data *sync.ExportData, con
 				sampleData.WriteString("...\n")
 				break
 			}
-			sampleData.WriteString(fmt.Sprintf("- %s -> %s (%s)\n", device.ShellyMAC, device.ShellyIP, device.OPNSenseHostname))
+			fmt.Fprintf(&sampleData, "- %s -> %s (%s)\n", device.ShellyMAC, device.ShellyIP, device.OPNSenseHostname)
 		}
 	case "firewall_aliases":
 		aliasName := o.getStringConfig(config.Config, "firewall_alias_name", "shelly_devices")
-		sampleData.WriteString(fmt.Sprintf("Firewall Alias: %s\n", aliasName))
+		fmt.Fprintf(&sampleData, "Firewall Alias: %s\n", aliasName)
 		sampleData.WriteString("IP Addresses:\n")
 		for i, device := range deviceMappings {
 			if i >= 10 { // Limit preview to 10 IPs
 				sampleData.WriteString("...\n")
 				break
 			}
-			sampleData.WriteString(fmt.Sprintf("- %s\n", device.ShellyIP))
+			fmt.Fprintf(&sampleData, "- %s\n", device.ShellyIP)
 		}
 	case "bidirectional_sync":
 		sampleData.WriteString("Bidirectional Sync Preview:\n")
@@ -643,10 +643,10 @@ func (o *OPNSensePlugin) generateXMLConfig(devices []opnsense.DeviceMapping, con
 
 	for _, device := range devices {
 		xml.WriteString("    <staticmap>\n")
-		xml.WriteString(fmt.Sprintf("      <mac>%s</mac>\n", device.ShellyMAC))
-		xml.WriteString(fmt.Sprintf("      <ipaddr>%s</ipaddr>\n", device.ShellyIP))
-		xml.WriteString(fmt.Sprintf("      <hostname>%s</hostname>\n", device.OPNSenseHostname))
-		xml.WriteString(fmt.Sprintf("      <descr>Shelly device: %s</descr>\n", device.ShellyName))
+		fmt.Fprintf(&xml, "      <mac>%s</mac>\n", device.ShellyMAC)
+		fmt.Fprintf(&xml, "      <ipaddr>%s</ipaddr>\n", device.ShellyIP)
+		fmt.Fprintf(&xml, "      <hostname>%s</hostname>\n", device.OPNSenseHostname)
+		fmt.Fprintf(&xml, "      <descr>Shelly device: %s</descr>\n", device.ShellyName)
 		xml.WriteString("    </staticmap>\n")
 	}
 
