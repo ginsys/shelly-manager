@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/database/provider"
@@ -87,13 +88,16 @@ func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
 
 // DatabaseTarget describes the database GetDatabaseConfig connects to, for
 // logs. Network provider DSNs can carry credentials, so for those only the
-// provider is named.
+// provider is named. Provider names are matched the way the provider factory
+// matches them.
 func (c *Config) DatabaseTarget() string {
 	dbConfig := c.GetDatabaseConfig()
-	if dbConfig.Provider == "sqlite" {
+	providerName := strings.ToLower(strings.TrimSpace(dbConfig.Provider))
+	switch providerName {
+	case "sqlite", "sqlite3":
 		return dbConfig.DSN
 	}
-	return dbConfig.Provider + " (DSN redacted)"
+	return providerName + " (DSN redacted)"
 }
 
 // ValidateDatabaseConfig validates the database configuration
