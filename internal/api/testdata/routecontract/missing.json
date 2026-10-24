@@ -1,0 +1,57 @@
+[
+  {
+    "method": "GET",
+    "template": "/api/v1/export/gitops",
+    "issue": 249
+  },
+  {
+    "method": "POST",
+    "template": "/api/v1/export/gitops-preview",
+    "issue": 249
+  },
+  {
+    "method": "GET",
+    "template": "/api/v1/export/gitops-statistics",
+    "issue": 249
+  },
+  {
+    "method": "DELETE",
+    "template": "/api/v1/export/gitops/{param}",
+    "issue": 249
+  },
+  {
+    "method": "GET",
+    "template": "/api/v1/export/gitops/{param}",
+    "issue": 249
+  },
+  {
+    "method": "POST",
+    "template": "/api/v1/import/restore",
+    "issue": 249
+  },
+  {
+    "method": "POST",
+    "template": "/api/v1/import/restore-preview",
+    "issue": 249
+  },
+  {
+    "method": "GET",
+    "template": "/api/v1/import/restore/{param}",
+    "issue": 249
+  },
+  {
+    "method": "GET",
+    "template": "/api/v1/notifications/channels/{param}",
+    "issue": 250
+  },
+  {
+    "method": "DELETE",
+    "template": "/api/v1/notifications/rules/{param}",
+    "issue": 250
+  },
+  {
+    "method": "GET",
+    "template": "/api/v1/version",
+    "issue": 253
+  }
+]
