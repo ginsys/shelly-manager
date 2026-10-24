@@ -195,7 +195,7 @@ make test-ci        # Match CI exactly
 ## Development
 
 **Prerequisites:**
-- Go 1.23+ (managed via [mise](https://mise.jdx.dev/))
+- Go 1.27+ (pinned in `.go-version`, managed via [mise](https://mise.jdx.dev/))
 - SQLite3 development libraries
 - GCC (for CGO)
 

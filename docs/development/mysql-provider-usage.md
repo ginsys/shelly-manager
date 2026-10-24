@@ -21,7 +21,7 @@ This guide provides comprehensive instructions for configuring, deploying, and u
 - Network connectivity to MySQL server
 
 **Application Requirements:**
-- Go 1.19+ with MySQL driver support
+- Go 1.27+ with MySQL driver support
 - Shelly Manager with database abstraction layer
 - Configuration management system
 - Logging framework

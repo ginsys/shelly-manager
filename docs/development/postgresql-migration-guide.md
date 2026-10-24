@@ -16,7 +16,7 @@ This guide provides comprehensive instructions for migrating from SQLite to Post
 
 #### Application Requirements
 - **Shelly Manager**: Version with PostgreSQL provider support
-- **Go Version**: 1.19 or higher
+- **Go Version**: 1.27 or higher
 - **GORM**: v1.25.0 or higher with PostgreSQL driver
 
 ### Pre-Migration Checklist
