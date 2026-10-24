@@ -126,15 +126,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 - CI/CD quality gates
 - Local validation before commits
 
-### 4. CI/Matrix Tests
-
-#### `make test-matrix`
-**Purpose**: Run tests suitable for matrix testing across different environments  
-**Command**: `CGO_ENABLED=1 go test -v -race -short ./...`  
-**When to use**:
-- GitHub Actions matrix testing (used automatically)
-- Testing across different Go versions and OS
-- Standardized test execution for CI
+### 4. CI Tests
 
 #### `make test-ci`
 **Purpose**: Complete CI test suite with all validations (Go version → deps → coverage+race → coverage threshold → lint → frontend type-check ratchet → vitest)
@@ -213,7 +205,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Comprehensive linting with automatic fixes
 - Before major commits
 - Catching advanced style and potential issues
-- **Requires**: golangci-lint 1.60.3 (pinned via `mise.toml`)
+- **Requires**: golangci-lint 2.15.0 (pinned via `mise.toml`)
 
 #### `make format`
 **Purpose**: Format code (gofmt + goimports)  
@@ -263,10 +255,8 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 The GitHub Actions workflow (`test.yml`) uses these steps:
 
-- Main test job: `make test-ci` (installs deps, runs coverage+race, enforces 27.5% threshold, runs lint via golangci-lint 1.60.3 read from `mise.toml`, enforces the frontend type-check ratchet, and runs vitest).
+- Main test job: `make test-ci` (installs deps, runs coverage+race, enforces 27.5% threshold, runs lint via golangci-lint 2.15.0 read from `mise.toml`, enforces the frontend type-check ratchet, and runs vitest).
 - Frontend Unit Tests job: `npm ci` → type-check baseline tooling tests → `vue-tsc` baseline ratchet → vitest with coverage. The tooling tests run first so a broken parser is reported as its own failure rather than as a gate verdict.
-- Matrix job: `make test-matrix` on Linux/macOS across Go versions (fast, race+short).
-- Windows job (informational): `go test -v -race -short ./...` without `make`.
 - Build job: `make build` and publish artifact.
 
 ## Command Selection Guide
@@ -291,7 +281,6 @@ The GitHub Actions workflow (`test.yml`) uses these steps:
 
 **CI/CD Usage**:
 - Main pipeline: `make test-ci`
-- Matrix testing: `make test-matrix`
 - Coverage CI: `make test-coverage-ci`
 
 ## Coverage Thresholds and Environment
@@ -303,10 +292,10 @@ The GitHub Actions workflow (`test.yml`) uses these steps:
 
 ### Environment Requirements
 - **CGO_ENABLED=1**: Required for most tests (SQLite database functionality)
-- **Go version**: 1.23+ (as specified in workflows)
+- **Go version**: 1.27+ (pinned in `.go-version`; workflows read it via `go-version-file`)
 - **Optional tools**: 
   - `entr` for watch mode (`brew install entr`)
-  - `golangci-lint 1.60.3` for linting (pinned via `mise.toml`)
+  - `golangci-lint 2.15.0` for linting (pinned via `mise.toml`)
   - `bc` for coverage calculations
 
 ### Test Categories by Location

@@ -516,7 +516,7 @@ var ProductionMonitoringConfig = MonitoringConfig{
 
 #### Dockerfile Security Configurations
 ```dockerfile
-FROM golang:1.21-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 # Security: Run as non-root user
 RUN adduser -D -s /bin/sh appuser
