@@ -72,19 +72,29 @@ func TestGetDatabaseConfig_ConnectionTarget(t *testing.T) {
 }
 
 func TestDatabaseTarget(t *testing.T) {
-	sqlite := loadDatabaseConfigFile(t, "database:\n  path: data/shelly-dev.db\n")
-	if got := sqlite.DatabaseTarget(); got != "data/shelly-dev.db" {
-		t.Errorf("SQLite DatabaseTarget() = %q, want the file path", got)
+	// Every spelling the provider factory opens as SQLite names the file.
+	for _, provider := range []string{"sqlite", "sqlite3", "SQLite", " sqlite "} {
+		t.Run(provider, func(t *testing.T) {
+			cfg := loadDatabaseConfigFile(t,
+				"database:\n  provider: \""+provider+"\"\n  path: data/shelly-dev.db\n")
+			if got := cfg.DatabaseTarget(); got != "data/shelly-dev.db" {
+				t.Errorf("DatabaseTarget() = %q, want the file path", got)
+			}
+		})
 	}
 
 	const secret = "s3cret"
-	pg := loadDatabaseConfigFile(t,
-		"database:\n  provider: postgresql\n  dsn: postgres://app:"+secret+"@db:5432/shelly\n")
-	got := pg.DatabaseTarget()
-	if strings.Contains(got, secret) {
-		t.Errorf("PostgreSQL DatabaseTarget() = %q, leaks the DSN password", got)
-	}
-	if !strings.Contains(got, "postgresql") {
-		t.Errorf("PostgreSQL DatabaseTarget() = %q, want it to name the provider", got)
+	for _, provider := range []string{"postgresql", "postgres", "mysql"} {
+		t.Run(provider, func(t *testing.T) {
+			cfg := loadDatabaseConfigFile(t,
+				"database:\n  provider: "+provider+"\n  dsn: app:"+secret+"@tcp(db:5432)/shelly\n")
+			got := cfg.DatabaseTarget()
+			if strings.Contains(got, secret) {
+				t.Errorf("DatabaseTarget() = %q, leaks the DSN password", got)
+			}
+			if !strings.Contains(got, provider) {
+				t.Errorf("DatabaseTarget() = %q, want it to name the provider", got)
+			}
+		})
 	}
 }
