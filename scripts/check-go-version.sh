@@ -29,8 +29,13 @@ if [[ ! -f .go-version ]]; then
     exit 1
 fi
 
-EXPECTED=$(cat .go-version | tr -d '[:space:]')
-EXPECTED_MAJOR_MINOR="${EXPECTED%.*}"  # e.g., "1.23" from "1.23.0"
+EXPECTED=$(tr -d '[:space:]' < .go-version)
+# "1.27.3" -> "1.27". A two-part value is already major.minor; %.* would
+# strip "1.27" to "1".
+case "$EXPECTED" in
+    *.*.*) EXPECTED_MAJOR_MINOR="${EXPECTED%.*}" ;;
+    *) EXPECTED_MAJOR_MINOR="$EXPECTED" ;;
+esac
 
 echo "Checking Go version consistency..."
 echo "Expected version: ${EXPECTED} (${EXPECTED_MAJOR_MINOR}.x)"
@@ -40,7 +45,10 @@ echo ""
 if [[ -f go.mod ]]; then
     GOMOD_VERSION=$(grep "^go " go.mod | awk '{print $2}')
     GOMOD_TOOLCHAIN=$(grep "^toolchain go" go.mod | sed 's/toolchain go//')
-    GOMOD_MAJOR_MINOR="${GOMOD_VERSION%.*}"
+    case "$GOMOD_VERSION" in
+        *.*.*) GOMOD_MAJOR_MINOR="${GOMOD_VERSION%.*}" ;;
+        *) GOMOD_MAJOR_MINOR="$GOMOD_VERSION" ;;
+    esac
 
     if [[ -z "$GOMOD_VERSION" ]]; then
         echo -e "${RED}  go.mod: missing go directive${NC}"

@@ -55,14 +55,14 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 		return
 	}
 
-	if dstVal.Kind() == reflect.Ptr {
+	if dstVal.Kind() == reflect.Pointer {
 		if dstVal.IsNil() {
 			dstVal.Set(reflect.New(dstVal.Type().Elem()))
 		}
 		dstVal = dstVal.Elem()
 	}
 
-	if srcVal.Kind() == reflect.Ptr {
+	if srcVal.Kind() == reflect.Pointer {
 		if srcVal.IsNil() {
 			return
 		}
@@ -84,7 +84,7 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 
 		fieldPath := buildFieldPath(pathPrefix, srcTypeField)
 
-		if srcField.Kind() == reflect.Ptr {
+		if srcField.Kind() == reflect.Pointer {
 			if srcField.IsNil() {
 				continue
 			}
@@ -127,7 +127,7 @@ func mergeSlices(dstField, srcField reflect.Value, sources map[string]string, so
 
 		if srcElem.Kind() == reflect.Struct {
 			mergeStructs(dstElem, srcElem, sources, sourceName, elemPath)
-		} else if srcElem.Kind() == reflect.Ptr {
+		} else if srcElem.Kind() == reflect.Pointer {
 			if !srcElem.IsNil() {
 				if srcElem.Elem().Kind() == reflect.Struct {
 					if dstElem.IsNil() {
@@ -168,7 +168,7 @@ func mergeStructs(dstVal, srcVal reflect.Value, sources map[string]string, sourc
 
 		fieldPath := buildFieldPath(pathPrefix, srcTypeField)
 
-		if srcField.Kind() == reflect.Ptr {
+		if srcField.Kind() == reflect.Pointer {
 			if srcField.IsNil() {
 				continue
 			}
@@ -225,7 +225,7 @@ func toSnakeCase(s string) string {
 }
 
 func isPointerToBasicType(t reflect.Type) bool {
-	if t.Kind() != reflect.Ptr {
+	if t.Kind() != reflect.Pointer {
 		return false
 	}
 
