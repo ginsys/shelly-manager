@@ -112,7 +112,7 @@ jobs:
               allow_origins: ["*"]
           EOF
 
-          # Start backend with test mode enabled
+          # Test mode: production /api/v1 table, no security middleware.
           SHELLY_SECURITY_VALIDATION_TEST_MODE=true ./bin/shelly-manager server --config configs/config.yaml > backend.log 2>&1 &
           BACKEND_PID=$!
           echo "BACKEND_PID=$BACKEND_PID" >> $GITHUB_ENV
