@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"sort"
 	"testing"
 
@@ -73,14 +74,18 @@ func routeTable(t *testing.T, r *mux.Router) map[string]struct{} {
 	t.Helper()
 	out := map[string]struct{}{}
 	err := r.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
-		tmpl, tmplErr := route.GetPathTemplate()
-		methods, methodErr := route.GetMethods()
-		if methodErr != nil {
-			// Subrouter PathPrefix routes carry no methods. They are not endpoints.
+		if route.GetHandler() == nil {
+			// Subrouter PathPrefix routes have no handler. They are not endpoints.
 			return nil
 		}
+		tmpl, tmplErr := route.GetPathTemplate()
 		if tmplErr != nil {
-			t.Fatalf("route has methods %v but no path template: %v", methods, tmplErr)
+			t.Fatalf("route has a handler but no path template: %v", tmplErr)
+		}
+		methods, methodErr := route.GetMethods()
+		if methodErr != nil {
+			// A handler without .Methods(...) answers every method.
+			methods = []string{"ANY"}
 		}
 		for _, method := range methods {
 			key := method + " " + tmpl
@@ -93,6 +98,22 @@ func routeTable(t *testing.T, r *mux.Router) map[string]struct{} {
 	})
 	require.NoError(t, err)
 	return out
+}
+
+func TestRouteTableRecordsMethodlessHandlers(t *testing.T) {
+	noop := func(http.ResponseWriter, *http.Request) {}
+	r := mux.NewRouter()
+	sub := r.PathPrefix("/api/v1").Subrouter()
+	sub.HandleFunc("/devices", noop).Methods("GET", "POST")
+	sub.HandleFunc("/probe", noop)
+
+	got := routeTable(t, r)
+	want := map[string]struct{}{
+		"GET /api/v1/devices":  {},
+		"POST /api/v1/devices": {},
+		"ANY /api/v1/probe":    {},
+	}
+	require.Equal(t, want, got)
 }
 
 func diffRoutes(want, got map[string]struct{}) (missing, extra []string) {
