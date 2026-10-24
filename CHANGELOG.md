@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Changed
+- Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate
+  mitigation (CVE-2026-111943). golangci-lint is 2.15.0. Module updates include
+  prometheus/client_golang v1.25.0 and current golang.org/x releases.
+  Dependabot again proposes golang.org/x minor updates.
 - Export and import previews now use the registered plugin list and each
   plugin's backend schema. Export preview supports every registered format;
   browser import preview is deliberately limited to SMA data and enforces a

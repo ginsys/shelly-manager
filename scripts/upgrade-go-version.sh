@@ -28,7 +28,7 @@ if [[ -z "$NEW_VERSION" ]]; then
     echo "Example: $0 1.24.0"
     echo ""
     if [[ -f .go-version ]]; then
-        CURRENT=$(cat .go-version | tr -d '[:space:]')
+        CURRENT=$(tr -d '[:space:]' < .go-version)
         echo "Current version: ${CURRENT}"
     fi
     exit 1
@@ -56,15 +56,16 @@ echo "  Updated .go-version"
 
 # Update go.mod
 if [[ -f go.mod ]]; then
-    # Update go directive (use major.minor only)
-    sed_inplace go.mod "s/^go [0-9.]\+$/go ${MAJOR_MINOR}/"
+    # Keep a patch component. check-go-version.sh strips one ".*" suffix, so
+    # "go 1.27" would compare as "1" against .go-version 1.27.x.
+    sed_inplace go.mod "s/^go [0-9.]\+$/go ${MAJOR_MINOR}.0/"
 
     # Update or add toolchain directive
     if grep -q "^toolchain go" go.mod; then
         sed_inplace go.mod "s/^toolchain go[0-9.]\+$/toolchain go${NEW_VERSION}/"
     else
         # Add toolchain after go directive
-        sed_inplace go.mod "/^go ${MAJOR_MINOR}$/a toolchain go${NEW_VERSION}"
+        sed_inplace go.mod "/^go ${MAJOR_MINOR}\\.0$/a toolchain go${NEW_VERSION}"
     fi
     echo "  Updated go.mod"
 fi
@@ -97,12 +98,12 @@ GOTOOLCHAIN=local go mod tidy
 
 # Verify go mod tidy didn't change the Go version (dependency compatibility check)
 ACTUAL_GO=$(grep "^go " go.mod | awk '{print $2}')
-ACTUAL_MAJOR_MINOR="${ACTUAL_GO%.*}"
-# Handle case where go.mod has X.Y format without patch (e.g., 1.23)
-if [[ "$ACTUAL_MAJOR_MINOR" == "$ACTUAL_GO" ]]; then
-    # No patch version, use as-is
-    ACTUAL_MAJOR_MINOR="$ACTUAL_GO"
-fi
+# "1.27.0" -> "1.27". A two-part "1.27" is already major.minor; %.* would
+# strip it to "1".
+case "$ACTUAL_GO" in
+    *.*.*) ACTUAL_MAJOR_MINOR="${ACTUAL_GO%.*}" ;;
+    *) ACTUAL_MAJOR_MINOR="$ACTUAL_GO" ;;
+esac
 if [[ "$ACTUAL_MAJOR_MINOR" != "$MAJOR_MINOR" ]]; then
     echo ""
     echo "ERROR: go mod tidy changed Go version from $MAJOR_MINOR to $ACTUAL_MAJOR_MINOR (go.mod: $ACTUAL_GO)"

@@ -494,7 +494,9 @@ func runCommandWithTimeout(t *testing.T, timeout time.Duration, binary string, a
 				t.Logf("Failed to kill process: %v", killErr)
 			}
 		}
-		<-done // Wait for the process to be killed
+		if waitErr := <-done; waitErr != nil {
+			t.Logf("process wait after kill: %v", waitErr)
+		}
 		return out.String(), &TimeoutError{timeout}
 	}
 }

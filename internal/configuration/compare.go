@@ -125,7 +125,7 @@ func (c *ConfigComparator) compareStruct(expected, actual reflect.Value, prefix 
 
 func (c *ConfigComparator) compareFields(expected, actual reflect.Value, path string, rule *FieldCompareRule, result *CompareResult) {
 	// Handle nil pointers
-	if expected.Kind() == reflect.Ptr {
+	if expected.Kind() == reflect.Pointer {
 		if expected.IsNil() {
 			// Expected is nil (inherit), don't compare
 			return

@@ -39,7 +39,22 @@ linters:
     govet:
       enable:
         - shadow
-    
+    # QF1012 wants fmt.Fprintf instead of
+    # strings.Builder.WriteString(fmt.Sprintf).
+    # Builder.WriteString always returns a nil error.
+    # Fprintf's error is checked by errcheck, so the rewrite
+    # does not compile cleanly.
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1012
+
     misspell:
       locale: US
 
