@@ -56,6 +56,12 @@ func TestGetDatabaseConfig_ConnectionTarget(t *testing.T) {
 			env:     map[string]string{"SHELLY_DATABASE_DSN": "/data/env-dsn.db"},
 			want:    "/data/env-dsn.db",
 		},
+		{
+			name:    "dsn from the environment beats dsn and path from the file",
+			content: "database:\n  path: data/file.db\n  dsn: data/shelly.db\n",
+			env:     map[string]string{"SHELLY_DATABASE_DSN": "/data/env-dsn.db"},
+			want:    "/data/env-dsn.db",
+		},
 	}
 
 	for _, tt := range tests {
