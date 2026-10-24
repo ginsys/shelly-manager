@@ -654,16 +654,16 @@ func (g *GitOpsPlugin) generatePreviewStructure(groups map[string][]sync.DeviceD
 	preview.WriteString("├── common.yaml                    # Global settings\n")
 
 	for groupName, devices := range groups {
-		preview.WriteString(fmt.Sprintf("├── groups/%s/\n", groupName))
-		preview.WriteString(fmt.Sprintf("│   ├── group.yaml              # Group: %s (%d devices)\n", groupName, len(devices)))
+		fmt.Fprintf(&preview, "├── groups/%s/\n", groupName)
+		fmt.Fprintf(&preview, "│   ├── group.yaml              # Group: %s (%d devices)\n", groupName, len(devices))
 
 		typeGroups := g.groupDevicesByType(devices)
 		for deviceType, typeDevices := range typeGroups {
-			preview.WriteString(fmt.Sprintf("│   ├── %s/\n", strings.ToLower(deviceType)))
-			preview.WriteString(fmt.Sprintf("│   │   ├── common.yaml         # %s settings\n", deviceType))
+			fmt.Fprintf(&preview, "│   ├── %s/\n", strings.ToLower(deviceType))
+			fmt.Fprintf(&preview, "│   │   ├── common.yaml         # %s settings\n", deviceType)
 			for _, device := range typeDevices {
 				filename := g.sanitizeFilename(device.Name)
-				preview.WriteString(fmt.Sprintf("│   │   └── %s.yaml\n", filename))
+				fmt.Fprintf(&preview, "│   │   └── %s.yaml\n", filename)
 			}
 		}
 	}
@@ -672,7 +672,7 @@ func (g *GitOpsPlugin) generatePreviewStructure(groups map[string][]sync.DeviceD
 		preview.WriteString("├── templates/\n")
 		for _, template := range data.Templates {
 			filename := g.sanitizeFilename(template.Name)
-			preview.WriteString(fmt.Sprintf("│   └── %s.yaml\n", filename))
+			fmt.Fprintf(&preview, "│   └── %s.yaml\n", filename)
 		}
 	}
 

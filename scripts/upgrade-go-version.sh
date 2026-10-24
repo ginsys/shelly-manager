@@ -41,11 +41,12 @@ if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
     exit 1
 fi
 
-MAJOR_MINOR="${NEW_VERSION%.*}"
-if [[ "$NEW_VERSION" == "$MAJOR_MINOR" ]]; then
-    # No patch version provided, keep as is for .go-version
-    MAJOR_MINOR="${NEW_VERSION}"
-fi
+# "1.27.3" -> "1.27". A two-part "1.27" is already major.minor; %.* would
+# strip it to "1".
+case "$NEW_VERSION" in
+    *.*.*) MAJOR_MINOR="${NEW_VERSION%.*}" ;;
+    *) MAJOR_MINOR="$NEW_VERSION" ;;
+esac
 
 echo "Upgrading Go version to ${NEW_VERSION}..."
 echo ""
@@ -56,8 +57,7 @@ echo "  Updated .go-version"
 
 # Update go.mod
 if [[ -f go.mod ]]; then
-    # Keep a patch component. check-go-version.sh strips one ".*" suffix, so
-    # "go 1.27" would compare as "1" against .go-version 1.27.x.
+    # Write the go line as major.minor.0 (e.g. "go 1.27.0").
     sed_inplace go.mod "s/^go [0-9.]\+$/go ${MAJOR_MINOR}.0/"
 
     # Update or add toolchain directive

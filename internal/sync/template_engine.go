@@ -495,8 +495,8 @@ func generateDHCPConfig(devices []interface{}) string {
 			hostname := getString(deviceMap, "hostname")
 
 			if mac != "" && ip != "" && hostname != "" {
-				config.WriteString(fmt.Sprintf("host %s { hardware ethernet %s; fixed-address %s; }\n",
-					hostname, mac, ip))
+				fmt.Fprintf(&config, "host %s { hardware ethernet %s; fixed-address %s; }\n",
+					hostname, mac, ip)
 			}
 		}
 	}
