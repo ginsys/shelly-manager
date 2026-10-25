@@ -265,29 +265,32 @@ func checkVueTemplate(file, src string, chunks []vueChunk, bindings map[string]b
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	// Template expressions are the values of directive attributes (:x, @x,
-	// #x, v-x) and {{ }} interpolations. Inside one, the binding named as a
-	// word in any position fails: comments, statements and operators around
-	// it do not matter. A member .api of something else is not the binding.
-	// Static attributes and text never run, so they are not read.
-	var exprs [][]int
-	attr := regexp.MustCompile(`(?:^|\s)(?:[:@#]|v-)[^\s=/>]*\s*=\s*("[^"]*"|'[^']*')`)
-	for _, m := range attr.FindAllSubmatchIndex(outside, -1) {
-		exprs = append(exprs, []int{m[2], m[3]})
-	}
-	exprs = append(exprs, regexp.MustCompile(`\{\{[\s\S]*?\}\}`).FindAllIndex(outside, -1)...)
+	// Vue has many expression forms (quoted and unquoted directive values,
+	// .prop and dynamic-argument shorthands, {{ }}), so the template is not
+	// parsed: the binding named as a word anywhere outside <script> fails,
+	// prose and class names included. Rename the binding or move the call
+	// into the script. Only a member access (cfg.api, cfg?.api) of the same
+	// word is something else; a spread (...api) is the binding.
 	var errs []routeContractError
 	for _, name := range names {
-		re := regexp.MustCompile(`(^|[^\w$.])` + regexp.QuoteMeta(name) + `([^\w$]|$)`)
-		first := -1
-		for _, e := range exprs {
-			// sub[3] ends the prefix group: where the name starts.
-			if sub := re.FindSubmatchIndex(outside[e[0]:e[1]]); sub != nil && (first < 0 || e[0]+sub[3] < first) {
-				first = e[0] + sub[3]
-			}
+		identByte := func(c byte) bool {
+			return c == '_' || c == '$' || c >= 0x80 || (c >= '0' && c <= '9') || (c|0x20 >= 'a' && c|0x20 <= 'z')
 		}
-		if first >= 0 {
-			errs = append(errs, routeContractError{File: file, Line: byteLine(src, first), Msg: fmt.Sprintf("unsupported use of %q in a template expression; templates are not scanned", name)})
+		for off := 0; ; {
+			rel := bytes.Index(outside[off:], []byte(name))
+			if rel < 0 {
+				break
+			}
+			at, end := off+rel, off+rel+len(name)
+			off = at + 1
+			if (at > 0 && identByte(outside[at-1])) || (end < len(outside) && identByte(outside[end])) {
+				continue
+			}
+			if at > 0 && outside[at-1] == '.' && (at < 3 || string(outside[at-3:at]) != "...") {
+				continue
+			}
+			errs = append(errs, routeContractError{File: file, Line: byteLine(src, at), Msg: fmt.Sprintf("unsupported use of %q outside <script>; templates are not scanned", name)})
+			break
 		}
 	}
 	return errs
@@ -669,9 +672,9 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 		}
 		seen[key] = true
 		reqPaths := []string{call.Template}
+		want := expected[key]
 		if strings.Contains(call.Template, "{param}") {
-			want, ok := expected[key]
-			if !ok {
+			if want == nil {
 				// No such pair; missingRoutePairs reports it.
 				continue
 			}
@@ -681,7 +684,9 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 			}
 		}
 		// Every distinct route that catches a sample request is reported,
-		// so a new shadow cannot hide behind a baselined one.
+		// so a new shadow cannot hide behind a baselined one. A shadow is
+		// named by its raw template: {id:[0-9]+} and {id:[a-z]+} are two
+		// routes even though both normalize to {param}.
 		matched := map[string]bool{}
 		for _, reqPath := range reqPaths {
 			req := httptest.NewRequest(call.Method, reqPath, nil)
@@ -693,16 +698,21 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 			if err != nil {
 				return nil, fmt.Errorf("%s %s matched a route without a template: %w", call.Method, call.Template, err)
 			}
-			got := normalizeRouteTemplate(tmpl)
-			if got == call.Template || matched[got] {
+			if want != nil && match.Route == want {
 				continue
 			}
-			matched[got] = true
+			if want == nil && normalizeRouteTemplate(tmpl) == call.Template {
+				continue
+			}
+			if matched[tmpl] {
+				continue
+			}
+			matched[tmpl] = true
 			out = append(out, routeContractPrec{
 				Method:   call.Method,
 				Request:  call.Template,
 				Expected: call.Template,
-				Matched:  got,
+				Matched:  tmpl,
 			})
 		}
 	}
