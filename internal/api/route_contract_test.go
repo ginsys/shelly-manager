@@ -111,7 +111,7 @@ func TestRouteContractFixtures(t *testing.T) {
 		router.HandleFunc("/api/v1/export/gitops", routeContractNop).Methods("POST")
 		prec, err := routePrecedence(router, calls)
 		require.NoError(t, err)
-		if len(prec) != 1 || prec[0].Method != "GET" || prec[0].Request != "/api/v1/export/gitops" || prec[0].Matched != "/api/v1/export/{param}" {
+		if len(prec) != 1 || prec[0].Method != "GET" || prec[0].Request != "/api/v1/export/gitops" || prec[0].Matched != "/api/v1/export/{id}" {
 			t.Fatalf("precedence: %+v", prec)
 		}
 		missing := missingRoutePairs(calls, routeTable(t, router))
@@ -194,7 +194,7 @@ func TestRouteContractFixtures(t *testing.T) {
 		prec, err := routePrecedence(router, calls)
 		require.NoError(t, err)
 		if len(prec) != 1 || prec[0].Request != "/api/v1/devices/{param}/config/current" ||
-			prec[0].Matched != "/api/v1/devices/{param}/config/{param}" {
+			prec[0].Matched != "/api/v1/devices/{id}/config/{section}" {
 			t.Fatalf("precedence: %+v", prec)
 		}
 	})
@@ -220,7 +220,7 @@ func TestRouteContractFixtures(t *testing.T) {
 		router.HandleFunc("/api/v1/devices/{id:[0-9]+}/config/{section:[a-z]+}", routeContractNop).Methods("GET")
 		prec, err = routePrecedence(router, calls)
 		require.NoError(t, err)
-		if len(prec) != 1 || prec[0].Matched != "/api/v1/devices/{param}/{param}/{param}" {
+		if len(prec) != 1 || prec[0].Matched != "/api/v1/devices/{id:[0-9]+}/{kind}/{name}" {
 			t.Fatalf("precedence: %+v", prec)
 		}
 	})
@@ -239,7 +239,7 @@ func TestRouteContractFixtures(t *testing.T) {
 		router.HandleFunc("/api/v1/devices/{id}/config/current", routeContractNop).Methods("GET")
 		prec, err := routePrecedence(router, calls)
 		require.NoError(t, err)
-		if len(prec) != 1 || prec[0].Matched != "/api/v1/devices/1/config/{param}" {
+		if len(prec) != 1 || prec[0].Matched != "/api/v1/devices/1/config/{section}" {
 			t.Fatalf("precedence: %+v", prec)
 		}
 		// A second shadow on other samples is reported next to the first.
@@ -251,6 +251,17 @@ func TestRouteContractFixtures(t *testing.T) {
 		prec, err = routePrecedence(router, calls)
 		require.NoError(t, err)
 		if len(prec) != 2 || prec[0].Matched == prec[1].Matched {
+			t.Fatalf("precedence: %+v", prec)
+		}
+		// Two shadows that differ only in constraints stay two.
+		router = mux.NewRouter()
+		router.HandleFunc("/api/v1/devices/{id:[0-9]+}/config/{section}", routeContractNop).Methods("GET")
+		router.HandleFunc("/api/v1/devices/{id:[a-z]+}/config/{section}", routeContractNop).Methods("GET")
+		router.HandleFunc("/api/v1/devices/{id}/config/current", routeContractNop).Methods("GET")
+		prec, err = routePrecedence(router, calls)
+		require.NoError(t, err)
+		if len(prec) != 2 || prec[0].Matched != "/api/v1/devices/{id:[0-9]+}/config/{section}" ||
+			prec[1].Matched != "/api/v1/devices/{id:[a-z]+}/config/{section}" {
 			t.Fatalf("precedence: %+v", prec)
 		}
 	})
@@ -367,9 +378,9 @@ func TestRouteContractFixtures(t *testing.T) {
 		if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/App.vue:2:") {
 			t.Fatalf("calls %+v errs: %+v", calls, errs)
 		}
-		// Prose, attributes and member names that merely contain the word pass.
+		// A member of another object with the same name passes.
 		src = "<template>\n" +
-			"  <p class=\"api-key\" :title=\"cfg.api\">the api key</p>\n" +
+			"  <p :title=\"cfg.api\" :x=\"cfg?.api\">client</p>\n" +
 			"</template>\n" +
 			"<script setup lang=\"ts\">\n" +
 			"import api from '@/api/client'\n" +
@@ -385,6 +396,13 @@ func TestRouteContractFixtures(t *testing.T) {
 			"operator":      `@click="(ok && api).get('/missing')"`,
 			"interpolation": "x {{ api\n.get('/missing') }}",
 			"v-on":          `v-on:click="api.get('/missing')"`,
+			"unquoted":      `@click=api.get(path)`,
+			"prop":          `.textContent="api.get('/missing')"`,
+			"dynamic arg":   `@[api.get(path)]="noop"`,
+			"spread":        `:data="{...api.get('/missing')}"`,
+			// Text is not parsed either: the word alone fails closed.
+			"prose": `title="x">the api key</b><b`,
+			"class": `class="api-key"`,
 		} {
 			vue := "<template>\n<b " + expr + "></b>\n</template>\n" +
 				"<script setup lang=\"ts\">\nimport api from '@/api/client'\n</script>\n"
