@@ -359,6 +359,19 @@ func TestRouteContractFixtures(t *testing.T) {
 				t.Fatalf("%s literal: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
 			}
 		}
+		// CR, U+2028 and U+2029 end a // comment as LF does; code after one runs.
+		for name, end := range map[string]string{"cr": "\r", "ls": "\u2028", "ps": "\u2029"} {
+			src := "import api from './client'\n// note" + end + "api.get(url)\n"
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/fixture.ts:2:") {
+				t.Fatalf("%s comment: calls %+v errs: %+v", name, calls, errs)
+			}
+			src = "import api from './client'\n// note" + end + "api.get('/x')\n"
+			calls, errs = extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+			if len(errs) != 0 || len(calls) != 1 || calls[0].Template != "/api/v1/x" {
+				t.Fatalf("%s comment literal: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
+			}
+		}
 		// A non-ASCII letter still continues a name.
 		src := "import api from './client'\nconst api\u00e9 = 1\nexport const v = api\u00e9\n"
 		calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
@@ -642,6 +655,7 @@ func TestRouteContractFixtures(t *testing.T) {
 			"nested comma":   {"import axios from 'axios'\nexport const api = axios.create({ baseURL: join(env.X || '/api/v1', '/unserved') })\n", 2},
 			"ternary":        {"import axios from 'axios'\nexport const api = axios.create({ baseURL: a ? b : '/api/v1' })\n", 2},
 			"two":            {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
+			"nested base":    {"import axios from 'axios'\nexport const api = axios.create({ headers: { baseURL: '/api/v1' } })\n", 2},
 			"two instances":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst rootApi = axios.create({})\nexport default rootApi\n", 3},
 			"base elsewhere": {"import axios from 'axios'\nconst o = { baseURL: '/api/v1' }\nexport const api = axios.create({ timeout: 1 })\n", 3},
 			"spread":         {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', ...defaults })\n", 2},

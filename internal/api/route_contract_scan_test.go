@@ -499,6 +499,23 @@ func codeContainsPath(src, path string) bool {
 	}
 }
 
+// lineCommentEnd returns the index of the line terminator that ends a //
+// comment whose text starts at i, or len(src). JavaScript ends it at LF, CR,
+// U+2028 and U+2029; code after any of them runs.
+func lineCommentEnd(src []byte, i int) int {
+	for ; i < len(src); i++ {
+		switch src[i] {
+		case '\n', '\r':
+			return i
+		case 0xE2:
+			if i+2 < len(src) && src[i+1] == 0x80 && (src[i+2] == 0xA8 || src[i+2] == 0xA9) {
+				return i
+			}
+		}
+	}
+	return i
+}
+
 func stripRouteComments(src string) string {
 	var b strings.Builder
 	s := newRouteScanner("", src, 1)
@@ -506,9 +523,7 @@ func stripRouteComments(src string) string {
 		c := s.src[s.i]
 		if c == '/' && s.peekN(1) == '/' {
 			s.i += 2
-			for !s.eof() && s.src[s.i] != '\n' {
-				s.i++
-			}
+			s.i = lineCommentEnd(s.src, s.i)
 			b.WriteByte(' ')
 			continue
 		}
@@ -1078,9 +1093,7 @@ func (s *routeScanner) skipSpaceComments() {
 		case '/':
 			if s.peekN(1) == '/' {
 				s.i += 2
-				for !s.eof() && s.src[s.i] != '\n' {
-					s.i++
-				}
+				s.i = lineCommentEnd(s.src, s.i)
 				continue
 			}
 			if s.peekN(1) == '*' {
@@ -1124,9 +1137,7 @@ func (s *routeScanner) nextSignificant() byte {
 		case '/':
 			if i+1 < len(s.src) && s.src[i+1] == '/' {
 				i += 2
-				for i < len(s.src) && s.src[i] != '\n' {
-					i++
-				}
+				i = lineCommentEnd(s.src, i)
 				continue
 			}
 			if i+1 < len(s.src) && s.src[i+1] == '*' {
@@ -1629,12 +1640,13 @@ func (s *routeScanner) checkCallConfig(method string) string {
 }
 
 type callArg struct {
-	spreadArg bool // the argument is spread (...xs) into several
-	closed    bool // a bracket opened at the argument's top level just closed
-	object    bool // the argument is an object literal and nothing else
-	baseURL   bool // it names baseURL anywhere, as a word or a string
-	spread    bool // it spreads at its own top level
-	computed  bool // it has a computed key at its own top level
+	spreadArg  bool // the argument is spread (...xs) into several
+	closed     bool // a bracket opened at the argument's top level just closed
+	object     bool // the argument is an object literal and nothing else
+	baseURL    bool // it names baseURL anywhere, as a word or a string
+	baseURLKey bool // it has baseURL as a key at its own top level
+	spread     bool // it spreads at its own top level
+	computed   bool // it has a computed key at its own top level
 }
 
 // remainingArgs walks the arguments after the current one up to the call's
@@ -1706,6 +1718,7 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 			ident, _ := w.readIdent()
 			if ident == "baseURL" {
 				cur.baseURL = true
+				cur.baseURLKey = cur.baseURLKey || atKey
 			}
 			w.canRegex = unaryKeyword(ident)
 			w.prevWord = ident
@@ -1718,6 +1731,7 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 			}
 			if text == "baseURL" {
 				cur.baseURL = true
+				cur.baseURLKey = cur.baseURLKey || atKey
 			}
 			w.canRegex = false
 		case c == '`':
@@ -1783,7 +1797,7 @@ func (s *routeScanner) tryAxios(line int, member bool) bool {
 		}
 		// That baseURL describes one instance only: a second one, or one
 		// whose options lack it, would be paired under a base it never uses.
-		if s.created || !args[0].baseURL {
+		if s.created || !args[0].baseURLKey {
 			s.fail(line, "unsupported axios.create(); the api client module creates one instance, with the checked baseURL")
 			return true
 		}
@@ -1956,9 +1970,7 @@ func (s *routeScanner) skipTypeArgs() bool {
 			s.i++
 		case c == '/' && s.peekN(1) == '/':
 			s.i += 2
-			for !s.eof() && s.src[s.i] != '\n' {
-				s.i++
-			}
+			s.i = lineCommentEnd(s.src, s.i)
 		case c == '/' && s.peekN(1) == '*':
 			s.skipBlockComment()
 		case c == '\'' || c == '"':
