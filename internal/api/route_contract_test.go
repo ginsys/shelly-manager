@@ -513,10 +513,24 @@ func TestRouteContractFixtures(t *testing.T) {
 	})
 
 	t.Run("hoisted import", func(t *testing.T) {
-		src := "export const load = () => api.get('/missing')\n" +
-			"import api from './client'\n"
+		// A binding is in scope above its import, where the scan has not
+		// recorded it, so an import after other code fails.
+		for name, src := range map[string]string{
+			"helper": "export const open = () => connect({ url: '/missing' })\n" +
+				"import { useWebSocket as connect } from '@/composables/useWebSocket'\n",
+			"client": "const x = 1\nimport api from './client'\n",
+		} {
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/fixture.ts:2:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		src := "import type { A } from './types'\n" +
+			"import api from './client';\n" +
+			"export const load = () => api.get('/x')\n" +
+			"export const lazy = () => import('./other')\n"
 		calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
-		if len(errs) != 0 || len(calls) != 1 || calls[0].Template != "/api/v1/missing" || calls[0].Line != 1 {
+		if len(errs) != 0 || len(calls) != 1 {
 			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
 		}
 	})

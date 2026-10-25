@@ -880,7 +880,8 @@ type routeScanner struct {
 	canRegex     bool
 	member       bool // the previous token was a member-access dot (`.` or `?.`)
 	stop         bool
-	collect      bool // the import-collection pass: failures are not recorded and the scan resumes
+	code         bool // a token other than a static import declaration was read
+	inImport     bool // the token just read was a static import declaration
 	prevWord     string
 	isClientFile bool
 	api          map[string]bool
@@ -1011,39 +1012,13 @@ func (s *routeScanner) peekMember(name string) bool {
 }
 
 func (s *routeScanner) scanFile() {
-	// Static imports are hoisted: a binding is in scope above its import
-	// statement too, so a first pass collects every import binding before
-	// the uses are read. That pass reads past failures (the main pass
-	// reports them) and discards everything but the bindings.
-	pre := s.probe()
-	pre.collect = true
-	pre.scanBody()
-	for _, pair := range [][2]map[string]bool{{s.api, pre.api}, {s.ws, pre.ws}, {s.axios, pre.axios}} {
-		for name := range pair[1] {
-			pair[0][name] = true
-		}
-	}
-	s.scanBody()
-}
-
-func (s *routeScanner) scanBody() {
 	s.canRegex = true
-	for !s.eof() {
-		if s.stop {
-			if !s.collect {
-				return
-			}
-			s.stop = false // collecting: resume after the failed token
-		}
+	for !s.stop && !s.eof() {
 		s.skipSpaceComments()
 		if s.eof() || s.stop {
-			continue
+			return
 		}
-		at := s.i
 		s.scanOne()
-		if s.i == at {
-			s.i++ // nothing consumed: step past it
-		}
 	}
 }
 
@@ -1072,9 +1047,6 @@ func (s *routeScanner) fail(line int, format string, args ...any) {
 		return
 	}
 	s.stop = true
-	if s.collect {
-		return
-	}
 	s.errs = append(s.errs, routeContractError{File: s.file, Line: line, Msg: fmt.Sprintf(format, args...)})
 }
 
@@ -1252,6 +1224,11 @@ func (s *routeScanner) scanOne() {
 	default:
 		s.scanPunct(c)
 	}
+	if s.inImport {
+		s.inImport = false
+	} else {
+		s.code = true
+	}
 }
 
 // isBrowserTransport reports the global names that issue requests outside
@@ -1274,7 +1251,18 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			s.canRegex = false
 			return
 		}
+		if s.nextSignificant() == '(' {
+			s.parseImport() // a dynamic import is an expression
+			return
+		}
+		// Static imports are hoisted: a binding is in scope above its
+		// declaration, where this single pass has not recorded it yet.
+		if s.code {
+			s.fail(line, "unsupported import after other code; move static imports to the top")
+			return
+		}
 		s.parseImport()
+		s.inImport = true
 		return
 	case "new":
 		s.afterNew()
