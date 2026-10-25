@@ -378,6 +378,12 @@ func TestRouteContractFixtures(t *testing.T) {
 		if len(errs) != 0 || len(calls) != 0 {
 			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
 		}
+		// So do Nl and Other_ID_Continue runes (U+2160, U+00B7).
+		src = "import api\u00b7client from './client'\nconst \u2160x = 1\nexport const v = () => api\u00b7client.get('/x')\n"
+		calls, errs = extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+		if len(errs) != 0 || len(calls) != 1 || calls[0].Template != "/api/v1/x" {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
 	})
 
 	t.Run("stale manifest", func(t *testing.T) {
@@ -615,11 +621,20 @@ func TestRouteContractFixtures(t *testing.T) {
 			"default request":   "export default api.get('/missing')",
 			"default continued": "export default api\n  .get('/missing')",
 			"default other":     "export default rootApi",
+			"default operator":  "export default api\ninstanceof Function ? rootApi : null",
 		} {
 			src := head + body + "\n"
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
 			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/client.ts:3:") {
 				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		// Every JavaScript line terminator ends the default export statement.
+		for name, end := range map[string]string{"lf": "\n", "cr": "\r", "ls": "\u2028", "ps": "\u2029", "comment": " // c\u2028"} {
+			src := head + "export default api" + end + "export const marker = 1\n"
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
+			if len(errs) != 0 || len(calls) != 0 {
+				t.Fatalf("%s: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
 			}
 		}
 		_, errs := extractRouteContractSources(map[string]string{
@@ -665,6 +680,7 @@ func TestRouteContractFixtures(t *testing.T) {
 			"ternary":        {"import axios from 'axios'\nexport const api = axios.create({ baseURL: a ? b : '/api/v1' })\n", 2},
 			"two":            {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
 			"nested base":    {"import axios from 'axios'\nexport const api = axios.create({ headers: { baseURL: '/api/v1' } })\n", 2},
+			"escaped key":    {"import axios from 'axios'\nexport const api = axios.create({\n  'base\\u0055RL': '/unserved',\n  headers: { 'X-Note': \"baseURL: '/api/v1',\" },\n})\n", 2},
 			"two instances":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst rootApi = axios.create({})\nexport default rootApi\n", 3},
 			"base elsewhere": {"import axios from 'axios'\nconst o = { baseURL: '/api/v1' }\nexport const api = axios.create({ timeout: 1 })\n", 3},
 			"spread":         {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', ...defaults })\n", 2},
