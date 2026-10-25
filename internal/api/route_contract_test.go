@@ -253,6 +253,14 @@ func TestRouteContractFixtures(t *testing.T) {
 		if len(prec) != 2 || prec[0].Matched == prec[1].Matched {
 			t.Fatalf("precedence: %+v", prec)
 		}
+		// A pair served by two routes is ambiguous and fails.
+		router = mux.NewRouter()
+		router.HandleFunc("/api/v1/devices/{id:[0-9]+}/config/current", routeContractNop).Methods("GET")
+		router.HandleFunc("/api/v1/devices/{id}/config/current", routeContractNop).Methods("GET")
+		_, err = routePrecedence(router, calls)
+		if err == nil || !strings.Contains(err.Error(), "served by 2 routes") {
+			t.Fatalf("err: %v", err)
+		}
 		// Two shadows that differ only in constraints stay two.
 		router = mux.NewRouter()
 		router.HandleFunc("/api/v1/devices/{id:[0-9]+}/config/{section}", routeContractNop).Methods("GET")
@@ -400,6 +408,8 @@ func TestRouteContractFixtures(t *testing.T) {
 			"prop":          `.textContent="api.get('/missing')"`,
 			"dynamic arg":   `@[api.get(path)]="noop"`,
 			"spread":        `:data="{...api.get('/missing')}"`,
+			"line sep":      "@click=\"api .get('/missing')\"",
+			"nbsp":          "@click=\" api.get('/missing')\"",
 			// Text is not parsed either: the word alone fails closed.
 			"prose": `title="x">the api key</b><b`,
 			"class": `class="api-key"`,

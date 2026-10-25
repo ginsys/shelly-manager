@@ -273,8 +273,10 @@ func checkVueTemplate(file, src string, chunks []vueChunk, bindings map[string]b
 	// word is something else; a spread (...api) is the binding.
 	var errs []routeContractError
 	for _, name := range names {
-		identByte := func(c byte) bool {
-			return c == '_' || c == '$' || c >= 0x80 || (c >= '0' && c <= '9') || (c|0x20 >= 'a' && c|0x20 <= 'z')
+		// Identifier characters are _, $, letters and digits; any other
+		// rune (spaces, U+2028, U+00A0, punctuation) ends the name.
+		identRune := func(r rune) bool {
+			return r == '_' || r == '$' || unicode.IsLetter(r) || unicode.IsDigit(r)
 		}
 		for off := 0; ; {
 			rel := bytes.Index(outside[off:], []byte(name))
@@ -283,7 +285,10 @@ func checkVueTemplate(file, src string, chunks []vueChunk, bindings map[string]b
 			}
 			at, end := off+rel, off+rel+len(name)
 			off = at + 1
-			if (at > 0 && identByte(outside[at-1])) || (end < len(outside) && identByte(outside[end])) {
+			if before, _ := utf8.DecodeLastRune(outside[:at]); at > 0 && identRune(before) {
+				continue
+			}
+			if after, _ := utf8.DecodeRune(outside[end:]); end < len(outside) && identRune(after) {
 				continue
 			}
 			if at > 0 && outside[at-1] == '.' && (at < 3 || string(outside[at-3:at]) != "...") {
@@ -645,6 +650,7 @@ func routePrecedenceRequests(method, tmpl string, want *mux.Route) []string {
 
 func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeContractPrec, error) {
 	expected := map[string]*mux.Route{}
+	served := map[string][]string{} // raw templates of every route per pair
 	err := router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
 		tmpl, tmplErr := route.GetPathTemplate()
 		methods, methodErr := route.GetMethods()
@@ -656,6 +662,7 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 			if _, ok := expected[key]; !ok {
 				expected[key] = route
 			}
+			served[key] = append(served[key], tmpl)
 		}
 		return nil
 	})
@@ -671,6 +678,11 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 			continue
 		}
 		seen[key] = true
+		if routes := served[key]; len(routes) > 1 {
+			// Which route a request reaches depends on its values, so no
+			// single route is the expected one.
+			return nil, fmt.Errorf("%s %s is served by %d routes (%s); make the templates distinct", call.Method, call.Template, len(routes), strings.Join(routes, ", "))
+		}
 		reqPaths := []string{call.Template}
 		want := expected[key]
 		if strings.Contains(call.Template, "{param}") {
