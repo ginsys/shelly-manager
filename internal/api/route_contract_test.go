@@ -591,6 +591,15 @@ func TestRouteContractFixtures(t *testing.T) {
 		if len(errs) != 0 || len(calls) != 1 {
 			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
 		}
+		// import.meta stays a member access across a comment a Unicode line
+		// terminator ends.
+		for name, end := range map[string]string{"ls": "\u2028", "ps": "\u2029"} {
+			src := "import api from './client'\nconst env = import // note" + end + "\n.meta.env\n"
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+			if len(errs) != 0 || len(calls) != 0 {
+				t.Fatalf("%s: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
+			}
+		}
 	})
 
 	t.Run("client module instance", func(t *testing.T) {
