@@ -1174,7 +1174,7 @@ func (s *routeScanner) isIdentStart() bool {
 		return false
 	}
 	r, _ := utf8.DecodeRune(s.src[s.i:])
-	return unicode.IsLetter(r)
+	return unicode.IsLetter(r) || unicode.In(r, unicode.Nl, unicode.Other_ID_Start)
 }
 
 // isIdentCont is the byte-level test used when walking backwards, where a
@@ -1196,7 +1196,7 @@ func (s *routeScanner) identContAt(i int) bool {
 		return s.isIdentCont(c)
 	}
 	r, _ := utf8.DecodeRune(s.src[i:])
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.In(r, unicode.Mn, unicode.Mc, unicode.Pc) || r == 0x200C || r == 0x200D
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.In(r, unicode.Nl, unicode.Mn, unicode.Mc, unicode.Pc, unicode.Other_ID_Start, unicode.Other_ID_Continue) || r == 0x200C || r == 0x200D
 }
 
 // jsSpaceAt returns the length of the non-ASCII JavaScript whitespace or line
@@ -1441,18 +1441,29 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 }
 
 // endsStatement reports whether the expression just read ends its statement:
-// the file ends, a ; or } follows, or the next token starts a new line with a
-// name. Anything else (.get(...), a call, an operator) continues it, also
-// across a line break. The position is unchanged.
+// the file ends, a ; or } follows, or the next token follows a line
+// terminator (LF, CR, U+2028, U+2029, also inside a comment) and is a name
+// that cannot continue an expression. Anything else (.get(...), a call, an
+// operator, instanceof) continues it. The position is unchanged.
 func (s *routeScanner) endsStatement() bool {
 	mark := s.mark()
 	defer s.restore(mark)
-	line := s.line
+	start := s.i
 	s.skipSpaceComments()
 	if s.eof() || s.peek(';') || s.peek('}') {
 		return true
 	}
-	return s.line > line && s.isIdentStart()
+	gap := s.src[start:s.i]
+	crossed := bytes.ContainsAny(gap, "\n\r") || bytes.Contains(gap, []byte("\u2028")) || bytes.Contains(gap, []byte("\u2029"))
+	if !crossed || !s.isIdentStart() {
+		return false
+	}
+	ident, _ := s.readIdent()
+	switch ident {
+	case "instanceof", "in", "as", "satisfies":
+		return false
+	}
+	return true
 }
 
 // webSocketTypeUse reports the references to WebSocket, other than new
@@ -1735,7 +1746,6 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 			}
 			if text == "baseURL" {
 				cur.baseURL = true
-				cur.baseURLKey = cur.baseURLKey || atKey
 			}
 			w.canRegex = false
 		case c == '`':
