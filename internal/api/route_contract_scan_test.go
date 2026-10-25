@@ -1152,6 +1152,10 @@ func (s *routeScanner) nextSignificant() byte {
 			}
 			return c
 		default:
+			if n := s.jsSpaceAt(i); n > 0 {
+				i += n
+				continue
+			}
 			return c
 		}
 	}
