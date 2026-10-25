@@ -322,6 +322,51 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 	})
 
+	t.Run("vue blocks share imports", func(t *testing.T) {
+		// An import in <script> is in scope in <script setup>, in either order.
+		setup := "<script setup lang=\"ts\">\nconst load = () => api.get(%s)\n</script>\n"
+		plain := "<script lang=\"ts\">\nimport api from '@/api/client'\nexport default {}\n</script>\n"
+		for name, tc := range map[string]struct {
+			src  string
+			line int
+		}{
+			"plain first": {plain + fmt.Sprintf(setup, "url"), 6},
+			"setup first": {fmt.Sprintf(setup, "url") + plain, 2},
+		} {
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/App.vue": tc.src}, nil)
+			want := fmt.Sprintf("ui/src/App.vue:%d:", tc.line)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), want) {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/App.vue": fmt.Sprintf(setup, "'/version'") + plain}, nil)
+		if len(errs) != 0 || len(calls) != 1 || calls[0].Line != 2 || calls[0].Template != "/api/v1/version" {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
+	t.Run("unicode whitespace", func(t *testing.T) {
+		// U+00A0 and U+FEFF are JavaScript whitespace, not part of a name.
+		for name, space := range map[string]string{"nbsp": "\u00a0", "bom": "\ufeff"} {
+			src := "import api from './client'\napi" + space + ".get(url)\n"
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/fixture.ts:2:") {
+				t.Fatalf("%s variable: calls %+v errs: %+v", name, calls, errs)
+			}
+			src = "import api from './client'\napi" + space + ".get('/x')\n"
+			calls, errs = extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+			if len(errs) != 0 || len(calls) != 1 || calls[0].Template != "/api/v1/x" {
+				t.Fatalf("%s literal: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
+			}
+		}
+		// A non-ASCII letter still continues a name.
+		src := "import api from './client'\nconst api\u00e9 = 1\nexport const v = api\u00e9\n"
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+		if len(errs) != 0 || len(calls) != 0 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
 	t.Run("stale manifest", func(t *testing.T) {
 		src := "const ws = new WebSocket(url)\n"
 		_, errs := extractRouteContractSources(map[string]string{"ui/src/api/ws.ts": src}, []routeContractManifest{{
@@ -539,12 +584,15 @@ func TestRouteContractFixtures(t *testing.T) {
 		const head = "import axios from 'axios'\n" +
 			"export const api = axios.create({ baseURL: '/api/v1' })\n"
 		for name, body := range map[string]string{
-			"http method":     "api.get('/missing')",
-			"request":         "api.request({ url: '/missing' })",
-			"called directly": "api({ url: '/missing' })",
-			"aliased":         "const c = api",
-			"axios called":    "axios('/missing')",
-			"axios aliased":   "const request = axios",
+			"http method":       "api.get('/missing')",
+			"request":           "api.request({ url: '/missing' })",
+			"called directly":   "api({ url: '/missing' })",
+			"aliased":           "const c = api",
+			"axios called":      "axios('/missing')",
+			"axios aliased":     "const request = axios",
+			"default request":   "export default api.get('/missing')",
+			"default continued": "export default api\n  .get('/missing')",
+			"default other":     "export default rootApi",
 		} {
 			src := head + body + "\n"
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
@@ -588,16 +636,17 @@ func TestRouteContractFixtures(t *testing.T) {
 			src  string
 			line int
 		}{
-			"other default": {"import axios from 'axios'\n\nexport const api = axios.create({ baseURL: env.X || '/api/v2' })\n", 3},
-			"no fallback":   {"import axios from 'axios'\nexport const api = axios.create({ baseURL: env.X })\n", 2},
-			"continued":     {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1'\n  + '/unserved' })\n", 2},
-			"nested comma":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: join(env.X || '/api/v1', '/unserved') })\n", 2},
-			"ternary":       {"import axios from 'axios'\nexport const api = axios.create({ baseURL: a ? b : '/api/v1' })\n", 2},
-			"none":          {"import axios from 'axios'\nexport const api = axios.create({})\n", 1},
-			"two":           {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
-			"spread":        {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', ...defaults })\n", 2},
-			"computed":      {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', [key]: v })\n", 2},
-			"second arg":    {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' }, more)\n", 2},
+			"other default":  {"import axios from 'axios'\n\nexport const api = axios.create({ baseURL: env.X || '/api/v2' })\n", 3},
+			"no fallback":    {"import axios from 'axios'\nexport const api = axios.create({ baseURL: env.X })\n", 2},
+			"continued":      {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1'\n  + '/unserved' })\n", 2},
+			"nested comma":   {"import axios from 'axios'\nexport const api = axios.create({ baseURL: join(env.X || '/api/v1', '/unserved') })\n", 2},
+			"ternary":        {"import axios from 'axios'\nexport const api = axios.create({ baseURL: a ? b : '/api/v1' })\n", 2},
+			"two":            {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
+			"two instances":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst rootApi = axios.create({})\nexport default rootApi\n", 3},
+			"base elsewhere": {"import axios from 'axios'\nconst o = { baseURL: '/api/v1' }\nexport const api = axios.create({ timeout: 1 })\n", 3},
+			"spread":         {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', ...defaults })\n", 2},
+			"computed":       {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', [key]: v })\n", 2},
+			"second arg":     {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' }, more)\n", 2},
 		} {
 			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": tc.src}, nil)
 			want := fmt.Sprintf("ui/src/api/client.ts:%d:", tc.line)
@@ -605,8 +654,15 @@ func TestRouteContractFixtures(t *testing.T) {
 				t.Fatalf("%s: errs: %+v", name, errs)
 			}
 		}
-		// A comment does not count as the base.
+		// No baseURL at all: the module check and the instance check both fail.
 		_, errs := extractRouteContractSources(map[string]string{
+			"ui/src/api/client.ts": "import axios from 'axios'\nexport const api = axios.create({})\n",
+		}, nil)
+		if len(errs) != 2 || !strings.Contains(errs[0].Error(), "ui/src/api/client.ts:1:") || !strings.Contains(errs[1].Error(), "ui/src/api/client.ts:2:") {
+			t.Fatalf("none: errs: %+v", errs)
+		}
+		// A comment does not count as the base.
+		_, errs = extractRouteContractSources(map[string]string{
 			"ui/src/api/client.ts": "import axios from 'axios'\n// baseURL: '/api/v2'\nexport const api = axios.create({ baseURL: e || \"/api/v1\" })\n",
 		}, nil)
 		if len(errs) != 0 {
