@@ -622,6 +622,14 @@ func TestRouteContractFixtures(t *testing.T) {
 			"default continued": "export default api\n  .get('/missing')",
 			"default other":     "export default rootApi",
 			"default operator":  "export default api\ninstanceof Function ? rootApi : null",
+			"default intercept": "export default api.interceptors.request.use(config => config)",
+			"default number":    "export default 0",
+			"default object":    "export default {}",
+			"default function":  "export default function replacement() {}",
+			"default arrow":     "export default () => api",
+			"default parens":    "export default (api)",
+			"default comment":   "export /* c */ default /* c */ {}",
+			"default specifier": "export { rootApi as default }",
 		} {
 			src := head + body + "\n"
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
