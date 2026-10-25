@@ -199,6 +199,32 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 	})
 
+	t.Run("mixed parameter constraints", func(t *testing.T) {
+		calls, errs := extractRouteContractSources(map[string]string{
+			"ui/src/api/fixture.ts": "import api from './client'\n" +
+				"export const f = (id: number, s: string) => api.get(`/devices/${id}/config/${s}`)\n",
+		}, nil)
+		if len(errs) != 0 {
+			t.Fatal(joinRouteContractErrs(errs))
+		}
+		router := mux.NewRouter()
+		router.HandleFunc("/api/v1/devices/{id:[0-9]+}/config/{section:[a-z]+}", routeContractNop).Methods("GET")
+		prec, err := routePrecedence(router, calls)
+		require.NoError(t, err)
+		if len(prec) != 0 {
+			t.Fatalf("precedence: %+v", prec)
+		}
+		// The same call is still checked for shadowing by an earlier route.
+		router = mux.NewRouter()
+		router.HandleFunc("/api/v1/devices/{id:[0-9]+}/{kind}/{name}", routeContractNop).Methods("GET")
+		router.HandleFunc("/api/v1/devices/{id:[0-9]+}/config/{section:[a-z]+}", routeContractNop).Methods("GET")
+		prec, err = routePrecedence(router, calls)
+		require.NoError(t, err)
+		if len(prec) != 1 || prec[0].Matched != "/api/v1/devices/{param}/{param}/{param}" {
+			t.Fatalf("precedence: %+v", prec)
+		}
+	})
+
 	t.Run("comments strings regex and division", func(t *testing.T) {
 		src := "import api from './client'\n" +
 			"// fetch('/hidden')\n" +
@@ -271,6 +297,139 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 		if len(calls) != 2 || calls[0].Template != "/api/v1/widgets" || calls[1].Template != "/api/v1/w" {
 			t.Fatalf("calls: %+v", calls)
+		}
+	})
+
+	t.Run("indirect fetch", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"aliased":       "const request = fetch\nrequest('/missing')",
+			"call":          "fetch.call(null, '/missing')",
+			"passed on":     "wrap(fetch)",
+			"window member": "window.fetch('/missing')",
+			"global xhr":    "new globalThis.XMLHttpRequest()",
+		} {
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/fixture.ts": body + "\n"}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/fixture.ts:1:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		// A property named fetch belongs to another object.
+		calls, errs := extractRouteContractSources(map[string]string{
+			"ui/src/fixture.ts": "export const f = (store: any) => store.fetch()\n",
+		}, nil)
+		if len(errs) != 0 || len(calls) != 0 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
+	t.Run("request config", func(t *testing.T) {
+		for name, call := range map[string]string{
+			"baseURL key":        "api.get('/x', { baseURL: '/unserved' })",
+			"quoted baseURL key": "api.get('/x', { 'baseURL': '/unserved' })",
+			"shorthand baseURL":  "api.get('/x', { baseURL })",
+			"nested baseURL":     "api.get('/x', { params: { baseURL: 1 } })",
+			"post config":        "api.post('/x', body, { baseURL: '/unserved' })",
+			"config variable":    "api.get('/x', cfg)",
+			"config spread":      "api.get('/x', { ...cfg })",
+			"computed key":       "api.get('/x', { [k]: v })",
+		} {
+			src := "import api from './client'\n" + call + "\n"
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/fixture.ts:2:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		src := "import api from './client'\n" +
+			"export const a = () => api.get('/a', { params: { page: [1, 2] }, responseType: 'blob' })\n" +
+			"export const b = (data: any) => api.post('/b', data)\n" +
+			"export const c = (data: any) => api.post('/c', { ...data }, { timeout: 1 })\n" +
+			"export const d = () => api.get('/d',)\n" +
+			"export const e = () => api.put('/e', [`${1}`, f(2)], { headers: { 'X-A': '1' } })\n"
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+		if len(errs) != 0 || len(calls) != 5 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
+	t.Run("client module instance", func(t *testing.T) {
+		const head = "import axios from 'axios'\n" +
+			"export const api = axios.create({ baseURL: '/api/v1' })\n"
+		for name, body := range map[string]string{
+			"http method":     "api.get('/missing')",
+			"request":         "api.request({ url: '/missing' })",
+			"called directly": "api({ url: '/missing' })",
+			"aliased":         "const c = api",
+			"axios called":    "axios('/missing')",
+		} {
+			src := head + body + "\n"
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/client.ts:3:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		_, errs := extractRouteContractSources(map[string]string{
+			"ui/src/api/client.ts": "import axios from 'axios'\nexport default axios.create({ baseURL: '/api/v1' })\n",
+		}, nil)
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/client.ts:2:") {
+			t.Fatalf("unbound create: %+v", errs)
+		}
+	})
+
+	t.Run("re-export of the client", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"named default": "export { default as api } from './client'",
+			"named":         "export { api } from '@/api/client'",
+			"star":          "export * from './client'",
+			"star as":       "export * as http from './client'",
+			"axios":         "export { default } from 'axios'",
+		} {
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/index.ts": body + "\n"}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/index.ts:1:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		src := "export type { Device } from './client'\n" +
+			"export { listDevices } from './devices'\n" +
+			"export * from './types'\n" +
+			"export const x = 1\n"
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/index.ts": src}, nil)
+		if len(errs) != 0 || len(calls) != 0 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
+	t.Run("client base path", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			src  string
+			line int
+		}{
+			"other default": {"import axios from 'axios'\n\nexport const api = axios.create({ baseURL: env.X || '/api/v2' })\n", 3},
+			"no fallback":   {"import axios from 'axios'\nexport const api = axios.create({ baseURL: env.X })\n", 2},
+			"none":          {"import axios from 'axios'\nexport const api = axios.create({})\n", 1},
+			"two":           {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
+		} {
+			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": tc.src}, nil)
+			want := fmt.Sprintf("ui/src/api/client.ts:%d:", tc.line)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), want) {
+				t.Fatalf("%s: errs: %+v", name, errs)
+			}
+		}
+		// A comment does not count as the base.
+		_, errs := extractRouteContractSources(map[string]string{
+			"ui/src/api/client.ts": "import axios from 'axios'\n// baseURL: '/api/v2'\nexport const api = axios.create({ baseURL: e || \"/api/v1\" })\n",
+		}, nil)
+		if len(errs) != 0 {
+			t.Fatal(joinRouteContractErrs(errs))
+		}
+
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "ui", "src", "api"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "api", "testdata", "routecontract"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "api", "testdata", "routecontract", "transports.json"), []byte("[]\n"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "ui", "src", "api", "devices.ts"), []byte("export {}\n"), 0o600))
+		_, errs = extractRouteContract(root)
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/client.ts:1:") {
+			t.Fatalf("missing client module: %+v", errs)
 		}
 	})
 

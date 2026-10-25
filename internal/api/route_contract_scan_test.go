@@ -8,6 +8,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +25,36 @@ import (
 // call it cannot normalize. WebSocket calls are not axios paths; they are
 // accepted only when transports.json names that file and line.
 
+// routeContractAPIBase must equal the default baseURL in client.ts;
+// checkClientBase fails the scan when it does not. The VITE_API_BASE and
+// window.__API_BASE__ overrides are deployment choices outside the contract.
 const routeContractAPIBase = "/api/v1"
+
+const routeContractClientFile = "ui/src/api/client.ts"
+
+// checkClientBase reads the axios instance's baseURL in client.ts and fails
+// unless it has exactly one, whose final fallback operand is the literal
+// routeContractAPIBase.
+func checkClientBase(src string) []routeContractError {
+	code := stripRouteComments(src)
+	re := regexp.MustCompile(`\bbaseURL\b`)
+	locs := re.FindAllStringIndex(code, -1)
+	if len(locs) != 1 {
+		return []routeContractError{{File: routeContractClientFile, Line: 1, Msg: fmt.Sprintf("want exactly one baseURL, found %d", len(locs))}}
+	}
+	line := byteLine(code, locs[0][0])
+	m := regexp.MustCompile(`^baseURL\s*:\s*([^,}\n]+)`).FindStringSubmatch(code[locs[0][0]:])
+	if m == nil {
+		return []routeContractError{{File: routeContractClientFile, Line: line, Msg: "unsupported baseURL shape; want baseURL: <overrides> || '<base>'"}}
+	}
+	ops := regexp.MustCompile(`\|\||\?\?`).Split(m[1], -1)
+	last := strings.TrimSpace(ops[len(ops)-1])
+	want := []string{"'" + routeContractAPIBase + "'", `"` + routeContractAPIBase + `"`}
+	if !slices.Contains(want, last) {
+		return []routeContractError{{File: routeContractClientFile, Line: line, Msg: fmt.Sprintf("default baseURL %s does not match routeContractAPIBase %q", last, routeContractAPIBase)}}
+	}
+	return nil
+}
 
 type routeContractCall struct {
 	File     string
@@ -94,6 +125,9 @@ func extractRouteContract(root string) ([]routeContractCall, []routeContractErro
 	if err != nil {
 		return nil, []routeContractError{{File: "internal/api/testdata/routecontract/transports.json", Line: 1, Msg: err.Error()}}
 	}
+	if _, ok := files[routeContractClientFile]; !ok {
+		return nil, []routeContractError{{File: routeContractClientFile, Line: 1, Msg: "api client module not found"}}
+	}
 	return extractRouteContractSources(files, manifest)
 }
 
@@ -107,6 +141,9 @@ func extractRouteContractSources(files map[string]string, manifest []routeContra
 	var calls []routeContractCall
 	var hits []routeContractHit
 	var errs []routeContractError
+	if src, ok := files[routeContractClientFile]; ok {
+		errs = append(errs, checkClientBase(src)...)
+	}
 	for _, name := range names {
 		src := files[name]
 		if strings.HasSuffix(name, ".vue") {
@@ -495,11 +532,44 @@ func sortRoutePairs(out []routeContractPair) {
 	})
 }
 
-// routePrecedenceSamples are tried in order for every {param} of a call
-// template. The first value the expected route accepts on its own builds the
-// representative request, so a constrained route such as {id:<uuid>} is not
-// reported as shadowed by a value it would reject anyway.
+// routePrecedenceSamples are the candidate values for each {param} of a call
+// template. Every combination is tried, one sample per parameter, and the
+// first one the expected route accepts on its own builds the representative
+// request. A constrained route such as {id:<uuid>} is therefore not reported
+// as shadowed by a value it would reject anyway, and parameters with disjoint
+// constraints ({id:[0-9]+}/{section:[a-z]+}) each get a value that fits.
 var routePrecedenceSamples = []string{"00000000-0000-0000-0000-000000000000", "1", "x"}
+
+// routePrecedenceRequest returns the first sample path the expected route
+// matches, filling each {param} of tmpl independently.
+func routePrecedenceRequest(method, tmpl string, want *mux.Route) (string, bool) {
+	parts := strings.Split(tmpl, "{param}")
+	choice := make([]int, len(parts)-1)
+	for {
+		var b strings.Builder
+		for i, part := range parts {
+			b.WriteString(part)
+			if i < len(choice) {
+				b.WriteString(routePrecedenceSamples[choice[i]])
+			}
+		}
+		p := b.String()
+		var m mux.RouteMatch
+		if want.Match(httptest.NewRequest(method, p, nil), &m) && m.MatchErr == nil {
+			return p, true
+		}
+		// Advance the odometer over sample indexes; done after the last one.
+		i := len(choice) - 1
+		for i >= 0 && choice[i] == len(routePrecedenceSamples)-1 {
+			choice[i] = 0
+			i--
+		}
+		if i < 0 {
+			return "", false
+		}
+		choice[i]++
+	}
+}
 
 func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeContractPrec, error) {
 	expected := map[string]*mux.Route{}
@@ -536,16 +606,8 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 				// No such pair; missingRoutePairs reports it.
 				continue
 			}
-			reqPath = ""
-			for _, sample := range routePrecedenceSamples {
-				p := strings.ReplaceAll(call.Template, "{param}", sample)
-				var m mux.RouteMatch
-				if want.Match(httptest.NewRequest(call.Method, p, nil), &m) && m.MatchErr == nil {
-					reqPath = p
-					break
-				}
-			}
-			if reqPath == "" {
+			reqPath, ok = routePrecedenceRequest(call.Method, call.Template, want)
+			if !ok {
 				return nil, fmt.Errorf("%s %s: no sample value satisfies the route's own constraints; extend routePrecedenceSamples", call.Method, call.Template)
 			}
 		}
@@ -705,6 +767,8 @@ type routeScanner struct {
 	api          map[string]bool
 	ws           map[string]bool
 	axios        map[string]bool
+	instance     map[string]bool // axios instances bound in the client module
+	bound        bool            // a binding for the next axios.create was recorded
 	calls        []routeContractCall
 	hits         []routeContractHit
 	errs         []routeContractError
@@ -723,11 +787,108 @@ func newRouteScanner(file, src string, line int) *routeScanner {
 		src:          []byte(src),
 		line:         line,
 		canRegex:     true,
-		isClientFile: file == "ui/src/api/client.ts",
+		isClientFile: file == routeContractClientFile,
 		api:          map[string]bool{},
 		ws:           map[string]bool{},
 		axios:        map[string]bool{},
+		instance:     map[string]bool{},
 	}
+}
+
+// bindsAxiosCreate reports whether the binding just read is followed by
+// = <axios>.create(, and records that the next create call is bound. The
+// position is unchanged.
+func (s *routeScanner) bindsAxiosCreate() bool {
+	mark := s.mark()
+	defer s.restore(mark)
+	s.skipSpaceComments()
+	if !s.peek('=') || s.peekN(1) == '=' || s.peekN(1) == '>' {
+		return false
+	}
+	s.i++
+	s.skipSpaceComments()
+	ident, _ := s.readIdent()
+	if !s.axios[ident] || !s.consumeDot() {
+		return false
+	}
+	if method, _ := s.readIdent(); method != "create" {
+		return false
+	}
+	s.bound = true
+	return true
+}
+
+// reExportSpec returns the module of an export ... from '<spec>' that follows
+// the export keyword just read: export * [as x], export { ... }. A type-only
+// re-export carries no runtime value and is not reported. The position is
+// unchanged.
+func (s *routeScanner) reExportSpec() (string, bool) {
+	w := s.probe()
+	w.skipSpaceComments()
+	if w.peekIdent("type") {
+		return "", false
+	}
+	switch {
+	case w.peek('*'):
+		w.i++
+		w.skipSpaceComments()
+		if w.consumeWord("as") {
+			w.skipSpaceComments()
+			if w.peek('\'') || w.peek('"') {
+				if _, ok := w.readQuoted(); !ok {
+					return "", false
+				}
+			} else if name, _ := w.readIdent(); name == "" {
+				return "", false
+			}
+		}
+	case w.peek('{'):
+		for !w.eof() && !w.stop && !w.peek('}') {
+			w.i++
+			w.skipSpaceComments()
+		}
+		if w.eof() || w.stop {
+			return "", false
+		}
+		w.i++
+	default:
+		return "", false
+	}
+	w.skipSpaceComments()
+	if !w.consumeWord("from") {
+		return "", false
+	}
+	w.skipSpaceComments()
+	return w.readQuoted()
+}
+
+// probe returns a copy of the scanner at the same position for look-ahead.
+// What it reads, records or reports is discarded; the main scan visits the
+// same bytes afterwards.
+func (s *routeScanner) probe() *routeScanner {
+	return &routeScanner{
+		file:         s.file,
+		src:          s.src,
+		i:            s.i,
+		line:         s.line,
+		canRegex:     s.canRegex,
+		isClientFile: s.isClientFile,
+		api:          map[string]bool{},
+		ws:           map[string]bool{},
+		axios:        map[string]bool{},
+		instance:     map[string]bool{},
+	}
+}
+
+// peekMember reports whether the next tokens are .<name>, without moving.
+func (s *routeScanner) peekMember(name string) bool {
+	mark := s.mark()
+	defer s.restore(mark)
+	if !s.consumeDot() {
+		return false
+	}
+	s.skipSpaceComments()
+	return s.peekIdent(name)
 }
 
 func (s *routeScanner) scanFile() {
@@ -953,6 +1114,15 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	case "new":
 		s.afterNew()
 		return
+	case "export":
+		if spec, ok := s.reExportSpec(); ok && (isAPIClientModule(s.file, spec) || spec == "axios" || forbiddenHTTPModule(spec)) {
+			// A barrel would hand out the client under a binding no
+			// importer tracks; import it from the client module directly.
+			s.fail(line, "unsupported re-export of %s", spec)
+			return
+		}
+		s.canRegex = true
+		return
 	case "function", "class", "interface", "enum", "namespace":
 		s.canRegex = false
 		return
@@ -960,6 +1130,25 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	if ident == "type" && s.looksLikeTypeAlias() {
 		s.canRegex = false
 		return
+	}
+	// Inside the client module the axios instance is bound as
+	// const <name> = axios.create(...). Its supported uses there are
+	// <name>.interceptors... and export default <name>; anything else could
+	// issue a request without yielding a pair.
+	if s.isClientFile && !member {
+		if (prev == "const" || prev == "let" || prev == "var") && s.bindsAxiosCreate() {
+			s.instance[ident] = true
+			s.canRegex = false
+			return
+		}
+		if s.instance[ident] {
+			if prev != "default" && !s.peekMember("interceptors") {
+				s.fail(line, "unsupported use of the axios instance %q in the api client module", ident)
+				return
+			}
+			s.canRegex = false
+			return
+		}
 	}
 	// The client binding has one supported shape: api.<method>(url, ...).
 	// Any other use (called, indexed, aliased, passed on) could reach the
@@ -970,7 +1159,19 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 		}
 		return
 	}
-	if ident == "fetch" {
+	// window.fetch and friends are the same globals under another name.
+	if (ident == "window" || ident == "globalThis" || ident == "self") && !member {
+		for _, name := range []string{"fetch", "XMLHttpRequest", "WebSocket"} {
+			if s.peekMember(name) {
+				s.fail(line, "unsupported use of %s.%s", ident, name)
+				return
+			}
+		}
+	}
+	// fetch is never a supported transport. A call fails, and so does any
+	// other reference (an alias, fetch.call, passing it on), which could reach
+	// the server without yielding a pair. obj.fetch is a property.
+	if ident == "fetch" && !member {
 		mark := s.mark()
 		s.skipSpaceComments()
 		if s.peek('(') {
@@ -978,7 +1179,8 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			return
 		}
 		s.restore(mark)
-		s.prevWord = ident
+		s.fail(line, "unsupported use of fetch; HTTP calls go through the api client")
+		return
 	}
 	if (ident == "useWebSocket" || s.ws[ident]) && prev != "function" && s.looksLikeCall() {
 		s.finishTransport(line, "use-websocket")
@@ -1086,6 +1288,10 @@ func (s *routeScanner) tryClientCall(line int) bool {
 		s.fail(line, "unsupported url expression for %s(); pass one string or template literal", method)
 		return true
 	}
+	if msg := s.checkCallConfig(method); msg != "" {
+		s.fail(line, "%s", msg)
+		return true
+	}
 	full, err := normalizeCallPath(routeContractAPIBase, raw)
 	if err != nil {
 		s.fail(line, "unsupported url %q", raw)
@@ -1102,13 +1308,149 @@ func (s *routeScanner) tryClientCall(line int) bool {
 	return true
 }
 
+// checkCallConfig inspects the request config of the client call whose url
+// argument was just read, and returns why it cannot be trusted, or "". A
+// per-call baseURL sends the request somewhere other than routeContractAPIBase,
+// so the config must be an object literal that provably sets none: no
+// baseURL key, no spread and no computed key. The scan itself is unchanged;
+// the main loop still visits every argument afterwards.
+func (s *routeScanner) checkCallConfig(method string) string {
+	args, ok := s.remainingArgs()
+	if !ok {
+		return fmt.Sprintf("unsupported arguments for %s()", method)
+	}
+	idx := 0 // get, delete, head, options: (url, config)
+	switch method {
+	case "post", "put", "patch": // (url, data, config)
+		idx = 1
+	}
+	if idx >= len(args) {
+		return ""
+	}
+	cfg := args[idx]
+	switch {
+	case !cfg.object:
+		return fmt.Sprintf("unsupported request config for %s(); pass an object literal", method)
+	case cfg.baseURL:
+		return fmt.Sprintf("unsupported baseURL in the request config of %s()", method)
+	case cfg.spread || cfg.computed:
+		return fmt.Sprintf("unsupported spread or computed key in the request config of %s()", method)
+	}
+	return ""
+}
+
+type callArg struct {
+	object   bool // the argument is an object literal
+	baseURL  bool // it names baseURL anywhere, as a word or a string
+	spread   bool // it spreads at its own top level
+	computed bool // it has a computed key at its own top level
+}
+
+// remainingArgs walks the arguments after the current one up to the call's
+// closing parenthesis, on a copy of the scanner, so nothing is recorded and
+// the position is unchanged. It reports false if the walk cannot finish.
+func (s *routeScanner) remainingArgs() ([]callArg, bool) {
+	w := s.probe()
+	var args []callArg
+	var cur *callArg
+	depth := 0
+	keyPos := false // at an object literal key position of the current argument
+	for {
+		w.skipSpaceComments()
+		if w.stop || w.eof() {
+			return nil, false
+		}
+		c := w.src[w.i]
+		if depth == 0 && (c == ')' || c == ',') {
+			w.i++
+			if c == ')' {
+				return args, true
+			}
+			w.canRegex = true
+			w.skipSpaceComments()
+			if w.stop || w.eof() {
+				return nil, false
+			}
+			if w.peek(')') {
+				return args, true // trailing comma
+			}
+			args = append(args, callArg{object: w.peek('{')})
+			cur = &args[len(args)-1]
+			keyPos = false
+			continue
+		}
+		if cur == nil {
+			return nil, false
+		}
+		atKey := keyPos && depth == 1 && cur.object
+		keyPos = false
+		switch {
+		case w.isIdentStart():
+			ident, _ := w.readIdent()
+			if ident == "baseURL" {
+				cur.baseURL = true
+			}
+			w.canRegex = unaryKeyword(ident)
+			w.prevWord = ident
+		case c >= '0' && c <= '9':
+			w.scanNumber()
+		case c == '\'' || c == '"':
+			text, ok := w.readQuoted()
+			if !ok {
+				return nil, false
+			}
+			if text == "baseURL" {
+				cur.baseURL = true
+			}
+			w.canRegex = false
+		case c == '`':
+			if _, ok := w.scanTemplate(false); !ok {
+				return nil, false
+			}
+			w.canRegex = false
+		case c == '(' || c == '[' || c == '{':
+			if atKey && c == '[' {
+				cur.computed = true
+			}
+			depth++
+			w.scanPunct(c)
+			keyPos = c == '{' && depth == 1
+		case c == ')' || c == ']' || c == '}':
+			depth--
+			w.scanPunct(c)
+		case c == '.' && w.peekN(1) == '.' && w.peekN(2) == '.':
+			if atKey {
+				cur.spread = true
+			}
+			w.scanPunct(c)
+		case c == ',':
+			w.scanPunct(c)
+			keyPos = depth == 1
+		default:
+			w.scanPunct(c)
+		}
+		w.member = false
+	}
+}
+
 func (s *routeScanner) tryAxios(line int) bool {
 	mark := s.mark()
 	if !s.consumeDot() {
+		// axios(config) / axios(url) reaches the server without a pair.
+		if s.looksLikeCall() {
+			s.fail(line, "unsupported axios() call")
+			return true
+		}
 		return false
 	}
 	method, _ := s.readIdent()
 	if method == "create" && s.isClientFile {
+		// Only an instance bound by bindsAxiosCreate is tracked.
+		if !s.bound {
+			s.fail(line, "unsupported axios.create(); bind it as const <name> = axios.create(...)")
+			return true
+		}
+		s.bound = false
 		s.canRegex = false
 		s.prevWord = ""
 		return true
@@ -1127,7 +1469,7 @@ func (s *routeScanner) tryForeignHTTP(line int) bool {
 		return false
 	}
 	method, _ := s.readIdent()
-	if !isHTTPMethod(method) {
+	if !isHTTPMethod(method) && (method != "request" || !s.isClientFile) {
 		s.restore(mark)
 		return false
 	}
@@ -1143,6 +1485,13 @@ func (s *routeScanner) tryForeignHTTP(line int) bool {
 	}
 	s.i++
 	s.skipSpaceComments()
+	// The client module creates the axios instance under its own binding, so
+	// any request it issues itself would bypass the import tracking: there it
+	// fails whatever the argument.
+	if s.isClientFile {
+		s.fail(line, "unsupported http call .%s() in the api client module", method)
+		return true
+	}
 	if s.pathArgAhead() {
 		s.fail(line, "unsupported http call .%s()", method)
 		return true
