@@ -242,6 +242,17 @@ func TestRouteContractFixtures(t *testing.T) {
 		if len(prec) != 1 || prec[0].Matched != "/api/v1/devices/1/config/{param}" {
 			t.Fatalf("precedence: %+v", prec)
 		}
+		// A second shadow on other samples is reported next to the first.
+		const uuid = "00000000-0000-0000-0000-000000000000"
+		router = mux.NewRouter()
+		router.HandleFunc("/api/v1/devices/"+uuid+"/config/{section}", routeContractNop).Methods("GET")
+		router.HandleFunc("/api/v1/devices/1/config/{section}", routeContractNop).Methods("GET")
+		router.HandleFunc("/api/v1/devices/{id}/config/current", routeContractNop).Methods("GET")
+		prec, err = routePrecedence(router, calls)
+		require.NoError(t, err)
+		if len(prec) != 2 || prec[0].Matched == prec[1].Matched {
+			t.Fatalf("precedence: %+v", prec)
+		}
 	})
 
 	t.Run("comments strings regex and division", func(t *testing.T) {
@@ -368,6 +379,20 @@ func TestRouteContractFixtures(t *testing.T) {
 		if len(errs) != 0 || len(calls) != 1 {
 			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
 		}
+		for name, expr := range map[string]string{
+			"comment":       `@click="api /* c */ .get('/missing')"`,
+			"statement":     `@click="const c = api; c.get('/missing')"`,
+			"operator":      `@click="(ok && api).get('/missing')"`,
+			"interpolation": "x {{ api\n.get('/missing') }}",
+			"v-on":          `v-on:click="api.get('/missing')"`,
+		} {
+			vue := "<template>\n<b " + expr + "></b>\n</template>\n" +
+				"<script setup lang=\"ts\">\nimport api from '@/api/client'\n</script>\n"
+			got, gotErrs := extractRouteContractSources(map[string]string{"ui/src/App.vue": vue}, nil)
+			if len(gotErrs) != 1 || !strings.Contains(gotErrs[0].Error(), "ui/src/App.vue:2:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, got, gotErrs)
+			}
+		}
 		// Handing the binding to a child component fails too.
 		src = "<template><Child :client=\"api\" /></template>\n" +
 			"<script setup lang=\"ts\">\nimport api from '@/api/client'\n</script>\n"
@@ -465,6 +490,8 @@ func TestRouteContractFixtures(t *testing.T) {
 			"other default": {"import axios from 'axios'\n\nexport const api = axios.create({ baseURL: env.X || '/api/v2' })\n", 3},
 			"no fallback":   {"import axios from 'axios'\nexport const api = axios.create({ baseURL: env.X })\n", 2},
 			"continued":     {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1'\n  + '/unserved' })\n", 2},
+			"nested comma":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: join(env.X || '/api/v1', '/unserved') })\n", 2},
+			"ternary":       {"import axios from 'axios'\nexport const api = axios.create({ baseURL: a ? b : '/api/v1' })\n", 2},
 			"none":          {"import axios from 'axios'\nexport const api = axios.create({})\n", 1},
 			"two":           {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
 		} {

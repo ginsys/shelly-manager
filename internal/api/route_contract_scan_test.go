@@ -43,13 +43,22 @@ func checkClientBase(src string) []routeContractError {
 		return []routeContractError{{File: routeContractClientFile, Line: 1, Msg: fmt.Sprintf("want exactly one baseURL, found %d", len(locs))}}
 	}
 	line := byteLine(code, locs[0][0])
-	// The value runs to the property's end, across lines; a value containing
-	// a comma or brace of its own is cut short and fails the literal check.
+	// The value runs to the property's end, across lines. Only a chain of
+	// plain operands (names, member paths, string literals) joined by || or
+	// ?? is read: anything else (a call, a ternary, concatenation) could
+	// change the base, so it fails rather than being partly read.
+	shape := "unsupported baseURL shape; want baseURL: <overrides> || '<base>'"
 	m := regexp.MustCompile(`^baseURL\s*:\s*([^,}]+)[,}]`).FindStringSubmatch(code[locs[0][0]:])
 	if m == nil {
-		return []routeContractError{{File: routeContractClientFile, Line: line, Msg: "unsupported baseURL shape; want baseURL: <overrides> || '<base>'"}}
+		return []routeContractError{{File: routeContractClientFile, Line: line, Msg: shape}}
 	}
+	operand := regexp.MustCompile(`^(?:[\w$]+(?:\??\.[\w$]+)*|'[^'\\]*'|"[^"\\]*")$`)
 	ops := regexp.MustCompile(`\|\||\?\?`).Split(m[1], -1)
+	for _, op := range ops {
+		if !operand.MatchString(strings.TrimSpace(op)) {
+			return []routeContractError{{File: routeContractClientFile, Line: line, Msg: shape}}
+		}
+	}
 	last := strings.TrimSpace(ops[len(ops)-1])
 	want := []string{"'" + routeContractAPIBase + "'", `"` + routeContractAPIBase + `"`}
 	if !slices.Contains(want, last) {
@@ -256,14 +265,29 @@ func checkVueTemplate(file, src string, chunks []vueChunk, bindings map[string]b
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	// Template expressions are the values of directive attributes (:x, @x,
+	// #x, v-x) and {{ }} interpolations. Inside one, the binding named as a
+	// word in any position fails: comments, statements and operators around
+	// it do not matter. A member .api of something else is not the binding.
+	// Static attributes and text never run, so they are not read.
+	var exprs [][]int
+	attr := regexp.MustCompile(`(?:^|\s)(?:[:@#]|v-)[^\s=/>]*\s*=\s*("[^"]*"|'[^']*')`)
+	for _, m := range attr.FindAllSubmatchIndex(outside, -1) {
+		exprs = append(exprs, []int{m[2], m[3]})
+	}
+	exprs = append(exprs, regexp.MustCompile(`\{\{[\s\S]*?\}\}`).FindAllIndex(outside, -1)...)
 	var errs []routeContractError
 	for _, name := range names {
-		// An expression use: a member, call or index, or the bare value
-		// ending an attribute, interpolation or argument. Prose ("the api
-		// key") and class names (api-key) do not match.
-		re := regexp.MustCompile(`(^|[^\w$.-])` + regexp.QuoteMeta(name) + `\s*(\?\.|[.(\[)"'},])`)
-		if loc := re.FindIndex(outside); loc != nil {
-			errs = append(errs, routeContractError{File: file, Line: byteLine(src, loc[0]+1), Msg: fmt.Sprintf("unsupported use of %q outside <script>; template expressions are not scanned", name)})
+		re := regexp.MustCompile(`(^|[^\w$.])` + regexp.QuoteMeta(name) + `([^\w$]|$)`)
+		first := -1
+		for _, e := range exprs {
+			// sub[3] ends the prefix group: where the name starts.
+			if sub := re.FindSubmatchIndex(outside[e[0]:e[1]]); sub != nil && (first < 0 || e[0]+sub[3] < first) {
+				first = e[0] + sub[3]
+			}
+		}
+		if first >= 0 {
+			errs = append(errs, routeContractError{File: file, Line: byteLine(src, first), Msg: fmt.Sprintf("unsupported use of %q in a template expression; templates are not scanned", name)})
 		}
 	}
 	return errs
@@ -656,7 +680,9 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 				return nil, fmt.Errorf("%s %s: no sample value satisfies the route's own constraints; extend routePrecedenceSamples", call.Method, call.Template)
 			}
 		}
-		// The first sample request another route catches is reported.
+		// Every distinct route that catches a sample request is reported,
+		// so a new shadow cannot hide behind a baselined one.
+		matched := map[string]bool{}
 		for _, reqPath := range reqPaths {
 			req := httptest.NewRequest(call.Method, reqPath, nil)
 			var match mux.RouteMatch
@@ -668,23 +694,26 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 				return nil, fmt.Errorf("%s %s matched a route without a template: %w", call.Method, call.Template, err)
 			}
 			got := normalizeRouteTemplate(tmpl)
-			if got == call.Template {
+			if got == call.Template || matched[got] {
 				continue
 			}
+			matched[got] = true
 			out = append(out, routeContractPrec{
 				Method:   call.Method,
 				Request:  call.Template,
 				Expected: call.Template,
 				Matched:  got,
 			})
-			break
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Request != out[j].Request {
 			return out[i].Request < out[j].Request
 		}
-		return out[i].Method < out[j].Method
+		if out[i].Method != out[j].Method {
+			return out[i].Method < out[j].Method
+		}
+		return out[i].Matched < out[j].Matched
 	})
 	return out, nil
 }
