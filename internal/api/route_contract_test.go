@@ -463,6 +463,64 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 	})
 
+	t.Run("manifest path is whole", func(t *testing.T) {
+		manifest := []routeContractManifest{{
+			File: "ui/src/api/ws.ts", Line: 2, Kind: "new-websocket", Method: "GET", Template: "/metrics/ws",
+		}}
+		for name, url := range map[string]string{
+			"suffix": "`${base}/metrics/ws-broken`",
+			"prefix": "`${base}/x/metrics/ws`",
+		} {
+			src := "const url = " + url + "\nconst ws = new WebSocket(url)\n"
+			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/ws.ts": src}, manifest)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "not a whole path") {
+				t.Fatalf("%s: errs: %+v", name, errs)
+			}
+		}
+		src := "const url = `${proto}://${base}/metrics/ws${q ? `?t=${q}` : ''}`\nconst ws = new WebSocket(url)\n"
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/ws.ts": src}, manifest)
+		if len(errs) != 0 || len(calls) != 1 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
+	t.Run("transport references", func(t *testing.T) {
+		for name, body := range map[string]string{
+			"aliased":        "const Socket = WebSocket",
+			"passed on":      "open(WebSocket)",
+			"object value":   "const o = { impl: WebSocket }",
+			"ternary":        "const S = ok ? Other : WebSocket",
+			"helper aliased": "import { useWebSocket } from '@/composables/useWebSocket'; const open = useWebSocket",
+			"helper passed":  "import { useWebSocket as ws } from '@/composables/useWebSocket'; run(ws)",
+		} {
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/fixture.ts": body + "\n"}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/fixture.ts:1:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		// State constants, type operators and the UI's annotation forms open nothing.
+		src := "let s: WebSocket | null = null\n" +
+			"export const open = () => s?.readyState === WebSocket.OPEN || s?.readyState === WebSocket.CONNECTING\n" +
+			"export function get(): WebSocket {\n" +
+			"  return s as WebSocket\n" +
+			"}\n" +
+			"export const t = typeof WebSocket\n" +
+			"export const ok = (x: unknown) => x instanceof WebSocket\n"
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/fixture.ts": src}, nil)
+		if len(errs) != 0 || len(calls) != 0 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
+	t.Run("hoisted import", func(t *testing.T) {
+		src := "export const load = () => api.get('/missing')\n" +
+			"import api from './client'\n"
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
+		if len(errs) != 0 || len(calls) != 1 || calls[0].Template != "/api/v1/missing" || calls[0].Line != 1 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
 	t.Run("client module instance", func(t *testing.T) {
 		const head = "import axios from 'axios'\n" +
 			"export const api = axios.create({ baseURL: '/api/v1' })\n"
@@ -472,6 +530,7 @@ func TestRouteContractFixtures(t *testing.T) {
 			"called directly": "api({ url: '/missing' })",
 			"aliased":         "const c = api",
 			"axios called":    "axios('/missing')",
+			"axios aliased":   "const request = axios",
 		} {
 			src := head + body + "\n"
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
@@ -522,6 +581,9 @@ func TestRouteContractFixtures(t *testing.T) {
 			"ternary":       {"import axios from 'axios'\nexport const api = axios.create({ baseURL: a ? b : '/api/v1' })\n", 2},
 			"none":          {"import axios from 'axios'\nexport const api = axios.create({})\n", 1},
 			"two":           {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
+			"spread":        {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', ...defaults })\n", 2},
+			"computed":      {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', [key]: v })\n", 2},
+			"second arg":    {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' }, more)\n", 2},
 		} {
 			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": tc.src}, nil)
 			want := fmt.Sprintf("ui/src/api/client.ts:%d:", tc.line)
