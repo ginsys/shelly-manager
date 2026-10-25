@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http/httptest"
 	"os"
 	"path"
@@ -160,9 +161,23 @@ func extractRouteContractSources(files map[string]string, manifest []routeContra
 		if strings.HasSuffix(name, ".vue") {
 			chunks, chunkErrs := vueScriptChunks(name, src)
 			errs = append(errs, chunkErrs...)
+			// <script> and <script setup> share one module scope: an import
+			// in either is usable in both, so every block is scanned with
+			// the bindings all of them declare.
+			var seed []*routeScanner
+			for _, chunk := range chunks {
+				sc := newRouteScanner(name, chunk.src, chunk.line)
+				sc.scanFile()
+				seed = append(seed, sc)
+			}
 			bindings := map[string]bool{}
 			for _, chunk := range chunks {
 				sc := newRouteScanner(name, chunk.src, chunk.line)
+				for _, p := range seed {
+					maps.Copy(sc.api, p.api)
+					maps.Copy(sc.ws, p.ws)
+					maps.Copy(sc.axios, p.axios)
+				}
 				sc.scanFile()
 				calls = append(calls, sc.calls...)
 				hits = append(hits, sc.hits...)
@@ -889,6 +904,7 @@ type routeScanner struct {
 	axios        map[string]bool
 	instance     map[string]bool // axios instances bound in the client module
 	bound        bool            // a binding for the next axios.create was recorded
+	created      bool            // the client module's axios instance was created
 	calls        []routeContractCall
 	hits         []routeContractHit
 	errs         []routeContractError
@@ -1073,6 +1089,10 @@ func (s *routeScanner) skipSpaceComments() {
 			}
 			return
 		default:
+			if n := s.jsSpaceAt(s.i); n > 0 {
+				s.i += n
+				continue
+			}
 			return
 		}
 	}
@@ -1142,11 +1162,39 @@ func (s *routeScanner) isIdentStart() bool {
 	return unicode.IsLetter(r)
 }
 
+// isIdentCont is the byte-level test used when walking backwards, where a
+// rune cannot be decoded; any non-ASCII byte counts, which only ever joins
+// words and so fails closed. Forward reads use identContAt.
 func (s *routeScanner) isIdentCont(c byte) bool {
 	if c == '_' || c == '$' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
 		return true
 	}
 	return c >= 0x80
+}
+
+// identContAt reports whether the rune at i continues an identifier. A
+// non-ASCII rune must be one JavaScript allows there (ID_Continue, ZWNJ,
+// ZWJ); whitespace such as U+00A0 ends the name instead of joining it.
+func (s *routeScanner) identContAt(i int) bool {
+	c := s.src[i]
+	if c < 0x80 {
+		return s.isIdentCont(c)
+	}
+	r, _ := utf8.DecodeRune(s.src[i:])
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.In(r, unicode.Mn, unicode.Mc, unicode.Pc) || r == 0x200C || r == 0x200D
+}
+
+// jsSpaceAt returns the length of the non-ASCII JavaScript whitespace or line
+// terminator at i (U+00A0, U+FEFF, other Zs, U+2028, U+2029), or 0.
+func (s *routeScanner) jsSpaceAt(i int) int {
+	if s.src[i] < 0x80 {
+		return 0
+	}
+	r, size := utf8.DecodeRune(s.src[i:])
+	if r == 0xFEFF || r == 0x2028 || r == 0x2029 || unicode.Is(unicode.Zs, r) {
+		return size
+	}
+	return 0
 }
 
 func (s *routeScanner) readIdent() (string, int) {
@@ -1160,7 +1208,7 @@ func (s *routeScanner) readIdent() (string, int) {
 		size = 1
 	}
 	s.i += size
-	for !s.eof() && s.isIdentCont(s.src[s.i]) {
+	for !s.eof() && s.identContAt(s.i) {
 		_, size = utf8.DecodeRune(s.src[s.i:])
 		if size < 1 {
 			size = 1
@@ -1180,7 +1228,7 @@ func (s *routeScanner) peekIdent(want string) bool {
 		size = 1
 	}
 	i += size
-	for i < len(s.src) && s.isIdentCont(s.src[i]) {
+	for i < len(s.src) && s.identContAt(i) {
 		_, size = utf8.DecodeRune(s.src[i:])
 		if size < 1 {
 			size = 1
@@ -1295,11 +1343,18 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			return
 		}
 		if s.instance[ident] {
-			if prev != "default" && !s.peekMember("interceptors") {
+			exported := prev == "default" && s.endsStatement()
+			if !exported && !s.peekMember("interceptors") {
 				s.fail(line, "unsupported use of the axios instance %q in the api client module", ident)
 				return
 			}
 			s.canRegex = false
+			return
+		}
+		// Callers import the default export as the client and are paired
+		// under the one checked baseURL, so it must be that instance.
+		if prev == "default" {
+			s.fail(line, "unsupported default export %q in the api client module; export default the axios instance", ident)
 			return
 		}
 	}
@@ -1368,6 +1423,21 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 		return
 	}
 	s.canRegex = false
+}
+
+// endsStatement reports whether the expression just read ends its statement:
+// the file ends, a ; or } follows, or the next token starts a new line with a
+// name. Anything else (.get(...), a call, an operator) continues it, also
+// across a line break. The position is unchanged.
+func (s *routeScanner) endsStatement() bool {
+	mark := s.mark()
+	defer s.restore(mark)
+	line := s.line
+	s.skipSpaceComments()
+	if s.eof() || s.peek(';') || s.peek('}') {
+		return true
+	}
+	return s.line > line && s.isIdentStart()
 }
 
 // webSocketTypeUse reports the references to WebSocket, other than new
@@ -1711,6 +1781,13 @@ func (s *routeScanner) tryAxios(line int, member bool) bool {
 			s.fail(line, "unsupported axios.create() options; pass one object literal without spreads or computed keys")
 			return true
 		}
+		// That baseURL describes one instance only: a second one, or one
+		// whose options lack it, would be paired under a base it never uses.
+		if s.created || !args[0].baseURL {
+			s.fail(line, "unsupported axios.create(); the api client module creates one instance, with the checked baseURL")
+			return true
+		}
+		s.created = true
 		s.canRegex = false
 		s.prevWord = ""
 		return true
