@@ -637,6 +637,15 @@ func TestRouteContractFixtures(t *testing.T) {
 				t.Fatalf("%s: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
 			}
 		}
+		// as and satisfies cannot follow a line break in TypeScript, so on a
+		// new line they start a statement.
+		for _, name := range []string{"as", "satisfies"} {
+			src := "import axios from 'axios'\nconst " + name + " = () => {}\nexport const api = axios.create({ baseURL: '/api/v1' })\nexport default api\n" + name + "()\n"
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
+			if len(errs) != 0 || len(calls) != 0 {
+				t.Fatalf("%s: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
+			}
+		}
 		_, errs := extractRouteContractSources(map[string]string{
 			"ui/src/api/client.ts": "import axios from 'axios'\nexport default axios.create({ baseURL: '/api/v1' })\n",
 		}, nil)
