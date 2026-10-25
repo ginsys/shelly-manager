@@ -1337,6 +1337,9 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			s.fail(line, "unsupported re-export of %s", spec)
 			return
 		}
+		if s.isClientFile && s.clientDefaultExport(line) {
+			return
+		}
 		s.canRegex = true
 		return
 	case "function", "class", "interface", "enum", "namespace":
@@ -1358,18 +1361,17 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			return
 		}
 		if s.instance[ident] {
-			exported := prev == "default" && s.endsStatement()
-			if !exported && !s.peekMember("interceptors") {
+			if !s.peekMember("interceptors") {
 				s.fail(line, "unsupported use of the axios instance %q in the api client module", ident)
 				return
 			}
 			s.canRegex = false
 			return
 		}
-		// Callers import the default export as the client and are paired
-		// under the one checked baseURL, so it must be that instance.
-		if prev == "default" {
-			s.fail(line, "unsupported default export %q in the api client module; export default the axios instance", ident)
+		// export { x as default } names the default export as well;
+		// clientDefaultExport accepts only the export default form.
+		if ident == "default" && prev == "as" {
+			s.fail(line, "unsupported default export specifier in the api client module; export default the axios instance")
 			return
 		}
 	}
@@ -1438,6 +1440,30 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 		return
 	}
 	s.canRegex = false
+}
+
+// clientDefaultExport handles export default in the api client module, just
+// after export was read. Callers import the default export as the client and
+// are paired under the one checked baseURL, so the whole exported expression
+// must be that axios instance, alone; anything else (a literal, an object, a
+// function, a member such as api.interceptors..., a parenthesized form) fails.
+// It reports false, unchanged, when no default follows.
+func (s *routeScanner) clientDefaultExport(line int) bool {
+	mark := s.mark()
+	s.skipSpaceComments()
+	if !s.consumeWord("default") {
+		s.restore(mark)
+		return false
+	}
+	s.skipSpaceComments()
+	ident, _ := s.readIdent()
+	if !s.instance[ident] || !s.endsStatement() {
+		s.fail(line, "unsupported default export in the api client module; export default the axios instance")
+		return true
+	}
+	s.canRegex = false
+	s.prevWord = ""
+	return true
 }
 
 // endsStatement reports whether the expression just read ends its statement:
