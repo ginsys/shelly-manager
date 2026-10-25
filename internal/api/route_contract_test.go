@@ -225,6 +225,25 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 	})
 
+	t.Run("shadow on some accepted samples", func(t *testing.T) {
+		calls, errs := extractRouteContractSources(map[string]string{
+			"ui/src/api/fixture.ts": "import api from './client'\n" +
+				"export const f = (id: string) => api.get(`/devices/${id}/config/current`)\n",
+		}, nil)
+		if len(errs) != 0 {
+			t.Fatal(joinRouteContractErrs(errs))
+		}
+		// The UUID sample reaches the expected route; id=1 does not.
+		router := mux.NewRouter()
+		router.HandleFunc("/api/v1/devices/1/config/{section}", routeContractNop).Methods("GET")
+		router.HandleFunc("/api/v1/devices/{id}/config/current", routeContractNop).Methods("GET")
+		prec, err := routePrecedence(router, calls)
+		require.NoError(t, err)
+		if len(prec) != 1 || prec[0].Matched != "/api/v1/devices/1/config/{param}" {
+			t.Fatalf("precedence: %+v", prec)
+		}
+	})
+
 	t.Run("comments strings regex and division", func(t *testing.T) {
 		src := "import api from './client'\n" +
 			"// fetch('/hidden')\n" +
@@ -307,18 +326,54 @@ func TestRouteContractFixtures(t *testing.T) {
 			"passed on":     "wrap(fetch)",
 			"window member": "window.fetch('/missing')",
 			"global xhr":    "new globalThis.XMLHttpRequest()",
+			"cast receiver": "(window as any).fetch('/missing')",
+			"computed":      "window['fetch']('/missing')",
+			"computed tmpl": "self[`WebSocket`]",
+			// Any receiver: a property named fetch cannot be told apart.
+			"other object": "store.fetch()",
 		} {
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/fixture.ts": body + "\n"}, nil)
 			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/fixture.ts:1:") {
 				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
 			}
 		}
-		// A property named fetch belongs to another object.
 		calls, errs := extractRouteContractSources(map[string]string{
-			"ui/src/fixture.ts": "export const f = (store: any) => store.fetch()\n",
+			"ui/src/fixture.ts": "export const f = (store: any) => store.fetchAll('fetching')\n",
 		}, nil)
 		if len(errs) != 0 || len(calls) != 0 {
 			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
+	t.Run("vue template", func(t *testing.T) {
+		src := "<template>\n" +
+			"  <button @click=\"api.get('/missing')\">API</button>\n" +
+			"</template>\n" +
+			"<script setup lang=\"ts\">\n" +
+			"import api from '@/api/client'\n" +
+			"</script>\n"
+		calls, errs := extractRouteContractSources(map[string]string{"ui/src/App.vue": src}, nil)
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/App.vue:2:") {
+			t.Fatalf("calls %+v errs: %+v", calls, errs)
+		}
+		// Prose, attributes and member names that merely contain the word pass.
+		src = "<template>\n" +
+			"  <p class=\"api-key\" :title=\"cfg.api\">the api key</p>\n" +
+			"</template>\n" +
+			"<script setup lang=\"ts\">\n" +
+			"import api from '@/api/client'\n" +
+			"export const load = () => api.get('/version')\n" +
+			"</script>\n"
+		calls, errs = extractRouteContractSources(map[string]string{"ui/src/App.vue": src}, nil)
+		if len(errs) != 0 || len(calls) != 1 {
+			t.Fatalf("calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+		// Handing the binding to a child component fails too.
+		src = "<template><Child :client=\"api\" /></template>\n" +
+			"<script setup lang=\"ts\">\nimport api from '@/api/client'\n</script>\n"
+		calls, errs = extractRouteContractSources(map[string]string{"ui/src/App.vue": src}, nil)
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/App.vue:1:") {
+			t.Fatalf("calls %+v errs: %+v", calls, errs)
 		}
 	})
 
@@ -332,6 +387,10 @@ func TestRouteContractFixtures(t *testing.T) {
 			"config variable":    "api.get('/x', cfg)",
 			"config spread":      "api.get('/x', { ...cfg })",
 			"computed key":       "api.get('/x', { [k]: v })",
+			"spread arguments":   "api.post('/x', ...[data, { baseURL: '/unserved' }])",
+			"spread config":      "api.get('/x', ...rest)",
+			"literal member":     "api.get('/x', { normal: cfg }.normal)",
+			"literal fallback":   "api.get('/x', {} || cfg)",
 		} {
 			src := "import api from './client'\n" + call + "\n"
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/fixture.ts": src}, nil)
@@ -405,6 +464,7 @@ func TestRouteContractFixtures(t *testing.T) {
 		}{
 			"other default": {"import axios from 'axios'\n\nexport const api = axios.create({ baseURL: env.X || '/api/v2' })\n", 3},
 			"no fallback":   {"import axios from 'axios'\nexport const api = axios.create({ baseURL: env.X })\n", 2},
+			"continued":     {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1'\n  + '/unserved' })\n", 2},
 			"none":          {"import axios from 'axios'\nexport const api = axios.create({})\n", 1},
 			"two":           {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst baseURL = 1\n", 1},
 		} {
