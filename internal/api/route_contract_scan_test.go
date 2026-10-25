@@ -414,8 +414,8 @@ func applyRouteContractManifest(calls []routeContractCall, hits []routeContractH
 			}
 		}
 		src := files[hit.File]
-		if !codeContains(src, tmpl) {
-			errs = append(errs, routeContractError{File: hit.File, Line: hit.Line, Msg: "manifest template " + tmpl + " is not in non-comment source"})
+		if !codeContainsPath(src, tmpl) {
+			errs = append(errs, routeContractError{File: hit.File, Line: hit.Line, Msg: "manifest template " + tmpl + " is not a whole path in non-comment source"})
 		}
 		calls = append(calls, routeContractCall{
 			File:     hit.File,
@@ -462,8 +462,26 @@ func normalizeLiteralTransport(raw string) (string, error) {
 	return normalizeManifestTemplate(raw)
 }
 
-func codeContains(src, needle string) bool {
-	return strings.Contains(stripRouteComments(src), needle)
+// codeContainsPath reports whether the path appears in non-comment source as
+// a whole path: starting after a quote or an interpolation (`${...}`) and
+// ending at a quote, a query, a fragment or an interpolation. A longer path
+// that merely contains it (/metrics/ws-broken, /x/metrics/ws) does not count.
+func codeContainsPath(src, path string) bool {
+	code := stripRouteComments(src)
+	for off := 0; ; {
+		rel := strings.Index(code[off:], path)
+		if rel < 0 {
+			return false
+		}
+		at, end := off+rel, off+rel+len(path)
+		off = at + 1
+		if at == 0 || !strings.ContainsRune("'\"`}", rune(code[at-1])) {
+			continue
+		}
+		if end < len(code) && strings.ContainsRune("'\"`?#$", rune(code[end])) {
+			return true
+		}
+	}
 }
 
 func stripRouteComments(src string) string {
@@ -862,6 +880,7 @@ type routeScanner struct {
 	canRegex     bool
 	member       bool // the previous token was a member-access dot (`.` or `?.`)
 	stop         bool
+	collect      bool // the import-collection pass: failures are not recorded and the scan resumes
 	prevWord     string
 	isClientFile bool
 	api          map[string]bool
@@ -992,13 +1011,39 @@ func (s *routeScanner) peekMember(name string) bool {
 }
 
 func (s *routeScanner) scanFile() {
+	// Static imports are hoisted: a binding is in scope above its import
+	// statement too, so a first pass collects every import binding before
+	// the uses are read. That pass reads past failures (the main pass
+	// reports them) and discards everything but the bindings.
+	pre := s.probe()
+	pre.collect = true
+	pre.scanBody()
+	for _, pair := range [][2]map[string]bool{{s.api, pre.api}, {s.ws, pre.ws}, {s.axios, pre.axios}} {
+		for name := range pair[1] {
+			pair[0][name] = true
+		}
+	}
+	s.scanBody()
+}
+
+func (s *routeScanner) scanBody() {
 	s.canRegex = true
-	for !s.stop && !s.eof() {
+	for !s.eof() {
+		if s.stop {
+			if !s.collect {
+				return
+			}
+			s.stop = false // collecting: resume after the failed token
+		}
 		s.skipSpaceComments()
 		if s.eof() || s.stop {
-			return
+			continue
 		}
+		at := s.i
 		s.scanOne()
+		if s.i == at {
+			s.i++ // nothing consumed: step past it
+		}
 	}
 }
 
@@ -1027,6 +1072,9 @@ func (s *routeScanner) fail(line int, format string, args ...any) {
 		return
 	}
 	s.stop = true
+	if s.collect {
+		return
+	}
 	s.errs = append(s.errs, routeContractError{File: s.file, Line: line, Msg: fmt.Sprintf(format, args...)})
 }
 
@@ -1298,15 +1346,26 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 		s.fail(line, "unsupported use of fetch; HTTP calls go through the api client")
 		return
 	}
-	if (ident == "useWebSocket" || s.ws[ident]) && prev != "function" && s.looksLikeCall() {
-		s.finishTransport(line, "use-websocket")
-		return
+	if (ident == "useWebSocket" || s.ws[ident]) && prev != "function" {
+		if s.looksLikeCall() {
+			s.finishTransport(line, "use-websocket")
+			return
+		}
+		// An alias would open a socket the manifest never sees.
+		if !member && prev != "typeof" {
+			s.fail(line, "unsupported reference to %s; call it directly", ident)
+			return
+		}
 	}
 	if ident == "WebSocket" && s.looksLikeCall() {
 		s.fail(line, "unsupported WebSocket() call without new")
 		return
 	}
-	if (ident == "axios" || s.axios[ident]) && s.tryAxios(line) {
+	if ident == "WebSocket" && !member && !s.webSocketTypeUse(prev, s.i-len(ident)) {
+		s.fail(line, "unsupported reference to WebSocket; open sockets with new WebSocket(...)")
+		return
+	}
+	if (ident == "axios" || s.axios[ident]) && s.tryAxios(line, member) {
 		return
 	}
 	if ident == "XMLHttpRequest" {
@@ -1321,6 +1380,56 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 		return
 	}
 	s.canRegex = false
+}
+
+// webSocketTypeUse reports the references to WebSocket, other than new
+// WebSocket(...), that open nothing: its state constants, type operators
+// and the two annotation forms the UI uses (let x: WebSocket and
+// ): WebSocket {). Any other reference could be an alias that opens a socket
+// the manifest never sees. start is where the name begins.
+func (s *routeScanner) webSocketTypeUse(prev string, start int) bool {
+	for _, state := range []string{"OPEN", "CONNECTING", "CLOSING", "CLOSED"} {
+		if s.peekMember(state) {
+			return true
+		}
+	}
+	switch prev {
+	case "typeof", "instanceof", "as", "satisfies":
+		return true
+	}
+	back := func(i int) int { // the previous non-space byte before i, or -1
+		for i--; i >= 0 && strings.ContainsRune(" \t\r\n", rune(s.src[i])); i-- {
+		}
+		return i
+	}
+	colon := back(start)
+	if colon < 0 || s.src[colon] != ':' {
+		return false
+	}
+	at := back(colon)
+	if at < 0 {
+		return false
+	}
+	if s.src[at] == ')' {
+		return s.nextSignificant() == '{' // a return type before the body
+	}
+	end := at + 1
+	for at >= 0 && s.isIdentCont(s.src[at]) {
+		at--
+	}
+	if at+1 == end {
+		return false
+	}
+	kw := back(at + 1)
+	wordEnd := kw + 1
+	for kw >= 0 && s.isIdentCont(s.src[kw]) {
+		kw--
+	}
+	switch string(s.src[kw+1 : wordEnd]) {
+	case "let", "const", "var":
+		return true
+	}
+	return false
 }
 
 func unaryKeyword(ident string) bool {
@@ -1474,6 +1583,16 @@ type callArg struct {
 // closing parenthesis, on a copy of the scanner, so nothing is recorded and
 // the position is unchanged. It reports false if the walk cannot finish.
 func (s *routeScanner) remainingArgs() ([]callArg, bool) {
+	return s.walkArgs(false)
+}
+
+// callArgs walks every argument of the call whose ( comes next, like
+// remainingArgs.
+func (s *routeScanner) callArgs() ([]callArg, bool) {
+	return s.walkArgs(true)
+}
+
+func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 	w := s.probe()
 	var args []callArg
 	var cur *callArg
@@ -1485,6 +1604,15 @@ func (s *routeScanner) remainingArgs() ([]callArg, bool) {
 			return nil, false
 		}
 		c := w.src[w.i]
+		if open {
+			// The opening parenthesis starts the first argument as a
+			// comma starts the next one.
+			if c != '(' {
+				return nil, false
+			}
+			open = false
+			c = ','
+		}
 		if depth == 0 && (c == ')' || c == ',') {
 			w.i++
 			if c == ')' {
@@ -1565,12 +1693,17 @@ func (s *routeScanner) remainingArgs() ([]callArg, bool) {
 	}
 }
 
-func (s *routeScanner) tryAxios(line int) bool {
+func (s *routeScanner) tryAxios(line int, member bool) bool {
 	mark := s.mark()
 	if !s.consumeDot() {
 		// axios(config) / axios(url) reaches the server without a pair.
 		if s.looksLikeCall() {
 			s.fail(line, "unsupported axios() call")
+			return true
+		}
+		// So does an alias (const request = axios) called later.
+		if !member {
+			s.fail(line, "unsupported reference to axios; only axios.create(...) is supported")
 			return true
 		}
 		return false
@@ -1583,6 +1716,13 @@ func (s *routeScanner) tryAxios(line int) bool {
 			return true
 		}
 		s.bound = false
+		// checkClientBase reads the one baseURL key; a spread or computed
+		// key in the same options could replace it unseen.
+		args, ok := s.callArgs()
+		if !ok || len(args) != 1 || !args[0].object || args[0].spread || args[0].computed {
+			s.fail(line, "unsupported axios.create() options; pass one object literal without spreads or computed keys")
+			return true
+		}
 		s.canRegex = false
 		s.prevWord = ""
 		return true
