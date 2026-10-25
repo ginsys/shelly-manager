@@ -43,7 +43,9 @@ func checkClientBase(src string) []routeContractError {
 		return []routeContractError{{File: routeContractClientFile, Line: 1, Msg: fmt.Sprintf("want exactly one baseURL, found %d", len(locs))}}
 	}
 	line := byteLine(code, locs[0][0])
-	m := regexp.MustCompile(`^baseURL\s*:\s*([^,}\n]+)`).FindStringSubmatch(code[locs[0][0]:])
+	// The value runs to the property's end, across lines; a value containing
+	// a comma or brace of its own is cut short and fails the literal check.
+	m := regexp.MustCompile(`^baseURL\s*:\s*([^,}]+)[,}]`).FindStringSubmatch(code[locs[0][0]:])
 	if m == nil {
 		return []routeContractError{{File: routeContractClientFile, Line: line, Msg: "unsupported baseURL shape; want baseURL: <overrides> || '<base>'"}}
 	}
@@ -149,13 +151,20 @@ func extractRouteContractSources(files map[string]string, manifest []routeContra
 		if strings.HasSuffix(name, ".vue") {
 			chunks, chunkErrs := vueScriptChunks(name, src)
 			errs = append(errs, chunkErrs...)
+			bindings := map[string]bool{}
 			for _, chunk := range chunks {
 				sc := newRouteScanner(name, chunk.src, chunk.line)
 				sc.scanFile()
 				calls = append(calls, sc.calls...)
 				hits = append(hits, sc.hits...)
 				errs = append(errs, sc.errs...)
+				for _, m := range []map[string]bool{sc.api, sc.ws, sc.axios} {
+					for b := range m {
+						bindings[b] = true
+					}
+				}
 			}
+			errs = append(errs, checkVueTemplate(name, src, chunks, bindings)...)
 			continue
 		}
 		sc := newRouteScanner(name, src, 1)
@@ -224,8 +233,40 @@ func routeContractFiles(root string) (map[string]string, error) {
 }
 
 type vueChunk struct {
-	src  string
-	line int
+	src        string
+	line       int
+	start, end int // byte range of src within the file
+}
+
+// checkVueTemplate fails when the parts of a .vue file outside its <script>
+// blocks name a client or transport binding the scripts imported: template
+// expressions (@click="api.get(...)") run with the script setup bindings in
+// scope and are not scanned.
+func checkVueTemplate(file, src string, chunks []vueChunk, bindings map[string]bool) []routeContractError {
+	outside := []byte(src)
+	for _, chunk := range chunks {
+		for i := chunk.start; i < chunk.end; i++ {
+			if outside[i] != '\n' {
+				outside[i] = ' '
+			}
+		}
+	}
+	names := make([]string, 0, len(bindings))
+	for name := range bindings {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var errs []routeContractError
+	for _, name := range names {
+		// An expression use: a member, call or index, or the bare value
+		// ending an attribute, interpolation or argument. Prose ("the api
+		// key") and class names (api-key) do not match.
+		re := regexp.MustCompile(`(^|[^\w$.-])` + regexp.QuoteMeta(name) + `\s*(\?\.|[.(\[)"'},])`)
+		if loc := re.FindIndex(outside); loc != nil {
+			errs = append(errs, routeContractError{File: file, Line: byteLine(src, loc[0]+1), Msg: fmt.Sprintf("unsupported use of %q outside <script>; template expressions are not scanned", name)})
+		}
+	}
+	return errs
 }
 
 func vueScriptChunks(file, src string) ([]vueChunk, []routeContractError) {
@@ -251,8 +292,10 @@ func vueScriptChunks(file, src string) ([]vueChunk, []routeContractError) {
 			return nil, []routeContractError{{File: file, Line: byteLine(src, abs), Msg: "unclosed <script> tag"}}
 		}
 		out = append(out, vueChunk{
-			src:  src[bodyStart : bodyStart+endRel],
-			line: byteLine(src, bodyStart),
+			src:   src[bodyStart : bodyStart+endRel],
+			line:  byteLine(src, bodyStart),
+			start: bodyStart,
+			end:   bodyStart + endRel,
 		})
 		base = bodyStart + endRel + len("</script>")
 	}
@@ -533,18 +576,20 @@ func sortRoutePairs(out []routeContractPair) {
 }
 
 // routePrecedenceSamples are the candidate values for each {param} of a call
-// template. Every combination is tried, one sample per parameter, and the
-// first one the expected route accepts on its own builds the representative
-// request. A constrained route such as {id:<uuid>} is therefore not reported
-// as shadowed by a value it would reject anyway, and parameters with disjoint
-// constraints ({id:[0-9]+}/{section:[a-z]+}) each get a value that fits.
+// template. Every combination is tried, one sample per parameter, and each
+// one the expected route accepts on its own is a representative request. A
+// constrained route such as {id:<uuid>} is therefore not reported as shadowed
+// by a value it would reject anyway, parameters with disjoint constraints
+// ({id:[0-9]+}/{section:[a-z]+}) each get a value that fits, and an earlier
+// route that catches only some accepted values (/devices/1/...) still shows.
 var routePrecedenceSamples = []string{"00000000-0000-0000-0000-000000000000", "1", "x"}
 
-// routePrecedenceRequest returns the first sample path the expected route
+// routePrecedenceRequests returns every sample path the expected route
 // matches, filling each {param} of tmpl independently.
-func routePrecedenceRequest(method, tmpl string, want *mux.Route) (string, bool) {
+func routePrecedenceRequests(method, tmpl string, want *mux.Route) []string {
 	parts := strings.Split(tmpl, "{param}")
 	choice := make([]int, len(parts)-1)
+	var out []string
 	for {
 		var b strings.Builder
 		for i, part := range parts {
@@ -556,7 +601,7 @@ func routePrecedenceRequest(method, tmpl string, want *mux.Route) (string, bool)
 		p := b.String()
 		var m mux.RouteMatch
 		if want.Match(httptest.NewRequest(method, p, nil), &m) && m.MatchErr == nil {
-			return p, true
+			out = append(out, p)
 		}
 		// Advance the odometer over sample indexes; done after the last one.
 		i := len(choice) - 1
@@ -565,7 +610,7 @@ func routePrecedenceRequest(method, tmpl string, want *mux.Route) (string, bool)
 			i--
 		}
 		if i < 0 {
-			return "", false
+			return out
 		}
 		choice[i]++
 	}
@@ -599,37 +644,41 @@ func routePrecedence(router *mux.Router, calls []routeContractCall) ([]routeCont
 			continue
 		}
 		seen[key] = true
-		reqPath := call.Template
+		reqPaths := []string{call.Template}
 		if strings.Contains(call.Template, "{param}") {
 			want, ok := expected[key]
 			if !ok {
 				// No such pair; missingRoutePairs reports it.
 				continue
 			}
-			reqPath, ok = routePrecedenceRequest(call.Method, call.Template, want)
-			if !ok {
+			reqPaths = routePrecedenceRequests(call.Method, call.Template, want)
+			if len(reqPaths) == 0 {
 				return nil, fmt.Errorf("%s %s: no sample value satisfies the route's own constraints; extend routePrecedenceSamples", call.Method, call.Template)
 			}
 		}
-		req := httptest.NewRequest(call.Method, reqPath, nil)
-		var match mux.RouteMatch
-		if !router.Match(req, &match) || match.MatchErr != nil || match.Route == nil {
-			continue
+		// The first sample request another route catches is reported.
+		for _, reqPath := range reqPaths {
+			req := httptest.NewRequest(call.Method, reqPath, nil)
+			var match mux.RouteMatch
+			if !router.Match(req, &match) || match.MatchErr != nil || match.Route == nil {
+				continue
+			}
+			tmpl, err := match.Route.GetPathTemplate()
+			if err != nil {
+				return nil, fmt.Errorf("%s %s matched a route without a template: %w", call.Method, call.Template, err)
+			}
+			got := normalizeRouteTemplate(tmpl)
+			if got == call.Template {
+				continue
+			}
+			out = append(out, routeContractPrec{
+				Method:   call.Method,
+				Request:  call.Template,
+				Expected: call.Template,
+				Matched:  got,
+			})
+			break
 		}
-		tmpl, err := match.Route.GetPathTemplate()
-		if err != nil {
-			return nil, fmt.Errorf("%s %s matched a route without a template: %w", call.Method, call.Template, err)
-		}
-		got := normalizeRouteTemplate(tmpl)
-		if got == call.Template {
-			continue
-		}
-		out = append(out, routeContractPrec{
-			Method:   call.Method,
-			Request:  call.Template,
-			Expected: call.Template,
-			Matched:  got,
-		})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Request != out[j].Request {
@@ -1092,11 +1141,28 @@ func (s *routeScanner) scanOne() {
 	case c >= '0' && c <= '9':
 		s.scanNumber()
 	case c == '\'' || c == '"':
-		s.readQuoted()
+		line := s.line
+		if text, ok := s.readQuoted(); ok && isBrowserTransport(text) {
+			s.fail(line, "unsupported string %q; it can name a browser HTTP transport", text)
+		}
 	case c == '`':
-		s.scanTemplate(false)
+		line := s.line
+		if text, ok := s.scanTemplate(false); ok && isBrowserTransport(text) {
+			s.fail(line, "unsupported string %q; it can name a browser HTTP transport", text)
+		}
 	default:
 		s.scanPunct(c)
+	}
+}
+
+// isBrowserTransport reports the global names that issue requests outside
+// the api client.
+func isBrowserTransport(name string) bool {
+	switch name {
+	case "fetch", "XMLHttpRequest", "WebSocket":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -1159,14 +1225,13 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 		}
 		return
 	}
-	// window.fetch and friends are the same globals under another name.
-	if (ident == "window" || ident == "globalThis" || ident == "self") && !member {
-		for _, name := range []string{"fetch", "XMLHttpRequest", "WebSocket"} {
-			if s.peekMember(name) {
-				s.fail(line, "unsupported use of %s.%s", ident, name)
-				return
-			}
-		}
+	// window.fetch, (window as any).fetch and friends are the same globals
+	// reached through some receiver, which cannot be told apart from an
+	// unrelated property. A member with such a name always fails; the
+	// quoted form (window['fetch']) fails in scanOne.
+	if member && isBrowserTransport(ident) {
+		s.fail(line, "unsupported member .%s; HTTP calls go through the api client", ident)
+		return
 	}
 	// fetch is never a supported transport. A call fails, and so does any
 	// other reference (an alias, fetch.call, passing it on), which could reach
@@ -1319,6 +1384,12 @@ func (s *routeScanner) checkCallConfig(method string) string {
 	if !ok {
 		return fmt.Sprintf("unsupported arguments for %s()", method)
 	}
+	for _, arg := range args {
+		if arg.spreadArg {
+			// Which element lands in the config position is unknown.
+			return fmt.Sprintf("unsupported spread argument for %s()", method)
+		}
+	}
 	idx := 0 // get, delete, head, options: (url, config)
 	switch method {
 	case "post", "put", "patch": // (url, data, config)
@@ -1340,10 +1411,12 @@ func (s *routeScanner) checkCallConfig(method string) string {
 }
 
 type callArg struct {
-	object   bool // the argument is an object literal
-	baseURL  bool // it names baseURL anywhere, as a word or a string
-	spread   bool // it spreads at its own top level
-	computed bool // it has a computed key at its own top level
+	spreadArg bool // the argument is spread (...xs) into several
+	closed    bool // a bracket opened at the argument's top level just closed
+	object    bool // the argument is an object literal and nothing else
+	baseURL   bool // it names baseURL anywhere, as a word or a string
+	spread    bool // it spreads at its own top level
+	computed  bool // it has a computed key at its own top level
 }
 
 // remainingArgs walks the arguments after the current one up to the call's
@@ -1374,13 +1447,20 @@ func (s *routeScanner) remainingArgs() ([]callArg, bool) {
 			if w.peek(')') {
 				return args, true // trailing comma
 			}
-			args = append(args, callArg{object: w.peek('{')})
+			args = append(args, callArg{
+				object:    w.peek('{'),
+				spreadArg: w.peek('.') && w.peekN(1) == '.' && w.peekN(2) == '.',
+			})
 			cur = &args[len(args)-1]
 			keyPos = false
 			continue
 		}
 		if cur == nil {
 			return nil, false
+		}
+		if depth == 0 && cur.closed {
+			// { ... }.key or { ... } ?? cfg: no longer the literal itself.
+			cur.object = false
 		}
 		atKey := keyPos && depth == 1 && cur.object
 		keyPos = false
@@ -1418,6 +1498,7 @@ func (s *routeScanner) remainingArgs() ([]callArg, bool) {
 		case c == ')' || c == ']' || c == '}':
 			depth--
 			w.scanPunct(c)
+			cur.closed = depth == 0
 		case c == '.' && w.peekN(1) == '.' && w.peekN(2) == '.':
 			if atKey {
 				cur.spread = true
@@ -1789,9 +1870,7 @@ func (s *routeScanner) scanTemplate(pathMode bool) (string, bool) {
 				return "", false
 			}
 			s.i += extra
-			if pathMode {
-				b.WriteString(decoded)
-			}
+			b.WriteString(decoded)
 			continue
 		}
 		if c == '`' {
@@ -1805,17 +1884,20 @@ func (s *routeScanner) scanTemplate(pathMode bool) (string, bool) {
 				if !s.readSimpleInterp(&b) {
 					return "", false
 				}
-			} else if !s.scanInterp() {
-				return "", false
+			} else {
+				if !s.scanInterp() {
+					return "", false
+				}
+				// Outside path mode the text is only compared whole; an
+				// interpolation keeps its neighbours apart.
+				b.WriteByte(0)
 			}
 			continue
 		}
 		if c == '\n' {
 			s.line++
 		}
-		if pathMode {
-			b.WriteByte(c)
-		}
+		b.WriteByte(c)
 		s.i++
 	}
 	return "", false
