@@ -1444,7 +1444,7 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 // the file ends, a ; or } follows, or the next token follows a line
 // terminator (LF, CR, U+2028, U+2029, also inside a comment) and is a name
 // that cannot continue an expression. Anything else (.get(...), a call, an
-// operator, instanceof) continues it. The position is unchanged.
+// operator, instanceof, in) continues it. The position is unchanged.
 func (s *routeScanner) endsStatement() bool {
 	mark := s.mark()
 	defer s.restore(mark)
@@ -1460,7 +1460,7 @@ func (s *routeScanner) endsStatement() bool {
 	}
 	ident, _ := s.readIdent()
 	switch ident {
-	case "instanceof", "in", "as", "satisfies":
+	case "instanceof", "in": // TypeScript forbids a line break before as and satisfies
 		return false
 	}
 	return true
