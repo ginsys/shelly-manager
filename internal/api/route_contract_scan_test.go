@@ -1694,16 +1694,18 @@ type callArg struct {
 // closing parenthesis, on a copy of the scanner, so nothing is recorded and
 // the position is unchanged. It reports false if the walk cannot finish.
 func (s *routeScanner) remainingArgs() ([]callArg, bool) {
-	return s.walkArgs(false)
+	args, _, ok := s.walkArgs(false)
+	return args, ok
 }
 
 // callArgs walks every argument of the call whose ( comes next, like
-// remainingArgs.
-func (s *routeScanner) callArgs() ([]callArg, bool) {
+// remainingArgs, and also returns the position just after its closing ).
+// The scanner itself is unchanged.
+func (s *routeScanner) callArgs() ([]callArg, scanMark, bool) {
 	return s.walkArgs(true)
 }
 
-func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
+func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 	w := s.probe()
 	var args []callArg
 	var cur *callArg
@@ -1712,14 +1714,14 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 	for {
 		w.skipSpaceComments()
 		if w.stop || w.eof() {
-			return nil, false
+			return nil, scanMark{}, false
 		}
 		c := w.src[w.i]
 		if open {
 			// The opening parenthesis starts the first argument as a
 			// comma starts the next one.
 			if c != '(' {
-				return nil, false
+				return nil, scanMark{}, false
 			}
 			open = false
 			c = ','
@@ -1727,15 +1729,16 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 		if depth == 0 && (c == ')' || c == ',') {
 			w.i++
 			if c == ')' {
-				return args, true
+				return args, w.mark(), true
 			}
 			w.canRegex = true
 			w.skipSpaceComments()
 			if w.stop || w.eof() {
-				return nil, false
+				return nil, scanMark{}, false
 			}
 			if w.peek(')') {
-				return args, true // trailing comma
+				w.i++
+				return args, w.mark(), true // trailing comma
 			}
 			args = append(args, callArg{
 				object:    w.peek('{'),
@@ -1746,7 +1749,7 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 			continue
 		}
 		if cur == nil {
-			return nil, false
+			return nil, scanMark{}, false
 		}
 		if depth == 0 && cur.closed {
 			// { ... }.key or { ... } ?? cfg: no longer the literal itself.
@@ -1768,7 +1771,7 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 		case c == '\'' || c == '"':
 			text, ok := w.readQuoted()
 			if !ok {
-				return nil, false
+				return nil, scanMark{}, false
 			}
 			if text == "baseURL" {
 				cur.baseURL = true
@@ -1776,7 +1779,7 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, bool) {
 			w.canRegex = false
 		case c == '`':
 			if _, ok := w.scanTemplate(false); !ok {
-				return nil, false
+				return nil, scanMark{}, false
 			}
 			w.canRegex = false
 		case c == '(' || c == '[' || c == '{':
@@ -1830,7 +1833,7 @@ func (s *routeScanner) tryAxios(line int, member bool) bool {
 		s.bound = false
 		// checkClientBase reads the one baseURL key; a spread or computed
 		// key in the same options could replace it unseen.
-		args, ok := s.callArgs()
+		args, end, ok := s.callArgs()
 		if !ok || len(args) != 1 || !args[0].object || args[0].spread || args[0].computed {
 			s.fail(line, "unsupported axios.create() options; pass one object literal without spreads or computed keys")
 			return true
@@ -1839,6 +1842,14 @@ func (s *routeScanner) tryAxios(line int, member bool) bool {
 		// whose options lack it, would be paired under a base it never uses.
 		if s.created || !args[0].baseURLKey {
 			s.fail(line, "unsupported axios.create(); the api client module creates one instance, with the checked baseURL")
+			return true
+		}
+		// The binding holds the instance only if the call is the whole
+		// initializer: axios.create(...).interceptors or && x would not.
+		after := s.probe()
+		after.restore(end)
+		if !after.endsStatement() {
+			s.fail(line, "unsupported axios.create() continuation; bind the instance as const <name> = axios.create(...)")
 			return true
 		}
 		s.created = true
