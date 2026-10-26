@@ -630,6 +630,9 @@ func TestRouteContractFixtures(t *testing.T) {
 			"default parens":    "export default (api)",
 			"default comment":   "export /* c */ default /* c */ {}",
 			"default specifier": "export { rootApi as default }",
+			"default quoted":    "export { replacement as \"default\" }",
+			"default reexport":  "export { default } from './other'",
+			"star as default":   "export * as default from './other'",
 		} {
 			src := head + body + "\n"
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)

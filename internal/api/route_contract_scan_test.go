@@ -1337,7 +1337,7 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			s.fail(line, "unsupported re-export of %s", spec)
 			return
 		}
-		if s.isClientFile && s.clientDefaultExport(line) {
+		if s.isClientFile && s.clientExport(line) {
 			return
 		}
 		s.canRegex = true
@@ -1366,12 +1366,6 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 				return
 			}
 			s.canRegex = false
-			return
-		}
-		// export { x as default } names the default export as well;
-		// clientDefaultExport accepts only the export default form.
-		if ident == "default" && prev == "as" {
-			s.fail(line, "unsupported default export specifier in the api client module; export default the axios instance")
 			return
 		}
 	}
@@ -1442,15 +1436,21 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	s.canRegex = false
 }
 
-// clientDefaultExport handles export default in the api client module, just
-// after export was read. Callers import the default export as the client and
-// are paired under the one checked baseURL, so the whole exported expression
-// must be that axios instance, alone; anything else (a literal, an object, a
-// function, a member such as api.interceptors..., a parenthesized form) fails.
-// It reports false, unchanged, when no default follows.
-func (s *routeScanner) clientDefaultExport(line int) bool {
+// clientExport checks an export in the api client module, just after export
+// was read. Callers import the default export as the client and are paired
+// under the one checked baseURL, so the whole exported expression must be
+// that axios instance, alone; anything else (a literal, an object, a
+// function, a member such as api.interceptors..., a parenthesized form)
+// fails. An export clause or star export fails too: it can name the default
+// export in forms this scanner does not resolve ({ default } from, a quoted
+// "default"). It reports false, unchanged, for any other export.
+func (s *routeScanner) clientExport(line int) bool {
 	mark := s.mark()
 	s.skipSpaceComments()
+	if s.peek('{') || s.peek('*') {
+		s.fail(line, "unsupported export clause in the api client module; export default the axios instance")
+		return true
+	}
 	if !s.consumeWord("default") {
 		s.restore(mark)
 		return false
