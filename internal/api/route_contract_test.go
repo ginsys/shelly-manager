@@ -642,11 +642,16 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 		// Every JavaScript line terminator ends the default export statement.
 		for name, end := range map[string]string{"lf": "\n", "cr": "\r", "ls": "\u2028", "ps": "\u2029", "comment": " // c\u2028"} {
-			src := head + "export default api" + end + "export const marker = 1\n"
+			src := head + "export default api" + end + "const marker = 1\n"
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil)
 			if len(errs) != 0 || len(calls) != 0 {
 				t.Fatalf("%s: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
 			}
+		}
+		// Type-only exports carry no runtime value and stay allowed.
+		typed := head + "export type Client = { id: number }\nexport interface Page { n: number }\nexport type { AxiosError } from 'axios'\nexport default api\n"
+		if calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": typed}, nil); len(errs) != 0 || len(calls) != 0 {
+			t.Fatalf("type exports: calls %+v errs: %s", calls, joinRouteContractErrs(errs))
 		}
 		// as and satisfies cannot follow a line break in TypeScript, so on a
 		// new line they start a statement.
@@ -716,6 +721,11 @@ func TestRouteContractFixtures(t *testing.T) {
 			"api not create": {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport const api = {}\nexport default real\n", 3},
 			"api function":   {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport function api() {}\nexport default real\n", 3},
 			"api destructed": {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport const { api } = holder\nexport default real\n", 3},
+			"api declarator": {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport const marker = 0, api = {}\nexport default real\n", 3},
+			"api async":      {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport async function api() {}\nexport default real\n", 3},
+			"api generator":  {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport function* api() {}\nexport default real\n", 3},
+			"api let":        {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport let api = real\nexport default real\n", 3},
+			"api enum":       {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport enum api { A }\nexport default real\n", 3},
 		} {
 			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": tc.src}, nil)
 			want := fmt.Sprintf("ui/src/api/client.ts:%d:", tc.line)

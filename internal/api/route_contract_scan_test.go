@@ -1442,47 +1442,45 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 }
 
 // clientExport checks an export in the api client module, just after export
-// was read. Callers import the default export as the client and are paired
-// under the one checked baseURL, so the whole exported expression must be
-// that axios instance, alone; anything else (a literal, an object, a
-// function, a member such as api.interceptors..., a parenthesized form)
-// fails. An export clause or star export fails too: it can name the default
-// export in forms this scanner does not resolve ({ default } from, a quoted
-// "default"). It reports false, unchanged, for any other export.
+// was read. Importers take its default export and its named export api as
+// the client and pair their calls under the one checked baseURL, so every
+// runtime export must be that instance. Only two shapes are accepted:
+// export const <name> = axios.create(...) (bindsAxiosCreate and the create
+// path check the rest) and export default <instance>, alone. Type-only
+// exports carry no runtime value. Anything else fails: another declaration
+// (let, a second declarator, async function, class ...), an export clause or
+// star export (which can name the default as { default } from or a quoted
+// "default"), or any other default export (a literal, an object, a function,
+// api.interceptors..., a parenthesized form). It reports false, unchanged,
+// for the accepted declaration and type-only exports.
 func (s *routeScanner) clientExport(line int) bool {
 	mark := s.mark()
 	s.skipSpaceComments()
-	if s.peek('{') || s.peek('*') {
-		s.fail(line, "unsupported export clause in the api client module; export default the axios instance")
+	if s.consumeWord("default") {
+		s.skipSpaceComments()
+		ident, _ := s.readIdent()
+		if !s.instance[ident] || !s.endsStatement() {
+			s.fail(line, "unsupported default export in the api client module; export default the axios instance")
+			return true
+		}
+		s.canRegex = false
+		s.prevWord = ""
 		return true
 	}
-	// Importers also take the named export api as the client, so it must be
-	// bound by axios.create; a destructured export could bind it unseen.
 	decl := s.probe()
-	if kw, _ := decl.readIdent(); kw == "const" || kw == "let" || kw == "var" || kw == "function" || kw == "class" {
-		decl.skipSpaceComments()
-		if decl.peek('{') || decl.peek('[') {
-			s.fail(line, "unsupported destructuring export in the api client module")
-			return true
-		}
-		decl.axios = s.axios
-		if name, _ := decl.readIdent(); name == "api" && (kw == "function" || kw == "class" || !decl.bindsAxiosCreate()) {
-			s.fail(line, "the api export of the api client module must be its axios.create(...) instance")
-			return true
-		}
-	}
-	if !s.consumeWord("default") {
+	decl.axios = s.axios
+	switch kw, _ := decl.readIdent(); kw {
+	case "type", "interface":
 		s.restore(mark)
 		return false
+	case "const":
+		decl.skipSpaceComments()
+		if name, _ := decl.readIdent(); name != "" && decl.bindsAxiosCreate() {
+			s.restore(mark)
+			return false
+		}
 	}
-	s.skipSpaceComments()
-	ident, _ := s.readIdent()
-	if !s.instance[ident] || !s.endsStatement() {
-		s.fail(line, "unsupported default export in the api client module; export default the axios instance")
-		return true
-	}
-	s.canRegex = false
-	s.prevWord = ""
+	s.fail(line, "unsupported export in the api client module; export only const <name> = axios.create(...) and default <name>")
 	return true
 }
 
