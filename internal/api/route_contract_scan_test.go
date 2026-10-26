@@ -1704,7 +1704,7 @@ type callArg struct {
 	object     bool // the argument is an object literal and nothing else
 	baseURL    bool // it names baseURL anywhere, as a word or a string
 	baseURLKey bool // it has baseURL as a key at its own top level
-	quotedBase bool // it has a quoted key that decodes to baseURL at its own top level
+	oddKey     bool // a top-level property is not a plain name: value (quoted, accessor, method ...)
 	spread     bool // it spreads at its own top level
 	computed   bool // it has a computed key at its own top level
 }
@@ -1776,6 +1776,14 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 		}
 		atKey := keyPos && depth == 1 && cur.object
 		keyPos = false
+		// checkClientBase reads the raw baseURL: key; any other key form
+		// (quoted with escapes or line continuations, an accessor, a
+		// method, a number) could name baseURL again and override it.
+		// Spreads, computed keys and the closing } are reported below.
+		spreadNext := c == '.' && w.peekN(1) == '.' && w.peekN(2) == '.'
+		if atKey && c != '[' && c != '}' && !spreadNext && !w.plainKey() {
+			cur.oddKey = true
+		}
 		switch {
 		case w.isIdentStart():
 			ident, _ := w.readIdent()
@@ -1794,9 +1802,6 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 			}
 			if text == "baseURL" {
 				cur.baseURL = true
-				// A quoted key (escapes decoded) still names the property and
-				// would override the checked one; checkClientBase cannot see it.
-				cur.quotedBase = cur.quotedBase || atKey
 			}
 			w.canRegex = false
 		case c == '`':
@@ -1830,6 +1835,18 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 	}
 }
 
+// plainKey reports whether an object property starting here is a plain
+// name followed by :. The position is unchanged.
+func (s *routeScanner) plainKey() bool {
+	w := s.probe()
+	if !w.isIdentStart() {
+		return false
+	}
+	w.readIdent()
+	w.skipSpaceComments()
+	return w.peek(':')
+}
+
 func (s *routeScanner) tryAxios(line int, member bool) bool {
 	mark := s.mark()
 	if !s.consumeDot() {
@@ -1856,8 +1873,8 @@ func (s *routeScanner) tryAxios(line int, member bool) bool {
 		// checkClientBase reads the one baseURL key; a spread or computed
 		// key in the same options could replace it unseen.
 		args, end, ok := s.callArgs()
-		if !ok || len(args) != 1 || !args[0].object || args[0].spread || args[0].computed || args[0].quotedBase {
-			s.fail(line, "unsupported axios.create() options; pass one object literal without spreads, computed keys or a quoted baseURL key")
+		if !ok || len(args) != 1 || !args[0].object || args[0].spread || args[0].computed || args[0].oddKey {
+			s.fail(line, "unsupported axios.create() options; pass one object literal of plain name: value properties, without spreads or computed keys")
 			return true
 		}
 		// That baseURL describes one instance only: a second one, or one
