@@ -706,6 +706,9 @@ func TestRouteContractFixtures(t *testing.T) {
 			"spread":         {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', ...defaults })\n", 2},
 			"computed":       {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', [key]: v })\n", 2},
 			"second arg":     {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' }, more)\n", 2},
+			"member after":   {"import axios from 'axios'\nconst api = axios.create({ baseURL: '/api/v1' }).interceptors\nexport default api\n", 2},
+			"operator after": {"import axios from 'axios'\nconst api = axios.create({ baseURL: '/api/v1' }) && replacement\nexport default api\n", 2},
+			"next line":      {"import axios from 'axios'\nconst api = axios.create({ baseURL: '/api/v1' })\n  .interceptors\nexport default api\n", 2},
 		} {
 			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": tc.src}, nil)
 			want := fmt.Sprintf("ui/src/api/client.ts:%d:", tc.line)
