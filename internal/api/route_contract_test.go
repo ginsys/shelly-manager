@@ -709,6 +709,13 @@ func TestRouteContractFixtures(t *testing.T) {
 			"member after":   {"import axios from 'axios'\nconst api = axios.create({ baseURL: '/api/v1' }).interceptors\nexport default api\n", 2},
 			"operator after": {"import axios from 'axios'\nconst api = axios.create({ baseURL: '/api/v1' }) && replacement\nexport default api\n", 2},
 			"next line":      {"import axios from 'axios'\nconst api = axios.create({ baseURL: '/api/v1' })\n  .interceptors\nexport default api\n", 2},
+			"named import":   {"import { Axios } from 'axios'\nconst unused = { baseURL: '/api/v1' }\nexport const api = new Axios({})\n", 1},
+			"no create":      {"import axios from 'axios'\nconst unused = { baseURL: '/api/v1' }\n", 1},
+			"axios member":   {"import axios from 'axios'\nconst unused = { baseURL: '/api/v1' }\nexport const api = new axios.Axios({})\n", 3},
+			"member beside":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst other = new axios.Axios({})\n", 3},
+			"api not create": {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport const api = {}\nexport default real\n", 3},
+			"api function":   {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport function api() {}\nexport default real\n", 3},
+			"api destructed": {"import axios from 'axios'\nconst real = axios.create({ baseURL: '/api/v1' })\nexport const { api } = holder\nexport default real\n", 3},
 		} {
 			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": tc.src}, nil)
 			want := fmt.Sprintf("ui/src/api/client.ts:%d:", tc.line)

@@ -193,6 +193,11 @@ func extractRouteContractSources(files map[string]string, manifest []routeContra
 		}
 		sc := newRouteScanner(name, src, 1)
 		sc.scanFile()
+		// checkClientBase validates the one baseURL key, which pairs calls
+		// only if axios.create is what builds the client: exactly one.
+		if sc.isClientFile && !sc.created && len(sc.errs) == 0 {
+			sc.fail(1, "the api client module creates no axios instance; create it with axios.create(...)")
+		}
 		calls = append(calls, sc.calls...)
 		hits = append(hits, sc.hits...)
 		errs = append(errs, sc.errs...)
@@ -1451,6 +1456,21 @@ func (s *routeScanner) clientExport(line int) bool {
 		s.fail(line, "unsupported export clause in the api client module; export default the axios instance")
 		return true
 	}
+	// Importers also take the named export api as the client, so it must be
+	// bound by axios.create; a destructured export could bind it unseen.
+	decl := s.probe()
+	if kw, _ := decl.readIdent(); kw == "const" || kw == "let" || kw == "var" || kw == "function" || kw == "class" {
+		decl.skipSpaceComments()
+		if decl.peek('{') || decl.peek('[') {
+			s.fail(line, "unsupported destructuring export in the api client module")
+			return true
+		}
+		decl.axios = s.axios
+		if name, _ := decl.readIdent(); name == "api" && (kw == "function" || kw == "class" || !decl.bindsAxiosCreate()) {
+			s.fail(line, "the api export of the api client module must be its axios.create(...) instance")
+			return true
+		}
+	}
 	if !s.consumeWord("default") {
 		s.restore(mark)
 		return false
@@ -1859,6 +1879,12 @@ func (s *routeScanner) tryAxios(line int, member bool) bool {
 	}
 	if isHTTPMethod(method) || method == "request" {
 		s.fail(line, "unsupported axios.%s call", method)
+		return true
+	}
+	// In the client module only axios.create builds the checked instance;
+	// any other member (Axios, defaults ...) could build or reach one unseen.
+	if s.isClientFile && !member {
+		s.fail(line, "unsupported axios.%s; only axios.create(...) is supported", method)
 		return true
 	}
 	s.restore(mark)
@@ -2481,9 +2507,13 @@ func (s *routeScanner) noteModule(bindings []importBinding, spec string) {
 			return
 		}
 		for _, binding := range bindings {
-			if binding.imported == "default" {
-				s.axios[binding.local] = true
+			// A named runtime import (Axios, create) builds an instance
+			// the checked axios.create path never sees.
+			if binding.imported != "default" {
+				s.fail(s.line, "unsupported axios import %q in the api client module; import the default and call axios.create", binding.imported)
+				return
 			}
+			s.axios[binding.local] = true
 		}
 		return
 	}
