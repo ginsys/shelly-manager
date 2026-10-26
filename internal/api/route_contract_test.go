@@ -707,6 +707,7 @@ func TestRouteContractFixtures(t *testing.T) {
 			"nested base":    {"import axios from 'axios'\nexport const api = axios.create({ headers: { baseURL: '/api/v1' } })\n", 2},
 			"escaped key":    {"import axios from 'axios'\nexport const api = axios.create({\n  'base\\u0055RL': '/unserved',\n  headers: { 'X-Note': \"baseURL: '/api/v1',\" },\n})\n", 2},
 			"escaped beside": {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', 'base\\u0055RL': '/unserved' })\n", 2},
+			"escaped ident":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1', base\\u0055RL: '/unserved' })\n", 2},
 			"quoted first":   {"import axios from 'axios'\nexport const api = axios.create({ \"base\\x55RL\": '/unserved', baseURL: '/api/v1' })\n", 2},
 			"two instances":  {"import axios from 'axios'\nexport const api = axios.create({ baseURL: '/api/v1' })\nconst rootApi = axios.create({})\nexport default rootApi\n", 3},
 			"base elsewhere": {"import axios from 'axios'\nconst o = { baseURL: '/api/v1' }\nexport const api = axios.create({ timeout: 1 })\n", 3},
