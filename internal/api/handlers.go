@@ -19,6 +19,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/metrics"
 	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/service"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // Handler contains dependencies for API handlers
@@ -710,6 +711,20 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 
 // GetCurrentDeviceConfig handles GET /api/v1/devices/{id}/config/current
 // Returns the current live device configuration directly from the device
+// writeDeviceReadError reports a failed read from a physical device. A device
+// that rejects our login is an upstream problem the caller can act on (fix the
+// stored credentials), so it gets 502 with a specific message instead of a
+// generic 500. It is not 401, which would read as the caller's own login to
+// this API failing.
+func (h *Handler) writeDeviceReadError(w http.ResponseWriter, r *http.Request, err error) {
+	if shelly.IsAuthError(err) {
+		h.responseWriter().WriteError(w, r, http.StatusBadGateway, apiresp.ErrCodeExternalServiceError,
+			"The device rejected the stored credentials; update them with PUT /devices/{id}/config/auth", nil)
+		return
+	}
+	h.responseWriter().WriteInternalError(w, r, err)
+}
+
 func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
@@ -725,7 +740,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get current device config from device")
-		h.responseWriter().WriteInternalError(w, r, err)
+		h.writeDeviceReadError(w, r, err)
 		return
 	}
 
@@ -757,11 +772,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get current device config from device for normalization")
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		h.writeDeviceReadError(w, r, err)
 		return
 	}
 
