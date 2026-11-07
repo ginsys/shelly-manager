@@ -47,6 +47,15 @@ All notable changes to this project are documented here. The project follows Con
   **schema viewer**, and read-only details. A product model for stored plugin
   configuration/testing/enablement is tracked as a design vertical (#290).
 
+### Fixed
+- Device credentials saved with `PUT /devices/{id}/config/auth` were stored
+  where no client builder reads them, and a cached client kept the old login
+  until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`
+  (an empty user disables auth), and the cached client is evicted on change.
+  A device that rejects the stored login now returns 502 with a specific
+  message from `GET /devices/{id}/config/current` (and `/normalized`) instead
+  of a generic 500. (#376)
+
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`
   (list item) and `PluginDetail = { info, capabilities }`, replacing a permissive

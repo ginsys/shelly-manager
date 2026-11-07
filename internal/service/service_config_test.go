@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -470,10 +471,71 @@ func TestShellyService_UpdateDeviceAuth(t *testing.T) {
 		t.Fatalf("Failed to get updated device: %v", err)
 	}
 
-	// Note: Database Device model doesn't have Username, Password, Auth fields
-	// These would be stored in the device settings JSON or handled differently
 	if updatedDevice == nil {
-		t.Error("Expected device to be updated")
+		t.Fatal("Expected device to be updated")
+	}
+
+	// The credentials must land under the keys the client builders read.
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(updatedDevice.Settings), &settings); err != nil {
+		t.Fatalf("settings are not valid JSON: %v", err)
+	}
+	if settings["auth_enabled"] != true {
+		t.Errorf("auth_enabled = %v, want true", settings["auth_enabled"])
+	}
+	if settings["auth_user"] != "admin" || settings["auth_pass"] != "newpassword" {
+		t.Errorf("auth_user/auth_pass = %v/%v, want admin/newpassword", settings["auth_user"], settings["auth_pass"])
+	}
+	if _, legacy := settings["auth"]; legacy {
+		t.Error("legacy settings.auth key must not be written")
+	}
+}
+
+func TestShellyService_UpdateDeviceAuth_EvictsCachedClient(t *testing.T) {
+	db := createTestDB(t)
+	service := NewService(db, createTestConfig())
+
+	device := createTestDevice(t, db, "192.0.2.10:80")
+	service.clients[device.IP] = nil // stands in for a client built with the old credentials
+
+	if err := service.UpdateDeviceAuth(device.ID, "admin", "newpassword"); err != nil {
+		t.Fatalf("UpdateDeviceAuth failed: %v", err)
+	}
+	if _, cached := service.clients[device.IP]; cached {
+		t.Error("cached client must be evicted when credentials change")
+	}
+}
+
+func TestShellyService_UpdateDeviceAuth_EmptyUserDisablesAuth(t *testing.T) {
+	db := createTestDB(t)
+	service := NewService(db, createTestConfig())
+	device := createTestDevice(t, db, "192.0.2.11:80")
+
+	if err := service.UpdateDeviceAuth(device.ID, "admin", "pw"); err != nil {
+		t.Fatalf("UpdateDeviceAuth failed: %v", err)
+	}
+	if err := service.UpdateDeviceAuth(device.ID, "", ""); err != nil {
+		t.Fatalf("UpdateDeviceAuth clear failed: %v", err)
+	}
+	updated, err := db.GetDevice(device.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(updated.Settings), &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["auth_enabled"] != false {
+		t.Errorf("auth_enabled = %v, want false", settings["auth_enabled"])
+	}
+	if _, ok := settings["auth_user"]; ok {
+		t.Error("auth_user must be removed when credentials are cleared")
+	}
+	if _, ok := settings["auth_pass"]; ok {
+		t.Error("auth_pass must be removed when credentials are cleared")
+	}
+	if _, ok := settings["auth"]; ok {
+		t.Error("legacy settings.auth key must not remain")
 	}
 }
 
