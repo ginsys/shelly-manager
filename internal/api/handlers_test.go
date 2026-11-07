@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/service"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
@@ -893,6 +895,32 @@ func TestGetCurrentDeviceConfig(t *testing.T) {
 	// Should have success field (will be false due to service error, but that's expected)
 	_, hasSuccess := response["success"]
 	testutil.AssertEqual(t, true, hasSuccess)
+}
+
+func TestWriteDeviceReadError(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
+
+	cases := []struct {
+		name string
+		err  error
+		code int
+	}{
+		{"auth required, wrapped", fmt.Errorf("failed to get device configuration: %w", shelly.ErrAuthRequired), http.StatusBadGateway},
+		{"auth failed", shelly.ErrAuthFailed, http.StatusBadGateway},
+		{"other error", errors.New("boom"), http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			handler.writeDeviceReadError(w, httptest.NewRequest("GET", "/x", nil), tc.err)
+			testutil.AssertEqual(t, tc.code, w.Code)
+			if tc.code == http.StatusBadGateway && !strings.Contains(w.Body.String(), "rejected the stored credentials") {
+				t.Errorf("502 body should name the cause, got %s", w.Body.String())
+			}
+		})
+	}
 }
 
 func TestGetConfigTemplates(t *testing.T) {

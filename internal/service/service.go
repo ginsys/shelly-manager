@@ -878,21 +878,32 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 	// Update device settings with auth info
 	settings := make(map[string]interface{})
 	if device.Settings != "" {
-		if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+		if unmarshalErr := json.Unmarshal([]byte(device.Settings), &settings); unmarshalErr != nil {
 			s.logger.WithFields(map[string]any{
 				"device_id": device.ID,
-				"error":     err,
+				"error":     unmarshalErr,
 				"component": "service",
 			}).Warn("Failed to unmarshal device settings, using empty settings")
 		}
 	}
 
-	settings["auth"] = map[string]string{
-		"username": username,
-		"password": password,
+	// Store under the keys the client builders read (auth_enabled, auth_user,
+	// auth_pass). The old nested "auth" object was never read by anything.
+	delete(settings, "auth")
+	if username == "" && password == "" {
+		settings["auth_enabled"] = false
+		delete(settings, "auth_user")
+		delete(settings, "auth_pass")
+	} else {
+		settings["auth_enabled"] = true
+		settings["auth_user"] = username
+		settings["auth_pass"] = password
 	}
 
-	settingsJSON, _ := json.Marshal(settings)
+	settingsJSON, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("failed to encode device settings: %w", err)
+	}
 	device.Settings = string(settingsJSON)
 
 	if err := s.DB.UpdateDevice(device); err != nil {
@@ -902,6 +913,9 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 		}).Error("Failed to update device")
 		return err
 	}
+
+	// A cached client still carries the previous credentials.
+	s.ClearClientCache(device.IP)
 	return nil
 }
 
