@@ -19,10 +19,12 @@ var ErrUnsupportedGeneration = errors.New("applying configuration is not support
 var ErrUnsupportedSettings = errors.New("desired configuration contains settings that cannot be applied yet")
 
 // gen1ApplyKeys are the Gen1 settings keys that apply writes correctly today: flat parameters
-// on POST /settings, and the mqtt section, which is flattened to mqtt_* parameters. Every
-// other section (wifi_sta, wifi_ap, cloud, coiot, relays, login, inputs) is refused before
-// the device is touched, because the applier would send it in a shape the device ignores.
-// Wi-Fi in particular is never written.
+// on POST /settings, the mqtt section, which is flattened to mqtt_* parameters, and the
+// relays section, which is written per channel with POST /settings/relay/<n>. Every other
+// section (wifi_sta, wifi_ap, cloud, coiot, login, inputs) is refused before the device is
+// touched, because the applier would send it in a shape the device ignores. Wi-Fi in
+// particular is never written. A relay key outside name, default_state, auto_on and auto_off
+// is refused through the round-trip check below.
 var gen1ApplyKeys = map[string]bool{
 	"name":               true,
 	"timezone":           true,
@@ -34,6 +36,7 @@ var gen1ApplyKeys = map[string]bool{
 	"led_power_disable":  true,
 	"led_status_disable": true,
 	"mqtt":               true,
+	"relays":             true,
 }
 
 // gen1ApplicablePaths are the DeviceConfiguration field paths that reach gen1ApplyKeys through
@@ -42,23 +45,27 @@ var gen1ApplyKeys = map[string]bool{
 // when this list and unsupportedApplySettings disagree. mqtt.port reaches the device only
 // together with mqtt.server.
 var gen1ApplicablePaths = map[string]bool{
-	"system.device.name":         true,
-	"system.device.eco_mode":     true,
-	"system.device.discoverable": true,
-	"location.tz":                true,
-	"location.lat":               true,
-	"location.lng":               true,
-	"power_metering.max_power":   true,
-	"led.power_indication":       true,
-	"led.network_indication":     true,
-	"mqtt.enable":                true,
-	"mqtt.server":                true,
-	"mqtt.port":                  true,
-	"mqtt.user":                  true,
-	"mqtt.pass":                  true,
-	"mqtt.id":                    true,
-	"mqtt.clean_session":         true,
-	"mqtt.keep_alive":            true,
+	"system.device.name":           true,
+	"system.device.eco_mode":       true,
+	"system.device.discoverable":   true,
+	"location.tz":                  true,
+	"location.lat":                 true,
+	"location.lng":                 true,
+	"power_metering.max_power":     true,
+	"led.power_indication":         true,
+	"led.network_indication":       true,
+	"mqtt.enable":                  true,
+	"mqtt.server":                  true,
+	"mqtt.port":                    true,
+	"mqtt.user":                    true,
+	"mqtt.pass":                    true,
+	"mqtt.id":                      true,
+	"mqtt.clean_session":           true,
+	"mqtt.keep_alive":              true,
+	"relay.relays[].name":          true,
+	"relay.relays[].default_state": true,
+	"relay.relays[].auto_on":       true,
+	"relay.relays[].auto_off":      true,
 }
 
 // unsupportedApplySettings returns the sorted top-level Gen1 keys of desired that apply cannot
