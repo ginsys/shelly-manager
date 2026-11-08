@@ -181,9 +181,13 @@ function formatDate(iso: string) {
   }
 }
 
+// Each handler remembers the device it started for. After an await, a handler for a device that
+// the page has left stops: it must not reload, close or fill anything for the device on screen.
 async function handleRefresh() {
+  const id = deviceId.value
   try {
-    await store.refresh(deviceId.value)
+    await store.refresh(id)
+    if (deviceId.value !== id) return
     overridesData.value = JSON.parse(JSON.stringify(store.overrides || {}))
   } catch (e: any) {
     console.error('Refresh failed:', e)
@@ -196,12 +200,14 @@ async function handleAddTemplate() {
     return
   }
 
+  const id = deviceId.value
   try {
     await store.addTemplate(
-      deviceId.value, 
+      id, 
       newTemplateId.value, 
       newTemplatePosition.value === null ? undefined : newTemplatePosition.value
     )
+    if (deviceId.value !== id) return
     await handleRefresh()
     showAddTemplate.value = false
     newTemplateId.value = null
@@ -214,8 +220,10 @@ async function handleAddTemplate() {
 async function handleRemoveTemplate(templateId: number) {
   if (!confirm('Remove this template from the device?')) return
 
+  const id = deviceId.value
   try {
-    await store.removeTemplate(deviceId.value, templateId)
+    await store.removeTemplate(id, templateId)
+    if (deviceId.value !== id) return
     await handleRefresh()
   } catch (e: any) {
     alert('Failed to remove template: ' + (e?.message || 'Unknown error'))
@@ -223,8 +231,10 @@ async function handleRemoveTemplate(templateId: number) {
 }
 
 async function handleSaveOverrides() {
+  const id = deviceId.value
   try {
-    await store.saveOverrides(deviceId.value, overridesData.value)
+    await store.saveOverrides(id, overridesData.value)
+    if (deviceId.value !== id) return
     editOverrides.value = false
     await handleRefresh()
   } catch (e: any) {
@@ -235,8 +245,10 @@ async function handleSaveOverrides() {
 async function handleClearOverrides() {
   if (!confirm('Clear all device overrides?')) return
 
+  const id = deviceId.value
   try {
-    await store.clearOverrides(deviceId.value)
+    await store.clearOverrides(id)
+    if (deviceId.value !== id) return
     await handleRefresh()
   } catch (e: any) {
     alert('Failed to clear overrides: ' + (e?.message || 'Unknown error'))
@@ -246,13 +258,15 @@ async function handleClearOverrides() {
 async function handleApply() {
   if (!confirm('Apply this configuration to the device? This will modify the physical device.')) return
 
+  const id = deviceId.value
   try {
-    const result = await store.apply(deviceId.value)
+    const result = await store.apply(id)
     if (result.success) {
       alert(`Applied successfully. ${result.applied_count} field(s) updated.`)
     } else {
       alert(`Apply completed with errors. ${result.failed_count} field(s) failed.`)
     }
+    if (deviceId.value !== id) return
     await handleRefresh()
   } catch (e: any) {
     alert('Failed to apply config: ' + (e?.message || 'Unknown error'))

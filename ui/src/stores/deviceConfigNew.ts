@@ -38,6 +38,10 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
   // belongs to an earlier device and must not write its answer into the store.
   let refreshSeq = 0
 
+  // Counts resets. An action that started for one device and finishes after a reset must hand its
+  // answer back to its caller but must not write it into the store, which now holds another device.
+  let deviceEpoch = 0
+
   async function refresh(deviceId: number | string) {
     const seq = ++refreshSeq
     loading.value = true
@@ -68,166 +72,192 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     }
   }
 
+  // The actions below share one shape. They remember the epoch when they start. If a reset ran
+  // meanwhile, the store holds another device: the caller still gets the answer, or the error, but
+  // the store keeps its own state.
   async function addTemplate(deviceId: number | string, templateId: number | string, position?: number) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
       const updated = await addDeviceTemplateNew({ deviceId, templateId, position })
+      if (epoch !== deviceEpoch) return
       templates.value = updated
       templateIds.value = updated.map((t) => t.id)
     } catch (e: any) {
-      error.value = e?.message || 'Failed to add template'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to add template'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function removeTemplate(deviceId: number | string, templateId: number | string) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
       const updated = await removeDeviceTemplateNew(deviceId, templateId)
+      if (epoch !== deviceEpoch) return
       templates.value = updated
       templateIds.value = updated.map((t) => t.id)
     } catch (e: any) {
-      error.value = e?.message || 'Failed to remove template'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to remove template'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function setTemplates(deviceId: number | string, templateIdsNew: number[]) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
       const result = await setDeviceTemplatesNew(deviceId, templateIdsNew)
+      if (epoch !== deviceEpoch) return
       templates.value = result.templates
       templateIds.value = result.template_ids
       if (result.desired_config !== undefined) desiredConfig.value = result.desired_config
       if (result.sources) sources.value = result.sources
     } catch (e: any) {
-      error.value = e?.message || 'Failed to set templates'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to set templates'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function saveOverrides(deviceId: number | string, overridesNew: DeviceConfiguration) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
       const result = await setDeviceOverridesNew(deviceId, overridesNew)
+      if (epoch !== deviceEpoch) return
       overrides.value = result.overrides
       if (result.desired_config !== undefined) desiredConfig.value = result.desired_config
     } catch (e: any) {
-      error.value = e?.message || 'Failed to save overrides'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to save overrides'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function patchOverrides(deviceId: number | string, patch: DeviceConfiguration) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
-      overrides.value = await patchDeviceOverridesNew(deviceId, patch)
+      const result = await patchDeviceOverridesNew(deviceId, patch)
+      if (epoch !== deviceEpoch) return
+      overrides.value = result
     } catch (e: any) {
-      error.value = e?.message || 'Failed to patch overrides'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to patch overrides'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function clearOverrides(deviceId: number | string) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
       await deleteDeviceOverridesNew(deviceId)
+      if (epoch !== deviceEpoch) return
       overrides.value = null
     } catch (e: any) {
-      error.value = e?.message || 'Failed to clear overrides'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to clear overrides'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function fetchDesired(deviceId: number | string): Promise<DesiredConfigData> {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
       const result = await getDesiredConfigNew(deviceId)
+      if (epoch !== deviceEpoch) return result
       desiredConfig.value = result.config
       sources.value = result.sources || {}
       return result
     } catch (e: any) {
-      error.value = e?.message || 'Failed to load desired config'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to load desired config'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function fetchStatus(deviceId: number | string) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
-      status.value = await getConfigStatusNew(deviceId)
-      return status.value
+      const result = await getConfigStatusNew(deviceId)
+      if (epoch === deviceEpoch) status.value = result
+      return result
     } catch (e: any) {
-      error.value = e?.message || 'Failed to load status'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to load status'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function apply(deviceId: number | string) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
-      lastApply.value = await applyDeviceConfigNew(deviceId)
+      // The caller gets the answer of this apply, whatever happens to the store while the status loads.
+      const result = await applyDeviceConfigNew(deviceId)
+      if (epoch === deviceEpoch) lastApply.value = result
       await fetchStatus(deviceId)
-      return lastApply.value
+      return result
     } catch (e: any) {
-      error.value = e?.message || 'Failed to apply config'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to apply config'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   async function verify(deviceId: number | string) {
+    const epoch = deviceEpoch
     loading.value = true
     error.value = null
 
     try {
-      lastVerify.value = await verifyDeviceConfigNew(deviceId)
-      return lastVerify.value
+      const result = await verifyDeviceConfigNew(deviceId)
+      if (epoch === deviceEpoch) lastVerify.value = result
+      return result
     } catch (e: any) {
-      error.value = e?.message || 'Failed to verify config'
+      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to verify config'
       throw e
     } finally {
-      loading.value = false
+      if (epoch === deviceEpoch) loading.value = false
     }
   }
 
   function reset() {
     refreshSeq++ // a refresh still in flight now belongs to an earlier device
+    deviceEpoch++
     templates.value = []
     templateIds.value = []
     overrides.value = null
