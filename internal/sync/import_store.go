@@ -306,7 +306,7 @@ func resolveRedacted(config, current map[string]interface{}) int {
 				continue
 			}
 			found++
-			if kept, ok := current[key]; ok {
+			if kept, ok := current[key]; ok && !holdsPlaceholder(kept) {
 				config[key] = kept
 			} else {
 				delete(config, key)
@@ -320,6 +320,28 @@ func resolveRedacted(config, current map[string]interface{}) int {
 		}
 	}
 	return found
+}
+
+// holdsPlaceholder reports whether a stored value is, or contains, the redaction placeholder. Such
+// a value is not a credential, so it is never restored.
+func holdsPlaceholder(value interface{}) bool {
+	switch v := value.(type) {
+	case string:
+		return v == RedactedValue
+	case map[string]interface{}:
+		for _, child := range v {
+			if holdsPlaceholder(child) {
+				return true
+			}
+		}
+	case []interface{}:
+		for _, child := range v {
+			if holdsPlaceholder(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // resolveRedactedList resolves the redacted values inside the objects and nested lists of list.
