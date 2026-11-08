@@ -2,8 +2,11 @@ package configuration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 // ErrUnsupportedGeneration is returned when the device generation has no
@@ -11,28 +14,105 @@ import (
 // verify today.
 var ErrUnsupportedGeneration = errors.New("applying configuration is not supported for this device generation")
 
+// ErrUnsupportedSettings is returned when the desired configuration holds settings that apply
+// cannot write to the device yet. Nothing is sent to the device in that case.
+var ErrUnsupportedSettings = errors.New("desired configuration contains settings that cannot be applied yet")
+
+// gen1ApplyKeys are the Gen1 settings keys that apply writes correctly today: flat parameters
+// on POST /settings, and the mqtt section, which is flattened to mqtt_* parameters. Every
+// other section (wifi_sta, wifi_ap, cloud, coiot, relays, login, inputs) is refused before
+// the device is touched, because the applier would send it in a shape the device ignores.
+// Wi-Fi in particular is never written.
+var gen1ApplyKeys = map[string]bool{
+	"name":               true,
+	"timezone":           true,
+	"lat":                true,
+	"lng":                true,
+	"eco_mode_enabled":   true,
+	"discoverable":       true,
+	"max_power":          true,
+	"led_power_disable":  true,
+	"led_status_disable": true,
+	"mqtt":               true,
+}
+
+// unsupportedApplySettings returns the sorted top-level Gen1 keys of desired that apply cannot
+// write.
+func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfiguration, deviceType string) ([]string, error) {
+	apiJSON, err := converter.ToAPIConfig(desired, deviceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert desired config: %w", err)
+	}
+	var apiConfig map[string]interface{}
+	if err := json.Unmarshal(apiJSON, &apiConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse converted config: %w", err)
+	}
+
+	var unsupported []string
+	for key := range apiConfig {
+		if !gen1ApplyKeys[key] {
+			unsupported = append(unsupported, key)
+		}
+	}
+	sort.Strings(unsupported)
+	return unsupported, nil
+}
+
 // ApplyDesiredConfig sends the device's desired configuration to the device,
 // then reads it back and compares. The device is marked config_applied only
-// when the read-back matches, so a partial or failed apply stays pending.
+// when the read-back matches and the desired configuration did not change
+// meanwhile, so a partial, failed or outdated apply stays pending.
+//
+// The applied flag is cleared before the first write, so a failed re-apply of a previously
+// applied device reports pending, not applied.
 func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID uint, client ShellyClient, deviceType string) (*ApplyVerifyResult, error) {
 	if client.GetGeneration() != 1 {
 		return nil, fmt.Errorf("%w: generation %d", ErrUnsupportedGeneration, client.GetGeneration())
 	}
+
+	// Snapshot first: if the desired configuration changes after this read, the final
+	// compare-and-set below fails and the newer configuration stays pending.
+	device, err := s.repo.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDeviceNotFound, err)
+	}
+	snapshot := device.DesiredConfig
 
 	desired, _, err := s.GetDesiredConfig(deviceID)
 	if err != nil {
 		return nil, err
 	}
 
-	verifier := NewConfigVerifier(NewGen1Converter(s.logger), s.logger)
+	converter := NewGen1Converter(s.logger)
+	unsupported, err := unsupportedApplySettings(converter, desired, deviceType)
+	if err != nil {
+		return nil, err
+	}
+	if len(unsupported) > 0 {
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedSettings, strings.Join(unsupported, ", "))
+	}
+
+	if err = s.repo.SetDeviceConfigApplied(deviceID, false); err != nil {
+		return nil, fmt.Errorf("could not mark configuration pending before applying: %w", err)
+	}
+
+	verifier := NewConfigVerifier(converter, s.logger)
 	result, err := verifier.ApplyAndVerify(ctx, client, desired, deviceType)
 	if err != nil {
 		return nil, err
 	}
 
 	if result.ConfigApplied {
-		if err := s.repo.SetDeviceConfigApplied(deviceID, true); err != nil {
+		set, err := s.repo.SetDeviceConfigAppliedIfDesired(deviceID, snapshot)
+		if err != nil {
 			return nil, fmt.Errorf("configuration applied but could not record it: %w", err)
+		}
+		if !set {
+			result.ConfigApplied = false
+			if result.ApplyResult != nil {
+				result.ApplyResult.Warnings = append(result.ApplyResult.Warnings,
+					"The desired configuration changed while it was being applied; the device stays pending.")
+			}
 		}
 	}
 

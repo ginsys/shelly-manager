@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -260,18 +261,58 @@ func (a *ConfigApplier) applyMQTTSettings(ctx context.Context, client ShellyClie
 		return nil
 	}
 
-	if err := client.SetConfig(ctx, map[string]interface{}{"mqtt": mqtt}); err != nil {
+	form := gen1MQTTForm(mqtt)
+	if len(form) == 0 {
+		return nil
+	}
+
+	if err := client.SetConfig(ctx, form); err != nil {
+		// Value names the keys only: the form can hold the broker password.
 		result.Failures = append(result.Failures, ApplyFailure{
 			Path:  "mqtt",
-			Value: fmt.Sprintf("%v", mqtt),
+			Value: strings.Join(sortedKeys(form), ","),
 			Error: err.Error(),
 		})
-		result.FailedCount++
+		result.FailedCount += len(form)
 		return err
 	}
 
-	result.AppliedCount++
+	result.AppliedCount += len(form)
 	return nil
+}
+
+// gen1MQTTKeys maps the nested "mqtt" document that Gen1 returns from GET /settings to the
+// flat form parameters that POST /settings accepts. The device reads nested maps on output but
+// only understands flat mqtt_* parameters on input.
+var gen1MQTTKeys = map[string]string{
+	"enable":        "mqtt_enable",
+	"server":        "mqtt_server",
+	"user":          "mqtt_user",
+	"pass":          "mqtt_pass",
+	"id":            "mqtt_id",
+	"clean_session": "mqtt_clean_session",
+	"keep_alive":    "mqtt_keep_alive",
+}
+
+// gen1MQTTForm converts a nested mqtt document into Gen1 form parameters. Keys it does not know
+// are dropped, never sent.
+func gen1MQTTForm(mqtt map[string]interface{}) map[string]interface{} {
+	form := make(map[string]interface{}, len(mqtt))
+	for key, value := range mqtt {
+		if formKey, ok := gen1MQTTKeys[key]; ok {
+			form[formKey] = value
+		}
+	}
+	return form
+}
+
+func sortedKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (a *ConfigApplier) applyCloudSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
