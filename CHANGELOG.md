@@ -48,6 +48,16 @@ All notable changes to this project are documented here. The project follows Con
   desired configuration. A section whose last saved override is reset stays
   checked for required fields, so Save cannot remove a saved password while a
   template keeps authentication on. Lists still use a JSON box. (#385)
+- The template editors (the create dialog and the template page) use the same
+  form. A device_type template gets the schema of its model. A global or group
+  template gets the new `GET /api/v1/config/schema?scope=global|group`, which
+  holds every stored section. A new template starts empty, and each field
+  offers its default. The server now checks a template body against that
+  schema on create and update, and refuses a wrong type, an out-of-range value,
+  a value outside its enum, or a section the model does not have. The refusal
+  is a `VALIDATION_FAILED` error with each field in `error.details.fields`. The
+  JSON view stays. Scope and device type are read-only after create, because
+  the update API keeps them. (#386)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

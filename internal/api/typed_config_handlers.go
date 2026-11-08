@@ -383,8 +383,10 @@ func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 // With ?device_type=<model> or ?device_id=<id> it returns the schema of the configuration stored
 // for that model (configuration.GetDeviceConfigurationSchema): only the model's sections, only
 // stored fields, and each field marked x-applicable when apply can write it. device_id resolves
-// the model the way apply does. Without either parameter it returns the generic schema. A
-// parameter that is present but empty, a malformed query string, or both parameters is a 400.
+// the model the way apply does. scope=global or scope=group returns the schema of such a template
+// (configuration.GetTemplateConfigurationSchema). Without a parameter it returns the generic
+// schema. A parameter that is present but empty, a malformed query string, or more than one of
+// the three parameters is a 400.
 func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request) {
 	// r.URL.Query() drops a malformed pair without a word, so "?device_id=%ZZ" would read as no
 	// parameter and return the generic schema. Parse the raw query and refuse it instead.
@@ -399,6 +401,21 @@ func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request)
 	if query.Has("device_type") && deviceType == "" {
 		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
 			"device_type must not be empty", nil)
+		return
+	}
+	if query.Has("scope") {
+		scope := query.Get("scope")
+		if query.Has("device_type") || query.Has("device_id") {
+			h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+				"Use scope, device_type or device_id, not more than one", nil)
+			return
+		}
+		if scope != configuration.ScopeGlobal && scope != configuration.ScopeGroup {
+			h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+				"scope must be global or group; a device_type template uses device_type", nil)
+			return
+		}
+		h.responseWriter().WriteSuccess(w, r, configuration.GetTemplateConfigurationSchema())
 		return
 	}
 	if query.Has("device_id") {

@@ -235,6 +235,20 @@ export function validateOverrides(
   return errors
 }
 
+// templateSchemaTarget names the schema a template form uses: the model's schema for a
+// device_type template, the template schema for a global or group template. It is null while a
+// device_type template has no device type yet, because no model schema exists for it.
+export function templateSchemaTarget(
+  scope: string | undefined,
+  deviceType: string | undefined,
+): { deviceType?: string; scope?: string } | null {
+  if (scope === 'device_type') {
+    const model = (deviceType || '').trim()
+    return model ? { deviceType: model } : null
+  }
+  return { scope: scope || 'global' }
+}
+
 // countOverrides counts the leaf values set in the override body under path.
 export function countOverrides(body: ConfigBody, path: ConfigPath): number {
   const node = getAt(body, path)

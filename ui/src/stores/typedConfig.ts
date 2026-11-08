@@ -120,10 +120,11 @@ export const useTypedConfigStore = defineStore('typedConfig', () => {
   }
 
   // Fetch configuration schema (with caching)
-  async function fetchSchema(deviceType?: string, deviceId?: number | string) {
-    const cacheKey = deviceId !== undefined && deviceId !== ''
-      ? `device:${deviceId}`
-      : deviceType || 'default'
+  async function fetchSchema(deviceType?: string, deviceId?: number | string, scope?: string) {
+    let cacheKey = 'default'
+    if (deviceId !== undefined && deviceId !== '') cacheKey = `device:${deviceId}`
+    else if (deviceType) cacheKey = deviceType
+    else if (scope) cacheKey = `scope:${scope}`
 
     // Check cache first
     if (schemaCache.value.has(cacheKey)) {
@@ -134,7 +135,7 @@ export const useTypedConfigStore = defineStore('typedConfig', () => {
     loading.value = true
     error.value = null
     try {
-      schema.value = await getConfigSchema(deviceType, deviceId)
+      schema.value = await getConfigSchema(deviceType, deviceId, scope)
       // Cache the schema
       schemaCache.value.set(cacheKey, schema.value)
       return schema.value
