@@ -423,3 +423,82 @@ func TestValidationReportsABlankIdentityThatApplyRefuses(t *testing.T) {
 		}
 	}
 }
+
+// exportArchive writes an archive of the given devices and returns its path.
+func (f *persistFixture) exportArchive(t *testing.T, devices []sync.DeviceData) string {
+	t.Helper()
+	data := validExportData()
+	data.Devices = devices
+	exporter := initializedPlugin(t)
+	exporter.SetExportBaseDir(f.dir)
+	exported, err := exporter.Export(context.Background(), data, sync.ExportConfig{
+		Format: "sma", Config: map[string]interface{}{"output_path": f.dir},
+	})
+	require.NoError(t, err)
+	return exported.OutputPath
+}
+
+func (f *persistFixture) deviceIPs(t *testing.T) map[string]string {
+	t.Helper()
+	var devices []database.Device
+	require.NoError(t, f.db.GetDB().Find(&devices).Error)
+	ips := make(map[string]string, len(devices))
+	for _, device := range devices {
+		ips[device.MAC] = device.IP
+	}
+	return ips
+}
+
+func TestForcedImportAssignsAddressesThatDevicesSwapped(t *testing.T) {
+	cases := map[string]struct {
+		stored  map[string]string // MAC to IP in the database
+		archive map[string]string // MAC to IP in the archive
+	}{
+		"two devices swap": {
+			stored:  map[string]string{"aabbccdd0001": "192.0.2.20", "aabbccdd0002": "192.0.2.10"},
+			archive: map[string]string{"aabbccdd0001": "192.0.2.10", "aabbccdd0002": "192.0.2.20"},
+		},
+		"three devices rotate": {
+			stored:  map[string]string{"aabbccdd0001": "192.0.2.10", "aabbccdd0002": "192.0.2.20", "aabbccdd0003": "192.0.2.30"},
+			archive: map[string]string{"aabbccdd0001": "192.0.2.20", "aabbccdd0002": "192.0.2.30", "aabbccdd0003": "192.0.2.10"},
+		},
+		"one device moves to a free address while another stays": {
+			stored:  map[string]string{"aabbccdd0001": "192.0.2.10", "aabbccdd0002": "192.0.2.20"},
+			archive: map[string]string{"aabbccdd0001": "192.0.2.11", "aabbccdd0002": "192.0.2.20"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newPersistFixture(t)
+			var archived []sync.DeviceData
+			for mac, ip := range tc.stored {
+				require.NoError(t, f.db.AddDevice(&database.Device{IP: ip, MAC: mac, Name: "stored-" + mac, Type: "switch"}))
+			}
+			for mac, ip := range tc.archive {
+				archived = append(archived, sync.DeviceData{ID: uint(len(archived) + 1), MAC: mac, IP: ip, Name: "archived-" + mac, Type: "switch"})
+			}
+			path := f.exportArchive(t, archived)
+
+			result, err := f.importFile(t, path, sync.ImportOptions{ForceOverwrite: true})
+
+			require.NoError(t, err)
+			assert.True(t, result.Success)
+			assert.Equal(t, tc.archive, f.deviceIPs(t))
+		})
+	}
+}
+
+func TestForcedImportStillRefusesAnAddressAnotherDeviceKeeps(t *testing.T) {
+	f := newPersistFixture(t)
+	// The holder is not in the archive, so its address is not released.
+	require.NoError(t, f.db.AddDevice(&database.Device{IP: "192.0.2.30", MAC: "aabbccdd0009", Name: "holder", Type: "switch"}))
+	require.NoError(t, f.db.AddDevice(&database.Device{IP: "192.0.2.10", MAC: "aabbccdd0001", Name: "mover", Type: "switch"}))
+	path := f.exportArchive(t, []sync.DeviceData{{ID: 1, MAC: "aabbccdd0001", IP: "192.0.2.30", Name: "mover", Type: "switch"}})
+
+	result, err := f.importFile(t, path, sync.ImportOptions{ForceOverwrite: true})
+
+	require.Error(t, err)
+	assert.False(t, result.Success)
+	assert.Equal(t, map[string]string{"aabbccdd0009": "192.0.2.30", "aabbccdd0001": "192.0.2.10"}, f.deviceIPs(t),
+		"nothing may change, and no released address may stay behind")
+}
