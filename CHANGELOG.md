@@ -152,6 +152,11 @@ All notable changes to this project are documented here. The project follows Con
 - The server now also answers `GET /api/v1/version`. The UI calls that path, so
   the "UI is older than the server" banner and the database labels on the
   backup page never got their data. The root `GET /version` stays. (#363)
+- The device configuration page follows the device in the address bar. After a
+  route change from one device to another (for example with the browser back
+  button) it kept the first device id, so apply, verify, save and template
+  changes went to the wrong device. The page now reloads, closes the editor, and
+  ignores a late answer for the device it left. (#400)
 - `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
   `database.dsn` default always won, so unless `dsn` was set explicitly every
   SQLite run used `data/shelly.db` whatever `path` said. `dsn` still takes

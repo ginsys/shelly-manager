@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
@@ -157,7 +157,9 @@ import ConfigEditor from '@/components/config/ConfigEditor.vue'
 const route = useRoute()
 const store = useDeviceConfigNewStore()
 
-const deviceId = ref<number | string>(route.params.id as string)
+// Follows the route: the router reuses this component when the address changes from one device
+// to another, and every save, apply and template change below must target the device on screen.
+const deviceId = computed<number | string>(() => route.params.id as string)
 const deviceType = ref<string | undefined>(undefined)
 const editOverrides = ref(false)
 const overridesData = ref<Record<string, any>>({})
@@ -266,6 +268,19 @@ async function handleVerify() {
 }
 
 onMounted(() => {
+  handleRefresh()
+})
+
+// A new device id means another device: drop everything that belonged to the old one, then load
+// the new one. An empty id means the route is leaving this page, so there is nothing to load.
+watch(deviceId, (next, previous) => {
+  if (!next || next === previous) return
+  store.reset()
+  overridesData.value = {}
+  editOverrides.value = false
+  showAddTemplate.value = false
+  newTemplateId.value = null
+  newTemplatePosition.value = null
   handleRefresh()
 })
 </script>
