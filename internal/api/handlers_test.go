@@ -933,6 +933,61 @@ func TestGetCurrentDeviceConfig(t *testing.T) {
 	testutil.AssertEqual(t, true, hasSuccess)
 }
 
+// TestGetCurrentDeviceConfigEnvelope pins the success shape: the live
+// configuration is the "data" member of the standard envelope, which is where
+// the UI client reads it.
+func TestGetCurrentDeviceConfigEnvelope(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+
+	deviceMux := http.NewServeMux()
+	deviceMux.HandleFunc("/shelly", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"type":"SHSW-25","mac":"68C63A123456","auth":false,"fw":"1.14.0"}`)
+	})
+	deviceMux.HandleFunc("/settings", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{
+			"device": {"type": "SHSW-25", "mac": "68C63A123456", "hostname": "shelly1-68C63A123456"},
+			"wifi_sta": {"enabled": true, "ssid": "TestNetwork", "ipv4_method": "dhcp"},
+			"name": "Live Name",
+			"fw": "1.14.0",
+			"relays": [{"name": "Relay 0", "ison": false, "default_state": "off"}]
+		}`)
+	})
+	srv := httptest.NewServer(deviceMux)
+	defer srv.Close()
+
+	device := testutil.TestDevice()
+	device.IP = strings.TrimPrefix(srv.URL, "http://")
+	device.MAC = "68C63A123456"
+	device.Type = "SHSW-25"
+	device.Settings = `{"model":"SHSW-25","gen":1,"auth_enabled":false}`
+	testutil.AssertNoError(t, db.AddDevice(device))
+
+	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/config/current", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+
+	w := httptest.NewRecorder()
+	handler.GetCurrentDeviceConfig(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+	var response map[string]interface{}
+	testutil.AssertNoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	testutil.AssertEqual(t, true, response["success"])
+	if _, bare := response["configuration"]; bare {
+		t.Errorf("configuration must not sit beside success: %s", w.Body.String())
+	}
+	data, ok := response["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("data must be an object holding the live configuration: %s", w.Body.String())
+	}
+	if len(data) == 0 {
+		t.Errorf("data is empty: %s", w.Body.String())
+	}
+}
+
 func TestWriteDeviceReadError(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
