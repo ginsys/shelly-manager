@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 )
@@ -609,6 +610,55 @@ func TestShellyService_getClient_UsesLegacyDeviceCredentials(t *testing.T) {
 			t.Errorf("request sent credentials %q, want legacy:legacypw", got)
 		}
 	}
+}
+
+// A device that rejects the saved login sends getClientWithRetry into its retry path. That path
+// must not lock the client cache a second time, or the request hangs and blocks every other
+// device call.
+func TestShellyService_getClient_RejectedSavedLoginDoesNotDeadlock(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, _, _ := r.BasicAuth()
+		if user == "saved" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"DCAA2E000000","auth":true,"fw":"1.14.0"}`)
+	}))
+	defer server.Close()
+
+	db := createTestDB(t)
+	cfg := createTestConfig()
+	cfg.Provisioning.AuthEnabled = true
+	cfg.Provisioning.AuthUser = "global"
+	cfg.Provisioning.AuthPassword = "globalpw"
+	service := NewService(db, cfg)
+
+	device := createTestDevice(t, db, server.URL[len("http://"):])
+	device.Settings = `{"gen":1,"auth_enabled":true,"auth_user":"saved","auth_pass":"wrong"}`
+	if err := db.UpdateDevice(device); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.getClientWithRetry(device, true)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("getClientWithRetry failed: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("getClientWithRetry deadlocked on a rejected saved login")
+	}
+
+	// The cache lock must be free again.
+	if !service.clientMu.TryLock() {
+		t.Fatal("client cache lock is still held")
+	}
+	service.clientMu.Unlock()
 }
 
 func TestShellyService_ExportDeviceConfig(t *testing.T) {

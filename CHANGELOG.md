@@ -63,7 +63,8 @@ All notable changes to this project are documented here. The project follows Con
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`
   (an empty user disables auth), and the cached client is evicted on change.
   Credentials saved earlier in the old `auth.username`/`auth.password` shape
-  are still used until they are saved again. A device that rejects the stored login now returns 502 with a specific
+  are still used until they are saved again. A device that rejects the saved
+  login no longer hangs the request while the client is rebuilt. A device that rejects the stored login now returns 502 with a specific
   message from `GET /devices/{id}/config/current` (and `/normalized`) instead
   of a generic 500. (#376)
 
