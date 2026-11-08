@@ -162,6 +162,11 @@ All notable changes to this project are documented here. The project follows Con
   random under `go test -race` when the test closed the database while the
   cleanup still read it. The handler now tracks that work, and
   `Handler.WaitBackground` waits for it before the database is closed. (#366)
+- The device configuration page drops work in flight when it is left. A verify,
+  apply, save or template answer for one device could still reach the page of
+  the next device, for example after the device page in between. A new page
+  starts from an empty store, and a page that was left stops its own handlers.
+  (#402)
 - `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
   `database.dsn` default always won, so unless `dsn` was set explicitly every
   SQLite run used `data/shelly.db` whatever `path` said. `dsn` still takes
