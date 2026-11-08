@@ -100,6 +100,18 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		}
 	}
 
+	// The converted configuration holds no channel id: the list position is the channel that
+	// apply writes. A stated id that disagrees with its position would change another channel
+	// than the one the configuration names, so refuse it before the device is touched. An id
+	// left out decodes as 0 and cannot be told from a stated 0, so it is taken as the position.
+	if desired.Relay != nil {
+		for i, relay := range desired.Relay.Relays {
+			if relay.ID != 0 && relay.ID != i {
+				unsupported = append(unsupported, fmt.Sprintf("relay.relays[%d].id", i))
+			}
+		}
+	}
+
 	sort.Strings(unsupported)
 	return unsupported, nil
 }
