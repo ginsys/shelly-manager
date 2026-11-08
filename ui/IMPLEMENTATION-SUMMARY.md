@@ -2,12 +2,12 @@
 
 > **⚠️ Accuracy note (2026-07).** This document was written when SMA support was
 > prototyped and overstates import. The truth: **SMA export works end to end; SMA
-> import does not.** There is no import UI (the prototype form was removed), the
-> app's SMA import helpers target non-existent `/import/sma*` routes (404), and
-> even the generic `POST /api/v1/import` (`plugin_name: "sma"`) only previews —
-> a non-dry-run restore now **fails closed** with HTTP 501 `NOT_IMPLEMENTED`
-> rather than the old fake success (#272 removed the fabricated success; real
-> persistence is tracked in #284). The
+> import has no UI.** The prototype form was removed and the app's SMA import
+> helpers target non-existent `/import/sma*` routes (404). The generic
+> `POST /api/v1/import` (`plugin_name: "sma"`) previews with a preview option and
+> writes nothing. Without one, it restores devices, templates and discovered
+> devices in one transaction (#284; #272 had replaced the old fake success with
+> HTTP 501 until then). The
 > ✅-marked "Import Features", "Import Configuration", and import-related "User
 > Experience" items below (conflict resolution, merge strategies, safety backups,
 > drag-and-drop, progress UI, etc.) describe **intended design, not shipped
@@ -50,8 +50,8 @@ banner above and the Status section).
   `/export/sma-preview` — **neither route is registered** (both 404); use the
   generic `/export/{id}` and `/export/preview` instead. These helpers need rewiring.
 - ⚠️ SMA **import** helpers target `/import/sma*` routes that do not exist (404);
-  the working backend path is the generic `POST /api/v1/import` (restore fails
-  closed with 501 today; persistence tracked in #284). These helpers need rewiring.
+  the working backend path is the generic `POST /api/v1/import` (a non-preview
+  import restores records in one transaction, #284). These helpers need rewiring.
 - TypeScript interfaces for SMA operations
 - Error handling and response parsing
 
@@ -77,14 +77,14 @@ banner above and the Status section).
 - Export metadata configuration
 - Real-time validation and preview
 
-**SMA import — preview-only backend, no UI**
+**SMA import — backend restore and preview, no UI**
 - A prototype `src/components/SMAImportForm.vue` existed but was never mounted by
   any page or route, so the workflow was unreachable. It has been removed.
 - `POST /api/v1/import` with `plugin_name: "sma"` dispatches to the registered SMA
   plugin (`file`/`data` sources; `url` unimplemented). **Validation and dry-run
-  preview work; a non-dry-run import fails closed with HTTP 501 `NOT_IMPLEMENTED`
-  instead of the old fake success (#272 removed the fake; persistence tracked in
-  #284).** There is no dedicated `/import/sma*` route.
+  preview write nothing; a non-preview import restores devices, templates and
+  discovered devices in one transaction (#284).** There is no dedicated
+  `/import/sma*` route.
 - Frontend gap: no import UI, and the app's SMA import helpers target the
   non-existent `/import/sma*` paths (404) instead of the generic route.
 
@@ -125,7 +125,7 @@ UI Updates ← State Updates ← Response ← SMA Plugin
 ```
 Export (working):      Generated Data → Generator → Compression → Download
 Import preview (OK):   SMA File → POST /api/v1/import (dry_run) → validated preview
-Import restore (gap):  non-dry-run fails closed → HTTP 501 (#272; persist=#284)
+Import restore (OK):   non-preview POST /api/v1/import → one-transaction restore (#284)
 Import frontend (gap): app's SMA helpers call /import/sma* (404); no import UI
 ```
 
@@ -204,8 +204,7 @@ is **not present** — there is no import screen:
 
 ### Processing Performance
 - **Export**: 1-5 seconds typical
-- **Import**: N/A — restore fails closed with 501, persistence not implemented
-  (#284); preview parsing only
+- **Import**: not measured (#284 added the restore; no benchmark yet)
 - **Memory Usage**: 2-3x file size during processing
 - **Compression**: 30-45% size reduction typical
 
@@ -259,10 +258,9 @@ is **not present** — there is no import screen:
 ### Backend Integration
 - Export uses the established SMA export endpoints (`POST /export/sma`,
   `GET /export/sma/{id}/download`)
-- Import backend: generic `POST /import` (`plugin_name: "sma"`) previews only —
-  a non-dry-run restore fails closed with HTTP 501 `NOT_IMPLEMENTED` (#272 removed
-  the fake success; persistence tracked in #284); no `/import/sma` route,
-  no frontend import UI
+- Import backend: generic `POST /import` (`plugin_name: "sma"`) previews with a
+  preview option and otherwise restores records in one transaction (#284); no
+  `/import/sma` route, no frontend import UI
 - Follows existing authentication patterns
 - Maintains API response consistency
 
@@ -277,7 +275,7 @@ is **not present** — there is no import screen:
 2. **Format Selection** → Dynamic configuration appears
 3. **Configuration** → Real-time validation and preview
 4. **Creation** → Progress tracking and result display
-5. **Import** → no UI; generic `POST /import` previews only, restore fails closed → 501 (#284)
+5. **Import** → no UI; generic `POST /import` previews or restores in one transaction (#284)
 
 ## ✨ Key Benefits
 
@@ -291,20 +289,19 @@ is **not present** — there is no import screen:
 
 ## Status
 
-SMA **export** is implemented and wired end to end. SMA **import** is only
-partly functional: the generic `POST /api/v1/import` (`plugin_name: "sma"`) route
-dispatches to the plugin and previews correctly, but a non-dry-run restore fails
-closed with HTTP 501 `NOT_IMPLEMENTED` (#272 removed the fake success; persistence
-tracked in #284), and there is no frontend UI.
+SMA **export** is implemented and wired end to end. SMA **import** works in the
+backend: the generic `POST /api/v1/import` (`plugin_name: "sma"`) route
+dispatches to the plugin, previews with a preview option and otherwise restores
+devices, templates and discovered devices in one transaction (#284). There is
+no frontend UI.
 
 - ✅ **Export**: create + download wired to `POST /export/sma` and
   `GET /export/sma/{id}/download` (note: the `getSMAExportResult` /
   `previewSMAExport` helpers target unregistered `/export/sma/{id}` and
   `/export/sma-preview` and 404 — use the generic `/export/{id}` / `/export/preview`)
 - ✅ **Codec**: parser/generator with checksum verification, unit-tested
-- ⚠️ **Import backend**: generic `POST /import` (`plugin_name: "sma"`) validates
-  and previews, but a non-dry-run import fails closed with HTTP 501
-  `NOT_IMPLEMENTED` (#272 removed the fake success; persistence tracked in #284)
+- ✅ **Import backend**: generic `POST /import` (`plugin_name: "sma"`) validates,
+  previews and restores in one transaction (#284)
 - ❌ **Import frontend**: no UI; SMA helpers target `/import/sma*` (404)
 - ⚠️ **Docs**: older "production-ready / complete import workflow" claims in this
   file and the SMA guides referred to the export path and the prototyped-but-

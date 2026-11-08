@@ -297,7 +297,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 #### Import (5 registered endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/import` | POST | Generic import — SMA runs here with `plugin_name: "sma"` (⚠️ preview works; non-dry-run restore fails closed → 501, persistence #284) |
+| `/import` | POST | Generic import — SMA runs here with `plugin_name: "sma"` (preview writes nothing; a non-preview import restores records in one transaction, #284) |
 | `/import/preview` | POST | Preview import operation (same body, dry-run) |
 | `/import/history` | GET | List all imports |
 | `/import/{id}` | GET | Get import result |
@@ -308,9 +308,9 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 
 > Note: #268/#273 removed the frontend helpers that targeted the struck
 > `/import/sma*` paths. Browser SMA preview now uses the generic
-> `/import/preview` route with the registered `sma` plugin. A non-dry-run restore
-> still **fails closed** with HTTP 501 `NOT_IMPLEMENTED`; real persistence remains
-> tracked in #284, so SMA restore is not yet usable end-to-end.
+> `/import/preview` route with the registered `sma` plugin. A non-preview
+> `POST /import` restores devices, templates and discovered devices in one
+> transaction (#284); the browser has no restore UI yet.
 
 #### Plugins (3 real endpoints — read-only UI)
 

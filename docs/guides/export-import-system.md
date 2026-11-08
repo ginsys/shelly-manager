@@ -67,8 +67,9 @@ SMA plugin advertising format `sma`; it sends:
 ```
 
 The browser accepts `.sma` or `.json` data up to 7 MiB before base64 encoding.
-SMA then applies its 100 MiB normalized-data limit. Applying an SMA import is
-not implemented and returns HTTP 501; preview and validation do not persist.
+SMA then applies its 100 MiB normalized-data limit. An SMA import without a
+preview option restores devices, templates and discovered devices in one
+transaction. Preview and validation do not persist.
 
 ## Errors
 
