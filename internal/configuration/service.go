@@ -1204,6 +1204,11 @@ func (s *Service) createClientForDevice(deviceID uint) (shelly.Client, error) {
 		// Default to Gen1 if no settings
 		settings.Gen = 1
 	}
+	if settings.AuthUser == "" && settings.AuthPass == "" {
+		if user, pass, ok := LegacyDeviceAuth(device.Settings); ok {
+			settings.AuthUser, settings.AuthPass = user, pass
+		}
+	}
 
 	// Create appropriate client based on generation
 	switch settings.Gen {
