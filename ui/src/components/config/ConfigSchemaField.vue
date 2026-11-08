@@ -11,6 +11,7 @@
       :overrides="overrides"
       :inherited="inherited"
       :sources="sources"
+      :stored-secrets="storedSecrets"
       :errors="errors"
       @set="(p, v) => emit('set', p, v)"
       @reset="p => emit('reset', p)"
@@ -86,10 +87,12 @@
     <p v-if="!overridden && inheritedValue !== undefined" class="field-inherited">
       Inherited: {{ schema.format === 'password' ? '••••' : formatValue(inheritedValue) }}<span v-if="source"> from {{ source }}</span>
     </p>
+    <p v-if="clearsSecret" class="field-note" data-note="clears-secret">The stored password is removed when you save.</p>
     <p v-if="readOnly" class="field-note">Apply cannot write this field to the device yet.</p>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
 
-    <div v-if="overridden || canUseDefault" class="field-actions">
+    <div v-if="overridden || canUseDefault || keepsSecret" class="field-actions">
+      <button v-if="keepsSecret" type="button" class="link-btn" data-action="clear-secret" @click="emit('set', path, '')">Clear stored password</button>
       <button v-if="overridden" type="button" class="link-btn" data-action="reset" @click="emit('reset', path)">Reset</button>
       <button v-if="canUseDefault" type="button" class="link-btn" data-action="use-default" @click="emit('set', path, clone(schema.default))">
         Use default ({{ formatValue(schema.default) }})
@@ -119,6 +122,9 @@ interface Props {
   overrides: ConfigBody
   inherited?: ConfigBody | null
   sources?: Record<string, string>
+  // Schema paths of the secrets the saved body holds (for example "mqtt.pass"). The API never returns
+  // their values.
+  storedSecrets?: string[]
   errors: Record<string, string>
 }
 
@@ -141,7 +147,17 @@ const source = computed(() => props.sources?.[key.value])
 const readOnly = computed(() => !subtreeApplicable(props.schema))
 const error = computed(() => props.errors[key.value])
 
+// A stored secret that the user has not touched stays out of the saved body, and the server keeps it.
+// Typing a value replaces it. "Clear stored password" sets an empty string, which the server stores as
+// no password.
+const isStoredSecret = computed(() =>
+  props.schema.format === 'password' && (props.storedSecrets || []).includes(key.value),
+)
+const keepsSecret = computed(() => isStoredSecret.value && !overridden.value)
+const clearsSecret = computed(() => isStoredSecret.value && overridden.value && override.value === '')
+
 const placeholder = computed(() => {
+  if (keepsSecret.value) return 'Stored, leave empty to keep'
   if (inheritedValue.value !== undefined) {
     return props.schema.format === 'password' ? '••••' : formatValue(inheritedValue.value)
   }

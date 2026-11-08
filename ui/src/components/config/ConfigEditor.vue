@@ -71,6 +71,7 @@
                     :overrides="localConfig"
                     :inherited="baseline"
                     :sources="sources"
+                    :stored-secrets="storedSecrets"
                     :errors="errors"
                     @set="setField"
                     @reset="resetField"
@@ -84,6 +85,7 @@
                   :overrides="localConfig"
                   :inherited="baseline"
                   :sources="sources"
+                  :stored-secrets="storedSecrets"
                   :errors="errors"
                   @set="setField"
                   @reset="resetField"
@@ -128,6 +130,9 @@ interface Props {
   scope?: string
   inherited?: ConfigBody | null
   sources?: Record<string, string>
+  // Schema paths of the secrets the saved body holds. The form shows a stored secret as kept and lets
+  // the user clear it; see ConfigSchemaField.
+  storedSecrets?: string[]
 }
 
 const props = defineProps<Props>()

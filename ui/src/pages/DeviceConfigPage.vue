@@ -112,6 +112,7 @@
             :device-id="deviceId"
             :inherited="store.desiredConfig"
             :sources="store.sources"
+            :stored-secrets="store.storedSecrets"
           />
         </div>
         <ConfigView v-else :config="store.overrides" />

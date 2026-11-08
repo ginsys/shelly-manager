@@ -82,6 +82,8 @@ export async function removeDeviceTemplateNew(
 
 export interface GetDeviceOverridesNewResult {
   overrides: DeviceConfiguration | null
+  // Schema paths of the secrets the device overrides hold. See ConfigTemplate.stored_secrets.
+  stored_secrets?: string[]
 }
 
 export async function getDeviceOverridesNew(deviceId: number | string): Promise<GetDeviceOverridesNewResult> {
@@ -96,6 +98,7 @@ export async function getDeviceOverridesNew(deviceId: number | string): Promise<
 export interface SetDeviceOverridesNewResult {
   overrides: DeviceConfiguration | null
   desired_config?: DeviceConfiguration
+  stored_secrets?: string[]
 }
 
 export async function setDeviceOverridesNew(

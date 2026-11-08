@@ -71,6 +71,7 @@
             v-model:valid="configValid"
             :device-type="schemaTarget?.deviceType"
             :scope="schemaTarget?.scope"
+            :stored-secrets="template?.stored_secrets"
           />
           <ul v-if="saveErrors.length > 0" class="save-errors" data-testid="template-save-errors">
             <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>

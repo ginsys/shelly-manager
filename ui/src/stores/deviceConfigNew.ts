@@ -25,6 +25,8 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
   const templates = ref<ConfigTemplate[]>([])
   const templateIds = ref<number[]>([])
   const overrides = ref<DeviceConfiguration | null>(null)
+  // Schema paths of the secrets the saved overrides hold. The API returns their values never.
+  const storedSecrets = ref<string[]>([])
   const desiredConfig = ref<DeviceConfiguration | null>(null)
   const sources = ref<Record<string, string>>({})
   const status = ref<ConfigStatusData | null>(null)
@@ -49,6 +51,7 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       templates.value = t.templates
       templateIds.value = t.template_ids
       overrides.value = o.overrides
+      storedSecrets.value = o.stored_secrets ?? []
       desiredConfig.value = d.config
       sources.value = d.sources || {}
       status.value = s
@@ -117,6 +120,7 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     try {
       const result = await setDeviceOverridesNew(deviceId, overridesNew)
       overrides.value = result.overrides
+      if (result.stored_secrets !== undefined) storedSecrets.value = result.stored_secrets
       if (result.desired_config !== undefined) desiredConfig.value = result.desired_config
     } catch (e: any) {
       error.value = e?.message || 'Failed to save overrides'
@@ -147,6 +151,7 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     try {
       await deleteDeviceOverridesNew(deviceId)
       overrides.value = null
+      storedSecrets.value = []
     } catch (e: any) {
       error.value = e?.message || 'Failed to clear overrides'
       throw e
@@ -222,6 +227,7 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     templates.value = []
     templateIds.value = []
     overrides.value = null
+    storedSecrets.value = []
     desiredConfig.value = null
     sources.value = {}
     status.value = null
@@ -235,6 +241,7 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     templates,
     templateIds,
     overrides,
+    storedSecrets,
     desiredConfig,
     sources,
     status,

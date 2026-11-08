@@ -592,4 +592,44 @@ describe('DeviceConfigNew Store', () => {
       }
     })
   })
+
+  describe('stored secrets (ginsys/shelly-manager#395)', () => {
+    it('keeps the secret paths of the overrides it loads, saves and clears', async () => {
+      const store = useDeviceConfigNewStore()
+      mockApi.getDeviceTemplatesNew.mockResolvedValue({ templates: [], template_ids: [] })
+      mockApi.getDesiredConfigNew.mockResolvedValue({ config: {}, sources: {} } as DesiredConfigData)
+      mockApi.getConfigStatusNew.mockResolvedValue({ config_applied: true, pending_changes: false } as ConfigStatusData)
+      mockApi.getDeviceOverridesNew.mockResolvedValue({ overrides: { mqtt: {} }, stored_secrets: ['mqtt.pass'] })
+
+      await store.refresh(1)
+      expect(store.storedSecrets).toEqual(['mqtt.pass'])
+
+      mockApi.setDeviceOverridesNew.mockResolvedValue({ overrides: { mqtt: { pass: '' } }, stored_secrets: [] })
+      await store.saveOverrides(1, { mqtt: { pass: '' } })
+      expect(store.storedSecrets).toEqual([])
+
+      mockApi.getDeviceOverridesNew.mockResolvedValue({ overrides: null, stored_secrets: ['auth.pass'] })
+      await store.refresh(1)
+      expect(store.storedSecrets).toEqual(['auth.pass'])
+
+      mockApi.deleteDeviceOverridesNew.mockResolvedValue(undefined as any)
+      await store.clearOverrides(1)
+      expect(store.storedSecrets).toEqual([])
+
+      mockApi.getDeviceOverridesNew.mockResolvedValue({ overrides: null, stored_secrets: ['auth.pass'] })
+      await store.refresh(1)
+      store.reset()
+      expect(store.storedSecrets).toEqual([])
+    })
+
+    it('treats a response without the list as no stored secrets', async () => {
+      const store = useDeviceConfigNewStore()
+      mockApi.getDeviceTemplatesNew.mockResolvedValue({ templates: [], template_ids: [] })
+      mockApi.getDesiredConfigNew.mockResolvedValue({ config: {}, sources: {} } as DesiredConfigData)
+      mockApi.getConfigStatusNew.mockResolvedValue({ config_applied: true, pending_changes: false } as ConfigStatusData)
+      mockApi.getDeviceOverridesNew.mockResolvedValue({ overrides: null })
+      await store.refresh(1)
+      expect(store.storedSecrets).toEqual([])
+    })
+  })
 })

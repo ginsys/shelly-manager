@@ -80,7 +80,10 @@ All notable changes to this project are documented here. The project follows Con
   access point, MQTT or auth password. The API returns secrets redacted, so a
   client sends them back missing. A missing secret now keeps the stored value,
   and an explicit empty string clears it. Both responses list the stored secrets
-  in `stored_secrets`, for example `mqtt.pass` (#395).
+  in `stored_secrets`, for example `mqtt.pass`. The template editor and the
+  device override form show such a password as "Stored, leave empty to keep",
+  leave it out of the saved body until you type a new one, and offer "Clear
+  stored password", which sends an empty string on purpose (#395).
 - Device credentials saved with `PUT /devices/{id}/config/auth` were stored
   where no client builder reads them, and a cached client kept the old login
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`

@@ -38,6 +38,14 @@ const schema: ConfigSchema = {
         max_power: { type: 'integer', minimum: 0, maximum: 3500, default: 2500, 'x-applicable': true },
       },
     },
+    mqtt: {
+      type: 'object',
+      title: 'MQTT',
+      properties: {
+        server: { type: 'string', maxLength: 128, 'x-applicable': true },
+        pass: { type: 'string', format: 'password', 'x-applicable': true },
+      },
+    },
     relay: {
       type: 'object',
       title: 'Relay',
@@ -158,5 +166,57 @@ describe('ConfigEditor', () => {
     expect(field.find('[data-action="use-default"]').exists()).toBe(false)
     await field.find('[data-action="reset"]').trigger('click')
     expect(lastModel(wrapper)).toEqual({})
+  })
+  describe('stored secrets (ginsys/shelly-manager#395)', () => {
+    async function openMqtt(extra: Record<string, any> = {}, model: Record<string, any> = {}) {
+      const wrapper = mountEditor(model, { storedSecrets: ['mqtt.pass'], ...extra })
+      await flushPromises()
+      await openSection(wrapper, 'mqtt')
+      return wrapper
+    }
+
+    it('shows a stored password as kept and leaves it out of the body when untouched', async () => {
+      const wrapper = await openMqtt()
+      const pass = wrapper.find('[data-path="mqtt.pass"]')
+      expect(pass.find('input').attributes('placeholder')).toBe('Stored, leave empty to keep')
+      await wrapper.find('[data-path="mqtt.server"] input').setValue('broker.local')
+      expect(lastModel(wrapper)).toEqual({ mqtt: { server: 'broker.local' } })
+      expect(JSON.stringify(lastModel(wrapper))).not.toContain('pass')
+    })
+
+    it('an emptied box keeps the stored password, it does not send an empty string', async () => {
+      const wrapper = await openMqtt()
+      const input = wrapper.find('[data-path="mqtt.pass"] input')
+      await input.setValue('typed')
+      expect(lastModel(wrapper)).toEqual({ mqtt: { pass: 'typed' } })
+      await input.setValue('')
+      expect(lastModel(wrapper)).toEqual({})
+    })
+
+    it('clear sends an empty string on purpose, and reset goes back to keeping it', async () => {
+      const wrapper = await openMqtt()
+      const field = wrapper.find('[data-path="mqtt.pass"]')
+      await field.find('[data-action="clear-secret"]').trigger('click')
+      expect(lastModel(wrapper)).toEqual({ mqtt: { pass: '' } })
+      expect(field.find('[data-note="clears-secret"]').exists()).toBe(true)
+      expect(lastValid(wrapper)).toBe(true)
+
+      await field.find('[data-action="reset"]').trigger('click')
+      expect(lastModel(wrapper)).toEqual({})
+      expect(field.find('[data-note="clears-secret"]').exists()).toBe(false)
+    })
+
+    it('a password field with no stored value has no hint and no clear action', async () => {
+      const wrapper = await openMqtt({ storedSecrets: [] })
+      const field = wrapper.find('[data-path="mqtt.pass"]')
+      expect(field.find('input').attributes('placeholder') ?? '').not.toContain('Stored')
+      expect(field.find('[data-action="clear-secret"]').exists()).toBe(false)
+    })
+
+    it('a stored secret does not change the text fields next to it', async () => {
+      const wrapper = await openMqtt()
+      const server = wrapper.find('[data-path="mqtt.server"]')
+      expect(server.find('[data-action="clear-secret"]').exists()).toBe(false)
+    })
   })
 })
