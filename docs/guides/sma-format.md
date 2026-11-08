@@ -119,9 +119,26 @@ sources that the engine does not yet provide.
 
 Import normalizes raw/gzip input, completes strict lexical and depth checks,
 validates the closed schema and counts, then verifies the RFC 8785 checksum.
-Dry-run and validate-only imports return a preview. Applying an SMA archive is
-not implemented yet and returns HTTP 501 (`ErrImportNotImplemented`) rather
-than reporting a false success.
+Dry-run and validate-only imports return a preview and write nothing.
+
+A real import restores devices, templates and discovered devices in one
+database transaction: either every record is written or none is, and a failure
+returns an error that says no changes were made. Records are matched like this:
+
+- A device is matched by MAC address. Its stored desired configuration travels
+  with it. A restored configuration is marked not applied, because it has not
+  reached the device.
+- A template is matched by name.
+- A discovered device is matched by MAC address and agent ID. It is listed for
+  24 hours after the import.
+
+A record that already exists is left unchanged and counted in
+`records_skipped`. With `force_overwrite` it is replaced instead. The result
+lists every change and a warning for anything that was not done.
+
+The import does not restore the network settings, plugin configurations or
+system settings of the archive, and `backup_before` is not supported. Both
+produce a warning, so a partial restore is never reported as a complete one.
 
 ## API example
 

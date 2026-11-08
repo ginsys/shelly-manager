@@ -168,6 +168,9 @@ func (e *SyncEngine) RegisterPlugin(plugin SyncPlugin) error {
 	if restricted, ok := plugin.(ImportPathRestrictedPlugin); ok {
 		restricted.SetImportBaseDir(e.importBaseDir)
 	}
+	if aware, ok := plugin.(ImportStoreAware); ok {
+		aware.SetImportStore(e)
+	}
 
 	e.plugins[info.Name] = plugin
 	e.logger.Info("Registered export plugin",
