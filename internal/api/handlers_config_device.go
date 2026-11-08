@@ -417,6 +417,10 @@ func (h *Handler) GetDeviceNewConfigStatus(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) ApplyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
+	// Apply writes to the physical device (for example the MQTT broker), so it needs the admin key.
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	rw := h.responseWriter()
 
 	vars := mux.Vars(r)

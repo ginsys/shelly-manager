@@ -979,6 +979,18 @@ func TestWriteConfigDeviceError(t *testing.T) {
 	}
 }
 
+func TestApplyDeviceNewConfig_RequiresAdminKey(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
+	handler.SetAdminAPIKey("admin-secret")
+
+	w := httptest.NewRecorder()
+	handler.ApplyDeviceNewConfig(w, httptest.NewRequest("POST", "/api/v1/devices/1/config/new/apply", nil))
+
+	testutil.AssertEqual(t, http.StatusUnauthorized, w.Code)
+}
+
 func TestGetConfigTemplates(t *testing.T) {
 	// Setup
 	db, cleanup := testutil.TestDatabase(t)
