@@ -172,6 +172,21 @@ func (m *mockRepository) SetDeviceConfigApplied(deviceID uint, applied bool) err
 	return nil
 }
 
+func (m *mockRepository) SetDeviceConfigAppliedIfDesired(deviceID uint, desiredConfig string) (bool, error) {
+	if m.updateErr != nil {
+		return false, m.updateErr
+	}
+	d, ok := m.devices[deviceID]
+	if !ok {
+		return false, ErrDeviceNotFound
+	}
+	if d.DesiredConfig != desiredConfig {
+		return false, nil
+	}
+	d.ConfigApplied = true
+	return true, nil
+}
+
 func (m *mockRepository) AddDeviceTag(deviceID uint, tag string) error {
 	if _, ok := m.devices[deviceID]; !ok {
 		return ErrDeviceNotFound

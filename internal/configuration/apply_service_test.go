@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,6 +20,8 @@ type fakeGen1Device struct {
 	settings     map[string]interface{}
 	ignoreWrites bool
 	setCalls     int
+	posted       []map[string]interface{}
+	onWrite      func() // runs after each accepted write, to simulate a concurrent edit
 }
 
 func newFakeGen1Device() *fakeGen1Device {
@@ -33,11 +36,25 @@ func (d *fakeGen1Device) SetConfig(_ context.Context, cfg map[string]interface{}
 	if d.setErr != nil {
 		return d.setErr
 	}
+	d.posted = append(d.posted, cfg)
 	if d.ignoreWrites {
 		return nil
 	}
 	for k, v := range cfg {
+		// Like a real Gen1 device: flat mqtt_* parameters in, a nested "mqtt" document out.
+		if sub, ok := strings.CutPrefix(k, "mqtt_"); ok {
+			doc, _ := d.settings["mqtt"].(map[string]interface{})
+			if doc == nil {
+				doc = map[string]interface{}{}
+			}
+			doc[sub] = v
+			d.settings["mqtt"] = doc
+			continue
+		}
 		d.settings[k] = v
+	}
+	if d.onWrite != nil {
+		d.onWrite()
 	}
 	return nil
 }
@@ -118,6 +135,91 @@ func TestApplyDesiredConfig_Gen2IsRefusedWithoutWriting(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrUnsupportedGeneration))
 	assert.Equal(t, 0, dev.setCalls)
 	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+func setDesired(t *testing.T, repo *mockRepository, cfg *DeviceConfiguration) {
+	t.Helper()
+	raw, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	repo.devices[1].DesiredConfig = string(raw)
+}
+
+func TestApplyDesiredConfig_MQTTIsSentFlatAndVerifies(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		MQTT: &MQTTConfiguration{
+			Enable: BoolPtr(true),
+			Server: StringPtr("broker.local"),
+			Port:   IntPtr(1883),
+			User:   StringPtr("iot"),
+		},
+	})
+	dev := newFakeGen1Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied, "read-back of the nested mqtt document matches")
+	for _, posted := range dev.posted {
+		assert.NotContains(t, posted, "mqtt", "a nested map must never reach the device")
+	}
+	mqtt, _ := dev.settings["mqtt"].(map[string]interface{})
+	assert.Equal(t, "broker.local:1883", mqtt["server"])
+	assert.True(t, repo.devices[1].ConfigApplied)
+}
+
+func TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}},
+		WiFi:   &WiFiConfiguration{SSID: StringPtr("other-net"), Password: StringPtr("s3cret")},
+	})
+	repo.devices[1].ConfigApplied = true
+	dev := newFakeGen1Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+	assert.Contains(t, err.Error(), "wifi_sta")
+	assert.NotContains(t, err.Error(), "s3cret")
+	assert.Equal(t, 0, dev.setCalls, "nothing may be written, not even the supported name")
+	assert.Equal(t, "", dev.settings["name"])
+	assert.True(t, repo.devices[1].ConfigApplied, "a refused request leaves the flag alone")
+}
+
+func TestApplyDesiredConfig_FailedReapplyClearsAppliedFlag(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	repo.devices[1].ConfigApplied = true // previously applied, then the device drifted
+	dev := newFakeGen1Device()
+	dev.ignoreWrites = true
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	assert.False(t, repo.devices[1].ConfigApplied, "status must not keep claiming applied")
+}
+
+func TestApplyDesiredConfig_ConfigChangedDuringApplyStaysPending(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	dev.onWrite = func() {
+		// An override edit lands while the device is being written: recompute stores a newer
+		// desired configuration and marks the device pending.
+		setDesired(t, repo, &DeviceConfiguration{
+			System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("newer-name")}},
+		})
+		repo.devices[1].ConfigApplied = false
+	}
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	assert.False(t, repo.devices[1].ConfigApplied, "the newer configuration was never sent")
+	assert.Contains(t, strings.Join(result.ApplyResult.Warnings, " "), "changed while it was being applied")
 }
 
 func TestApplyDesiredConfig_UnknownDevice(t *testing.T) {
