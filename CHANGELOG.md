@@ -81,6 +81,13 @@ All notable changes to this project are documented here. The project follows Con
   answered 500, the import status read `not_imported` and drift detection was
   disabled. A forced import updates the existing row in place and keeps its
   template. (#411)
+- `POST /devices/{id}/config/new/apply` and `/verify` were stubs that always
+  reported success. Apply now sends the desired configuration to the device,
+  reads it back and compares. It reports real `applied_count`, `failed_count`
+  and `requires_reboot`, lists failures and read-back differences, and sets
+  `config_applied` only when the read-back matches. Verify reports the real
+  differences and changes nothing. Only Gen1 devices are supported; Gen2 and
+  Gen3 return HTTP 501 rather than a false success. (#375)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`

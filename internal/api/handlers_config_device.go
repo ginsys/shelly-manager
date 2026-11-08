@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -430,24 +431,41 @@ func (h *Handler) ApplyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _, err = h.ConfigService.ConfigurationSvc.GetDesiredConfig(uint(id))
+	result, err := h.Service.ApplyDesiredConfig(r.Context(), uint(id))
 	if err != nil {
-		rw.WriteInternalError(w, r, err)
+		h.writeConfigDeviceError(w, r, err)
 		return
 	}
 
-	h.logger.WithFields(map[string]any{
-		"device_id": id,
-		"component": "api",
-	}).Info("Config apply requested - implementation requires Shelly client integration")
+	resp := ConfigApplyResponse{
+		Success:  result.ConfigApplied,
+		Failures: []string{},
+	}
+	if result.ApplyResult != nil {
+		resp.AppliedCount = result.ApplyResult.AppliedCount
+		resp.FailedCount = result.ApplyResult.FailedCount
+		resp.RequiresReboot = result.ApplyResult.RequiresReboot
+		for _, f := range result.ApplyResult.Failures {
+			resp.Failures = append(resp.Failures, f.Path+": "+f.Error)
+		}
+	}
+	if result.VerifyResult != nil {
+		for _, d := range result.VerifyResult.Differences {
+			resp.Failures = append(resp.Failures,
+				fmt.Sprintf("verify %s: expected %v, device has %v", d.Path, d.Expected, d.Actual))
+		}
+	}
 
-	rw.WriteSuccess(w, r, ConfigApplyResponse{
-		Success:        true,
-		AppliedCount:   0,
-		FailedCount:    0,
-		RequiresReboot: false,
-		Failures:       []string{},
-	})
+	rw.WriteSuccess(w, r, resp)
+}
+
+// writeConfigDeviceError maps errors from talking to a device to API responses.
+func (h *Handler) writeConfigDeviceError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, configuration.ErrUnsupportedGeneration) {
+		h.responseWriter().WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, err.Error(), nil)
+		return
+	}
+	h.writeDeviceReadError(w, r, err)
 }
 
 func (h *Handler) VerifyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
@@ -466,19 +484,16 @@ func (h *Handler) VerifyDeviceNewConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, _, err = h.ConfigService.ConfigurationSvc.GetDesiredConfig(uint(id))
+	result, err := h.Service.VerifyDesiredConfig(r.Context(), uint(id))
 	if err != nil {
-		rw.WriteInternalError(w, r, err)
+		h.writeConfigDeviceError(w, r, err)
 		return
 	}
 
-	h.logger.WithFields(map[string]any{
-		"device_id": id,
-		"component": "api",
-	}).Info("Config verify requested - implementation requires Shelly client integration")
+	diffs := make([]ConfigDifferenceDTO, 0, len(result.Differences))
+	for _, d := range result.Differences {
+		diffs = append(diffs, ConfigDifferenceDTO{Path: d.Path, Expected: d.Expected, Actual: d.Actual})
+	}
 
-	rw.WriteSuccess(w, r, ConfigVerifyResponse{
-		Match:       true,
-		Differences: []ConfigDifferenceDTO{},
-	})
+	rw.WriteSuccess(w, r, ConfigVerifyResponse{Match: result.Match, Differences: diffs})
 }
