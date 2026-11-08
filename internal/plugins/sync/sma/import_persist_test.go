@@ -214,6 +214,23 @@ func TestForcedImportKeepsSecretsInsideArrays(t *testing.T) {
 	assert.Contains(t, result.Warnings[0], "3 redacted values")
 }
 
+// A stored placeholder is not a credential: restoring it would write the placeholder back.
+func TestForcedImportDoesNotRestoreAStoredPlaceholder(t *testing.T) {
+	const stored = `{"connections":[{"name":"a","password":"[REDACTED]"}],"mqtt":{"enable":true,"password":"[REDACTED]"}}`
+	f := newPersistFixture(t)
+	f.seed(t)
+	require.NoError(t, f.db.GetDB().Model(&database.Device{}).Where("mac = ?", "aabbccddeeff").
+		Update("desired_config", stored).Error)
+	archive := f.export(t)
+
+	_, err := f.importFile(t, archive, sync.ImportOptions{ForceOverwrite: true})
+	require.NoError(t, err)
+	var device database.Device
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	assert.NotContains(t, device.DesiredConfig, sync.RedactedValue)
+	assert.JSONEq(t, `{"connections":[{"name":"a"}],"mqtt":{"enable":true}}`, device.DesiredConfig)
+}
+
 // Export falls back to the older device_configs row when the device has no desired configuration,
 // so a replacement must look for the stored secrets in the same place.
 func TestForcedImportKeepsSecretsFromTheLegacyConfigurationRow(t *testing.T) {
