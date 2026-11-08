@@ -6,7 +6,9 @@
       <div class="spacer" />
       <button v-if="!editMode" class="btn primary" @click="enterEdit">Edit</button>
       <button v-else class="btn" @click="cancelEdit">Cancel</button>
-      <button v-if="editMode" class="btn primary" @click="handleSave">Save</button>
+      <button v-if="editMode" class="btn primary" data-testid="save-template" :disabled="!configValid" @click="handleSave">
+        Save
+      </button>
     </div>
 
     <div v-if="loading" class="card state">Loading...</div>
@@ -26,25 +28,14 @@
             <input v-if="editMode" v-model="edit.name" class="form-input" />
             <span v-else>{{ template.name }}</span>
           </div>
+          <!-- The update API keeps the scope and the device type, so they are not editable here. -->
           <div class="info-item">
             <label>Scope</label>
-            <select v-if="editMode" v-model="edit.scope" class="form-input">
-              <option value="global">global</option>
-              <option value="group">group</option>
-              <option value="device_type">device_type</option>
-            </select>
-            <span v-else class="pill">{{ template.scope }}</span>
+            <span class="pill">{{ template.scope }}</span>
           </div>
-          <div class="info-item" :class="{ disabled: editMode && edit.scope !== 'device_type' }">
+          <div class="info-item">
             <label>Device Type</label>
-            <input
-              v-if="editMode"
-              v-model="edit.device_type"
-              class="form-input"
-              :disabled="edit.scope !== 'device_type'"
-              placeholder="SHPLG-S"
-            />
-            <span v-else class="pill">{{ template.device_type || '-' }}</span>
+            <span class="pill">{{ template.device_type || '-' }}</span>
           </div>
           <div class="info-item full">
             <label>Description</label>
@@ -65,12 +56,27 @@
 
       <div class="card">
         <div class="header-row">
-          <h2 class="h2">Config (JSON)</h2>
+          <h2 class="h2">{{ editMode ? 'Config' : 'Config (JSON)' }}</h2>
           <div class="spacer" />
           <button class="btn" @click="copyConfig">Copy</button>
         </div>
 
-        <textarea v-model="configJson" class="code" rows="18" :readonly="!editMode" spellcheck="false" />
+        <template v-if="editMode">
+          <div v-if="schemaTarget === null" class="hint">
+            This device_type template has no device type, so no form exists for it.
+          </div>
+          <ConfigEditor
+            v-else
+            v-model="configBody"
+            v-model:valid="configValid"
+            :device-type="schemaTarget?.deviceType"
+            :scope="schemaTarget?.scope"
+          />
+          <ul v-if="saveErrors.length > 0" class="save-errors" data-testid="template-save-errors">
+            <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>
+          </ul>
+        </template>
+        <textarea v-else :value="configJson" class="code" rows="18" readonly spellcheck="false" />
         <div v-if="lastAffectedDevices !== null" class="hint">
           Update impacts ~{{ lastAffectedDevices }} devices.
         </div>
@@ -113,16 +119,20 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   assignTemplateToDevice,
   deleteTemplate,
   getTemplate,
   updateTemplate,
+  TemplateSaveError,
   type ConfigTemplate,
+  type FieldError,
   type TemplateScope,
 } from '@/api/templates'
+import ConfigEditor from '@/components/config/ConfigEditor.vue'
+import { clone, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
 
 const route = useRoute()
 const router = useRouter()
@@ -140,6 +150,10 @@ const edit = ref<{ name: string; description?: string; scope: TemplateScope; dev
 })
 
 const configJson = ref<string>('{}')
+const configBody = ref<ConfigBody>({})
+const configValid = ref(true)
+const saveErrors = ref<FieldError[]>([])
+const schemaTarget = computed(() => templateSchemaTarget(template.value?.scope, template.value?.device_type))
 const lastAffectedDevices = ref<number | null>(null)
 
 const showAssignDialog = ref(false)
@@ -181,6 +195,8 @@ async function load() {
 
 function enterEdit() {
   if (!template.value) return
+  configBody.value = clone(template.value.config || {})
+  saveErrors.value = []
   editMode.value = true
   lastAffectedDevices.value = null
 }
@@ -203,15 +219,9 @@ function cancelEdit() {
 }
 
 async function handleSave() {
-  if (!template.value) return
-
-  let parsedConfig: Record<string, any>
-  try {
-    parsedConfig = JSON.parse(configJson.value || '{}')
-  } catch (e: any) {
-    alert('Invalid config JSON: ' + (e?.message || 'Unknown error'))
-    return
-  }
+  if (!template.value || !configValid.value) return
+  const parsedConfig = clone(configBody.value)
+  saveErrors.value = []
 
   try {
     const result = await updateTemplate(template.value.id, {
@@ -224,6 +234,10 @@ async function handleSave() {
     editMode.value = false
     await load()
   } catch (e: any) {
+    if (e instanceof TemplateSaveError) {
+      saveErrors.value = e.fields
+      return
+    }
     alert('Save failed: ' + (e?.message || 'Unknown error'))
   }
 }
@@ -306,6 +320,8 @@ label { font-size: 12px; color: #64748b; }
 .code { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 
 .hint { font-size: 12px; color: #64748b; margin-top: 8px; }
+.save-errors { margin: 8px 0 0; padding: 8px 12px 8px 28px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modal { width: min(560px, 100%); background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; padding: 14px; }

@@ -51,6 +51,32 @@ export async function getTemplate(id: number | string): Promise<ConfigTemplate> 
   return res.data.data.template
 }
 
+// FieldError is one config field the server refused (internal/configuration FieldError).
+export interface FieldError {
+  path: string
+  message: string
+}
+
+// TemplateSaveError carries the field errors of a refused template body, so the page can show
+// each one next to its path.
+export class TemplateSaveError extends Error {
+  fields: FieldError[]
+  constructor(message: string, fields: FieldError[]) {
+    super(message)
+    this.name = 'TemplateSaveError'
+    this.fields = fields
+  }
+}
+
+// toSaveError turns a refused create or update into a TemplateSaveError. The server answers a
+// schema failure with 400 and error.details.fields.
+function toSaveError(e: any, fallback: string): Error {
+  const error = e?.response?.data?.error
+  const fields = error?.details?.fields
+  if (Array.isArray(fields)) return new TemplateSaveError(error?.message || fallback, fields)
+  return new Error(error?.message || e?.message || fallback)
+}
+
 export interface CreateTemplateRequest {
   name: string
   description?: string
@@ -60,7 +86,12 @@ export interface CreateTemplateRequest {
 }
 
 export async function createTemplate(data: CreateTemplateRequest): Promise<ConfigTemplate> {
-  const res = await api.post<APIResponse<{ template: ConfigTemplate }>>('/config/templates/new', data)
+  let res
+  try {
+    res = await api.post<APIResponse<{ template: ConfigTemplate }>>('/config/templates/new', data)
+  } catch (e) {
+    throw toSaveError(e, 'Failed to create template')
+  }
 
   if (!res.data.success || !res.data.data?.template) {
     const msg = res.data.error?.message || 'Failed to create template'
@@ -82,7 +113,12 @@ export interface UpdateTemplateResult {
 }
 
 export async function updateTemplate(id: number | string, data: UpdateTemplateRequest): Promise<UpdateTemplateResult> {
-  const res = await api.put<APIResponse<UpdateTemplateResult>>(`/config/templates/new/${id}`, data)
+  let res
+  try {
+    res = await api.put<APIResponse<UpdateTemplateResult>>(`/config/templates/new/${id}`, data)
+  } catch (e) {
+    throw toSaveError(e, 'Failed to update template')
+  }
 
   if (!res.data.success || !res.data.data?.template) {
     const msg = res.data.error?.message || 'Failed to update template'

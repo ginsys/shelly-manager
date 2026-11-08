@@ -18,6 +18,7 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
+  TemplateSaveError,
   type ConfigTemplate,
 } from '../templates'
 
@@ -27,6 +28,26 @@ describe('templates API (new config templates)', () => {
     ;(api.post as any).mockReset()
     ;(api.put as any).mockReset()
     ;(api.delete as any).mockReset()
+  })
+
+  it('a schema refusal becomes a TemplateSaveError with the field list', async () => {
+    const fields = [{ path: 'power_metering.max_power', message: 'Must be at least 0' }]
+    ;(api.put as any).mockRejectedValue({
+      response: { status: 400, data: { success: false, error: { code: 'VALIDATION_FAILED', message: 'Validation failed', details: { fields } } } },
+    })
+    const err = await updateTemplate(1, { config: {} }).catch((e) => e)
+    expect(err).toBeInstanceOf(TemplateSaveError)
+    expect(err.fields).toEqual(fields)
+  })
+
+  it('another refusal keeps the server message', async () => {
+    ;(api.post as any).mockRejectedValue({
+      message: 'Request failed with status code 400',
+      response: { status: 400, data: { success: false, error: { message: 'name is required' } } },
+    })
+    const err = await createTemplate({ name: '', scope: 'global', config: {} }).catch((e) => e)
+    expect(err).not.toBeInstanceOf(TemplateSaveError)
+    expect(err.message).toBe('name is required')
   })
 
   it('listTemplates calls /config/templates/new', async () => {
