@@ -342,9 +342,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			return client, nil
 		}
 		// Client no longer works, recreate it
-		s.clientMu.Lock()
-		delete(s.clients, device.IP)
-		s.clientMu.Unlock()
+		s.evictClient(device.IP, client)
 	}
 
 	// Parse device settings to get generation and auth info
@@ -525,9 +523,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 			}
 
 			// Clear from cache
-			s.clientMu.Lock()
-			delete(s.clients, device.IP)
-			s.clientMu.Unlock()
+			s.evictClient(device.IP, client)
 
 			// Retry with config credentials
 			return s.getClientWithRetry(device, false)
@@ -535,6 +531,17 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	}
 
 	return client, nil
+}
+
+// evictClient removes the cached client for ip only if it is still the given client. The
+// connection test runs without the cache lock, so another request can already have cached a
+// working replacement; a late failure of the old client must not evict it.
+func (s *ShellyService) evictClient(ip string, client shelly.Client) {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	if cached, ok := s.clients[ip]; ok && cached == client {
+		delete(s.clients, ip)
+	}
 }
 
 // ControlDevice sends a control command to a device

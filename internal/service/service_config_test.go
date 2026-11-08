@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/shelly/gen1"
 )
 
 // Mock server for configuration operations
@@ -659,6 +660,26 @@ func TestShellyService_getClient_RejectedSavedLoginDoesNotDeadlock(t *testing.T)
 		t.Fatal("client cache lock is still held")
 	}
 	service.clientMu.Unlock()
+}
+
+// A late connection-test failure of an old client must not evict the replacement that another
+// request cached in the meantime.
+func TestShellyService_evictClient_KeepsReplacement(t *testing.T) {
+	service := NewService(createTestDB(t), createTestConfig())
+	const ip = "192.0.2.20:80"
+	stale := gen1.NewClient(ip)
+	replacement := gen1.NewClient(ip)
+
+	service.clients[ip] = replacement
+	service.evictClient(ip, stale)
+	if service.clients[ip] != replacement {
+		t.Fatal("evicting a stale client removed the cached replacement")
+	}
+
+	service.evictClient(ip, replacement)
+	if _, cached := service.clients[ip]; cached {
+		t.Fatal("evicting the cached client must remove it")
+	}
 }
 
 func TestShellyService_ExportDeviceConfig(t *testing.T) {
