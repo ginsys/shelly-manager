@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,12 +19,20 @@ import (
 // controls the ordering the race depends on.
 type gatedCleanupDB struct {
 	database.DatabaseInterface
-	started  chan struct{}
-	release  chan struct{}
-	finished atomic.Bool
+	started     chan struct{}
+	release     chan struct{}
+	done        chan struct{}
+	releaseOnce sync.Once
+	finished    atomic.Bool
+}
+
+// open lets the held cleanup run. It is safe to call more than once.
+func (g *gatedCleanupDB) open() {
+	g.releaseOnce.Do(func() { close(g.release) })
 }
 
 func (g *gatedCleanupDB) CleanupExpiredDiscoveredDevices() (int64, error) {
+	defer close(g.done)
 	close(g.started)
 	<-g.release
 	n, err := g.DatabaseInterface.CleanupExpiredDiscoveredDevices()
@@ -44,8 +53,20 @@ func TestGetDiscoveredDevicesCleanupIsAwaited(t *testing.T) {
 		DatabaseInterface: dbManager,
 		started:           make(chan struct{}),
 		release:           make(chan struct{}),
+		done:              make(chan struct{}),
 	}
 	handler := &Handler{DB: gated, logger: logger}
+	// Teardown must not rely on WaitBackground, the code under test. If an assertion fails first,
+	// release the held cleanup and wait for it on its own signal before the database closes. This
+	// defer runs before the database cleanup above.
+	defer func() {
+		gated.open()
+		select {
+		case <-gated.started:
+			<-gated.done
+		default: // the cleanup never started, so there is nothing to wait for
+		}
+	}()
 
 	w := httptest.NewRecorder()
 	handler.GetDiscoveredDevices(w, httptest.NewRequest("GET", "/api/v1/provisioner/discovered-devices", nil))
@@ -64,7 +85,7 @@ func TestGetDiscoveredDevicesCleanupIsAwaited(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 
-	close(gated.release)
+	gated.open()
 	select {
 	case <-waited:
 	case <-time.After(5 * time.Second):
