@@ -171,6 +171,10 @@ produce a warning, so a partial restore is never reported as a complete one.
 }
 ```
 
+Validation and preview refuse the archives that an apply refuses for an empty or
+blank identity: a device or discovered device without a MAC address, or a template
+without a name.
+
 Send this body to `POST /api/v1/import/preview`. The browser exposes data-based
 import preview only for a registered plugin named `sma` that advertises the
 `sma` format.

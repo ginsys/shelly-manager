@@ -157,6 +157,10 @@ func (s *SMAPlugin) importNormalized(ctx context.Context, data []byte, config sy
 	if err = json.Unmarshal(restored, &archive); err != nil {
 		return invalidImportResult("invalid SMA structure", err)
 	}
+	// Validation and preview refuse the records an apply refuses, through the same check.
+	if identityErr := sync.ValidateImportIdentities(archiveExportData(&archive)); identityErr != nil {
+		return invalidImportResult("invalid SMA record", identityErr)
+	}
 	importID := fmt.Sprintf("sma-import-%d", time.Now().UnixNano())
 	if config.Options.DryRun {
 		return s.generateDryRunResult(importID, &archive, time.Since(start))

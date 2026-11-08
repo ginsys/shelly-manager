@@ -78,10 +78,57 @@ func (e *SyncEngine) ApplyImport(ctx context.Context, data *ExportData, opts Imp
 	return result, nil
 }
 
+// ValidateImportIdentities returns ErrInvalidImportData when a record has an empty or blank
+// identity: a device or discovered device without a MAC address, or a template without a name.
+// ApplyImport refuses the same records through the same checks, so a plugin that calls this
+// during validation and preview reports exactly what an apply would refuse.
+func ValidateImportIdentities(data *ExportData) error {
+	if data == nil {
+		return nil
+	}
+	for _, in := range data.Devices {
+		if err := deviceIdentityError(in); err != nil {
+			return err
+		}
+	}
+	for _, in := range data.Templates {
+		if err := templateIdentityError(in); err != nil {
+			return err
+		}
+	}
+	for _, in := range data.DiscoveredDevices {
+		if err := discoveredIdentityError(in); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func deviceIdentityError(in DeviceData) error {
+	if strings.TrimSpace(in.MAC) == "" {
+		return fmt.Errorf("%w: device without a MAC address", ErrInvalidImportData)
+	}
+	return nil
+}
+
+func templateIdentityError(in TemplateData) error {
+	if strings.TrimSpace(in.Name) == "" {
+		return fmt.Errorf("%w: template without a name", ErrInvalidImportData)
+	}
+	return nil
+}
+
+func discoveredIdentityError(in DiscoveredDeviceData) error {
+	if strings.TrimSpace(in.MAC) == "" {
+		return fmt.Errorf("%w: discovered device without a MAC address", ErrInvalidImportData)
+	}
+	return nil
+}
+
 func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {
 	for _, in := range data.Devices {
-		if strings.TrimSpace(in.MAC) == "" {
-			return fmt.Errorf("%w: device without a MAC address", ErrInvalidImportData)
+		if err := deviceIdentityError(in); err != nil {
+			return err
 		}
 
 		var existing database.Device
@@ -150,8 +197,8 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 
 func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {
 	for _, in := range data.Templates {
-		if strings.TrimSpace(in.Name) == "" {
-			return fmt.Errorf("%w: template without a name", ErrInvalidImportData)
+		if err := templateIdentityError(in); err != nil {
+			return err
 		}
 
 		var existing configuration.ConfigTemplate
@@ -216,8 +263,8 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 
 func importDiscovered(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {
 	for _, in := range data.DiscoveredDevices {
-		if strings.TrimSpace(in.MAC) == "" {
-			return fmt.Errorf("%w: discovered device without a MAC address", ErrInvalidImportData)
+		if err := discoveredIdentityError(in); err != nil {
+			return err
 		}
 		expires := time.Now().Add(discoveredDeviceTTL)
 

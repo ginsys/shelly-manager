@@ -80,6 +80,10 @@ All notable changes to this project are documented here. The project follows Con
   separately as #279. (#270)
 
 ### Fixed
+- SMA `validate_only` and `dry_run` imports now refuse an archive with a device
+  or discovered device without a MAC address, or a template without a name.
+  Before, they reported the archive valid and the apply refused it. One shared
+  check serves validation, preview and the apply. (#406)
 - `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
   `database.dsn` default always won, so unless `dsn` was set explicitly every
   SQLite run used `data/shelly.db` whatever `path` said. `dsn` still takes
