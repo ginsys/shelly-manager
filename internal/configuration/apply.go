@@ -207,7 +207,7 @@ func (a *ConfigApplier) applyMainSettings(ctx context.Context, client ShellyClie
 	// A custom timezone or location only takes effect once the device's automatic detection
 	// is off. The prerequisite is sent with them but is not a desired setting, so it is not
 	// counted.
-	write := make(map[string]interface{}, len(mainSettings)+1)
+	write := make(map[string]interface{})
 	for key, val := range mainSettings {
 		write[key] = val
 	}
