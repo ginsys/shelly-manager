@@ -955,6 +955,29 @@ func TestUpdateDeviceAuth_RejectsUserWithoutPassword(t *testing.T) {
 	}
 }
 
+func TestWriteConfigDeviceError(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
+
+	cases := []struct {
+		name string
+		err  error
+		code int
+	}{
+		{"gen2 not supported", fmt.Errorf("x: %w", configuration.ErrUnsupportedGeneration), http.StatusNotImplemented},
+		{"auth failed", fmt.Errorf("apply: %w", shelly.ErrAuthFailed), http.StatusBadGateway},
+		{"other error", errors.New("boom"), http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			handler.writeConfigDeviceError(w, httptest.NewRequest("POST", "/x", nil), tc.err)
+			testutil.AssertEqual(t, tc.code, w.Code)
+		})
+	}
+}
+
 func TestGetConfigTemplates(t *testing.T) {
 	// Setup
 	db, cleanup := testutil.TestDatabase(t)

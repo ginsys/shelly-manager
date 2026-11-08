@@ -866,6 +866,38 @@ func (s *ShellyService) ImportDeviceConfig(deviceID uint) (*configuration.Device
 	return s.ConfigSvc.ImportFromDevice(deviceID, client)
 }
 
+// ApplyDesiredConfig pushes the device's desired configuration to the physical
+// device and verifies it by reading it back.
+func (s *ShellyService) ApplyDesiredConfig(ctx context.Context, deviceID uint) (*configuration.ApplyVerifyResult, error) {
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+
+	client, err := s.getClientWithAuthRetry(device)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	return s.ConfigSvc.ConfigurationSvc.ApplyDesiredConfig(ctx, deviceID, client, device.Type)
+}
+
+// VerifyDesiredConfig compares the device's desired configuration with the
+// live configuration on the physical device. It changes nothing.
+func (s *ShellyService) VerifyDesiredConfig(ctx context.Context, deviceID uint) (*configuration.VerifyResult, error) {
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+
+	client, err := s.getClientWithAuthRetry(device)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	return s.ConfigSvc.ConfigurationSvc.VerifyDesiredConfig(ctx, deviceID, client, device.Type)
+}
+
 // GetDeviceConfig gets the stored configuration for a device
 func (s *ShellyService) GetDeviceConfig(deviceID uint) (*configuration.DeviceConfig, error) {
 	return s.ConfigSvc.GetDeviceConfig(deviceID)
