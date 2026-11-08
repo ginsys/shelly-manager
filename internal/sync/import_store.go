@@ -189,6 +189,11 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 		case !opts.ForceOverwrite:
 			result.Skipped++
 		default:
+			// The retained scope must still hold with the archived device type, or the stored
+			// row would fail the startup check of template scopes.
+			if err := configuration.ValidateTemplateScope(existing.Scope, in.DeviceType); err != nil {
+				return fmt.Errorf("%w: template %s keeps scope %q: %v", ErrInvalidImportData, in.Name, existing.Scope, err)
+			}
 			updates := map[string]interface{}{
 				// The scope stays as it is: the archive does not carry one, and a group template
 				// must not turn global because its device type is empty.
