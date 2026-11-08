@@ -89,7 +89,8 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 		// A record that does not exist yet has no stored values to keep in place of a redaction.
 		var storedSettings, storedDesired string
 		if lookup.Error == nil {
-			storedSettings, storedDesired = existing.Settings, existing.DesiredConfig
+			storedSettings = existing.Settings
+			storedDesired = storedDesiredConfig(tx, existing)
 		}
 		settings, err := restoreObject(in.Settings, storedSettings, result)
 		if err != nil {
@@ -263,6 +264,23 @@ func templateScope(deviceType string) string {
 	return "device_type"
 }
 
+// storedDesiredConfig returns the configuration an export of device would have written: the
+// desired configuration, or the older device_configs row when that is empty.
+func storedDesiredConfig(tx *gorm.DB, device database.Device) string {
+	raw := strings.TrimSpace(device.DesiredConfig)
+	if raw != "" && raw != "{}" && raw != "null" {
+		return device.DesiredConfig
+	}
+	if !tx.Migrator().HasTable(&configuration.DeviceConfig{}) {
+		return device.DesiredConfig
+	}
+	var legacy configuration.DeviceConfig
+	if err := tx.Where("device_id = ?", device.ID).First(&legacy).Error; err != nil {
+		return device.DesiredConfig
+	}
+	return string(legacy.Config)
+}
+
 // restoreObject returns the JSON text of m with each redacted value replaced by the one in the
 // stored JSON object at the same path, or removed when there is none. It adds the number of
 // redacted values to result.
@@ -277,8 +295,8 @@ func restoreObject(m map[string]interface{}, stored string, result *ImportApplyR
 }
 
 // resolveRedacted replaces every RedactedValue in config with the value at the same path in
-// current, or deletes the key when current has none. It returns how many it found. Values inside
-// arrays have no stable path, so they are deleted rather than matched.
+// current, or deletes the key when current has none. It returns how many it found. An array has
+// no key to match its elements by, so an element takes the stored one at the same position.
 func resolveRedacted(config, current map[string]interface{}) int {
 	found := 0
 	for key, value := range config {
@@ -297,18 +315,31 @@ func resolveRedacted(config, current map[string]interface{}) int {
 			child, _ := current[key].(map[string]interface{})
 			found += resolveRedacted(v, child)
 		case []interface{}:
-			found += dropRedactedInList(v)
+			stored, _ := current[key].([]interface{})
+			found += resolveRedactedList(v, stored)
 		}
 	}
 	return found
 }
 
-// dropRedactedInList deletes redacted values from the objects inside a list.
-func dropRedactedInList(list []interface{}) int {
+// resolveRedactedList resolves the redacted values inside the objects and nested lists of list.
+// Element i is resolved against stored element i. A value with no stored element at that position
+// is left out. A stored list that was reordered since the export pairs the wrong elements, which
+// is the limit of matching by position.
+func resolveRedactedList(list, stored []interface{}) int {
 	found := 0
-	for _, item := range list {
-		if object, ok := item.(map[string]interface{}); ok {
-			found += resolveRedacted(object, nil)
+	for i, item := range list {
+		var kept interface{}
+		if i < len(stored) {
+			kept = stored[i]
+		}
+		switch v := item.(type) {
+		case map[string]interface{}:
+			child, _ := kept.(map[string]interface{})
+			found += resolveRedacted(v, child)
+		case []interface{}:
+			child, _ := kept.([]interface{})
+			found += resolveRedactedList(v, child)
 		}
 	}
 	return found
