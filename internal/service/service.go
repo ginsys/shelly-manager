@@ -374,6 +374,13 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
 			return nil, fmt.Errorf("failed to parse device settings: %w", err)
 		}
+		// Credentials saved before the flat keys existed are still honoured.
+		if settings.AuthUser == "" && settings.AuthPass == "" {
+			if user, pass, ok := configuration.LegacyDeviceAuth(device.Settings); ok {
+				settings.AuthEnabled = true
+				settings.AuthUser, settings.AuthPass = user, pass
+			}
+		}
 	}
 
 	// Create new client based on generation
@@ -890,7 +897,8 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 	// Store under the keys the client builders read (auth_enabled, auth_user,
 	// auth_pass). The old nested "auth" object was never read by anything.
 	delete(settings, "auth")
-	if username == "" && password == "" {
+	// An empty user disables auth: both client builders need a user and a password.
+	if username == "" {
 		settings["auth_enabled"] = false
 		delete(settings, "auth_user")
 		delete(settings, "auth_pass")

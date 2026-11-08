@@ -514,8 +514,12 @@ func TestShellyService_UpdateDeviceAuth_EmptyUserDisablesAuth(t *testing.T) {
 	if err := service.UpdateDeviceAuth(device.ID, "admin", "pw"); err != nil {
 		t.Fatalf("UpdateDeviceAuth failed: %v", err)
 	}
+	service.clients[device.IP] = nil // stands in for a client built with the old credentials
 	if err := service.UpdateDeviceAuth(device.ID, "", ""); err != nil {
 		t.Fatalf("UpdateDeviceAuth clear failed: %v", err)
+	}
+	if _, cached := service.clients[device.IP]; cached {
+		t.Error("cached client must be evicted when credentials are cleared")
 	}
 	updated, err := db.GetDevice(device.ID)
 	if err != nil {
@@ -536,6 +540,30 @@ func TestShellyService_UpdateDeviceAuth_EmptyUserDisablesAuth(t *testing.T) {
 	}
 	if _, ok := settings["auth"]; ok {
 		t.Error("legacy settings.auth key must not remain")
+	}
+}
+
+func TestShellyService_UpdateDeviceAuth_PasswordWithoutUserDisablesAuth(t *testing.T) {
+	db := createTestDB(t)
+	service := NewService(db, createTestConfig())
+	device := createTestDevice(t, db, "192.0.2.12:80")
+
+	if err := service.UpdateDeviceAuth(device.ID, "", "pw"); err != nil {
+		t.Fatalf("UpdateDeviceAuth failed: %v", err)
+	}
+	updated, err := db.GetDevice(device.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(updated.Settings), &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["auth_enabled"] != false {
+		t.Errorf("auth_enabled = %v, want false", settings["auth_enabled"])
+	}
+	if _, ok := settings["auth_pass"]; ok {
+		t.Error("auth_pass must not be stored without a user")
 	}
 }
 
