@@ -14,6 +14,9 @@ export interface ConfigSchema {
   type: string
   properties: Record<string, SchemaProperty>
   required?: string[]
+  // Device-type schema only: the model it was built for, and whether apply supports the model.
+  'x-device-type'?: string
+  'x-apply-supported'?: boolean
 }
 
 export interface SchemaProperty {
@@ -33,6 +36,12 @@ export interface SchemaProperty {
   format?: string
   maxLength?: number
   pattern?: string
+  // Object schemas list required child keys; array schemas give their item schema.
+  required?: string[]
+  items?: SchemaProperty
+  // Device-type schema only (GET /config/schema?device_id=...): false when apply cannot write
+  // the field to the device yet. The generic schema omits it.
+  'x-applicable'?: boolean
 }
 
 export interface DeviceCapabilities {
@@ -138,10 +147,14 @@ export async function convertToRaw(request: ConversionRequest): Promise<Record<s
   return res.data.data.config
 }
 
-export async function getConfigSchema(deviceType?: string): Promise<ConfigSchema> {
-  const res = await api.get<APIResponse<ConfigSchema>>('/config/schema', {
-    params: { device_type: deviceType }
-  })
+// getConfigSchema returns the generic schema, or with a device type or a device id the schema of
+// the configuration stored for that model. A device id resolves the model on the server, the way
+// apply does.
+export async function getConfigSchema(deviceType?: string, deviceId?: number | string): Promise<ConfigSchema> {
+  const params = deviceId !== undefined && deviceId !== ''
+    ? { device_id: deviceId }
+    : { device_type: deviceType }
+  const res = await api.get<APIResponse<ConfigSchema>>('/config/schema', { params })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get configuration schema'
     throw new Error(msg)
