@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -187,6 +188,81 @@ func TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting(t *testing.T
 	assert.Equal(t, 0, dev.setCalls, "nothing may be written, not even the supported name")
 	assert.Equal(t, "", dev.settings["name"])
 	assert.True(t, repo.devices[1].ConfigApplied, "a refused request leaves the flag alone")
+}
+
+func TestApplyDesiredConfig_RefusesSettingsTheConverterDrops(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		System: &SystemConfiguration{
+			Device: &TypedDeviceConfig{Name: StringPtr("tv-office")},
+			SNTP:   &SNTPConfig{Server: "ntp.example.net"},
+		},
+	})
+	dev := newFakeGen1Device()
+
+	_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+	assert.Contains(t, err.Error(), "sntp")
+	assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
+}
+
+func TestApplyDesiredConfig_MQTTPasswordNeverReadBackStillVerifies(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		MQTT: &MQTTConfiguration{
+			Enable:   BoolPtr(true),
+			Server:   StringPtr("broker.local"),
+			Port:     IntPtr(1883),
+			Password: StringPtr("s3cret"),
+		},
+	})
+	dev := newFakeGen1Device() // like a real Gen1 device, never returns mqtt.pass
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied, "a write-only secret must not keep the device pending")
+	assert.True(t, repo.devices[1].ConfigApplied)
+}
+
+func TestApplyDesiredConfig_CustomLocationDisablesAutoDetect(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		Location: &LocationConfiguration{Timezone: StringPtr("Europe/Brussels")},
+	})
+	dev := newFakeGen1Device()
+
+	_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	require.NotEmpty(t, dev.posted)
+	assert.Equal(t, false, dev.posted[0]["tzautodetect"])
+	assert.Equal(t, "Europe/Brussels", dev.posted[0]["timezone"])
+}
+
+func TestApplyDesiredConfig_SerializesPerDevice(t *testing.T) {
+	svc, _ := newServiceWithDesiredName(t, "tv-office")
+	release := svc.lockApply(1)
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = svc.ApplyDesiredConfig(context.Background(), 1, newFakeGen1Device(), "SHPLG-S")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("a second apply to the same device ran while the first held the lock")
+	case <-time.After(100 * time.Millisecond):
+	}
+	release()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the second apply did not run after the lock was released")
+	}
 }
 
 func TestApplyDesiredConfig_FailedReapplyClearsAppliedFlag(t *testing.T) {

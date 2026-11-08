@@ -44,7 +44,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		return nil, fmt.Errorf("failed to convert desired config: %w", err)
 	}
 	var apiConfig map[string]interface{}
-	if err := json.Unmarshal(apiJSON, &apiConfig); err != nil {
+	if err = json.Unmarshal(apiJSON, &apiConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse converted config: %w", err)
 	}
 
@@ -54,6 +54,20 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 			unsupported = append(unsupported, key)
 		}
 	}
+
+	// The converter drops desired settings it has no Gen1 mapping for (for example system.sntp
+	// or mqtt.update_period), so they never reach apiConfig. Convert back and report every
+	// populated desired field that did not survive the round trip.
+	back, err := converter.FromAPIConfig(apiJSON, deviceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check converted config: %w", err)
+	}
+	for _, diff := range NewConfigComparator().Compare(desired, back).Differences {
+		if diff.Actual == nil {
+			unsupported = append(unsupported, diff.Path)
+		}
+	}
+
 	sort.Strings(unsupported)
 	return unsupported, nil
 }
@@ -69,6 +83,10 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	if client.GetGeneration() != 1 {
 		return nil, fmt.Errorf("%w: generation %d", ErrUnsupportedGeneration, client.GetGeneration())
 	}
+
+	// One apply per device at a time, from the snapshot to the flag update: the compare-and-set
+	// below guards the stored configuration, this lock guards the order of writes to hardware.
+	defer s.lockApply(deviceID)()
 
 	// Snapshot first: if the desired configuration changes after this read, the final
 	// compare-and-set below fails and the newer configuration stays pending.
