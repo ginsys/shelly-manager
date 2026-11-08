@@ -181,13 +181,17 @@ function formatDate(iso: string) {
   }
 }
 
-// Each handler remembers the device it started for. After an await, a handler for a device that
-// the page has left stops: it must not reload, close or fill anything for the device on screen.
+// Counts the device changes of this page. Each handler remembers the count when it starts. After an
+// await, a handler that started before a device change stops, even when the route has come back to
+// the same id: it must not reload, close or fill anything for what is on screen now.
+let routeGeneration = 0
+
 async function handleRefresh() {
   const id = deviceId.value
+  const generation = routeGeneration
   try {
     await store.refresh(id)
-    if (deviceId.value !== id) return
+    if (routeGeneration !== generation) return
     overridesData.value = JSON.parse(JSON.stringify(store.overrides || {}))
   } catch (e: any) {
     console.error('Refresh failed:', e)
@@ -201,15 +205,16 @@ async function handleAddTemplate() {
   }
 
   const id = deviceId.value
+  const generation = routeGeneration
   try {
     await store.addTemplate(
       id, 
       newTemplateId.value, 
       newTemplatePosition.value === null ? undefined : newTemplatePosition.value
     )
-    if (deviceId.value !== id) return
+    if (routeGeneration !== generation) return
     await handleRefresh()
-    if (deviceId.value !== id) return
+    if (routeGeneration !== generation) return
     showAddTemplate.value = false
     newTemplateId.value = null
     newTemplatePosition.value = null
@@ -222,9 +227,10 @@ async function handleRemoveTemplate(templateId: number) {
   if (!confirm('Remove this template from the device?')) return
 
   const id = deviceId.value
+  const generation = routeGeneration
   try {
     await store.removeTemplate(id, templateId)
-    if (deviceId.value !== id) return
+    if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
     alert('Failed to remove template: ' + (e?.message || 'Unknown error'))
@@ -233,9 +239,10 @@ async function handleRemoveTemplate(templateId: number) {
 
 async function handleSaveOverrides() {
   const id = deviceId.value
+  const generation = routeGeneration
   try {
     await store.saveOverrides(id, overridesData.value)
-    if (deviceId.value !== id) return
+    if (routeGeneration !== generation) return
     editOverrides.value = false
     await handleRefresh()
   } catch (e: any) {
@@ -247,9 +254,10 @@ async function handleClearOverrides() {
   if (!confirm('Clear all device overrides?')) return
 
   const id = deviceId.value
+  const generation = routeGeneration
   try {
     await store.clearOverrides(id)
-    if (deviceId.value !== id) return
+    if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
     alert('Failed to clear overrides: ' + (e?.message || 'Unknown error'))
@@ -260,6 +268,7 @@ async function handleApply() {
   if (!confirm('Apply this configuration to the device? This will modify the physical device.')) return
 
   const id = deviceId.value
+  const generation = routeGeneration
   try {
     const result = await store.apply(id)
     if (result.success) {
@@ -267,7 +276,7 @@ async function handleApply() {
     } else {
       alert(`Apply completed with errors. ${result.failed_count} field(s) failed.`)
     }
-    if (deviceId.value !== id) return
+    if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
     alert('Failed to apply config: ' + (e?.message || 'Unknown error'))
@@ -290,6 +299,7 @@ onMounted(() => {
 // the new one. An empty id means the route is leaving this page, so there is nothing to load.
 watch(deviceId, (next, previous) => {
   if (!next || next === previous) return
+  routeGeneration++
   store.reset()
   overridesData.value = {}
   editOverrides.value = false
