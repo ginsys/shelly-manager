@@ -1067,8 +1067,14 @@ func TestCompareConfigurationsForDrift_IgnoresDeviceClock(t *testing.T) {
 
 	assert.Empty(t, service.compareConfigurationsForDrift(stored, current),
 		"a moved device clock is not drift")
-	assert.NotEmpty(t, service.compareConfigurations(stored, current),
-		"the audit comparator still reports everything")
+	// The audit comparator still reports both clock keys, and nothing else moved.
+	audit := service.compareConfigurations(stored, current)
+	paths := make([]string, 0, len(audit))
+	for _, diff := range audit {
+		paths = append(paths, diff.Path)
+	}
+	assert.ElementsMatch(t, []string{"time", "unixtime"}, paths,
+		"the audit comparator reports exactly the two clock keys")
 }
 
 // TestCompareConfigurationsForDrift_KeepsNestedAndEnergyMeterKeys proves the telemetry filter
