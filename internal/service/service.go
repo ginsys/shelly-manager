@@ -270,8 +270,17 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		return nil, fmt.Errorf("failed to parse settings: %w", err)
 	}
 
+	// A login saved only in the legacy settings.auth pair is a saved login too: the client
+	// builders use it, so a rejected one must be cleared the same way.
+	_, _, legacySaved := configuration.LegacyDeviceAuth(device.Settings)
+
 	// Only retry if we had saved credentials (to avoid infinite loop)
-	if settings.AuthUser != "" || settings.AuthPass != "" {
+	if settings.AuthUser != "" || settings.AuthPass != "" || legacySaved {
+		// The client builders treat a legacy pair as auth enabled; keep that for the retry, so
+		// it falls back to the provisioning login and does not go unauthenticated.
+		if legacySaved {
+			settings.AuthEnabled = true
+		}
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"device_ip": device.IP,

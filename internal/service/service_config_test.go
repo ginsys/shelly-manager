@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -663,6 +664,73 @@ func TestShellyService_getClient_RejectedSavedLoginDoesNotDeadlock(t *testing.T)
 		t.Fatal("client cache lock is still held")
 	}
 	service.clientMu.Unlock()
+}
+
+// A device that holds its login only in the legacy settings.auth pair, and now rejects it, must
+// be reached with the provisioning login, and the rejected pair must not stay stored
+// (ginsys/shelly-manager#415). Older versions did not always store auth_enabled with the pair.
+func TestShellyService_getClientWithAuthRetry_RejectedLegacyOnlyLogin(t *testing.T) {
+	for name, stored := range map[string]string{
+		"auth_enabled":    `{"gen":1,"auth_enabled":true,"auth":{"username":"legacy","password":"oldpw"}}`,
+		"no auth_enabled": `{"gen":1,"auth":{"username":"legacy","password":"oldpw"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var mu sync.Mutex
+			var users []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				user, _, _ := r.BasicAuth()
+				mu.Lock()
+				users = append(users, user)
+				mu.Unlock()
+				if user != "global" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"DCAA2E000000","auth":true,"fw":"1.14.0"}`)
+			}))
+			defer server.Close()
+
+			db := createTestDB(t)
+			cfg := createTestConfig()
+			cfg.Provisioning.AuthEnabled = true
+			cfg.Provisioning.AuthUser = "global"
+			cfg.Provisioning.AuthPassword = "globalpw"
+			service := NewService(db, cfg)
+
+			device := createTestDevice(t, db, server.URL[len("http://"):])
+			device.Settings = stored
+			if err := db.UpdateDevice(device); err != nil {
+				t.Fatal(err)
+			}
+
+			client, err := service.getClientWithAuthRetry(device)
+			if err != nil {
+				t.Fatalf("getClientWithAuthRetry failed: %v", err)
+			}
+			if _, infoErr := client.GetInfo(context.Background()); infoErr != nil {
+				t.Fatalf("the returned client still fails: %v", infoErr)
+			}
+
+			mu.Lock()
+			last := users[len(users)-1]
+			mu.Unlock()
+			if last != "global" {
+				t.Errorf("last request sent user %q, want the provisioning user global (requests: %v)", last, users)
+			}
+			updated, err := db.GetDevice(device.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var settings map[string]interface{}
+			if err := json.Unmarshal([]byte(updated.Settings), &settings); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := settings["auth"]; ok {
+				t.Errorf("the rejected legacy pair must be cleared, settings = %s", updated.Settings)
+			}
+		})
+	}
 }
 
 // A control request that the device rejects clears the saved login and retries with the
