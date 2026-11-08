@@ -378,3 +378,48 @@ func TestForcedImportRefusesATemplateScopeItCannotKeep(t *testing.T) {
 	assert.Equal(t, "SHPLG-S", template.DeviceType, "the stored row must be untouched")
 	assert.JSONEq(t, `{"mqtt":{"enable":true}}`, string(template.Config))
 }
+
+// blankIdentityData returns archive data whose one record of the named kind has a blank identity.
+func blankIdentityData(kind, identity string) *sync.ExportData {
+	data := validExportData()
+	switch kind {
+	case "device":
+		data.Devices[0].MAC = identity
+	case "template":
+		data.Templates = []sync.TemplateData{{Name: identity, DeviceType: "all", Config: map[string]interface{}{"a": 1.0}}}
+	case "discovered":
+		data.DiscoveredDevices = []sync.DiscoveredDeviceData{{MAC: identity, IP: "192.0.2.7"}}
+	}
+	return data
+}
+
+func TestValidationReportsABlankIdentityThatApplyRefuses(t *testing.T) {
+	for _, kind := range []string{"device", "template", "discovered"} {
+		for _, identity := range []string{"", "   "} {
+			for _, mode := range []string{"validate_only", "dry_run", "apply"} {
+				t.Run(kind+"/"+mode+"/"+identity, func(t *testing.T) {
+					f := newPersistFixture(t)
+					exporter := initializedPlugin(t)
+					exporter.SetExportBaseDir(f.dir)
+					exported, err := exporter.Export(context.Background(), blankIdentityData(kind, identity), sync.ExportConfig{
+						Format: "sma", Config: map[string]interface{}{"output_path": f.dir},
+					})
+					require.NoError(t, err)
+					options := sync.ImportOptions{}
+					switch mode {
+					case "validate_only":
+						options.ValidateOnly = true
+					case "dry_run":
+						options.DryRun = true
+					}
+
+					result, err := f.importFile(t, exported.OutputPath, options)
+
+					require.Error(t, err, "%s of a record with a blank identity must not report the archive valid", mode)
+					require.ErrorIs(t, err, sync.ErrInvalidImportData)
+					assert.False(t, result.Success)
+				})
+			}
+		}
+	}
+}
