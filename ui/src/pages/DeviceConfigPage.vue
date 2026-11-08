@@ -141,6 +141,23 @@
           :expand-all="true"
         />
       </div>
+
+      <div class="card live-card">
+        <div class="header-row">
+          <h2>Live on device</h2>
+          <div class="spacer" />
+          <button class="btn" data-testid="live-load" @click="handleLoadLive" :disabled="liveLoading">
+            {{ liveLoading ? 'Reading...' : liveConfig ? 'Reload from device' : 'Read from device' }}
+          </button>
+        </div>
+        <div v-if="liveError" class="live-error" data-testid="live-error">{{ liveError }}</div>
+        <div v-else-if="liveConfig" data-testid="live-config">
+          <ConfigView :config="liveConfig" :expand-all="true" />
+        </div>
+        <div v-else class="empty-state">
+          Not read yet. The device is only contacted when you click the button.
+        </div>
+      </div>
     </template>
 
     <div v-if="showAddTemplate" class="modal-overlay" @click.self="showAddTemplate = false">
@@ -169,6 +186,7 @@ import { useRoute } from 'vue-router'
 import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
+import { getCurrentDeviceConfig } from '@/api/deviceConfig'
 
 const route = useRoute()
 const store = useDeviceConfigNewStore()
@@ -188,6 +206,9 @@ const showRawJson = ref(false)
 const showAddTemplate = ref(false)
 const newTemplateId = ref<number | null>(null)
 const newTemplatePosition = ref<number | null>(null)
+const liveConfig = ref<Record<string, any> | null>(null)
+const liveError = ref<string | null>(null)
+const liveLoading = ref(false)
 
 function loadOverrides(body: Record<string, any> | null | undefined) {
   overridesData.value = JSON.parse(JSON.stringify(body || {}))
@@ -227,6 +248,30 @@ async function handleRefresh() {
     loadOverrides(store.overrides)
   } catch (e: any) {
     console.error('Refresh failed:', e)
+  }
+}
+
+// Read-only view of what the device reports now. Loaded on demand: an
+// unreachable device shows the error here and never fails the page. A read that
+// finishes after the device on screen changed belongs to the old device: it
+// fills nothing and clears nothing, because the device change already reset the panel.
+async function handleLoadLive() {
+  const id = deviceId.value
+  const generation = routeGeneration
+  liveLoading.value = true
+  liveError.value = null
+  try {
+    const record = await getCurrentDeviceConfig(id)
+    if (routeGeneration !== generation) return
+    // The endpoint returns the stored record; its "config" member holds the
+    // device settings. Fall back to the whole object for a bare payload.
+    liveConfig.value = (record?.config as Record<string, any> | undefined) ?? record
+  } catch (e: any) {
+    if (routeGeneration !== generation) return
+    liveConfig.value = null
+    liveError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read configuration from device'
+  } finally {
+    if (routeGeneration === generation) liveLoading.value = false
   }
 }
 
@@ -347,6 +392,9 @@ watch(deviceId, (next, previous) => {
   showAddTemplate.value = false
   newTemplateId.value = null
   newTemplatePosition.value = null
+  liveConfig.value = null
+  liveError.value = null
+  liveLoading.value = false
   handleRefresh()
 })
 </script>
@@ -385,6 +433,8 @@ watch(deviceId, (next, previous) => {
 
 .header-row { display: flex; align-items: center; margin-bottom: 16px; }
 .header-row h2 { margin: 0; font-size: 16px; }
+
+.live-error { padding: 12px; background: #fee2e2; color: #991b1b; border-radius: 6px; }
 
 .empty-state { padding: 24px; text-align: center; color: #64748b; background: #f9fafb; border-radius: 6px; }
 

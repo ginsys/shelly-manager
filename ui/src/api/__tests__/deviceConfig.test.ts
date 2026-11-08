@@ -25,7 +25,6 @@ import {
   applyConfigTemplate,
   getConfigHistory,
   type DeviceConfig,
-  type ConfigDrift,
   type ConfigHistoryEntry,
   type ConfigImportStatus
 } from '../deviceConfig'
@@ -278,44 +277,65 @@ describe('deviceConfig API', () => {
   })
 
   describe('detectConfigDrift', () => {
-    it('detects configuration drift', async () => {
-      const drift: ConfigDrift = {
-        hasDrift: true,
-        driftFields: ['wifi.ssid', 'mqtt.enabled'],
-        storedConfig: { wifi: { ssid: 'OldNetwork' }, mqtt: { enabled: true } },
-        liveConfig: { wifi: { ssid: 'NewNetwork' }, mqtt: { enabled: false } }
-      }
+    const respond = (data: unknown) =>
+      (api.get as any).mockResolvedValue({
+        data: { success: true, data, timestamp: new Date().toISOString() }
+      })
 
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: drift,
-          timestamp: new Date().toISOString()
-        }
+    it('maps a drift report to hasDrift and the changed paths', async () => {
+      respond({
+        device_id: 123,
+        device_name: 'Living room',
+        differences: [
+          { path: 'wifi.ssid', expected: 'Old', actual: 'New', type: 'modified' },
+          { path: 'mqtt.enabled', expected: true, actual: false, type: 'modified' }
+        ],
+        requires_action: true
       })
 
       const result = await detectConfigDrift(123)
-      expect(result.hasDrift).toBe(true)
-      expect(result.driftFields).toHaveLength(2)
+      expect(result).toEqual({ hasDrift: true, driftFields: ['wifi.ssid', 'mqtt.enabled'] })
       expect(api.get).toHaveBeenCalledWith('/devices/123/config/drift', { signal: undefined })
     })
 
-    it('returns no drift when configurations match', async () => {
-      const drift: ConfigDrift = {
-        hasDrift: false
-      }
-
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: drift,
-          timestamp: new Date().toISOString()
-        }
-      })
+    it('reports no drift for an empty differences list', async () => {
+      respond({ device_id: 123, differences: [], requires_action: false })
 
       const result = await detectConfigDrift(123)
-      expect(result.hasDrift).toBe(false)
-      expect(result.driftFields).toBeUndefined()
+      expect(result).toEqual({ hasDrift: false })
+    })
+
+    it('reports no drift for a null differences list', async () => {
+      respond({ device_id: 123, differences: null })
+
+      expect((await detectConfigDrift(123)).hasDrift).toBe(false)
+    })
+
+    it('maps the no-stored-configuration shape to no drift', async () => {
+      respond({ device_id: 123, drift: false, message: 'No stored configuration to compare' })
+
+      const result = await detectConfigDrift(123)
+      expect(result).toEqual({ hasDrift: false })
+    })
+
+    it('throws the backend message when the request fails', async () => {
+      ;(api.get as any).mockResolvedValue({
+        data: { success: false, error: { message: 'Device not responding' } }
+      })
+
+      await expect(detectConfigDrift(123)).rejects.toThrow('Device not responding')
+    })
+
+    it.each([
+      ['an empty object', {}],
+      ['drift true without a differences list', { drift: true }],
+      ['a differences value that is not a list', { differences: 'invalid' }],
+      ['a differences object', { differences: { path: 'wifi.ssid' } }],
+      ['a message without a verdict', { device_id: 123, message: 'No stored configuration to compare' }]
+    ])('rejects %s instead of showing no drift', async (_label, payload) => {
+      respond(payload)
+
+      await expect(detectConfigDrift(123)).rejects.toThrow('Unexpected configuration drift response')
     })
   })
 
