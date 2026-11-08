@@ -709,8 +709,6 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, config)
 }
 
-// GetCurrentDeviceConfig handles GET /api/v1/devices/{id}/config/current
-// Returns the current live device configuration directly from the device
 // writeDeviceReadError reports a failed read from a physical device. A device
 // that rejects our login is an upstream problem the caller can act on (fix the
 // stored credentials), so it gets 502 with a specific message instead of a
@@ -725,6 +723,8 @@ func (h *Handler) writeDeviceReadError(w http.ResponseWriter, r *http.Request, e
 	h.responseWriter().WriteInternalError(w, r, err)
 }
 
+// GetCurrentDeviceConfig handles GET /api/v1/devices/{id}/config/current
+// Returns the current live device configuration directly from the device
 func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
@@ -1412,6 +1412,14 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	if decodeErr := json.NewDecoder(r.Body).Decode(&authConfig); decodeErr != nil {
 		h.responseWriter().WriteValidationError(w, r, "Invalid auth configuration JSON")
+		return
+	}
+
+	// Both client builders need a user and a password, so a user without a password would be
+	// stored as enabled auth that is never used. An empty user is how auth is turned off.
+	if authConfig.Username != "" && authConfig.Password == "" {
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeValidationFailed,
+			"A device login needs a password; send an empty username to turn device auth off", nil)
 		return
 	}
 

@@ -417,6 +417,9 @@ All API responses follow this envelope:
 | `DEVICE_OFFLINE` | 503 | Device unreachable |
 | `CONFIGURATION_ERROR` | 400 | Config operation failed |
 | `TEMPLATE_ERROR` | 400 | Template processing error |
+| `EXTERNAL_SERVICE_ERROR` | 502 | A device rejected its stored login on a live read (`/devices/{id}/config/current` and `/current/normalized`). Store the right login with `PUT /devices/{id}/config/auth`. |
+
+`PUT /devices/{id}/config/auth` takes `{"username", "password"}`. A username with an empty password returns 400 `VALIDATION_FAILED`. An empty username turns device auth off.
 
 ---
 

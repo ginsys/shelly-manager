@@ -923,6 +923,24 @@ func TestWriteDeviceReadError(t *testing.T) {
 	}
 }
 
+// A user without a password would be stored as enabled auth that no client builder uses.
+func TestUpdateDeviceAuth_RejectsUserWithoutPassword(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
+
+	for _, body := range []string{`{"username":"admin","password":""}`, `{"username":"admin"}`} {
+		req := httptest.NewRequest("PUT", "/api/v1/devices/1/config/auth", strings.NewReader(body))
+		req = mux.SetURLVars(req, map[string]string{"id": "1"})
+		w := httptest.NewRecorder()
+		handler.UpdateDeviceAuth(w, req)
+		testutil.AssertEqual(t, http.StatusBadRequest, w.Code)
+		if !strings.Contains(w.Body.String(), "needs a password") {
+			t.Errorf("400 body should name the missing password, got %s", w.Body.String())
+		}
+	}
+}
+
 func TestGetConfigTemplates(t *testing.T) {
 	// Setup
 	db, cleanup := testutil.TestDatabase(t)
