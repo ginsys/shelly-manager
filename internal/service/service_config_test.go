@@ -489,8 +489,11 @@ func TestShellyService_UpdateDeviceAuth(t *testing.T) {
 	if settings["auth_user"] != "admin" || settings["auth_pass"] != "newpassword" {
 		t.Errorf("auth_user/auth_pass = %v/%v, want admin/newpassword", settings["auth_user"], settings["auth_pass"])
 	}
-	if _, legacy := settings["auth"]; legacy {
-		t.Error("legacy settings.auth key must not be written")
+	// The nested pair stays in step, so a forced SMA restore of an archive in the older shape
+	// keeps the login.
+	legacy, _ := settings["auth"].(map[string]interface{})
+	if legacy["username"] != "admin" || legacy["password"] != "newpassword" {
+		t.Errorf("settings.auth = %v, want the same admin/newpassword pair", settings["auth"])
 	}
 }
 
@@ -542,7 +545,7 @@ func TestShellyService_UpdateDeviceAuth_EmptyUserDisablesAuth(t *testing.T) {
 		t.Error("auth_pass must be removed when credentials are cleared")
 	}
 	if _, ok := settings["auth"]; ok {
-		t.Error("legacy settings.auth key must not remain")
+		t.Error("legacy settings.auth key must not remain, or the legacy fallback re-enables auth")
 	}
 }
 

@@ -905,18 +905,22 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 		}
 	}
 
-	// Store under the keys the client builders read (auth_enabled, auth_user,
-	// auth_pass). The old nested "auth" object was never read by anything.
-	delete(settings, "auth")
+	// Store under the keys the client builders read (auth_enabled, auth_user, auth_pass), and keep
+	// the nested "auth" pair that older versions wrote in step with them. An SMA archive in the
+	// older shape carries only "auth", redacted, and a forced restore takes its value from the
+	// stored "auth"; the builders read that pair when the flat keys are absent
+	// (configuration.LegacyDeviceAuth). Without it, such a restore drops the login.
 	// An empty user disables auth: both client builders need a user and a password.
 	if username == "" {
 		settings["auth_enabled"] = false
 		delete(settings, "auth_user")
 		delete(settings, "auth_pass")
+		delete(settings, "auth")
 	} else {
 		settings["auth_enabled"] = true
 		settings["auth_user"] = username
 		settings["auth_pass"] = password
+		settings["auth"] = map[string]string{"username": username, "password": password}
 	}
 
 	settingsJSON, err := json.Marshal(settings)
