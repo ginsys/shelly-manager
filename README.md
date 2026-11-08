@@ -61,8 +61,11 @@ Shelly Manager supports multiple export formats for backing up and sharing devic
 - **Compression**: Always GZIP; import preview also accepts raw JSON
 - **Limits**: 100 MiB normalized archive data, 10 MiB HTTP request body,
   7 MiB browser source before base64 encoding
-- **Import**: Browser and API dry-run preview only; persistence fails closed
-  with HTTP 501 until implemented
+- **Import**: The browser and `POST /api/v1/import/preview` show a dry-run
+  preview and write nothing. `POST /api/v1/import` without a preview option
+  restores devices, templates and discovered devices into the database in one
+  transaction. See [SMA format](docs/guides/sma-format.md) for matching,
+  `force_overwrite` and the limits
 
 ### Compression Options
 
