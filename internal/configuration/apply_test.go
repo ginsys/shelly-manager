@@ -365,6 +365,57 @@ func TestUnsupportedApplySettings_RelayKeys(t *testing.T) {
 	assert.NotEmpty(t, unsupported)
 }
 
+// The converted configuration carries no channel id: the list position is the channel. A
+// desired id that disagrees with its position would write another channel than the one named,
+// so the refusal check rejects it before the device is touched.
+func TestUnsupportedApplySettings_RelayIDMustMatchPosition(t *testing.T) {
+	converter := NewGen1Converter(nil)
+
+	wrongChannel := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 1, AutoOff: IntPtr(60)},
+	}}}
+	unsupported, err := unsupportedApplySettings(converter, wrongChannel, "SHSW-25")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"relay.relays[0].id"}, unsupported)
+
+	inOrder := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, AutoOff: IntPtr(60)},
+		{ID: 1, AutoOff: IntPtr(30)},
+	}}}
+	unsupported, err = unsupportedApplySettings(converter, inOrder, "SHSW-25")
+	require.NoError(t, err)
+	assert.Empty(t, unsupported)
+
+	// An id left out decodes as 0 and cannot be told from a stated 0, so a position without
+	// a stated id is taken as the channel.
+	unnamed := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{AutoOff: IntPtr(60)},
+		{AutoOff: IntPtr(30)},
+	}}}
+	unsupported, err = unsupportedApplySettings(converter, unnamed, "SHSW-25")
+	require.NoError(t, err)
+	assert.Empty(t, unsupported)
+}
+
+// A device that ignores the write and reports a null name must not pass for a desired name that
+// prints the same as nil.
+func TestApplyConfig_RelayReadBackComparesStringTypes(t *testing.T) {
+	client := newApplyTestClient()
+	client.relayLive = map[int]map[string]interface{}{0: {"name": nil}}
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+	config := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, Name: StringPtr("<nil>")},
+	}}}
+
+	result, err := applier.ApplyConfig(context.Background(), client, config, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Equal(t, 0, result.AppliedCount)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "relays[0].name", result.Failures[0].Path)
+}
+
 func TestApplyConfig_SetConfigError(t *testing.T) {
 	client := newApplyTestClient()
 	client.setErr = errors.New("device rejected settings")

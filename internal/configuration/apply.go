@@ -462,11 +462,16 @@ func relayMaps(raw interface{}) []map[string]interface{} {
 }
 
 // relayValuesEqual compares a written form value with the JSON the device returns. JSON numbers
-// arrive as float64, while the converter holds ints.
+// arrive as float64, while the converter holds ints. A string must come back as a string: a
+// null or a number that prints the same as the written text is a mismatch.
 func relayValuesEqual(written, live interface{}) bool {
 	if wf, ok := toFloat(written); ok {
 		lf, lok := toFloat(live)
 		return lok && wf == lf
+	}
+	if ws, ok := written.(string); ok {
+		ls, lok := live.(string)
+		return lok && ws == ls
 	}
 	return fmt.Sprintf("%v", written) == fmt.Sprintf("%v", live)
 }
