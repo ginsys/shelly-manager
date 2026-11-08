@@ -227,8 +227,10 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     try {
       // The caller gets the answer of this apply, whatever happens to the store while the status loads.
       const result = await applyDeviceConfigNew(deviceId)
-      if (epoch === deviceEpoch) lastApply.value = result
-      await fetchStatus(deviceId)
+      if (epoch === deviceEpoch) {
+        lastApply.value = result
+        await fetchStatus(deviceId)
+      }
       return result
     } catch (e: any) {
       if (epoch === deviceEpoch) error.value = e?.message || 'Failed to apply config'

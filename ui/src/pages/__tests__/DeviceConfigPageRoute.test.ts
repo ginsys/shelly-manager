@@ -159,6 +159,69 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
     expect((store.status as any)?.owner).toBe('device-8')
   })
 
+  it('does not load the status of the old device when its apply ends after the route changed', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.spyOn(window, 'alert').mockImplementation(() => {})
+    let releaseApply: (value: any) => void = () => {}
+    api.applyDeviceConfigNew.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseApply = resolve
+        }) as any,
+    )
+    api.getConfigStatusNew.mockImplementation(async (id: any) => ({
+      config_applied: false,
+      pending_changes: String(id) === '7',
+      owner: `device-${id}`,
+    }) as any)
+    const { wrapper, router } = await mountAt('/devices/7/config')
+    const store = useDeviceConfigNewStore()
+
+    await buttonWithText(wrapper, 'Apply Config').trigger('click')
+    await flushPromises() // the apply request of device 7 is still open
+
+    await router.push('/devices/8/config')
+    await flushPromises()
+    releaseApply({ success: true, applied_count: 1, failed_count: 0 })
+    await flushPromises()
+
+    const statusReads = api.getConfigStatusNew.mock.calls.map((c) => String(c[0]))
+    expect(statusReads.filter((id) => id === '7')).toHaveLength(1) // the read at mount only
+    expect((store.status as any)?.owner).toBe('device-8')
+    expect(store.loading).toBe(false)
+  })
+
+  it('keeps the add-template dialog of the new device when the old add ends late', async () => {
+    let releaseOld: (value: any) => void = () => {}
+    let oldTemplateReads = 0
+    api.addDeviceTemplateNew.mockResolvedValue([] as any)
+    api.getDeviceTemplatesNew.mockImplementation((id: any) => {
+      if (String(id) === '7' && ++oldTemplateReads === 2) {
+        return new Promise((resolve) => {
+          releaseOld = resolve
+        }) as any
+      }
+      return Promise.resolve({ templates: [], template_ids: [] }) as any
+    })
+    const { wrapper, router } = await mountAt('/devices/7/config')
+    const vm = wrapper.vm as any
+
+    vm.newTemplateId = 5
+    void vm.handleAddTemplate()
+    await flushPromises() // the add is done, the refresh of device 7 is still open
+
+    await router.push('/devices/8/config')
+    await flushPromises()
+    vm.showAddTemplate = true
+    vm.newTemplateId = 9
+
+    releaseOld({ templates: [], template_ids: [] })
+    await flushPromises()
+
+    expect(vm.showAddTemplate).toBe(true)
+    expect(vm.newTemplateId).toBe(9)
+  })
+
   it('keeps the edits of the new device when the old refresh fails late', async () => {
     let rejectOld: (reason: any) => void = () => {}
     api.getDeviceOverridesNew.mockImplementation((id: any) => {
