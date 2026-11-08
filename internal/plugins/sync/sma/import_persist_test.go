@@ -530,3 +530,17 @@ func TestForcedImportPlaceholdersNeverCollideWithRealAddresses(t *testing.T) {
 		assert.Equal(t, map[string]string{"aabbccdd0001": "import-hold-2", "aabbccdd0002": "192.0.2.21"}, f.deviceIPs(t))
 	})
 }
+
+func TestForcedImportReleasesAMatchedDeviceOnlyOnce(t *testing.T) {
+	f := newPersistFixture(t)
+	require.NoError(t, f.db.AddDevice(&database.Device{IP: "192.0.2.10", MAC: "aabbccdd0001", Name: "mover", Type: "switch"}))
+	data := &sync.ExportData{}
+	for i := 0; i < 200; i++ {
+		data.Devices = append(data.Devices, sync.DeviceData{ID: uint(i + 1), MAC: "aabbccdd0001", IP: "192.0.2.11", Name: "mover", Type: "switch"})
+	}
+
+	_, err := f.engine.ApplyImport(context.Background(), data, sync.ImportOptions{ForceOverwrite: true})
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"aabbccdd0001": "192.0.2.11"}, f.deviceIPs(t))
+}

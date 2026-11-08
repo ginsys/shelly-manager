@@ -128,24 +128,25 @@ func discoveredIdentityError(in DiscoveredDeviceData) error {
 // releaseOverwrittenAddresses is the first phase of a forced device import. Devices are updated
 // one at a time, so two devices that swapped addresses since the export would clash on the unique
 // IP index at the first update although the final state has no clash. This phase moves every
-// matched device whose address changes to a placeholder address of its own, inside the same
-// transaction, and the second phase then writes the archived values. A device the archive does
-// not overwrite keeps its address, so an archived address that it holds still fails the update.
-// A placeholder is never an address stored now or archived, so it cannot clash with either, and
-// it never survives: a later failure rolls the transaction back.
+// matched device whose address changes to a placeholder address of its own, once per device,
+// inside the same transaction, and the second phase then writes the archived values. A device the
+// archive does not overwrite keeps its address, so an archived address that it holds still fails
+// the update. A placeholder is never an address stored now or archived, so it cannot clash with
+// either, and it never survives: a later failure rolls the transaction back.
 func releaseOverwrittenAddresses(tx *gorm.DB, data *ExportData) error {
 	taken := make(map[string]bool, len(data.Devices))
 	for _, in := range data.Devices {
-		taken[in.IP] = true
+		taken[addressKey(in.IP)] = true
 	}
 	var stored []string
 	if err := tx.Model(&database.Device{}).Pluck("ip", &stored).Error; err != nil {
 		return fmt.Errorf("read the stored device addresses: %w", err)
 	}
 	for _, ip := range stored {
-		taken[ip] = true
+		taken[addressKey(ip)] = true
 	}
 
+	released := make(map[uint]bool, len(data.Devices))
 	for _, in := range data.Devices {
 		var existing database.Device
 		lookup := tx.Where("mac = ?", in.MAC).First(&existing)
@@ -155,19 +156,35 @@ func releaseOverwrittenAddresses(tx *gorm.DB, data *ExportData) error {
 		if lookup.Error != nil {
 			return fmt.Errorf("look up device %s: %w", in.MAC, lookup.Error)
 		}
-		if existing.IP == in.IP {
+		if existing.IP == in.IP || released[existing.ID] {
 			continue
 		}
-		hold := fmt.Sprintf("import-hold-%d", existing.ID)
-		for taken[hold] {
-			hold += "x"
-		}
-		taken[hold] = true
+		released[existing.ID] = true
+		hold := releasePlaceholder(existing.ID, taken)
 		if err := tx.Model(&database.Device{}).Where("id = ?", existing.ID).UpdateColumn("ip", hold).Error; err != nil {
 			return fmt.Errorf("release the address of device %s: %w", in.MAC, err)
 		}
 	}
 	return nil
+}
+
+// addressKey is the form in which the unique IP index compares two addresses. A case-insensitive
+// collation treats upper and lower case as equal and a PAD SPACE collation ignores trailing
+// spaces, so the key folds both and covers every provider.
+func addressKey(ip string) string {
+	return strings.ToLower(strings.TrimRight(ip, " "))
+}
+
+// releasePlaceholder returns an address for a device that is waiting for its archived address and
+// reserves it in taken. The suffix is a counter, so its length stays small however many
+// addresses are taken, and the column limit is never reached.
+func releasePlaceholder(id uint, taken map[string]bool) string {
+	hold := fmt.Sprintf("import-hold-%d", id)
+	for n := 1; taken[addressKey(hold)]; n++ {
+		hold = fmt.Sprintf("import-hold-%d-%d", id, n)
+	}
+	taken[addressKey(hold)] = true
+	return hold
 }
 
 func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {
