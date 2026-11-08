@@ -19,10 +19,12 @@ var ErrUnsupportedGeneration = errors.New("applying configuration is not support
 var ErrUnsupportedSettings = errors.New("desired configuration contains settings that cannot be applied yet")
 
 // gen1ApplyKeys are the Gen1 settings keys that apply writes correctly today: flat parameters
-// on POST /settings, and the mqtt section, which is flattened to mqtt_* parameters. Every
-// other section (wifi_sta, wifi_ap, cloud, coiot, relays, login, inputs) is refused before
-// the device is touched, because the applier would send it in a shape the device ignores.
-// Wi-Fi in particular is never written.
+// on POST /settings, the mqtt section, which is flattened to mqtt_* parameters, and the
+// relays section, which is written per channel with POST /settings/relay/<n>. Every other
+// section (wifi_sta, wifi_ap, cloud, coiot, login, inputs) is refused before the device is
+// touched, because the applier would send it in a shape the device ignores. Wi-Fi in
+// particular is never written. A relay key outside name, default_state, auto_on and auto_off
+// is refused through the round-trip check below.
 var gen1ApplyKeys = map[string]bool{
 	"name":               true,
 	"timezone":           true,
@@ -34,6 +36,7 @@ var gen1ApplyKeys = map[string]bool{
 	"led_power_disable":  true,
 	"led_status_disable": true,
 	"mqtt":               true,
+	"relays":             true,
 }
 
 // gen1ApplicablePaths are the DeviceConfiguration field paths that reach gen1ApplyKeys through

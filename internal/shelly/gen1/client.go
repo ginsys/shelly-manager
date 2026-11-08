@@ -515,6 +515,16 @@ func (c *Client) SetRelaySettings(ctx context.Context, channel int, settings map
 	return c.postForm(ctx, url, settings)
 }
 
+// GetRelaySettings reads relay-specific settings with GET /settings/relay/<channel>.
+func (c *Client) GetRelaySettings(ctx context.Context, channel int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/settings/relay/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // SetMaxPower sets the maximum power limit for PM devices
 func (c *Client) SetMaxPower(ctx context.Context, maxPower float64) error {
 	url := fmt.Sprintf("http://%s/settings/max_power", c.ip)
