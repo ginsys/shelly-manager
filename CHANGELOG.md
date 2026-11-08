@@ -158,7 +158,9 @@ All notable changes to this project are documented here. The project follows Con
   value the device did not keep is reported as a failure of that path, for
   example `relays[0].auto_off`. Other relay keys, such as `schedule`, are
   still refused with HTTP 422, and the device schema marks exactly the four
-  written fields applicable. Wi-Fi is still never written. (#387)
+  written fields applicable. Each relay `id` must equal its position in the
+  list, because the position is the channel written; any other `id` is refused
+  with HTTP 422 before the device is touched. Wi-Fi is still never written. (#387)
 - Device credentials saved with `PUT /devices/{id}/config/auth` were stored
   where no client builder reads them, and a cached client kept the old login
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`
