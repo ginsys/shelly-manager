@@ -330,6 +330,7 @@ func TestValidateOnlyWritesNothing(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.Success)
 	assert.Equal(t, true, result.Metadata["validate_only"])
+	assert.Equal(t, 0, result.RecordsImported, "nothing was imported, and the engine stores this count in history")
 	var count int64
 	require.NoError(t, f.db.GetDB().Model(&database.Device{}).Count(&count).Error)
 	assert.Equal(t, int64(0), count)
@@ -345,4 +346,35 @@ func TestBackupBeforeIsReportedAsIgnored(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, result.Warnings, "backup_before is not supported and was ignored; no backup was taken")
+}
+
+// A forced replacement keeps the stored scope, so it must be refused when the archived device type
+// cannot satisfy that scope: the stored row would break the startup check of template scopes.
+func TestForcedImportRefusesATemplateScopeItCannotKeep(t *testing.T) {
+	f := newPersistFixture(t)
+	require.NoError(t, f.db.GetDB().Create(&configuration.ConfigTemplate{
+		Name: "plug-defaults", Scope: "device_type", DeviceType: "SHPLG-S", Generation: 1,
+		Config: json.RawMessage(`{"mqtt":{"enable":true}}`), Variables: json.RawMessage(`{}`),
+	}).Error)
+
+	data := validExportData()
+	data.Templates = []sync.TemplateData{{
+		Name: "plug-defaults", DeviceType: "", Config: map[string]interface{}{"a": 1.0},
+	}}
+	exporter := initializedPlugin(t)
+	exporter.SetExportBaseDir(f.dir)
+	exported, err := exporter.Export(context.Background(), data, sync.ExportConfig{
+		Format: "sma", Config: map[string]interface{}{"output_path": f.dir},
+	})
+	require.NoError(t, err)
+
+	result, err := f.importFile(t, exported.OutputPath, sync.ImportOptions{ForceOverwrite: true})
+
+	require.Error(t, err)
+	assert.False(t, result.Success)
+	assert.Contains(t, err.Error(), "no changes were made")
+	var template configuration.ConfigTemplate
+	require.NoError(t, f.db.GetDB().Where("name = ?", "plug-defaults").First(&template).Error)
+	assert.Equal(t, "SHPLG-S", template.DeviceType, "the stored row must be untouched")
+	assert.JSONEq(t, `{"mqtt":{"enable":true}}`, string(template.Config))
 }

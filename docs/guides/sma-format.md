@@ -135,7 +135,8 @@ returns an error that says no changes were made. Records are matched like this:
 A record that already exists is left unchanged and counted in
 `records_skipped`. With `force_overwrite` it is replaced instead, with two
 exceptions. A template keeps its stored scope, because the archive does not
-carry one. A device whose archive entry has no configuration keeps the
+carry one. If the archived device type cannot satisfy that scope (a `device_type`
+template archived with no device type), the import fails and writes nothing. A device whose archive entry has no configuration keeps the
 configuration it has now. The result lists every change and a warning for
 anything that was not done.
 

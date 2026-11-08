@@ -169,6 +169,9 @@ func (s *SMAPlugin) importNormalized(ctx context.Context, data []byte, config sy
 		if err != nil {
 			return nil, err
 		}
+		// The changes stay as a preview. The count is zero: the engine stores it in import
+		// history, and nothing was imported.
+		result.RecordsImported = 0
 		result.Warnings = []string{"Validation only - the archive is valid and no changes were made"}
 		result.Metadata["dry_run"] = false
 		result.Metadata["validate_only"] = true
