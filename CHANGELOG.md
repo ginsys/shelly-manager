@@ -71,6 +71,10 @@ All notable changes to this project are documented here. The project follows Con
   `GET /devices/{id}/config/current` (was a generic 500) and from
   `/current/normalized` (was 200 with `success: false`). A username with an
   empty password is now refused with 400 `VALIDATION_FAILED`. (#376)
+- A device that holds its login only in the old `auth.username`/`auth.password`
+  pair, and rejects it, is now reached with the provisioning login on live
+  configuration reads (was 502 on every read), and the rejected pair is
+  cleared. (#415)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`
