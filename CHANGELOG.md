@@ -75,6 +75,12 @@ All notable changes to this project are documented here. The project follows Con
   pair, and rejects it, is now reached with the provisioning login on live
   configuration reads (was 502 on every read), and the rejected pair is
   cleared. (#415)
+- An SMA import now also writes a restored device's configuration to the
+  `device_configs` table, with sync status `pending`. Before, it wrote only
+  `devices.desired_config`, so after a restore the configuration endpoint
+  answered 500, the import status read `not_imported` and drift detection was
+  disabled. A forced import updates the existing row in place and keeps its
+  template. (#411)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`

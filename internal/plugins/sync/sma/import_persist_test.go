@@ -12,6 +12,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 	"github.com/ginsys/shelly-manager/internal/sync"
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
@@ -249,6 +250,31 @@ func TestForcedImportKeepsSecretsFromTheLegacyConfigurationRow(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
 	assert.JSONEq(t, legacy, device.DesiredConfig, "the legacy row's password must survive the replacement")
+}
+
+// A forced import replaces the desired configuration, so the row the configuration service reads
+// must follow it: new content, "pending", and the template link kept (ginsys/shelly-manager#411).
+func TestForcedImportUpdatesTheConfigurationRowAndKeepsItsTemplate(t *testing.T) {
+	f := newPersistFixture(t)
+	f.seed(t)
+	archive := f.export(t)
+	var device database.Device
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	templateID := uint(7)
+	require.NoError(t, f.db.GetDB().Create(&configuration.DeviceConfig{
+		DeviceID: device.ID, TemplateID: &templateID, Config: json.RawMessage(`{"old":true}`), SyncStatus: "synced",
+	}).Error)
+
+	_, err := f.importFile(t, archive, sync.ImportOptions{ForceOverwrite: true})
+	require.NoError(t, err)
+
+	var rows []configuration.DeviceConfig
+	require.NoError(t, f.db.GetDB().Where("device_id = ?", device.ID).Find(&rows).Error)
+	require.Len(t, rows, 1, "the row is updated in place, never duplicated")
+	assert.JSONEq(t, persistDesiredConfig, string(rows[0].Config))
+	assert.Equal(t, "pending", rows[0].SyncStatus)
+	require.NotNil(t, rows[0].TemplateID)
+	assert.Equal(t, templateID, *rows[0].TemplateID)
 }
 
 func TestForcedImportKeepsTemplateScopeAndReportsOldValues(t *testing.T) {
@@ -543,4 +569,54 @@ func TestForcedImportReleasesAMatchedDeviceOnlyOnce(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"aabbccdd0001": "192.0.2.11"}, f.deviceIPs(t))
+}
+
+// replayClient answers the two device calls the configuration service makes with a fixed configuration.
+// The embedded interface is nil on purpose: any other call panics, so the test notices if the service starts
+// reaching for the device elsewhere.
+type replayClient struct {
+	shelly.Client
+	raw json.RawMessage
+}
+
+func (c replayClient) GetInfo(context.Context) (*shelly.DeviceInfo, error) {
+	return &shelly.DeviceInfo{Generation: 2, Model: "SHPLG-S"}, nil
+}
+
+func (c replayClient) GetConfig(context.Context) (*shelly.DeviceConfig, error) {
+	return &shelly.DeviceConfig{Raw: c.raw}, nil
+}
+
+func (f *persistFixture) configService(t *testing.T) *configuration.Service {
+	t.Helper()
+	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+	require.NoError(t, err)
+	return configuration.NewService(f.db.GetDB(), logger)
+}
+
+// A restored device must be readable through the configuration service, which reads device_configs,
+// not only through devices.desired_config (ginsys/shelly-manager#411).
+func TestRestoredDeviceConfigurationIsReadableAndDriftCheckable(t *testing.T) {
+	f := newPersistFixture(t)
+	f.seed(t)
+	archive := f.export(t)
+	f.wipe(t)
+	_, err := f.importFile(t, archive, sync.ImportOptions{})
+	require.NoError(t, err)
+
+	var device database.Device
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	service := f.configService(t)
+
+	stored, err := service.GetDeviceConfig(device.ID)
+	require.NoError(t, err, "the configuration endpoint answered 500 after a restore")
+	assert.JSONEq(t, persistDesiredConfig, string(stored.Config))
+
+	status, err := service.GetImportStatus(device.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "pending", status.Status, "a restored configuration has not reached the device")
+
+	drift, err := service.DetectDrift(device.ID, replayClient{raw: json.RawMessage(persistDesiredConfig)})
+	require.NoError(t, err, "drift detection was disabled after a restore")
+	assert.Nil(t, drift, "a device that still runs the restored configuration has not drifted")
 }
