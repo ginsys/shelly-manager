@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -37,7 +38,14 @@ type Handler struct {
 	AdminAPIKey string
 	// Version/banner support
 	serverStartedAt time.Time
+	// background tracks goroutines that handlers start after they answer, such as the cleanup
+	// of expired discovered devices.
+	background sync.WaitGroup
 }
+
+// WaitBackground blocks until the background work that handlers started has finished. Call it
+// before closing the database the handlers use, so that work never reads a closed database.
+func (h *Handler) WaitBackground() { h.background.Wait() }
 
 // NewHandler creates a new API handler
 func NewHandler(db database.DatabaseInterface, svc *service.ShellyService, notificationHandler *notification.Handler) *Handler {

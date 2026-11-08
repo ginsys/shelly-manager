@@ -157,6 +157,11 @@ All notable changes to this project are documented here. The project follows Con
   button) it kept the first device id, so apply, verify, save and template
   changes went to the wrong device. The page now reloads, closes the editor, and
   ignores a late answer for the device it left. (#400)
+- `GET /provisioner/discovered-devices` started a cleanup goroutine that
+  nothing waited for, so `TestDiscoveredDevicesDatabaseIntegration` failed at
+  random under `go test -race` when the test closed the database while the
+  cleanup still read it. The handler now tracks that work, and
+  `Handler.WaitBackground` waits for it before the database is closed. (#366)
 - `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
   `database.dsn` default always won, so unless `dsn` was set explicitly every
   SQLite run used `data/shelly.db` whatever `path` said. `dsn` still takes
