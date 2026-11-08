@@ -454,9 +454,10 @@ All API responses follow this envelope:
 - Every request needs a `User-Agent` header. An empty one is treated as an
   attack signal: the request fails with `400 VALIDATION_FAILED` and the security
   monitor counts it as suspicious activity from that client IP, which it can
-  block. Standard clients (browsers, `curl`, `wget`,
-  `python-requests`, Go and Node HTTP clients) already send one. Known scanner
-  names such as `sqlmap` or `nmap` are refused too.
+  block. Browsers, `curl`, `wget`, `python-requests`, `axios`, `node-fetch` and
+  Go's `net/http` send one by default. Node's core `http` module does not, so a
+  client built on it must set one. Known scanner names such as `sqlmap` or
+  `nmap` are refused too.
 - `POST`, `PUT` and `PATCH` requests need a `Content-Type` header. A missing one
   fails with `400 VALIDATION_FAILED`.
 - A client that sends no `User-Agent` (for example `curl -H 'User-Agent:'`) must

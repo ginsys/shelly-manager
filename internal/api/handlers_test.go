@@ -597,9 +597,10 @@ func TestAPIRouter(t *testing.T) {
 	}
 }
 
-// POST /api/v1/discover starts a real network discovery in the background, so it stays out of
-// the short suite. The network is a reserved documentation range, so a local run never scans
-// the LAN.
+// POST /api/v1/discover starts a real network discovery in the background: it scans the
+// network in the request and also runs mDNS on the local network, which the request cannot
+// limit. It stays out of the short suite that CI runs, and a local run reaches the LAN. The
+// request names a reserved documentation range only to keep the address scan itself small.
 func TestAPIRouterDiscover(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping network test in short mode")
