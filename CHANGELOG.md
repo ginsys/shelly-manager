@@ -32,7 +32,8 @@ All notable changes to this project are documented here. The project follows Con
   normalized-data limit, strict JSON/schema/number/depth validation, joined
   persisted device settings/configurations and templates, and atomic
   publication. Raw JSON is accepted only as an import representation.
-  Non-dry-run persistence remains unavailable and fails with HTTP 501. (#268)
+  A non-preview import restores devices, templates and discovered devices in
+  one transaction (#284). (#268)
 - Export/import audit identity uses trimmed `X-User-ID`, then `X-User`, and
   otherwise `api`; credentials and network addresses are never recorded as the
   requester. (#268)
@@ -142,11 +143,11 @@ All notable changes to this project are documented here. The project follows Con
 - SMA non-dry-run import no longer fakes success. `performImport` and its
   per-entity helpers were placeholders that returned `success: true` with a
   positive `records_imported` count while writing nothing, so a restore reported
-  success but silently lost data. Persistence is not built yet (a larger
-  follow-up), so a real import now fails closed: the generic import endpoint
-  returns `501 Not Implemented` (`NOT_IMPLEMENTED`) instead of a fabricated
-  success or an opaque `500`. Dry-run preview is unchanged. Building the actual
-  persistence is tracked separately in #284. (#272)
+  success but silently lost data. Persistence was not built yet (a larger
+  follow-up), so a real import failed closed: the generic import endpoint
+  returned `501 Not Implemented` (`NOT_IMPLEMENTED`) instead of a fabricated
+  success or an opaque `500`. Dry-run preview was unchanged. The actual
+  persistence replaced that 501 in #284. (#272)
 - Existing databases could not start the server after upgrading: AutoMigrate
   emitted `ALTER TABLE config_templates ADD scope text NOT NULL`, which SQLite
   refuses on a populated table and PostgreSQL rejects for the NULLs it would
