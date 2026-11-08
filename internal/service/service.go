@@ -384,11 +384,13 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	}
 
 	// Create new client based on generation
+	// The cache lock is released once the client is cached: the connection test and the retry
+	// below run without it, because the retry takes the lock again.
 	s.clientMu.Lock()
-	defer s.clientMu.Unlock()
 
 	// Check again in case another goroutine created it
 	if client, exists = s.clients[device.IP]; exists {
+		s.clientMu.Unlock()
 		return client, nil
 	}
 
@@ -450,6 +452,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		client = gen2.NewClient(device.IP, opts...)
 
 	default:
+		s.clientMu.Unlock()
 		return nil, fmt.Errorf("unsupported device generation: %d", settings.Gen)
 	}
 
@@ -494,6 +497,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 
 	// Cache the client
 	s.clients[device.IP] = client
+	s.clientMu.Unlock()
 
 	// Test the client works
 	testCtx, testCancel := context.WithTimeout(context.Background(), 2*time.Second)
