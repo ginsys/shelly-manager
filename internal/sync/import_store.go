@@ -227,6 +227,9 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 			if err := tx.Create(&device).Error; err != nil {
 				return fmt.Errorf("create device %s: %w", in.MAC, err)
 			}
+			if err := writeDeviceConfigRow(tx, device.ID, desired); err != nil {
+				return fmt.Errorf("device %s configuration row: %w", in.MAC, err)
+			}
 			result.Imported++
 			result.Changes = append(result.Changes, ImportChange{
 				Type: "create", Resource: "device", ResourceID: in.MAC,
@@ -250,6 +253,9 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 			oldValue := fmt.Sprintf("Device: %s (%s)", existing.Name, existing.Type)
 			if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 				return fmt.Errorf("update device %s: %w", in.MAC, err)
+			}
+			if err := writeDeviceConfigRow(tx, existing.ID, desired); err != nil {
+				return fmt.Errorf("device %s configuration row: %w", in.MAC, err)
 			}
 			result.Imported++
 			result.Changes = append(result.Changes, ImportChange{
@@ -398,6 +404,32 @@ func storedDesiredConfig(tx *gorm.DB, device database.Device) string {
 		return device.DesiredConfig
 	}
 	return string(legacy.Config)
+}
+
+// writeDeviceConfigRow keeps the device_configs row in step with a desired configuration the
+// import wrote to devices.desired_config. The configuration service (read, import status, drift
+// detection) reads only that table, so a restored device without a row answered 500 and could not
+// be drift-checked. The row is "pending", like config_applied=false: the device has not received
+// it. An existing row keeps its template. Nothing happens for an empty configuration, or when the
+// installation has no device_configs table.
+func writeDeviceConfigRow(tx *gorm.DB, deviceID uint, desired string) error {
+	if strings.TrimSpace(desired) == "" || !tx.Migrator().HasTable(&configuration.DeviceConfig{}) {
+		return nil
+	}
+	var row configuration.DeviceConfig
+	err := tx.Where("device_id = ?", deviceID).First(&row).Error
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return tx.Create(&configuration.DeviceConfig{
+			DeviceID: deviceID, Config: json.RawMessage(desired), SyncStatus: "pending",
+		}).Error
+	case err != nil:
+		return err
+	default:
+		return tx.Model(&row).Updates(map[string]interface{}{
+			"config": json.RawMessage(desired), "sync_status": "pending",
+		}).Error
+	}
 }
 
 // restoreObject returns the JSON text of m with each redacted value replaced by the one in the
