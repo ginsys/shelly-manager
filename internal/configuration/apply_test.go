@@ -386,15 +386,19 @@ func TestUnsupportedApplySettings_RelayIDMustMatchPosition(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, unsupported)
 
-	// An id left out decodes as 0 and cannot be told from a stated 0, so a position without
-	// a stated id is taken as the channel.
-	unnamed := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
-		{AutoOff: IntPtr(60)},
-		{AutoOff: IntPtr(30)},
-	}}}
-	unsupported, err = unsupportedApplySettings(converter, unnamed, "SHSW-25")
-	require.NoError(t, err)
-	assert.Empty(t, unsupported)
+	// An id left out decodes as 0 and cannot be told from a stated 0, so the rule is strict:
+	// a second entry with id 0 (stated or left out) would write channel 1 while naming channel 0,
+	// and the final verification would then fail on the id. Both forms are refused.
+	for name, relays := range map[string][]SingleRelayConfig{
+		"id left out":   {{AutoOff: IntPtr(60)}, {AutoOff: IntPtr(30)}},
+		"stated zero":   {{ID: 0}, {ID: 0, AutoOff: IntPtr(60)}},
+		"id out of run": {{ID: 0, AutoOff: IntPtr(60)}, {ID: 2, AutoOff: IntPtr(30)}},
+	} {
+		cfg := &DeviceConfiguration{Relay: &RelayConfig{Relays: relays}}
+		unsupported, err = unsupportedApplySettings(converter, cfg, "SHSW-25")
+		require.NoError(t, err, name)
+		assert.Equal(t, []string{"relay.relays[1].id"}, unsupported, name)
+	}
 }
 
 // A device that ignores the write and reports a null name must not pass for a desired name that
