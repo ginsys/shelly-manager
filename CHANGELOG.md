@@ -80,6 +80,11 @@ All notable changes to this project are documented here. The project follows Con
   separately as #279. (#270)
 
 ### Fixed
+- A forced SMA import (`force_overwrite`) now restores devices that swapped IP
+  addresses since the export. Before, the first update broke the unique IP index
+  and the whole import failed. The import frees the address of every device it
+  overwrites inside the transaction, then writes the archived addresses; an
+  address that a device outside the archive holds still fails the import. (#397)
 - SMA `validate_only` and `dry_run` imports now refuse an archive with a device
   or discovered device without a MAC address, or a template without a name.
   Before, they reported the archive valid and the apply refused it. One shared

@@ -137,8 +137,11 @@ A record that already exists is left unchanged and counted in
 exceptions. A template keeps its stored scope, because the archive does not
 carry one. If the archived device type cannot satisfy that scope (a `device_type`
 template archived with no device type), the import fails and writes nothing. A device whose archive entry has no configuration keeps the
-configuration it has now. The result lists every change and a warning for
-anything that was not done.
+configuration it has now. Devices that swapped IP addresses since the export
+are restored: the import frees the address of every device it overwrites before
+it writes the archived addresses. An archived address that a device outside the
+archive still holds fails the import and writes nothing. The result lists every
+change and a warning for anything that was not done.
 
 An export redacts sensitive values by default and writes `[REDACTED]` in their
 place. The import never stores that text. A replaced record keeps the value it

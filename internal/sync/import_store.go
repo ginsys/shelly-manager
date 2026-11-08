@@ -125,7 +125,40 @@ func discoveredIdentityError(in DiscoveredDeviceData) error {
 	return nil
 }
 
+// releaseOverwrittenAddresses is the first phase of a forced device import. Devices are updated
+// one at a time, so two devices that swapped addresses since the export would clash on the unique
+// IP index at the first update although the final state has no clash. This phase moves every
+// matched device whose address changes to a placeholder address of its own, inside the same
+// transaction, and the second phase then writes the archived values. A device the archive does
+// not overwrite keeps its address, so an archived address that it holds still fails the update.
+// The placeholder never survives: a later failure rolls the transaction back.
+func releaseOverwrittenAddresses(tx *gorm.DB, data *ExportData) error {
+	for _, in := range data.Devices {
+		var existing database.Device
+		lookup := tx.Where("mac = ?", in.MAC).First(&existing)
+		if errors.Is(lookup.Error, gorm.ErrRecordNotFound) {
+			continue
+		}
+		if lookup.Error != nil {
+			return fmt.Errorf("look up device %s: %w", in.MAC, lookup.Error)
+		}
+		if existing.IP == in.IP {
+			continue
+		}
+		hold := fmt.Sprintf("import-hold-%d", existing.ID)
+		if err := tx.Model(&database.Device{}).Where("id = ?", existing.ID).UpdateColumn("ip", hold).Error; err != nil {
+			return fmt.Errorf("release the address of device %s: %w", in.MAC, err)
+		}
+	}
+	return nil
+}
+
 func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {
+	if opts.ForceOverwrite {
+		if err := releaseOverwrittenAddresses(tx, data); err != nil {
+			return err
+		}
+	}
 	for _, in := range data.Devices {
 		if err := deviceIdentityError(in); err != nil {
 			return err
