@@ -204,7 +204,21 @@ func (a *ConfigApplier) applyMainSettings(ctx context.Context, client ShellyClie
 		return nil
 	}
 
-	if err := client.SetConfig(ctx, mainSettings); err != nil {
+	// A custom timezone or location only takes effect once the device's automatic detection
+	// is off. The prerequisite is sent with them but is not a desired setting, so it is not
+	// counted.
+	write := make(map[string]interface{}, len(mainSettings)+1)
+	for key, val := range mainSettings {
+		write[key] = val
+	}
+	for _, key := range []string{"timezone", "lat", "lng"} {
+		if _, ok := mainSettings[key]; ok {
+			write["tzautodetect"] = false
+			break
+		}
+	}
+
+	if err := client.SetConfig(ctx, write); err != nil {
 		for key := range mainSettings {
 			result.Failures = append(result.Failures, ApplyFailure{
 				Path:  key,

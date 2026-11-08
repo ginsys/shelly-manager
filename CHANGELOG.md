@@ -78,7 +78,11 @@ All notable changes to this project are documented here. The project follows Con
   cloud, CoIoT, relays, login, inputs) returns HTTP 422 naming the settings,
   and nothing is written. Apply clears `config_applied` before writing, and a
   desired configuration edited during the apply leaves the device pending.
-  The device model is read from the stored device settings. (#375)
+  Settings the converter has no Gen1 mapping for (for example SNTP) are also
+  refused. Applies to one device run one at a time, apply needs the admin key,
+  the write-only MQTT password is not compared on read-back, and a custom
+  timezone or location also switches off automatic detection. The device model
+  is read from the stored device settings. (#375)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`

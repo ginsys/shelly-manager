@@ -10,8 +10,8 @@ import (
 const redactedValue = "[redacted]"
 
 // secretKeyFragments mark a configuration key as holding a secret: password, pass, passphrase,
-// psk, secret, token. Matching is on the lowercased key.
-var secretKeyFragments = []string{"pass", "psk", "secret", "token"}
+// psk, secret, token, key (the Wi-Fi access point key, API keys). Matching is on the lowercased key.
+var secretKeyFragments = []string{"pass", "psk", "secret", "token", "key"}
 
 func isSecretKey(key string) bool {
 	key = strings.ToLower(key)
