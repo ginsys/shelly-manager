@@ -30,6 +30,10 @@ var defaultCompareRules = []FieldCompareRule{
 	{Path: "system.firmware", SkipCompare: true},
 	{Path: "system.fw_id", SkipCompare: true},
 
+	// Write-only secret: Gen1 GET /settings never returns the MQTT password, so a read-back can
+	// never equal what was written.
+	{Path: "mqtt.pass", SkipCompare: true},
+
 	// Tolerance for coordinates (about 10 meters)
 	{Path: "location.latitude", Tolerance: 0.0001, Category: "system"},
 	{Path: "location.longitude", Tolerance: 0.0001, Category: "system"},

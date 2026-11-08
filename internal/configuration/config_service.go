@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -73,6 +74,18 @@ type ConfigurationService struct {
 	repo   ConfigRepository
 	merger Merger
 	logger *logging.Logger
+
+	// applyLocks holds one *sync.Mutex per device ID. It serializes applies to the same
+	// device so a slow apply cannot overwrite a newer one and leave the flag claiming applied.
+	applyLocks sync.Map
+}
+
+// lockApply serializes applies to one device and returns the unlock function.
+func (s *ConfigurationService) lockApply(deviceID uint) func() {
+	m, _ := s.applyLocks.LoadOrStore(deviceID, &sync.Mutex{})
+	mu := m.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }
 
 type ConfigStatus struct {
