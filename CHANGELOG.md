@@ -98,7 +98,9 @@ All notable changes to this project are documented here. The project follows Con
   refused. Applies to one device run one at a time, apply needs the admin key,
   the write-only MQTT password is not compared on read-back, and a custom
   timezone or location also switches off automatic detection. The device model
-  is read from the stored device settings. (#375)
+  is read from the stored device settings. A device that rejects the login
+  during the write returns HTTP 502, and a refused write names the setting but
+  not the device's error text, which can echo the value sent. (#375)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`

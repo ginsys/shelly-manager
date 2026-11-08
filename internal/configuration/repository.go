@@ -252,12 +252,23 @@ func (r *GormConfigRepository) SetDeviceConfigApplied(deviceID uint, applied boo
 // newer configuration stays pending.
 func (r *GormConfigRepository) SetDeviceConfigAppliedIfDesired(deviceID uint, desiredConfig string) (bool, error) {
 	res := r.db.Model(&DbDevice{}).
-		Where("id = ? AND COALESCE(desired_config, '') = ?", deviceID, desiredConfig).
+		Where(desiredConfigMatchCondition(r.db.Dialector.Name()), deviceID, desiredConfig).
 		Update("config_applied", true)
 	if res.Error != nil {
 		return false, fmt.Errorf("failed to set device config applied: %w", res.Error)
 	}
 	return res.RowsAffected > 0, nil
+}
+
+// desiredConfigMatchCondition is the WHERE clause of SetDeviceConfigAppliedIfDesired. The
+// comparison must be byte-exact: MySQL compares text with the column collation, which is often
+// case-insensitive, so a desired name changed from "office" to "Office" during an apply would
+// still match. SQLite and PostgreSQL compare text exactly by default.
+func desiredConfigMatchCondition(dialect string) string {
+	if dialect == "mysql" {
+		return "id = ? AND BINARY COALESCE(desired_config, '') = ?"
+	}
+	return "id = ? AND COALESCE(desired_config, '') = ?"
 }
 
 // Tag operations

@@ -404,14 +404,14 @@ func (s *ConfigurationService) GetDesiredConfig(deviceID uint) (*DeviceConfigura
 		return &DeviceConfiguration{}, map[string]string{}, nil
 	}
 
-	var config DeviceConfiguration
-	if unmarshalErr := json.Unmarshal([]byte(device.DesiredConfig), &config); unmarshalErr != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal desired config: %w", unmarshalErr)
+	config, err := parseDesiredConfig(device.DesiredConfig)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	templates, err := s.GetDeviceTemplates(deviceID)
 	if err != nil {
-		return &config, map[string]string{}, nil
+		return config, map[string]string{}, nil
 	}
 
 	layers := make([]ConfigLayer, 0, len(templates)+1)
@@ -429,15 +429,28 @@ func (s *ConfigurationService) GetDesiredConfig(deviceID uint) (*DeviceConfigura
 	}
 
 	if len(layers) == 0 {
-		return &config, map[string]string{}, nil
+		return config, map[string]string{}, nil
 	}
 
 	result, mergeErr := s.merger.Merge(layers)
 	if mergeErr != nil {
-		return &config, map[string]string{}, nil
+		return config, map[string]string{}, nil
 	}
 
-	return &config, result.Sources, nil
+	return config, result.Sources, nil
+}
+
+// parseDesiredConfig decodes a stored desired configuration. An empty value, or an empty
+// object, is an empty configuration.
+func parseDesiredConfig(raw string) (*DeviceConfiguration, error) {
+	if raw == "" || raw == "{}" {
+		return &DeviceConfiguration{}, nil
+	}
+	var config DeviceConfiguration
+	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal desired config: %w", err)
+	}
+	return &config, nil
 }
 
 func (s *ConfigurationService) RecomputeDesiredConfig(deviceID uint) error {

@@ -65,3 +65,28 @@ func TestRedactDifference_NilStaysNil(t *testing.T) {
 	assert.Nil(t, expected)
 	assert.Nil(t, actual)
 }
+
+// The device's own error text can echo the value it was sent; it must not reach the caller.
+func TestApplyFailureMessages_HideDeviceErrorText(t *testing.T) {
+	result := &configuration.ApplyVerifyResult{
+		ApplyResult: &configuration.ApplyResult{
+			Failures: []configuration.ApplyFailure{
+				{Path: "mqtt", Value: "mqtt_pass,mqtt_server", Error: "invalid mqtt_pass: s3cret at http://10.0.0.5/settings"},
+			},
+		},
+	}
+
+	failures := applyFailureMessages(result)
+
+	require.Len(t, failures, 1)
+	assert.Equal(t, "mqtt: the device refused the write", failures[0])
+	assert.NotContains(t, failures[0], "s3cret")
+	assert.NotContains(t, failures[0], "10.0.0.5")
+}
+
+func TestApplyFailureMessages_EmptyIsNotNil(t *testing.T) {
+	failures := applyFailureMessages(&configuration.ApplyVerifyResult{})
+
+	assert.NotNil(t, failures, "the response always carries a failures list")
+	assert.Empty(t, failures)
+}
