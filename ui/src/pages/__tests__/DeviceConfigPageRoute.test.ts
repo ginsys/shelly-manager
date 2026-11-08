@@ -222,6 +222,31 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
     expect(vm.newTemplateId).toBe(9)
   })
 
+  it('keeps the edits after the route returns to the first device and its old refresh ends', async () => {
+    let releaseFirst: (value: any) => void = () => {}
+    let reads = 0
+    api.getDeviceOverridesNew.mockImplementation((id: any) => {
+      if (String(id) === '7' && ++reads === 1) {
+        return new Promise((resolve) => {
+          releaseFirst = resolve
+        }) as any
+      }
+      return Promise.resolve({ overrides: { owner: `device-${id}` } }) as any
+    })
+    const { wrapper, router } = await mountAt('/devices/7/config')
+
+    await router.push('/devices/8/config')
+    await flushPromises()
+    await router.push('/devices/7/config')
+    await flushPromises()
+    ;(wrapper.vm as any).overridesData = { draft: true }
+
+    releaseFirst({ overrides: { owner: 'device-7' } })
+    await flushPromises()
+
+    expect((wrapper.vm as any).overridesData).toEqual({ draft: true })
+  })
+
   it('keeps the edits of the new device when the old refresh fails late', async () => {
     let rejectOld: (reason: any) => void = () => {}
     api.getDeviceOverridesNew.mockImplementation((id: any) => {
