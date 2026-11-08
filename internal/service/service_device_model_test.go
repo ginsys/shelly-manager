@@ -21,7 +21,7 @@ func TestDeviceModel(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, deviceModel(&tc.device))
+			assert.Equal(t, tc.want, DeviceModel(&tc.device))
 		})
 	}
 }

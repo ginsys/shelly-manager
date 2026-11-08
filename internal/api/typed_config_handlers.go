@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/service"
 )
 
 // TypedConfigurationRequest represents a typed configuration request
@@ -375,11 +377,50 @@ func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, response)
 }
 
-// GetConfigurationSchema handles GET /api/v1/configuration/schema
+// GetConfigurationSchema handles GET /api/v1/config/schema.
+//
+// With ?device_type=<model> or ?device_id=<id> it returns the schema of the configuration stored
+// for that model (configuration.GetDeviceConfigurationSchema): only the model's sections, only
+// stored fields, and each field marked x-applicable when apply can write it. device_id resolves
+// the model the way apply does. Without either parameter it returns the generic schema.
 func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request) {
-	schema := configuration.GetConfigurationSchema()
+	query := r.URL.Query()
+	deviceType := query.Get("device_type")
 
-	h.responseWriter().WriteSuccess(w, r, schema)
+	if idParam := query.Get("device_id"); idParam != "" {
+		if deviceType != "" {
+			h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+				"Use device_type or device_id, not both", nil)
+			return
+		}
+		id, err := strconv.ParseUint(idParam, 10, 32)
+		if err != nil {
+			h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+			return
+		}
+		device, err := h.DB.GetDevice(uint(id))
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				h.responseWriter().WriteNotFoundError(w, r, "Device")
+			} else {
+				h.responseWriter().WriteInternalError(w, r, err)
+			}
+			return
+		}
+		deviceType = service.DeviceModel(device)
+		if deviceType == "" {
+			// An empty model would read as "no parameter" below and return the generic schema,
+			// whose fields are not all stored. A device without a model gets the unsupported-model
+			// schema instead.
+			deviceType = "unknown"
+		}
+	}
+
+	if deviceType == "" {
+		h.responseWriter().WriteSuccess(w, r, configuration.GetConfigurationSchema())
+		return
+	}
+	h.responseWriter().WriteSuccess(w, r, configuration.GetDeviceConfigurationSchema(deviceType))
 }
 
 // BulkValidateConfigs handles POST /api/v1/configuration/bulk-validate
