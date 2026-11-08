@@ -96,6 +96,7 @@ components:
             - DEVICE_OFFLINE
             - CONFIGURATION_ERROR
             - TEMPLATE_ERROR
+            - EXTERNAL_SERVICE_ERROR
         message:
           type: string
         details:
@@ -1048,6 +1049,85 @@ paths:
       responses:
         '200':
           description: Current device configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '502':
+          description: >-
+            The device rejected the stored login (error code EXTERNAL_SERVICE_ERROR).
+            Store the right login with PUT /api/v1/devices/{id}/config/auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/current/normalized:
+    get:
+      tags: [Configuration]
+      summary: Get current live configuration from device, normalized
+      operationId: getCurrentDeviceConfigNormalized
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Normalized current device configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '502':
+          description: >-
+            The device rejected the stored login (error code EXTERNAL_SERVICE_ERROR).
+            Store the right login with PUT /api/v1/devices/{id}/config/auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/auth:
+    put:
+      tags: [Configuration]
+      summary: Store the login the manager uses to reach the device
+      operationId: updateDeviceAuth
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: An empty username turns device auth off.
+                password:
+                  type: string
+                  description: Required when username is set.
+      responses:
+        '200':
+          description: Login stored; a cached device client is dropped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: Invalid device ID or JSON, or a username without a password (VALIDATION_FAILED)
           content:
             application/json:
               schema:
