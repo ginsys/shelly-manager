@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
@@ -564,6 +565,49 @@ func TestShellyService_UpdateDeviceAuth_PasswordWithoutUserDisablesAuth(t *testi
 	}
 	if _, ok := settings["auth_pass"]; ok {
 		t.Error("auth_pass must not be stored without a user")
+	}
+}
+
+// A device whose credentials were stored in the legacy settings.auth shape must be reached with
+// those credentials, not with the global provisioning credentials.
+func TestShellyService_getClient_UsesLegacyDeviceCredentials(t *testing.T) {
+	var mu sync.Mutex
+	var seen []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, _ := r.BasicAuth()
+		mu.Lock()
+		seen = append(seen, user+":"+pass)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"DCAA2E000000","auth":true,"fw":"1.14.0"}`)
+	}))
+	defer server.Close()
+
+	db := createTestDB(t)
+	cfg := createTestConfig()
+	cfg.Provisioning.AuthEnabled = true
+	cfg.Provisioning.AuthUser = "global"
+	cfg.Provisioning.AuthPassword = "globalpw"
+	service := NewService(db, cfg)
+
+	device := createTestDevice(t, db, server.URL[len("http://"):])
+	device.Settings = `{"gen":1,"auth":{"username":"legacy","password":"legacypw"}}`
+	if err := db.UpdateDevice(device); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.getClientWithRetry(device, false); err != nil {
+		t.Fatalf("getClientWithRetry failed: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) == 0 {
+		t.Fatal("the client sent no request to the device")
+	}
+	for _, got := range seen {
+		if got != "legacy:legacypw" {
+			t.Errorf("request sent credentials %q, want legacy:legacypw", got)
+		}
 	}
 }
 
