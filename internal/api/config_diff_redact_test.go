@@ -44,6 +44,21 @@ func TestRedactDifference_WholeSectionIsMaskedKeyByKey(t *testing.T) {
 	assert.Contains(t, string(raw), redactedValue)
 }
 
+func TestRedactDifference_AccessPointKeyIsMasked(t *testing.T) {
+	_, expected, _ := redactDifference(configuration.ConfigDifference{
+		Path: "wifi.ap.key", Expected: "ap-secret", Actual: "old-ap-secret",
+	})
+	assert.Equal(t, redactedValue, expected)
+
+	_, section, _ := redactDifference(configuration.ConfigDifference{
+		Path:     "wifi.ap",
+		Expected: map[string]interface{}{"ssid": "net", "key": "ap-secret"},
+	})
+	raw, err := json.Marshal(section)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "ap-secret")
+}
+
 func TestRedactDifference_NilStaysNil(t *testing.T) {
 	_, expected, actual := redactDifference(configuration.ConfigDifference{Path: "wifi.password"})
 
