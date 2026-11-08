@@ -25,10 +25,8 @@ import (
 // (registerAPIRoutes) with optional handlers enabled and test mode off.
 //
 // Issue keys on the missing-route baseline: 249 is the phantom export/import
-// set, 250 is the notification paths the UI calls that are not registered,
-// 363 is GET /api/v1/version. App.vue and BackupManagementPage call /version;
-// the axios client joins that with base URL /api/v1, while the server
-// registers GET /version on the root router. The detector finds no
+// set, 250 is the notification paths the UI calls that are not registered.
+// The detector finds no
 // precedence mismatch, literal or parameterized, so precedence.json is an
 // empty list. A new mismatch, or a baseline entry whose pair is no longer
 // missing, fails the test.

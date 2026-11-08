@@ -779,6 +779,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/VersionInfo'
 
+  /api/v1/version:
+    get:
+      tags: [Health]
+      summary: Get API version (the path the web UI uses)
+      operationId: getAPIVersion
+      responses:
+        '200':
+          description: Version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionInfo'
+
   # Device Endpoints
   /api/v1/devices:
     get:
