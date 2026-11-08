@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
@@ -291,8 +291,16 @@ async function handleVerify() {
   }
 }
 
+// The store is shared by every instance of this page. A new instance starts from an empty store, which
+// also drops any answer that an earlier instance still waits for. The count makes this instance's own
+// handlers stop when the page is left, so none of them touches what the next page shows.
 onMounted(() => {
+  store.reset()
   handleRefresh()
+})
+
+onUnmounted(() => {
+  routeGeneration++
 })
 
 // A new device id means another device: drop everything that belonged to the old one, then load
