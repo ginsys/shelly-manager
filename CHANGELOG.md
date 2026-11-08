@@ -24,6 +24,14 @@ All notable changes to this project are documented here. The project follows Con
   present, and SHSW-25 has the roller section, both not applicable. An empty
   or malformed parameter is a 400. Without a parameter the generic schema is
   unchanged. (#384)
+- The device override editor is now a real form. It loads the schema of the
+  device's model, shows nested objects as nested fields, and shows each field's
+  inherited value and its source. Editing a field makes it an override, Reset
+  removes it, and "Use default" sets the schema default. A field that apply
+  cannot write yet is read-only. Schema validation (type, range, length,
+  pattern, enum, required) runs on every change, and Save stays disabled while
+  a field is invalid. Only changed fields go into the override body. Lists
+  still use a JSON box. (#385)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

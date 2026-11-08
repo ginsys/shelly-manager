@@ -214,7 +214,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | `/configuration/validate-typed` | POST | Validate typed configuration |
 | `/configuration/convert-to-typed` | POST | Convert raw config to typed format |
 | `/configuration/convert-to-raw` | POST | Convert typed config to raw format |
-| `/configuration/schema` | GET | Get configuration schema for device type |
+| `/config/schema` | GET | Get configuration schema; with `?device_id=` the device override form (`ConfigEditor`) gets the schema of that device's model |
 | `/configuration/bulk-validate` | POST | Bulk validate multiple configurations |
 
 #### Drift Detection (11 endpoints)
