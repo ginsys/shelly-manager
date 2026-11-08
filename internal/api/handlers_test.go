@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -547,52 +548,64 @@ func TestGetDHCPReservations(t *testing.T) {
 	testutil.AssertEqual(t, 0, len(response))
 }
 
-// Integration test for the full API router
-func TestAPIRouter(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
+// routerRequest builds a request for a test that drives the full router. The router's header
+// validation refuses a request with an empty User-Agent as suspicious on purpose
+// (isSuspiciousUserAgent, tested in the middleware package), and httptest.NewRequest sends none,
+// so a client name is set the way a real client sends one. A request with a body also names its
+// content type, which the router requires on POST, PUT and PATCH.
+func routerRequest(method, target string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, target, body)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Test)")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
+	return req
+}
 
+func routerTestSetup(t *testing.T) (http.Handler, *database.Device) {
+	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 	router := SetupRoutes(handler)
 
-	// Add a test device
 	device := testutil.TestDevice()
-	err := db.AddDevice(device)
-	testutil.AssertNoError(t, err)
+	testutil.AssertNoError(t, db.AddDevice(device))
+	return router, device
+}
 
-	// Test GET /api/v1/devices
-	req := httptest.NewRequest("GET", "/api/v1/devices", nil)
+// Integration test for the full API router. It runs in the short suite that CI runs: every
+// request is answered in process.
+func TestAPIRouter(t *testing.T) {
+	router, device := routerTestSetup(t)
+
+	for _, target := range []string{
+		"/api/v1/devices",
+		fmt.Sprintf("/api/v1/devices/%d", device.ID),
+		"/api/v1/provisioning/status",
+		"/api/v1/dhcp/reservations",
+	} {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, routerRequest("GET", target, nil))
+		if w.Code != http.StatusOK {
+			t.Errorf("GET %s: expected %d, got %d: %s", target, http.StatusOK, w.Code, w.Body.String())
+		}
+	}
+}
+
+// POST /api/v1/discover starts a real network discovery in the background, so it stays out of
+// the short suite. The network is a reserved documentation range, so a local run never scans
+// the LAN.
+func TestAPIRouterDiscover(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping network test in short mode")
+	}
+	router, _ := routerTestSetup(t)
+
 	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-
-	// Test GET /api/v1/devices/{id}
-	req = httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d", device.ID), nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-
-	// Test POST /api/v1/discover
-	req = httptest.NewRequest("POST", "/api/v1/discover", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-
-	// Test GET /api/v1/provisioning/status
-	req = httptest.NewRequest("GET", "/api/v1/provisioning/status", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-
-	// Test GET /api/v1/dhcp/reservations
-	req = httptest.NewRequest("GET", "/api/v1/dhcp/reservations", nil)
-	w = httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	router.ServeHTTP(w, routerRequest("POST", "/api/v1/discover", strings.NewReader(`{"network":"192.0.2.0/30"}`)))
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 }
 
