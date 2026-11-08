@@ -503,7 +503,9 @@ func (h *Handler) GetDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clean up expired devices while we're here (async cleanup)
+	h.background.Add(1)
 	go func() {
+		defer h.background.Done()
 		if deleted, err := h.DB.CleanupExpiredDiscoveredDevices(); err != nil {
 			h.logger.WithFields(map[string]any{
 				"error":     err.Error(),

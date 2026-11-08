@@ -28,6 +28,7 @@ func TestReportDiscoveredDevicesDatabase(t *testing.T) {
 
 	// Create handler
 	handler := &Handler{DB: dbManager, logger: logger}
+	defer handler.WaitBackground() // runs before the database cleanup above
 
 	t.Run("ValidDiscoveryReport", func(t *testing.T) {
 		// First register the agent
@@ -233,6 +234,7 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 
 		// Create handler with isolated database
 		handler := &Handler{DB: dbManager, logger: logger}
+		defer handler.WaitBackground() // runs before the database cleanup above
 		req := httptest.NewRequest("GET", "/api/v1/provisioner/discovered-devices", nil)
 		w := httptest.NewRecorder()
 
@@ -271,6 +273,7 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 
 		// Create handler with isolated database
 		handler := &Handler{DB: dbManager, logger: logger}
+		defer handler.WaitBackground() // runs before the database cleanup above
 		req := httptest.NewRequest("GET", "/api/v1/provisioner/discovered-devices?agent_id=agent-1", nil)
 		w := httptest.NewRecorder()
 
@@ -315,6 +318,7 @@ func TestGetDiscoveredDevicesDatabase(t *testing.T) {
 
 		// Create handler with isolated database
 		handler := &Handler{DB: dbManager, logger: logger}
+		defer handler.WaitBackground() // runs before the database cleanup above
 		req := httptest.NewRequest("GET", "/api/v1/provisioner/discovered-devices?agent_id=non-existent-agent", nil)
 		w := httptest.NewRecorder()
 
@@ -348,6 +352,7 @@ func TestDiscoveredDevicesDatabaseIntegration(t *testing.T) {
 
 	// Create handler and router
 	handler := &Handler{DB: dbManager, logger: logger}
+	defer handler.WaitBackground() // runs before the database cleanup above
 	router := mux.NewRouter()
 	api := router.PathPrefix("/api/v1").Subrouter()
 	api.HandleFunc("/provisioner/discovered-devices", handler.ReportDiscoveredDevices).Methods("POST")
