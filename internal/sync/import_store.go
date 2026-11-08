@@ -131,8 +131,21 @@ func discoveredIdentityError(in DiscoveredDeviceData) error {
 // matched device whose address changes to a placeholder address of its own, inside the same
 // transaction, and the second phase then writes the archived values. A device the archive does
 // not overwrite keeps its address, so an archived address that it holds still fails the update.
-// The placeholder never survives: a later failure rolls the transaction back.
+// A placeholder is never an address stored now or archived, so it cannot clash with either, and
+// it never survives: a later failure rolls the transaction back.
 func releaseOverwrittenAddresses(tx *gorm.DB, data *ExportData) error {
+	taken := make(map[string]bool, len(data.Devices))
+	for _, in := range data.Devices {
+		taken[in.IP] = true
+	}
+	var stored []string
+	if err := tx.Model(&database.Device{}).Pluck("ip", &stored).Error; err != nil {
+		return fmt.Errorf("read the stored device addresses: %w", err)
+	}
+	for _, ip := range stored {
+		taken[ip] = true
+	}
+
 	for _, in := range data.Devices {
 		var existing database.Device
 		lookup := tx.Where("mac = ?", in.MAC).First(&existing)
@@ -146,6 +159,10 @@ func releaseOverwrittenAddresses(tx *gorm.DB, data *ExportData) error {
 			continue
 		}
 		hold := fmt.Sprintf("import-hold-%d", existing.ID)
+		for taken[hold] {
+			hold += "x"
+		}
+		taken[hold] = true
 		if err := tx.Model(&database.Device{}).Where("id = ?", existing.ID).UpdateColumn("ip", hold).Error; err != nil {
 			return fmt.Errorf("release the address of device %s: %w", in.MAC, err)
 		}
