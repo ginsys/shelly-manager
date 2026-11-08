@@ -112,6 +112,9 @@ All notable changes to this project are documented here. The project follows Con
   open draft onto `main` after each merge, which moved a draft to a new head while it
   was being reviewed and verified and cancelled the test run in progress. A pull
   request is rebased again once it is marked ready for review. (#367)
+- The server now also answers `GET /api/v1/version`. The UI calls that path, so
+  the "UI is older than the server" banner and the database labels on the
+  backup page never got their data. The root `GET /version` stays. (#363)
 - `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
   `database.dsn` default always won, so unless `dsn` was set explicitly every
   SQLite run used `data/shelly.db` whatever `path` said. `dsn` still takes

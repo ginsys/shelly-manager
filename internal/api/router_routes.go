@@ -21,6 +21,10 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 		w.WriteHeader(http.StatusOK)
 	}))
 
+	// Version info for the UI, whose client prefixes every call with /api/v1. The root
+	// GET /version stays for health tooling.
+	api.HandleFunc("/version", handler.Version).Methods("GET")
+
 	// Admin routes (guarded by simple admin key if configured)
 	api.HandleFunc("/admin/rotate-admin-key", handler.RotateAdminKey).Methods("POST")
 

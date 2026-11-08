@@ -24,7 +24,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 |--------|----------|-------------|-------|--------|
 | GET | `/healthz` | Liveness probe | - | `{"status": "ok"}` |
 | GET | `/readyz` | Readiness probe | - | `{"status": "ready"}` |
-| GET | `/version` | API version info | - | `{"version": "...", "build": "..."}` |
+| GET | `/version`, `/api/v1/version` | API version info. The UI uses the `/api/v1` path. | - | `{"api_version": "...", "server_started_at": "..."}` |
 
 ---
 

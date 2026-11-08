@@ -48,10 +48,5 @@
     "method": "DELETE",
     "template": "/api/v1/notifications/rules/{param}",
     "issue": 250
-  },
-  {
-    "method": "GET",
-    "template": "/api/v1/version",
-    "issue": 363
   }
 ]
