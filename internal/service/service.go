@@ -622,10 +622,17 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 		// Parse and clear credentials
 		var settings map[string]interface{}
 		if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil {
-			if settings["auth_user"] != nil || settings["auth_pass"] != nil {
+			// The nested pair counts too: the client builders fall back to it when the flat keys
+			// are gone, so leaving it would retry with the login the device just rejected. A
+			// boolean "auth" from discovery is not a login and stays.
+			_, nestedPair := settings["auth"].(map[string]interface{})
+			if settings["auth_user"] != nil || settings["auth_pass"] != nil || nestedPair {
 				// Clear bad credentials
 				delete(settings, "auth_user")
 				delete(settings, "auth_pass")
+				if nestedPair {
+					delete(settings, "auth")
+				}
 				updatedSettings, _ := json.Marshal(settings)
 				device.Settings = string(updatedSettings)
 				if updateErr := s.DB.UpdateDevice(device); updateErr != nil {

@@ -665,6 +665,65 @@ func TestShellyService_getClient_RejectedSavedLoginDoesNotDeadlock(t *testing.T)
 	service.clientMu.Unlock()
 }
 
+// A control request that the device rejects clears the saved login and retries with the
+// provisioning login. UpdateDeviceAuth also stores the nested settings.auth pair, which the client
+// builders fall back to, so the recovery must clear that pair too or it retries the rejected login.
+func TestShellyService_ControlDevice_RejectedLoginClearsNestedPair(t *testing.T) {
+	var mu sync.Mutex
+	var relayUsers []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/shelly" {
+			_, _ = fmt.Fprint(w, `{"type":"SHSW-25","mac":"68C63A123456","auth":true,"fw":"1.14.0"}`)
+			return
+		}
+		user, _, _ := r.BasicAuth()
+		mu.Lock()
+		relayUsers = append(relayUsers, user)
+		mu.Unlock()
+		if user != "global" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = fmt.Fprint(w, `{"ison":true}`)
+	}))
+	defer server.Close()
+
+	db := createTestDB(t)
+	cfg := createTestConfig()
+	cfg.Provisioning.AuthEnabled = true
+	cfg.Provisioning.AuthUser = "global"
+	cfg.Provisioning.AuthPassword = "globalpw"
+	service := NewService(db, cfg)
+
+	device := createTestDevice(t, db, server.URL[len("http://"):])
+	if err := service.UpdateDeviceAuth(device.ID, "saved", "wrong"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.ControlDevice(device.ID, "on", map[string]interface{}{"channel": float64(0)}); err != nil {
+		t.Fatalf("ControlDevice failed: %v", err)
+	}
+
+	mu.Lock()
+	last := relayUsers[len(relayUsers)-1]
+	mu.Unlock()
+	if last != "global" {
+		t.Errorf("the retry sent user %q, want the provisioning user global (requests: %v)", last, relayUsers)
+	}
+	updated, err := db.GetDevice(device.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings map[string]interface{}
+	if err := json.Unmarshal([]byte(updated.Settings), &settings); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := settings["auth"]; ok {
+		t.Errorf("the rejected nested pair must be cleared, settings = %s", updated.Settings)
+	}
+}
+
 // A late connection-test failure of an old client must not evict the replacement that another
 // request cached in the meantime.
 func TestShellyService_evictClient_KeepsReplacement(t *testing.T) {
