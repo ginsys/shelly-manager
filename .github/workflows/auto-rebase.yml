@@ -30,8 +30,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           gh pr list --base main --state open \
-            --json number,headRefName,author \
-            --jq '.[] | select(.author.login != "app/dependabot") | "\(.number) \(.headRefName)"' |
+            --json number,headRefName,author,isDraft \
+            --jq '.[] | select(.author.login != "app/dependabot") | select(.isDraft | not) | "\(.number) \(.headRefName)"' |
           while read -r pr branch; do
             [ -z "$pr" ] && continue
             echo "::group::PR #${pr} (${branch})"

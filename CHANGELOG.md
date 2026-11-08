@@ -84,6 +84,10 @@ All notable changes to this project are documented here. The project follows Con
   or discovered device without a MAC address, or a template without a name.
   Before, they reported the archive valid and the apply refused it. One shared
   check serves validation, preview and the apply. (#406)
+- The auto-rebase workflow skips draft pull requests. It used to force-push every
+  open draft onto `main` after each merge, which moved a draft to a new head while it
+  was being reviewed and verified and cancelled the test run in progress. A pull
+  request is rebased again once it is marked ready for review. (#367)
 - `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
   `database.dsn` default always won, so unless `dsn` was set explicitly every
   SQLite run used `data/shelly.db` whatever `path` said. `dsn` still takes
