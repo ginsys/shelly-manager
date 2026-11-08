@@ -502,3 +502,31 @@ func TestForcedImportStillRefusesAnAddressAnotherDeviceKeeps(t *testing.T) {
 	assert.Equal(t, map[string]string{"aabbccdd0009": "192.0.2.30", "aabbccdd0001": "192.0.2.10"}, f.deviceIPs(t),
 		"nothing may change, and no released address may stay behind")
 }
+
+func TestForcedImportPlaceholdersNeverCollideWithRealAddresses(t *testing.T) {
+	t.Run("a stored device already holds the placeholder text", func(t *testing.T) {
+		f := newPersistFixture(t)
+		require.NoError(t, f.db.AddDevice(&database.Device{IP: "192.0.2.10", MAC: "aabbccdd0001", Name: "mover", Type: "switch"}))
+		require.NoError(t, f.db.AddDevice(&database.Device{IP: "import-hold-1", MAC: "aabbccdd0002", Name: "bystander", Type: "switch"}))
+		path := f.exportArchive(t, []sync.DeviceData{{ID: 1, MAC: "aabbccdd0001", IP: "192.0.2.11", Name: "mover", Type: "switch"}})
+
+		_, err := f.importFile(t, path, sync.ImportOptions{ForceOverwrite: true})
+
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"aabbccdd0001": "192.0.2.11", "aabbccdd0002": "import-hold-1"}, f.deviceIPs(t))
+	})
+	t.Run("the archive asks for an address that looks like a placeholder", func(t *testing.T) {
+		f := newPersistFixture(t)
+		require.NoError(t, f.db.AddDevice(&database.Device{IP: "192.0.2.10", MAC: "aabbccdd0001", Name: "first", Type: "switch"}))
+		require.NoError(t, f.db.AddDevice(&database.Device{IP: "192.0.2.20", MAC: "aabbccdd0002", Name: "second", Type: "switch"}))
+		path := f.exportArchive(t, []sync.DeviceData{
+			{ID: 1, MAC: "aabbccdd0001", IP: "import-hold-2", Name: "first", Type: "switch"},
+			{ID: 2, MAC: "aabbccdd0002", IP: "192.0.2.21", Name: "second", Type: "switch"},
+		})
+
+		_, err := f.importFile(t, path, sync.ImportOptions{ForceOverwrite: true})
+
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"aabbccdd0001": "import-hold-2", "aabbccdd0002": "192.0.2.21"}, f.deviceIPs(t))
+	})
+}
