@@ -41,6 +41,7 @@ type ConfigApplyResponse struct {
 	FailedCount    int      `json:"failed_count"`
 	RequiresReboot bool     `json:"requires_reboot"`
 	Failures       []string `json:"failures,omitempty"`
+	Warnings       []string `json:"warnings,omitempty"`
 }
 
 type ConfigStatusResponse struct {
@@ -445,14 +446,16 @@ func (h *Handler) ApplyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
 		resp.AppliedCount = result.ApplyResult.AppliedCount
 		resp.FailedCount = result.ApplyResult.FailedCount
 		resp.RequiresReboot = result.ApplyResult.RequiresReboot
+		resp.Warnings = result.ApplyResult.Warnings
 		for _, f := range result.ApplyResult.Failures {
 			resp.Failures = append(resp.Failures, f.Path+": "+f.Error)
 		}
 	}
 	if result.VerifyResult != nil {
 		for _, d := range result.VerifyResult.Differences {
+			path, expected, actual := redactDifference(d)
 			resp.Failures = append(resp.Failures,
-				fmt.Sprintf("verify %s: expected %v, device has %v", d.Path, d.Expected, d.Actual))
+				fmt.Sprintf("verify %s: expected %v, device has %v", path, expected, actual))
 		}
 	}
 
@@ -463,6 +466,10 @@ func (h *Handler) ApplyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) writeConfigDeviceError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, configuration.ErrUnsupportedGeneration) {
 		h.responseWriter().WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, err.Error(), nil)
+		return
+	}
+	if errors.Is(err, configuration.ErrUnsupportedSettings) {
+		h.responseWriter().WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeValidationFailed, err.Error(), nil)
 		return
 	}
 	h.writeDeviceReadError(w, r, err)
@@ -492,7 +499,8 @@ func (h *Handler) VerifyDeviceNewConfig(w http.ResponseWriter, r *http.Request) 
 
 	diffs := make([]ConfigDifferenceDTO, 0, len(result.Differences))
 	for _, d := range result.Differences {
-		diffs = append(diffs, ConfigDifferenceDTO{Path: d.Path, Expected: d.Expected, Actual: d.Actual})
+		path, expected, actual := redactDifference(d)
+		diffs = append(diffs, ConfigDifferenceDTO{Path: path, Expected: expected, Actual: actual})
 	}
 
 	rw.WriteSuccess(w, r, ConfigVerifyResponse{Match: result.Match, Differences: diffs})

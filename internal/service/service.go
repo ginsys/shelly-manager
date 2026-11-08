@@ -879,7 +879,22 @@ func (s *ShellyService) ApplyDesiredConfig(ctx context.Context, deviceID uint) (
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
-	return s.ConfigSvc.ConfigurationSvc.ApplyDesiredConfig(ctx, deviceID, client, device.Type)
+	return s.ConfigSvc.ConfigurationSvc.ApplyDesiredConfig(ctx, deviceID, client, deviceModel(device))
+}
+
+// deviceModel returns the model identifier the configuration converters match on (for example
+// "SHPLG-S"). Discovery stores it in the device settings; device.Type holds a display label such
+// as "Smart Plug", so it is only a fallback for records that have no stored model.
+func deviceModel(device *database.Device) string {
+	var settings struct {
+		Model string `json:"model"`
+	}
+	if device.Settings != "" {
+		if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil && settings.Model != "" {
+			return settings.Model
+		}
+	}
+	return device.Type
 }
 
 // VerifyDesiredConfig compares the device's desired configuration with the
@@ -895,7 +910,7 @@ func (s *ShellyService) VerifyDesiredConfig(ctx context.Context, deviceID uint) 
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
-	return s.ConfigSvc.ConfigurationSvc.VerifyDesiredConfig(ctx, deviceID, client, device.Type)
+	return s.ConfigSvc.ConfigurationSvc.VerifyDesiredConfig(ctx, deviceID, client, deviceModel(device))
 }
 
 // GetDeviceConfig gets the stored configuration for a device

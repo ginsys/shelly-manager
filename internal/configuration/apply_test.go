@@ -115,13 +115,17 @@ func TestApplyConfig_MQTTSettings(t *testing.T) {
 	assert.Equal(t, 0, result.FailedCount)
 	assert.Greater(t, result.AppliedCount, 0)
 
-	foundMQTT := false
+	// Gen1 only accepts flat mqtt_* form parameters; a nested map would be sent as "map[...]".
+	var sent map[string]interface{}
 	for _, cfg := range client.configs {
-		if _, ok := cfg["mqtt"]; ok {
-			foundMQTT = true
+		if _, ok := cfg["mqtt_enable"]; ok {
+			sent = cfg
 		}
+		assert.NotContains(t, cfg, "mqtt", "a nested mqtt map must never be sent")
 	}
-	assert.True(t, foundMQTT, "MQTT settings should have been sent")
+	require.NotNil(t, sent, "flat MQTT parameters should have been sent")
+	assert.Equal(t, true, sent["mqtt_enable"])
+	assert.Equal(t, "broker.local:1883", sent["mqtt_server"])
 }
 
 func TestApplyConfig_WiFiSettings(t *testing.T) {

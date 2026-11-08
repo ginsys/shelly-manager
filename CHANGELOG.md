@@ -86,8 +86,15 @@ All notable changes to this project are documented here. The project follows Con
   reads it back and compares. It reports real `applied_count`, `failed_count`
   and `requires_reboot`, lists failures and read-back differences, and sets
   `config_applied` only when the read-back matches. Verify reports the real
-  differences and changes nothing. Only Gen1 devices are supported; Gen2 and
-  Gen3 return HTTP 501 rather than a false success. (#375)
+  differences and changes nothing. Secret values (passwords, keys, tokens)
+  are masked in the differences. Only Gen1 devices are supported; Gen2 and
+  Gen3 return HTTP 501 rather than a false success. On Gen1, apply writes the
+  name, timezone, location, eco mode, discoverable, max power, LED and MQTT
+  settings. A desired configuration that holds any other setting (Wi-Fi,
+  cloud, CoIoT, relays, login, inputs) returns HTTP 422 naming the settings,
+  and nothing is written. Apply clears `config_applied` before writing, and a
+  desired configuration edited during the apply leaves the device pending.
+  The device model is read from the stored device settings. (#375)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`

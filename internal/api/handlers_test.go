@@ -966,6 +966,7 @@ func TestWriteConfigDeviceError(t *testing.T) {
 		code int
 	}{
 		{"gen2 not supported", fmt.Errorf("x: %w", configuration.ErrUnsupportedGeneration), http.StatusNotImplemented},
+		{"unsupported settings", fmt.Errorf("x: %w", configuration.ErrUnsupportedSettings), http.StatusUnprocessableEntity},
 		{"auth failed", fmt.Errorf("apply: %w", shelly.ErrAuthFailed), http.StatusBadGateway},
 		{"other error", errors.New("boom"), http.StatusInternalServerError},
 	}
