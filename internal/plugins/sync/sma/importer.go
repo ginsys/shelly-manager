@@ -13,6 +13,10 @@ import (
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
+// defaultSystemLogLevel is the log level an export writes, since it carries no system settings
+// yet. An import warns about any other value.
+const defaultSystemLogLevel = "info"
+
 type normalizationError struct {
 	kind string
 	err  error
@@ -235,10 +239,18 @@ func archiveExportData(archive *SMAArchive) *sync.ExportData {
 // complete one.
 func importWarnings(archive *SMAArchive, options sync.ImportOptions, applied *sync.ImportApplyResult) []string {
 	var warnings []string
+	system := archive.SystemSettings
 	if archive.Network.MQTTConfig != nil || len(archive.Network.WiFiNetworks) > 0 ||
-		len(archive.Network.NTPServers) > 0 || len(archive.PluginConfigs) > 0 {
+		len(archive.Network.NTPServers) > 0 || len(archive.PluginConfigs) > 0 ||
+		(system.LogLevel != "" && system.LogLevel != defaultSystemLogLevel) ||
+		len(system.APISettings) > 0 || len(system.DatabaseSettings) > 0 {
 		warnings = append(warnings,
-			"Network settings and plugin configurations in the archive are not restored; only devices, templates and discovered devices are")
+			"Network settings, plugin configurations and system settings in the archive are not restored; only devices, templates and discovered devices are")
+	}
+	if applied.Redacted > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%d redacted values in the archive were not restored: a stored value was kept where there is one, and a new record is written without it",
+			applied.Redacted))
 	}
 	if options.BackupBefore {
 		warnings = append(warnings, "backup_before is not supported and was ignored; no backup was taken")

@@ -118,7 +118,7 @@ func (s *SMAPlugin) prepareArchive(data *sync.ExportData, config sync.ExportConf
 	}
 	pluginConfigs := []interface{}{}
 	systemSettings := map[string]interface{}{
-		"log_level":         "info",
+		"log_level":         defaultSystemLogLevel,
 		"api_settings":      map[string]interface{}{},
 		"database_settings": map[string]interface{}{},
 	}
@@ -510,7 +510,7 @@ func redactSensitive(value interface{}, sensitive func(string) bool) {
 	case map[string]interface{}:
 		for key, child := range current {
 			if sensitive(key) {
-				current[key] = "[REDACTED]"
+				current[key] = sync.RedactedValue
 			} else {
 				redactSensitive(child, sensitive)
 			}

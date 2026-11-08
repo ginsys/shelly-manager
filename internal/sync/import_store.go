@@ -21,8 +21,15 @@ var ErrImportStoreUnavailable = errors.New("import store unavailable")
 type ImportApplyResult struct {
 	Imported int
 	Skipped  int
+	// Redacted counts redacted values in the archive. An existing record keeps its stored value
+	// for each of them; a new record is written without it.
+	Redacted int
 	Changes  []ImportChange
 }
+
+// RedactedValue is what an export writes in place of a sensitive value. It is never a credential,
+// so an import must not store it.
+const RedactedValue = "[REDACTED]"
 
 // ImportStore persists decoded import data. The engine implements it and hands it to plugins
 // that implement ImportStoreAware, so a plugin decodes and validates its format while the
@@ -76,19 +83,25 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 		if strings.TrimSpace(in.MAC) == "" {
 			return fmt.Errorf("%w: device without a MAC address", ErrInvalidImportData)
 		}
-		settings, err := marshalObject(in.Settings)
+
+		var existing database.Device
+		lookup := tx.Where("mac = ?", in.MAC).First(&existing)
+		// A record that does not exist yet has no stored values to keep in place of a redaction.
+		var storedSettings, storedDesired string
+		if lookup.Error == nil {
+			storedSettings, storedDesired = existing.Settings, existing.DesiredConfig
+		}
+		settings, err := restoreObject(in.Settings, storedSettings, result)
 		if err != nil {
 			return fmt.Errorf("device %s settings: %w", in.MAC, err)
 		}
 		desired := ""
 		if in.Configuration != nil && in.Configuration.Config != nil {
-			if desired, err = marshalObject(in.Configuration.Config); err != nil {
+			if desired, err = restoreObject(in.Configuration.Config, storedDesired, result); err != nil {
 				return fmt.Errorf("device %s configuration: %w", in.MAC, err)
 			}
 		}
 
-		var existing database.Device
-		lookup := tx.Where("mac = ?", in.MAC).First(&existing)
 		switch {
 		case errors.Is(lookup.Error, gorm.ErrRecordNotFound):
 			device := database.Device{
@@ -118,13 +131,15 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 				updates["desired_config"] = desired
 				updates["config_applied"] = false
 			}
+			// Updates writes the new values back into existing, so read the old ones first.
+			oldValue := fmt.Sprintf("Device: %s (%s)", existing.Name, existing.Type)
 			if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 				return fmt.Errorf("update device %s: %w", in.MAC, err)
 			}
 			result.Imported++
 			result.Changes = append(result.Changes, ImportChange{
 				Type: "update", Resource: "device", ResourceID: in.MAC,
-				OldValue: fmt.Sprintf("Device: %s (%s)", existing.Name, existing.Type),
+				OldValue: oldValue,
 				NewValue: fmt.Sprintf("Device: %s (%s)", in.Name, in.Type),
 			})
 		}
@@ -137,17 +152,21 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 		if strings.TrimSpace(in.Name) == "" {
 			return fmt.Errorf("%w: template without a name", ErrInvalidImportData)
 		}
-		config, err := marshalObject(in.Config)
-		if err != nil {
-			return fmt.Errorf("template %s config: %w", in.Name, err)
-		}
-		variables, err := marshalObject(in.Variables)
-		if err != nil {
-			return fmt.Errorf("template %s variables: %w", in.Name, err)
-		}
 
 		var existing configuration.ConfigTemplate
 		lookup := tx.Where("name = ?", in.Name).First(&existing)
+		var storedConfig, storedVariables string
+		if lookup.Error == nil {
+			storedConfig, storedVariables = string(existing.Config), string(existing.Variables)
+		}
+		config, err := restoreObject(in.Config, storedConfig, result)
+		if err != nil {
+			return fmt.Errorf("template %s config: %w", in.Name, err)
+		}
+		variables, err := restoreObject(in.Variables, storedVariables, result)
+		if err != nil {
+			return fmt.Errorf("template %s variables: %w", in.Name, err)
+		}
 		switch {
 		case errors.Is(lookup.Error, gorm.ErrRecordNotFound):
 			template := configuration.ConfigTemplate{
@@ -170,7 +189,9 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 			result.Skipped++
 		default:
 			updates := map[string]interface{}{
-				"description": in.Description, "scope": templateScope(in.DeviceType),
+				// The scope stays as it is: the archive does not carry one, and a group template
+				// must not turn global because its device type is empty.
+				"description": in.Description,
 				"device_type": in.DeviceType, "generation": in.Generation, "is_default": in.IsDefault,
 				"config": json.RawMessage(config), "variables": json.RawMessage(variables),
 			}
@@ -240,6 +261,57 @@ func templateScope(deviceType string) string {
 		return "global"
 	}
 	return "device_type"
+}
+
+// restoreObject returns the JSON text of m with each redacted value replaced by the one in the
+// stored JSON object at the same path, or removed when there is none. It adds the number of
+// redacted values to result.
+func restoreObject(m map[string]interface{}, stored string, result *ImportApplyResult) (string, error) {
+	var current map[string]interface{}
+	if strings.TrimSpace(stored) != "" {
+		// A stored value that is not an object has nothing to keep.
+		_ = json.Unmarshal([]byte(stored), &current)
+	}
+	result.Redacted += resolveRedacted(m, current)
+	return marshalObject(m)
+}
+
+// resolveRedacted replaces every RedactedValue in config with the value at the same path in
+// current, or deletes the key when current has none. It returns how many it found. Values inside
+// arrays have no stable path, so they are deleted rather than matched.
+func resolveRedacted(config, current map[string]interface{}) int {
+	found := 0
+	for key, value := range config {
+		switch v := value.(type) {
+		case string:
+			if v != RedactedValue {
+				continue
+			}
+			found++
+			if kept, ok := current[key]; ok {
+				config[key] = kept
+			} else {
+				delete(config, key)
+			}
+		case map[string]interface{}:
+			child, _ := current[key].(map[string]interface{})
+			found += resolveRedacted(v, child)
+		case []interface{}:
+			found += dropRedactedInList(v)
+		}
+	}
+	return found
+}
+
+// dropRedactedInList deletes redacted values from the objects inside a list.
+func dropRedactedInList(list []interface{}) int {
+	found := 0
+	for _, item := range list {
+		if object, ok := item.(map[string]interface{}); ok {
+			found += resolveRedacted(object, nil)
+		}
+	}
+	return found
 }
 
 // marshalObject returns the JSON text of m, with a nil map stored as an empty object.

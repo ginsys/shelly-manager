@@ -133,8 +133,16 @@ returns an error that says no changes were made. Records are matched like this:
   24 hours after the import.
 
 A record that already exists is left unchanged and counted in
-`records_skipped`. With `force_overwrite` it is replaced instead. The result
-lists every change and a warning for anything that was not done.
+`records_skipped`. With `force_overwrite` it is replaced instead, with two
+exceptions. A template keeps its stored scope, because the archive does not
+carry one. A device whose archive entry has no configuration keeps the
+configuration it has now. The result lists every change and a warning for
+anything that was not done.
+
+An export redacts sensitive values by default and writes `[REDACTED]` in their
+place. The import never stores that text. A replaced record keeps the value it
+has now. A new record is written without the key. The result warns with the
+number of redacted values.
 
 The import does not restore the network settings, plugin configurations or
 system settings of the archive, and `backup_before` is not supported. Both
