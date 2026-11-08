@@ -454,8 +454,11 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 		req.ImportConfig = true
 	}
 
-	// Run discovery in background
+	// Run discovery in background. WaitBackground waits for it, so a caller that closes the
+	// database never leaves a discovery running.
+	h.background.Add(1)
 	go func() {
+		defer h.background.Done()
 		network := req.Network
 		if network == "" {
 			network = "auto"

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/discovery"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/notification"
 	"github.com/ginsys/shelly-manager/internal/service"
@@ -28,7 +31,17 @@ import (
 func testShellyService(t *testing.T, db *database.Manager) *service.ShellyService {
 	t.Helper()
 	cfg := testutil.TestConfig()
-	return service.NewService(db, cfg)
+	svc := service.NewService(db, cfg)
+	// No API test scans a real network: POST /api/v1/discover would send HTTP requests to the
+	// configured subnet and an mDNS query to the local network, and live Shelly devices there
+	// would answer it.
+	svc.SetDiscoverFunc(noDiscovery)
+	return svc
+}
+
+// noDiscovery is a discovery that finds no device and never touches the network.
+func noDiscovery(context.Context, []string, time.Duration) ([]discovery.ShellyDevice, error) {
+	return nil, nil
 }
 
 // testNotificationHandler creates a test notification handler for API tests
@@ -437,14 +450,24 @@ func TestDiscoverHandler(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
 	svc := testShellyService(t, db)
+	var discoveries atomic.Int32
+	svc.SetDiscoverFunc(func(ctx context.Context, networks []string, timeout time.Duration) ([]discovery.ShellyDevice, error) {
+		discoveries.Add(1)
+		return noDiscovery(ctx, networks, timeout)
+	})
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+	// The handler starts a discovery that outlives the request. Wait for it, so that it never
+	// runs into the next test and shows up there as a race.
+	defer handler.WaitBackground()
 
 	req := httptest.NewRequest("POST", "/api/v1/discover", nil)
 	w := httptest.NewRecorder()
 
 	// Execute
 	handler.DiscoverHandler(w, req)
+	handler.WaitBackground()
+	testutil.AssertEqual(t, int32(1), discoveries.Load())
 
 	// Assert
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
@@ -571,6 +594,9 @@ func routerTestSetup(t *testing.T) (http.Handler, *database.Device) {
 	svc := testShellyService(t, db)
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+	// Registered after the database cleanup, so it runs before it: a request that starts
+	// background work never leaves it running past the database close.
+	t.Cleanup(handler.WaitBackground)
 	router := SetupRoutes(handler)
 
 	device := testutil.TestDevice()
@@ -597,14 +623,10 @@ func TestAPIRouter(t *testing.T) {
 	}
 }
 
-// POST /api/v1/discover starts a real network discovery in the background: it scans the
-// network in the request and also runs mDNS on the local network, which the request cannot
-// limit. It stays out of the short suite that CI runs, and a local run reaches the LAN. The
-// request names a reserved documentation range only to keep the address scan itself small.
+// POST /api/v1/discover starts a discovery in the background. The test service replaces it
+// with one that finds nothing, so the request never reaches a real network, and the request
+// names a reserved documentation range for the same reason.
 func TestAPIRouterDiscover(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
-	}
 	router, _ := routerTestSetup(t)
 
 	w := httptest.NewRecorder()

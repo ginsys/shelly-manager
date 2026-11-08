@@ -34,7 +34,17 @@ type ShellyService struct {
 	// Client cache for device connections
 	clientMu sync.RWMutex
 	clients  map[string]shelly.Client
+
+	// discover runs the network discovery. Nil means discovery.CombinedDiscovery.
+	discover DiscoverFunc
 }
+
+// DiscoverFunc runs one combined HTTP and mDNS discovery.
+type DiscoverFunc func(ctx context.Context, networks []string, timeout time.Duration) ([]discovery.ShellyDevice, error)
+
+// SetDiscoverFunc replaces the discovery that DiscoverDevices runs. A test uses it so that
+// it never scans a real network. Call it before the first DiscoverDevices.
+func (s *ShellyService) SetDiscoverFunc(fn DiscoverFunc) { s.discover = fn }
 
 // NewService creates a new Shelly service
 func NewService(db database.DatabaseInterface, cfg *config.Config) *ShellyService {
@@ -90,7 +100,11 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 	}
 
 	// Perform combined discovery (HTTP + mDNS)
-	shellyDevices, err := discovery.CombinedDiscovery(ctx, networks, timeout)
+	discover := s.discover
+	if discover == nil {
+		discover = discovery.CombinedDiscovery
+	}
+	shellyDevices, err := discover(ctx, networks, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("discovery failed: %w", err)
 	}
