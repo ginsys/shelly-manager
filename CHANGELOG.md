@@ -110,7 +110,8 @@ All notable changes to this project are documented here. The project follows Con
 - Drift detection no longer reports a Gen1 plug's live `meters` reading (power,
   counters, timestamp) as configuration drift, so a freshly imported device is
   no longer drifted. Only the top-level `meters` key is ignored; `emeters` is
-  configuration on energy-meter models and is still compared. (#377)
+  configuration on energy-meter models and is still compared. The device
+  clock (top-level `time` and `unixtime`) is ignored the same way. (#377)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`

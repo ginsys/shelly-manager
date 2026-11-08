@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -1038,6 +1039,36 @@ func TestCompareConfigurationsForDrift_IgnoresRootMeters(t *testing.T) {
 
 	// The audit comparator keeps reporting everything.
 	assert.NotEmpty(t, service.compareConfigurations(stored, plug("tv", 41.5, 1794127999)))
+}
+
+// TestCompareConfigurationsForDrift_IgnoresDeviceClock loads a real Gen1 settings document twice,
+// with only the device clock changed: root "time" and "unixtime" move on every read, so they
+// are not drift.
+func TestCompareConfigurationsForDrift_IgnoresDeviceClock(t *testing.T) {
+	service, _ := setupTestService(t)
+
+	fixture, err := os.ReadFile("testdata/shplg_s_settings.json")
+	require.NoError(t, err)
+
+	withClock := func(clock string, unix int) json.RawMessage {
+		var doc map[string]interface{}
+		require.NoError(t, json.Unmarshal(fixture, &doc))
+		require.Contains(t, doc, "time", "the fixture must carry the device clock")
+		require.Contains(t, doc, "unixtime", "the fixture must carry the device clock")
+		doc["time"] = clock
+		doc["unixtime"] = unix
+		raw, err := json.Marshal(doc)
+		require.NoError(t, err)
+		return raw
+	}
+
+	stored := withClock("12:34", 1673456789)
+	current := withClock("12:41", 1673457209)
+
+	assert.Empty(t, service.compareConfigurationsForDrift(stored, current),
+		"a moved device clock is not drift")
+	assert.NotEmpty(t, service.compareConfigurations(stored, current),
+		"the audit comparator still reports everything")
 }
 
 // TestCompareConfigurationsForDrift_KeepsNestedAndEnergyMeterKeys proves the telemetry filter
