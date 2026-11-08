@@ -85,6 +85,27 @@ func TestConfigSchemaForDeviceIDUsesStoredModel(t *testing.T) {
 	assert.NotContains(t, schemaSections(data), "dimming")
 }
 
+func TestConfigSchemaForGlobalTemplate(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+
+	code, data := getSchema(t, handler, "?scope=global")
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t,
+		[]string{"auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "power_metering", "relay", "roller", "system", "wifi"},
+		schemaSections(data), "a global template holds every stored section, and no generic-only section")
+	assert.Equal(t, true, data[configuration.SchemaKeyApplySupported])
+
+	// A field apply writes on some model stays editable in a global template.
+	maxPower := data["properties"].(map[string]interface{})["power_metering"].(map[string]interface{})["properties"].(map[string]interface{})["max_power"].(map[string]interface{})
+	assert.Equal(t, true, maxPower[configuration.SchemaKeyApplicable])
+
+	code, _ = getSchema(t, handler, "?scope=device_type")
+	assert.Equal(t, http.StatusBadRequest, code)
+	code, _ = getSchema(t, handler, "?scope=global&device_type=SHPLG-S")
+	assert.Equal(t, http.StatusBadRequest, code)
+}
+
 func TestConfigSchemaParameterErrors(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()

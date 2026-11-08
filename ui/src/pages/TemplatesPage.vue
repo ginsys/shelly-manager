@@ -75,7 +75,7 @@
 
           <div class="form-group">
             <label>Scope *</label>
-            <select v-model="form.scope" class="form-input">
+            <select v-model="form.scope" class="form-input" data-testid="template-scope" :disabled="!!editing">
               <option value="global">global</option>
               <option value="group">group</option>
               <option value="device_type">device_type</option>
@@ -88,8 +88,10 @@
               v-model="form.device_type"
               type="text"
               class="form-input"
-              :disabled="form.scope !== 'device_type'"
+              data-testid="template-device-type"
+              :disabled="form.scope !== 'device_type' || !!editing"
               placeholder="SHPLG-S"
+              @change="schemaDeviceType = form.device_type || ''"
             />
           </div>
 
@@ -99,17 +101,36 @@
           </div>
 
           <div class="form-group full">
-            <label>Config (JSON) *</label>
-            <textarea v-model="configJson" class="template-area" rows="14" spellcheck="false" />
-            <div class="hint">
-              Store only the desired fields. Password fields are accepted, but returned redacted.
+            <label>Config</label>
+            <div v-if="schemaTarget === null" class="hint" data-testid="template-needs-type">
+              Enter the device type to get the form for that model.
             </div>
+            <ConfigEditor
+              v-else
+              v-model="configBody"
+              v-model:valid="configValid"
+              :device-type="schemaTarget.deviceType"
+              :scope="schemaTarget.scope"
+            />
+            <div class="hint">
+              Set only the fields this template must set. Password fields are accepted, but returned redacted.
+            </div>
+            <ul v-if="saveErrors.length > 0" class="save-errors" data-testid="template-save-errors">
+              <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>
+            </ul>
           </div>
         </div>
 
         <div class="modal-actions">
           <button class="btn" @click="closeDialog">Cancel</button>
-          <button class="btn primary" @click="handleSave">Save</button>
+          <button
+            class="btn primary"
+            data-testid="save-template"
+            :disabled="!configValid || schemaTarget === null"
+            @click="handleSave"
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>
@@ -117,9 +138,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useTemplatesStore } from '@/stores/templates'
-import type { ConfigTemplate, TemplateScope } from '@/api/templates'
+import { TemplateSaveError, type ConfigTemplate, type FieldError, type TemplateScope } from '@/api/templates'
+import ConfigEditor from '@/components/config/ConfigEditor.vue'
+import { clone, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
 
 const store = useTemplatesStore()
 
@@ -133,7 +156,13 @@ const form = ref<{ name: string; description?: string; scope: TemplateScope; dev
   device_type: '',
 })
 
-const configJson = ref<string>('{}')
+const configBody = ref<ConfigBody>({})
+const configValid = ref(true)
+const saveErrors = ref<FieldError[]>([])
+// The device type the form schema follows. It changes when the input is committed (change
+// event), not on each key, so a half-typed model does not load a schema.
+const schemaDeviceType = ref('')
+const schemaTarget = computed(() => templateSchemaTarget(form.value.scope, schemaDeviceType.value))
 
 function formatDate(iso: string) {
   try {
@@ -150,7 +179,10 @@ function hasSecrets(t: ConfigTemplate) {
 function openCreate() {
   editing.value = null
   form.value = { name: '', description: '', scope: 'global', device_type: '' }
-  configJson.value = '{\n  \n}'
+  // A new template starts empty; the form offers each schema default through "use default".
+  configBody.value = {}
+  schemaDeviceType.value = ''
+  saveErrors.value = []
   showDialog.value = true
 }
 
@@ -162,7 +194,9 @@ function openEdit(template: ConfigTemplate) {
     scope: (template.scope as TemplateScope) || 'global',
     device_type: template.device_type || '',
   }
-  configJson.value = JSON.stringify(template.config || {}, null, 2)
+  configBody.value = clone(template.config || {})
+  schemaDeviceType.value = template.device_type || ''
+  saveErrors.value = []
   showDialog.value = true
 }
 
@@ -172,13 +206,9 @@ function closeDialog() {
 }
 
 async function handleSave() {
-  let parsedConfig: Record<string, any>
-  try {
-    parsedConfig = JSON.parse(configJson.value || '{}')
-  } catch (e: any) {
-    alert('Invalid config JSON: ' + (e?.message || 'Unknown error'))
-    return
-  }
+  if (!configValid.value || schemaTarget.value === null) return
+  const parsedConfig = clone(configBody.value)
+  saveErrors.value = []
 
   try {
     if (editing.value) {
@@ -200,6 +230,10 @@ async function handleSave() {
     closeDialog()
     await store.fetchTemplates()
   } catch (e: any) {
+    if (e instanceof TemplateSaveError) {
+      saveErrors.value = e.fields
+      return
+    }
     alert('Failed to save template: ' + (e?.message || 'Unknown error'))
   }
 }
@@ -256,7 +290,9 @@ onMounted(() => {
 .form-group.full { grid-column: 1 / -1; }
 .form-group.disabled { opacity: 0.6; }
 .form-input { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
-.template-area { padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.save-errors { margin: 4px 0 0; padding: 8px 12px 8px 28px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px; }
+.modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .hint { font-size: 12px; color: #64748b; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; border-top: 1px solid #e5e7eb; margin-top: 12px; }

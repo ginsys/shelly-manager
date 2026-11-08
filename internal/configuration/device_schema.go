@@ -68,6 +68,17 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	return schema
 }
 
+// GetTemplateConfigurationSchema returns the schema of a global or group template: every
+// section DeviceConfiguration stores, because such a template can reach any model. A field is
+// marked applicable when apply can write it on at least one supported model. A device_type
+// template uses GetDeviceConfigurationSchema of its model instead.
+func GetTemplateConfigurationSchema() map[string]interface{} {
+	schema := GetDeviceConfigurationSchema("")
+	schema[SchemaKeyApplySupported] = true
+	markApplicable(schema, "", true)
+	return schema
+}
+
 // hasInputSettings reports whether a Gen1 model has configurable switch inputs.
 func hasInputSettings(deviceType string) bool {
 	switch deviceType {

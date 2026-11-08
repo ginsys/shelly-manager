@@ -5,10 +5,22 @@ import {
   inheritedBaseline,
   setAt,
   subtreeApplicable,
+  templateSchemaTarget,
   validateOverrides,
   validateValue,
 } from '../config-form'
 import type { SchemaProperty } from '@/api/typedConfig'
+
+describe('templateSchemaTarget', () => {
+  it('uses the model schema for a device_type template, and none until the type is set', () => {
+    expect(templateSchemaTarget('device_type', ' SHPLG-S ')).toEqual({ deviceType: 'SHPLG-S' })
+    expect(templateSchemaTarget('device_type', '')).toBeNull()
+  })
+  it('uses the template schema for a global or group template', () => {
+    expect(templateSchemaTarget('group', 'SHPLG-S')).toEqual({ scope: 'group' })
+    expect(templateSchemaTarget(undefined, undefined)).toEqual({ scope: 'global' })
+  })
+})
 
 describe('config-form paths', () => {
   it('setAt creates parents and does not change its input', () => {

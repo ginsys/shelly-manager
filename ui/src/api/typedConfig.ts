@@ -150,10 +150,17 @@ export async function convertToRaw(request: ConversionRequest): Promise<Record<s
 // getConfigSchema returns the generic schema, or with a device type or a device id the schema of
 // the configuration stored for that model. A device id resolves the model on the server, the way
 // apply does.
-export async function getConfigSchema(deviceType?: string, deviceId?: number | string): Promise<ConfigSchema> {
-  const params = deviceId !== undefined && deviceId !== ''
-    ? { device_id: deviceId }
-    : { device_type: deviceType }
+// getConfigSchema asks for the schema of one device (deviceId), one model (deviceType), or a
+// global or group template (scope). The first one given wins. With none it gets the generic schema.
+export async function getConfigSchema(
+  deviceType?: string,
+  deviceId?: number | string,
+  scope?: string,
+): Promise<ConfigSchema> {
+  let params: Record<string, unknown> = {}
+  if (deviceId !== undefined && deviceId !== '') params = { device_id: deviceId }
+  else if (deviceType) params = { device_type: deviceType }
+  else if (scope) params = { scope }
   const res = await api.get<APIResponse<ConfigSchema>>('/config/schema', { params })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get configuration schema'

@@ -311,9 +311,13 @@ describe('typedConfig API', () => {
       })
 
       await getConfigSchema()
-      expect(api.get).toHaveBeenCalledWith('/config/schema', {
-        params: { device_type: undefined }
-      })
+      expect(api.get).toHaveBeenCalledWith('/config/schema', { params: {} })
+    })
+
+    it('asks for the template schema of a global or group scope', async () => {
+      ;(api.get as any).mockResolvedValue({ data: { success: true, data: { type: 'object', properties: {} } } })
+      await getConfigSchema(undefined, undefined, 'group')
+      expect(api.get).toHaveBeenCalledWith('/config/schema', { params: { scope: 'group' } })
     })
 
     it('throws error when schema not available', async () => {

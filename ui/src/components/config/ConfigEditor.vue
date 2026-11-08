@@ -123,6 +123,9 @@ interface Props {
   // A device id asks the server for the schema of that device's model, resolved the way apply
   // resolves it. It wins over deviceType.
   deviceId?: number | string
+  // A global or group template scope asks for the template schema: every stored section. It is
+  // used only when neither deviceId nor deviceType is given.
+  scope?: string
   inherited?: ConfigBody | null
   sources?: Record<string, string>
 }
@@ -171,7 +174,7 @@ async function loadSchema() {
   loading.value = true
   loadError.value = null
   try {
-    schema.value = await typedConfigStore.fetchSchema(props.deviceType, props.deviceId)
+    schema.value = await typedConfigStore.fetchSchema(props.deviceType, props.deviceId, props.scope)
     if (schema.value?.properties) {
       Object.keys(schema.value.properties).forEach(key => {
         // Open the sections that already hold overrides.
@@ -234,6 +237,12 @@ function toggleSection(key: string) {
 }
 
 onMounted(() => {
+  loadSchema()
+})
+
+// A template page changes the scope or the model while the editor is open.
+watch(() => [props.deviceType, props.deviceId, props.scope], () => {
+  schema.value = null
   loadSchema()
 })
 </script>

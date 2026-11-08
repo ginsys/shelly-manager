@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -85,8 +86,16 @@ func (h *Handler) GetNewConfigTemplates(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) CreateNewConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	rw := h.responseWriter()
 
+	raw, head, err := readTemplateBody(r)
+	if err != nil {
+		rw.WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(head.Scope, head.DeviceType), head.Config) {
+		return
+	}
 	var req CreateTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.Unmarshal(raw, &req); err != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
@@ -203,8 +212,16 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	raw, head, err := readTemplateBody(r)
+	if err != nil {
+		rw.WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(existing.Scope, existing.DeviceType), head.Config) {
+		return
+	}
 	var req UpdateTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.Unmarshal(raw, &req); err != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
@@ -290,6 +307,55 @@ func (h *Handler) DeleteNewConfigTemplate(w http.ResponseWriter, r *http.Request
 	}).Info("Template deleted via API")
 
 	rw.WriteNoContent(w, r)
+}
+
+// maxTemplateBodyBytes bounds a template create or update request body.
+const maxTemplateBodyBytes = 1 << 20
+
+// templateHead holds the fields of a template request that schema validation needs. Config is
+// the raw body, before DeviceConfiguration decoding drops keys or refuses a wrong type.
+type templateHead struct {
+	Scope      string                 `json:"scope"`
+	DeviceType string                 `json:"device_type"`
+	Config     map[string]interface{} `json:"config"`
+}
+
+// readTemplateBody reads a template request body. It returns the raw bytes, for the typed
+// request, and its head, for schema validation.
+func readTemplateBody(r *http.Request) ([]byte, templateHead, error) {
+	var head templateHead
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxTemplateBodyBytes+1))
+	if err != nil {
+		return nil, head, err
+	}
+	if len(raw) > maxTemplateBodyBytes {
+		return nil, head, errors.New("request body too large")
+	}
+	if err := json.Unmarshal(raw, &head); err != nil {
+		return nil, head, err
+	}
+	return raw, head, nil
+}
+
+// schemaDeviceType names the device schema a template body is checked against: the template's
+// model for a device_type template, every section for a global or group template.
+func schemaDeviceType(scope, deviceType string) string {
+	if scope == configuration.ScopeDeviceType {
+		return deviceType
+	}
+	return ""
+}
+
+// writeConfigFieldErrors checks config against the device schema of deviceType. If a field
+// fails, it writes a validation error whose details list each field, and returns true.
+func writeConfigFieldErrors(rw *apiresp.ResponseWriter, w http.ResponseWriter, r *http.Request,
+	deviceType string, config map[string]interface{}) bool {
+	fieldErrs := configuration.ValidateConfigBody(deviceType, config)
+	if len(fieldErrs) == 0 {
+		return false
+	}
+	rw.WriteValidationError(w, r, map[string]any{"fields": fieldErrs})
+	return true
 }
 
 // templateToResponse converts a ServiceConfigTemplate to TemplateResponse

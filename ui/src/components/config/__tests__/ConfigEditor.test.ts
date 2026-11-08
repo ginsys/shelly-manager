@@ -81,7 +81,16 @@ describe('ConfigEditor', () => {
   it('asks for the schema of the device', async () => {
     mountEditor({})
     await flushPromises()
-    expect(getConfigSchema).toHaveBeenCalledWith(undefined, 7)
+    expect(getConfigSchema).toHaveBeenCalledWith(undefined, 7, undefined)
+  })
+
+  it('reloads the schema when the template scope or model changes', async () => {
+    const wrapper = mount(ConfigEditor, { props: { modelValue: {}, scope: 'global' } })
+    await flushPromises()
+    expect(getConfigSchema).toHaveBeenLastCalledWith(undefined, undefined, 'global')
+    await wrapper.setProps({ scope: undefined, deviceType: 'SHPLG-S' })
+    await flushPromises()
+    expect(getConfigSchema).toHaveBeenLastCalledWith('SHPLG-S', undefined, undefined)
   })
 
   it('renders a nested object as fields, not a JSON box', async () => {

@@ -382,10 +382,27 @@ func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 // With ?device_type=<model> or ?device_id=<id> it returns the schema of the configuration stored
 // for that model (configuration.GetDeviceConfigurationSchema): only the model's sections, only
 // stored fields, and each field marked x-applicable when apply can write it. device_id resolves
-// the model the way apply does. Without either parameter it returns the generic schema.
+// the model the way apply does. scope=global or scope=group returns the schema of such a template
+// (configuration.GetTemplateConfigurationSchema). Without a parameter it returns the generic
+// schema.
 func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	deviceType := query.Get("device_type")
+
+	if scope := query.Get("scope"); scope != "" {
+		if deviceType != "" || query.Get("device_id") != "" {
+			h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+				"Use scope, device_type or device_id, not more than one", nil)
+			return
+		}
+		if scope != configuration.ScopeGlobal && scope != configuration.ScopeGroup {
+			h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+				"scope must be global or group; a device_type template uses device_type", nil)
+			return
+		}
+		h.responseWriter().WriteSuccess(w, r, configuration.GetTemplateConfigurationSchema())
+		return
+	}
 
 	if idParam := query.Get("device_id"); idParam != "" {
 		if deviceType != "" {
