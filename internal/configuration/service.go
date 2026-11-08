@@ -792,10 +792,11 @@ func (s *Service) compareConfigurationsForDrift(stored, current json.RawMessage)
 
 // driftTelemetryRootKeys are top-level keys of a device settings document that carry live
 // readings, not configuration. Gen1 plugs put "meters" (power, counters, timestamp) in
-// /settings. They are dropped at the document root only: "emeters" is deliberately absent
+// /settings, and every Gen1 device reports its clock as "time" and "unixtime", which move on
+// every read. They are dropped at the document root only: "emeters" is deliberately absent
 // because on energy-meter models it holds real configuration (appliance type, max power),
 // and a nested key that happens to share a name must still be compared.
-var driftTelemetryRootKeys = []string{"meters"}
+var driftTelemetryRootKeys = []string{"meters", "time", "unixtime"}
 
 // dropRootKeys returns doc without the given top-level keys. A document that is not a JSON
 // object is returned unchanged, so the comparison treats it exactly as before.
