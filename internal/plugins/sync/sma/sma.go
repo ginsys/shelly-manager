@@ -29,9 +29,15 @@ type SMAPlugin struct {
 	importBaseDir   string
 	normalizedLimit int64
 	files           fileOperations
+	importStore     sync.ImportStore
 }
 
+// SetImportStore gives the plugin the engine's database access for non-dry-run imports.
+// Without it a real import fails closed with sync.ErrImportNotImplemented.
+func (s *SMAPlugin) SetImportStore(store sync.ImportStore) { s.importStore = store }
+
 var (
+	_ sync.ImportStoreAware           = (*SMAPlugin)(nil)
 	_ sync.PathRestrictedPlugin       = (*SMAPlugin)(nil)
 	_ sync.ExportPathRestrictedPlugin = (*SMAPlugin)(nil)
 	_ sync.ImportPathRestrictedPlugin = (*SMAPlugin)(nil)

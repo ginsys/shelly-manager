@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Added
+- SMA import now restores devices (with their desired configuration),
+  templates and discovered devices. The import runs in one transaction, so a
+  failure writes nothing. Existing records are skipped, or replaced with
+  `force_overwrite`, and `validate_only` writes nothing. Network settings,
+  plugin configurations and system settings in the archive are not restored,
+  and `backup_before` is ignored; both are reported as warnings. An export
+  followed by an import now restores the data. (#284)
+
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate
   mitigation (CVE-2026-111943). golangci-lint is 2.15.0. Module updates include

@@ -99,7 +99,7 @@ func (s *SMAPlugin) importLimit() int64 {
 	return defaultNormalizedLimit
 }
 
-func (s *SMAPlugin) importNormalized(_ context.Context, data []byte, config sync.ImportConfig) (*sync.ImportResult, error) {
+func (s *SMAPlugin) importNormalized(ctx context.Context, data []byte, config sync.ImportConfig) (*sync.ImportResult, error) {
 	start := time.Now()
 	treeValue, parseErr := parseStrictJSON(data, 64)
 	if parseErr != nil {
@@ -150,7 +150,7 @@ func (s *SMAPlugin) importNormalized(_ context.Context, data []byte, config sync
 		return invalidImportResult("invalid SMA structure", err)
 	}
 	var archive SMAArchive
-	if err := json.Unmarshal(restored, &archive); err != nil {
+	if err = json.Unmarshal(restored, &archive); err != nil {
 		return invalidImportResult("invalid SMA structure", err)
 	}
 	importID := fmt.Sprintf("sma-import-%d", time.Now().UnixNano())
@@ -158,19 +158,96 @@ func (s *SMAPlugin) importNormalized(_ context.Context, data []byte, config sync
 		return s.generateDryRunResult(importID, &archive, time.Since(start))
 	}
 
-	notImplemented := fmt.Errorf(
-		"SMA import persistence is not yet implemented; re-run with dry_run to preview (#284): %w",
-		sync.ErrImportNotImplemented,
-	)
+	if config.Options.ValidateOnly {
+		// The archive passed every check above; nothing is written.
+		var result *sync.ImportResult
+		result, err = s.generateDryRunResult(importID, &archive, time.Since(start))
+		if err != nil {
+			return nil, err
+		}
+		result.Warnings = []string{"Validation only - the archive is valid and no changes were made"}
+		result.Metadata["dry_run"] = false
+		result.Metadata["validate_only"] = true
+		return result, nil
+	}
+
+	if s.importStore == nil {
+		notImplemented := fmt.Errorf(
+			"SMA import has no database to write to; re-run with dry_run to preview: %w",
+			sync.ErrImportNotImplemented,
+		)
+		return &sync.ImportResult{
+			Success:    false,
+			ImportID:   importID,
+			PluginName: "sma",
+			Format:     "sma",
+			Duration:   time.Since(start),
+			Errors:     []string{notImplemented.Error()},
+			CreatedAt:  time.Now(),
+		}, notImplemented
+	}
+
+	applied, err := s.importStore.ApplyImport(ctx, archiveExportData(&archive), config.Options)
+	if err != nil {
+		// The store writes in one transaction, so nothing was written.
+		failed := fmt.Errorf("SMA import failed, no changes were made: %w", err)
+		return &sync.ImportResult{
+			Success:    false,
+			ImportID:   importID,
+			PluginName: "sma",
+			Format:     "sma",
+			Duration:   time.Since(start),
+			Errors:     []string{failed.Error()},
+			CreatedAt:  time.Now(),
+		}, failed
+	}
 	return &sync.ImportResult{
-		Success:    false,
-		ImportID:   importID,
-		PluginName: "sma",
-		Format:     "sma",
-		Duration:   time.Since(start),
-		Errors:     []string{notImplemented.Error()},
-		CreatedAt:  time.Now(),
-	}, notImplemented
+		Success:         true,
+		ImportID:        importID,
+		PluginName:      "sma",
+		Format:          "sma",
+		RecordsImported: applied.Imported,
+		RecordsSkipped:  applied.Skipped,
+		Changes:         applied.Changes,
+		Warnings:        importWarnings(&archive, config.Options, applied),
+		Metadata: map[string]interface{}{
+			"format_version": archive.FormatVersion,
+			"source_system":  archive.Metadata.SystemInfo.Hostname,
+			"dry_run":        false,
+		},
+		Duration:  time.Since(start),
+		CreatedAt: time.Now(),
+	}, nil
+}
+
+// archiveExportData maps a decoded archive to the records the engine persists. Device
+// configurations travel nested inside their device.
+func archiveExportData(archive *SMAArchive) *sync.ExportData {
+	return &sync.ExportData{
+		Devices:           archive.Devices,
+		Templates:         archive.Templates,
+		DiscoveredDevices: archive.Discovered,
+		Timestamp:         time.Now(),
+	}
+}
+
+// importWarnings names what an import did not do, so a caller never reads a partial restore as a
+// complete one.
+func importWarnings(archive *SMAArchive, options sync.ImportOptions, applied *sync.ImportApplyResult) []string {
+	var warnings []string
+	if archive.Network.MQTTConfig != nil || len(archive.Network.WiFiNetworks) > 0 ||
+		len(archive.Network.NTPServers) > 0 || len(archive.PluginConfigs) > 0 {
+		warnings = append(warnings,
+			"Network settings and plugin configurations in the archive are not restored; only devices, templates and discovered devices are")
+	}
+	if options.BackupBefore {
+		warnings = append(warnings, "backup_before is not supported and was ignored; no backup was taken")
+	}
+	if applied.Skipped > 0 && !options.ForceOverwrite {
+		warnings = append(warnings,
+			fmt.Sprintf("%d existing records were left unchanged; set force_overwrite to replace them", applied.Skipped))
+	}
+	return warnings
 }
 
 func invalidImportResult(kind string, cause error) (*sync.ImportResult, error) {
