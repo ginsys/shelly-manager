@@ -179,6 +179,11 @@ All notable changes to this project are documented here. The project follows Con
   the next device, for example after the device page in between. A new page
   starts from an empty store, and a page that was left stops its own handlers.
   (#402)
+- mDNS discovery read each service entry while the mDNS client was still
+  writing its fields, a data race under `go test -race`. `DiscoverDevices` now
+  collects the entries and reads them after the query returns. `POST
+  /api/v1/discover` also tracks its scan goroutine, so `Handler.WaitBackground`
+  waits for it. The API tests no longer scan a real network. (#412)
 - `database.path` (and `SHELLY_DATABASE_PATH`) is honoured again: a built-in
   `database.dsn` default always won, so unless `dsn` was set explicitly every
   SQLite run used `data/shelly.db` whatever `path` said. `dsn` still takes

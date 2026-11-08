@@ -10,6 +10,9 @@ import (
 	"github.com/hashicorp/mdns"
 )
 
+// mdnsQuery sends one mDNS query. A test replaces it, so that it never sends on the network.
+var mdnsQuery = mdns.Query
+
 // MDNSScanner handles mDNS-based device discovery
 type MDNSScanner struct {
 	timeout time.Duration
@@ -43,10 +46,10 @@ func (m *MDNSScanner) DiscoverDevices(ctx context.Context) ([]ShellyDevice, erro
 		params.Timeout = m.timeout
 		params.DisableIPv6 = true
 
-		if err := mdns.Query(params); err != nil {
+		if err := mdnsQuery(params); err != nil {
 			// Try generic HTTP service as fallback
 			params.Service = "_http._tcp"
-			if fallbackErr := mdns.Query(params); fallbackErr != nil {
+			if fallbackErr := mdnsQuery(params); fallbackErr != nil {
 				// Log the error but continue - mDNS discovery is best effort
 				m.scanner.logger.WithFields(map[string]any{
 					"component": "discovery",
@@ -57,9 +60,18 @@ func (m *MDNSScanner) DiscoverDevices(ctx context.Context) ([]ShellyDevice, erro
 		}
 	}()
 
+	// Collect the entry pointers and read none of their fields yet. At the first record of a
+	// service the client sends the entry, and at each later record it writes more fields into
+	// that same entry, so a read here races with the client. The goroutine closes the channel
+	// only after mdns.Query has returned, and the client writes nothing after that.
+	var entries []*mdns.ServiceEntry
+	for entry := range entriesCh {
+		entries = append(entries, entry)
+	}
+
 	// Process discovered services
 	seen := make(map[string]bool)
-	for entry := range entriesCh {
+	for _, entry := range entries {
 		// Check if it's a Shelly device
 		if !m.isShellyDevice(entry) {
 			continue
