@@ -21,6 +21,8 @@ type mockRepository struct {
 	getErr         error
 	updateErr      error
 	deleteErr      error
+	getDeviceCalls int
+	afterGetDevice func(call int) // runs after each GetDevice, to simulate a concurrent edit
 }
 
 func newMockRepository() *mockRepository {
@@ -110,10 +112,17 @@ func (m *mockRepository) GetDevice(id uint) (*ServiceDevice, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
-	if d, ok := m.devices[id]; ok {
-		return d, nil
+	d, ok := m.devices[id]
+	if !ok {
+		return nil, ErrDeviceNotFound
 	}
-	return nil, ErrDeviceNotFound
+	// Return a copy, like a database read: a later edit must not change what the caller holds.
+	read := *d
+	m.getDeviceCalls++
+	if m.afterGetDevice != nil {
+		m.afterGetDevice(m.getDeviceCalls)
+	}
+	return &read, nil
 }
 
 func (m *mockRepository) GetDevices() ([]ServiceDevice, error) {

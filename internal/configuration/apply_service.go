@@ -96,7 +96,10 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	}
 	snapshot := device.DesiredConfig
 
-	desired, _, err := s.GetDesiredConfig(deviceID)
+	// Apply exactly the snapshot that the compare-and-set checks. A second read could see an
+	// edit that is undone before the check, so the device would hold a configuration the
+	// check never saw.
+	desired, err := parseDesiredConfig(snapshot)
 	if err != nil {
 		return nil, err
 	}

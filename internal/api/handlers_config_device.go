@@ -444,26 +444,36 @@ func (h *Handler) ApplyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
 
 	resp := ConfigApplyResponse{
 		Success:  result.ConfigApplied,
-		Failures: []string{},
+		Failures: applyFailureMessages(result),
 	}
 	if result.ApplyResult != nil {
 		resp.AppliedCount = result.ApplyResult.AppliedCount
 		resp.FailedCount = result.ApplyResult.FailedCount
 		resp.RequiresReboot = result.ApplyResult.RequiresReboot
 		resp.Warnings = result.ApplyResult.Warnings
+	}
+
+	rw.WriteSuccess(w, r, resp)
+}
+
+// applyFailureMessages lists the settings the device refused and the read-back differences.
+// A refused write names the setting only: the device's own error text can echo the value it
+// was sent, such as the MQTT password, so it goes to the server log and never to the caller.
+func applyFailureMessages(result *configuration.ApplyVerifyResult) []string {
+	failures := []string{}
+	if result.ApplyResult != nil {
 		for _, f := range result.ApplyResult.Failures {
-			resp.Failures = append(resp.Failures, f.Path+": "+f.Error)
+			failures = append(failures, f.Path+": the device refused the write")
 		}
 	}
 	if result.VerifyResult != nil {
 		for _, d := range result.VerifyResult.Differences {
 			path, expected, actual := redactDifference(d)
-			resp.Failures = append(resp.Failures,
+			failures = append(failures,
 				fmt.Sprintf("verify %s: expected %v, device has %v", path, expected, actual))
 		}
 	}
-
-	rw.WriteSuccess(w, r, resp)
+	return failures
 }
 
 // writeConfigDeviceError maps errors from talking to a device to API responses.

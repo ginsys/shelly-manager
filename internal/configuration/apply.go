@@ -98,8 +98,11 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	// Count settings
 	result.SettingsCount = a.countSettings(apiConfig)
 
-	// Apply configuration sections
-	a.applyConfigSections(ctx, client, apiConfig, result)
+	// Apply configuration sections. A rejected login is an error, not a failed setting: the caller
+	// maps it to "the device rejected the stored credentials".
+	if err := a.applyConfigSections(ctx, client, apiConfig, result); err != nil {
+		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
+	}
 
 	// Check if reboot is required
 	if currentConfig != nil {
@@ -127,58 +130,37 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	return result, nil
 }
 
-// applyConfigSections applies each section of the configuration
-func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) {
+// applyConfigSections applies each section of the configuration. A section the device refuses
+// is recorded in result and the next section is tried, except when the device rejects the login:
+// every later write would be rejected too, so that error stops the apply and is returned.
+func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
 	// For Gen1 devices, we can send settings to /settings endpoint
 	// Different setting groups go to different endpoints
-
-	// Main settings (name, timezone, location, etc.)
-	if err := a.applyMainSettings(ctx, client, apiConfig, result); err != nil {
+	sections := []struct {
+		name  string
+		apply func(context.Context, ShellyClient, map[string]interface{}, *ApplyResult) error
+	}{
+		{"main", a.applyMainSettings}, // name, timezone, location, etc.
+		{"WiFi", a.applyWiFiSettings},
+		{"MQTT", a.applyMQTTSettings},
+		{"Cloud", a.applyCloudSettings},
+		{"CoIoT", a.applyCoIoTSettings},
+		{"Relay", a.applyRelaySettings},
+	}
+	for _, section := range sections {
+		err := section.apply(ctx, client, apiConfig, result)
+		if err == nil {
+			continue
+		}
 		a.logger.WithFields(map[string]any{
 			"error":     err.Error(),
 			"component": "config_applier",
-		}).Warn("Failed to apply main settings")
+		}).Warn("Failed to apply " + section.name + " settings")
+		if shelly.IsAuthError(err) {
+			return err
+		}
 	}
-
-	// WiFi settings
-	if err := a.applyWiFiSettings(ctx, client, apiConfig, result); err != nil {
-		a.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "config_applier",
-		}).Warn("Failed to apply WiFi settings")
-	}
-
-	// MQTT settings
-	if err := a.applyMQTTSettings(ctx, client, apiConfig, result); err != nil {
-		a.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "config_applier",
-		}).Warn("Failed to apply MQTT settings")
-	}
-
-	// Cloud settings
-	if err := a.applyCloudSettings(ctx, client, apiConfig, result); err != nil {
-		a.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "config_applier",
-		}).Warn("Failed to apply Cloud settings")
-	}
-
-	// CoIoT settings
-	if err := a.applyCoIoTSettings(ctx, client, apiConfig, result); err != nil {
-		a.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "config_applier",
-		}).Warn("Failed to apply CoIoT settings")
-	}
-
-	// Relay settings
-	if err := a.applyRelaySettings(ctx, client, apiConfig, result); err != nil {
-		a.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "config_applier",
-		}).Warn("Failed to apply Relay settings")
-	}
+	return nil
 }
 
 func (a *ConfigApplier) applyMainSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {

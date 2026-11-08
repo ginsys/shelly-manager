@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,8 @@ type fakeGen1Device struct {
 	ignoreWrites bool
 	setCalls     int
 	posted       []map[string]interface{}
-	onWrite      func() // runs after each accepted write, to simulate a concurrent edit
+	onWrite      func()          // runs after each accepted write, to simulate a concurrent edit
+	dropKeys     map[string]bool // form keys the device accepts but does not store
 }
 
 func newFakeGen1Device() *fakeGen1Device {
@@ -42,6 +44,9 @@ func (d *fakeGen1Device) SetConfig(_ context.Context, cfg map[string]interface{}
 		return nil
 	}
 	for k, v := range cfg {
+		if d.dropKeys[k] {
+			continue
+		}
 		// Like a real Gen1 device: flat mqtt_* parameters in, a nested "mqtt" document out.
 		if sub, ok := strings.CutPrefix(k, "mqtt_"); ok {
 			doc, _ := d.settings["mqtt"].(map[string]interface{})
@@ -60,8 +65,23 @@ func (d *fakeGen1Device) SetConfig(_ context.Context, cfg map[string]interface{}
 	return nil
 }
 
+// GetConfig returns the stored settings. Like a real Gen1 device it never returns the MQTT
+// password: GET /settings omits mqtt.pass even after a write.
 func (d *fakeGen1Device) GetConfig(_ context.Context) (*shelly.DeviceConfig, error) {
-	raw, err := json.Marshal(d.settings)
+	out := make(map[string]interface{}, len(d.settings))
+	for k, v := range d.settings {
+		out[k] = v
+	}
+	if doc, ok := d.settings["mqtt"].(map[string]interface{}); ok {
+		visible := make(map[string]interface{}, len(doc))
+		for k, v := range doc {
+			if k != "pass" {
+				visible[k] = v
+			}
+		}
+		out["mqtt"] = visible
+	}
+	raw, err := json.Marshal(out)
 	if err != nil {
 		return nil, err
 	}
@@ -223,8 +243,78 @@ func TestApplyDesiredConfig_MQTTPasswordNeverReadBackStillVerifies(t *testing.T)
 	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
 
 	require.NoError(t, err)
+	mqtt, _ := dev.settings["mqtt"].(map[string]interface{})
+	require.Equal(t, "s3cret", mqtt["pass"], "the password was written")
 	assert.True(t, result.ConfigApplied, "a write-only secret must not keep the device pending")
 	assert.True(t, repo.devices[1].ConfigApplied)
+}
+
+// Control for the test above: skipping the password on read-back must not hide a real MQTT
+// difference.
+func TestApplyDesiredConfig_MQTTFieldTheDeviceDropsStaysPending(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		MQTT: &MQTTConfiguration{
+			Enable:   BoolPtr(true),
+			Server:   StringPtr("broker.local"),
+			Port:     IntPtr(1883),
+			User:     StringPtr("iot"),
+			Password: StringPtr("s3cret"),
+		},
+	})
+	dev := newFakeGen1Device()
+	dev.dropKeys = map[string]bool{"mqtt_user": true}
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied, "the device did not store mqtt.user")
+	require.NotNil(t, result.VerifyResult)
+	assert.NotEmpty(t, result.VerifyResult.Differences)
+	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+// A device that rejects the login on the write is an error the API maps to 502, not a failed
+// setting in a 200 response.
+func TestApplyDesiredConfig_RejectedLoginOnWriteIsAnAuthError(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	repo.devices[1].ConfigApplied = true
+	dev := newFakeGen1Device()
+	dev.setErr = fmt.Errorf("POST /settings: %w", shelly.ErrAuthRequired)
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, shelly.IsAuthError(err), "got %v", err)
+	assert.Equal(t, 1, dev.setCalls, "no further write after the login is rejected")
+	assert.False(t, repo.devices[1].ConfigApplied, "the device stays pending")
+}
+
+// The configuration written is the snapshot the compare-and-set checks, even when the stored
+// configuration changes and changes back during the apply.
+func TestApplyDesiredConfig_WritesTheSnapshotItChecks(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	original := repo.devices[1].DesiredConfig
+	other, err := json.Marshal(&DeviceConfiguration{
+		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("other-name")}},
+	})
+	require.NoError(t, err)
+	repo.afterGetDevice = func(call int) {
+		switch call {
+		case 1: // an edit lands right after the snapshot
+			repo.devices[1].DesiredConfig = string(other)
+		case 2: // and is undone before the compare-and-set
+			repo.devices[1].DesiredConfig = original
+		}
+	}
+	dev := newFakeGen1Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "tv-office", dev.settings["name"], "the snapshot is what was written")
 }
 
 func TestApplyDesiredConfig_CustomLocationDisablesAutoDetect(t *testing.T) {
@@ -296,6 +386,15 @@ func TestApplyDesiredConfig_ConfigChangedDuringApplyStaysPending(t *testing.T) {
 	assert.False(t, result.ConfigApplied)
 	assert.False(t, repo.devices[1].ConfigApplied, "the newer configuration was never sent")
 	assert.Contains(t, strings.Join(result.ApplyResult.Warnings, " "), "changed while it was being applied")
+}
+
+// MySQL compares text with the column collation, often case-insensitive, so the compare-and-set
+// must force a byte comparison there. The other providers compare exactly already.
+func TestDesiredConfigMatchCondition_ExactOnMySQL(t *testing.T) {
+	assert.Contains(t, desiredConfigMatchCondition("mysql"), "BINARY COALESCE(desired_config, '') = ?")
+	for _, dialect := range []string{"sqlite", "postgres"} {
+		assert.Equal(t, "id = ? AND COALESCE(desired_config, '') = ?", desiredConfigMatchCondition(dialect), dialect)
+	}
 }
 
 func TestApplyDesiredConfig_UnknownDevice(t *testing.T) {
