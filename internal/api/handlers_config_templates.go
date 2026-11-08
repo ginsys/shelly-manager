@@ -46,6 +46,9 @@ type TemplateResponse struct {
 	HasWiFiPassword *bool `json:"has_wifi_password,omitempty"`
 	HasMQTTPassword *bool `json:"has_mqtt_password,omitempty"`
 	HasAuthPassword *bool `json:"has_auth_password,omitempty"`
+	// StoredSecrets lists the schema paths of the secrets the template holds, for example
+	// "mqtt.pass". An update that leaves one out keeps it; an empty string clears it.
+	StoredSecrets []string `json:"stored_secrets"`
 }
 
 // ListTemplatesResponse represents the response for listing templates
@@ -234,6 +237,15 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 		existing.Description = req.Description
 	}
 	if req.Config != nil {
+		// The client read the template with its secrets redacted; keep the ones it left out.
+		var stored configuration.DeviceConfiguration
+		if len(existing.Config) > 0 {
+			if err = json.Unmarshal(existing.Config, &stored); err != nil {
+				rw.WriteInternalError(w, r, err)
+				return
+			}
+		}
+		configuration.KeepStoredSecrets(req.Config, &stored)
 		configJSON, err := json.Marshal(req.Config)
 		if err != nil {
 			rw.WriteInternalError(w, r, err)
@@ -362,13 +374,14 @@ func writeConfigFieldErrors(rw *apiresp.ResponseWriter, w http.ResponseWriter, r
 // This function handles secret redaction
 func templateToResponse(tmpl *configuration.ServiceConfigTemplate) TemplateResponse {
 	resp := TemplateResponse{
-		ID:          tmpl.ID,
-		Name:        tmpl.Name,
-		Description: tmpl.Description,
-		Scope:       tmpl.Scope,
-		DeviceType:  tmpl.DeviceType,
-		CreatedAt:   tmpl.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:   tmpl.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:            tmpl.ID,
+		Name:          tmpl.Name,
+		Description:   tmpl.Description,
+		Scope:         tmpl.Scope,
+		DeviceType:    tmpl.DeviceType,
+		CreatedAt:     tmpl.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:     tmpl.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		StoredSecrets: []string{},
 	}
 
 	// Parse config and redact secrets
@@ -390,6 +403,7 @@ func templateToResponse(tmpl *configuration.ServiceConfigTemplate) TemplateRespo
 				resp.HasAuthPassword = &hasAuthPass
 			}
 
+			resp.StoredSecrets = configuration.StoredSecretPaths(&config)
 			// Redact secrets before returning
 			redactSecrets(&config)
 			resp.Config = &config

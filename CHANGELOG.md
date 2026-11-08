@@ -75,6 +75,12 @@ All notable changes to this project are documented here. The project follows Con
   configuration/testing/enablement is tracked as a design vertical (#290).
 
 ### Fixed
+- Saving a template (`PUT /config/templates/new/{id}`) or a device override
+  body (`PUT /devices/{id}/overrides/new`) no longer deletes the stored Wi-Fi,
+  access point, MQTT or auth password. The API returns secrets redacted, so a
+  client sends them back missing. A missing secret now keeps the stored value,
+  and an explicit empty string clears it. Both responses list the stored secrets
+  in `stored_secrets`, for example `mqtt.pass` (#395).
 - Device credentials saved with `PUT /devices/{id}/config/auth` were stored
   where no client builder reads them, and a cached client kept the old login
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`

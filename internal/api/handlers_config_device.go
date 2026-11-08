@@ -253,11 +253,12 @@ func (h *Handler) GetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	storedSecrets := configuration.StoredSecretPaths(overrides)
 	if overrides != nil {
 		redactSecrets(overrides)
 	}
 
-	rw.WriteSuccess(w, r, map[string]any{"overrides": overrides})
+	rw.WriteSuccess(w, r, map[string]any{"overrides": overrides, "stored_secrets": storedSecrets})
 }
 
 func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) {
@@ -271,12 +272,24 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var overrides configuration.DeviceConfiguration
-	if err := json.NewDecoder(r.Body).Decode(&overrides); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&overrides); err != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
-	if err := h.ConfigService.ConfigurationSvc.SetDeviceOverrides(uint(id), &overrides); err != nil {
+	// The client read the overrides with their secrets redacted; keep the ones it left out.
+	stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id))
+	if err != nil {
+		if errors.Is(err, configuration.ErrDeviceNotFound) {
+			rw.WriteNotFoundError(w, r, "Device")
+			return
+		}
+		rw.WriteInternalError(w, r, err)
+		return
+	}
+	configuration.KeepStoredSecrets(&overrides, stored)
+
+	if err = h.ConfigService.ConfigurationSvc.SetDeviceOverrides(uint(id), &overrides); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {
 			rw.WriteNotFoundError(w, r, "Device")
 			return
@@ -288,6 +301,7 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	savedOverrides, _ := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id))
 	desiredConfig, _, _ := h.ConfigService.ConfigurationSvc.GetDesiredConfig(uint(id))
 
+	storedSecrets := configuration.StoredSecretPaths(savedOverrides)
 	if savedOverrides != nil {
 		redactSecrets(savedOverrides)
 	}
@@ -298,6 +312,7 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	rw.WriteSuccess(w, r, map[string]any{
 		"overrides":      savedOverrides,
 		"desired_config": desiredConfig,
+		"stored_secrets": storedSecrets,
 	})
 }
 
