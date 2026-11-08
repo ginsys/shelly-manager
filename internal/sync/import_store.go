@@ -321,7 +321,9 @@ func resolveRedacted(config, current map[string]interface{}) int {
 			found += resolveRedacted(v, child)
 		case []interface{}:
 			stored, _ := current[key].([]interface{})
-			found += resolveRedactedList(v, stored)
+			resolved, n := resolveRedactedList(v, stored)
+			config[key] = resolved
+			found += n
 		}
 	}
 	return found
@@ -349,27 +351,42 @@ func holdsPlaceholder(value interface{}) bool {
 	return false
 }
 
-// resolveRedactedList resolves the redacted values inside the objects and nested lists of list.
-// Element i is resolved against stored element i. A value with no stored element at that position
-// is left out. A stored list that was reordered since the export pairs the wrong elements, which
-// is the limit of matching by position.
-func resolveRedactedList(list, stored []interface{}) int {
+// resolveRedactedList resolves the redacted values inside list and returns the resolved list with
+// how many it found. Element i is resolved against stored element i. A bare RedactedValue element
+// takes the stored element when that is a string that is not a placeholder, and is left out
+// otherwise. A stored list that was reordered since the export pairs the wrong elements, which is
+// the limit of matching by position.
+func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 	found := 0
+	out := make([]interface{}, 0, len(list))
 	for i, item := range list {
 		var kept interface{}
 		if i < len(stored) {
 			kept = stored[i]
 		}
 		switch v := item.(type) {
+		case string:
+			if v != RedactedValue {
+				out = append(out, item)
+				continue
+			}
+			found++
+			if s, ok := kept.(string); ok && !holdsPlaceholder(s) {
+				out = append(out, s)
+			}
+			continue
 		case map[string]interface{}:
 			child, _ := kept.(map[string]interface{})
 			found += resolveRedacted(v, child)
 		case []interface{}:
 			child, _ := kept.([]interface{})
-			found += resolveRedactedList(v, child)
+			resolved, n := resolveRedactedList(v, child)
+			found += n
+			item = resolved
 		}
+		out = append(out, item)
 	}
-	return found
+	return out, found
 }
 
 // marshalObject returns the JSON text of m, with a nil map stored as an empty object.

@@ -145,7 +145,8 @@ place. The import never stores that text. A replaced record keeps the value it
 has now, found where the export found it: the device's desired configuration,
 or the older stored configuration row when that is empty. Inside a list, the
 value at the same position is kept, so a list reordered since the export can
-pair the wrong values. A new record is written without the key. The result
+pair the wrong values. A bare `[REDACTED]` list entry with no stored text value
+at its position is removed from the list. A new record is written without the key. The result
 warns with the number of redacted values.
 
 The import does not restore the network settings, plugin configurations or
