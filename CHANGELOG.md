@@ -58,6 +58,14 @@ All notable changes to this project are documented here. The project follows Con
   configuration/testing/enablement is tracked as a design vertical (#290).
 
 ### Fixed
+- The device detail page always showed "No Drift", and the configuration page
+  had no way to see what the device holds. The UI read `hasDrift` and
+  `driftFields`, which the drift endpoint never sends; it now maps the
+  endpoint's `differences` list (and the `drift: false` no-configuration
+  answer) to the badge. `GET /devices/{id}/config/current` now answers in the
+  standard `{success, data}` envelope the UI client reads, instead of a bare
+  `configuration` member, and the configuration page has a read-only "Live on
+  device" panel that reads the device on demand. (#388)
 - Device credentials saved with `PUT /devices/{id}/config/auth` were stored
   where no client builder reads them, and a cached client kept the old login
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`

@@ -1047,7 +1047,10 @@ paths:
             type: integer
       responses:
         '200':
-          description: Current device configuration
+          description: >-
+            Current device configuration. The standard envelope carries the
+            configuration record as `data`; its `config` member holds the
+            settings read from the device.
           content:
             application/json:
               schema:

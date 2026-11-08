@@ -108,14 +108,37 @@ export async function exportDeviceConfig(id: number | string): Promise<DeviceCon
   return res.data.data
 }
 
+// The drift endpoint answers in one of two shapes: a full report
+// ({differences: [{path, ...}], ...}) when the device is compared, or
+// {device_id, drift: false, message} when no stored configuration exists.
+interface DriftDifference {
+  path?: string
+}
+interface DriftResponse {
+  differences?: DriftDifference[] | null
+  drift?: boolean
+  message?: string
+}
+
+function mapDriftResponse(data: DriftResponse): ConfigDrift {
+  const differences = Array.isArray(data.differences) ? data.differences : []
+  if (differences.length === 0) {
+    return { hasDrift: false }
+  }
+  return {
+    hasDrift: true,
+    driftFields: differences.map((d) => d.path).filter((p): p is string => !!p),
+  }
+}
+
 // Detect configuration drift
 export async function detectConfigDrift(id: number | string, signal?: AbortSignal): Promise<ConfigDrift> {
-  const res = await api.get<APIResponse<ConfigDrift>>(`/devices/${id}/config/drift`, { signal })
+  const res = await api.get<APIResponse<DriftResponse>>(`/devices/${id}/config/drift`, { signal })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to detect configuration drift'
     throw new Error(msg)
   }
-  return res.data.data
+  return mapDriftResponse(res.data.data)
 }
 
 // Apply template to device configuration

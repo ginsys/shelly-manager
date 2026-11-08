@@ -744,11 +744,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"success":       true,
-		"configuration": config,
-	})
+	h.responseWriter().WriteSuccess(w, r, config)
 }
 
 // GetCurrentDeviceConfigNormalized handles GET /api/v1/devices/{id}/config/current/normalized
