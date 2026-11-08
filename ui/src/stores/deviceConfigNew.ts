@@ -34,7 +34,12 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  // Counts refresh calls and resets. A refresh that finishes after a newer refresh or a reset
+  // belongs to an earlier device and must not write its answer into the store.
+  let refreshSeq = 0
+
   async function refresh(deviceId: number | string) {
+    const seq = ++refreshSeq
     loading.value = true
     error.value = null
 
@@ -45,6 +50,7 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
         getDesiredConfigNew(deviceId),
         getConfigStatusNew(deviceId),
       ])
+      if (seq !== refreshSeq) return
 
       templates.value = t.templates
       templateIds.value = t.template_ids
@@ -53,10 +59,12 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       sources.value = d.sources || {}
       status.value = s
     } catch (e: any) {
+      // The error of a refresh that was replaced is not the error of the device on screen.
+      if (seq !== refreshSeq) return
       error.value = e?.message || 'Failed to load new config state'
       throw e
     } finally {
-      loading.value = false
+      if (seq === refreshSeq) loading.value = false
     }
   }
 
@@ -219,6 +227,7 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
   }
 
   function reset() {
+    refreshSeq++ // a refresh still in flight now belongs to an earlier device
     templates.value = []
     templateIds.value = []
     overrides.value = null
