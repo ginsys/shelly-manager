@@ -156,6 +156,74 @@ func TestImportSkipsExistingRecordsUnlessForced(t *testing.T) {
 	assert.Equal(t, "tv-office", restored.Name)
 }
 
+const persistSecretConfig = `{"mqtt":{"enable":true,"server":"broker.local","password":"s3cret"}}`
+
+// A default export redacts sensitive values. Importing the archive must never store the
+// placeholder as a credential.
+func TestImportNeverStoresRedactionPlaceholders(t *testing.T) {
+	f := newPersistFixture(t)
+	f.seed(t)
+	require.NoError(t, f.db.GetDB().Model(&database.Device{}).Where("mac = ?", "aabbccddeeff").
+		Update("desired_config", persistSecretConfig).Error)
+	archive := f.export(t)
+
+	// A new record has no stored value to keep, so the redacted key is left out.
+	f.wipe(t)
+	fresh, err := f.importFile(t, archive, sync.ImportOptions{})
+	require.NoError(t, err)
+	var device database.Device
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	assert.JSONEq(t, `{"mqtt":{"enable":true,"server":"broker.local"}}`, device.DesiredConfig)
+	assert.NotContains(t, device.DesiredConfig, sync.RedactedValue)
+	assert.Contains(t, fresh.Warnings[0], "1 redacted values", "the caller must be told what was left out")
+
+	// An existing record keeps its stored secret when it is replaced.
+	require.NoError(t, f.db.GetDB().Model(&database.Device{}).Where("mac = ?", "aabbccddeeff").
+		Update("desired_config", persistSecretConfig).Error)
+	_, err = f.importFile(t, archive, sync.ImportOptions{ForceOverwrite: true})
+	require.NoError(t, err)
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	assert.JSONEq(t, persistSecretConfig, device.DesiredConfig)
+}
+
+func TestForcedImportKeepsTemplateScopeAndReportsOldValues(t *testing.T) {
+	f := newPersistFixture(t)
+	f.seed(t)
+	archive := f.export(t)
+	require.NoError(t, f.db.GetDB().Model(&configuration.ConfigTemplate{}).Where("name = ?", "plug-defaults").
+		Update("scope", "group").Error)
+	require.NoError(t, f.db.GetDB().Model(&database.Device{}).Where("mac = ?", "aabbccddeeff").
+		Update("name", "renamed").Error)
+
+	result, err := f.importFile(t, archive, sync.ImportOptions{ForceOverwrite: true})
+
+	require.NoError(t, err)
+	var template configuration.ConfigTemplate
+	require.NoError(t, f.db.GetDB().Where("name = ?", "plug-defaults").First(&template).Error)
+	assert.Equal(t, "group", template.Scope, "the archive carries no scope, so a replacement keeps the stored one")
+	var found bool
+	for _, change := range result.Changes {
+		if change.Resource == "device" {
+			found = true
+			assert.Equal(t, "update", change.Type)
+			assert.Equal(t, "Device: renamed (Smart Plug)", change.OldValue)
+			assert.Equal(t, "Device: tv-office (Smart Plug)", change.NewValue)
+		}
+	}
+	assert.True(t, found, "the device update must be listed")
+}
+
+func TestImportWarnsWhenSystemSettingsAreDropped(t *testing.T) {
+	archive := &SMAArchive{SystemSettings: SystemSettings{LogLevel: "debug"}}
+	warned := importWarnings(archive, sync.ImportOptions{}, &sync.ImportApplyResult{})
+	require.Len(t, warned, 1)
+	assert.Contains(t, warned[0], "system settings")
+
+	archive.SystemSettings = SystemSettings{LogLevel: defaultSystemLogLevel}
+	assert.Empty(t, importWarnings(archive, sync.ImportOptions{}, &sync.ImportApplyResult{}),
+		"the settings an export writes by default are not a loss")
+}
+
 func TestImportIsAllOrNothing(t *testing.T) {
 	f := newPersistFixture(t)
 	// A device already holds the IP that the second archive device wants.
