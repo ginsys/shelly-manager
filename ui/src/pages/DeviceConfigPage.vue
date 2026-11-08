@@ -209,6 +209,7 @@ async function handleAddTemplate() {
     )
     if (deviceId.value !== id) return
     await handleRefresh()
+    if (deviceId.value !== id) return
     showAddTemplate.value = false
     newTemplateId.value = null
     newTemplatePosition.value = null
