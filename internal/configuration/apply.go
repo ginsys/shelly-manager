@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -351,45 +352,152 @@ func (a *ConfigApplier) applyCoIoTSettings(ctx context.Context, client ShellyCli
 	return nil
 }
 
+// RelaySettingsClient is the per-channel relay surface of a Gen1 client: POST and GET on
+// /settings/relay/<n>. A client without it cannot apply relay settings, and apply reports that
+// as a failure instead of falling back to the nested "relays" document, which Gen1 ignores.
+type RelaySettingsClient interface {
+	SetRelaySettings(ctx context.Context, channel int, settings map[string]interface{}) error
+	GetRelaySettings(ctx context.Context, channel int) (map[string]interface{}, error)
+}
+
+var errNoRelayClient = errors.New("client cannot write per-channel relay settings")
+
+// gen1RelayKeys are the relay settings apply writes: the flat form parameters of
+// POST /settings/relay/<n>. Anything else in a relay document is refused before the device is
+// touched (see unsupportedApplySettings).
+var gen1RelayKeys = []string{"name", "default_state", "auto_on", "auto_off"}
+
 func (a *ConfigApplier) applyRelaySettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
-	relaysRaw, ok := apiConfig["relays"]
-	if !ok || relaysRaw == nil {
+	relays := relayMaps(apiConfig["relays"])
+	if len(relays) == 0 {
 		return nil
 	}
 
-	// Check if relays is a slice
-	relays, ok := relaysRaw.([]interface{})
-	if !ok || len(relays) == 0 {
-		// Try typed slice format
-		if typedRelays, ok := relaysRaw.([]map[string]interface{}); ok && len(typedRelays) > 0 {
-			// Convert to []interface{}
-			relays = make([]interface{}, len(typedRelays))
-			for i, r := range typedRelays {
-				relays[i] = r
+	relayClient, ok := client.(RelaySettingsClient)
+	if !ok {
+		result.Failures = append(result.Failures, ApplyFailure{
+			Path:  "relays",
+			Error: errNoRelayClient.Error(),
+		})
+		result.FailedCount++
+		return errNoRelayClient
+	}
+
+	var firstErr error
+	for channel, relay := range relays {
+		form := make(map[string]interface{}, len(gen1RelayKeys))
+		for _, key := range gen1RelayKeys {
+			if value, present := relay[key]; present {
+				form[key] = value
 			}
-		} else {
-			return nil
+		}
+		if len(form) == 0 {
+			continue
+		}
+
+		if err := relayClient.SetRelaySettings(ctx, channel, form); err != nil {
+			a.failRelay(result, channel, form, err.Error())
+			firstErr = firstError(firstErr, err)
+			continue
+		}
+
+		// Read back this channel and compare every key just written. A device can answer 200
+		// and keep the old value, so a mismatch is a failure of that path.
+		live, err := relayClient.GetRelaySettings(ctx, channel)
+		if err != nil {
+			a.failRelay(result, channel, form, "read-back failed: "+err.Error())
+			firstErr = firstError(firstErr, err)
+			continue
+		}
+		for _, key := range sortedKeys(form) {
+			if relayValuesEqual(form[key], live[key]) {
+				result.AppliedCount++
+				continue
+			}
+			result.Failures = append(result.Failures, ApplyFailure{
+				Path:  fmt.Sprintf("relays[%d].%s", channel, key),
+				Value: fmt.Sprintf("%v", form[key]),
+				Error: fmt.Sprintf("device reports %v after the write", live[key]),
+			})
+			result.FailedCount++
 		}
 	}
 
-	if err := client.SetConfig(ctx, map[string]interface{}{"relays": relays}); err != nil {
+	return firstErr
+}
+
+// failRelay records every key of one channel's form as failed.
+func (a *ConfigApplier) failRelay(result *ApplyResult, channel int, form map[string]interface{}, message string) {
+	for _, key := range sortedKeys(form) {
 		result.Failures = append(result.Failures, ApplyFailure{
-			Path:  "relays",
-			Value: fmt.Sprintf("%v", relays),
-			Error: err.Error(),
+			Path:  fmt.Sprintf("relays[%d].%s", channel, key),
+			Value: fmt.Sprintf("%v", form[key]),
+			Error: message,
 		})
 		result.FailedCount++
-		return err
 	}
+}
 
-	result.AppliedCount++
+func firstError(current, next error) error {
+	if current != nil {
+		return current
+	}
+	return next
+}
+
+// relayMaps returns the relay documents of the converted configuration, in channel order.
+func relayMaps(raw interface{}) []map[string]interface{} {
+	switch relays := raw.(type) {
+	case []map[string]interface{}:
+		return relays
+	case []interface{}:
+		out := make([]map[string]interface{}, 0, len(relays))
+		for _, item := range relays {
+			relay, _ := item.(map[string]interface{})
+			out = append(out, relay)
+		}
+		return out
+	}
 	return nil
+}
+
+// relayValuesEqual compares a written form value with the JSON the device returns. JSON numbers
+// arrive as float64, while the converter holds ints.
+func relayValuesEqual(written, live interface{}) bool {
+	if wf, ok := toFloat(written); ok {
+		lf, lok := toFloat(live)
+		return lok && wf == lf
+	}
+	return fmt.Sprintf("%v", written) == fmt.Sprintf("%v", live)
+}
+
+func toFloat(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float64:
+		return n, true
+	}
+	return 0, false
 }
 
 // countSettings counts the number of settings being applied
 func (a *ConfigApplier) countSettings(config map[string]interface{}) int {
 	count := 0
 	for key, val := range config {
+		if key == "relays" {
+			// One setting per relay key apply writes, as applyRelaySettings counts them.
+			for _, relay := range relayMaps(val) {
+				for _, relayKey := range gen1RelayKeys {
+					if _, ok := relay[relayKey]; ok {
+						count++
+					}
+				}
+			}
+			continue
+		}
 		switch v := val.(type) {
 		case map[string]interface{}:
 			count += len(v)

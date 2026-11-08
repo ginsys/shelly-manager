@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/shelly"
+	"github.com/ginsys/shelly-manager/internal/shelly/gen1"
 )
 
 type applyTestClient struct {
@@ -22,6 +23,49 @@ type applyTestClient struct {
 	testConnErr error
 	configs     []map[string]interface{}
 	currentRaw  json.RawMessage
+
+	// Per-channel relay surface (RelaySettingsClient). relayLive is what GET /settings/relay/<n>
+	// returns; when nil the device echoes the last form written to that channel.
+	relayWrites []relayWrite
+	relayLive   map[int]map[string]interface{}
+	relaySetErr error
+	relayGetErr error
+}
+
+type relayWrite struct {
+	channel int
+	form    map[string]interface{}
+}
+
+func (m *applyTestClient) SetRelaySettings(ctx context.Context, channel int, settings map[string]interface{}) error {
+	if m.relaySetErr != nil {
+		return m.relaySetErr
+	}
+	m.relayWrites = append(m.relayWrites, relayWrite{channel: channel, form: settings})
+	return nil
+}
+
+func (m *applyTestClient) GetRelaySettings(ctx context.Context, channel int) (map[string]interface{}, error) {
+	if m.relayGetErr != nil {
+		return nil, m.relayGetErr
+	}
+	if live, ok := m.relayLive[channel]; ok {
+		return live, nil
+	}
+	echo := map[string]interface{}{}
+	for _, w := range m.relayWrites {
+		if w.channel != channel {
+			continue
+		}
+		for k, v := range w.form {
+			// A device returns JSON numbers as float64.
+			if n, ok := v.(int); ok {
+				v = float64(n)
+			}
+			echo[k] = v
+		}
+	}
+	return echo, nil
 }
 
 func newApplyTestClient() *applyTestClient {
@@ -171,6 +215,154 @@ func TestApplyConfig_RelaySettings(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
+}
+
+// The applier reaches the relay endpoints through RelaySettingsClient, so the real Gen1 client
+// must satisfy it, or apply fails every relay on a real device.
+var _ RelaySettingsClient = (*gen1.Client)(nil)
+
+func relayApplyConfig() *DeviceConfiguration {
+	return &DeviceConfiguration{
+		Relay: &RelayConfig{
+			Relays: []SingleRelayConfig{
+				{ID: 0, Name: StringPtr("Heater"), DefaultState: StringPtr("last"), AutoOn: IntPtr(5), AutoOff: IntPtr(3600)},
+			},
+		},
+	}
+}
+
+func TestApplyConfig_RelayRequestShape(t *testing.T) {
+	client := newApplyTestClient()
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client, relayApplyConfig(), "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.Success, "failures: %+v", result.Failures)
+	require.Len(t, client.relayWrites, 1)
+	assert.Equal(t, 0, client.relayWrites[0].channel)
+	assert.Equal(t, map[string]interface{}{
+		"name":          "Heater",
+		"default_state": "last",
+		"auto_on":       float64(5),
+		"auto_off":      float64(3600),
+	}, client.relayWrites[0].form)
+	// The nested document goes nowhere: Gen1 ignores it.
+	for _, cfg := range client.configs {
+		assert.NotContains(t, cfg, "relays")
+	}
+	assert.Equal(t, 4, result.AppliedCount)
+	assert.Equal(t, 4, result.SettingsCount)
+}
+
+func TestApplyConfig_RelayWritesEachChannel(t *testing.T) {
+	client := newApplyTestClient()
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+	config := &DeviceConfiguration{
+		Relay: &RelayConfig{
+			Relays: []SingleRelayConfig{
+				{ID: 0, AutoOff: IntPtr(60)},
+				{ID: 1, DefaultState: StringPtr("off")},
+			},
+		},
+	}
+
+	result, err := applier.ApplyConfig(context.Background(), client, config, "SHSW-25")
+
+	require.NoError(t, err)
+	assert.True(t, result.Success, "failures: %+v", result.Failures)
+	require.Len(t, client.relayWrites, 2)
+	assert.Equal(t, 0, client.relayWrites[0].channel)
+	assert.Equal(t, map[string]interface{}{"auto_off": float64(60)}, client.relayWrites[0].form)
+	assert.Equal(t, 1, client.relayWrites[1].channel)
+	assert.Equal(t, map[string]interface{}{"default_state": "off"}, client.relayWrites[1].form)
+}
+
+func TestApplyConfig_RelayReadBackMismatchFails(t *testing.T) {
+	client := newApplyTestClient()
+	// The device answers 200 to the write and keeps the old auto_off.
+	client.relayLive = map[int]map[string]interface{}{
+		0: {"name": "Heater", "default_state": "last", "auto_on": float64(5), "auto_off": float64(0)},
+	}
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client, relayApplyConfig(), "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Equal(t, 1, result.FailedCount)
+	assert.Equal(t, 3, result.AppliedCount)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "relays[0].auto_off", result.Failures[0].Path)
+	assert.Equal(t, "3600", result.Failures[0].Value)
+	assert.Contains(t, result.Failures[0].Error, "0")
+}
+
+func TestApplyConfig_RelayWriteErrorFailsEveryKey(t *testing.T) {
+	client := newApplyTestClient()
+	client.relaySetErr = errors.New("device rejected settings")
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client, relayApplyConfig(), "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Equal(t, 4, result.FailedCount)
+	assert.Equal(t, 0, result.AppliedCount)
+	assert.Empty(t, client.relayWrites)
+}
+
+func TestApplyConfig_RelayReadBackErrorFailsEveryKey(t *testing.T) {
+	client := newApplyTestClient()
+	client.relayGetErr = errors.New("timeout")
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client, relayApplyConfig(), "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	assert.Equal(t, 4, result.FailedCount)
+	require.NotEmpty(t, result.Failures)
+	assert.Contains(t, result.Failures[0].Error, "read-back failed")
+}
+
+// plainApplyClient has no per-channel relay surface.
+type plainApplyClient struct{ *applyTestClient }
+
+func (plainApplyClient) SetRelaySettings() {}
+
+func TestApplyConfig_RelayClientWithoutRelaySurfaceFails(t *testing.T) {
+	// plainApplyClient shadows SetRelaySettings with a different signature, so it does not
+	// satisfy RelaySettingsClient.
+	client := plainApplyClient{newApplyTestClient()}
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client, relayApplyConfig(), "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "relays", result.Failures[0].Path)
+	assert.Contains(t, result.Failures[0].Error, "per-channel relay settings")
+}
+
+func TestUnsupportedApplySettings_RelayKeys(t *testing.T) {
+	converter := NewGen1Converter(nil)
+
+	ok := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, Name: StringPtr("a"), DefaultState: StringPtr("off"), AutoOn: IntPtr(1), AutoOff: IntPtr(2)},
+	}}}
+	unsupported, err := unsupportedApplySettings(converter, ok, "SHPLG-S")
+	require.NoError(t, err)
+	assert.Empty(t, unsupported)
+
+	// schedule is not a key apply writes, so it is still refused.
+	withSchedule := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, Schedule: BoolPtr(true)},
+	}}}
+	unsupported, err = unsupportedApplySettings(converter, withSchedule, "SHPLG-S")
+	require.NoError(t, err)
+	assert.NotEmpty(t, unsupported)
 }
 
 func TestApplyConfig_SetConfigError(t *testing.T) {

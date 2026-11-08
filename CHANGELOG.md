@@ -151,6 +151,14 @@ All notable changes to this project are documented here. The project follows Con
   device each client was built for, drops the entry at a device's previous
   address on its next request, and never hands a client to a different device
   that takes the address. (#396)
+- Gen1 apply refused every relay setting, so power-on state and auto on/off
+  could not be managed. Apply now writes `default_state`, `auto_on`, `auto_off`
+  and the per-channel `name` with `POST /settings/relay/<n>` as flat form
+  parameters, then reads each channel back with `GET /settings/relay/<n>`. A
+  value the device did not keep is reported as a failure of that path, for
+  example `relays[0].auto_off`. Other relay keys, such as `schedule`, are
+  still refused with HTTP 422, and the device schema marks exactly the four
+  written fields applicable. Wi-Fi is still never written. (#387)
 - Device credentials saved with `PUT /devices/{id}/config/auth` were stored
   where no client builder reads them, and a cached client kept the old login
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`
