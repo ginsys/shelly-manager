@@ -36,6 +36,31 @@ var gen1ApplyKeys = map[string]bool{
 	"mqtt":               true,
 }
 
+// gen1ApplicablePaths are the DeviceConfiguration field paths that reach gen1ApplyKeys through
+// the Gen1 converter and survive its round trip, so apply writes and verifies them. The device
+// schema marks exactly these fields applicable; TestDeviceSchemaApplicableMatchesApply fails
+// when this list and unsupportedApplySettings disagree. mqtt.port reaches the device only
+// together with mqtt.server.
+var gen1ApplicablePaths = map[string]bool{
+	"system.device.name":         true,
+	"system.device.eco_mode":     true,
+	"system.device.discoverable": true,
+	"location.tz":                true,
+	"location.lat":               true,
+	"location.lng":               true,
+	"power_metering.max_power":   true,
+	"led.power_indication":       true,
+	"led.network_indication":     true,
+	"mqtt.enable":                true,
+	"mqtt.server":                true,
+	"mqtt.port":                  true,
+	"mqtt.user":                  true,
+	"mqtt.pass":                  true,
+	"mqtt.id":                    true,
+	"mqtt.clean_session":         true,
+	"mqtt.keep_alive":            true,
+}
+
 // unsupportedApplySettings returns the sorted top-level Gen1 keys of desired that apply cannot
 // write.
 func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfiguration, deviceType string) ([]string, error) {

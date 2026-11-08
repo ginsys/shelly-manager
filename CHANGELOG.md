@@ -12,6 +12,13 @@ All notable changes to this project are documented here. The project follows Con
   plugin configurations and system settings in the archive are not restored,
   and `backup_before` is ignored; both are reported as warnings. An export
   followed by an import now restores the data. (#284)
+- `GET /api/v1/config/schema?device_type=<model>` (or `?device_id=<id>`) returns
+  the schema of the configuration stored for that model. It holds only the
+  model's sections and only fields the stored configuration keeps, and marks
+  each field `x-applicable` when apply can write it today. A test fails when
+  the marks and apply disagree. The CoIoT section uses the stored keys
+  (`enable`, `peer`, `update_period`). Without a parameter the generic schema
+  is unchanged. (#384)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

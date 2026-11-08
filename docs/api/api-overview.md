@@ -166,7 +166,7 @@ Supported devices and settings:
 | POST | `/api/v1/configuration/validate-typed` | Validate typed config |
 | POST | `/api/v1/configuration/convert-to-typed` | Convert raw to typed |
 | POST | `/api/v1/configuration/convert-to-raw` | Convert typed to raw |
-| GET | `/api/v1/configuration/schema` | Get configuration schema |
+| GET | `/api/v1/config/schema` | Get configuration schema. With `?device_type=<model>` or `?device_id=<id>`: the stored-configuration schema for that model, with each field marked `x-applicable` when apply can write it |
 | POST | `/api/v1/configuration/bulk-validate` | Bulk validate configs |
 
 ---
