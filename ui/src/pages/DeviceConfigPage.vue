@@ -91,13 +91,28 @@
           <button class="btn" @click="editOverrides = !editOverrides">
             {{ editOverrides ? 'Cancel' : 'Edit' }}
           </button>
-          <button v-if="editOverrides" class="btn primary" @click="handleSaveOverrides">Save</button>
+          <button
+            v-if="editOverrides"
+            class="btn primary"
+            data-testid="save-overrides"
+            :disabled="!overridesValid"
+            :title="overridesValid ? '' : 'Fix the invalid fields first'"
+            @click="handleSaveOverrides"
+          >
+            Save
+          </button>
         </div>
         <div v-if="(!store.overrides || Object.keys(store.overrides).length === 0) && !editOverrides" class="empty-state">
           No overrides set. Click Edit to add device-specific overrides.
         </div>
         <div v-else-if="editOverrides" class="editor">
-          <ConfigEditor v-model="overridesData" :device-type="deviceType" />
+          <ConfigEditor
+            v-model="overridesData"
+            v-model:valid="overridesValid"
+            :device-id="deviceId"
+            :inherited="store.desiredConfig"
+            :sources="store.sources"
+          />
         </div>
         <ConfigView v-else :config="store.overrides" />
       </div>
@@ -158,8 +173,8 @@ const route = useRoute()
 const store = useDeviceConfigNewStore()
 
 const deviceId = ref<number | string>(route.params.id as string)
-const deviceType = ref<string | undefined>(undefined)
 const editOverrides = ref(false)
+const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
 const showSources = ref(false)
 const showRawJson = ref(false)
@@ -221,6 +236,7 @@ async function handleRemoveTemplate(templateId: number) {
 }
 
 async function handleSaveOverrides() {
+  if (!overridesValid.value) return
   try {
     await store.saveOverrides(deviceId.value, overridesData.value)
     editOverrides.value = false

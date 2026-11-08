@@ -34,124 +34,103 @@
 
       <div v-else class="form-editor">
         <div v-if="!schema" class="no-schema">
-          Schema not available. Use JSON view.
+          {{ loadError ? `Schema not available (${loadError}).` : 'Schema not available.' }} Use JSON view.
         </div>
 
-        <div v-else class="sections">
-          <div 
-            v-for="(sectionSchema, sectionKey) in schema.properties" 
-            :key="sectionKey"
-            class="section"
-          >
-            <div 
-              class="section-header"
-              @click="toggleSection(sectionKey as string)"
+        <template v-else>
+          <div v-if="schema['x-apply-supported'] === false" class="apply-note">
+            Apply does not support this device model yet. The fields are shown read-only.
+          </div>
+          <div class="sections">
+            <div
+              v-for="(sectionSchema, sectionKey) in schema.properties"
+              :key="sectionKey"
+              class="section"
+              :data-section="sectionKey"
             >
-              <input 
-                type="checkbox" 
-                :checked="hasSection(sectionKey as string)"
-                @click.stop="toggleSectionEnabled(sectionKey as string)"
-              />
-              <span class="section-icon">{{ getSectionIcon(sectionKey as string) }}</span>
-              <span class="section-title">{{ sectionSchema.title || formatLabel(sectionKey as string) }}</span>
-              <span class="expand-icon">{{ expandedSections[sectionKey] ? '−' : '+' }}</span>
-            </div>
+              <div class="section-header" @click="toggleSection(String(sectionKey))">
+                <span class="section-icon">{{ getSectionIcon(String(sectionKey)) }}</span>
+                <span class="section-title">{{ sectionSchema.title || formatLabel(String(sectionKey)) }}</span>
+                <span v-if="countOverrides(localConfig, [String(sectionKey)]) > 0" class="section-count">
+                  {{ countOverrides(localConfig, [String(sectionKey)]) }} override(s)
+                </span>
+                <span v-if="sectionErrorCount(String(sectionKey)) > 0" class="section-errors">
+                  {{ sectionErrorCount(String(sectionKey)) }} error(s)
+                </span>
+                <span class="expand-icon">{{ expandedSections[sectionKey] ? '−' : '+' }}</span>
+              </div>
 
-            <div v-if="expandedSections[sectionKey] && hasSection(sectionKey as string)" class="section-content">
-              <div 
-                v-for="(propSchema, propKey) in sectionSchema.properties" 
-                :key="propKey"
-                class="field"
-              >
-                <label :for="`${sectionKey}-${propKey}`">
-                  {{ propSchema.title || formatLabel(propKey as string) }}
-                </label>
-                <p v-if="propSchema.description" class="field-hint">{{ propSchema.description }}</p>
-
-                <input
-                  v-if="propSchema.type === 'boolean'"
-                  :id="`${sectionKey}-${propKey}`"
-                  type="checkbox"
-                  :checked="getFieldValue(sectionKey as string, propKey as string)"
-                  @change="setFieldValue(sectionKey as string, propKey as string, ($event.target as HTMLInputElement).checked)"
-                />
-
-                <input
-                  v-else-if="propSchema.type === 'integer' || propSchema.type === 'number'"
-                  :id="`${sectionKey}-${propKey}`"
-                  type="number"
-                  class="form-input"
-                  :value="getFieldValue(sectionKey as string, propKey as string)"
-                  :min="propSchema.minimum"
-                  :max="propSchema.maximum"
-                  :placeholder="propSchema.default?.toString()"
-                  @input="setFieldValue(sectionKey as string, propKey as string, parseNumber(($event.target as HTMLInputElement).value))"
-                />
-
-                <select
-                  v-else-if="propSchema.enum"
-                  :id="`${sectionKey}-${propKey}`"
-                  class="form-select"
-                  :value="getFieldValue(sectionKey as string, propKey as string)"
-                  @change="setFieldValue(sectionKey as string, propKey as string, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">Select...</option>
-                  <option v-for="opt in propSchema.enum" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
-
-                <input
-                  v-else-if="propSchema.format === 'password'"
-                  :id="`${sectionKey}-${propKey}`"
-                  type="password"
-                  class="form-input"
-                  :value="getFieldValue(sectionKey as string, propKey as string)"
-                  :maxlength="propSchema.maxLength"
-                  :placeholder="propSchema.default?.toString()"
-                  @input="setFieldValue(sectionKey as string, propKey as string, ($event.target as HTMLInputElement).value)"
-                />
-
-                <input
-                  v-else-if="propSchema.type === 'string'"
-                  :id="`${sectionKey}-${propKey}`"
-                  type="text"
-                  class="form-input"
-                  :value="getFieldValue(sectionKey as string, propKey as string)"
-                  :maxlength="propSchema.maxLength"
-                  :pattern="propSchema.pattern"
-                  :placeholder="propSchema.default?.toString()"
-                  @input="setFieldValue(sectionKey as string, propKey as string, ($event.target as HTMLInputElement).value)"
-                />
-
-                <textarea
-                  v-else-if="propSchema.type === 'object' || propSchema.type === 'array'"
-                  :id="`${sectionKey}-${propKey}`"
-                  class="form-textarea"
-                  rows="3"
-                  :value="JSON.stringify(getFieldValue(sectionKey as string, propKey as string) || (propSchema.type === 'array' ? [] : {}), null, 2)"
-                  @input="setFieldValueJson(sectionKey as string, propKey as string, ($event.target as HTMLTextAreaElement).value)"
+              <div v-if="expandedSections[sectionKey]" class="section-content">
+                <template v-if="sectionSchema.type === 'object' && sectionSchema.properties">
+                  <ConfigSchemaField
+                    v-for="(propSchema, propKey) in sectionSchema.properties"
+                    :key="propKey"
+                    :name="String(propKey)"
+                    :schema="propSchema"
+                    :path="[String(sectionKey), String(propKey)]"
+                    :overrides="localConfig"
+                    :inherited="baseline"
+                    :sources="sources"
+                    :errors="errors"
+                    @set="setField"
+                    @reset="resetField"
+                  />
+                </template>
+                <ConfigSchemaField
+                  v-else
+                  :name="String(sectionKey)"
+                  :schema="sectionSchema"
+                  :path="[String(sectionKey)]"
+                  :overrides="localConfig"
+                  :inherited="baseline"
+                  :sources="sources"
+                  :errors="errors"
+                  @set="setField"
+                  @reset="resetField"
                 />
               </div>
             </div>
           </div>
-        </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+// ConfigEditor edits an override body: only the fields the user changed. Each field shows its
+// inherited value (the desired configuration) as the baseline. Reset removes a field from the
+// body; "use default" sets the schema default. Schema validation runs on every change, and the
+// editor reports validity through update:valid so the page can block save.
+import { ref, watch, computed, onMounted } from 'vue'
 import { useTypedConfigStore } from '@/stores/typedConfig'
 import type { ConfigSchema } from '@/api/typedConfig'
+import ConfigSchemaField from './ConfigSchemaField.vue'
+import {
+  clone,
+  countOverrides,
+  deleteAt,
+  inheritedBaseline,
+  setAt,
+  validateOverrides,
+  type ConfigBody,
+  type ConfigPath,
+} from '@/utils/config-form'
 
 interface Props {
   modelValue: Record<string, any>
   deviceType?: string
+  // A device id asks the server for the schema of that device's model, resolved the way apply
+  // resolves it. It wins over deviceType.
+  deviceId?: number | string
+  inherited?: ConfigBody | null
+  sources?: Record<string, string>
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: Record<string, any>]
+  'update:valid': [value: boolean]
 }>()
 
 const typedConfigStore = useTypedConfigStore()
@@ -159,41 +138,73 @@ const typedConfigStore = useTypedConfigStore()
 const mode = ref<'form' | 'json'>('form')
 const schema = ref<ConfigSchema | null>(null)
 const loading = ref(false)
+const loadError = ref<string | null>(null)
 const jsonText = ref('{}')
 const jsonError = ref<string | null>(null)
 const expandedSections = ref<Record<string, boolean>>({})
-const localConfig = ref<Record<string, any>>({})
+const localConfig = ref<ConfigBody>({})
 
 watch(() => props.modelValue, (newValue) => {
-  localConfig.value = JSON.parse(JSON.stringify(newValue || {}))
+  localConfig.value = clone(newValue || {})
   jsonText.value = JSON.stringify(newValue || {}, null, 2)
 }, { immediate: true, deep: true })
 
+// The page passes the desired configuration, which already holds the saved overrides. The
+// baseline drops those, so each field shows what it inherits from templates.
+const baseline = computed(() => inheritedBaseline(props.inherited, props.sources))
+
+const errors = computed<Record<string, string>>(() =>
+  schema.value?.properties
+    ? validateOverrides(schema.value.properties, localConfig.value, baseline.value)
+    : {},
+)
+
+const valid = computed(() => jsonError.value === null && Object.keys(errors.value).length === 0)
+
+watch(valid, (value) => emit('update:valid', value), { immediate: true })
+
+function sectionErrorCount(section: string): number {
+  return Object.keys(errors.value).filter(key => key === section || key.startsWith(`${section}.`)).length
+}
+
 async function loadSchema() {
   loading.value = true
+  loadError.value = null
   try {
-    schema.value = await typedConfigStore.fetchSchema(props.deviceType)
+    schema.value = await typedConfigStore.fetchSchema(props.deviceType, props.deviceId)
     if (schema.value?.properties) {
       Object.keys(schema.value.properties).forEach(key => {
-        expandedSections.value[key] = false
+        // Open the sections that already hold overrides.
+        expandedSections.value[key] = countOverrides(localConfig.value, [key]) > 0
       })
     }
-  } catch (e) {
-    console.error('Failed to load schema:', e)
+  } catch (e: any) {
+    loadError.value = e?.message || 'unknown error'
   } finally {
     loading.value = false
   }
 }
 
 function emitChange() {
-  emit('update:modelValue', JSON.parse(JSON.stringify(localConfig.value)))
+  jsonText.value = JSON.stringify(localConfig.value, null, 2)
+  emit('update:modelValue', clone(localConfig.value))
+}
+
+function setField(path: ConfigPath, value: any) {
+  localConfig.value = setAt(localConfig.value, path, value)
+  emitChange()
+}
+
+function resetField(path: ConfigPath) {
+  localConfig.value = deleteAt(localConfig.value, path)
+  emitChange()
 }
 
 function handleJsonChange() {
   try {
     localConfig.value = JSON.parse(jsonText.value || '{}')
     jsonError.value = null
-    emitChange()
+    emit('update:modelValue', clone(localConfig.value))
   } catch (e: any) {
     jsonError.value = e.message
   }
@@ -220,53 +231,6 @@ function formatLabel(key: string): string {
 
 function toggleSection(key: string) {
   expandedSections.value[key] = !expandedSections.value[key]
-}
-
-function hasSection(sectionKey: string): boolean {
-  return sectionKey in localConfig.value
-}
-
-function toggleSectionEnabled(sectionKey: string) {
-  if (hasSection(sectionKey)) {
-    delete localConfig.value[sectionKey]
-  } else {
-    localConfig.value[sectionKey] = {}
-    expandedSections.value[sectionKey] = true
-  }
-  jsonText.value = JSON.stringify(localConfig.value, null, 2)
-  emitChange()
-}
-
-function getFieldValue(section: string, field: string): any {
-  return localConfig.value[section]?.[field]
-}
-
-function setFieldValue(section: string, field: string, value: any) {
-  if (!localConfig.value[section]) {
-    localConfig.value[section] = {}
-  }
-  if (value === '' || value === undefined) {
-    delete localConfig.value[section][field]
-  } else {
-    localConfig.value[section][field] = value
-  }
-  jsonText.value = JSON.stringify(localConfig.value, null, 2)
-  emitChange()
-}
-
-function setFieldValueJson(section: string, field: string, jsonValue: string) {
-  try {
-    const parsed = JSON.parse(jsonValue)
-    setFieldValue(section, field, parsed)
-  } catch {
-    // Invalid JSON, ignore
-  }
-}
-
-function parseNumber(value: string): number | undefined {
-  if (value === '') return undefined
-  const num = Number(value)
-  return isNaN(num) ? undefined : num
 }
 
 onMounted(() => {
@@ -338,6 +302,33 @@ onMounted(() => {
   color: #991b1b;
   border-radius: 4px;
   font-size: 13px;
+}
+
+.apply-note {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.section-count,
+.section-errors {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.section-count {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.section-errors {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .no-schema {
