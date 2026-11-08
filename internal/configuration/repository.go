@@ -246,6 +246,20 @@ func (r *GormConfigRepository) SetDeviceConfigApplied(deviceID uint, applied boo
 	return nil
 }
 
+// SetDeviceConfigAppliedIfDesired marks the device applied only while its stored desired
+// configuration still equals desiredConfig, in one UPDATE. It reports whether the flag was set.
+// A template or override edit that landed during an apply changes desired_config, so the
+// newer configuration stays pending.
+func (r *GormConfigRepository) SetDeviceConfigAppliedIfDesired(deviceID uint, desiredConfig string) (bool, error) {
+	res := r.db.Model(&DbDevice{}).
+		Where("id = ? AND COALESCE(desired_config, '') = ?", deviceID, desiredConfig).
+		Update("config_applied", true)
+	if res.Error != nil {
+		return false, fmt.Errorf("failed to set device config applied: %w", res.Error)
+	}
+	return res.RowsAffected > 0, nil
+}
+
 // Tag operations
 
 func (r *GormConfigRepository) AddDeviceTag(deviceID uint, tag string) error {

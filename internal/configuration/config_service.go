@@ -54,6 +54,9 @@ type ConfigRepository interface {
 	UpdateDeviceOverrides(deviceID uint, overrides json.RawMessage) error
 	UpdateDeviceDesiredConfig(deviceID uint, config json.RawMessage) error
 	SetDeviceConfigApplied(deviceID uint, applied bool) error
+	// SetDeviceConfigAppliedIfDesired sets the applied flag only while the stored desired
+	// configuration still equals desiredConfig. It reports whether the flag was set.
+	SetDeviceConfigAppliedIfDesired(deviceID uint, desiredConfig string) (bool, error)
 
 	AddDeviceTag(deviceID uint, tag string) error
 	RemoveDeviceTag(deviceID uint, tag string) error
