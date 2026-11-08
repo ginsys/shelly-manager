@@ -186,6 +186,54 @@ func TestImportNeverStoresRedactionPlaceholders(t *testing.T) {
 	assert.JSONEq(t, persistSecretConfig, device.DesiredConfig)
 }
 
+// The exporter redacts sensitive keys at any depth, arrays included. A forced import must put
+// the stored value back for each one, and must never store the placeholder.
+func TestForcedImportKeepsSecretsInsideArrays(t *testing.T) {
+	const listed = `{"connections":[{"name":"a","password":"s1"},{"name":"b","password":"s2"}],` +
+		`"groups":[[{"name":"c","password":"s3"}]]}`
+	f := newPersistFixture(t)
+	f.seed(t)
+	require.NoError(t, f.db.GetDB().Model(&database.Device{}).Where("mac = ?", "aabbccddeeff").
+		Update("desired_config", listed).Error)
+	archive := f.export(t)
+
+	var device database.Device
+	_, err := f.importFile(t, archive, sync.ImportOptions{ForceOverwrite: true})
+	require.NoError(t, err)
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	assert.JSONEq(t, listed, device.DesiredConfig, "a replacement keeps the stored secret of each list element")
+
+	// A new record has nothing to keep: the placeholder is left out, at any depth, and counted.
+	f.wipe(t)
+	result, err := f.importFile(t, archive, sync.ImportOptions{})
+	require.NoError(t, err)
+	var fresh database.Device
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&fresh).Error)
+	assert.NotContains(t, fresh.DesiredConfig, sync.RedactedValue)
+	assert.JSONEq(t, `{"connections":[{"name":"a"},{"name":"b"}],"groups":[[{"name":"c"}]]}`, fresh.DesiredConfig)
+	assert.Contains(t, result.Warnings[0], "3 redacted values")
+}
+
+// Export falls back to the older device_configs row when the device has no desired configuration,
+// so a replacement must look for the stored secrets in the same place.
+func TestForcedImportKeepsSecretsFromTheLegacyConfigurationRow(t *testing.T) {
+	const legacy = `{"mqtt":{"enable":true,"server":"broker.local","password":"s3cret"}}`
+	f := newPersistFixture(t)
+	f.seed(t)
+	var device database.Device
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	require.NoError(t, f.db.GetDB().Model(&device).Update("desired_config", "{}").Error)
+	require.NoError(t, f.db.GetDB().Create(&configuration.DeviceConfig{
+		DeviceID: device.ID, Config: json.RawMessage(legacy), SyncStatus: "pending",
+	}).Error)
+	archive := f.export(t)
+
+	_, err := f.importFile(t, archive, sync.ImportOptions{ForceOverwrite: true})
+	require.NoError(t, err)
+	require.NoError(t, f.db.GetDB().Where("mac = ?", "aabbccddeeff").First(&device).Error)
+	assert.JSONEq(t, legacy, device.DesiredConfig, "the legacy row's password must survive the replacement")
+}
+
 func TestForcedImportKeepsTemplateScopeAndReportsOldValues(t *testing.T) {
 	f := newPersistFixture(t)
 	f.seed(t)
