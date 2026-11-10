@@ -126,6 +126,11 @@ All notable changes to this project are documented here. The project follows Con
   synced, so the next drift check showed no drift. `POST
   /devices/{id}/config/import` still accepts the device's state as the stored
   configuration. (#388)
+- The device client cache is keyed by IP address and kept the entry at a
+  device's old address after the device moved. The cache now records which
+  device each client was built for, drops the entry at a device's previous
+  address on its next request, and never hands a client to a different device
+  that takes the address. (#396)
 - Device credentials saved with `PUT /devices/{id}/config/auth` were stored
   where no client builder reads them, and a cached client kept the old login
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`

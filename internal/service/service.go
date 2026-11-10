@@ -35,6 +35,13 @@ type ShellyService struct {
 	clientMu sync.RWMutex
 	clients  map[string]shelly.Client
 
+	// clientOwner and clientAddr record which device each cached client was built for, so an
+	// entry left at a device's old address is found and dropped when the device moves, and is
+	// never handed to another device that takes the address. A client cached without an owner
+	// (a device with ID 0) is matched by address alone. Both maps are guarded by clientMu.
+	clientOwner map[string]uint
+	clientAddr  map[uint]string
+
 	// discover runs the network discovery. Nil means discovery.CombinedDiscovery.
 	discover DiscoverFunc
 }
@@ -66,6 +73,9 @@ func NewServiceWithLogger(db database.DatabaseInterface, cfg *config.Config, log
 		ctx:       ctx,
 		cancel:    cancel,
 		clients:   make(map[string]shelly.Client),
+
+		clientOwner: make(map[string]uint),
+		clientAddr:  make(map[uint]string),
 	}
 }
 
@@ -203,17 +213,58 @@ func (s *ShellyService) ClearClientCache(deviceIP string) {
 	if deviceIP == "" {
 		// Clear all cached clients
 		s.clients = make(map[string]shelly.Client)
+		s.clientOwner = make(map[string]uint)
+		s.clientAddr = make(map[uint]string)
 		s.logger.WithFields(map[string]any{
 			"component": "service",
 		}).Info("Cleared all cached clients")
 	} else {
 		// Clear specific client
-		delete(s.clients, deviceIP)
+		s.dropClientLocked(deviceIP)
 		s.logger.WithFields(map[string]any{
 			"device_ip": deviceIP,
 			"component": "service",
 		}).Info("Cleared cached client for device")
 	}
+}
+
+// dropClientLocked removes the cached client at ip and its owner record. The caller holds
+// clientMu for writing.
+func (s *ShellyService) dropClientLocked(ip string) {
+	delete(s.clients, ip)
+	if id, ok := s.clientOwner[ip]; ok {
+		delete(s.clientOwner, ip)
+		if s.clientAddr[id] == ip {
+			delete(s.clientAddr, id)
+		}
+	}
+}
+
+// cachedClientLocked returns the cached client for the device at its current address. It first
+// drops what the cache holds under a stale address: the entry at the address the device used
+// before it moved, and an entry at this address that was built for another device. The caller
+// holds clientMu for writing.
+func (s *ShellyService) cachedClientLocked(device *database.Device) (shelly.Client, bool) {
+	if prev, ok := s.clientAddr[device.ID]; ok && prev != device.IP {
+		s.dropClientLocked(prev)
+	}
+	if owner, ok := s.clientOwner[device.IP]; ok && owner != device.ID {
+		s.dropClientLocked(device.IP)
+	}
+	client, ok := s.clients[device.IP]
+	return client, ok
+}
+
+// storeClientLocked caches the client for the device at its current address and records the
+// device as its owner. The caller holds clientMu for writing.
+func (s *ShellyService) storeClientLocked(device *database.Device, client shelly.Client) {
+	s.dropClientLocked(device.IP)
+	s.clients[device.IP] = client
+	if device.ID == 0 {
+		return
+	}
+	s.clientOwner[device.IP] = device.ID
+	s.clientAddr[device.ID] = device.IP
 }
 
 // getClient returns a cached client or creates a new one for the device
@@ -353,9 +404,9 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 
 // getClientWithRetry returns a cached client or creates a new one with retry logic
 func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry bool) (shelly.Client, error) {
-	s.clientMu.RLock()
-	client, exists := s.clients[device.IP]
-	s.clientMu.RUnlock()
+	s.clientMu.Lock()
+	client, exists := s.cachedClientLocked(device)
+	s.clientMu.Unlock()
 
 	if exists {
 		// Test if existing client still works
@@ -410,7 +461,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	s.clientMu.Lock()
 
 	// Check again in case another goroutine created it
-	if client, exists = s.clients[device.IP]; exists {
+	if client, exists = s.cachedClientLocked(device); exists {
 		s.clientMu.Unlock()
 		return client, nil
 	}
@@ -517,7 +568,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	}
 
 	// Cache the client
-	s.clients[device.IP] = client
+	s.storeClientLocked(device, client)
 	s.clientMu.Unlock()
 
 	// Test the client works
@@ -563,7 +614,7 @@ func (s *ShellyService) evictClient(ip string, client shelly.Client) {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
 	if cached, ok := s.clients[ip]; ok && cached == client {
-		delete(s.clients, ip)
+		s.dropClientLocked(ip)
 	}
 }
 
