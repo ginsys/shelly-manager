@@ -1010,6 +1010,69 @@ func TestCompareConfigurationsForDrift_KeepsMetadataLikeKeys(t *testing.T) {
 	}
 }
 
+// TestCompareConfigurationsForDrift_IgnoresRootMeters uses a Gen1 plug (SHPLG-S) settings
+// document, which embeds live meter readings under "meters". A fresh import must not look
+// drifted because the reading moved, while a real setting change must still be reported.
+func TestCompareConfigurationsForDrift_IgnoresRootMeters(t *testing.T) {
+	service, _ := setupTestService(t)
+
+	plug := func(name string, power float64, ts int64) json.RawMessage {
+		doc := map[string]interface{}{
+			"name":   name,
+			"mqtt":   map[string]interface{}{"enable": true},
+			"meters": []interface{}{map[string]interface{}{"power": power, "is_valid": true, "timestamp": ts, "total": 0}},
+		}
+		raw, err := json.Marshal(doc)
+		require.NoError(t, err)
+		return raw
+	}
+
+	stored := plug("tv", 0, 1794127877)
+
+	assert.Empty(t, service.compareConfigurationsForDrift(stored, plug("tv", 41.5, 1794127999)),
+		"a moved meter reading is telemetry, not drift")
+
+	diffs := service.compareConfigurationsForDrift(stored, plug("renamed", 41.5, 1794127999))
+	require.Len(t, diffs, 1, "a real setting change is still drift")
+	assert.Equal(t, "name", diffs[0].Path)
+
+	// The audit comparator keeps reporting everything.
+	assert.NotEmpty(t, service.compareConfigurations(stored, plug("tv", 41.5, 1794127999)))
+}
+
+// TestCompareConfigurationsForDrift_KeepsNestedAndEnergyMeterKeys proves the telemetry filter
+// is root-only: "emeters" holds real configuration on energy-meter models, and a nested key
+// named "meters" is not the root telemetry block.
+func TestCompareConfigurationsForDrift_KeepsNestedAndEnergyMeterKeys(t *testing.T) {
+	service, _ := setupTestService(t)
+
+	cases := map[string][2]json.RawMessage{
+		"emeters config": {
+			json.RawMessage(`{"emeters": [{"max_power": 100}]}`),
+			json.RawMessage(`{"emeters": [{"max_power": 200}]}`),
+		},
+		"nested meters": {
+			json.RawMessage(`{"power_metering": {"meters": 1}}`),
+			json.RawMessage(`{"power_metering": {"meters": 2}}`),
+		},
+	}
+
+	for name, pair := range cases {
+		t.Run(name, func(t *testing.T) {
+			assert.NotEmpty(t, service.compareConfigurationsForDrift(pair[0], pair[1]))
+		})
+	}
+}
+
+// TestDropRootKeys_NonObjectIsUnchanged keeps the comparator's old behaviour for input that
+// is not a JSON object.
+func TestDropRootKeys_NonObjectIsUnchanged(t *testing.T) {
+	in := json.RawMessage(`not json`)
+	assert.Equal(t, in, dropRootKeys(in, driftTelemetryRootKeys))
+	arr := json.RawMessage(`[1,2]`)
+	assert.Equal(t, arr, dropRootKeys(arr, driftTelemetryRootKeys))
+}
+
 // TestCompareConfigurations_ReportsMetadata locks in the audit/drift split: the unfiltered
 // comparator (used by createHistory) still reports a metadata-only change, while the
 // drift-specific comparator ignores that same change.

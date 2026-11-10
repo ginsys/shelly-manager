@@ -778,8 +778,40 @@ func (s *Service) compareConfigurations(stored, current json.RawMessage) []Confi
 // ignoring volatile bookkeeping subtrees (_metadata, device_info) that ImportFromDevice
 // adds on every import. Without this, a re-import's re-stamped _metadata.imported_at would
 // register as drift on any check whose second differs from the stored baseline.
+//
+// It also ignores live telemetry that a device embeds in its settings document (see
+// driftTelemetryRootKeys). Without this, a device that was just imported would report
+// itself as drifted because its power reading and timestamp moved.
 func (s *Service) compareConfigurationsForDrift(stored, current json.RawMessage) []ConfigDifference {
-	return s.compareConfigurationsFiltered(stored, current, isDriftMetadataKey)
+	return s.compareConfigurationsFiltered(
+		dropRootKeys(stored, driftTelemetryRootKeys),
+		dropRootKeys(current, driftTelemetryRootKeys),
+		isDriftMetadataKey,
+	)
+}
+
+// driftTelemetryRootKeys are top-level keys of a device settings document that carry live
+// readings, not configuration. Gen1 plugs put "meters" (power, counters, timestamp) in
+// /settings. They are dropped at the document root only: "emeters" is deliberately absent
+// because on energy-meter models it holds real configuration (appliance type, max power),
+// and a nested key that happens to share a name must still be compared.
+var driftTelemetryRootKeys = []string{"meters"}
+
+// dropRootKeys returns doc without the given top-level keys. A document that is not a JSON
+// object is returned unchanged, so the comparison treats it exactly as before.
+func dropRootKeys(doc json.RawMessage, keys []string) json.RawMessage {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(doc, &fields); err != nil {
+		return doc
+	}
+	for _, key := range keys {
+		delete(fields, key)
+	}
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return doc
+	}
+	return out
 }
 
 // compareConfigurationsFiltered unmarshals both configs and compares them recursively.

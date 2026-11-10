@@ -107,6 +107,10 @@ All notable changes to this project are documented here. The project follows Con
   serialized inside one server process only, so run one manager replica when
   you use apply (#425). The routes are documented in
   `docs/api/api-overview.md`. (#375)
+- Drift detection no longer reports a Gen1 plug's live `meters` reading (power,
+  counters, timestamp) as configuration drift, so a freshly imported device is
+  no longer drifted. Only the top-level `meters` key is ignored; `emeters` is
+  configuration on energy-meter models and is still compared. (#377)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`
