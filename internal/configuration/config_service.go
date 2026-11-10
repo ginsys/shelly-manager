@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -448,6 +449,26 @@ func parseDesiredConfig(raw string) (*DeviceConfiguration, error) {
 	}
 	var config DeviceConfiguration
 	if err := json.Unmarshal([]byte(raw), &config); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal desired config: %w", err)
+	}
+	return &config, nil
+}
+
+// parseApplicableDesiredConfig decodes a stored desired configuration for apply and verify.
+// It refuses fields the typed configuration does not know, such as a legacy device_configs
+// row restored by an SMA import, because a plain decode would drop them: apply would then
+// write nothing and verify would report a match.
+func parseApplicableDesiredConfig(raw string) (*DeviceConfiguration, error) {
+	if raw == "" || raw == "{}" {
+		return &DeviceConfiguration{}, nil
+	}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var config DeviceConfiguration
+	if err := decoder.Decode(&config); err != nil {
+		if strings.Contains(err.Error(), "unknown field") {
+			return nil, fmt.Errorf("%w: %v", ErrUnsupportedSettings, err)
+		}
 		return nil, fmt.Errorf("failed to unmarshal desired config: %w", err)
 	}
 	return &config, nil
