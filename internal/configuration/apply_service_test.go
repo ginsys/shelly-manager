@@ -189,6 +189,50 @@ func TestApplyDesiredConfig_MQTTIsSentFlatAndVerifies(t *testing.T) {
 	assert.True(t, repo.devices[1].ConfigApplied)
 }
 
+// A desired server in the combined host:port form is what a Gen1 device stores, but its
+// read-back is split into server and port. The comparison must not report that as drift.
+func TestApplyDesiredConfig_MQTTCombinedHostPortVerifies(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		MQTT: &MQTTConfiguration{
+			Enable: BoolPtr(true),
+			Server: StringPtr("broker.local:1883"),
+		},
+	})
+	dev := newFakeGen1Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	mqtt, _ := dev.settings["mqtt"].(map[string]interface{})
+	require.Equal(t, "broker.local:1883", mqtt["server"], "the device stores the combined form")
+	assert.True(t, result.ConfigApplied, "the split read-back matches the combined desired value")
+	assert.True(t, repo.devices[1].ConfigApplied)
+
+	verify, err := svc.VerifyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+	require.NoError(t, err)
+	assert.True(t, verify.Match)
+	assert.Empty(t, verify.Differences)
+	assert.Equal(t, "broker.local:1883", *verify.Desired.MQTT.Server,
+		"the reported desired value is the one the user stored")
+}
+
+// Control: a different port on the device is still drift after the endpoint is normalized.
+func TestVerifyDesiredConfig_MQTTCombinedHostPortReportsPortDrift(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		MQTT: &MQTTConfiguration{Server: StringPtr("broker.local:1883")},
+	})
+	dev := newFakeGen1Device()
+	dev.settings["mqtt"] = map[string]interface{}{"server": "broker.local:8883"}
+
+	result, err := svc.VerifyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Match)
+	require.NotEmpty(t, result.Differences)
+}
+
 func TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting(t *testing.T) {
 	svc, repo := newServiceWithDesiredName(t, "tv-office")
 	setDesired(t, repo, &DeviceConfiguration{
