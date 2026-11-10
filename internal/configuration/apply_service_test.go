@@ -272,6 +272,39 @@ func TestApplyDesiredConfig_RefusesSettingsTheConverterDrops(t *testing.T) {
 	assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
 }
 
+// A stored desired configuration can hold fields the typed configuration does not know, for
+// example a legacy device_configs row restored by an SMA import in the device's own flat
+// shape. A plain decode drops them, so apply would write nothing, verify would report a
+// match and the device would be marked applied. Apply and verify must refuse instead.
+func TestApplyAndVerifyDesiredConfig_RefuseUnknownStoredFields(t *testing.T) {
+	cases := map[string]string{
+		"legacy flat device shape": `{"name":"tv-office"}`,
+		"unknown nested field":     `{"mqtt":{"enable":true,"srv":"broker.local"}}`,
+	}
+	for name, stored := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, repo := newServiceWithDesiredName(t, "tv-office")
+			repo.devices[1].DesiredConfig = stored
+			dev := newFakeGen1Device()
+			dev.settings["name"] = "old"
+
+			result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			assert.Equal(t, 0, dev.setCalls, "nothing may be written")
+			assert.False(t, repo.devices[1].ConfigApplied, "an unreadable configuration is never applied")
+
+			verify, err := svc.VerifyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+			require.Error(t, err)
+			assert.Nil(t, verify)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+		})
+	}
+}
+
 func TestApplyDesiredConfig_MQTTPasswordNeverReadBackStillVerifies(t *testing.T) {
 	svc, repo := newServiceWithDesiredName(t, "tv-office")
 	setDesired(t, repo, &DeviceConfiguration{

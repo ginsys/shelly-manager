@@ -99,7 +99,7 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	// Apply exactly the snapshot that the compare-and-set checks. A second read could see an
 	// edit that is undone before the check, so the device would hold a configuration the
 	// check never saw.
-	desired, err := parseDesiredConfig(snapshot)
+	desired, err := parseApplicableDesiredConfig(snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,11 @@ func (s *ConfigurationService) VerifyDesiredConfig(ctx context.Context, deviceID
 		return nil, fmt.Errorf("%w: generation %d", ErrUnsupportedGeneration, client.GetGeneration())
 	}
 
-	desired, _, err := s.GetDesiredConfig(deviceID)
+	device, err := s.repo.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDeviceNotFound, err)
+	}
+	desired, err := parseApplicableDesiredConfig(device.DesiredConfig)
 	if err != nil {
 		return nil, err
 	}
