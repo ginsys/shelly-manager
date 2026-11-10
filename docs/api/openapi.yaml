@@ -730,13 +730,19 @@ components:
 
     VersionInfo:
       type: object
+      description: The `data` payload of the version response
       properties:
-        version:
+        api_version:
           type: string
-        build:
+        server_started_at:
           type: string
-        go_version:
+          format: date-time
+        database_provider_name:
           type: string
+          description: Present when the database layer reports its provider
+        database_provider_version:
+          type: string
+          description: Present when the database layer reports its provider
 
 paths:
   # Health Endpoints
@@ -777,7 +783,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VersionInfo'
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/VersionInfo'
 
   /api/v1/version:
     get:
@@ -790,7 +801,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VersionInfo'
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/VersionInfo'
 
   # Device Endpoints
   /api/v1/devices:
