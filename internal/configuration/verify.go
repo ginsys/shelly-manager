@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -69,7 +70,7 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 
 	result.Imported = imported
 
-	compareResult := v.comparator.Compare(desired, imported)
+	compareResult := v.comparator.Compare(comparableDesired(desired), imported)
 	result.Match = compareResult.Match
 	result.Differences = compareResult.Differences
 	result.Duration = time.Since(startTime)
@@ -84,6 +85,31 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 	}).Info("Configuration verification completed")
 
 	return result, nil
+}
+
+// comparableDesired returns the desired configuration in the shape the Gen1 read-back has.
+// A Gen1 device stores the MQTT endpoint as one "host:port" string, and the converter splits
+// it into server and port on read-back. A desired server in that combined form, with no
+// separate port, is split the same way, so a matching device is not reported as drift.
+// The caller's configuration is never changed.
+func comparableDesired(desired *DeviceConfiguration) *DeviceConfiguration {
+	if desired == nil || desired.MQTT == nil || desired.MQTT.Server == nil || desired.MQTT.Port != nil {
+		return desired
+	}
+	parts := strings.Split(*desired.MQTT.Server, ":")
+	if len(parts) != 2 {
+		return desired
+	}
+	var port int
+	if _, err := fmt.Sscanf(parts[1], "%d", &port); err != nil {
+		return desired
+	}
+	normalized := *desired
+	mqtt := *desired.MQTT
+	mqtt.Server = StringPtr(parts[0])
+	mqtt.Port = IntPtr(port)
+	normalized.MQTT = &mqtt
+	return &normalized
 }
 
 // ApplyAndVerify applies configuration and then verifies it was applied correctly

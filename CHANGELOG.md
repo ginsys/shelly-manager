@@ -96,7 +96,8 @@ All notable changes to this project are documented here. The project follows Con
   desired configuration edited during the apply leaves the device pending.
   Settings the converter has no Gen1 mapping for (for example SNTP) are also
   refused. Applies to one device run one at a time, apply needs the admin key,
-  the write-only MQTT password is not compared on read-back, and a custom
+  the write-only MQTT password is not compared on read-back, an MQTT server
+  given as `host:port` matches the device's split read-back, and a custom
   timezone or location also switches off automatic detection. The device model
   is read from the stored device settings. A device that rejects the login
   during the write returns HTTP 502, and a refused write names the setting but
