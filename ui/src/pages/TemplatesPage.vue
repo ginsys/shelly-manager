@@ -185,7 +185,13 @@ function hasSecrets(t: ConfigTemplate) {
   return Boolean(t.has_wifi_password || t.has_mqtt_password || t.has_auth_password)
 }
 
+// The number of the dialog that is open now. It changes when a dialog opens or closes. A save
+// keeps the number it started with and writes dialog state (the error list, closing) only if the
+// number is still the same, because the answer of a closed dialog belongs to nobody.
+let dialogSession = 0
+
 function openCreate() {
+  dialogSession++
   editing.value = null
   form.value = { name: '', description: '', scope: 'global', device_type: '' }
   // A new template starts empty; the form offers each schema default through "use default".
@@ -196,6 +202,7 @@ function openCreate() {
 }
 
 function openEdit(template: ConfigTemplate) {
+  dialogSession++
   editing.value = template
   form.value = {
     name: template.name,
@@ -210,6 +217,7 @@ function openEdit(template: ConfigTemplate) {
 }
 
 function closeDialog() {
+  dialogSession++
   showDialog.value = false
   editing.value = null
 }
@@ -217,6 +225,7 @@ function closeDialog() {
 async function handleSave() {
   if (!configValid.value || schemaTarget.value === null) return
   const parsedConfig = clone(configBody.value)
+  const session = dialogSession
   saveErrors.value = []
 
   try {
@@ -238,11 +247,11 @@ async function handleSave() {
       })
     }
 
-    closeDialog()
+    if (session === dialogSession) closeDialog()
     await store.fetchTemplates()
   } catch (e: any) {
     if (e instanceof TemplateSaveError) {
-      saveErrors.value = e.fields
+      if (session === dialogSession) saveErrors.value = e.fields
       return
     }
     alert('Failed to save template: ' + (e?.message || 'Unknown error'))
