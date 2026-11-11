@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- Saving a template or the device overrides no longer deletes a stored secret
+  that the body leaves out. The API never returns a secret, so a client that
+  edits the body it read sends it back without the password. A secret that is
+  left out, or sent as the mask, now keeps its stored value, and only an empty
+  string clears it. Template responses carry `stored_secrets`, the path of each
+  stored secret, so the form tells the access point password from the station
+  password, and the template form no longer asks for a saved password again
+  after an edit. It has a "Clear stored password" action. Limit: the
+  `network.wifi.*.pass` fields are plain strings, so an empty value there keeps
+  the stored password and it cannot be cleared through the API. (#395)
 - The device routes no longer return saved secrets in clear. The list, get, add
   and update routes and the configuration reads (`/config`, `/config/import`,
   `/config/current`) show a secret held in `settings`, `overrides`,

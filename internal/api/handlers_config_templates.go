@@ -48,6 +48,9 @@ type TemplateResponse struct {
 	HasWiFiPassword *bool `json:"has_wifi_password,omitempty"`
 	HasMQTTPassword *bool `json:"has_mqtt_password,omitempty"`
 	HasAuthPassword *bool `json:"has_auth_password,omitempty"`
+	// StoredSecrets lists the JSON path of every secret the template holds, for example
+	// "wifi.ap.pass". The flags above cannot tell the two Wi-Fi passwords apart.
+	StoredSecrets []string `json:"stored_secrets"`
 }
 
 // ListTemplatesResponse represents the response for listing templates
@@ -116,6 +119,9 @@ func (h *Handler) CreateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 		rw.WriteValidationError(w, r, "config is required")
 		return
 	}
+
+	// A new template has nothing stored, so a mask in the body is dropped, never saved.
+	restoreMaskedSecrets(req.Config, nil)
 
 	// Marshal config to JSON
 	configJSON, err := json.Marshal(req.Config)
@@ -238,6 +244,18 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 		existing.Description = req.Description
 	}
 	if req.Config != nil {
+		// The client read the template without its secrets: a mask or an omitted secret keeps the
+		// stored value, and only an explicit "" clears it.
+		var stored configuration.DeviceConfiguration
+		if len(existing.Config) > 0 {
+			if err := json.Unmarshal(existing.Config, &stored); err != nil {
+				rw.WriteInternalError(w, r, err)
+				return
+			}
+		}
+		restoreMaskedSecrets(req.Config, &stored)
+		keepOmittedSecrets(req.Config, &stored)
+
 		configJSON, err := json.Marshal(req.Config)
 		if err != nil {
 			rw.WriteInternalError(w, r, err)
@@ -381,13 +399,14 @@ func writeConfigFieldErrors(rw *apiresp.ResponseWriter, w http.ResponseWriter, r
 // This function handles secret redaction
 func templateToResponse(tmpl *configuration.ServiceConfigTemplate) TemplateResponse {
 	resp := TemplateResponse{
-		ID:          tmpl.ID,
-		Name:        tmpl.Name,
-		Description: tmpl.Description,
-		Scope:       tmpl.Scope,
-		DeviceType:  tmpl.DeviceType,
-		CreatedAt:   tmpl.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:   tmpl.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:            tmpl.ID,
+		Name:          tmpl.Name,
+		Description:   tmpl.Description,
+		Scope:         tmpl.Scope,
+		DeviceType:    tmpl.DeviceType,
+		CreatedAt:     tmpl.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:     tmpl.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		StoredSecrets: []string{},
 	}
 
 	// Parse config and redact secrets
@@ -408,6 +427,8 @@ func templateToResponse(tmpl *configuration.ServiceConfigTemplate) TemplateRespo
 			if hasAuthPass {
 				resp.HasAuthPassword = &hasAuthPass
 			}
+
+			resp.StoredSecrets = storedSecretPaths(&config)
 
 			// Redact secrets before returning
 			redactSecrets(&config)
@@ -456,10 +477,18 @@ const secretMask = "********"
 type secretSlot struct {
 	get func() string
 	set func(string)
+	// present is true when the body names the secret at all. A pointer slot tells an omitted
+	// secret (nil) from an empty one; a plain string cannot, so there "" counts as omitted.
+	present func() bool
+	// put stores v even when it is "", where set("") removes a pointer secret. An empty override
+	// secret is a value: it keeps beating the secret of a template.
+	put func(string)
 }
 
 func ptrSlot(p **string) secretSlot {
 	return secretSlot{
+		present: func() bool { return *p != nil },
+		put:     func(v string) { *p = &v },
 		get: func() string {
 			if *p == nil {
 				return ""
@@ -477,7 +506,12 @@ func ptrSlot(p **string) secretSlot {
 }
 
 func strSlot(p *string) secretSlot {
-	return secretSlot{get: func() string { return *p }, set: func(v string) { *p = v }}
+	return secretSlot{
+		present: func() bool { return *p != "" },
+		get:     func() string { return *p },
+		set:     func(v string) { *p = v },
+		put:     func(v string) { *p = v },
+	}
 }
 
 // secretSlots lists every secret of a configuration by its JSON path. A section that is absent has
@@ -543,5 +577,74 @@ func restoreMaskedSecrets(incoming, stored *configuration.DeviceConfiguration) {
 			kept = old.get()
 		}
 		slot.set(kept)
+	}
+}
+
+// storedSecretPaths lists the path of every secret that is set, sorted.
+func storedSecretPaths(config *configuration.DeviceConfiguration) []string {
+	paths := []string{}
+	for path, slot := range secretSlots(config) {
+		if slot.get() != "" {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+// keepOmittedSecrets answers a client that read a body without its secrets and sends it back
+// edited. A secret the incoming body leaves out keeps its stored value, whether or not the section
+// around it is there. An explicit empty string is a value and clears the secret, and a stored
+// empty secret is kept as empty, so it still beats the secret of a template. Run it after
+// restoreMaskedSecrets, so a mask has already become the stored value.
+func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration) {
+	if incoming == nil {
+		return
+	}
+	storedSlots := secretSlots(stored)
+	for path, old := range storedSlots {
+		if old.present() {
+			ensureSecretSection(incoming, path)
+		}
+	}
+	for path, slot := range secretSlots(incoming) {
+		if old, ok := storedSlots[path]; ok && old.present() && !slot.present() {
+			slot.put(old.get())
+		}
+	}
+}
+
+// ensureSecretSection creates the sections on the way to the secret at path, so that its slot
+// exists in config.
+func ensureSecretSection(config *configuration.DeviceConfiguration, path string) {
+	switch {
+	case strings.HasPrefix(path, "wifi."):
+		if config.WiFi == nil {
+			config.WiFi = &configuration.WiFiConfiguration{}
+		}
+		if strings.HasPrefix(path, "wifi.ap.") && config.WiFi.AccessPoint == nil {
+			config.WiFi.AccessPoint = &configuration.AccessPointConfig{}
+		}
+	case strings.HasPrefix(path, "mqtt."):
+		if config.MQTT == nil {
+			config.MQTT = &configuration.MQTTConfiguration{}
+		}
+	case strings.HasPrefix(path, "auth."):
+		if config.Auth == nil {
+			config.Auth = &configuration.AuthConfiguration{}
+		}
+	case strings.HasPrefix(path, "network.wifi."):
+		if config.Network == nil {
+			config.Network = &configuration.NetworkConfiguration{}
+		}
+		if config.Network.WiFi == nil {
+			config.Network.WiFi = &configuration.TypedWiFiConfig{}
+		}
+		if strings.HasPrefix(path, "network.wifi.sta.") && config.Network.WiFi.STA == nil {
+			config.Network.WiFi.STA = &configuration.WiFiSTAConfig{}
+		}
+		if strings.HasPrefix(path, "network.wifi.ap.") && config.Network.WiFi.AP == nil {
+			config.Network.WiFi.AP = &configuration.WiFiAPConfig{}
+		}
 	}
 }

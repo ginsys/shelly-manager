@@ -288,12 +288,14 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// The body replaces the stored overrides, so a secret sent back as the mask is the stored one.
-	if stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id)); err == nil {
-		restoreMaskedSecrets(&overrides, stored)
-	} else {
-		restoreMaskedSecrets(&overrides, nil)
+	// The body replaces the stored overrides, so a secret sent back as the mask or left out is the
+	// stored one, and only an explicit "" clears it.
+	stored, readErr := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id))
+	if readErr != nil {
+		stored = nil
 	}
+	restoreMaskedSecrets(&overrides, stored)
+	keepOmittedSecrets(&overrides, stored)
 
 	if err := h.ConfigService.ConfigurationSvc.SetDeviceOverrides(uint(id), &overrides); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {
