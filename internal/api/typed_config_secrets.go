@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
@@ -53,70 +52,38 @@ func maskTypedSecrets(c *configuration.TypedConfiguration) {
 	c.Raw = maskRawJSON(c.Raw)
 }
 
-// typedSecretValues lists the saved secrets of c, longest first: the typed ones and every secret
-// string inside the raw part.
-func typedSecretValues(c *configuration.TypedConfiguration) []string {
-	if c == nil {
-		return nil
-	}
-	var values []string
-	for _, slot := range secretSlots(typedSecretView(c)) {
-		if v := slot.get(); v != "" {
-			values = append(values, v)
-		}
-	}
-	if doc, ok := decodeDocument(string(c.Raw)); ok {
-		collectSecretStrings(doc, &values)
-	}
-	// The validator reads the configuration as JSON text, so a message can quote a value in its
-	// escaped form too.
-	for _, v := range values {
-		if escaped := encodeDocument(v); len(escaped) > 2 && escaped[1:len(escaped)-1] != v {
-			values = append(values, escaped[1:len(escaped)-1])
-		}
-	}
-	sort.Slice(values, func(i, j int) bool { return len(values[i]) > len(values[j]) })
-	return values
+// templateMessageCodes are the validation codes whose message quotes a fragment of the configuration
+// text: a template expression, which may hold a saved secret or a default for one. The validator
+// chooses which fragment a message quotes, so no secret value can be searched for in it.
+var templateMessageCodes = map[string]bool{
+	"TEMPLATE_SYNTAX_ERROR":       true,
+	"DANGEROUS_TEMPLATE_FUNCTION": true,
+	"ENV_VARIABLE_REFERENCE":      true,
 }
 
-func collectSecretStrings(v any, out *[]string) {
-	switch x := v.(type) {
-	case map[string]any:
-		for k, child := range x {
-			if s, ok := child.(string); ok && secretKey(k) && s != "" {
-				*out = append(*out, s)
-				continue
-			}
-			collectSecretStrings(child, out)
-		}
-	case []any:
-		for _, child := range x {
-			collectSecretStrings(child, out)
-		}
-	}
-}
-
-// scrubValidation replaces each secret value in the validation messages with the mask. The
-// validator reads the real configuration, and a message can quote a value from it (a template
-// default inside a raw setting, for one).
-func scrubValidation(result *configuration.ValidationResult, secrets []string) {
-	if result == nil || len(secrets) == 0 {
+// scrubValidation replaces what follows the colon in each message that quotes a template fragment
+// with the mask. The validator reads the real configuration, and the answer carries it masked.
+func scrubValidation(result *configuration.ValidationResult) {
+	if result == nil {
 		return
 	}
-	scrub := func(s string) string {
-		for _, secret := range secrets {
-			s = strings.ReplaceAll(s, secret, secretMask)
+	scrub := func(code, message string) string {
+		if !templateMessageCodes[code] {
+			return message
 		}
-		return s
+		if head, _, found := strings.Cut(message, ": "); found {
+			return head + ": " + secretMask
+		}
+		return message
 	}
-	for i := range result.Errors {
-		result.Errors[i].Message = scrub(result.Errors[i].Message)
+	for i, e := range result.Errors {
+		result.Errors[i].Message = scrub(e.Code, e.Message)
 	}
-	for i := range result.Warnings {
-		result.Warnings[i].Message = scrub(result.Warnings[i].Message)
+	for i, w := range result.Warnings {
+		result.Warnings[i].Message = scrub(w.Code, w.Message)
 	}
-	for i := range result.Info {
-		result.Info[i].Message = scrub(result.Info[i].Message)
+	for i, n := range result.Info {
+		result.Info[i].Message = scrub(n.Code, n.Message)
 	}
 }
 
@@ -153,24 +120,21 @@ func restoreRawJSON(incoming, stored json.RawMessage) json.RawMessage {
 }
 
 // keepOmittedRawSecrets copies into incoming each stored secret that it leaves out, the rule the
-// typed secrets follow. A raw secret sent as "" or null is present and stays as sent, and a raw part
-// that is null stays null.
+// typed secrets follow. A raw part the body omits altogether is the stored one. A raw secret sent
+// as "" or null is present and stays as sent, and a raw part that is null stays null.
 func keepOmittedRawSecrets(incoming, stored json.RawMessage) json.RawMessage {
+	if len(incoming) == 0 {
+		return stored
+	}
 	storedDoc, ok := decodeDocument(string(stored))
 	if !ok || string(incoming) == "null" {
 		return incoming
 	}
-	var doc any
-	if len(incoming) > 0 {
-		if doc, ok = decodeDocument(string(incoming)); !ok {
-			return incoming
-		}
-	}
-	merged := keepOmittedValue(doc, storedDoc)
-	if merged == nil {
+	doc, ok := decodeDocument(string(incoming))
+	if !ok {
 		return incoming
 	}
-	return json.RawMessage(encodeDocument(merged))
+	return json.RawMessage(encodeDocument(keepOmittedValue(doc, storedDoc)))
 }
 
 // keepOmittedValue returns in with the secrets of stored that in leaves out added, or nil when in is

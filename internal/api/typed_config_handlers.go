@@ -100,9 +100,9 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	configJSON, _ := typedConfig.ToJSON()
 	validationResult := validator.ValidateConfiguration(configJSON)
 
-	// The configuration was validated with its real values, and is sent masked, with the same
-	// values taken out of the validation messages.
-	scrubValidation(validationResult, typedSecretValues(typedConfig))
+	// The configuration was validated with its real values, and is sent masked, with the template
+	// fragments that the validation messages quote masked too.
+	scrubValidation(validationResult)
 	maskTypedSecrets(typedConfig)
 
 	response := TypedConfigurationResponse{
@@ -251,7 +251,7 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	}
 
 	validationResult := validator.ValidateConfiguration(configJSON)
-	scrubValidation(validationResult, typedSecretValues(req.Configuration))
+	scrubValidation(validationResult)
 	if !validationResult.Valid {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
