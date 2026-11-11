@@ -104,20 +104,18 @@ func TestMaskJSONText_NumericSecretsAreMasked(t *testing.T) {
 	assert.NotContains(t, back, secretMask)
 }
 
-func TestMaskJSONText_MalformedTextNamingASecretKeyIsMaskedWhole(t *testing.T) {
-	bs := string(rune(92)) // a backslash, built here so the u-escape cases below are real escapes
+func TestMaskJSONText_MalformedTextIsMaskedWhole(t *testing.T) {
+	bs := string(rune(92)) // a backslash, built here so the escape case below is a real u-escape
 	for name, text := range map[string]string{
-		"password key":      `{"password":"saved-secret"`,
-		"key suffix":        `{"wifi_sta":{"key":"saved-secret"`,
-		"token anywhere":    `{"api_token_v2":"saved-secret"`,
-		"escaped key":       `{"pa` + bs + `u0073sword":"saved-secret"`,
-		"escaped quote key": `{"a\"pass":"saved-secret"`,
-		"split by a quote":  `{"pass\"word":"saved-secret"`,
-		"unicode escape":    `{"name":"x","` + bs + `u0070assword":"saved-secret"`,
+		"truncated, secret key":    `{"password":"saved-secret"`,
+		"truncated, no secret key": `{"name":"nothing here"`,
+		"quote splits a key":       `{"pass\"word":"saved-secret"`,
+		"u-escaped key":            `{"pa` + bs + `u0073sword":"saved-secret"`,
+		"trailing data after JSON": `{"password":"saved-secret"} x`,
+		"not JSON at all":          `password=saved-secret`,
 	} {
 		assert.Equal(t, secretMask, maskJSONText(text), name)
 	}
-	assert.Equal(t, `{"name":"nothing here"`, maskJSONText(`{"name":"nothing here"`))
 }
 
 func TestRestoreMaskedText_TakesTheStoredValueOrDropsTheMask(t *testing.T) {
