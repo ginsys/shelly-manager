@@ -1162,6 +1162,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
 
+  /api/v1/devices/{id}/desired-config:
+    get:
+      tags: [Configuration]
+      summary: Get the desired configuration of a device and what it inherits from its templates
+      operationId: getDeviceDesiredConfig
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: >-
+            data holds config and sources (the composed result of the templates and the device
+            overrides, with the layer each value comes from), and inherited and inherited_sources
+            (the template layers alone, which is what a field falls back to when its override is
+            removed). A field that a template and an override both set shows only the override in
+            config, and the template value in inherited. In config a set secret is removed. In
+            inherited a set secret shows as the mask "********", never as its value. The
+            set-templates route (PUT /api/v1/devices/{id}/templates/new) returns the same
+            inherited and inherited_sources beside its desired_config and sources.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: Invalid device ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
   /api/v1/devices/{id}/config/new/status:
     get:
       tags: [Configuration]
