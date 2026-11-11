@@ -161,6 +161,12 @@ All notable changes to this project are documented here. The project follows Con
   no longer drifted. Only the top-level `meters` key is ignored; `emeters` is
   configuration on energy-meter models and is still compared. The device
   clock (top-level `time` and `unixtime`) is ignored the same way. (#377)
+- The web UI showed "The API has changed since this UI was built" after every
+  server start, because it compared the UI build time with the server start
+  time. It now compares the git revision each side was built from: `GET
+  /api/v1/version` returns `git_sha`, and the banner shows only when both
+  revisions are known and differ. A server built without version control
+  information (`go run`, `-buildvcs=false`) or a dev UI shows no banner. (#438)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`
