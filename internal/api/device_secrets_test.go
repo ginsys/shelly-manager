@@ -201,8 +201,8 @@ func TestDeviceRoutes_AddWithTheMaskStoresNoMask(t *testing.T) {
 	assert.Contains(t, stored.Overrides, "mqtt.example.net")
 }
 
-// Text that is not valid JSON cannot be walked. It must not leak: a text that names a secret key
-// is replaced by the mask, and a text that names none is returned as it is.
+// Text that is not valid JSON cannot be walked. It must not leak: it is replaced by the mask whole,
+// whether or not it names a secret key.
 func TestDeviceRoutes_MalformedJSONTextDoesNotLeak(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()
@@ -222,7 +222,8 @@ func TestDeviceRoutes_MalformedJSONTextDoesNotLeak(t *testing.T) {
 
 	got = serve(handler.GetDevice, "GET", "/api/v1/devices/2", idString(quiet), "")
 	require.Equal(t, http.StatusOK, got.Code, got.Body.String())
-	assert.Contains(t, got.Body.String(), "no secret here")
+	assert.NotContains(t, got.Body.String(), "no secret here", "a malformed text is masked whole")
+	assert.Contains(t, got.Body.String(), `"overrides":"`+secretMask+`"`)
 }
 
 // The live reads return what the device reports, in the device's own shape (Gen1 here), and the
