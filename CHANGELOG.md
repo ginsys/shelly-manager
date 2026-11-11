@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- The typed configuration routes no longer return saved secrets in clear.
+  `GET /devices/{id}/config/typed` and `.../typed/normalized` show a secret as
+  the mask `********`, in the typed sections and in the `raw` part by key name.
+  `PUT /devices/{id}/config/typed` follows the rules of the overrides routes: a
+  secret sent as the mask or left out keeps its stored value, an empty string
+  or `null` removes it, and the mask is never stored. The answer is masked too.
+  (#450)
 - Saving a template or the device overrides no longer deletes a stored secret
   that the body leaves out. The API never returns a secret, so a client that
   edits the body it read sends it back without the password. A secret that is
