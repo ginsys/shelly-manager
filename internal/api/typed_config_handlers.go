@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -383,9 +384,16 @@ func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 // for that model (configuration.GetDeviceConfigurationSchema): only the model's sections, only
 // stored fields, and each field marked x-applicable when apply can write it. device_id resolves
 // the model the way apply does. Without either parameter it returns the generic schema. A
-// parameter that is present but empty, or both parameters, is a 400.
+// parameter that is present but empty, a malformed query string, or both parameters is a 400.
 func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+	// r.URL.Query() drops a malformed pair without a word, so "?device_id=%ZZ" would read as no
+	// parameter and return the generic schema. Parse the raw query and refuse it instead.
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+			"Invalid query string", nil)
+		return
+	}
 	deviceType := query.Get("device_type")
 
 	if query.Has("device_type") && deviceType == "" {

@@ -37,8 +37,12 @@ var gen1ApplyKeys = map[string]bool{
 }
 
 // gen1ApplicablePaths are the DeviceConfiguration field paths that reach gen1ApplyKeys through
-// the Gen1 converter and survive its round trip, so apply writes and verifies them. The device
-// schema marks exactly these fields applicable; TestDeviceSchemaApplicableMatchesApply fails
+// the Gen1 converter and survive its round trip, so apply writes them and verify compares them.
+// "Applicable" means that apply writes the field. mqtt.pass is the one write-only exception: a
+// Gen1 device never returns it, so verify skips it (defaultCompareRules in compare.go) and no
+// read-back can confirm it. TestDeviceSchemaApplicableFieldsAreVerifiedOrNamed fails when a
+// second applicable path is skipped by verify without being named.
+// The device schema marks exactly these fields applicable; TestDeviceSchemaApplicableMatchesApply fails
 // when this list and unsupportedApplySettings disagree. mqtt.port reaches the device only
 // together with mqtt.server.
 var gen1ApplicablePaths = map[string]bool{

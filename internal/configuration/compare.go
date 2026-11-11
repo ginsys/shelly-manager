@@ -31,7 +31,8 @@ var defaultCompareRules = []FieldCompareRule{
 	{Path: "system.fw_id", SkipCompare: true},
 
 	// Write-only secret: Gen1 GET /settings never returns the MQTT password, so a read-back can
-	// never equal what was written.
+	// never equal what was written. Apply still writes it, so the device schema marks it
+	// applicable (gen1ApplicablePaths); it is the one named write-only exception.
 	{Path: "mqtt.pass", SkipCompare: true},
 
 	// Tolerance for coordinates (about 10 meters)

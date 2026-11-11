@@ -103,4 +103,10 @@ func TestConfigSchemaParameterErrors(t *testing.T) {
 		code, _ = getSchema(t, handler, q)
 		assert.Equal(t, http.StatusBadRequest, code, q)
 	}
+
+	// A malformed pair is a 400, never the generic schema, and it cannot hide a second parameter.
+	for _, q := range []string{"?device_id=%ZZ", "?device_type=SHPLG-S&device_id=%ZZ", "?device_type=%ZZ", "?device_type=SHPLG-S&x=%ZZ"} {
+		code, _ = getSchema(t, handler, q)
+		assert.Equal(t, http.StatusBadRequest, code, q)
+	}
 }

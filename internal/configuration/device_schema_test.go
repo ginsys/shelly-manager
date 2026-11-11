@@ -228,6 +228,34 @@ func TestDeviceSchemaApplicableMatchesApply(t *testing.T) {
 	}
 }
 
+// writeOnlyApplicablePaths names the applicable fields that verify skips on purpose. A Gen1 device
+// never returns the value, so apply writes it and no read-back can confirm it. Every other
+// applicable field is compared on verify.
+var writeOnlyApplicablePaths = map[string]bool{
+	"mqtt.pass": true,
+}
+
+// TestDeviceSchemaApplicableFieldsAreVerifiedOrNamed fails when verify skips an applicable field
+// that is not named above, and when a named field is no longer both applicable and skipped.
+func TestDeviceSchemaApplicableFieldsAreVerifiedOrNamed(t *testing.T) {
+	comparator := NewConfigComparator()
+	for path := range gen1ApplicablePaths {
+		rule := comparator.findRule(path)
+		skipped := rule != nil && rule.SkipCompare
+		if skipped && !writeOnlyApplicablePaths[path] {
+			t.Errorf("%s is applicable but verify skips it; compare it or name it as write-only", path)
+		}
+		if !skipped && writeOnlyApplicablePaths[path] {
+			t.Errorf("%s is named write-only but verify now compares it; drop it from the list", path)
+		}
+	}
+	for path := range writeOnlyApplicablePaths {
+		if !gen1ApplicablePaths[path] {
+			t.Errorf("%s is named write-only but is not an applicable path", path)
+		}
+	}
+}
+
 func TestDeviceSchemaPlugApplicableFields(t *testing.T) {
 	leaves := map[string]map[string]interface{}{}
 	schemaLeaves("", GetDeviceConfigurationSchema("SHPLG-S"), leaves)
