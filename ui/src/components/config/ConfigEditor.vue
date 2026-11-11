@@ -99,7 +99,7 @@
 
 <script setup lang="ts">
 // ConfigEditor edits an override body: only the fields the user changed. Each field shows its
-// inherited value (the desired configuration) as the baseline. Reset removes a field from the
+// inherited value (from the templates) as the baseline. Reset removes a field from the
 // body; "use default" sets the schema default. Schema validation runs on every change, and the
 // editor reports validity through update:valid so the page can block save.
 import { ref, watch, computed, onMounted } from 'vue'
@@ -112,7 +112,6 @@ import {
   deleteAt,
   getAt,
   hasAt,
-  inheritedBaseline,
   sameValue,
   setAt,
   validateOverrides,
@@ -153,9 +152,9 @@ watch(() => props.modelValue, (newValue) => {
   jsonText.value = JSON.stringify(newValue || {}, null, 2)
 }, { immediate: true, deep: true })
 
-// The page passes the desired configuration, which already holds the saved overrides. The
-// baseline drops those, so each field shows what it inherits from templates.
-const baseline = computed(() => inheritedBaseline(props.inherited, props.sources))
+// The page passes the inherited configuration: the template layers alone, which is what a field
+// falls back to when its override is removed. A secret that a template sets arrives as a mask.
+const baseline = computed<ConfigBody>(() => props.inherited || {})
 
 const errors = computed<Record<string, string>>(() =>
   schema.value?.properties

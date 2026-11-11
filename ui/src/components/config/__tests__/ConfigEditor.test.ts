@@ -94,17 +94,41 @@ describe('ConfigEditor', () => {
     expect(wrapper.find('[data-section="system"] textarea').exists()).toBe(false)
   })
 
-  it('shows the inherited value and its source, without the saved override', async () => {
+  it('shows the inherited value and its source', async () => {
     const wrapper = mountEditor({}, {
-      inherited: { system: { device: { name: 'tv-office' } }, power_metering: { max_power: 1800 } },
-      sources: { 'system.device.name': 'Global', 'power_metering.max_power': 'device-override' },
+      inherited: { system: { device: { name: 'tv-office' } } },
+      sources: { 'system.device.name': 'Global' },
     })
     await flushPromises()
     await openSection(wrapper, 'system')
-    await openSection(wrapper, 'power_metering')
     expect(wrapper.find('[data-path="system.device.name"] .field-inherited').text()).toBe('Inherited: tv-office from Global')
-    // max_power came from the saved override, so it is no baseline.
-    expect(wrapper.find('[data-path="power_metering.max_power"] .field-inherited').exists()).toBe(false)
+  })
+
+  it('reset on a field that a template and a saved override both set shows the template value', async () => {
+    // The page passes the template layers alone, so the override under the field hides nothing.
+    const wrapper = mountEditor({ power_metering: { max_power: 2000 } }, {
+      inherited: { power_metering: { max_power: 1800 } },
+      sources: { 'power_metering.max_power': 'Global' },
+    })
+    await flushPromises()
+    await openSection(wrapper, 'power_metering')
+    const field = '[data-path="power_metering.max_power"]'
+    expect(wrapper.find(`${field} .field-inherited`).exists()).toBe(false)
+    await wrapper.find(`${field} [data-action="reset"]`).trigger('click')
+    expect(lastModel(wrapper)).toEqual({})
+    await wrapper.setProps({ modelValue: lastModel(wrapper) })
+    expect(wrapper.find(`${field} .field-inherited`).text()).toBe('Inherited: 1800 from Global')
+  })
+
+  it('setting the field to the template value, under a saved override, leaves no override', async () => {
+    const wrapper = mountEditor({ power_metering: { max_power: 2000 } }, {
+      inherited: { power_metering: { max_power: 1800 } },
+      sources: { 'power_metering.max_power': 'Global' },
+    })
+    await flushPromises()
+    await openSection(wrapper, 'power_metering')
+    await wrapper.find('[data-path="power_metering.max_power"] input').setValue('1800')
+    expect(lastModel(wrapper)).toEqual({})
   })
 
   it('puts only the changed field into the override body', async () => {

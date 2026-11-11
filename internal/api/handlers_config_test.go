@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -257,6 +258,75 @@ func TestSecretRedaction_NoSecrets(t *testing.T) {
 	assert.False(t, hasWiFiPassword(config))
 	assert.False(t, hasMQTTPassword(config))
 	assert.False(t, hasAuthPassword(config))
+}
+
+func TestMaskSecrets(t *testing.T) {
+	wifiPass, empty := "secret-wifi", ""
+	config := &configuration.DeviceConfiguration{
+		WiFi: &configuration.WiFiConfiguration{Password: &wifiPass},
+		Auth: &configuration.AuthConfiguration{Password: &empty},
+		MQTT: &configuration.MQTTConfiguration{},
+	}
+
+	maskSecrets(config)
+
+	// A set secret shows that it is set, never its value. An empty or absent one stays as it was.
+	require.NotNil(t, config.WiFi.Password)
+	assert.Equal(t, secretMask, *config.WiFi.Password)
+	assert.Equal(t, "", *config.Auth.Password)
+	assert.Nil(t, config.MQTT.Password)
+}
+
+// The desired configuration keeps only the winning layer of a field, so a device override hides
+// the template value under it. The response also carries the template-only configuration, which
+// is what a reset field falls back to, with a set template secret shown as set and never as its value.
+func TestGetDeviceDesiredConfig_CarriesTheInheritedConfiguration(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+
+	device := testutil.TestDevice()
+	require.NoError(t, handler.DB.AddDevice(device))
+
+	svc := handler.ConfigService.ConfigurationSvc
+	template := &configuration.ServiceConfigTemplate{
+		Name:   "Global",
+		Scope:  "global",
+		Config: json.RawMessage(`{"mqtt":{"server":"global.broker","port":1883},"auth":{"enable":true,"user":"admin","pass":"template-secret"}}`),
+	}
+	require.NoError(t, svc.CreateTemplate(template))
+	require.NoError(t, svc.SetDeviceTemplates(device.ID, []uint{template.ID}))
+	port := 8883
+	require.NoError(t, svc.SetDeviceOverrides(device.ID, &configuration.DeviceConfiguration{
+		MQTT: &configuration.MQTTConfiguration{Port: &port},
+	}))
+
+	req := httptest.NewRequest("GET", "/api/v1/devices/1/desired-config", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.FormatUint(uint64(device.ID), 10)})
+	w := httptest.NewRecorder()
+	handler.GetDeviceDesiredConfig(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response struct {
+		Data struct {
+			Config           map[string]any    `json:"config"`
+			Sources          map[string]string `json:"sources"`
+			Inherited        map[string]any    `json:"inherited"`
+			InheritedSources map[string]string `json:"inherited_sources"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+
+	assert.EqualValues(t, 8883, response.Data.Config["mqtt"].(map[string]any)["port"])
+	assert.Equal(t, "device-override", response.Data.Sources["mqtt.port"])
+
+	inheritedMQTT := response.Data.Inherited["mqtt"].(map[string]any)
+	assert.EqualValues(t, 1883, inheritedMQTT["port"])
+	assert.Equal(t, "global.broker", inheritedMQTT["server"])
+	assert.Equal(t, "Global", response.Data.InheritedSources["mqtt.port"])
+
+	inheritedAuth := response.Data.Inherited["auth"].(map[string]any)
+	assert.Equal(t, secretMask, inheritedAuth["pass"])
+	assert.NotContains(t, w.Body.String(), "template-secret")
 }
 
 func boolPtr(b bool) *bool {

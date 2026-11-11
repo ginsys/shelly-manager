@@ -223,6 +223,66 @@ describe('DeviceConfigNew Store', () => {
     })
   })
 
+  describe('inherited configuration', () => {
+    // mqtt.user is set by a template and by the device override: the desired configuration keeps
+    // only the override, the inherited one keeps the template value the field falls back to.
+    const withInherited: DesiredConfigData = {
+      ...mockDesiredConfigData,
+      inherited: { mqtt: { enabled: true, server: 'mqtt.local', user: 'template_user' } },
+      inherited_sources: { 'mqtt.user': 'template:1' },
+    }
+
+    it('refresh loads the inherited configuration and its sources', async () => {
+      const store = useDeviceConfigNewStore()
+      mockApi.getDeviceTemplatesNew.mockResolvedValue(mockTemplatesData)
+      mockApi.getDeviceOverridesNew.mockResolvedValue(mockOverridesData)
+      mockApi.getDesiredConfigNew.mockResolvedValue(withInherited)
+      mockApi.getConfigStatusNew.mockResolvedValue(mockStatusData)
+
+      await store.refresh(123)
+
+      expect(store.inherited).toEqual(withInherited.inherited)
+      expect(store.inheritedSources).toEqual({ 'mqtt.user': 'template:1' })
+    })
+
+    it('fetchDesired loads it, and a response without it leaves none', async () => {
+      const store = useDeviceConfigNewStore()
+      mockApi.getDesiredConfigNew.mockResolvedValue(withInherited)
+      await store.fetchDesired(123)
+      expect(store.inherited).toEqual(withInherited.inherited)
+
+      mockApi.getDesiredConfigNew.mockResolvedValue(mockDesiredConfigData)
+      await store.fetchDesired(123)
+      expect(store.inherited).toBeNull()
+      expect(store.inheritedSources).toEqual({})
+    })
+
+    it('setTemplates takes the new inherited configuration from the response', async () => {
+      const store = useDeviceConfigNewStore()
+      mockApi.setDeviceTemplatesNew.mockResolvedValue({
+        ...mockTemplatesData,
+        desired_config: mockDesiredConfigData.config,
+        sources: mockDesiredConfigData.sources,
+        inherited: withInherited.inherited,
+        inherited_sources: withInherited.inherited_sources,
+      })
+
+      await store.setTemplates(123, [1])
+
+      expect(store.inherited).toEqual(withInherited.inherited)
+      expect(store.inheritedSources).toEqual({ 'mqtt.user': 'template:1' })
+    })
+
+    it('reset clears it', () => {
+      const store = useDeviceConfigNewStore()
+      store.inherited = { mqtt: { enabled: true } }
+      store.inheritedSources = { 'mqtt.enabled': 'template:1' }
+      store.reset()
+      expect(store.inherited).toBeNull()
+      expect(store.inheritedSources).toEqual({})
+    })
+  })
+
   describe('setTemplates', () => {
     it('should set template order successfully', async () => {
       const store = useDeviceConfigNewStore()

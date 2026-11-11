@@ -25,6 +25,8 @@ export interface SetDeviceTemplatesNewResult {
   template_ids: number[]
   desired_config?: DeviceConfiguration
   sources?: Record<string, string>
+  inherited?: DeviceConfiguration | null
+  inherited_sources?: Record<string, string>
 }
 
 export async function setDeviceTemplatesNew(
@@ -136,6 +138,10 @@ export async function deleteDeviceOverridesNew(deviceId: number | string): Promi
 export interface DesiredConfigData {
   config: DeviceConfiguration | null
   sources: Record<string, string>
+  // What the device falls back to without its overrides: the template layers alone, with the
+  // template each value comes from. A set secret shows as a mask, never as its value.
+  inherited?: DeviceConfiguration | null
+  inherited_sources?: Record<string, string>
 }
 
 export async function getDesiredConfigNew(deviceId: number | string): Promise<DesiredConfigData> {

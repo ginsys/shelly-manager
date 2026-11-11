@@ -27,6 +27,9 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
   const overrides = ref<DeviceConfiguration | null>(null)
   const desiredConfig = ref<DeviceConfiguration | null>(null)
   const sources = ref<Record<string, string>>({})
+  // The template layers alone: what a field falls back to when its override is removed.
+  const inherited = ref<DeviceConfiguration | null>(null)
+  const inheritedSources = ref<Record<string, string>>({})
   const status = ref<ConfigStatusData | null>(null)
   const lastApply = ref<ConfigApplyData | null>(null)
   const lastVerify = ref<ConfigVerifyData | null>(null)
@@ -61,6 +64,8 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       overrides.value = o.overrides
       desiredConfig.value = d.config
       sources.value = d.sources || {}
+      inherited.value = d.inherited ?? null
+      inheritedSources.value = d.inherited_sources || {}
       status.value = s
     } catch (e: any) {
       // The error of a refresh that was replaced is not the error of the device on screen.
@@ -123,6 +128,8 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       templateIds.value = result.template_ids
       if (result.desired_config !== undefined) desiredConfig.value = result.desired_config
       if (result.sources) sources.value = result.sources
+      if (result.inherited !== undefined) inherited.value = result.inherited
+      if (result.inherited_sources) inheritedSources.value = result.inherited_sources
     } catch (e: any) {
       if (epoch === deviceEpoch) error.value = e?.message || 'Failed to set templates'
       throw e
@@ -193,6 +200,8 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       if (epoch !== deviceEpoch) return result
       desiredConfig.value = result.config
       sources.value = result.sources || {}
+      inherited.value = result.inherited ?? null
+      inheritedSources.value = result.inherited_sources || {}
       return result
     } catch (e: any) {
       if (epoch === deviceEpoch) error.value = e?.message || 'Failed to load desired config'
@@ -265,6 +274,8 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     overrides.value = null
     desiredConfig.value = null
     sources.value = {}
+    inherited.value = null
+    inheritedSources.value = {}
     status.value = null
     lastApply.value = null
     lastVerify.value = null
@@ -278,6 +289,8 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     overrides,
     desiredConfig,
     sources,
+    inherited,
+    inheritedSources,
     status,
     lastApply,
     lastVerify,
