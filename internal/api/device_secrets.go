@@ -9,6 +9,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/redact"
 )
 
 // A device carries saved secrets inside JSON text: Overrides, DesiredConfig and Settings are
@@ -21,15 +22,7 @@ import (
 // secret_invariant_test.go already uses for the typed configuration (a field named like a secret
 // is one), so the two agree. A key that merely looks like one is masked on a read and restored by
 // the stored value on a save, so a false match costs a masked display and nothing else.
-func secretKey(key string) bool {
-	k := strings.ToLower(key)
-	for _, word := range []string{"pass", "pwd", "psk", "secret", "token"} {
-		if strings.Contains(k, word) {
-			return true
-		}
-	}
-	return strings.HasSuffix(k, "key")
-}
+func secretKey(key string) bool { return redact.IsKey(key) }
 
 // secretScalar reports whether a JSON value is one that a secret key can hold: a non-empty string
 // or a number. A number is a secret too ({"auth_pass": 12345678}), so it is masked like a string.

@@ -44,6 +44,13 @@ All notable changes to this project are documented here. The project follows Con
   that sends the mask back, including `PUT /devices/{id}/config`, keeps the
   stored secret and never stores the mask.
   The JSON, YAML and GitOps exports are not covered. (#436)
+- The JSON, YAML and GitOps exports, and the preview of an export, no longer
+  write saved device secrets in clear. A secret in the device settings, the
+  device configurations, the templates or the template variables is replaced by
+  `[REDACTED]`, the marker the SMA export uses, and an import keeps the stored
+  value for it. Set `exclude_sensitive` to `false` in the export `config` to ask
+  for a full export. The `backup` plugin still writes a full database snapshot.
+  (#443)
 
 ### Added
 - A device-type template now takes its type from a list. `GET /api/v1/config/device-types`

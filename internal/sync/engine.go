@@ -254,6 +254,8 @@ func (e *SyncEngine) Export(ctx context.Context, request ExportRequest) (*Export
 		return failedExportResult(exportID, request, startTime, wrapped), wrapped
 	}
 
+	maskExportSecrets(data, request.Config)
+
 	// Enhance metadata with export information
 	data.Metadata.ExportID = exportID
 	data.Metadata.RequestedBy = strings.TrimSpace(request.CreatedBy)
@@ -348,6 +350,7 @@ func (e *SyncEngine) Preview(ctx context.Context, request ExportRequest) (*Previ
 	if err != nil {
 		return nil, fmt.Errorf("failed to load data: %w", err)
 	}
+	maskExportSecrets(data, request.Config)
 	data.Metadata.RequestedBy = strings.TrimSpace(request.CreatedBy)
 	if data.Metadata.RequestedBy == "" {
 		data.Metadata.RequestedBy = "shelly-manager"
