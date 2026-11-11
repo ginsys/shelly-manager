@@ -187,6 +187,7 @@ import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import { getCurrentDeviceConfig } from '@/api/deviceConfig'
+import { nullRemovedSecrets } from '@/utils/config-form'
 
 const route = useRoute()
 const store = useDeviceConfigNewStore()
@@ -319,7 +320,7 @@ async function handleSaveOverrides() {
   const id = deviceId.value
   const generation = routeGeneration
   try {
-    await store.saveOverrides(id, overridesData.value)
+    await store.saveOverrides(id, nullRemovedSecrets(overridesData.value, overridesHeld.value))
     if (routeGeneration !== generation) return
     editOverrides.value = false
     await handleRefresh()

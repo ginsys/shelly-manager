@@ -9,13 +9,15 @@ All notable changes to this project are documented here. The project follows Con
   that the body leaves out. The API never returns a secret, so a client that
   edits the body it read sends it back without the password. A secret that is
   left out, or sent as the mask, now keeps its stored value, and only an empty
-  string clears it. Template responses carry `stored_secrets`, the path of each
+  string clears it. JSON `null` removes a secret, so a device override that is
+  reset inherits the template secret again; the device editor's Reset sends it.
+  Template responses carry `stored_secrets`, the path of each
   stored secret, so the form tells the access point password from the station
   password, and the template form no longer asks for a saved password again
   after an edit. It has a "Clear stored password" action. Limit: the
   `network.wifi.*.pass` fields are plain strings, so an empty value there keeps
-  the stored password and it cannot be cleared through the API, and the form
-  offers no Clear action for them. The rule covers the template routes and
+  the stored password (send `null` to clear one), and the template form offers
+  no Clear action for them. The rule covers the template routes and
   `PUT` on the overrides. `PATCH` on the overrides keeps a pointer secret, but
   its merge still drops the plain `network.wifi.*.pass` fields (#435). (#395)
 - The device routes no longer return saved secrets in clear. The list, get, add
