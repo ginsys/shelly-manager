@@ -14,6 +14,12 @@ All notable changes to this project are documented here. The project follows Con
   The JSON, YAML and GitOps exports are not covered. (#436)
 
 ### Added
+- A device-type template now takes its type from a list. `GET /api/v1/config/device-types`
+  returns the supported models (code, name, generation), and the create dialog offers
+  them in a select instead of a free-text field. The template create and update routes
+  refuse a device type outside the list with a `device_type` field error. A template
+  stored with another type stays editable, and the startup migration and import still
+  accept it. (#439)
 - SMA import now restores devices (with their desired configuration),
   templates and discovered devices. The import runs in one transaction, so a
   failure writes nothing. Existing records are skipped, or replaced with

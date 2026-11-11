@@ -74,6 +74,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/config/convert-to-typed", handler.ConvertConfigToTyped).Methods("POST")
 	api.HandleFunc("/config/convert-to-raw", handler.ConvertTypedToRaw).Methods("POST")
 	api.HandleFunc("/config/schema", handler.GetConfigurationSchema).Methods("GET")
+	api.HandleFunc("/config/device-types", handler.GetDeviceTypes).Methods("GET")
 	api.HandleFunc("/config/bulk-validate", handler.BulkValidateConfigs).Methods("POST")
 
 	// Bulk configuration operations

@@ -13,13 +13,20 @@ vi.mock('@/api/templates', async (importOriginal) => {
   return {
     ...actual,
     listTemplates: vi.fn(),
+    listDeviceTypes: vi.fn(),
     createTemplate: vi.fn(),
     updateTemplate: vi.fn(),
   }
 })
 
 import { getConfigSchema } from '@/api/typedConfig'
-import { createTemplate, listTemplates, updateTemplate, TemplateSaveError } from '@/api/templates'
+import {
+  createTemplate,
+  listDeviceTypes,
+  listTemplates,
+  updateTemplate,
+  TemplateSaveError,
+} from '@/api/templates'
 import TemplatesPage from '../TemplatesPage.vue'
 
 // A cut-down template schema, in the shape GET /config/schema returns.
@@ -59,6 +66,11 @@ describe('TemplatesPage template form', () => {
     vi.mocked(getConfigSchema).mockResolvedValue(schema)
     vi.mocked(listTemplates).mockReset()
     vi.mocked(listTemplates).mockResolvedValue([])
+    vi.mocked(listDeviceTypes).mockReset()
+    vi.mocked(listDeviceTypes).mockResolvedValue([
+      { device_type: 'SHPLG-S', name: 'Shelly Plug S', generation: 1 },
+      { device_type: 'SHSW-1', name: 'Shelly 1', generation: 1 },
+    ])
     vi.mocked(createTemplate).mockReset()
     vi.mocked(updateTemplate).mockReset()
   })
@@ -95,7 +107,50 @@ describe('TemplatesPage template form', () => {
     })
   })
 
-  it('a device_type template loads the schema of its model once the type is entered', async () => {
+  it('the create dialog offers the device types the server lists, by name and code', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('[data-testid="template-scope"]').setValue('device_type')
+    const options = wrapper.findAll('[data-testid="template-device-type"] option').map((o) => o.text())
+    expect(options).toEqual(['Select a device type', 'Shelly Plug S (SHPLG-S)', 'Shelly 1 (SHSW-1)'])
+  })
+
+  it('creates a device_type template with the chosen code', async () => {
+    vi.mocked(createTemplate).mockResolvedValue({
+      id: 1, name: 'plugs', scope: 'device_type', device_type: 'SHSW-1', config: {}, created_at: '', updated_at: '',
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('.modal .form-input[type="text"]').setValue('plugs')
+    await wrapper.find('[data-testid="template-scope"]').setValue('device_type')
+    await wrapper.find('[data-testid="template-device-type"]').setValue('SHSW-1')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    expect(createTemplate).toHaveBeenCalledWith(expect.objectContaining({ scope: 'device_type', device_type: 'SHSW-1' }))
+  })
+
+  it('a failed device type list keeps Save off and offers a retry, with no free text', async () => {
+    vi.mocked(listDeviceTypes).mockRejectedValueOnce(new Error('boom'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('[data-testid="template-scope"]').setValue('device_type')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="device-types-error"]').text()).toContain('boom')
+    expect(wrapper.find('select[data-testid="template-device-type"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('input[data-testid="template-device-type"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="retry-device-types"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="device-types-error"]').exists()).toBe(false)
+    expect(wrapper.find('select[data-testid="template-device-type"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('a device_type template loads the schema of its model once the type is chosen', async () => {
     const wrapper = mountPage()
     await flushPromises()
     await openCreate(wrapper)

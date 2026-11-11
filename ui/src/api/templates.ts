@@ -21,6 +21,21 @@ export interface ConfigTemplate {
   has_auth_password?: boolean
 }
 
+export interface DeviceTypeInfo {
+  device_type: string
+  name: string
+  generation: number
+}
+
+// listDeviceTypes returns the models a device-type template can name.
+export async function listDeviceTypes(): Promise<DeviceTypeInfo[]> {
+  const res = await api.get<APIResponse<{ device_types: DeviceTypeInfo[] }>>('/config/device-types')
+  if (!res.data.success || !res.data.data?.device_types) {
+    throw new Error(res.data.error?.message || 'Failed to load device types')
+  }
+  return res.data.data.device_types
+}
+
 export interface ListTemplatesParams {
   scope?: TemplateScope | string
 }
