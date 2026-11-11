@@ -134,9 +134,12 @@ type NetworkConfiguration struct {
 }
 
 // EthernetConfig represents ethernet settings
+//
+// Every field is a pointer, like the other sections, so a layer can leave a field out and the
+// merge (mergeInto) copies the fields a layer sets, false and empty included.
 type EthernetConfig struct {
-	Enable   bool            `json:"enable"`
-	IPv4Mode string          `json:"ipv4mode,omitempty" validate:"oneof=dhcp static"`
+	Enable   *bool           `json:"enable,omitempty"`
+	IPv4Mode *string         `json:"ipv4mode,omitempty" validate:"omitempty,oneof=dhcp static"`
 	StaticIP *StaticIPConfig `json:"ip,omitempty"`
 }
 
@@ -148,24 +151,24 @@ type TypedWiFiConfig struct {
 
 // WiFiSTAConfig represents WiFi station settings
 type WiFiSTAConfig struct {
-	Enable     bool            `json:"enable"`
-	SSID       string          `json:"ssid,omitempty" validate:"max=32"`
-	Password   string          `json:"pass,omitempty" validate:"max=63"`
-	IsOpen     bool            `json:"is_open,omitempty"`
-	IPv4Mode   string          `json:"ipv4mode,omitempty" validate:"oneof=dhcp static"`
+	Enable     *bool           `json:"enable,omitempty"`
+	SSID       *string         `json:"ssid,omitempty" validate:"omitempty,max=32"`
+	Password   *string         `json:"pass,omitempty" validate:"omitempty,max=63"`
+	IsOpen     *bool           `json:"is_open,omitempty"`
+	IPv4Mode   *string         `json:"ipv4mode,omitempty" validate:"omitempty,oneof=dhcp static"`
 	StaticIP   *StaticIPConfig `json:"ip,omitempty"`
-	Nameserver string          `json:"nameserver,omitempty" validate:"omitempty,ip"`
+	Nameserver *string         `json:"nameserver,omitempty" validate:"omitempty,ip"`
 }
 
 // WiFiAPConfig represents WiFi access point settings
 type WiFiAPConfig struct {
-	Enable     bool   `json:"enable"`
-	SSID       string `json:"ssid,omitempty" validate:"max=32"`
-	Password   string `json:"pass,omitempty" validate:"min=8,max=63"`
-	IsOpen     bool   `json:"is_open,omitempty"`
-	MaxClients int    `json:"max_sta,omitempty" validate:"min=1,max=10"`
-	RangeStart string `json:"range_start,omitempty" validate:"omitempty,ip"`
-	RangeEnd   string `json:"range_end,omitempty" validate:"omitempty,ip"`
+	Enable     *bool   `json:"enable,omitempty"`
+	SSID       *string `json:"ssid,omitempty" validate:"omitempty,max=32"`
+	Password   *string `json:"pass,omitempty" validate:"omitempty,min=8,max=63"`
+	IsOpen     *bool   `json:"is_open,omitempty"`
+	MaxClients *int    `json:"max_sta,omitempty" validate:"omitempty,min=1,max=10"`
+	RangeStart *string `json:"range_start,omitempty" validate:"omitempty,ip"`
+	RangeEnd   *string `json:"range_end,omitempty" validate:"omitempty,ip"`
 }
 
 // CloudConfiguration represents cloud settings
@@ -504,23 +507,27 @@ func (n *NetworkConfiguration) Validate() error {
 
 // Validate validates WiFi STA configuration
 func (w *WiFiSTAConfig) Validate() error {
-	if w.Enable && w.SSID == "" {
+	ssid := StringVal(w.SSID, "")
+	ipv4Mode := StringVal(w.IPv4Mode, "")
+	nameserver := StringVal(w.Nameserver, "")
+
+	if BoolVal(w.Enable, false) && ssid == "" {
 		return fmt.Errorf("SSID is required when WiFi STA is enabled")
 	}
 
-	if len(w.SSID) > 32 {
+	if len(ssid) > 32 {
 		return fmt.Errorf("SSID must be 32 characters or less")
 	}
 
-	if len(w.Password) > 63 {
+	if len(StringVal(w.Password, "")) > 63 {
 		return fmt.Errorf("WiFi password must be 63 characters or less")
 	}
 
-	if w.IPv4Mode != "" && w.IPv4Mode != "dhcp" && w.IPv4Mode != "static" {
+	if ipv4Mode != "" && ipv4Mode != "dhcp" && ipv4Mode != "static" {
 		return fmt.Errorf("IPv4 mode must be 'dhcp' or 'static'")
 	}
 
-	if w.IPv4Mode == "static" && w.StaticIP == nil {
+	if ipv4Mode == "static" && w.StaticIP == nil {
 		return fmt.Errorf("static IP configuration required when IPv4 mode is 'static'")
 	}
 
@@ -530,8 +537,8 @@ func (w *WiFiSTAConfig) Validate() error {
 		}
 	}
 
-	if w.Nameserver != "" && net.ParseIP(w.Nameserver) == nil {
-		return fmt.Errorf("invalid nameserver: %s", w.Nameserver)
+	if nameserver != "" && net.ParseIP(nameserver) == nil {
+		return fmt.Errorf("invalid nameserver: %s", nameserver)
 	}
 
 	return nil
@@ -539,28 +546,33 @@ func (w *WiFiSTAConfig) Validate() error {
 
 // Validate validates WiFi AP configuration
 func (w *WiFiAPConfig) Validate() error {
-	if len(w.SSID) > 32 {
+	password := StringVal(w.Password, "")
+	maxClients := IntVal(w.MaxClients, 0)
+	rangeStart := StringVal(w.RangeStart, "")
+	rangeEnd := StringVal(w.RangeEnd, "")
+
+	if len(StringVal(w.SSID, "")) > 32 {
 		return fmt.Errorf("AP SSID must be 32 characters or less")
 	}
 
-	if !w.IsOpen && len(w.Password) < 8 {
+	if !BoolVal(w.IsOpen, false) && len(password) < 8 {
 		return fmt.Errorf("AP password must be at least 8 characters when not open")
 	}
 
-	if len(w.Password) > 63 {
+	if len(password) > 63 {
 		return fmt.Errorf("AP password must be 63 characters or less")
 	}
 
-	if w.MaxClients != 0 && (w.MaxClients < 1 || w.MaxClients > 10) {
+	if maxClients != 0 && (maxClients < 1 || maxClients > 10) {
 		return fmt.Errorf("max clients must be between 1 and 10")
 	}
 
-	if w.RangeStart != "" && net.ParseIP(w.RangeStart) == nil {
-		return fmt.Errorf("invalid range start IP: %s", w.RangeStart)
+	if rangeStart != "" && net.ParseIP(rangeStart) == nil {
+		return fmt.Errorf("invalid range start IP: %s", rangeStart)
 	}
 
-	if w.RangeEnd != "" && net.ParseIP(w.RangeEnd) == nil {
-		return fmt.Errorf("invalid range end IP: %s", w.RangeEnd)
+	if rangeEnd != "" && net.ParseIP(rangeEnd) == nil {
+		return fmt.Errorf("invalid range end IP: %s", rangeEnd)
 	}
 
 	return nil
@@ -568,11 +580,13 @@ func (w *WiFiAPConfig) Validate() error {
 
 // Validate validates Ethernet configuration
 func (e *EthernetConfig) Validate() error {
-	if e.IPv4Mode != "" && e.IPv4Mode != "dhcp" && e.IPv4Mode != "static" {
+	ipv4Mode := StringVal(e.IPv4Mode, "")
+
+	if ipv4Mode != "" && ipv4Mode != "dhcp" && ipv4Mode != "static" {
 		return fmt.Errorf("IPv4 mode must be 'dhcp' or 'static'")
 	}
 
-	if e.IPv4Mode == "static" && e.StaticIP == nil {
+	if ipv4Mode == "static" && e.StaticIP == nil {
 		return fmt.Errorf("static IP configuration required when IPv4 mode is 'static'")
 	}
 

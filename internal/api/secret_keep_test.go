@@ -85,7 +85,8 @@ func TestUpdateTemplateKeepsASecretWhoseSectionIsOmitted(t *testing.T) {
 	require.NotNil(t, got.MQTT.Password)
 	assert.Equal(t, "x", *got.MQTT.Password)
 	require.NotNil(t, got.Network.WiFi.STA)
-	assert.Equal(t, "net-pass", got.Network.WiFi.STA.Password)
+	require.NotNil(t, got.Network.WiFi.STA.Password)
+	assert.Equal(t, "net-pass", *got.Network.WiFi.STA.Password)
 	assert.NotNil(t, got.LED, "the field the client sent is still saved")
 }
 
@@ -116,9 +117,8 @@ func TestUpdateTemplateClearsASecretOnEmptyString(t *testing.T) {
 	assert.Empty(t, templateStoredSecrets(t, w))
 }
 
-// A plain string cannot tell an omitted value from an empty one, so "" keeps the stored password.
-// This is the named limit: such a password cannot be cleared through this path.
-func TestUpdateTemplateKeepsANetworkPasswordSentAsEmpty(t *testing.T) {
+// The Network passwords are pointers like every other secret, so "" clears one.
+func TestUpdateTemplateClearsANetworkPasswordOnEmptyString(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()
 	id := newKeepTemplate(t, handler, `{"network":{"wifi":{"sta":{"ssid":"home","pass":"net-pass"}}}}`)
@@ -128,7 +128,25 @@ func TestUpdateTemplateKeepsANetworkPasswordSentAsEmpty(t *testing.T) {
 
 	var got configuration.DeviceConfiguration
 	require.NoError(t, json.Unmarshal([]byte(storedTemplateConfig(t, handler, id)), &got))
-	assert.Equal(t, "net-pass", got.Network.WiFi.STA.Password)
+	require.NotNil(t, got.Network.WiFi.STA.Password)
+	assert.Equal(t, "", *got.Network.WiFi.STA.Password)
+}
+
+// An omitted Network password is kept, like any other secret.
+func TestUpdateTemplateKeepsAnOmittedNetworkPassword(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := newKeepTemplate(t, handler, `{"network":{"wifi":{"sta":{"ssid":"home","pass":"net-pass"}}}}`)
+
+	w := putKeepTemplate(t, handler, id, `{"config":{"network":{"wifi":{"sta":{"ssid":"office"}}}}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var got configuration.DeviceConfiguration
+	require.NoError(t, json.Unmarshal([]byte(storedTemplateConfig(t, handler, id)), &got))
+	require.NotNil(t, got.Network.WiFi.STA.Password)
+	assert.Equal(t, "net-pass", *got.Network.WiFi.STA.Password)
+	require.NotNil(t, got.Network.WiFi.STA.SSID)
+	assert.Equal(t, "office", *got.Network.WiFi.STA.SSID)
 }
 
 func TestUpdateTemplateRestoresAMaskedSecretAndNeverStoresTheMask(t *testing.T) {
@@ -327,7 +345,7 @@ func TestSetOverridesRemovesANetworkPasswordOnNull(t *testing.T) {
 
 	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
 	require.NoError(t, err)
-	assert.Equal(t, "", stored.Network.WiFi.STA.Password, "null clears a plain-string password that \"\" cannot")
+	assert.Nil(t, stored.Network.WiFi.STA.Password, "null removes the override")
 }
 
 // Each secret path is a JSON key path, so a raw body can be read for null at it. This fails when a

@@ -27,12 +27,18 @@ All notable changes to this project are documented here. The project follows Con
   Template responses carry `stored_secrets`, the path of each
   stored secret, so the form tells the access point password from the station
   password, and the template form no longer asks for a saved password again
-  after an edit. It has a "Clear stored password" action. Limit: the
-  `network.wifi.*.pass` fields are plain strings, so an empty value there keeps
-  the stored password (send `null` to clear one), and the template form offers
-  no Clear action for them. The rule covers the template routes and
-  `PUT` on the overrides. `PATCH` on the overrides keeps a pointer secret, but
-  its merge still drops the plain `network.wifi.*.pass` fields (#435). (#395)
+  after an edit. It has a "Clear stored password" action. The rule covers the
+  template routes and `PUT` and `PATCH` on the overrides. (ginsys/shelly-manager#395)
+- A layer merge no longer drops the plain `network.ethernet` and
+  `network.wifi` fields (`enable`, `ssid`, `is_open`, `ipv4mode`, `max_sta` and
+  the others). Before, a template value for one of them never reached the
+  desired configuration, and a device override of `false` or `""` was lost. The
+  fields are now optional (a missing one inherits), so an empty value is a real
+  value. This also means an empty string clears the `network.wifi.*.pass`
+  passwords, the template form offers a Clear action for them, and `PATCH` on
+  the overrides keeps them. A field that is not set is left out of the JSON, so
+  `enable: false` is no longer always present; the form reads a missing switch as
+  off. (ginsys/shelly-manager#435)
 - The device routes no longer return saved secrets in clear. The list, get, add
   and update routes and the configuration reads (`/config`, `/config/import`,
   `/config/current`) show a secret held in `settings`, `overrides`,
