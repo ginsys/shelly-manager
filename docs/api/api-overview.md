@@ -142,6 +142,8 @@ Supported devices and settings:
 
 `POST` and `PUT` on `/api/v1/config/templates/new` check the `config` body against the schema of the template (the model for a `device_type` template, every stored section for a `global` or `group` template) and refuse it with 400 `VALIDATION_FAILED`, one entry per field in `error.details.fields`, and store nothing. The check covers the value of each field and the keys: an unknown key, a key that differs from the stored key only in case (`Relay` for `relay`), and a repeated key are refused with the key named, because the stored body is decoded without regard to case and merges repeated keys. A request key that is repeated or differs in case is refused the same way. The response returns a saved password as `has_wifi_password`, `has_mqtt_password` or `has_auth_password` and leaves the value out. A `PUT` without `config` keeps the stored config.
 
+A `device_type` template names a model from `GET /api/v1/config/device-types`. `POST /api/v1/config/templates/new` refuses a `device_type` that is not in that list with 400 `VALIDATION_FAILED` and a `device_type` entry in `error.details.fields`, and stores nothing. An empty `device_type` on a `device_type` template is refused as before, and a `global` or `group` template ignores the field. `PUT /api/v1/config/templates/new/{id}` never changes the type of a template. It refuses a `device_type` in the body only when it differs from the stored type and is not in the list, so a template stored with another type stays editable. Only these two routes check the type. The older `/api/v1/config/templates` routes, the startup migration and the SMA import only require a `device_type` template to have a type, and accept any non-empty one.
+
 **Template Model:**
 ```json
 {
@@ -180,6 +182,7 @@ Supported devices and settings:
 | POST | `/api/v1/configuration/convert-to-typed` | Convert raw to typed |
 | POST | `/api/v1/configuration/convert-to-raw` | Convert typed to raw |
 | GET | `/api/v1/config/schema` | Get configuration schema. With `?device_type=<model>` or `?device_id=<id>`: the stored-configuration schema for that model, with each field marked `x-applicable` when apply can write it. With `?scope=global` or `?scope=group`: the schema of such a template, every stored section |
+| GET | `/api/v1/config/device-types` | List the models a `device_type` template can name. `data.device_types` holds `{device_type, name, generation}` for each of the six supported Gen1 models (`SHPLG-S`, `SHPLG-1`, `SHSW-1`, `SHSW-PM`, `SHSW-25`, `SHIX3-1`) |
 | POST | `/api/v1/configuration/bulk-validate` | Bulk validate configs |
 
 ---

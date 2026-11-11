@@ -19,7 +19,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
-| [api-overview.md](api/api-overview.md) | Comprehensive overview of all 138 API endpoints |
+| [api-overview.md](api/api-overview.md) | Comprehensive overview of all 139 API endpoints |
 | [openapi.yaml](api/openapi.yaml) | OpenAPI 3.1 specification for code generation |
 | [API_EXPORT_IMPORT.md](api/API_EXPORT_IMPORT.md) | Export/Import API with pagination, filters, dry-run |
 | [API_NOTIFICATION.md](api/API_NOTIFICATION.md) | Notification channels, rules, and history API |
