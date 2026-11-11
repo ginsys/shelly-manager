@@ -247,6 +247,12 @@ func (h *Handler) GetDevices(w http.ResponseWriter, r *http.Request) {
 	if start != 0 || end != total {
 		pageDevices = devices[start:end]
 	}
+	// The saved secrets inside Settings, Overrides and DesiredConfig never leave the API.
+	masked := make([]database.Device, len(pageDevices))
+	for i, d := range pageDevices {
+		masked[i] = maskDeviceSecrets(d)
+	}
+	pageDevices = masked
 
 	// Build pagination meta
 	totalPages := 1
@@ -283,6 +289,9 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A mask in the body has nothing stored to take its place: it is dropped, never stored.
+	restoreDeviceSecrets(&device, nil)
+
 	// Validate and normalize device settings
 	if err := h.validateDeviceSettings(&device); err != nil {
 		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
@@ -296,7 +305,7 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 			"device_ip":   device.IP,
 			"device_mac":  device.MAC,
 			"device_type": device.Type,
-			"settings":    device.Settings,
+			"settings":    maskJSONText(device.Settings),
 			"component":   "api",
 			"operation":   "add_device",
 			"request_id":  r.Context().Value("request_id"),
@@ -319,7 +328,7 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteCreated(w, r, device)
+	h.responseWriter().WriteCreated(w, r, maskDeviceSecrets(device))
 }
 
 // GetDevice handles GET /api/v1/devices/{id}
@@ -341,7 +350,7 @@ func (h *Handler) GetDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, device)
+	h.responseWriter().WriteSuccess(w, r, maskDeviceSecrets(*device))
 }
 
 // UpdateDevice handles PUT /api/v1/devices/{id}
@@ -370,6 +379,10 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
+
+	// The client read the device with its secrets masked: a mask that comes back takes the stored
+	// value, so the mask is never saved over a secret.
+	restoreDeviceSecrets(&updatedDevice, existingDevice)
 
 	// Validate and normalize device settings
 	if err := h.validateDeviceSettings(&updatedDevice); err != nil {
@@ -406,7 +419,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, updatedDevice)
+	h.responseWriter().WriteSuccess(w, r, maskDeviceSecrets(updatedDevice))
 }
 
 // DeleteDevice handles DELETE /api/v1/devices/{id}
@@ -717,7 +730,8 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, config)
+	// The stored record keeps the real values; only the answer is masked.
+	h.responseWriter().WriteSuccess(w, r, maskDeviceConfig(config))
 }
 
 // writeDeviceReadError reports a failed read from a physical device. A device
@@ -756,7 +770,7 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, config)
+	h.responseWriter().WriteSuccess(w, r, maskDeviceConfig(config))
 }
 
 // GetCurrentDeviceConfigNormalized handles GET /api/v1/devices/{id}/config/current/normalized
@@ -823,7 +837,7 @@ func (h *Handler) ImportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, config)
+	h.responseWriter().WriteSuccess(w, r, maskDeviceConfig(config))
 }
 
 // GetImportStatus handles GET /api/v1/devices/{id}/config/status
