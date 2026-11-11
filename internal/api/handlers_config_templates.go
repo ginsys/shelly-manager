@@ -86,6 +86,9 @@ func (h *Handler) GetNewConfigTemplates(w http.ResponseWriter, r *http.Request) 
 
 // GetDeviceTypes handles GET /api/v1/config/device-types: the models a device-type template can name.
 func (h *Handler) GetDeviceTypes(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
 	h.responseWriter().WriteSuccess(w, r, map[string]any{
 		"device_types": configuration.SupportedDeviceTypeInfos(),
 	})
