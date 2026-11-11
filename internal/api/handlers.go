@@ -1284,6 +1284,13 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A client that read the config sends the mask back: a masked secret takes the stored value,
+	// and the mask is never stored. A missing stored config is left to the service to report.
+	if stored, getErr := h.Service.GetDeviceConfig(uint(id)); getErr == nil {
+		old, _ := decodeDocument(string(stored.Config))
+		restoreValue(configUpdate, old)
+	}
+
 	// Update device configuration
 	err = h.Service.UpdateDeviceConfig(uint(id), configUpdate)
 	if err != nil {
@@ -1302,7 +1309,7 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, config)
+	h.responseWriter().WriteSuccess(w, r, maskDeviceConfig(config))
 }
 
 // UpdateRelayConfig handles PUT /api/v1/devices/{id}/config/relay
