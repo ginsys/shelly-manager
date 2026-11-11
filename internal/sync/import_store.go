@@ -115,6 +115,11 @@ func templateIdentityError(in TemplateData) error {
 	if strings.TrimSpace(in.Name) == "" {
 		return fmt.Errorf("%w: template without a name", ErrInvalidImportData)
 	}
+	if in.Scope != "" {
+		if err := configuration.ValidateTemplateScope(in.Scope, in.DeviceType); err != nil {
+			return fmt.Errorf("%w: template %s: %v", ErrInvalidImportData, in.Name, err)
+		}
+	}
 	return nil
 }
 
@@ -290,8 +295,13 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 		}
 		switch {
 		case errors.Is(lookup.Error, gorm.ErrRecordNotFound):
+			scope := in.Scope
+			if scope == "" {
+				// An archive written before the scope travelled: derive it from the device type.
+				scope = templateScope(in.DeviceType)
+			}
 			template := configuration.ConfigTemplate{
-				Name: in.Name, Description: in.Description, Scope: templateScope(in.DeviceType),
+				Name: in.Name, Description: in.Description, Scope: scope,
 				DeviceType: in.DeviceType, Generation: in.Generation, IsDefault: in.IsDefault,
 				Config: json.RawMessage(config), Variables: json.RawMessage(variables),
 				CreatedAt: in.CreatedAt, UpdatedAt: in.UpdatedAt,
@@ -315,8 +325,8 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 				return fmt.Errorf("%w: template %s keeps scope %q: %v", ErrInvalidImportData, in.Name, existing.Scope, err)
 			}
 			updates := map[string]interface{}{
-				// The scope stays as it is: the archive does not carry one, and a group template
-				// must not turn global because its device type is empty.
+				// The scope stays as it is: a replacement never changes what the template applies to,
+				// and a group template must not turn global because its device type is empty.
 				"description": in.Description,
 				"device_type": in.DeviceType, "generation": in.Generation, "is_default": in.IsDefault,
 				"config": json.RawMessage(config), "variables": json.RawMessage(variables),

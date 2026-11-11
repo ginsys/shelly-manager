@@ -292,7 +292,7 @@ func buildTemplate(template sync.TemplateData) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("variables: %w", err)
 	}
-	return map[string]interface{}{
+	row := map[string]interface{}{
 		"id":          template.ID,
 		"name":        template.Name,
 		"description": template.Description,
@@ -303,7 +303,12 @@ func buildTemplate(template sync.TemplateData) (map[string]interface{}, error) {
 		"is_default":  template.IsDefault,
 		"created_at":  canonicalTime(template.CreatedAt),
 		"updated_at":  canonicalTime(template.UpdatedAt),
-	}, nil
+	}
+	// The scope is optional in the archive: an empty one is left out, as in an older archive.
+	if template.Scope != "" {
+		row["scope"] = template.Scope
+	}
+	return row, nil
 }
 
 func buildDiscovered(device sync.DiscoveredDeviceData) (map[string]interface{}, error) {

@@ -59,6 +59,7 @@ export interface SMATemplate {
   name: string
   description: string
   device_type: string
+  scope?: 'global' | 'group' | 'device_type' // absent in an archive that predates it
   config: Record<string, unknown>
   variables: Record<string, unknown>
   is_default: boolean
@@ -276,7 +277,10 @@ function validateTemplate(template: Record<string, unknown>): void {
   keys(template, [
     'id', 'generation', 'name', 'description', 'device_type', 'config', 'variables',
     'is_default', 'created_at', 'updated_at',
-  ])
+  ], ['scope'])
+  if ('scope' in template && !['global', 'group', 'device_type'].includes(template.scope as string)) {
+    throw new Error('scope must be global, group or device_type')
+  }
   safeInteger(template.id, 'id')
   safeInteger(template.generation, 'generation')
   for (const name of ['name', 'description', 'device_type']) string(template[name], name, true)

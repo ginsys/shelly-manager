@@ -42,6 +42,13 @@ All notable changes to this project are documented here. The project follows Con
   The JSON, YAML and GitOps exports are not covered. (#436)
 
 ### Added
+- An SMA archive now carries each template's scope. A template row has an optional
+  `scope` key (`global`, `group` or `device_type`), the export always writes it, and an
+  import creates the template with it, so a `group` template no longer comes back as
+  `global` or `device_type`. An archive without `scope` keeps the old derivation from the
+  device type, and an invalid scope is refused by validation and by apply. A replacement
+  with `force_overwrite` still keeps the stored scope. The format version stays `2026.1`;
+  a reader with the older closed key list refuses an archive that has `scope`. (#398)
 - A device-type template now takes its type from a list. `GET /api/v1/config/device-types`
   returns the supported models (code, name, generation), and the create dialog offers
   them in a select instead of a free-text field. The template create and update routes

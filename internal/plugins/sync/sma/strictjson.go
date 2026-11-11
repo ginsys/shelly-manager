@@ -597,8 +597,19 @@ func validateTemplate(object map[string]interface{}) error {
 		"id", "generation", "name", "description", "device_type", "config", "variables",
 		"is_default", "created_at", "updated_at",
 	}
-	if err := exactKeys(object, required, nil); err != nil {
+	if err := exactKeys(object, required, []string{"scope"}); err != nil {
 		return err
+	}
+	if scope, present := object["scope"]; present {
+		text, err := requireString(scope, "scope", false)
+		if err != nil {
+			return err
+		}
+		switch text {
+		case "global", "group", "device_type":
+		default:
+			return fmt.Errorf("scope must be global, group or device_type")
+		}
 	}
 	for _, name := range []string{"id", "generation"} {
 		if _, err := requireSafeInteger(object[name], name, false); err != nil {

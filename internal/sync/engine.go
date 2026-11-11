@@ -946,6 +946,7 @@ func (e *SyncEngine) loadExportData(ctx context.Context, filters ExportFilters) 
 			Name:        stored.Name,
 			Description: stored.Description,
 			DeviceType:  stored.DeviceType,
+			Scope:       stored.Scope,
 			Generation:  stored.Generation,
 			Config:      config,
 			Variables:   variables,
