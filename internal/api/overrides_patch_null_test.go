@@ -1,9 +1,16 @@
 package api
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"testing/iotest"
 
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -220,6 +227,26 @@ func TestPatchOverridesStillAcceptsTextAfterTheFirstValue(t *testing.T) {
 	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"user":"iot"}} {}`)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.MQTT)
+	assert.Equal(t, "iot", *stored.MQTT.User)
+}
+
+// The old handler stopped reading after the first value, so a body whose rest cannot be read (it
+// runs past the size limit) was still accepted. The handler must not read past the first value.
+func TestPatchOverridesDoesNotReadPastTheFirstValue(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{}`)
+
+	body := io.MultiReader(strings.NewReader(`{"mqtt":{"user":"iot"}}`), iotest.ErrReader(errors.New("body too large")))
+	req := httptest.NewRequest("PATCH", fmt.Sprintf("/api/v1/devices/%d/overrides/new", id), body)
+	req = mux.SetURLVars(req, map[string]string{"id": fmt.Sprint(id)})
+	w := httptest.NewRecorder()
+	handler.PatchDeviceNewOverrides(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
 	require.NoError(t, err)
 	require.NotNil(t, stored.MQTT)

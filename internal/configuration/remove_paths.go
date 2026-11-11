@@ -25,30 +25,33 @@ func NullPaths(raw []byte) ([][]string, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	var paths [][]string
-	if err := readNulls(dec, nil, &paths); err != nil {
+	var path []string
+	if err := readNulls(dec, &path, &paths); err != nil {
 		return nil, err
 	}
 	return paths, nil
 }
 
-func readNulls(dec *json.Decoder, path []string, paths *[][]string) error {
+// readNulls keeps one path stack for the whole body. A path is copied only when it is recorded, so
+// a deep body costs memory in proportion to its size and never to its depth times its null count.
+func readNulls(dec *json.Decoder, path *[]string, paths *[][]string) error {
 	tok, err := dec.Token()
 	if err != nil {
 		return err
 	}
 	switch t := tok.(type) {
 	case nil:
-		if len(path) > 0 && len(path) <= maxPathDepth {
-			*paths = append(*paths, append([]string{}, path...))
+		if n := len(*path); n > 0 && n <= maxPathDepth {
+			*paths = append(*paths, append([]string{}, *path...))
 		}
 	case json.Delim:
 		switch t {
 		case '{':
 			seen := map[string]bool{}
 			for dec.More() {
-				keyTok, err := dec.Token()
-				if err != nil {
-					return err
+				keyTok, keyErr := dec.Token()
+				if keyErr != nil {
+					return keyErr
 				}
 				key := keyTok.(string)
 				if folded := foldKey(key); seen[folded] {
@@ -56,13 +59,24 @@ func readNulls(dec *json.Decoder, path []string, paths *[][]string) error {
 				} else {
 					seen[folded] = true
 				}
-				if err := readNulls(dec, append(path, key), paths); err != nil {
+				*path = append(*path, key)
+				err = readNulls(dec, path, paths)
+				*path = (*path)[:len(*path)-1]
+				if err != nil {
 					return err
 				}
 			}
 		case '[':
 			for i := 0; dec.More(); i++ {
-				if err := readNulls(dec, append(path, strconv.Itoa(i)), paths); err != nil {
+				// Past the longest address the index is never read, so it is not formatted.
+				index := ""
+				if len(*path) < maxPathDepth {
+					index = strconv.Itoa(i)
+				}
+				*path = append(*path, index)
+				err = readNulls(dec, path, paths)
+				*path = (*path)[:len(*path)-1]
+				if err != nil {
 					return err
 				}
 			}

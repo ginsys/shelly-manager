@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"encoding/json"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -66,6 +67,23 @@ func TestNullPathsDropsAPathThatIsTooDeepToAddressAField(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, [][]string{{"mqtt", "pass"}}, got)
+}
+
+// Dropping a deep path is not enough: building it must cost nothing too. Each of 10000 sibling nulls
+// below 8704 nested arrays used to copy the whole path, about 1.8 GB for a body of 67 KB.
+func TestNullPathsDoesNotCopyADeepPathForEverySibling(t *testing.T) {
+	const depth = 8704
+	deep := `{"unknown":` + strings.Repeat("[", depth) + strings.TrimSuffix(strings.Repeat("null,", 10000), ",") +
+		strings.Repeat("]", depth) + `}`
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	got, err := NullPaths([]byte(deep))
+	runtime.ReadMemStats(&after)
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	assert.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20), "bytes allocated for a 67 KB body")
 }
 
 func TestNullPathsRefusesAKeyThatAppearsTwice(t *testing.T) {
