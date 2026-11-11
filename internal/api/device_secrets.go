@@ -133,13 +133,38 @@ func restoreValue(v, stored any) {
 	case []any:
 		old, _ := stored.([]any)
 		for i, child := range x {
+			// An entry gets the secret of the stored entry at its position only when the two
+			// agree on everything but their secrets. A reordered or removed entry would otherwise
+			// take another entry's password, so its mask is dropped instead.
 			var counterpart any
-			if i < len(old) {
+			if i < len(old) && encodeDocument(withoutSecrets(child)) == encodeDocument(withoutSecrets(old[i])) {
 				counterpart = old[i]
 			}
 			restoreValue(child, counterpart)
 		}
 	}
+}
+
+// withoutSecrets returns a copy of a decoded document without the values held under secret keys.
+func withoutSecrets(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, child := range x {
+			if secretKey(k) && secretScalar(child) {
+				continue
+			}
+			out[k] = withoutSecrets(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, child := range x {
+			out[i] = withoutSecrets(child)
+		}
+		return out
+	}
+	return v
 }
 
 // storedAuthPassword returns the device login password held in a device's Settings text: the flat
