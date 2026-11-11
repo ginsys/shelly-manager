@@ -103,10 +103,11 @@ func TestDeviceSchemaHoldsOnlyStoredFields(t *testing.T) {
 
 func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 	cases := map[string][]string{
-		"SHPLG-S": {"auth", "cloud", "coiot", "led", "location", "mqtt", "power_metering", "relay", "system", "wifi"},
-		"SHSW-1":  {"auth", "cloud", "coiot", "input", "location", "mqtt", "relay", "system", "wifi"},
-		"SHIX3-1": {"auth", "cloud", "coiot", "input", "location", "mqtt", "system", "wifi"},
-		"unknown": {"auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "power_metering", "relay", "roller", "system", "wifi"},
+		"SHPLG-S": {"auth", "cloud", "coiot", "led", "location", "mqtt", "network", "power_metering", "relay", "system", "wifi"},
+		"SHSW-1":  {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "relay", "system", "wifi"},
+		"SHSW-25": {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
+		"SHIX3-1": {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "system", "wifi"},
+		"unknown": {"auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 	}
 	for deviceType, want := range cases {
 		schema := GetDeviceConfigurationSchema(deviceType)
