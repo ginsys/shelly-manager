@@ -12,6 +12,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // ErrImportStoreUnavailable means the engine has no database to import into.
@@ -64,10 +65,15 @@ func (e *SyncEngine) ApplyImport(ctx context.Context, data *ExportData, opts Imp
 
 	result := &ImportApplyResult{Changes: []ImportChange{}}
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := importDevices(tx, data, opts, result); err != nil {
+		restored := map[uint]bool{}    // devices whose desired configuration the archive wrote
+		overwritten := map[uint]bool{} // templates a forced import replaced
+		if err := importDevices(tx, data, opts, result, restored); err != nil {
 			return err
 		}
-		if err := importTemplates(tx, data, opts, result); err != nil {
+		if err := importTemplates(tx, data, opts, result, overwritten); err != nil {
+			return err
+		}
+		if err := recomputeTemplateDevices(tx, e.logger, overwritten, restored); err != nil {
 			return err
 		}
 		return importDiscovered(tx, data, opts, result)
@@ -192,7 +198,7 @@ func releasePlaceholder(id uint, taken map[string]bool) string {
 	return hold
 }
 
-func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {
+func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult, restored map[uint]bool) error {
 	if opts.ForceOverwrite {
 		if err := releaseOverwrittenAddresses(tx, data); err != nil {
 			return err
@@ -235,6 +241,9 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 			if err := writeDeviceConfigRow(tx, device.ID, desired); err != nil {
 				return fmt.Errorf("device %s configuration row: %w", in.MAC, err)
 			}
+			if desired != "" {
+				restored[device.ID] = true
+			}
 			result.Imported++
 			result.Changes = append(result.Changes, ImportChange{
 				Type: "create", Resource: "device", ResourceID: in.MAC,
@@ -262,6 +271,9 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 			if err := writeDeviceConfigRow(tx, existing.ID, desired); err != nil {
 				return fmt.Errorf("device %s configuration row: %w", in.MAC, err)
 			}
+			if desired != "" {
+				restored[existing.ID] = true
+			}
 			result.Imported++
 			result.Changes = append(result.Changes, ImportChange{
 				Type: "update", Resource: "device", ResourceID: in.MAC,
@@ -273,7 +285,7 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 	return nil
 }
 
-func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {
+func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult, overwritten map[uint]bool) error {
 	for _, in := range data.Templates {
 		if err := templateIdentityError(in); err != nil {
 			return err
@@ -334,6 +346,7 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 			if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 				return fmt.Errorf("update template %s: %w", in.Name, err)
 			}
+			overwritten[existing.ID] = true
 			result.Imported++
 			result.Changes = append(result.Changes, ImportChange{
 				Type: "update", Resource: "template", ResourceID: in.Name,
@@ -342,6 +355,46 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 		}
 	}
 	return nil
+}
+
+// recomputeTemplateDevices refreshes the desired configuration of every device that uses a template
+// a forced import replaced, and marks it pending, as saving a template through the API does. A
+// device the archive restored with its own desired configuration is left as the archive wrote it.
+// It runs in the import transaction, and unlike the API path it fails the import on any device
+// error, so a half-recomputed state is never committed.
+func recomputeTemplateDevices(tx *gorm.DB, logger *logging.Logger, overwritten, restored map[uint]bool) error {
+	if len(overwritten) == 0 {
+		return nil
+	}
+	var devices []database.Device
+	if err := tx.Select("id", "template_ids").Find(&devices).Error; err != nil {
+		return fmt.Errorf("list devices to recompute: %w", err)
+	}
+	service := configuration.NewConfigurationService(configuration.NewGormConfigRepositoryOn(tx, logger), nil, logger)
+	for _, device := range devices {
+		if restored[device.ID] || !usesAnyTemplate(device.TemplateIDs, overwritten) {
+			continue
+		}
+		if err := service.RecomputeDesiredConfig(device.ID); err != nil {
+			return fmt.Errorf("recompute device %d after a template update: %w", device.ID, err)
+		}
+	}
+	return nil
+}
+
+// usesAnyTemplate reports whether a device's template ID list names one of the templates. A list
+// that does not parse names none, as in the API path.
+func usesAnyTemplate(templateIDs string, templates map[uint]bool) bool {
+	var ids []uint
+	if err := json.Unmarshal([]byte(templateIDs), &ids); err != nil {
+		return false
+	}
+	for _, id := range ids {
+		if templates[id] {
+			return true
+		}
+	}
+	return false
 }
 
 func importDiscovered(tx *gorm.DB, data *ExportData, opts ImportOptions, result *ImportApplyResult) error {

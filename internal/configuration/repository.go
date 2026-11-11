@@ -77,6 +77,16 @@ func NewGormConfigRepository(db *gorm.DB, logger *logging.Logger) *GormConfigRep
 	}
 }
 
+// NewGormConfigRepositoryOn is NewGormConfigRepository for a handle that is already inside a
+// transaction. It migrates nothing, because a schema change inside a transaction can commit it on
+// some databases; the tables exist once the application has started.
+func NewGormConfigRepositoryOn(tx *gorm.DB, logger *logging.Logger) *GormConfigRepository {
+	if logger == nil {
+		logger = logging.GetDefault()
+	}
+	return &GormConfigRepository{db: tx, logger: logger}
+}
+
 // Template CRUD
 
 func (r *GormConfigRepository) CreateTemplate(template *ServiceConfigTemplate) error {
