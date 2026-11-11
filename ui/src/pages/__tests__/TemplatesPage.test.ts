@@ -150,6 +150,45 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('select[data-testid="template-device-type"]').attributes('disabled')).toBeUndefined()
   })
 
+  it('a reload clears the earlier list, so a type chosen from it cannot be saved after the reload fails', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await flushPromises()
+    await wrapper.find('.modal-actions button').trigger('click') // Cancel
+
+    let rejectList: (e: Error) => void = () => {}
+    vi.mocked(listDeviceTypes).mockReturnValueOnce(new Promise((_, reject) => { rejectList = reject }))
+    await openCreate(wrapper)
+    await wrapper.find('[data-testid="template-scope"]').setValue('device_type')
+    // While the request is pending the earlier options are gone: only the placeholder is left.
+    expect(wrapper.findAll('[data-testid="template-device-type"] option')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+
+    rejectList(new Error('boom'))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="device-types-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('the answer of a closed dialog does not touch the list of the dialog that is open', async () => {
+    let rejectA: (e: Error) => void = () => {}
+    vi.mocked(listDeviceTypes).mockReturnValueOnce(new Promise((_, reject) => { rejectA = reject }))
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper) // request A stays pending
+    await wrapper.find('.modal-actions button').trigger('click') // Cancel
+    await openCreate(wrapper) // request B succeeds with the default list
+    await wrapper.find('[data-testid="template-scope"]').setValue('device_type')
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="template-device-type"] option')).toHaveLength(3)
+
+    rejectA(new Error('late'))
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="template-device-type"] option')).toHaveLength(3)
+    expect(wrapper.find('[data-testid="device-types-error"]').exists()).toBe(false)
+  })
+
   it('a device_type template loads the schema of its model once the type is chosen', async () => {
     const wrapper = mountPage()
     await flushPromises()

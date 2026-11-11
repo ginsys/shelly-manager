@@ -145,7 +145,7 @@
           <button
             class="btn primary"
             data-testid="save-template"
-            :disabled="!configValid || schemaTarget === null || busy"
+            :disabled="!configValid || schemaTarget === null || typeMissing || busy"
             @click="handleSave"
           >
             Save
@@ -232,13 +232,29 @@ function changeScope() {
 const deviceTypes = ref<DeviceTypeInfo[]>([])
 const deviceTypesError = ref('')
 
+// The number of the newest list request. A response whose request is no longer the newest (the
+// dialog was closed or reopened, or Retry started another) belongs to nobody and is dropped.
+let typesRequest = 0
+
+// A device-type template needs a type from the loaded list. The list is cleared when a load starts
+// and when it fails, so a type chosen from an earlier list never outlives it.
+const typeMissing = computed(() =>
+  !editing.value && form.value.scope === 'device_type' &&
+  !deviceTypes.value.some((t) => t.device_type === form.value.device_type))
+
 async function loadDeviceTypes() {
+  const mine = ++typesRequest
   deviceTypesError.value = ''
+  deviceTypes.value = []
+  form.value.device_type = ''
+  schemaDeviceType.value = ''
   try {
-    deviceTypes.value = await listDeviceTypes()
+    const list = await listDeviceTypes()
+    if (mine === typesRequest) deviceTypes.value = list
   } catch (e: any) {
-    deviceTypes.value = []
-    deviceTypesError.value = 'Could not load the device types: ' + (e?.message || 'Unknown error')
+    if (mine === typesRequest) {
+      deviceTypesError.value = 'Could not load the device types: ' + (e?.message || 'Unknown error')
+    }
   }
 }
 
@@ -273,12 +289,13 @@ function openEdit(template: ConfigTemplate) {
 
 function closeDialog() {
   dialogSession++
+  typesRequest++
   showDialog.value = false
   editing.value = null
 }
 
 async function handleSave() {
-  if (!configValid.value || schemaTarget.value === null || busy.value) return
+  if (!configValid.value || schemaTarget.value === null || typeMissing.value || busy.value) return
   const parsedConfig = clone(configBody.value)
   const session = dialogSession
   saveErrors.value = []
