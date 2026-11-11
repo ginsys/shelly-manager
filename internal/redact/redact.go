@@ -34,21 +34,47 @@ func IsScalar(v any) bool {
 }
 
 // Mask replaces, in place, every secret scalar under a secret-named key of a decoded JSON tree
-// (maps and slices) with mask. A secret key that holds an object or a list is walked, and an empty
-// secret stays empty.
+// (maps and slices) with mask. A secret key that holds an object or a list is secret as a whole:
+// every string and number inside it is replaced, so {"api_tokens":["a","b"]} keeps nothing. An
+// empty secret stays empty.
 func Mask(v any, mask string) {
 	switch x := v.(type) {
 	case map[string]any:
 		for k, child := range x {
-			if IsKey(k) && IsScalar(child) {
+			switch {
+			case IsKey(k) && IsScalar(child):
 				x[k] = mask
-				continue
+			case IsKey(k):
+				maskAll(child, mask)
+			default:
+				Mask(child, mask)
 			}
-			Mask(child, mask)
 		}
 	case []any:
 		for _, child := range x {
 			Mask(child, mask)
+		}
+	}
+}
+
+// maskAll masks every scalar inside a container held by a secret-named key.
+func maskAll(v any, mask string) {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			if IsScalar(child) {
+				x[k] = mask
+				continue
+			}
+			maskAll(child, mask)
+		}
+	case []any:
+		for i, child := range x {
+			if IsScalar(child) {
+				x[i] = mask
+				continue
+			}
+			maskAll(child, mask)
 		}
 	}
 }
