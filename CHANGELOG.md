@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- The configuration template routes, the device template assignment routes and
+  `GET /api/v1/config/schema` now need the admin key when one is configured.
+  They answered any request before. Without a configured key they stay open.
+  (ginsys/shelly-manager#459)
 - The typed configuration routes no longer return saved secrets in clear.
   `GET /devices/{id}/config/typed` and `.../typed/normalized` show a secret as
   the mask `********`, in the typed sections and in the `raw` part by key name.
