@@ -211,6 +211,34 @@ func TestPatchOverridesNullOnAZeroValuedPlainFieldKeepsItsSection(t *testing.T) 
 	}
 }
 
+// The old handler decoded the first JSON value and ignored what followed it.
+func TestPatchOverridesStillAcceptsTextAfterTheFirstValue(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"user":"iot"}} {}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.MQTT)
+	assert.Equal(t, "iot", *stored.MQTT.User)
+}
+
+func TestPatchOverridesNullForAnAbsentFieldKeepsAnEmptySection(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"pass":null}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.NotNil(t, stored.MQTT)
+}
+
 func TestPatchOverridesKeysAreMatchedLikeTheDecoder(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()
