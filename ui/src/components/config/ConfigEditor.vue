@@ -134,7 +134,7 @@ interface Props {
   layer?: boolean
   kept?: ConfigBody | null
   sources?: Record<string, string>
-  // The overrides as they were saved: the page sets it when it loads them (see `held` below). Optional.
+  // The overrides as they were saved: the page sets it when it loads them (see `held` below). The device page always gives it; template pages (layer) do not.
   held?: ConfigBody
 }
 
@@ -160,21 +160,16 @@ const localConfig = ref<ConfigBody>({})
 // untouched, yet saving it removes what was saved, so the required check keeps looking at a
 // section that was saved with an override (see validateOverrides). The memory is the saved body
 // and nothing the editor sees: no edit, typed in the form or in the JSON view, can change it, so
-// no sequence of edits can lose it. The page gives it (`held` prop) and replaces it only when it
-// loads the overrides again (another device, a reload after Save, Cancel). Without the prop the
-// editor takes the body it was given, at mount and when the device changes.
-const savedBody = ref<ConfigBody>(clone(props.modelValue || {}))
-const held = computed<ConfigBody>(() => props.held ?? savedBody.value)
+// no sequence of edits can lose it. Only the page knows when the overrides were loaded again
+// (another device, a reload after Save, Cancel), so the page gives it (`held` prop). Without the
+// prop nothing is remembered: the editor cannot tell a reload from an edit by itself.
+const held = computed<ConfigBody>(() => props.held ?? {})
 
 watch(() => props.modelValue, (newValue) => {
   const incoming = newValue || {}
   localConfig.value = clone(incoming)
   jsonText.value = JSON.stringify(incoming, null, 2)
 }, { immediate: true, deep: true })
-
-watch(() => props.deviceId, () => {
-  savedBody.value = clone(props.modelValue || {})
-})
 
 // The page passes the inherited configuration: the template layers alone, which is what a field
 // falls back to when its override is removed. A secret that a template sets arrives as a mask.

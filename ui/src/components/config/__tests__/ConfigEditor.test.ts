@@ -163,6 +163,7 @@ describe('ConfigEditor', () => {
     }
     vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
     const wrapper = mountEditor({ auth: { pass: '********' } }, {
+      held: { auth: { pass: '********' } },
       inherited: { auth: { enable: true, user: 'admin' } },
       sources: { 'auth.enable': 'Global', 'auth.user': 'Global' },
     })
@@ -399,9 +400,9 @@ describe('ConfigEditor', () => {
 
     // The editor as the page uses it: the page owns the saved body (`held`) and echoes every
     // update back as the model, the way v-model does.
-    async function mountSaved(withHeld: boolean) {
+    async function mountSaved() {
       vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
-      const wrapper = mountEditor(saved, { inherited, ...(withHeld ? { held: saved } : {}) })
+      const wrapper = mountEditor(saved, { inherited, held: saved })
       await flushPromises()
       expect(lastValid(wrapper)).toBe(true)
       return wrapper
@@ -417,35 +418,33 @@ describe('ConfigEditor', () => {
       await wrapper.findAll('.mode-btn')[1].trigger('click')
     }
 
-    describe.each([['the page gives held', true], ['the editor keeps its own', false]])('when %s', (_name, withHeld) => {
-      it.each(['null', '0', 'false', '""'])('a whole body of %s, then {}, keeps Save off', async (text) => {
-        const wrapper = await mountSaved(withHeld)
-        await openJson(wrapper)
-        await typeJson(wrapper, text)
-        await typeJson(wrapper, '{}')
-        expect(lastValid(wrapper)).toBe(false)
-      })
+    it.each(['null', '0', 'false', '""'])('a whole body of %s, then {}, keeps Save off', async (text) => {
+      const wrapper = await mountSaved()
+      await openJson(wrapper)
+      await typeJson(wrapper, text)
+      await typeJson(wrapper, '{}')
+      expect(lastValid(wrapper)).toBe(false)
+    })
 
-      it.each(['null', '5', '[]', '"x"'])('the auth section set to %s, then {}, keeps Save off', async (value) => {
-        const wrapper = await mountSaved(withHeld)
-        await openJson(wrapper)
-        await typeJson(wrapper, `{"auth":${value}}`)
-        await typeJson(wrapper, '{}')
-        expect(lastValid(wrapper)).toBe(false)
-      })
+    it.each(['null', '5', '[]', '"x"'])('the auth section set to %s, then {}, keeps Save off', async (value) => {
+      const wrapper = await mountSaved()
+      await openJson(wrapper)
+      await typeJson(wrapper, `{"auth":${value}}`)
+      await typeJson(wrapper, '{}')
+      expect(lastValid(wrapper)).toBe(false)
+    })
 
-      it('Reset of the saved password keeps Save off', async () => {
-        const wrapper = await mountSaved(withHeld)
-        await openSection(wrapper, 'auth')
-        await wrapper.find('[data-path="auth.pass"] [data-action="reset"]').trigger('click')
-        await echo(wrapper)
-        expect(lastModel(wrapper)).toEqual({})
-        expect(lastValid(wrapper)).toBe(false)
-      })
+    it('Reset of the saved password keeps Save off', async () => {
+      const wrapper = await mountSaved()
+      await openSection(wrapper, 'auth')
+      await wrapper.find('[data-path="auth.pass"] [data-action="reset"]').trigger('click')
+      await echo(wrapper)
+      expect(lastModel(wrapper)).toEqual({})
+      expect(lastValid(wrapper)).toBe(false)
     })
 
     it('a new password after the whole body was cleared makes Save valid again', async () => {
-      const wrapper = await mountSaved(true)
+      const wrapper = await mountSaved()
       await openJson(wrapper)
       await typeJson(wrapper, 'null')
       await typeJson(wrapper, '{"auth":{"pass":"new-secret"}}')
@@ -453,12 +452,37 @@ describe('ConfigEditor', () => {
     })
 
     it('a new saved body from the page starts the guard again', async () => {
-      const wrapper = await mountSaved(true)
+      const wrapper = await mountSaved()
       await openJson(wrapper)
       await typeJson(wrapper, '{}')
       expect(lastValid(wrapper)).toBe(false)
       // The page saved and reloaded: the stored override no longer holds a password.
       await wrapper.setProps({ held: {}, modelValue: {} })
+      expect(lastValid(wrapper)).toBe(true)
+    })
+
+    // A reload that brings a password the editor had not seen: the page gives the new saved body, so
+    // Reset of that password is guarded, with no earlier mount snapshot to go stale.
+    it('a reload that brings a saved password guards its Reset', async () => {
+      vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+      const wrapper = mountEditor({}, { inherited, held: {} })
+      await flushPromises()
+      expect(lastValid(wrapper)).toBe(true)
+      await wrapper.setProps({ held: saved, modelValue: saved })
+      await openSection(wrapper, 'auth')
+      await wrapper.find('[data-path="auth.pass"] [data-action="reset"]').trigger('click')
+      await echo(wrapper)
+      expect(lastModel(wrapper)).toEqual({})
+      expect(lastValid(wrapper)).toBe(false)
+    })
+
+    it('without held nothing is remembered, so no reload can leave a stale memory', async () => {
+      vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+      const wrapper = mountEditor(saved, { inherited })
+      await flushPromises()
+      await openSection(wrapper, 'auth')
+      await wrapper.find('[data-path="auth.pass"] [data-action="reset"]').trigger('click')
+      await echo(wrapper)
       expect(lastValid(wrapper)).toBe(true)
     })
   })
