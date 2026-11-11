@@ -164,13 +164,18 @@ function requiredKeys(
   return keys
 }
 
+// The keys that reach a prototype when used as a property name. JSON.parse makes "__proto__" an own
+// key, so the JSON view can hand one to a deep copy. No configuration field has these names.
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 // rememberOverrides returns held with every key of body added, objects merged deeply. It is the
 // memory of what an override body has held: a key stays once it was there, even after Reset
-// removes it from the body.
+// removes it from the body. It skips the keys of UNSAFE_KEYS, so it never writes through a prototype.
 export function rememberOverrides(held: ConfigBody, body: ConfigBody): ConfigBody {
   const out: ConfigBody = clone(held)
   const add = (target: any, source: any) => {
     for (const [key, value] of Object.entries(source || {})) {
+      if (UNSAFE_KEYS.has(key)) continue
       if (isPlainObject(value)) {
         if (!isPlainObject(target[key])) target[key] = {}
         add(target[key], value)
