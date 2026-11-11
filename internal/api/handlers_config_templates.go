@@ -369,6 +369,9 @@ const secretMask = "********"
 // maskSecrets replaces each secret that is set with secretMask. A secret that is absent or empty
 // stays as it is.
 func maskSecrets(config *configuration.DeviceConfiguration) {
+	if config == nil {
+		return
+	}
 	mask := func(p **string) {
 		if *p != nil && **p != "" {
 			m := secretMask

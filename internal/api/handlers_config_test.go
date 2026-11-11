@@ -275,6 +275,8 @@ func TestMaskSecrets(t *testing.T) {
 	assert.Equal(t, secretMask, *config.WiFi.Password)
 	assert.Equal(t, "", *config.Auth.Password)
 	assert.Nil(t, config.MQTT.Password)
+
+	assert.NotPanics(t, func() { maskSecrets(nil) })
 }
 
 // The desired configuration keeps only the winning layer of a field, so a device override hides
