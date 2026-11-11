@@ -306,6 +306,42 @@ describe('ConfigEditor', () => {
     expect(lastValid(wrapper)).toBe(false)
   })
 
+  it('a late schema response does not replace the schema of the current selection', async () => {
+    const globalSchema: ConfigSchema = {
+      type: 'object',
+      'x-apply-supported': true,
+      properties: { mqtt: { type: 'object', title: 'MQTT', properties: { server: { type: 'string', 'x-applicable': true } } } },
+    }
+    let resolvePlug!: (value: ConfigSchema) => void
+    let resolveGlobal!: (value: ConfigSchema) => void
+    vi.mocked(getConfigSchema)
+      .mockReturnValueOnce(new Promise<ConfigSchema>((resolve) => { resolvePlug = resolve }))
+      .mockReturnValueOnce(new Promise<ConfigSchema>((resolve) => { resolveGlobal = resolve }))
+    const wrapper = mountEditor({}, { deviceId: undefined, deviceType: 'SHPLG-S' })
+    await wrapper.setProps({ deviceType: undefined, scope: 'global' })
+    // The global answer arrives first, the plug answer last.
+    resolveGlobal(globalSchema)
+    await flushPromises()
+    resolvePlug(schema)
+    await flushPromises()
+    expect(wrapper.find('[data-section="mqtt"]').exists()).toBe(true)
+    expect(wrapper.find('[data-section="relay"]').exists()).toBe(false)
+  })
+
+  it('a late failed schema response does not end the loading state of the current selection', async () => {
+    let rejectPlug!: (reason: Error) => void
+    vi.mocked(getConfigSchema)
+      .mockReturnValueOnce(new Promise<ConfigSchema>((_, reject) => { rejectPlug = reject }))
+      .mockReturnValueOnce(new Promise<ConfigSchema>(() => {}))
+    const wrapper = mountEditor({}, { deviceId: undefined, deviceType: 'SHPLG-S' })
+    await wrapper.setProps({ deviceType: undefined, scope: 'global' })
+    rejectPlug(new Error('plug gone'))
+    await flushPromises()
+    // The current request is still pending: nothing is checked yet, and no error shows.
+    expect(lastValid(wrapper)).toBe(false)
+    expect(wrapper.find('.no-schema').exists()).toBe(false)
+  })
+
   it('is valid again, and says so, when the schema request fails', async () => {
     vi.mocked(getConfigSchema).mockRejectedValue(new Error('boom'))
     const wrapper = mountEditor({})

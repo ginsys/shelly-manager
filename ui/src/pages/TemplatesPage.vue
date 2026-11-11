@@ -111,6 +111,7 @@
               v-model:valid="configValid"
               :device-type="schemaTarget.deviceType"
               :scope="schemaTarget.scope"
+              :inherited="savedSecrets"
             />
             <div class="hint">
               Set only the fields this template must set. Password fields are accepted, but returned redacted.
@@ -142,7 +143,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useTemplatesStore } from '@/stores/templates'
 import { TemplateSaveError, type ConfigTemplate, type FieldError, type TemplateScope } from '@/api/templates'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
-import { clone, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
+import { clone, sameValue, savedSecretBaseline, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
 
 const store = useTemplatesStore()
 
@@ -163,6 +164,14 @@ const saveErrors = ref<FieldError[]>([])
 // event), not on each key, so a half-typed model does not load a schema.
 const schemaDeviceType = ref('')
 const schemaTarget = computed(() => templateSchemaTarget(form.value.scope, schemaDeviceType.value))
+// The body the template had when the dialog opened. It is the same until the form changes it.
+const configUntouched = computed(() =>
+  editing.value !== null && sameValue(configBody.value, editing.value.config || {}))
+// While the body is untouched, a saved password counts as given for the required check. Once
+// the form changes the body, a save would replace the config without the password the server
+// holds, so the field is required again and the password must be entered.
+const savedSecrets = computed(() =>
+  editing.value && configUntouched.value ? savedSecretBaseline(editing.value) : null)
 
 function formatDate(iso: string) {
   try {
@@ -212,10 +221,12 @@ async function handleSave() {
 
   try {
     if (editing.value) {
+      // An untouched config is left out of the update: the server keeps the stored one, and the
+      // body shown here has no saved passwords in it.
       await store.update(editing.value.id, {
         name: form.value.name,
         description: form.value.description,
-        config: parsedConfig,
+        ...(configUntouched.value ? {} : { config: parsedConfig }),
       })
     } else {
       await store.create({

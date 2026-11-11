@@ -249,6 +249,25 @@ export function templateSchemaTarget(
   return { scope: scope || 'global' }
 }
 
+// The template API returns a saved password as a flag (has_wifi_password, has_mqtt_password,
+// has_auth_password) and leaves the value out of the body. savedSecretBaseline turns the flags
+// into a body that holds a mask at each such path, for the editor's `inherited` input: a field
+// that requires a password is then not reported as missing while the password is saved. It is
+// null when no flag is set. The mask is never sent; it only satisfies the required check.
+export const SAVED_SECRET_MASK = '********'
+
+export function savedSecretBaseline(flags: {
+  has_wifi_password?: boolean
+  has_mqtt_password?: boolean
+  has_auth_password?: boolean
+}): ConfigBody | null {
+  let body: ConfigBody = {}
+  if (flags.has_wifi_password) body = setAt(body, ['wifi', 'password'], SAVED_SECRET_MASK)
+  if (flags.has_mqtt_password) body = setAt(body, ['mqtt', 'pass'], SAVED_SECRET_MASK)
+  if (flags.has_auth_password) body = setAt(body, ['auth', 'pass'], SAVED_SECRET_MASK)
+  return Object.keys(body).length > 0 ? body : null
+}
+
 // countOverrides counts the leaf values set in the override body under path.
 export function countOverrides(body: ConfigBody, path: ConfigPath): number {
   const node = getAt(body, path)

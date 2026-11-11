@@ -213,21 +213,30 @@ function sectionErrorCount(section: string): number {
   return Object.keys(errors.value).filter(key => key === section || key.startsWith(`${section}.`)).length
 }
 
+// The number of the newest schema request. A template page changes the scope or the model while
+// an older request may still be pending, and requests can finish in any order. Only the newest
+// one may set the schema, the error and the loading state.
+let schemaRequest = 0
+
 async function loadSchema() {
+  const request = ++schemaRequest
   loading.value = true
   loadError.value = null
   try {
-    schema.value = await typedConfigStore.fetchSchema(props.deviceType, props.deviceId, props.scope)
-    if (schema.value?.properties) {
-      Object.keys(schema.value.properties).forEach(key => {
+    const loaded = await typedConfigStore.fetchSchema(props.deviceType, props.deviceId, props.scope)
+    if (request !== schemaRequest) return
+    schema.value = loaded
+    if (loaded?.properties) {
+      Object.keys(loaded.properties).forEach(key => {
         // Open the sections that already hold overrides.
         expandedSections.value[key] = countOverrides(localConfig.value, [key]) > 0
       })
     }
   } catch (e: any) {
+    if (request !== schemaRequest) return
     loadError.value = e?.message || 'unknown error'
   } finally {
-    loading.value = false
+    if (request === schemaRequest) loading.value = false
   }
 }
 

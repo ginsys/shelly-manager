@@ -71,6 +71,7 @@
             v-model:valid="configValid"
             :device-type="schemaTarget?.deviceType"
             :scope="schemaTarget?.scope"
+            :inherited="savedSecrets"
           />
           <ul v-if="saveErrors.length > 0" class="save-errors" data-testid="template-save-errors">
             <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>
@@ -132,7 +133,7 @@ import {
   type TemplateScope,
 } from '@/api/templates'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
-import { clone, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
+import { clone, sameValue, savedSecretBaseline, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
 
 const route = useRoute()
 const router = useRouter()
@@ -155,6 +156,14 @@ const configValid = ref(true)
 const saveErrors = ref<FieldError[]>([])
 const schemaTarget = computed(() => templateSchemaTarget(template.value?.scope, template.value?.device_type))
 const lastAffectedDevices = ref<number | null>(null)
+// The body the template had when Edit opened. It is the same until the form changes it.
+const configUntouched = computed(() =>
+  template.value !== null && sameValue(configBody.value, template.value.config || {}))
+// While the body is untouched, a saved password counts as given for the required check. Once
+// the form changes the body, a save would replace the config without the password the server
+// holds, so the field is required again and the password must be entered.
+const savedSecrets = computed(() =>
+  template.value && configUntouched.value ? savedSecretBaseline(template.value) : null)
 
 const showAssignDialog = ref(false)
 const assign = ref<{ deviceId: number | null; position: number | null }>({ deviceId: null, position: null })
@@ -224,10 +233,12 @@ async function handleSave() {
   saveErrors.value = []
 
   try {
+    // An untouched config is left out of the update: the server keeps the stored one, and the
+    // body shown here has no saved passwords in it.
     const result = await updateTemplate(template.value.id, {
       name: edit.value.name,
       description: edit.value.description,
-      config: parsedConfig,
+      ...(configUntouched.value ? {} : { config: parsedConfig }),
     })
 
     lastAffectedDevices.value = result.affected_devices ?? null

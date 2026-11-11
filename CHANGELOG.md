@@ -54,10 +54,18 @@ All notable changes to this project are documented here. The project follows Con
   holds every stored section. A new template starts empty, and each field
   offers its default. The server now checks a template body against that
   schema on create and update, and refuses a wrong type, an out-of-range value,
-  a value outside its enum, or a section the model does not have. The refusal
-  is a `VALIDATION_FAILED` error with each field in `error.details.fields`. The
-  JSON view stays. Scope and device type are read-only after create, because
-  the update API keeps them. (#386)
+  a value outside its enum, or a section the model does not have. It also
+  refuses an unknown key, a key in the wrong case (`Relay` for `relay`) and a
+  repeated key, and names the key, because the stored body is decoded without
+  regard to case and merges repeats, so a schema check could read a different
+  body than the one stored. The refusal is a `VALIDATION_FAILED` error with
+  each field in `error.details.fields`. The JSON view stays. Scope and device
+  type are read-only after create, because the update API keeps them. A
+  template with a saved password can be renamed: the unchanged config is left
+  out of the update, and the saved password counts as given while the config is
+  untouched. Once the config changes, the password is required again, because
+  the update replaces the config. A late schema response no longer replaces the
+  schema of the current scope or model. (#386)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

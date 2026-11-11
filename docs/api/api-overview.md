@@ -136,6 +136,8 @@ Supported devices and settings:
 | PUT | `/api/v1/config/templates/{id}` | Update template | Template fields |
 | DELETE | `/api/v1/config/templates/{id}` | Delete template | Path: `id` |
 
+`POST` and `PUT` on `/api/v1/config/templates/new` check the `config` body against the schema of the template (the model for a `device_type` template, every stored section for a `global` or `group` template) and refuse it with 400 `VALIDATION_FAILED`, one entry per field in `error.details.fields`, and store nothing. The check covers the value of each field and the keys: an unknown key, a key that differs from the stored key only in case (`Relay` for `relay`), and a repeated key are refused with the key named, because the stored body is decoded without regard to case and merges repeated keys. A request key that is repeated or differs in case is refused the same way. The response returns a saved password as `has_wifi_password`, `has_mqtt_password` or `has_auth_password` and leaves the value out. A `PUT` without `config` keeps the stored config.
+
 **Template Model:**
 ```json
 {

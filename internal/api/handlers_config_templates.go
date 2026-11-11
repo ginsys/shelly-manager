@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -91,7 +93,8 @@ func (h *Handler) CreateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
-	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(head.Scope, head.DeviceType), head.Config) {
+	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(head.Scope, head.DeviceType), raw, head,
+		reflect.TypeOf(CreateTemplateRequest{})) {
 		return
 	}
 	var req CreateTemplateRequest
@@ -217,7 +220,8 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
-	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(existing.Scope, existing.DeviceType), head.Config) {
+	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(existing.Scope, existing.DeviceType), raw, head,
+		reflect.TypeOf(UpdateTemplateRequest{})) {
 		return
 	}
 	var req UpdateTemplateRequest
@@ -318,6 +322,8 @@ type templateHead struct {
 	Scope      string                 `json:"scope"`
 	DeviceType string                 `json:"device_type"`
 	Config     map[string]interface{} `json:"config"`
+	// RawConfig is the config value as sent, for the key check.
+	RawConfig json.RawMessage `json:"-"`
 }
 
 // readTemplateBody reads a template request body. It returns the raw bytes, for the typed
@@ -334,6 +340,13 @@ func readTemplateBody(r *http.Request) ([]byte, templateHead, error) {
 	if err := json.Unmarshal(raw, &head); err != nil {
 		return nil, head, err
 	}
+	var rawConfig struct {
+		Config json.RawMessage `json:"config"`
+	}
+	if err := json.Unmarshal(raw, &rawConfig); err != nil {
+		return nil, head, err
+	}
+	head.RawConfig = rawConfig.Config
 	return raw, head, nil
 }
 
@@ -346,14 +359,20 @@ func schemaDeviceType(scope, deviceType string) string {
 	return ""
 }
 
-// writeConfigFieldErrors checks config against the device schema of deviceType. If a field
-// fails, it writes a validation error whose details list each field, and returns true.
+// writeConfigFieldErrors checks a template request body. It refuses a repeated or miscased
+// request key, then the keys of the config against the stored configuration, which is the body
+// that CreateTemplateRequest and UpdateTemplateRequest decode and store, then the values of
+// config against the device schema of deviceType. If anything fails, it writes a validation
+// error whose details list each field, and returns true.
 func writeConfigFieldErrors(rw *apiresp.ResponseWriter, w http.ResponseWriter, r *http.Request,
-	deviceType string, config map[string]interface{}) bool {
-	fieldErrs := configuration.ValidateConfigBody(deviceType, config)
+	deviceType string, raw []byte, head templateHead, request reflect.Type) bool {
+	fieldErrs := configuration.CheckRequestKeys(raw, request)
+	fieldErrs = append(fieldErrs, configuration.CheckConfigKeys(head.RawConfig)...)
+	fieldErrs = append(fieldErrs, configuration.ValidateConfigBody(deviceType, head.Config)...)
 	if len(fieldErrs) == 0 {
 		return false
 	}
+	sort.SliceStable(fieldErrs, func(i, j int) bool { return fieldErrs[i].Path < fieldErrs[j].Path })
 	rw.WriteValidationError(w, r, map[string]any{"fields": fieldErrs})
 	return true
 }
