@@ -9,6 +9,13 @@ All notable changes to this project are documented here. The project follows Con
   `GET /api/v1/config/schema` now need the admin key when one is configured.
   They answered any request before. Without a configured key they stay open.
   (ginsys/shelly-manager#459)
+- A typed save no longer deletes the Wi-Fi key and the login password of a
+  configuration stored in the device's own shape. The conversion read
+  `wifi_sta.pass` and `login.pass` only, so a device's `wifi_sta.key` and
+  `login.password` were missing from the typed view, and the typed save replaced
+  the stored configuration without them. It now reads those two spellings as the
+  typed Wi-Fi and login passwords, and the save keeps them like any other saved
+  secret. (ginsys/shelly-manager#460)
 - The typed configuration routes no longer return saved secrets in clear.
   `GET /devices/{id}/config/typed` and `.../typed/normalized` show a secret as
   the mask `********`, in the typed sections and in the `raw` part by key name.
