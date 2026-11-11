@@ -382,13 +382,20 @@ func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 // With ?device_type=<model> or ?device_id=<id> it returns the schema of the configuration stored
 // for that model (configuration.GetDeviceConfigurationSchema): only the model's sections, only
 // stored fields, and each field marked x-applicable when apply can write it. device_id resolves
-// the model the way apply does. Without either parameter it returns the generic schema.
+// the model the way apply does. Without either parameter it returns the generic schema. A
+// parameter that is present but empty, or both parameters, is a 400.
 func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	deviceType := query.Get("device_type")
 
-	if idParam := query.Get("device_id"); idParam != "" {
-		if deviceType != "" {
+	if query.Has("device_type") && deviceType == "" {
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+			"device_type must not be empty", nil)
+		return
+	}
+	if query.Has("device_id") {
+		idParam := query.Get("device_id")
+		if query.Has("device_type") {
 			h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
 				"Use device_type or device_id, not both", nil)
 			return

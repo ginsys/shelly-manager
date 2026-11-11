@@ -17,8 +17,10 @@ All notable changes to this project are documented here. The project follows Con
   model's sections and only fields the stored configuration keeps, and marks
   each field `x-applicable` when apply can write it today. A test fails when
   the marks and apply disagree. The CoIoT section uses the stored keys
-  (`enable`, `peer`, `update_period`). Without a parameter the generic schema
-  is unchanged. (#384)
+  (`enable`, `peer`, `update_period`). The stored network section is always
+  present, and SHSW-25 has the roller section, both not applicable. An empty
+  parameter is a 400. Without a parameter the generic schema is unchanged.
+  (#384)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

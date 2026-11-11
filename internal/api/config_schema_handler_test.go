@@ -57,7 +57,7 @@ func TestConfigSchemaForPlugModel(t *testing.T) {
 	code, data := getSchema(t, handler, "?device_type=SHPLG-S")
 	require.Equal(t, http.StatusOK, code)
 	assert.Equal(t,
-		[]string{"auth", "cloud", "coiot", "led", "location", "mqtt", "power_metering", "relay", "system", "wifi"},
+		[]string{"auth", "cloud", "coiot", "led", "location", "mqtt", "network", "power_metering", "relay", "system", "wifi"},
 		schemaSections(data))
 	assert.Equal(t, "SHPLG-S", data[configuration.SchemaKeyDeviceType])
 	assert.Equal(t, true, data[configuration.SchemaKeyApplySupported])
@@ -97,4 +97,10 @@ func TestConfigSchemaParameterErrors(t *testing.T) {
 
 	code, _ = getSchema(t, handler, "?device_id=999")
 	assert.Equal(t, http.StatusNotFound, code)
+
+	// A present but empty parameter is a 400, never the generic schema.
+	for _, q := range []string{"?device_id=", "?device_id=&device_type=SHPLG-S", "?device_type=", "?device_type=&device_id=1"} {
+		code, _ = getSchema(t, handler, q)
+		assert.Equal(t, http.StatusBadRequest, code, q)
+	}
 }
