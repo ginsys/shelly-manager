@@ -15,9 +15,7 @@ All notable changes to this project are documented here. The project follows Con
   for a secret inside `raw`. In an array, a masked or omitted secret returns
   only to the entry that matches it at the same position; where more than one
   stored entry matches and their secrets differ, the request is refused with
-  400 and asks for the secret value. Limit, as on the overrides routes: the
-  `network.wifi.*.pass` fields are plain strings, so an empty value there keeps
-  the stored password (send `null` to clear one). (#450)
+  400 and asks for the secret value. (#450)
 - Saving a template or the device overrides no longer deletes a stored secret
   that the body leaves out. The API never returns a secret, so a client that
   edits the body it read sends it back without the password. A secret that is
