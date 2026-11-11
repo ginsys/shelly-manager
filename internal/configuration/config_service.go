@@ -377,12 +377,9 @@ func (s *ConfigurationService) PatchDeviceOverrides(deviceID uint, patch *Device
 		return fmt.Errorf("failed to merge overrides: %w", err)
 	}
 
-	merged, err := RemovePaths(result.Config, removed)
-	if err != nil {
-		return err
-	}
+	RemovePaths(result.Config, removed)
 
-	return s.SetDeviceOverrides(deviceID, merged)
+	return s.SetDeviceOverrides(deviceID, result.Config)
 }
 
 func (s *ConfigurationService) ClearDeviceOverrides(deviceID uint) error {
