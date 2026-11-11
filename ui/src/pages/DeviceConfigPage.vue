@@ -88,7 +88,7 @@
           <h2>Device Overrides</h2>
           <div class="spacer" />
           <button v-if="store.overrides && Object.keys(store.overrides).length > 0" class="btn" @click="handleClearOverrides">Clear All</button>
-          <button class="btn" @click="editOverrides = !editOverrides">
+          <button class="btn" @click="toggleEditOverrides">
             {{ editOverrides ? 'Cancel' : 'Edit' }}
           </button>
           <button
@@ -197,6 +197,13 @@ function loadOverrides(body: Record<string, any> | null | undefined) {
 watch(() => store.overrides, (newOverrides) => {
   loadOverrides(newOverrides)
 }, { immediate: true, deep: true })
+
+// Cancel throws the edit away: the body and the memory go back to the saved overrides, so the next
+// Edit starts clean and a key reset in the abandoned edit blocks nothing.
+function toggleEditOverrides() {
+  if (editOverrides.value) loadOverrides(store.overrides)
+  editOverrides.value = !editOverrides.value
+}
 
 function formatDate(iso: string) {
   try {

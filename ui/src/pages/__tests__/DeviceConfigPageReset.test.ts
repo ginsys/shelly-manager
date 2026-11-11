@@ -107,4 +107,39 @@ describe('DeviceConfigPage keeps the Reset memory across a reload of the editor'
     expect(wrapper.find('[data-section="auth"]').exists()).toBe(true)
     expect(save().attributes('disabled')).toBeDefined()
   })
+
+  // Round 10 finding: Cancel only hid the editor. It kept the edited body and the memory, so after
+  // Edit, a change to a field, Reset and Cancel, the next Edit started from a body that held
+  // nothing but remembered the key, and the missing password blocked an unrelated edit.
+  it('Cancel loads the body and the memory again from the saved overrides', async () => {
+    api.getDeviceOverridesNew.mockImplementation(async () => ({ overrides: {} }) as any)
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/devices/:id/config', component: DeviceConfigPage }],
+    })
+    router.push('/devices/7/config')
+    await router.isReady()
+    const wrapper = mount(RouterView, {
+      global: { plugins: [router], stubs: { ConfigView: true, RouterLink: true } },
+    })
+    await flushPromises()
+
+    const button = (label: string) => wrapper.findAll('button').find((b) => b.text().trim() === label)
+    const save = () => wrapper.find('[data-testid="save-overrides"]')
+
+    await button('Edit')!.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-section="auth"] .section-header').trigger('click')
+    await wrapper.find('[data-path="auth.user"] input').setValue('bob')
+    await flushPromises()
+    await wrapper.find('[data-path="auth.user"] [data-action="reset"]').trigger('click')
+    await flushPromises()
+
+    await button('Cancel')!.trigger('click')
+    await flushPromises()
+    await button('Edit')!.trigger('click')
+    await flushPromises()
+
+    expect(save().attributes('disabled')).toBeUndefined()
+  })
 })
