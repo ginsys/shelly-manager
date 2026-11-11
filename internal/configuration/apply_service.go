@@ -66,6 +66,13 @@ var gen1ApplicablePaths = map[string]bool{
 	"mqtt.id":                    true,
 	"mqtt.clean_session":         true,
 	"mqtt.keep_alive":            true,
+
+	// relays are written per channel with POST /settings/relay/<n> and read back from
+	// GET /settings/relay/<n>. The id is an item's position, not a setting.
+	"relay.relays[].name":          true,
+	"relay.relays[].default_state": true,
+	"relay.relays[].auto_on":       true,
+	"relay.relays[].auto_off":      true,
 }
 
 // unsupportedApplySettings returns the sorted top-level Gen1 keys of desired that apply cannot
