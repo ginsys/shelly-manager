@@ -1,0 +1,170 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/testutil"
+)
+
+// These tests pin that the typed configuration routes never return a saved secret, and that a
+// client that reads a configuration and saves it back keeps every stored secret and stores no mask.
+
+const (
+	typWiFi  = "t7pe-wifi-s3cret"
+	typAP    = "t7pe-ap-s3cret"
+	typAPKey = "t7pe-apkey-s3cret"
+	typMQTT  = "t7pe-mqtt-s3cret"
+	typAuth  = "t7pe-auth-s3cret"
+	typSTA   = "t7pe-sta-s3cret"
+	typRaw   = "t7pe-raw-s3cret"
+	typGen1  = "t7pe-gen1-s3cret"
+)
+
+var allTypedSecrets = []string{typWiFi, typAP, typAPKey, typMQTT, typAuth, typSTA, typRaw, typGen1}
+
+// typedStored is a configuration already in the typed shape, with every typed secret set and one
+// secret inside the raw part, which holds the settings the typed model does not know.
+const typedStored = `{"wifi":{"enable":true,"ssid":"home","password":"` + typWiFi + `",` +
+	`"ap":{"enable":false,"pass":"` + typAP + `","key":"` + typAPKey + `"}},` +
+	`"mqtt":{"enable":true,"server":"mqtt.example.net:1883","pass":"` + typMQTT + `"},` +
+	`"auth":{"enable":true,"user":"admin","pass":"` + typAuth + `"},` +
+	`"network":{"wifi":{"sta":{"pass":"` + typSTA + `"}}},` +
+	`"raw":{"future":{"api_token":"` + typRaw + `","label":"keep-me"}}}`
+
+// gen1Stored is a configuration in the device's own shape. The typed routes convert it, and what
+// they cannot place lands in the raw part.
+const gen1Stored = `{"mqtt":{"enable":true,"server":"mqtt.example.net:1883","pass":"` + typMQTT + `"},` +
+	`"login":{"enabled":true,"username":"admin","password":"` + typAuth + `"},` +
+	`"vendor_blob":{"api_key":"` + typGen1 + `","label":"keep-me"}}`
+
+func typedHandler(t *testing.T) (*Handler, func()) {
+	t.Helper()
+	db, cleanup := testutil.TestDatabase(t)
+	logger := logging.GetDefault()
+	return &Handler{
+		DB:            db,
+		Service:       testShellyService(t, db),
+		logger:        logger,
+		ConfigService: configuration.NewService(db.GetDB(), logger),
+	}, cleanup
+}
+
+// typedDevice adds a device and stores stored as its configuration.
+func typedDevice(t *testing.T, h *Handler, stored string) string {
+	t.Helper()
+	device := testutil.TestDevice()
+	require.NoError(t, h.DB.AddDevice(device))
+	require.NoError(t, h.Service.ConfigSvc.UpdateDeviceConfigFromJSON(device.ID, json.RawMessage(stored)))
+	return idString(device)
+}
+
+func assertNoTypedSecret(t *testing.T, where, body string) {
+	t.Helper()
+	for _, s := range allTypedSecrets {
+		assert.NotContains(t, body, s, "%s returns the saved secret %s in clear", where, s)
+	}
+}
+
+// storedConfig returns the stored configuration text of a device.
+func storedConfig(t *testing.T, h *Handler, id string) string {
+	t.Helper()
+	var n uint
+	for _, c := range id {
+		n = n*10 + uint(c-'0')
+	}
+	cfg, err := h.Service.GetDeviceConfig(n)
+	require.NoError(t, err)
+	return string(cfg.Config)
+}
+
+func TestTypedConfigRoutes_ReadsReturnNoSavedSecret(t *testing.T) {
+	for name, stored := range map[string]string{"typed": typedStored, "device shape": gen1Stored} {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, stored)
+
+			get := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+			require.Equal(t, http.StatusOK, get.Code, get.Body.String())
+			assertNoTypedSecret(t, "GET config/typed", get.Body.String())
+			assert.Contains(t, get.Body.String(), secretMask, "a secret that is set shows as the mask")
+			assert.Contains(t, get.Body.String(), "keep-me", "a setting around a secret must survive the mask")
+
+			norm := serve(h.GetTypedDeviceConfigNormalized, "GET", "/api/v1/devices/1/config/typed/normalized", id, "")
+			require.Equal(t, http.StatusOK, norm.Code, norm.Body.String())
+			assertNoTypedSecret(t, "GET config/typed/normalized", norm.Body.String())
+		})
+	}
+}
+
+// A client reads the typed configuration and saves it back unchanged: every stored secret stays,
+// the mask is stored nowhere, and the answer carries no secret either.
+func TestTypedConfigRoutes_ReadEditSaveKeepsStoredSecrets(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, typedStored)
+
+	get := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+	require.Equal(t, http.StatusOK, get.Code, get.Body.String())
+	var read struct {
+		Configuration json.RawMessage `json:"configuration"`
+	}
+	require.NoError(t, json.Unmarshal(dataOf(t, get.Body.Bytes()), &read))
+
+	body := `{"configuration":` + string(read.Configuration) + `}`
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	assertNoTypedSecret(t, "PUT config/typed", put.Body.String())
+
+	stored := storedConfig(t, h, id)
+	for _, s := range []string{typWiFi, typAP, typAPKey, typMQTT, typAuth, typSTA, typRaw} {
+		assert.Contains(t, stored, s, "a saved read must keep the stored secret %s", s)
+	}
+	assert.NotContains(t, stored, secretMask, "the mask must never be stored")
+}
+
+// A secret sent as a new value replaces the stored one, and the others are kept.
+func TestTypedConfigRoutes_NewSecretReplacesStoredOne(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, typedStored)
+
+	get := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+	require.Equal(t, http.StatusOK, get.Code, get.Body.String())
+	var read struct {
+		Configuration map[string]any `json:"configuration"`
+	}
+	require.NoError(t, json.Unmarshal(dataOf(t, get.Body.Bytes()), &read))
+	read.Configuration["mqtt"].(map[string]any)["pass"] = "n3w-mqtt-pass"
+
+	payload, err := json.Marshal(map[string]any{"configuration": read.Configuration})
+	require.NoError(t, err)
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, string(payload))
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	assert.NotContains(t, put.Body.String(), "n3w-mqtt-pass", "the answer must not echo the new secret")
+
+	stored := storedConfig(t, h, id)
+	assert.Contains(t, stored, "n3w-mqtt-pass")
+	assert.NotContains(t, stored, typMQTT)
+	assert.Contains(t, stored, typAuth)
+	assert.NotContains(t, stored, secretMask)
+}
+
+// A mask with nothing stored behind it is dropped, never stored.
+func TestTypedConfigRoutes_MaskWithNothingStoredStoresNoMask(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"}}`)
+
+	body := `{"configuration":{"wifi":{"enable":true,"ssid":"home","password":"` + secretMask + `"}}}`
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	assert.NotContains(t, storedConfig(t, h, id), secretMask)
+}

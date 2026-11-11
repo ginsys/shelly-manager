@@ -99,6 +99,9 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	configJSON, _ := typedConfig.ToJSON()
 	validationResult := validator.ValidateConfiguration(configJSON)
 
+	// The configuration was validated with its real values, and is sent masked.
+	maskTypedSecrets(typedConfig)
+
 	response := TypedConfigurationResponse{
 		Configuration:    typedConfig,
 		ValidationResult: validationResult,
@@ -176,7 +179,8 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Normalize the typed configuration
+	// Normalize the typed configuration, with its secrets masked
+	maskTypedSecrets(typedConfig)
 	normalizer := NewConfigNormalizer()
 	normalized := normalizer.NormalizeTypedConfig(typedConfig)
 
@@ -219,6 +223,10 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// The client read the configuration masked: a mask becomes the stored secret before the
+	// configuration is validated and stored.
+	restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device))
+
 	// Validate the configuration
 	validationLevel := req.ValidationLevel
 	if validationLevel == "" {
@@ -254,6 +262,8 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// The stored configuration is the one just written: the answer carries it masked.
+	maskTypedSecrets(req.Configuration)
 	response := TypedConfigurationResponse{
 		Configuration:    req.Configuration,
 		ValidationResult: validationResult,

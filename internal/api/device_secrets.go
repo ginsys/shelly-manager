@@ -185,13 +185,6 @@ func maskDeviceConfig(c *configuration.DeviceConfig) *configuration.DeviceConfig
 		return nil
 	}
 	out := *c
-	if len(out.Config) > 0 {
-		masked := maskJSONText(string(out.Config))
-		if !json.Valid([]byte(masked)) {
-			quoted, _ := json.Marshal(masked)
-			masked = string(quoted)
-		}
-		out.Config = json.RawMessage(masked)
-	}
+	out.Config = maskRawJSON(out.Config)
 	return &out
 }
