@@ -1133,6 +1133,150 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
 
+  /api/v1/devices/{id}/config/new/status:
+    get:
+      tags: [Configuration]
+      summary: Get whether the desired configuration is applied
+      operationId: getDeviceNewConfigStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: >-
+            data holds device_id, config_applied, has_overrides, template_count,
+            last_applied (when known) and pending_changes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/new/apply:
+    post:
+      tags: [Configuration]
+      summary: Write the desired configuration to a Gen1 device, read it back and compare
+      description: >-
+        Needs the admin key. Takes no request body. Clears config_applied before the write
+        and sets it again only if the read-back matches and the desired configuration did not
+        change during the apply. Supported Gen1 settings: name, timezone, location, eco mode,
+        discoverable, max power, LED and MQTT. Applies to one device are serialized inside one
+        server process only, so run one manager replica when you use apply.
+      operationId: applyDeviceNewConfig
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: >-
+            data holds success, applied_count, failed_count, requires_reboot, failures
+            (refused settings by path and read-back differences, secret values masked) and
+            warnings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '401':
+          description: Admin key missing or wrong (UNAUTHORIZED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '422':
+          description: >-
+            Nothing written (VALIDATION_FAILED). The desired configuration holds an unsupported
+            section (Wi-Fi, cloud, CoIoT, relays, login, inputs), a section with no Gen1 mapping
+            such as SNTP, or a stored field the configuration model does not know. The error
+            names the sections.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '501':
+          description: Gen2 and Gen3 devices are not supported (NOT_IMPLEMENTED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '502':
+          description: >-
+            The device rejected the stored login (EXTERNAL_SERVICE_ERROR). Store the right
+            login with PUT /api/v1/devices/{id}/config/auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/new/verify:
+    post:
+      tags: [Configuration]
+      summary: Compare the desired configuration with a Gen1 device
+      description: >-
+        Reads the device and writes nothing. Takes no request body. The MQTT password is
+        write-only on Gen1, so it is not compared.
+      operationId: verifyDeviceNewConfig
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: >-
+            data holds match and differences; each difference has path, expected and actual,
+            with secret values masked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '422':
+          description: Same cases as apply (VALIDATION_FAILED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '501':
+          description: Gen2 and Gen3 devices are not supported (NOT_IMPLEMENTED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '502':
+          description: >-
+            The device rejected the stored login (EXTERNAL_SERVICE_ERROR). Store the right
+            login with PUT /api/v1/devices/{id}/config/auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
   /api/v1/devices/{id}/config/drift:
     get:
       tags: [Drift]
