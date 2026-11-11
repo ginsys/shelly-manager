@@ -46,6 +46,24 @@ POST /api/v1/export
 }
 ```
 
+### Saved secrets in exports
+
+The generic export, its preview and the GitOps export replace every saved
+secret with the marker `[REDACTED]`: the values under a secret-named key (a
+name that contains `pass`, `pwd`, `psk`, `secret` or `token`, or ends in `key`)
+in the device settings, the device configurations, the templates and the
+template variables. An empty value stays empty. This holds for the JSON, YAML,
+GitOps and SMA plugins, and an import reads the marker as "keep the stored
+value". Set `"exclude_sensitive": false` in `config` to ask for a full export
+with the secrets in clear. The SMA export also redacts by its own wider key
+rule.
+
+The `backup` plugin is not covered: it writes a database snapshot, which holds
+every secret by design, so protect that file as you protect the database. The
+push routes `POST /api/v1/devices/{id}/config/export` and
+`POST /api/v1/config/bulk-export` send the stored configuration to the device
+and return no configuration.
+
 ### Preview export
 
 ```
