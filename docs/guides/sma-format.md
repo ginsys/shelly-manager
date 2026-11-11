@@ -132,10 +132,20 @@ returns an error that says no changes were made. Records are matched like this:
 - A discovered device is matched by MAC address and agent ID. It is listed for
   24 hours after the import.
 
+A template row carries its `scope` (`global`, `group` or `device_type`) next to
+its `device_type`. The key is optional, and an export always writes it. A new
+template is created with the archived scope. An archive without `scope` (one
+written before the key existed) gets the scope an import always gave: `global`
+when the device type is empty or `all`, otherwise `device_type`. A `group`
+template has no group reference of its own, because devices join a group
+through their tags, so the archive restores its scope and device type and no
+group membership. A reader that knows only the older key list refuses an
+archive that has `scope`.
+
 A record that already exists is left unchanged and counted in
 `records_skipped`. With `force_overwrite` it is replaced instead, with two
-exceptions. A template keeps its stored scope, because the archive does not
-carry one. If the archived device type cannot satisfy that scope (a `device_type`
+exceptions. A template keeps its stored scope, whatever the archive carries.
+If the archived device type cannot satisfy that scope (a `device_type`
 template archived with no device type), the import fails and writes nothing. A device whose archive entry has no configuration keeps the
 configuration it has now. Devices that swapped IP addresses since the export
 are restored: the import frees the address of every device it overwrites before
@@ -176,7 +186,8 @@ produce a warning, so a partial restore is never reported as a complete one.
 
 Validation and preview refuse the archives that an apply refuses for an empty or
 blank identity: a device or discovered device without a MAC address, or a template
-without a name.
+without a name. They also refuse a template whose `scope` is not `global`,
+`group` or `device_type`, or is `device_type` with no device type.
 
 Send this body to `POST /api/v1/import/preview`. The browser exposes data-based
 import preview only for a registered plugin named `sma` that advertises the

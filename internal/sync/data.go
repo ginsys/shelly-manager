@@ -63,6 +63,7 @@ type TemplateData struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
 	DeviceType  string                 `json:"device_type"`
+	Scope       string                 `json:"scope,omitempty"` // empty in an archive that predates it: import derives it
 	Generation  int                    `json:"generation"`
 	Config      map[string]interface{} `json:"config"`
 	Variables   map[string]interface{} `json:"variables"`

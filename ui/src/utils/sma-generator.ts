@@ -196,7 +196,7 @@ function buildDevice(device: SMADevice): Record<string, unknown> {
 }
 
 function buildTemplate(template: SMATemplate): Record<string, unknown> {
-  return Object.assign(Object.create(null), {
+  const row = Object.assign(Object.create(null), {
     id: template.id,
     generation: template.generation,
     name: template.name ?? '',
@@ -208,6 +208,9 @@ function buildTemplate(template: SMATemplate): Record<string, unknown> {
     created_at: normalizeTimestamp(template.created_at),
     updated_at: normalizeTimestamp(template.updated_at),
   })
+  // The scope is optional in the archive: an absent one is left out, as in an older archive.
+  if (template.scope !== undefined) row.scope = template.scope
+  return row
 }
 
 function buildDiscovered(device: SMADiscoveredDevice): Record<string, unknown> {

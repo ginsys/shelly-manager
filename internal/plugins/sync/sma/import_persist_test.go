@@ -3,6 +3,7 @@ package sma
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -291,7 +292,7 @@ func TestForcedImportKeepsTemplateScopeAndReportsOldValues(t *testing.T) {
 	require.NoError(t, err)
 	var template configuration.ConfigTemplate
 	require.NoError(t, f.db.GetDB().Where("name = ?", "plug-defaults").First(&template).Error)
-	assert.Equal(t, "group", template.Scope, "the archive carries no scope, so a replacement keeps the stored one")
+	assert.Equal(t, "group", template.Scope, "a replacement keeps the stored scope, whatever the archive carries")
 	var found bool
 	for _, change := range result.Changes {
 		if change.Resource == "device" {
@@ -302,6 +303,104 @@ func TestForcedImportKeepsTemplateScopeAndReportsOldValues(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "the device update must be listed")
+}
+
+// The archive carries each template's scope. A group template has no group reference of its own
+// (devices join a group through their tags), so the scope is all that has to travel. Before, an
+// import derived the scope from the device type, so a group template came back as another scope.
+func TestImportKeepsEveryTemplateScope(t *testing.T) {
+	f := newPersistFixture(t)
+	f.seed(t)
+	for _, template := range []configuration.ConfigTemplate{
+		{Name: "group-typed", Scope: "group", DeviceType: "SHPLG-S", Generation: 1, Config: json.RawMessage(`{"a":1}`)},
+		{Name: "group-untyped", Scope: "group", DeviceType: "", Generation: 1, Config: json.RawMessage(`{"a":2}`)},
+		{Name: "everywhere", Scope: "global", DeviceType: "", Generation: 1, Config: json.RawMessage(`{"a":3}`)},
+	} {
+		require.NoError(t, f.db.GetDB().Create(&template).Error)
+	}
+	archive := f.export(t)
+	f.wipe(t)
+
+	_, err := f.importFile(t, archive, sync.ImportOptions{})
+
+	require.NoError(t, err)
+	want := map[string][2]string{
+		"plug-defaults": {"device_type", "SHPLG-S"},
+		"group-typed":   {"group", "SHPLG-S"},
+		"group-untyped": {"group", ""},
+		"everywhere":    {"global", ""},
+	}
+	for name, expected := range want {
+		var template configuration.ConfigTemplate
+		require.NoError(t, f.db.GetDB().Where("name = ?", name).First(&template).Error, name)
+		assert.Equal(t, expected[0], template.Scope, "scope of %s", name)
+		assert.Equal(t, expected[1], template.DeviceType, "device type of %s", name)
+	}
+}
+
+// templateArchive writes an archive holding only the given templates and returns its path.
+func (f *persistFixture) templateArchive(t *testing.T, templates ...sync.TemplateData) (string, error) {
+	t.Helper()
+	data := validExportData()
+	data.Templates = templates
+	exporter := initializedPlugin(t)
+	exporter.SetExportBaseDir(f.dir)
+	exported, err := exporter.Export(context.Background(), data, sync.ExportConfig{
+		Format: "sma", Config: map[string]interface{}{"output_path": f.dir},
+	})
+	if err != nil {
+		return "", err
+	}
+	return exported.OutputPath, nil
+}
+
+// An archive written before the scope travelled has none, and its templates keep the scope an
+// import always gave them: global without a device type, device_type with one.
+func TestImportOfAnArchiveWithoutScopeDerivesIt(t *testing.T) {
+	f := newPersistFixture(t)
+	archive, err := f.templateArchive(t,
+		sync.TemplateData{Name: "old-typed", DeviceType: "SHPLG-S", Config: map[string]interface{}{"a": 1.0}},
+		sync.TemplateData{Name: "old-untyped", DeviceType: "", Config: map[string]interface{}{"a": 2.0}},
+		sync.TemplateData{Name: "old-all", DeviceType: "all", Config: map[string]interface{}{"a": 3.0}})
+	require.NoError(t, err)
+	raw, err := os.ReadFile(archive)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), `"scope"`, "an empty scope is left out of the archive")
+
+	_, err = f.importFile(t, archive, sync.ImportOptions{})
+
+	require.NoError(t, err)
+	for name, want := range map[string]string{"old-typed": "device_type", "old-untyped": "global", "old-all": "global"} {
+		var template configuration.ConfigTemplate
+		require.NoError(t, f.db.GetDB().Where("name = ?", name).First(&template).Error, name)
+		assert.Equal(t, want, template.Scope, name)
+	}
+}
+
+// A scope the archive names must be one a template can hold, and a device_type scope needs its
+// device type: validation reports it as an apply would refuse it.
+func TestImportRefusesAScopeATemplateCannotHold(t *testing.T) {
+	for name, template := range map[string]sync.TemplateData{
+		"unknown scope":                {Name: "t", Scope: "team", DeviceType: "SHPLG-S", Config: map[string]interface{}{"a": 1.0}},
+		"device_type without its type": {Name: "t", Scope: "device_type", DeviceType: "", Config: map[string]interface{}{"a": 1.0}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newPersistFixture(t)
+			archive, err := f.templateArchive(t, template)
+			if err != nil {
+				require.ErrorContains(t, err, "scope", "an unknown scope must not even be written")
+				return
+			}
+			for _, options := range []sync.ImportOptions{{ValidateOnly: true}, {DryRun: true}, {}} {
+				result, importErr := f.importFile(t, archive, options)
+				require.ErrorIs(t, importErr, sync.ErrInvalidImportData)
+				assert.False(t, result.Success)
+			}
+			var count int64
+			require.NoError(t, f.db.GetDB().Model(&configuration.ConfigTemplate{}).Count(&count).Error)
+			assert.Zero(t, count, "a refused archive stores nothing")
+		})
+	}
 }
 
 func TestImportWarnsWhenSystemSettingsAreDropped(t *testing.T) {

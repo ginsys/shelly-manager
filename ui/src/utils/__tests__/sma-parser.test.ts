@@ -28,6 +28,29 @@ describe('strict SMA 2026.1 parser', () => {
     expect(result.error).toContain('configured limit')
   })
 
+  describe('template scope', () => {
+    const template = {
+      id: 1, generation: 1, name: 't', description: '', device_type: 'SHPLG-S', config: {}, variables: {},
+      is_default: false, created_at: '2026-01-02T03:04:05Z', updated_at: '2026-01-02T03:04:05Z',
+    }
+
+    it('keeps a scope through generate and parse, and leaves an absent one out', async () => {
+      const generated = await generateSMAFile({
+        templates: [{ ...template, scope: 'group' }, { ...template, id: 2, name: 'old' }],
+      })
+      const result = await parseSMAFile(await generated.blob!.arrayBuffer())
+      expect(result.success, result.error).toBe(true)
+      expect(result.archive?.templates[0].scope).toBe('group')
+      expect(result.archive?.templates[1]).not.toHaveProperty('scope')
+    })
+
+    it('refuses a scope a template cannot hold', async () => {
+      const generated = await generateSMAFile({ templates: [{ ...template, scope: 'team' as never }] })
+      expect(generated.success).toBe(false)
+      expect(generated.error).toContain('scope')
+    })
+  })
+
   it('rejects malformed gzip, invalid UTF-8, and legacy versions', async () => {
     const malformed = new Uint8Array([0x1f, 0x8b, 0, 1]).buffer
     expect((await parseSMAFile(malformed)).success).toBe(false)
