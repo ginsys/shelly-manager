@@ -12,7 +12,8 @@ import (
 
 // NullPaths lists the path of every field that a raw JSON body sets to null. A decoded struct
 // cannot tell null from an omitted field, so the raw text is read. Keys are lower case, because the
-// decoder matches keys without regard to case. A path through an array holds the index of the
+// decoder matches keys without regard to case, so the keys keep their own spelling here and
+// RemovePaths folds them the way the decoder does. A path through an array holds the index of the
 // element. A key that appears twice in one object, in any casing, is an error: the struct decode
 // and this reading could not agree on which one wins.
 func NullPaths(raw []byte) ([][]string, error) {
@@ -38,17 +39,19 @@ func readNulls(dec *json.Decoder, path []string, paths *[][]string) error {
 	case json.Delim:
 		switch t {
 		case '{':
-			seen := map[string]bool{}
+			var seen []string
 			for dec.More() {
 				keyTok, err := dec.Token()
 				if err != nil {
 					return err
 				}
-				key := strings.ToLower(keyTok.(string))
-				if seen[key] {
-					return fmt.Errorf("duplicate key %q", key)
+				key := keyTok.(string)
+				for _, other := range seen {
+					if strings.EqualFold(key, other) {
+						return fmt.Errorf("duplicate key %q", key)
+					}
 				}
-				seen[key] = true
+				seen = append(seen, key)
 				if err := readNulls(dec, append(path, key), paths); err != nil {
 					return err
 				}
@@ -69,18 +72,19 @@ func readNulls(dec *json.Decoder, path []string, paths *[][]string) error {
 
 // RemovePaths removes the fields at the given paths from config. An optional field (a pointer) is
 // removed. A plain field returns to its zero value, and one without omitempty is still written.
-// A section that the removal leaves empty is removed too. A path that is not stored changes
-// nothing.
+// A section that a removal leaves with no JSON content is removed too. A path that is not stored
+// changes nothing, and neither does the section around it.
 func RemovePaths(config *DeviceConfiguration, paths [][]string) {
 	for _, path := range paths {
 		removeAt(reflect.ValueOf(config), path)
 	}
 }
 
-func removeAt(v reflect.Value, path []string) {
+// removeAt reports whether it removed a field below v.
+func removeAt(v reflect.Value, path []string) bool {
 	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
-			return
+			return false
 		}
 		v = v.Elem()
 	}
@@ -88,23 +92,34 @@ func removeAt(v reflect.Value, path []string) {
 	case reflect.Struct:
 		field, ok := fieldByJSONName(v, path[0])
 		if !ok {
-			return
+			return false
 		}
 		if len(path) == 1 {
 			field.Set(reflect.Zero(field.Type()))
-			return
+			return true
 		}
-		removeAt(field, path[1:])
-		if field.Kind() == reflect.Pointer && !field.IsNil() && field.Elem().Kind() == reflect.Struct && field.Elem().IsZero() {
+		if !removeAt(field, path[1:]) {
+			return false
+		}
+		if field.Kind() == reflect.Pointer && !field.IsNil() && writesNothing(field.Interface()) {
 			field.Set(reflect.Zero(field.Type()))
 		}
+		return true
 	case reflect.Slice:
 		i, err := strconv.Atoi(path[0])
 		if err != nil || i < 0 || i >= v.Len() || len(path) == 1 {
-			return
+			return false
 		}
-		removeAt(v.Index(i), path[1:])
+		return removeAt(v.Index(i), path[1:])
 	}
+	return false
+}
+
+// writesNothing reports whether a section has no JSON content. A field without omitempty is
+// content even at its zero value, so the zero struct is not always empty.
+func writesNothing(section any) bool {
+	data, err := json.Marshal(section)
+	return err == nil && string(data) == "{}"
 }
 
 // fieldByJSONName finds the settable field that the decoder fills for key.

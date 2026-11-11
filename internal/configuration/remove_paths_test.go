@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,22 @@ func TestNullPathsListsEveryNullField(t *testing.T) {
 	got, err := NullPaths(raw)
 	require.NoError(t, err)
 
-	assert.ElementsMatch(t, [][]string{{"mqtt", "pass"}, {"led"}, {"x", "1"}}, got)
+	assert.ElementsMatch(t, [][]string{{"MQTT", "Pass"}, {"led"}, {"x", "1"}}, got, "keys keep their own spelling")
+}
+
+// The decoder treats "İ" (U+0130) as a different letter from "i". Neither the removal nor the
+// duplicate test may fold it into "i".
+func TestNullPathsAndRemovePathsFoldKeysLikeTheDecoder(t *testing.T) {
+	paths, err := NullPaths([]byte("{\"wİfİ\":null}"))
+	require.NoError(t, err)
+	config := &DeviceConfiguration{MQTT: &MQTTConfiguration{Password: StringPtr("x")}}
+	RemovePaths(config, [][]string{{"wİfİ"}, {"mqtt", "İd"}})
+	require.NotNil(t, config.MQTT, "a key the decoder does not match removes nothing")
+	require.NotNil(t, config.MQTT.Password)
+	assert.Len(t, paths, 1)
+
+	_, err = NullPaths([]byte("{\"mqtt\":{\"id\":\"client\",\"İd\":1}}"))
+	assert.NoError(t, err, "two keys the decoder keeps apart are not duplicates")
 }
 
 func TestNullPathsReadsAFieldInsideAnArrayElement(t *testing.T) {
@@ -63,6 +79,43 @@ func TestRemovePathsDropsTheFieldAndASectionItEmpties(t *testing.T) {
 	assert.Nil(t, config.Auth.Password)
 	assert.Equal(t, "admin", *config.Auth.Username)
 	assert.NotNil(t, config.LED, "a section off the path stays")
+}
+
+// Whatever spelling the decoder fills a field from, RemovePaths must clear that field.
+func TestRemovePathsMatchesEverySpellingTheDecoderMatches(t *testing.T) {
+	cases := []struct{ key, value string }{
+		{"server", `"v"`}, {"SERVER", `"v"`}, {"ſerver", `"v"`}, {"sİrver", `"v"`},
+		{"keep_alive", `1`}, {"Keep_alive", `1`}, {"KEEP_ALIVE", `1`},
+	}
+	matched := 0
+	for _, tc := range cases {
+		var config DeviceConfiguration
+		require.NoError(t, json.Unmarshal([]byte(`{"mqtt":{"`+tc.key+`":`+tc.value+`}}`), &config))
+		filled := config.MQTT != nil && (config.MQTT.Server != nil || config.MQTT.KeepAlive != nil)
+
+		RemovePaths(&config, [][]string{{"mqtt", tc.key}})
+
+		if filled {
+			matched++
+			assert.Nil(t, config.MQTT, "the decoder filled a field from %q, so the removal must clear it", tc.key)
+		}
+	}
+	assert.GreaterOrEqual(t, matched, 3, "the control: the decoder fills a field for at least the plain spellings")
+}
+
+// A section whose JSON still holds a field that is written at its zero value is not empty, and a
+// path that matches nothing must not remove the section around it.
+func TestRemovePathsKeepsASectionThatStillWritesAField(t *testing.T) {
+	config := &DeviceConfiguration{System: &SystemConfiguration{Sleep: &SleepConfig{}}}
+
+	RemovePaths(config, [][]string{{"system", "sleep_mode", "unknown"}})
+	require.NotNil(t, config.System)
+	require.NotNil(t, config.System.Sleep, "a path that matches nothing changes nothing")
+
+	RemovePaths(config, [][]string{{"system", "sleep_mode", "enable"}})
+	require.NotNil(t, config.System)
+	require.NotNil(t, config.System.Sleep, "enable has no omitempty, so the section still writes it")
+	assert.False(t, config.System.Sleep.Enable)
 }
 
 func TestRemovePathsRemovesAWholeSection(t *testing.T) {
