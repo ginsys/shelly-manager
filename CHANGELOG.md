@@ -16,11 +16,14 @@ All notable changes to this project are documented here. The project follows Con
   the schema of the configuration stored for that model. It holds only the
   model's sections and only fields the stored configuration keeps, and marks
   each field `x-applicable` when apply can write it today. A test fails when
-  the marks and apply disagree. The CoIoT section uses the stored keys
+  the marks and apply disagree. The MQTT password is applicable but write-only:
+  a Gen1 device never returns it, so verify cannot read it back, and a test
+  fails if a second applicable field is skipped by verify without being named.
+  The CoIoT section uses the stored keys
   (`enable`, `peer`, `update_period`). The stored network section is always
   present, and SHSW-25 has the roller section, both not applicable. An empty
-  parameter is a 400. Without a parameter the generic schema is unchanged.
-  (#384)
+  or malformed parameter is a 400. Without a parameter the generic schema is
+  unchanged. (#384)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate
