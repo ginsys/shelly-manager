@@ -264,9 +264,9 @@ func (h *Handler) GetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if overrides != nil {
-		redactSecrets(overrides)
-	}
+	// A saved secret shows as the mask: the client sees that it is set, never its value, and a
+	// write that sends the mask back keeps the stored value.
+	maskSecrets(overrides)
 
 	rw.WriteSuccess(w, r, map[string]any{"overrides": overrides})
 }
@@ -287,6 +287,13 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// The body replaces the stored overrides, so a secret sent back as the mask is the stored one.
+	if stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id)); err == nil {
+		restoreMaskedSecrets(&overrides, stored)
+	} else {
+		restoreMaskedSecrets(&overrides, nil)
+	}
+
 	if err := h.ConfigService.ConfigurationSvc.SetDeviceOverrides(uint(id), &overrides); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {
 			rw.WriteNotFoundError(w, r, "Device")
@@ -299,9 +306,7 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	savedOverrides, _ := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id))
 	desiredConfig, _, _ := h.ConfigService.ConfigurationSvc.GetDesiredConfig(uint(id))
 
-	if savedOverrides != nil {
-		redactSecrets(savedOverrides)
-	}
+	maskSecrets(savedOverrides)
 	if desiredConfig != nil {
 		redactSecrets(desiredConfig)
 	}
@@ -328,6 +333,13 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// A secret sent back as the mask leaves the stored one as it is.
+	if stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id)); err == nil {
+		restoreMaskedSecrets(&patch, stored)
+	} else {
+		restoreMaskedSecrets(&patch, nil)
+	}
+
 	if err := h.ConfigService.ConfigurationSvc.PatchDeviceOverrides(uint(id), &patch); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {
 			rw.WriteNotFoundError(w, r, "Device")
@@ -338,9 +350,7 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 	}
 
 	overrides, _ := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id))
-	if overrides != nil {
-		redactSecrets(overrides)
-	}
+	maskSecrets(overrides)
 
 	rw.WriteSuccess(w, r, map[string]any{"overrides": overrides})
 }

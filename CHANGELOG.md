@@ -37,7 +37,12 @@ All notable changes to this project are documented here. The project follows Con
   already sits on the field: `GET /devices/{id}/desired-config` and the
   set-templates response now carry `inherited` and `inherited_sources` (the
   template layers alone), and a template secret that is set shows as a mask,
-  never as its value. Lists still use a JSON box. (#385)
+  never as its value. The device overrides routes (`GET`, `PUT` and `PATCH`
+  `/devices/{id}/overrides/new`) show a saved secret as the same mask, where
+  they showed nothing. A write that sends the mask back keeps the stored
+  secret, and the mask is never stored, so an unrelated edit no longer drops a
+  saved password and the form does not ask for it again. The Wi-Fi access point
+  key is a secret on every response. Lists still use a JSON box. (#385)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

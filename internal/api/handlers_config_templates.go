@@ -366,43 +366,61 @@ func hasAuthPassword(config *configuration.DeviceConfiguration) bool {
 // none" (a form that requires one) without ever receiving the value.
 const secretMask = "********"
 
+// secretSlots lists every secret of a configuration by its JSON path, as a pointer to the field.
+// A section that is absent has no slot. Redacting, masking and restoring all walk this one list, so
+// a new secret field is added in one place.
+func secretSlots(config *configuration.DeviceConfiguration) map[string]**string {
+	slots := map[string]**string{}
+	if config == nil {
+		return slots
+	}
+	if config.WiFi != nil {
+		slots["wifi.password"] = &config.WiFi.Password
+		if config.WiFi.AccessPoint != nil {
+			slots["wifi.ap.pass"] = &config.WiFi.AccessPoint.Password
+			slots["wifi.ap.key"] = &config.WiFi.AccessPoint.Key
+		}
+	}
+	if config.MQTT != nil {
+		slots["mqtt.pass"] = &config.MQTT.Password
+	}
+	if config.Auth != nil {
+		slots["auth.pass"] = &config.Auth.Password
+	}
+	return slots
+}
+
 // maskSecrets replaces each secret that is set with secretMask. A secret that is absent or empty
 // stays as it is.
 func maskSecrets(config *configuration.DeviceConfiguration) {
-	if config == nil {
-		return
-	}
-	mask := func(p **string) {
-		if *p != nil && **p != "" {
+	for _, slot := range secretSlots(config) {
+		if *slot != nil && **slot != "" {
 			m := secretMask
-			*p = &m
+			*slot = &m
 		}
-	}
-	if config.WiFi != nil {
-		mask(&config.WiFi.Password)
-		if config.WiFi.AccessPoint != nil {
-			mask(&config.WiFi.AccessPoint.Password)
-		}
-	}
-	if config.MQTT != nil {
-		mask(&config.MQTT.Password)
-	}
-	if config.Auth != nil {
-		mask(&config.Auth.Password)
 	}
 }
 
+// redactSecrets removes every secret.
 func redactSecrets(config *configuration.DeviceConfiguration) {
-	if config.WiFi != nil {
-		config.WiFi.Password = nil
-		if config.WiFi.AccessPoint != nil {
-			config.WiFi.AccessPoint.Password = nil
+	for _, slot := range secretSlots(config) {
+		*slot = nil
+	}
+}
+
+// restoreMaskedSecrets answers a client that sends back what maskSecrets gave it. A secret that
+// arrives as the mask becomes the stored value, or nothing when none is stored: the mask itself is
+// never stored. Any other value is a new secret and stays as sent.
+func restoreMaskedSecrets(incoming, stored *configuration.DeviceConfiguration) {
+	storedSlots := secretSlots(stored)
+	for path, slot := range secretSlots(incoming) {
+		if *slot == nil || **slot != secretMask {
+			continue
 		}
-	}
-	if config.MQTT != nil {
-		config.MQTT.Password = nil
-	}
-	if config.Auth != nil {
-		config.Auth.Password = nil
+		*slot = nil
+		if old, ok := storedSlots[path]; ok && *old != nil && **old != "" {
+			kept := **old
+			*slot = &kept
+		}
 	}
 }
