@@ -4,22 +4,25 @@
       <router-link class="btn" to="/templates">← Back</router-link>
       <h1 class="title">{{ template?.name || 'Template' }}</h1>
       <div class="spacer" />
-      <button v-if="!editMode" class="btn primary" :disabled="saving || error !== null" @click="enterEdit">Edit</button>
+      <button v-if="!editMode" class="btn primary" :disabled="busy || error !== null" @click="enterEdit">Edit</button>
       <button v-else class="btn" @click="cancelEdit">Cancel</button>
-      <button v-if="editMode" class="btn primary" data-testid="save-template" :disabled="!configValid || saving" @click="handleSave">
+      <button v-if="editMode" class="btn primary" data-testid="save-template" :disabled="!configValid || busy" @click="handleSave">
         Save
       </button>
     </div>
 
     <div v-if="loading" class="card state">Loading...</div>
-    <div v-else-if="error" class="card state error">{{ error }}</div>
+    <div v-else-if="error" class="card state error">
+      {{ error }}
+      <button class="btn" data-testid="retry-load" :disabled="busy" @click="load">Retry</button>
+    </div>
 
     <div v-else-if="template" class="content">
       <div class="card">
         <div class="header-row">
           <h2 class="h2">Template</h2>
           <div class="spacer" />
-          <button class="btn danger" :disabled="saving" @click="handleDelete">Delete</button>
+          <button class="btn danger" :disabled="busy" @click="handleDelete">Delete</button>
         </div>
 
         <div class="info-grid">
@@ -58,7 +61,7 @@
         <div class="header-row">
           <h2 class="h2">{{ editMode ? 'Config' : 'Config (JSON)' }}</h2>
           <div class="spacer" />
-          <button class="btn" @click="copyConfig">Copy</button>
+          <button class="btn" :disabled="busy" @click="copyConfig">Copy</button>
         </div>
 
         <template v-if="editMode">
@@ -212,16 +215,18 @@ async function load() {
 // if the number is still the same, because the answer of a cancelled edit belongs to nobody.
 let editSession = 0
 
-// True from the Save click until the save and the refresh after it have settled. While it is set
-// there is one save and nothing else that starts or replaces the template: Save, Edit and Delete are
-// off, and Cancel is the only action left. A new edit would copy the config the page holds, and the
-// refresh then replaces it under that edit.
+// True from the Save click until the save and the refresh after it have settled.
 const saving = ref(false)
+
+// Busy while a save runs or the page loads. Then nothing starts or copies the template: Save, Edit,
+// Delete and Copy are off, and Cancel is the only action left. A new edit or a copy would take the
+// config the page holds, and the refresh then replaces it. Assign stays: it reads no template body.
+const busy = computed(() => saving.value || loading.value)
 
 function enterEdit() {
   // After a failed load or refresh the page shows an error and not the template, and holds a copy
   // that may be older than the server's, so no edit starts from it.
-  if (!template.value || saving.value || error.value !== null) return
+  if (!template.value || busy.value || error.value !== null) return
   editSession++
   configBody.value = clone(template.value.config || {})
   saveErrors.value = []
@@ -248,7 +253,7 @@ function cancelEdit() {
 }
 
 async function handleSave() {
-  if (!template.value || !configValid.value || saving.value) return
+  if (!template.value || !configValid.value || busy.value) return
   const parsedConfig = clone(configBody.value)
   const session = editSession
   saveErrors.value = []
@@ -284,7 +289,7 @@ async function handleSave() {
 }
 
 async function handleDelete() {
-  if (!template.value || saving.value) return
+  if (!template.value || busy.value) return
   if (!confirm('Delete this template?')) return
 
   try {
@@ -296,6 +301,7 @@ async function handleDelete() {
 }
 
 async function copyConfig() {
+  if (busy.value) return
   try {
     // In edit mode the body being edited is the config on screen, not the saved one.
     const text = editMode.value ? JSON.stringify(configBody.value, null, 2) : configJson.value

@@ -3,11 +3,11 @@
     <div class="toolbar">
       <h1 class="title">Configuration Templates</h1>
       <div class="spacer" />
-      <button class="btn primary" @click="openCreate">+ Create Template</button>
+      <button class="btn primary" :disabled="busy" @click="openCreate">+ Create Template</button>
     </div>
 
     <div class="filters">
-      <select v-model="store.scopeFilter" class="select" @change="store.fetchTemplates()">
+      <select v-model="store.scopeFilter" class="select" :disabled="busy" @change="changeScope">
         <option value="">All Scopes</option>
         <option value="global">Global</option>
         <option value="group">Group</option>
@@ -53,8 +53,8 @@
             </td>
             <td>
               <div class="actions">
-                <button class="action-btn" @click="openEdit(template)">Edit</button>
-                <button class="action-btn danger" @click="handleDelete(template.id)">Delete</button>
+                <button class="action-btn" :disabled="busy" @click="openEdit(template)">Edit</button>
+                <button class="action-btn danger" :disabled="busy" @click="handleDelete(template.id)">Delete</button>
               </div>
             </td>
           </tr>
@@ -129,7 +129,7 @@
           <button
             class="btn primary"
             data-testid="save-template"
-            :disabled="!configValid || schemaTarget === null || saving"
+            :disabled="!configValid || schemaTarget === null || busy"
             @click="handleSave"
           >
             Save
@@ -195,11 +195,21 @@ function hasSecrets(t: ConfigTemplate) {
 // number is still the same, because the answer of a closed dialog belongs to nobody.
 let dialogSession = 0
 
-// True from the Save click until the save and the list refresh after it have settled, so two saves
-// never overlap. Cancel and Create stay allowed: the dialog number covers them.
+// True from the Save click until the save and the list refresh after it have settled.
 const saving = ref(false)
 
+// Busy while a save runs or any request of the store is in flight. Nothing that opens, sends or
+// reloads a template starts then: a list request that ends must not bring back an action while
+// another request is still pending. Cancel is the one way out and stays.
+const busy = computed(() => saving.value || store.loading)
+
+function changeScope() {
+  if (busy.value) return
+  store.fetchTemplates()
+}
+
 function openCreate() {
+  if (busy.value) return
   dialogSession++
   editing.value = null
   form.value = { name: '', description: '', scope: 'global', device_type: '' }
@@ -211,6 +221,7 @@ function openCreate() {
 }
 
 function openEdit(template: ConfigTemplate) {
+  if (busy.value) return
   dialogSession++
   editing.value = template
   form.value = {
@@ -232,7 +243,7 @@ function closeDialog() {
 }
 
 async function handleSave() {
-  if (!configValid.value || schemaTarget.value === null || saving.value) return
+  if (!configValid.value || schemaTarget.value === null || busy.value) return
   const parsedConfig = clone(configBody.value)
   const session = dialogSession
   saveErrors.value = []
@@ -271,6 +282,7 @@ async function handleSave() {
 }
 
 async function handleDelete(id: number) {
+  if (busy.value) return
   if (!confirm('Delete this template? This will fail if assigned to devices.')) return
 
   try {
