@@ -111,8 +111,9 @@ The response `data` holds these fields:
 Supported devices and settings:
 
 - Gen1 only. Gen2 and Gen3 return 501 `NOT_IMPLEMENTED`.
-- Supported Gen1 settings: name, timezone, location, eco mode, discoverable, max power, LED and MQTT. A MQTT server given as `host:port` matches the device's split read-back. The MQTT password is write-only on Gen1, so verify does not compare it.
-- On apply, any other section (Wi-Fi, cloud, CoIoT, relays, login, inputs) returns 422 `VALIDATION_FAILED`, and nothing is written. A section the converter cannot map, such as SNTP, returns 422 too. The error names the sections. Verify does not refuse these sections. It compares them with the device like the supported ones.
+- Supported Gen1 settings: name, timezone, location, eco mode, discoverable, max power, LED, MQTT and relays. A MQTT server given as `host:port` matches the device's split read-back. The MQTT password is write-only on Gen1, so verify does not compare it.
+- Relays: for each entry of `relays`, apply writes `default_state`, `auto_on`, `auto_off` and `name` to that channel with `POST /settings/relay/<n>`, then reads the channel back. A value the device did not keep fails with the path, for example `relays[0].auto_off`. Each relay `id` must equal its position in the list, because the position is the channel written. Any other relay key, such as `schedule`, and an `id` that differs from its position return 422 `VALIDATION_FAILED`.
+- On apply, any other section (Wi-Fi, cloud, CoIoT, login, inputs) returns 422 `VALIDATION_FAILED`, and nothing is written. A section the converter cannot map, such as SNTP, returns 422 too. The error names the sections. Verify does not refuse these sections. It compares them with the device like the supported ones.
 - On both routes, a stored desired configuration with fields the configuration model does not know returns 422. An example is a legacy row from an SMA import.
 - If the device rejects the stored login, both routes return 502 `EXTERNAL_SERVICE_ERROR`. Store the right login with `PUT /devices/{id}/config/auth`.
 - An unknown device returns 404.
