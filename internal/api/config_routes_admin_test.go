@@ -60,6 +60,27 @@ var adminGuardedConfigRoutes = []struct{ method, path string }{
 	{"GET", "/api/v1/devices/1/config/new/status"},
 	{"POST", "/api/v1/devices/1/config/new/verify"},
 	{"POST", "/api/v1/devices/1/drift-report"},
+
+	// Typed conversion, bulk operations, drift schedules and drift reports. The four bulk
+	// routes check the key in their handlers already.
+	{"POST", "/api/v1/config/validate-typed"},
+	{"POST", "/api/v1/config/convert-to-typed"},
+	{"POST", "/api/v1/config/convert-to-raw"},
+	{"POST", "/api/v1/config/bulk-validate"},
+	{"POST", "/api/v1/config/bulk-import"},
+	{"POST", "/api/v1/config/bulk-export"},
+	{"POST", "/api/v1/config/bulk-drift-detect"},
+	{"POST", "/api/v1/config/bulk-drift-detect-enhanced"},
+	{"GET", "/api/v1/config/drift-schedules"},
+	{"POST", "/api/v1/config/drift-schedules"},
+	{"GET", "/api/v1/config/drift-schedules/1"},
+	{"PUT", "/api/v1/config/drift-schedules/1"},
+	{"DELETE", "/api/v1/config/drift-schedules/1"},
+	{"POST", "/api/v1/config/drift-schedules/1/toggle"},
+	{"GET", "/api/v1/config/drift-schedules/1/runs"},
+	{"GET", "/api/v1/config/drift-reports"},
+	{"GET", "/api/v1/config/drift-trends"},
+	{"POST", "/api/v1/config/drift-trends/1/resolve"},
 }
 
 // configRoutesRouter builds the production route table on a full handler, because the old

@@ -86,12 +86,12 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/config/typed", admin(handler.GetTypedDeviceConfig)).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/typed", admin(handler.UpdateTypedDeviceConfig)).Methods("PUT")
 	api.HandleFunc("/devices/{id}/capabilities", handler.GetDeviceCapabilities).Methods("GET")
-	api.HandleFunc("/config/validate-typed", handler.ValidateTypedConfig).Methods("POST")
-	api.HandleFunc("/config/convert-to-typed", handler.ConvertConfigToTyped).Methods("POST")
-	api.HandleFunc("/config/convert-to-raw", handler.ConvertTypedToRaw).Methods("POST")
+	api.HandleFunc("/config/validate-typed", admin(handler.ValidateTypedConfig)).Methods("POST")
+	api.HandleFunc("/config/convert-to-typed", admin(handler.ConvertConfigToTyped)).Methods("POST")
+	api.HandleFunc("/config/convert-to-raw", admin(handler.ConvertTypedToRaw)).Methods("POST")
 	api.HandleFunc("/config/schema", admin(handler.GetConfigurationSchema)).Methods("GET")
 	api.HandleFunc("/config/device-types", handler.GetDeviceTypes).Methods("GET")
-	api.HandleFunc("/config/bulk-validate", handler.BulkValidateConfigs).Methods("POST")
+	api.HandleFunc("/config/bulk-validate", admin(handler.BulkValidateConfigs)).Methods("POST")
 
 	// Bulk configuration operations
 	api.HandleFunc("/config/bulk-import", handler.BulkImportConfigs).Methods("POST")
@@ -100,18 +100,18 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/config/bulk-drift-detect-enhanced", handler.EnhancedBulkDetectConfigDrift).Methods("POST")
 
 	// Drift detection schedule routes
-	api.HandleFunc("/config/drift-schedules", handler.GetDriftSchedules).Methods("GET")
-	api.HandleFunc("/config/drift-schedules", handler.CreateDriftSchedule).Methods("POST")
-	api.HandleFunc("/config/drift-schedules/{id}", handler.GetDriftSchedule).Methods("GET")
-	api.HandleFunc("/config/drift-schedules/{id}", handler.UpdateDriftSchedule).Methods("PUT")
-	api.HandleFunc("/config/drift-schedules/{id}", handler.DeleteDriftSchedule).Methods("DELETE")
-	api.HandleFunc("/config/drift-schedules/{id}/toggle", handler.ToggleDriftSchedule).Methods("POST")
-	api.HandleFunc("/config/drift-schedules/{id}/runs", handler.GetDriftScheduleRuns).Methods("GET")
+	api.HandleFunc("/config/drift-schedules", admin(handler.GetDriftSchedules)).Methods("GET")
+	api.HandleFunc("/config/drift-schedules", admin(handler.CreateDriftSchedule)).Methods("POST")
+	api.HandleFunc("/config/drift-schedules/{id}", admin(handler.GetDriftSchedule)).Methods("GET")
+	api.HandleFunc("/config/drift-schedules/{id}", admin(handler.UpdateDriftSchedule)).Methods("PUT")
+	api.HandleFunc("/config/drift-schedules/{id}", admin(handler.DeleteDriftSchedule)).Methods("DELETE")
+	api.HandleFunc("/config/drift-schedules/{id}/toggle", admin(handler.ToggleDriftSchedule)).Methods("POST")
+	api.HandleFunc("/config/drift-schedules/{id}/runs", admin(handler.GetDriftScheduleRuns)).Methods("GET")
 
 	// Comprehensive drift reporting routes
-	api.HandleFunc("/config/drift-reports", handler.GetDriftReports).Methods("GET")
-	api.HandleFunc("/config/drift-trends", handler.GetDriftTrends).Methods("GET")
-	api.HandleFunc("/config/drift-trends/{id}/resolve", handler.MarkTrendResolved).Methods("POST")
+	api.HandleFunc("/config/drift-reports", admin(handler.GetDriftReports)).Methods("GET")
+	api.HandleFunc("/config/drift-trends", admin(handler.GetDriftTrends)).Methods("GET")
+	api.HandleFunc("/config/drift-trends/{id}/resolve", admin(handler.MarkTrendResolved)).Methods("POST")
 
 	// Device-specific drift reporting
 	api.HandleFunc("/devices/{id}/drift-report", admin(handler.GenerateDeviceDriftReport)).Methods("POST")
