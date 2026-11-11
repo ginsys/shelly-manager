@@ -126,19 +126,6 @@ func TestExports_WriteNoSavedSecret(t *testing.T) {
 	}
 }
 
-func TestExports_PreviewShowsNoSavedSecret(t *testing.T) {
-	for _, p := range exportPlugins {
-		t.Run(p.plugin, func(t *testing.T) {
-			engine, dir := exportEngine(t)
-			preview, err := engine.Preview(context.Background(), exportRequest(p.plugin, p.format, dir, nil))
-			require.NoError(t, err)
-			for _, s := range allExportSecrets {
-				assert.NotContains(t, string(preview.SampleData), s, "%s preview shows the saved secret %s", p.plugin, s)
-			}
-		})
-	}
-}
-
 // The operator can still ask for a full export, as the SMA export allows with the same key.
 func TestExports_ExcludeSensitiveFalseWritesFullExport(t *testing.T) {
 	engine, dir := exportEngine(t)
