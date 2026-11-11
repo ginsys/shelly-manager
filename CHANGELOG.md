@@ -7,8 +7,10 @@ All notable changes to this project are documented here. The project follows Con
 ### Fixed
 - The device configuration routes now need the admin key when one is configured:
   every route under `/api/v1/devices/{id}/config`, the device overrides, the
-  desired configuration and the device drift report. They answered any request
-  before. Without a configured key they stay open. (ginsys/shelly-manager#465)
+  desired configuration and the device drift report. So do the typed conversion
+  and validation routes, the drift schedules and the drift reports under
+  `/api/v1/config`. They answered any request before. Without a configured key
+  they stay open. (ginsys/shelly-manager#465)
 - The configuration template routes, the device template assignment routes and
   `GET /api/v1/config/schema` now need the admin key when one is configured.
   They answered any request before. Without a configured key they stay open.
