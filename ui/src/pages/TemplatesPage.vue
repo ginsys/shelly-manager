@@ -84,15 +84,32 @@
 
           <div class="form-group" :class="{ disabled: form.scope !== 'device_type' }">
             <label>Device Type {{ form.scope === 'device_type' ? '*' : '' }}</label>
+            <!-- The type of a saved template is read-only, and may be one the list no longer has. -->
             <input
-              v-model="form.device_type"
+              v-if="editing"
+              :value="form.device_type"
               type="text"
               class="form-input"
               data-testid="template-device-type"
-              :disabled="form.scope !== 'device_type' || !!editing"
-              placeholder="SHPLG-S"
-              @change="schemaDeviceType = form.device_type || ''"
+              disabled
             />
+            <select
+              v-else
+              v-model="form.device_type"
+              class="form-input"
+              data-testid="template-device-type"
+              :disabled="form.scope !== 'device_type' || deviceTypes.length === 0"
+              @change="schemaDeviceType = form.device_type || ''"
+            >
+              <option value="" disabled>Select a device type</option>
+              <option v-for="t in deviceTypes" :key="t.device_type" :value="t.device_type">
+                {{ t.name }} ({{ t.device_type }})
+              </option>
+            </select>
+            <div v-if="!editing && form.scope === 'device_type' && deviceTypesError" class="hint" data-testid="device-types-error">
+              {{ deviceTypesError }}
+              <button class="btn" data-testid="retry-device-types" @click="loadDeviceTypes">Retry</button>
+            </div>
           </div>
 
           <div class="form-group full">
@@ -103,7 +120,7 @@
           <div class="form-group full">
             <label>Config</label>
             <div v-if="schemaTarget === null" class="hint" data-testid="template-needs-type">
-              Enter the device type to get the form for that model.
+              Pick the device type to get the form for that model.
             </div>
             <ConfigEditor
               v-else
@@ -142,7 +159,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useTemplatesStore } from '@/stores/templates'
-import { TemplateSaveError, type ConfigTemplate, type FieldError, type TemplateScope } from '@/api/templates'
+import {
+  listDeviceTypes,
+  TemplateSaveError,
+  type ConfigTemplate,
+  type DeviceTypeInfo,
+  type FieldError,
+  type TemplateScope,
+} from '@/api/templates'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import { clone, sameValue, savedSecretBaseline, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
 
@@ -203,6 +227,21 @@ function changeScope() {
   store.fetchTemplates()
 }
 
+// The models the create dialog offers. A failed load leaves the list empty, so no type can be
+// chosen and a device-type template cannot be saved; there is no free-text fallback.
+const deviceTypes = ref<DeviceTypeInfo[]>([])
+const deviceTypesError = ref('')
+
+async function loadDeviceTypes() {
+  deviceTypesError.value = ''
+  try {
+    deviceTypes.value = await listDeviceTypes()
+  } catch (e: any) {
+    deviceTypes.value = []
+    deviceTypesError.value = 'Could not load the device types: ' + (e?.message || 'Unknown error')
+  }
+}
+
 function openCreate() {
   if (busy.value) return
   dialogSession++
@@ -213,6 +252,7 @@ function openCreate() {
   schemaDeviceType.value = ''
   saveErrors.value = []
   showDialog.value = true
+  void loadDeviceTypes()
 }
 
 function openEdit(template: ConfigTemplate) {

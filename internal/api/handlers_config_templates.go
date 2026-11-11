@@ -87,6 +87,28 @@ func (h *Handler) GetNewConfigTemplates(w http.ResponseWriter, r *http.Request) 
 	rw.WriteSuccess(w, r, ListTemplatesResponse{Templates: responses})
 }
 
+// GetDeviceTypes handles GET /api/v1/config/device-types: the models a device-type template can name.
+func (h *Handler) GetDeviceTypes(w http.ResponseWriter, r *http.Request) {
+	h.responseWriter().WriteSuccess(w, r, map[string]any{
+		"device_types": configuration.SupportedDeviceTypeInfos(),
+	})
+}
+
+// writeUnknownDeviceType refuses a device-type template that names a model outside the supported
+// list, in the same field-error shape the config checks use. It returns true when it refused.
+// The check lives here and not in ValidateTemplateScope, which the startup migration and import
+// also run: they must never refuse a template that was stored before this check existed.
+func writeUnknownDeviceType(rw *apiresp.ResponseWriter, w http.ResponseWriter, r *http.Request, deviceType string) bool {
+	if configuration.IsSupportedDeviceType(deviceType) {
+		return false
+	}
+	rw.WriteValidationError(w, r, map[string]any{"fields": []configuration.FieldError{{
+		Path:    "device_type",
+		Message: "Unknown device type " + deviceType + ". Pick one from GET /api/v1/config/device-types",
+	}}})
+	return true
+}
+
 // CreateNewConfigTemplate handles POST /api/v1/config/templates/new
 func (h *Handler) CreateNewConfigTemplate(w http.ResponseWriter, r *http.Request) {
 	rw := h.responseWriter()
@@ -94,6 +116,11 @@ func (h *Handler) CreateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 	raw, head, err := readTemplateBody(r)
 	if err != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+	// An empty type keeps the service's own refusal (ErrDeviceTypeRequired).
+	if head.Scope == configuration.ScopeDeviceType && head.DeviceType != "" &&
+		writeUnknownDeviceType(rw, w, r, head.DeviceType) {
 		return
 	}
 	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(head.Scope, head.DeviceType), raw, head,
@@ -224,6 +251,12 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 	raw, head, err := readTemplateBody(r)
 	if err != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+	// Only a type that differs from the stored one is checked, so a template stored with a type
+	// outside the list stays editable. The update keeps the stored type either way.
+	if existing.Scope == configuration.ScopeDeviceType && head.DeviceType != "" &&
+		head.DeviceType != existing.DeviceType && writeUnknownDeviceType(rw, w, r, head.DeviceType) {
 		return
 	}
 	if writeConfigFieldErrors(rw, w, r, schemaDeviceType(existing.Scope, existing.DeviceType), raw, head,
