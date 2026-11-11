@@ -31,8 +31,26 @@ func secretKey(key string) bool {
 	return strings.HasSuffix(k, "key")
 }
 
-// secretKeyInText finds a secret-named key in text that is not valid JSON.
-var secretKeyInText = regexp.MustCompile(`(?i)"[^"]*(pass|pwd|psk|secret|token|key)"\s*:`)
+// secretKeyInText finds a secret-named key in text that is not valid JSON. It follows secretKey: the
+// quoted key contains one of the words anywhere, or ends in "key". A key written with an escape
+// cannot be read without a parser, so any escaped key counts too, and so does a \uXXXX escape
+// anywhere in the text, which could spell a secret word.
+var (
+	secretKeyInText = regexp.MustCompile(`(?i)"[^"]*(?:(?:pass|pwd|psk|secret|token)[^"]*|key|\\[^"]*)"\s*:`)
+	unicodeEscape   = regexp.MustCompile(`(?i)\\u[0-9a-f]{4}`)
+)
+
+// secretScalar reports whether a JSON value is one that a secret key can hold: a non-empty string
+// or a number. A number is a secret too ({"auth_pass": 12345678}), so it is masked like a string.
+func secretScalar(v any) bool {
+	switch x := v.(type) {
+	case string:
+		return x != ""
+	case json.Number:
+		return true
+	}
+	return false
+}
 
 func decodeDocument(text string) (any, bool) {
 	dec := json.NewDecoder(strings.NewReader(text))
@@ -66,7 +84,7 @@ func maskJSONText(text string) string {
 	}
 	doc, ok := decodeDocument(text)
 	if !ok {
-		if secretKeyInText.MatchString(text) {
+		if secretKeyInText.MatchString(text) || unicodeEscape.MatchString(text) {
 			return secretMask
 		}
 		return text
@@ -79,7 +97,7 @@ func maskValue(v any) {
 	switch x := v.(type) {
 	case map[string]any:
 		for k, child := range x {
-			if s, isString := child.(string); isString && s != "" && secretKey(k) {
+			if secretKey(k) && secretScalar(child) {
 				x[k] = secretMask
 				continue
 			}
@@ -116,7 +134,7 @@ func restoreValue(v, stored any) {
 		old, _ := stored.(map[string]any)
 		for k, child := range x {
 			if s, isString := child.(string); isString && s == secretMask && secretKey(k) {
-				if kept, ok := old[k].(string); ok && kept != secretMask {
+				if kept, ok := old[k]; ok && secretScalar(kept) && kept != secretMask {
 					x[k] = kept
 				} else {
 					delete(x, k)
