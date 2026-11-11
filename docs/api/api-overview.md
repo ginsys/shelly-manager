@@ -83,7 +83,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 The desired configuration is the composed result of the device's templates and overrides. Neither route takes a request body.
 
-`POST /devices/{id}/config/new/apply` writes the desired configuration to the device. Then it reads the configuration back and compares it. The route needs the admin key, as `Authorization: Bearer <key>` or `X-API-Key: <key>`. Without the key it returns 401 `UNAUTHORIZED`. Apply clears `config_applied` before the write. It sets the flag again only if the read-back matches and the desired configuration did not change during the apply. Applies to one device run one at a time in one server process. Run one manager replica if you use apply, because applies on different replicas are not serialized (ginsys/shelly-manager#425).
+`POST /devices/{id}/config/new/apply` writes the desired configuration to the device. Then it reads the configuration back and compares it. If the server has an admin key configured, the route needs that key, as `Authorization: Bearer <key>` or `X-API-Key: <key>`. Without the key it then returns 401 `UNAUTHORIZED`. If no admin key is configured, the route is open, like the other admin routes. Apply clears `config_applied` before the write. It sets the flag again only if the read-back matches and the desired configuration did not change during the apply. Applies to one device run one at a time in one server process. Run one manager replica if you use apply, because applies on different replicas are not serialized (ginsys/shelly-manager#425).
 
 The response `data` holds these fields:
 
@@ -101,8 +101,8 @@ Supported devices and settings:
 
 - Gen1 only. Gen2 and Gen3 return 501 `NOT_IMPLEMENTED`.
 - Supported Gen1 settings: name, timezone, location, eco mode, discoverable, max power, LED and MQTT. A MQTT server given as `host:port` matches the device's split read-back. The MQTT password is write-only on Gen1, so verify does not compare it.
-- Any other section (Wi-Fi, cloud, CoIoT, relays, login, inputs) returns 422 `VALIDATION_FAILED`, and apply writes nothing. A section the converter cannot map, such as SNTP, returns 422 too. The error names the sections.
-- A stored desired configuration with fields the configuration model does not know returns 422. An example is a legacy row from an SMA import.
+- On apply, any other section (Wi-Fi, cloud, CoIoT, relays, login, inputs) returns 422 `VALIDATION_FAILED`, and nothing is written. A section the converter cannot map, such as SNTP, returns 422 too. The error names the sections. Verify does not refuse these sections. It compares them with the device like the supported ones.
+- On both routes, a stored desired configuration with fields the configuration model does not know returns 422. An example is a legacy row from an SMA import.
 - If the device rejects the stored login, both routes return 502 `EXTERNAL_SERVICE_ERROR`. Store the right login with `PUT /devices/{id}/config/auth`.
 - An unknown device returns 404.
 

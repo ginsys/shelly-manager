@@ -1165,7 +1165,8 @@ paths:
       tags: [Configuration]
       summary: Write the desired configuration to a Gen1 device, read it back and compare
       description: >-
-        Needs the admin key. Takes no request body. Clears config_applied before the write
+        Needs the admin key when the server has one configured; with no admin key configured
+        the route is open. Takes no request body. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
         change during the apply. Supported Gen1 settings: name, timezone, location, eco mode,
         discoverable, max power, LED and MQTT. Applies to one device are serialized inside one
@@ -1191,7 +1192,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
         '401':
-          description: Admin key missing or wrong (UNAUTHORIZED)
+          description: An admin key is configured and the request has none or a wrong one (UNAUTHORIZED)
           content:
             application/json:
               schema:
@@ -1257,7 +1258,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
         '422':
-          description: Same cases as apply (VALIDATION_FAILED)
+          description: >-
+            The stored desired configuration holds a field the configuration model does not
+            know (VALIDATION_FAILED). Unlike apply, verify does not refuse unsupported
+            sections; it compares them with the device.
           content:
             application/json:
               schema:
