@@ -518,6 +518,8 @@ All API responses follow this envelope:
 - Header: `Authorization: Bearer {api_key}`
 - Header: `X-API-Key: {api_key}`
 
+**Admin key.** If the server has an admin key configured, these configuration routes need it and return 401 `UNAUTHORIZED` without it: every route under `/api/v1/devices/{id}/config` (the stored, live, typed, import, export, drift, history, apply-template, capability and apply routes), `/api/v1/devices/{id}/overrides/new`, `/api/v1/devices/{id}/desired-config` and `/api/v1/devices/{id}/drift-report`. The template routes under `/api/v1/config/templates`, the template assignment routes and `GET /api/v1/config/schema` need it too. If no admin key is configured, the routes are open. The web UI sends the key it holds on every call. `GET /api/v1/devices/{id}/capabilities` stays open.
+
 ---
 
 ## Key Files Reference
