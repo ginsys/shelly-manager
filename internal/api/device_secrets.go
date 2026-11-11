@@ -151,7 +151,7 @@ func restoreValue(v, stored any) error {
 			// take another entry's password, so its mask is dropped instead.
 			var counterpart any
 			if i < len(old) && sameWithoutSecrets(child, old[i]) {
-				if carriesMask(child) && ambiguousEntry(child, old) {
+				if ambiguousEntry(child, old) && maskNeedsChoice(child, old) {
 					return errAmbiguousEntry
 				}
 				counterpart = old[i]
@@ -187,21 +187,38 @@ func ambiguousEntry(entry any, stored []any) bool {
 	return false
 }
 
-// carriesMask reports whether a decoded document holds the mask under a secret-named key.
-func carriesMask(v any) bool {
+// maskNeedsChoice reports whether the entry sends a mask for a secret that at least one matching
+// stored entry holds. A mask no stored entry has a secret for is dropped, so nothing is chosen.
+func maskNeedsChoice(entry any, stored []any) bool {
+	for _, s := range stored {
+		if sameWithoutSecrets(entry, s) && maskHasSavedSecret(entry, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// maskHasSavedSecret reports whether v holds the mask under a secret-named key where stored holds a
+// saved secret.
+func maskHasSavedSecret(v, stored any) bool {
 	switch x := v.(type) {
 	case map[string]any:
+		old, _ := stored.(map[string]any)
 		for k, child := range x {
 			if s, isString := child.(string); isString && s == secretMask && secretKey(k) {
-				return true
+				if kept, ok := old[k]; ok && secretScalar(kept) {
+					return true
+				}
+				continue
 			}
-			if carriesMask(child) {
+			if maskHasSavedSecret(child, old[k]) {
 				return true
 			}
 		}
 	case []any:
-		for _, child := range x {
-			if carriesMask(child) {
+		old, _ := stored.([]any)
+		for i, child := range x {
+			if i < len(old) && maskHasSavedSecret(child, old[i]) {
 				return true
 			}
 		}
