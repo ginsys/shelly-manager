@@ -60,8 +60,109 @@ func (s *Service) SetDriftNotifier(fn func(ctx context.Context, deviceID uint, d
 	s.driftNotifier = fn
 }
 
+// ReadFromDevice reads the device's live configuration and returns it without
+// storing anything: the stored configuration, its sync status, its sync time and
+// the history stay as they were. Drift detection compares against the stored
+// record, so a read that only shows the device must not move that baseline.
+// The returned record is not saved and carries no sync status.
+func (s *Service) ReadFromDevice(deviceID uint, client shelly.Client) (*DeviceConfig, error) {
+	configData, err := s.readDeviceConfigData(deviceID, client)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	return &DeviceConfig{DeviceID: deviceID, Config: configData, LastSynced: &now}, nil
+}
+
 // ImportFromDevice imports configuration from a physical device
 func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*DeviceConfig, error) {
+	configData, err := s.readDeviceConfigData(deviceID, client)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if config already exists
+	var existingConfig DeviceConfig
+	err = s.db.Where("device_id = ?", deviceID).First(&existingConfig).Error
+
+	now := time.Now()
+
+	if err == gorm.ErrRecordNotFound {
+		// Create new config
+		newConfig := DeviceConfig{
+			DeviceID:   deviceID,
+			Config:     configData,
+			LastSynced: &now,
+			SyncStatus: "synced",
+		}
+
+		if createErr := s.db.Create(&newConfig).Error; createErr != nil {
+			return nil, fmt.Errorf("failed to create device config: %w", createErr)
+		}
+
+		// Create history entry
+		s.createHistory(deviceID, newConfig.ID, "import", nil, configData, "system")
+
+		s.logger.WithFields(map[string]any{
+			"device_id":   deviceID,
+			"config_id":   newConfig.ID,
+			"config_size": len(configData),
+			"component":   "configuration",
+		}).Info("Successfully imported configuration from device")
+
+		return &newConfig, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query existing config: %w", err)
+	}
+
+	// Check if configuration has actually changed
+	if string(existingConfig.Config) == string(configData) {
+		// No changes, just update sync timestamp
+		existingConfig.LastSynced = &now
+		existingConfig.SyncStatus = "synced"
+
+		if err := s.db.Save(&existingConfig).Error; err != nil {
+			return nil, fmt.Errorf("failed to update sync timestamp: %w", err)
+		}
+
+		s.logger.WithFields(map[string]any{
+			"device_id": deviceID,
+			"config_id": existingConfig.ID,
+			"component": "configuration",
+		}).Debug("Configuration unchanged, updated sync timestamp only")
+
+		return &existingConfig, nil
+	}
+
+	// Configuration has changed, update it
+	oldConfig := existingConfig.Config
+	existingConfig.Config = configData
+	existingConfig.LastSynced = &now
+	existingConfig.SyncStatus = "synced"
+
+	if err := s.db.Save(&existingConfig).Error; err != nil {
+		return nil, fmt.Errorf("failed to update device config: %w", err)
+	}
+
+	// Create history entry
+	s.createHistory(deviceID, existingConfig.ID, "import", oldConfig, configData, "system")
+
+	s.logger.WithFields(map[string]any{
+		"device_id":        deviceID,
+		"config_id":        existingConfig.ID,
+		"config_size":      len(configData),
+		"changes_detected": true,
+		"component":        "configuration",
+	}).Info("Successfully updated configuration from device")
+
+	return &existingConfig, nil
+}
+
+// readDeviceConfigData reads the device's configuration, adds the tracking
+// metadata and returns the validated JSON. It only reads: it stores nothing.
+func (s *Service) readDeviceConfigData(deviceID uint, client shelly.Client) (json.RawMessage, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -146,83 +247,7 @@ func (s *Service) ImportFromDevice(deviceID uint, client shelly.Client) (*Device
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
-	// Check if config already exists
-	var existingConfig DeviceConfig
-	err = s.db.Where("device_id = ?", deviceID).First(&existingConfig).Error
-
-	now := time.Now()
-
-	if err == gorm.ErrRecordNotFound {
-		// Create new config
-		newConfig := DeviceConfig{
-			DeviceID:   deviceID,
-			Config:     configData,
-			LastSynced: &now,
-			SyncStatus: "synced",
-		}
-
-		if createErr := s.db.Create(&newConfig).Error; createErr != nil {
-			return nil, fmt.Errorf("failed to create device config: %w", createErr)
-		}
-
-		// Create history entry
-		s.createHistory(deviceID, newConfig.ID, "import", nil, configData, "system")
-
-		s.logger.WithFields(map[string]any{
-			"device_id":   deviceID,
-			"config_id":   newConfig.ID,
-			"config_size": len(configData),
-			"component":   "configuration",
-		}).Info("Successfully imported configuration from device")
-
-		return &newConfig, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to query existing config: %w", err)
-	}
-
-	// Check if configuration has actually changed
-	if string(existingConfig.Config) == string(configData) {
-		// No changes, just update sync timestamp
-		existingConfig.LastSynced = &now
-		existingConfig.SyncStatus = "synced"
-
-		if err := s.db.Save(&existingConfig).Error; err != nil {
-			return nil, fmt.Errorf("failed to update sync timestamp: %w", err)
-		}
-
-		s.logger.WithFields(map[string]any{
-			"device_id": deviceID,
-			"config_id": existingConfig.ID,
-			"component": "configuration",
-		}).Debug("Configuration unchanged, updated sync timestamp only")
-
-		return &existingConfig, nil
-	}
-
-	// Configuration has changed, update it
-	oldConfig := existingConfig.Config
-	existingConfig.Config = configData
-	existingConfig.LastSynced = &now
-	existingConfig.SyncStatus = "synced"
-
-	if err := s.db.Save(&existingConfig).Error; err != nil {
-		return nil, fmt.Errorf("failed to update device config: %w", err)
-	}
-
-	// Create history entry
-	s.createHistory(deviceID, existingConfig.ID, "import", oldConfig, configData, "system")
-
-	s.logger.WithFields(map[string]any{
-		"device_id":        deviceID,
-		"config_id":        existingConfig.ID,
-		"config_size":      len(configData),
-		"changes_detected": true,
-		"component":        "configuration",
-	}).Info("Successfully updated configuration from device")
-
-	return &existingConfig, nil
+	return configData, nil
 }
 
 // GetImportStatus gets the import status for a device

@@ -101,7 +101,12 @@ All notable changes to this project are documented here. The project follows Con
   answer) to the badge. `GET /devices/{id}/config/current` now answers in the
   standard `{success, data}` envelope the UI client reads, instead of a bare
   `configuration` member, and the configuration page has a read-only "Live on
-  device" panel that reads the device on demand. (#388)
+  device" panel that reads the device on demand. The live reads
+  (`/config/current` and `/config/current/normalized`) no longer store what
+  they read: before, one read replaced the stored configuration and marked it
+  synced, so the next drift check showed no drift. `POST
+  /devices/{id}/config/import` still accepts the device's state as the stored
+  configuration. (#388)
 - Device credentials saved with `PUT /devices/{id}/config/auth` were stored
   where no client builder reads them, and a cached client kept the old login
   until restart. They are now stored as `auth_enabled`/`auth_user`/`auth_pass`

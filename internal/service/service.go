@@ -880,6 +880,30 @@ func (s *ShellyService) ImportDeviceConfig(deviceID uint) (*configuration.Device
 	return s.ConfigSvc.ImportFromDevice(deviceID, client)
 }
 
+// ReadDeviceConfig reads the device's live configuration and stores nothing:
+// the stored configuration, its sync status and its history stay as they were,
+// so drift detection keeps its baseline. Use ImportDeviceConfig to accept the
+// device's state as the new stored configuration.
+func (s *ShellyService) ReadDeviceConfig(deviceID uint) (*configuration.DeviceConfig, error) {
+	device, err := s.DB.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+
+	client, err := s.getClientWithAuthRetry(device)
+	if err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"device_ip": device.IP,
+			"error":     err.Error(),
+			"component": "service",
+		}).Error("ReadDeviceConfig: Failed to get client")
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	return s.ConfigSvc.ReadFromDevice(deviceID, client)
+}
+
 // ApplyDesiredConfig pushes the device's desired configuration to the physical
 // device and verifies it by reading it back.
 func (s *ShellyService) ApplyDesiredConfig(ctx context.Context, deviceID uint) (*configuration.ApplyVerifyResult, error) {

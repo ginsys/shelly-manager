@@ -1080,8 +1080,12 @@ paths:
           description: >-
             Current device configuration. The standard envelope carries the
             configuration record as `data`; its `config` member holds the
-            settings read from the device. The record is returned as it is:
-            this route does not mask secrets (tracked in
+            settings read from the device. The read stores nothing: the
+            stored configuration, its sync status and the history stay as they
+            were, so drift detection keeps its baseline (use
+            POST /api/v1/devices/{id}/config/import to accept the device's
+            state as the stored configuration). The record is returned as it
+            is: this route does not mask secrets (tracked in
             ginsys/shelly-manager#436).
           content:
             application/json:
@@ -1112,7 +1116,10 @@ paths:
             type: integer
       responses:
         '200':
-          description: Normalized current device configuration
+          description: >-
+            Normalized current device configuration. The read stores nothing:
+            the stored configuration, its sync status and the history stay as
+            they were.
           content:
             application/json:
               schema:
