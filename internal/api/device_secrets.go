@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 
@@ -102,20 +103,30 @@ func maskValue(v any) {
 // is never stored. Any other value is a new secret and stays as sent. A text that is not valid JSON
 // is the client's own and stays as sent, except the mask standing in for a whole malformed text,
 // which becomes the stored text.
-func restoreMaskedText(incoming, stored string) string {
+//
+// It returns errAmbiguousEntry when a masked secret sits in an array entry that matches more than
+// one stored entry, because then no stored secret can be told to belong to it.
+func restoreMaskedText(incoming, stored string) (string, error) {
 	if incoming == secretMask {
-		return stored
+		return stored, nil
 	}
 	doc, ok := decodeDocument(incoming)
 	if !ok {
-		return incoming
+		return incoming, nil
 	}
 	old, _ := decodeDocument(stored)
-	restoreValue(doc, old)
-	return encodeDocument(doc)
+	if err := restoreValue(doc, old); err != nil {
+		return "", err
+	}
+	return encodeDocument(doc), nil
 }
 
-func restoreValue(v, stored any) {
+// errAmbiguousEntry is returned when an array entry that needs a stored secret (it sends the mask,
+// or leaves the secret out) matches more than one stored entry whose secrets differ. Guessing would
+// give it another entry's password, so the request is refused and asks for the value.
+var errAmbiguousEntry = errors.New("an array entry matches more than one stored entry, so its saved secret cannot be told apart: send the secret value instead of the mask or leaving it out")
+
+func restoreValue(v, stored any) error {
 	switch x := v.(type) {
 	case map[string]any:
 		old, _ := stored.(map[string]any)
@@ -128,7 +139,9 @@ func restoreValue(v, stored any) {
 				}
 				continue
 			}
-			restoreValue(child, old[k])
+			if err := restoreValue(child, old[k]); err != nil {
+				return err
+			}
 		}
 	case []any:
 		old, _ := stored.([]any)
@@ -137,12 +150,63 @@ func restoreValue(v, stored any) {
 			// agree on everything but their secrets. A reordered or removed entry would otherwise
 			// take another entry's password, so its mask is dropped instead.
 			var counterpart any
-			if i < len(old) && encodeDocument(withoutSecrets(child)) == encodeDocument(withoutSecrets(old[i])) {
+			if i < len(old) && sameWithoutSecrets(child, old[i]) {
+				if carriesMask(child) && ambiguousEntry(child, old) {
+					return errAmbiguousEntry
+				}
 				counterpart = old[i]
 			}
-			restoreValue(child, counterpart)
+			if err := restoreValue(child, counterpart); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
+}
+
+func sameWithoutSecrets(a, b any) bool {
+	return encodeDocument(withoutSecrets(a)) == encodeDocument(withoutSecrets(b))
+}
+
+// ambiguousEntry reports whether an entry matches more than one stored entry (they agree on
+// everything but their secrets) and those entries differ in what their secrets hold.
+func ambiguousEntry(entry any, stored []any) bool {
+	var first string
+	matches := 0
+	for _, s := range stored {
+		if !sameWithoutSecrets(entry, s) {
+			continue
+		}
+		if matches == 0 {
+			first = encodeDocument(s)
+		} else if encodeDocument(s) != first {
+			return true
+		}
+		matches++
+	}
+	return false
+}
+
+// carriesMask reports whether a decoded document holds the mask under a secret-named key.
+func carriesMask(v any) bool {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			if s, isString := child.(string); isString && s == secretMask && secretKey(k) {
+				return true
+			}
+			if carriesMask(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range x {
+			if carriesMask(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func isContainer(v any) bool {
@@ -201,14 +265,20 @@ func maskDeviceSecrets(d database.Device) database.Device {
 
 // restoreDeviceSecrets undoes maskDeviceSecrets on a device a client sends back, from the stored
 // device (nil for a new one).
-func restoreDeviceSecrets(incoming *database.Device, stored *database.Device) {
+func restoreDeviceSecrets(incoming *database.Device, stored *database.Device) error {
 	var old database.Device
 	if stored != nil {
 		old = *stored
 	}
-	incoming.Settings = restoreMaskedText(incoming.Settings, old.Settings)
-	incoming.Overrides = restoreMaskedText(incoming.Overrides, old.Overrides)
-	incoming.DesiredConfig = restoreMaskedText(incoming.DesiredConfig, old.DesiredConfig)
+	var err error
+	if incoming.Settings, err = restoreMaskedText(incoming.Settings, old.Settings); err != nil {
+		return err
+	}
+	if incoming.Overrides, err = restoreMaskedText(incoming.Overrides, old.Overrides); err != nil {
+		return err
+	}
+	incoming.DesiredConfig, err = restoreMaskedText(incoming.DesiredConfig, old.DesiredConfig)
+	return err
 }
 
 // maskDeviceConfig returns a copy of a stored or live device configuration that is safe to send

@@ -99,7 +99,8 @@ func TestMaskJSONText_NumericSecretsAreMasked(t *testing.T) {
 	assert.Contains(t, got, `"keep_alive":60`)
 
 	stored := `{"auth_pass":12345678}`
-	back := restoreMaskedText(got, stored)
+	back, err := restoreMaskedText(got, stored)
+	assert.NoError(t, err)
 	assert.Contains(t, back, `"auth_pass":12345678`, "a returned mask takes the stored number")
 	assert.NotContains(t, back, secretMask)
 }
@@ -121,7 +122,10 @@ func TestMaskJSONText_MalformedTextIsMaskedWhole(t *testing.T) {
 func TestRestoreMaskedText_TakesTheStoredValueOrDropsTheMask(t *testing.T) {
 	stored := `{"mqtt":{"pass":"kept","server":"old"},"list":[{"token":"t0"}]}`
 	back := `{"mqtt":{"pass":"` + secretMask + `","server":"new"},"list":[{"token":"` + secretMask + `"}],"auth":{"pass":"` + secretMask + `"}}`
-	got := restoreMaskedText(back, stored)
+	got, err := restoreMaskedText(back, stored)
+	assert.NoError(t, err)
 	assert.JSONEq(t, `{"mqtt":{"pass":"kept","server":"new"},"list":[{"token":"t0"}],"auth":{}}`, got)
-	assert.Equal(t, stored, restoreMaskedText(secretMask, stored), "the mask standing in for a whole text takes the stored text")
+	whole, err := restoreMaskedText(secretMask, stored)
+	assert.NoError(t, err)
+	assert.Equal(t, stored, whole, "the mask standing in for a whole text takes the stored text")
 }

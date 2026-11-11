@@ -296,7 +296,8 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// A mask in the body has nothing stored to take its place: it is dropped, never stored.
-	restoreDeviceSecrets(&device, nil)
+	// With nothing stored no entry can be ambiguous, so the error cannot occur here.
+	_ = restoreDeviceSecrets(&device, nil)
 
 	// Validate and normalize device settings
 	if err := h.validateDeviceSettings(&device); err != nil {
@@ -388,7 +389,10 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 	// The client read the device with its secrets masked: a mask that comes back takes the stored
 	// value, so the mask is never saved over a secret.
-	restoreDeviceSecrets(&updatedDevice, existingDevice)
+	if err := restoreDeviceSecrets(&updatedDevice, existingDevice); err != nil {
+		h.responseWriter().WriteValidationError(w, r, err.Error())
+		return
+	}
 
 	// Validate and normalize device settings
 	if err := h.validateDeviceSettings(&updatedDevice); err != nil {
@@ -1288,7 +1292,10 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	// and the mask is never stored. A missing stored config is left to the service to report.
 	if stored, getErr := h.Service.GetDeviceConfig(uint(id)); getErr == nil {
 		old, _ := decodeDocument(string(stored.Config))
-		restoreValue(configUpdate, old)
+		if restoreErr := restoreValue(configUpdate, old); restoreErr != nil {
+			h.responseWriter().WriteValidationError(w, r, restoreErr.Error())
+			return
+		}
 	}
 
 	// Update device configuration

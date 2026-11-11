@@ -344,6 +344,56 @@ func TestTypedConfigRoutes_ArrayEntryOmittingItsSecretKeepsIt(t *testing.T) {
 	}
 }
 
+// An array entry that matches more than one stored entry, because they differ only in secrets,
+// cannot be told apart: a mask or an omitted secret is refused with a 400 and nothing is stored,
+// and a new secret value is accepted.
+func TestTypedConfigRoutes_AmbiguousArrayEntryIsRefused(t *testing.T) {
+	const stored = `{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[` +
+		`{"token":"alice","password":"t7pe-alice-s3cret"},{"token":"bob","password":"t7pe-bob-s3cret"}]}}`
+	cases := map[string]struct {
+		accounts string
+		status   int
+	}{
+		"omitted":   {`[{"token":"bob"}]`, http.StatusBadRequest},
+		"masked":    {`[{"token":"bob","password":"` + secretMask + `"}]`, http.StatusBadRequest},
+		"new value": {`[{"token":"bob","password":"t7pe-new-s3cret"}]`, http.StatusOK},
+		"cleared":   {`[{"token":"bob","password":""}]`, http.StatusOK},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, stored)
+
+			body := `{"configuration":{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":` + c.accounts + `}}}`
+			put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+			require.Equal(t, c.status, put.Code, put.Body.String())
+			got := storedConfig(t, h, id)
+			if c.status == http.StatusBadRequest {
+				assert.Contains(t, put.Body.String(), "more than one stored entry")
+				assert.NotContains(t, put.Body.String(), "t7pe-")
+				assert.Equal(t, stored, got, "a refused PUT stores nothing")
+				return
+			}
+			assert.NotContains(t, got, "t7pe-alice-s3cret")
+			assert.NotContains(t, got, secretMask)
+		})
+	}
+}
+
+// The text helper reports the same ambiguity, which the device routes share.
+func TestRestoreMaskedText_AmbiguousEntryIsAnError(t *testing.T) {
+	stored := `{"accounts":[{"token":"alice","password":"A"},{"token":"bob","password":"B"}]}`
+	_, err := restoreMaskedText(`{"accounts":[{"token":"bob","password":"`+secretMask+`"}]}`, stored)
+	assert.ErrorIs(t, err, errAmbiguousEntry)
+
+	// Identical stored entries cannot swap anything, so they are not ambiguous.
+	same := `{"accounts":[{"token":"bob","password":"A"},{"token":"bob","password":"A"}]}`
+	got, err := restoreMaskedText(`{"accounts":[{"token":"bob","password":"`+secretMask+`"}]}`, same)
+	assert.NoError(t, err)
+	assert.Contains(t, got, `"password":"A"`)
+}
+
 // A raw part the body omits is the stored one, an array secret included.
 func TestTypedConfigRoutes_OmittedRawKeepsArraySecrets(t *testing.T) {
 	h, cleanup := typedHandler(t)

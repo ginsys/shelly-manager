@@ -93,7 +93,10 @@ func scrubValidation(result *configuration.ValidationResult) {
 // mask becomes the stored secret (or is dropped when there is none, since the mask is never
 // stored), a secret the body leaves out keeps its stored value, an explicit "" clears it, and a
 // path in removed, sent as null, is not kept.
-func restoreTypedSecrets(incoming, stored *configuration.TypedConfiguration, removed map[string]bool) {
+//
+// It returns errAmbiguousEntry when a raw array entry needs a stored secret and matches more than
+// one stored entry.
+func restoreTypedSecrets(incoming, stored *configuration.TypedConfiguration, removed map[string]bool) error {
 	view := typedSecretView(incoming)
 	storedView := typedSecretView(stored)
 	restoreMaskedSecrets(view, storedView)
@@ -104,18 +107,27 @@ func restoreTypedSecrets(incoming, stored *configuration.TypedConfiguration, rem
 	if stored != nil {
 		storedRaw = stored.Raw
 	}
-	incoming.Raw = restoreRawJSON(incoming.Raw, storedRaw)
+	raw, err := restoreRawJSON(incoming.Raw, storedRaw)
+	if err != nil {
+		return err
+	}
+	incoming.Raw = raw
+	return nil
 }
 
 // restoreRawJSON undoes maskRawJSON: the mask standing for the whole part, sent as a JSON string,
 // becomes the stored part, and a mask inside it becomes the stored secret.
-func restoreRawJSON(incoming, stored json.RawMessage) json.RawMessage {
+func restoreRawJSON(incoming, stored json.RawMessage) (json.RawMessage, error) {
 	var whole string
 	if json.Unmarshal(incoming, &whole) == nil && whole == secretMask {
-		return stored
+		return stored, nil
 	}
 	if len(incoming) > 0 {
-		incoming = json.RawMessage(restoreMaskedText(string(incoming), string(stored)))
+		text, err := restoreMaskedText(string(incoming), string(stored))
+		if err != nil {
+			return nil, err
+		}
+		incoming = json.RawMessage(text)
 	}
 	return keepOmittedRawSecrets(incoming, stored)
 }
@@ -123,19 +135,21 @@ func restoreRawJSON(incoming, stored json.RawMessage) json.RawMessage {
 // keepOmittedRawSecrets copies into incoming each stored secret that it leaves out, the rule the
 // typed secrets follow. A raw part the body omits altogether is the stored one. A raw secret sent
 // as "" or null is present and stays as sent, and a raw part that is null stays null.
-func keepOmittedRawSecrets(incoming, stored json.RawMessage) json.RawMessage {
+func keepOmittedRawSecrets(incoming, stored json.RawMessage) (json.RawMessage, error) {
 	if len(incoming) == 0 {
-		return stored
+		return stored, nil
 	}
 	storedDoc, _ := decodeDocument(string(stored))
 	doc, _ := decodeDocument(string(incoming))
 	storedMap, storedIsMap := storedDoc.(map[string]any)
 	docMap, docIsMap := doc.(map[string]any)
 	if !storedIsMap || !docIsMap {
-		return incoming
+		return incoming, nil
 	}
-	keepOmittedValue(docMap, storedMap)
-	return json.RawMessage(encodeDocument(docMap))
+	if err := keepOmittedValue(docMap, storedMap); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(encodeDocument(docMap)), nil
 }
 
 // keepOmittedValue adds to in, in place, what stored holds that in leaves out, where that is or
@@ -143,7 +157,7 @@ func keepOmittedRawSecrets(incoming, stored json.RawMessage) json.RawMessage {
 // anywhere, an array included, since the client dropped that part and not one secret in it. A key
 // that is present is followed into an object only: null removes it, and any other value is the
 // client's own.
-func keepOmittedValue(in, stored map[string]any) {
+func keepOmittedValue(in, stored map[string]any) error {
 	for k, sv := range stored {
 		cur, present := in[k]
 		switch {
@@ -154,31 +168,70 @@ func keepOmittedValue(in, stored map[string]any) {
 		case cur == nil:
 			// null removes
 		default:
-			keepOmittedIn(cur, sv)
+			if err := keepOmittedIn(cur, sv); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // keepOmittedIn follows a present value into an object, or into an array whose entries pair with the
 // stored ones by position. An entry pairs only when the two agree on everything but their secrets,
 // the same test that restores a mask, so a reordered or removed entry takes nothing from another.
-func keepOmittedIn(cur, stored any) {
+// An entry that leaves out a stored secret and matches more than one stored entry is ambiguous.
+func keepOmittedIn(cur, stored any) error {
 	switch s := stored.(type) {
 	case map[string]any:
 		if c, ok := cur.(map[string]any); ok {
-			keepOmittedValue(c, s)
+			return keepOmittedValue(c, s)
 		}
 	case []any:
 		c, ok := cur.([]any)
 		if !ok {
-			return
+			return nil
 		}
 		for i := range c {
-			if i < len(s) && encodeDocument(withoutSecrets(c[i])) == encodeDocument(withoutSecrets(s[i])) {
-				keepOmittedIn(c[i], s[i])
+			if i >= len(s) || !sameWithoutSecrets(c[i], s[i]) {
+				continue
+			}
+			if omitsSecret(c[i], s[i]) && ambiguousEntry(c[i], s) {
+				return errAmbiguousEntry
+			}
+			if err := keepOmittedIn(c[i], s[i]); err != nil {
+				return err
 			}
 		}
 	}
+	return nil
+}
+
+// omitsSecret reports whether stored holds a secret that in leaves out, at the same place.
+func omitsSecret(in, stored any) bool {
+	switch s := stored.(type) {
+	case map[string]any:
+		c, _ := in.(map[string]any)
+		for k, sv := range s {
+			cv, present := c[k]
+			if !present {
+				if holdsSecret(k, sv) {
+					return true
+				}
+				continue
+			}
+			if omitsSecret(cv, sv) {
+				return true
+			}
+		}
+	case []any:
+		c, _ := in.([]any)
+		for i, sv := range s {
+			if i < len(c) && omitsSecret(c[i], sv) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // holdsSecret reports whether a value under key is a secret or contains one.
