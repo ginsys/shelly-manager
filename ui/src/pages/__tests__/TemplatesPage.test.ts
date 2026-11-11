@@ -200,6 +200,50 @@ describe('TemplatesPage template form', () => {
     expect(sent.config.auth.pass).toBe('')
   })
 
+  // The network passwords are plain strings: the server reads "" as omitted and keeps them, so the
+  // form must not promise that Clear removes one.
+  it('offers no Clear action for a saved network password', async () => {
+    const networkSchema: ConfigSchema = {
+      type: 'object',
+      'x-apply-supported': true,
+      properties: {
+        network: {
+          type: 'object',
+          title: 'Network',
+          properties: {
+            wifi: {
+              type: 'object',
+              properties: {
+                sta: {
+                  type: 'object',
+                  properties: { pass: { type: 'string', format: 'password', 'x-applicable': true } },
+                },
+              },
+            },
+          },
+        },
+        mqtt: {
+          type: 'object',
+          title: 'MQTT',
+          properties: { pass: { type: 'string', format: 'password', 'x-applicable': true } },
+        },
+      },
+    }
+    const saved = {
+      id: 10, name: 'net', description: '', scope: 'global', created_at: '', updated_at: '',
+      config: {}, stored_secrets: ['network.wifi.sta.pass', 'mqtt.pass'],
+    }
+    vi.mocked(getConfigSchema).mockResolvedValue(networkSchema)
+    vi.mocked(listTemplates).mockResolvedValue([saved] as any)
+    const wrapper = mountPage()
+    await openSavedTemplate(wrapper)
+    await openSection(wrapper, 'network')
+    await openSection(wrapper, 'mqtt')
+    expect(wrapper.find('[data-path="mqtt.pass"] [data-action="clear-secret"]').exists()).toBe(true)
+    expect(wrapper.find('[data-path="network.wifi.sta.pass"]').exists()).toBe(true)
+    expect(wrapper.find('[data-path="network.wifi.sta.pass"] [data-action="clear-secret"]').exists()).toBe(false)
+  })
+
   // The wifi password is not a required field of any schema. Setting another field and saving keeps
   // it, because the server keeps a password the body leaves out.
   it('a config edit that leaves out a saved password the schema does not require still saves', async () => {
