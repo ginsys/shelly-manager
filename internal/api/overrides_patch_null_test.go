@@ -1,0 +1,147 @@
+package api
+
+import (
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// PATCH on the device overrides follows the JSON merge patch rule: null removes the field.
+// These tests cover a plain field, a secret, a nested secret, a whole section and the casing.
+
+func TestPatchOverridesNullRemovesAPlainField(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"server":"mqtt.example:1883","user":"iot","pass":"x"}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"server":null}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.MQTT)
+	assert.Nil(t, stored.MQTT.Server, "null removes the field")
+	require.NotNil(t, stored.MQTT.User, "a field the body leaves out stays")
+	assert.Equal(t, "iot", *stored.MQTT.User)
+	require.NotNil(t, stored.MQTT.Password)
+	assert.Equal(t, "x", *stored.MQTT.Password)
+}
+
+func TestPatchOverridesNullRemovesASecretSoTheTemplateShowsThrough(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	svc := handler.ConfigService.ConfigurationSvc
+	tmplID := newKeepTemplate(t, handler, `{"mqtt":{"user":"iot","pass":"template-secret"}}`)
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"device-secret"}}`)
+	require.NoError(t, svc.SetDeviceTemplates(id, []uint{tmplID}))
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"pass":null}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := svc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.MQTT)
+	assert.Nil(t, stored.MQTT.Password, "the override no longer pins the secret")
+
+	desired, _, err := svc.GetDesiredConfig(id)
+	require.NoError(t, err)
+	require.NotNil(t, desired.MQTT.Password)
+	assert.Equal(t, "template-secret", *desired.MQTT.Password)
+}
+
+func TestPatchOverridesNullRemovesANestedSecret(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"network":{"wifi":{"sta":{"ssid":"home","pass":"device-secret"}}}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"network":{"wifi":{"sta":{"pass":null}}}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.Network.WiFi.STA)
+	assert.Nil(t, stored.Network.WiFi.STA.Password)
+	require.NotNil(t, stored.Network.WiFi.STA.SSID)
+	assert.Equal(t, "home", *stored.Network.WiFi.STA.SSID)
+}
+
+func TestPatchOverridesNullRemovesAWholeSection(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"x"},"led":{"power_indication":false}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":null}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.Nil(t, stored.MQTT, "the whole section is removed")
+	assert.NotNil(t, stored.LED, "another section stays")
+}
+
+func TestPatchOverridesNullIsReadWithoutRegardToCase(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"x"}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"MQTT":{"PASS":null}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.Nil(t, stored.MQTT.Password)
+}
+
+func TestPatchOverridesNullForAFieldThatIsNotStoredChangesNothing(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot"}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"pass":null,"nonsense":null},"auth":{"pass":null}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.MQTT.User)
+	assert.Equal(t, "iot", *stored.MQTT.User)
+	assert.Nil(t, stored.MQTT.Password)
+}
+
+// A secret path takes four values on PATCH, as on PUT: omitted keeps the stored value, "" clears
+// it, the mask restores it and null removes it.
+func TestPatchOverridesSecretTakesFourValues(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		wantSet  bool
+		wantPass string
+	}{
+		{"omitted keeps", `{"mqtt":{"user":"iot2"}}`, true, "x"},
+		{"empty string clears", `{"mqtt":{"pass":""}}`, true, ""},
+		{"mask restores", `{"mqtt":{"pass":"********"}}`, true, "x"},
+		{"null removes", `{"mqtt":{"pass":null}}`, false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			handler, cleanup := setupTestHandler(t)
+			defer cleanup()
+			id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"x"}}`)
+
+			w := sendOverrides(t, handler, "PATCH", id, tc.body)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.NotContains(t, w.Body.String(), `"x"`, "a stored secret never leaves the API")
+
+			stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+			require.NoError(t, err)
+			require.NotNil(t, stored.MQTT)
+			if !tc.wantSet {
+				assert.Nil(t, stored.MQTT.Password)
+				return
+			}
+			require.NotNil(t, stored.MQTT.Password)
+			assert.Equal(t, tc.wantPass, *stored.MQTT.Password)
+		})
+	}
+}

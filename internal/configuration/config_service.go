@@ -359,7 +359,9 @@ func (s *ConfigurationService) GetDeviceOverrides(deviceID uint) (*DeviceConfigu
 	return &overrides, nil
 }
 
-func (s *ConfigurationService) PatchDeviceOverrides(deviceID uint, patch *DeviceConfiguration) error {
+// PatchDeviceOverrides merges patch into the stored overrides. A path in removed was sent as JSON
+// null: the merge leaves it out, and it is removed from the result so the device inherits it again.
+func (s *ConfigurationService) PatchDeviceOverrides(deviceID uint, patch *DeviceConfiguration, removed [][]string) error {
 	existing, err := s.GetDeviceOverrides(deviceID)
 	if err != nil {
 		return err
@@ -375,7 +377,12 @@ func (s *ConfigurationService) PatchDeviceOverrides(deviceID uint, patch *Device
 		return fmt.Errorf("failed to merge overrides: %w", err)
 	}
 
-	return s.SetDeviceOverrides(deviceID, result.Config)
+	merged, err := RemovePaths(result.Config, removed)
+	if err != nil {
+		return err
+	}
+
+	return s.SetDeviceOverrides(deviceID, merged)
 }
 
 func (s *ConfigurationService) ClearDeviceOverrides(deviceID uint) error {
