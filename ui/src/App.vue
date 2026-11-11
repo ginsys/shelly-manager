@@ -2,8 +2,8 @@
   <div>
     <div v-if="showBanner" class="version-banner">
       <strong>UI refresh recommended:</strong>
-      The API has changed since this UI was built.
-      <span class="hint">Dev: run <code>make ui-dev</code>. Production: run <code>make ui-build</code> then restart the server.</span>
+      This UI was built from a different commit than the server.
+      <span class="hint">Dev: run <code>make ui-dev</code>. Production: run <code>make ui-build</code>, then restart the server.</span>
       <button class="banner-btn" @click="reload">Reload UI</button>
       <button class="banner-btn subtle" @click="dismiss">Dismiss</button>
     </div>
@@ -14,6 +14,7 @@
 <script setup lang="ts">
 import MainLayout from './layouts/MainLayout.vue'
 import api from './api/client'
+import { shouldShowVersionBanner } from './utils/version-banner'
 import { onMounted, ref } from 'vue'
 
 // Expose build metadata; Vite injects __UI_BUILD__ at build time.
@@ -41,10 +42,9 @@ onMounted(async () => {
     if (res.data && res.data.success && res.data.data) {
       const apiInfo = res.data.data
       const uiBuild = (window as any).__UI_BUILD__ || {}
-      // Heuristic: if UI build time is older than server start, suggest refresh
-      const apiStarted = Date.parse(apiInfo.server_started_at || '') || 0
-      const uiBuilt = Date.parse(uiBuild.build_time || '') || 0
-      if (uiBuilt && apiStarted && uiBuilt < apiStarted) {
+      // Compare the git revision each side was built from. A side with no revision (a dev UI, or
+      // a server built without version control information) shows no banner.
+      if (shouldShowVersionBanner(uiBuild.git_sha, apiInfo.git_sha)) {
         showBanner.value = true
       }
     }

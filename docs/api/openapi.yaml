@@ -737,6 +737,9 @@ components:
         server_started_at:
           type: string
           format: date-time
+        git_sha:
+          type: string
+          description: The git revision the server binary was built from. Empty when the build carries no version control information (for example `go run` or `-buildvcs=false`). The web UI compares it with its own build revision.
         database_provider_name:
           type: string
           description: Present when the database layer reports its provider

@@ -38,6 +38,8 @@ type Handler struct {
 	AdminAPIKey string
 	// Version/banner support
 	serverStartedAt time.Time
+	// gitSHA is the revision this binary was built from, or "" when the build carries none.
+	gitSHA string
 	// background tracks goroutines that handlers start after they answer, such as the cleanup
 	// of expired discovered devices.
 	background sync.WaitGroup
@@ -65,6 +67,7 @@ func NewHandlerWithLogger(db database.DatabaseInterface, svc *service.ShellyServ
 		ConfigService:       configService,
 		logger:              logger,
 		serverStartedAt:     time.Now(),
+		gitSHA:              buildRevision(),
 	}
 }
 
@@ -186,11 +189,14 @@ func (h *Handler) FastHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Version returns minimal API version/build info for UI mismatch banner
+// Version returns minimal API version/build info for UI mismatch banner. git_sha is the revision
+// the server binary was built from; it is empty when the build carries none, and the UI then
+// shows no banner.
 func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{
 		"api_version":       "dev",
 		"server_started_at": h.serverStartedAt.Format(time.RFC3339),
+		"git_sha":           h.gitSHA,
 	}
 	// Try to include database provider info if available
 	if mgr, ok := h.DB.(interface{ GetProviderInfo() (string, string) }); ok {
