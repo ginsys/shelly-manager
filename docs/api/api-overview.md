@@ -145,6 +145,8 @@ Supported devices and settings:
 
 A `PUT` with a `config` replaces the config, except for secrets. A secret the body leaves out keeps its stored value, whether or not the section around it is in the body. A secret sent as the mask `********` takes the stored value, and the mask is never stored (a `POST` drops it). An empty string clears the secret. JSON `null` removes it (the JSON merge patch convention, RFC 7396): on the device overrides, the device then inherits the secret of its templates again, which is what the editor's Reset sends. So a secret path takes four values: omitted keeps the stored value, `""` clears it, the mask restores it and `null` removes it. The device overrides `PUT` follows the same rule, and an empty override secret is kept as empty, so it still beats the secret of a template. **Limit:** the station and access point passwords of the `network.wifi` part are plain strings, so an empty string cannot be told from a missing one. There an empty value keeps the stored password. Send `null` to clear one. `PATCH` on the device overrides merges into the stored overrides, so it keeps every pointer secret it leaves out. Its merge drops the plain `network.wifi` passwords, a defect tracked in ginsys/shelly-manager#435.
 
+A `device_type` template names a model from `GET /api/v1/config/device-types`. `POST /api/v1/config/templates/new` refuses a `device_type` that is not in that list with 400 `VALIDATION_FAILED` and a `device_type` entry in `error.details.fields`, and stores nothing. An empty `device_type` on a `device_type` template is refused as before, and a `global` or `group` template ignores the field. `PUT /api/v1/config/templates/new/{id}` never changes the type of a template. It refuses a `device_type` in the body only when it differs from the stored type and is not in the list, so a template stored with another type stays editable. Only these two routes check the type. The older `/api/v1/config/templates` routes, the startup migration and the SMA import only require a `device_type` template to have a type, and accept any non-empty one.
+
 **Template Model:**
 ```json
 {
@@ -183,6 +185,7 @@ A `PUT` with a `config` replaces the config, except for secrets. A secret the bo
 | POST | `/api/v1/configuration/convert-to-typed` | Convert raw to typed |
 | POST | `/api/v1/configuration/convert-to-raw` | Convert typed to raw |
 | GET | `/api/v1/config/schema` | Get configuration schema. With `?device_type=<model>` or `?device_id=<id>`: the stored-configuration schema for that model, with each field marked `x-applicable` when apply can write it. With `?scope=global` or `?scope=group`: the schema of such a template, every stored section |
+| GET | `/api/v1/config/device-types` | List the models a `device_type` template can name. `data.device_types` holds `{device_type, name, generation}` for each of the six supported Gen1 models (`SHPLG-S`, `SHPLG-1`, `SHSW-1`, `SHSW-PM`, `SHSW-25`, `SHIX3-1`) |
 | POST | `/api/v1/configuration/bulk-validate` | Bulk validate configs |
 
 ---
