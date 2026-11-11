@@ -512,13 +512,12 @@ func hasAuthPassword(config *configuration.DeviceConfiguration) bool {
 // none" (a form that requires one) without ever receiving the value.
 const secretMask = "********"
 
-// secretSlot reads and writes one secret of a configuration. The fields differ in type (a pointer
-// in most sections, a plain string in the Network part), so a slot hides that. Setting "" clears it.
+// secretSlot reads and writes one secret of a configuration. Setting "" clears it.
 type secretSlot struct {
 	get func() string
 	set func(string)
-	// present is true when the body names the secret at all. A pointer slot tells an omitted
-	// secret (nil) from an empty one; a plain string cannot, so there "" counts as omitted.
+	// present is true when the body names the secret at all: an omitted secret is nil, an empty
+	// one is not.
 	present func() bool
 	// put stores v even when it is "", where set("") removes a pointer secret. An empty override
 	// secret is a value: it keeps beating the secret of a template.
@@ -545,15 +544,6 @@ func ptrSlot(p **string) secretSlot {
 	}
 }
 
-func strSlot(p *string) secretSlot {
-	return secretSlot{
-		present: func() bool { return *p != "" },
-		get:     func() string { return *p },
-		set:     func(v string) { *p = v },
-		put:     func(v string) { *p = v },
-	}
-}
-
 // secretSlots lists every secret of a configuration by its JSON path. A section that is absent has
 // no slot. Redacting, masking and restoring all walk this one list, so a new secret field is added
 // in one place, and secret_invariant_test.go fails for a field named like a secret that is not here.
@@ -577,10 +567,10 @@ func secretSlots(config *configuration.DeviceConfiguration) map[string]secretSlo
 	}
 	if config.Network != nil && config.Network.WiFi != nil {
 		if sta := config.Network.WiFi.STA; sta != nil {
-			slots["network.wifi.sta.pass"] = strSlot(&sta.Password)
+			slots["network.wifi.sta.pass"] = ptrSlot(&sta.Password)
 		}
 		if ap := config.Network.WiFi.AP; ap != nil {
-			slots["network.wifi.ap.pass"] = strSlot(&ap.Password)
+			slots["network.wifi.ap.pass"] = ptrSlot(&ap.Password)
 		}
 	}
 	return slots

@@ -210,9 +210,8 @@ func TestSecretInvariant_NoResponsePathReturnsASecret(t *testing.T) {
 	assert.JSONEq(t, fullJSON, body, "a read-modify-write of the masked overrides lost or changed a field")
 
 	// PATCH with the mask in every secret slot changes no stored secret. Only the secrets are
-	// compared: the merge of a patch is not what this test is about. The Network part is left out
-	// because mergeInto copies pointer fields only, so any merge, a PATCH included, drops its plain
-	// string and bool fields whatever they hold. That predates this change and is not about secrets.
+	// compared: the merge of a patch is not what this test is about. The Network passwords are
+	// among them, since the Network fields are pointers and the merge keeps them.
 	patch, _, _ := populated(t)
 	maskSecrets(patch)
 	call("patch overrides", handler.PatchDeviceNewOverrides,
@@ -222,9 +221,6 @@ func TestSecretInvariant_NoResponsePathReturnsASecret(t *testing.T) {
 	body = marshalConfig(t, stored)
 	assert.NotContains(t, body, secretMask, "the mask was stored as a value")
 	for _, p := range secrets {
-		if strings.HasPrefix(p, "network.") {
-			continue
-		}
 		assert.Contains(t, body, quoted(p), "a PATCH that sent the mask lost the stored secret %s", p)
 	}
 }
