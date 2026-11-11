@@ -84,36 +84,97 @@ describe('TemplateDetailPage template form', () => {
     expect(wrapper.find('[data-testid="template-save-errors"]').text()).toContain('Unknown key "auto_of"')
   })
 
-  // Save, Cancel and Edit again before the answer: the answer belongs to the first edit.
-  it('a save error that arrives after the edit was cancelled does not show in the next edit', async () => {
-    const pending = deferred<any>()
-    vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
-    const wrapper = mountPage()
+  const editDisabled = (wrapper: ReturnType<typeof mountPage>) =>
+    toolbarButton(wrapper, 'Edit').attributes('disabled') !== undefined
+
+  async function startSaveThenCancel(wrapper: ReturnType<typeof mountPage>) {
     await flushPromises()
     await toolbarButton(wrapper, 'Edit').trigger('click')
     await flushPromises()
     await wrapper.find('[data-testid="save-template"]').trigger('click')
     await toolbarButton(wrapper, 'Cancel').trigger('click')
-    await toolbarButton(wrapper, 'Edit').trigger('click')
-    await flushPromises()
+  }
+
+  // Save, then Cancel before the answer: the answer belongs to the cancelled edit. Edit stays off
+  // until the save has settled, so no new edit can be open when the answer arrives.
+  it('a save error that arrives after the edit was cancelled shows nowhere', async () => {
+    const pending = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await startSaveThenCancel(wrapper)
+    expect(editDisabled(wrapper)).toBe(true)
     pending.reject(refusal())
+    await flushPromises()
+    expect(editDisabled(wrapper)).toBe(false)
+    expect(wrapper.find('[data-testid="template-save-errors"]').exists()).toBe(false)
+    await toolbarButton(wrapper, 'Edit').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="template-save-errors"]').exists()).toBe(false)
   })
 
-  it('a save that finishes after the edit was cancelled does not close the next edit', async () => {
+  it('a save that finishes after the edit was cancelled leaves the page out of edit mode', async () => {
     const pending = deferred<any>()
     vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
     const wrapper = mountPage()
-    await flushPromises()
-    await toolbarButton(wrapper, 'Edit').trigger('click')
-    await flushPromises()
-    await wrapper.find('[data-testid="save-template"]').trigger('click')
-    await toolbarButton(wrapper, 'Cancel').trigger('click')
-    await toolbarButton(wrapper, 'Edit').trigger('click')
-    await flushPromises()
+    await startSaveThenCancel(wrapper)
     pending.resolve({ template: stored })
     await flushPromises()
+    expect(wrapper.find('[data-testid="save-template"]').exists()).toBe(false)
+    expect(editDisabled(wrapper)).toBe(false)
+  })
+
+  // Saved 200 over a stored 100, then Cancel. While the refresh after the save is pending, Edit
+  // must not start: it would copy 100, the refresh would then show 200, and an unchanged Save would
+  // send 100 and undo the saved change.
+  it('an edit cannot start while the refresh after a cancelled save is pending', async () => {
+    const stored100 = { ...stored, config: { power_metering: { max_power: 100 } } }
+    const stored200 = { ...stored, config: { power_metering: { max_power: 200 } } }
+    const refresh = deferred<any>()
+    vi.mocked(getTemplate).mockResolvedValueOnce(stored100 as any).mockReturnValueOnce(refresh.promise)
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(save.promise).mockResolvedValue({ template: stored200 } as any)
+    const wrapper = mountPage()
+    await startSaveThenCancel(wrapper)
+    save.resolve({ template: stored200 })
+    await flushPromises()
+    // The refresh GET is pending. Try Edit anyway.
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    refresh.resolve(stored200)
+    await flushPromises()
+    const edit = wrapper.findAll('.toolbar .btn').find(b => b.text() === 'Edit')
+    if (edit) await edit.trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    const second = vi.mocked(updateTemplate).mock.calls[1]
+    expect(second[1]).not.toHaveProperty('config')
+  })
+
+  it('Edit comes back when the refresh after a save fails', async () => {
+    vi.mocked(getTemplate).mockResolvedValueOnce(stored as any).mockRejectedValueOnce(new Error('refresh down'))
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(save.promise)
+    const wrapper = mountPage()
+    await startSaveThenCancel(wrapper)
+    expect(editDisabled(wrapper)).toBe(true)
+    save.resolve({ template: stored })
+    await flushPromises()
+    expect(editDisabled(wrapper)).toBe(false)
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
     expect(wrapper.find('[data-testid="save-template"]').exists()).toBe(true)
+  })
+
+  it('Edit comes back when the save itself fails', async () => {
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(save.promise)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const wrapper = mountPage()
+    await startSaveThenCancel(wrapper)
+    save.reject(new Error('server down'))
+    await flushPromises()
+    expect(editDisabled(wrapper)).toBe(false)
+    alertSpy.mockRestore()
   })
 })
