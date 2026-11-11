@@ -4,7 +4,7 @@
       <router-link class="btn" to="/templates">← Back</router-link>
       <h1 class="title">{{ template?.name || 'Template' }}</h1>
       <div class="spacer" />
-      <button v-if="!editMode" class="btn primary" @click="enterEdit">Edit</button>
+      <button v-if="!editMode" class="btn primary" :disabled="saving" @click="enterEdit">Edit</button>
       <button v-else class="btn" @click="cancelEdit">Cancel</button>
       <button v-if="editMode" class="btn primary" data-testid="save-template" :disabled="!configValid" @click="handleSave">
         Save
@@ -207,8 +207,13 @@ async function load() {
 // if the number is still the same, because the answer of a cancelled edit belongs to nobody.
 let editSession = 0
 
+// True from the Save click until the save and the refresh after it have settled. A new edit would
+// copy the config the page holds, and the refresh then replaces it under that edit, so no edit
+// starts in between. Cancel stays allowed.
+const saving = ref(false)
+
 function enterEdit() {
-  if (!template.value) return
+  if (!template.value || saving.value) return
   editSession++
   configBody.value = clone(template.value.config || {})
   saveErrors.value = []
@@ -239,6 +244,7 @@ async function handleSave() {
   const parsedConfig = clone(configBody.value)
   const session = editSession
   saveErrors.value = []
+  saving.value = true
 
   try {
     // An untouched config is left out of the update: the server keeps the stored one, and the
@@ -250,9 +256,9 @@ async function handleSave() {
     })
 
     if (session !== editSession) {
-      // The edit was cancelled while the save ran. A newer edit keeps its own form; with none
-      // open, the page shows what the server holds now.
-      if (!editMode.value) await load()
+      // The edit was cancelled while the save ran. No edit can have started since (Edit is off
+      // while saving), so the page shows what the server holds now.
+      await load()
       return
     }
     lastAffectedDevices.value = result.affected_devices ?? null
@@ -264,6 +270,8 @@ async function handleSave() {
       return
     }
     alert('Save failed: ' + (e?.message || 'Unknown error'))
+  } finally {
+    saving.value = false
   }
 }
 
