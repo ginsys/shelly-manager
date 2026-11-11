@@ -51,13 +51,15 @@
       :id="inputId"
       type="number"
       class="form-input"
-      :value="overridden ? override : ''"
+      :value="draft ?? (overridden ? override : '')"
       :min="schema.minimum"
       :max="schema.maximum"
       :step="schema.type === 'integer' ? 1 : 'any'"
       :placeholder="placeholder"
       :disabled="readOnly"
       @input="onNumberInput($event.target as HTMLInputElement)"
+      @change="draft = null"
+      @blur="draft = null"
     />
 
     <textarea
@@ -76,11 +78,13 @@
       :id="inputId"
       :type="schema.format === 'password' ? 'password' : 'text'"
       class="form-input"
-      :value="overridden ? override : ''"
+      :value="draft ?? (overridden ? override : '')"
       :maxlength="schema.maxLength"
       :placeholder="placeholder"
       :disabled="readOnly"
       @input="onTextInput(($event.target as HTMLInputElement).value)"
+      @change="draft = null"
+      @blur="draft = null"
     />
 
     <p v-if="!overridden && inheritedValue !== undefined" class="field-inherited">
@@ -90,8 +94,8 @@
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
 
     <div v-if="overridden || canUseDefault" class="field-actions">
-      <button v-if="overridden" type="button" class="link-btn" data-action="reset" @click="emit('reset', path)">Reset</button>
-      <button v-if="canUseDefault" type="button" class="link-btn" data-action="use-default" @click="emit('set', path, clone(schema.default))">
+      <button v-if="overridden" type="button" class="link-btn" data-action="reset" @click="onReset">Reset</button>
+      <button v-if="canUseDefault" type="button" class="link-btn" data-action="use-default" @click="onUseDefault">
         Use default ({{ formatValue(schema.default) }})
       </button>
     </div>
@@ -99,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { SchemaProperty } from '@/api/typedConfig'
 import {
   clone,
@@ -178,7 +182,24 @@ function onEnumChange(value: string) {
   emit('set', props.path, props.schema.enum![Number(value)])
 }
 
+// The text being typed. A value equal to the inherited one is no override, so the editor removes
+// it, and the box would then render empty under the user's hands: typing "plug2" over an inherited
+// "plug" would lose "plug". The draft keeps the box on what was typed until the box is left, or
+// Reset or Use default is chosen.
+const draft = ref<string | null>(null)
+
+function onReset() {
+  draft.value = null
+  emit('reset', props.path)
+}
+
+function onUseDefault() {
+  draft.value = null
+  emit('set', props.path, clone(props.schema.default))
+}
+
 function onNumberInput(input: HTMLInputElement) {
+  draft.value = input.value
   if (input.value === '') {
     emit('reset', props.path)
     return
@@ -187,6 +208,7 @@ function onNumberInput(input: HTMLInputElement) {
 }
 
 function onTextInput(value: string) {
+  draft.value = value
   if (value === '') {
     emit('reset', props.path)
     return

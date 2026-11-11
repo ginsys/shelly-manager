@@ -154,6 +154,33 @@ describe('ConfigEditor', () => {
     expect(lastModel(wrapper)).toEqual({})
   })
 
+  it('typing through the inherited value keeps the typed text in the box', async () => {
+    const wrapper = mountEditor({}, {
+      inherited: { system: { device: { name: 'plug' } }, power_metering: { max_power: 18 } },
+      sources: { 'system.device.name': 'Global', 'power_metering.max_power': 'Global' },
+    })
+    await flushPromises()
+    await openSection(wrapper, 'system')
+    await openSection(wrapper, 'power_metering')
+    const name = wrapper.find('[data-path="system.device.name"] input')
+    // A keystroke fires input only; setValue would also fire change, which ends the draft.
+    const typeInto = async (input: typeof name, text: string) => {
+      ;(input.element as HTMLInputElement).value = text
+      await input.trigger('input')
+    }
+    await typeInto(name, 'plug')
+    expect(lastModel(wrapper)).toEqual({})
+    expect((name.element as HTMLInputElement).value).toBe('plug')
+    await typeInto(name, 'plug2')
+    expect(lastModel(wrapper)).toEqual({ system: { device: { name: 'plug2' } } })
+    const power = wrapper.find('[data-path="power_metering.max_power"] input')
+    await typeInto(power, '18')
+    expect(lastModel(wrapper)).toEqual({ system: { device: { name: 'plug2' } } })
+    expect((power.element as HTMLInputElement).value).toBe('18')
+    await typeInto(power, '180')
+    expect(lastModel(wrapper)).toEqual({ system: { device: { name: 'plug2' } }, power_metering: { max_power: 180 } })
+  })
+
   it('is not valid while the schema request is pending', async () => {
     vi.mocked(getConfigSchema).mockReturnValue(new Promise(() => {}))
     const wrapper = mountEditor({ power_metering: { max_power: 70000 } })
