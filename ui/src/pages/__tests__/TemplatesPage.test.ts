@@ -121,6 +121,65 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
   })
 
+  // The server returns a saved password as has_auth_password and leaves the value out. The auth
+  // section requires a password once it is enabled, so a name-only edit must not be blocked by
+  // the value it cannot see, and must not send the config back without that value.
+  const authSchema: ConfigSchema = {
+    type: 'object',
+    'x-apply-supported': true,
+    properties: {
+      auth: {
+        type: 'object',
+        title: 'Authentication',
+        if: { properties: { enable: { const: true } } },
+        then: { required: ['user', 'pass'] },
+        properties: {
+          enable: { type: 'boolean', 'x-applicable': true },
+          user: { type: 'string', 'x-applicable': true },
+          pass: { type: 'string', 'x-applicable': true },
+        },
+      },
+      power_metering: schema.properties!.power_metering,
+    },
+  }
+  const savedAuthTemplate = {
+    id: 7, name: 'locked', description: '', scope: 'global', created_at: '', updated_at: '',
+    config: { auth: { enable: true, user: 'admin' } }, has_auth_password: true,
+  }
+
+  async function openSavedTemplate(wrapper: ReturnType<typeof mountPage>) {
+    await flushPromises()
+    await wrapper.findAll('.action-btn').find(b => b.text() === 'Edit')!.trigger('click')
+    await flushPromises()
+  }
+
+  it('a name-only edit of a template with a saved password saves and keeps the config out', async () => {
+    vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+    vi.mocked(listTemplates).mockResolvedValue([savedAuthTemplate] as any)
+    vi.mocked(updateTemplate).mockResolvedValue({ template: savedAuthTemplate } as any)
+    const wrapper = mountPage()
+    await openSavedTemplate(wrapper)
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+    await wrapper.find('.modal .form-input[type="text"]').setValue('renamed')
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    expect(updateTemplate).toHaveBeenCalledTimes(1)
+    const sent = vi.mocked(updateTemplate).mock.calls[0][1] as Record<string, unknown>
+    expect(sent.name).toBe('renamed')
+    expect('config' in sent).toBe(false)
+  })
+
+  it('a config edit that leaves out the saved password stays blocked', async () => {
+    vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+    vi.mocked(listTemplates).mockResolvedValue([savedAuthTemplate] as any)
+    const wrapper = mountPage()
+    await openSavedTemplate(wrapper)
+    await openSection(wrapper, 'power_metering')
+    await wrapper.find('[data-path="power_metering.max_power"] input').setValue('1400')
+    // Saving this body would replace the config without the password the server holds.
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+  })
+
   it('shows each field the server refused', async () => {
     vi.mocked(createTemplate).mockRejectedValue(
       new TemplateSaveError('Validation failed', [{ path: 'roller', message: 'SHPLG-S has no roller settings' }]),
