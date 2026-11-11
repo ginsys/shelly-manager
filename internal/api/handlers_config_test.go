@@ -279,6 +279,110 @@ func TestMaskSecrets(t *testing.T) {
 	assert.NotPanics(t, func() { maskSecrets(nil) })
 }
 
+func apSecrets() *configuration.DeviceConfiguration {
+	pass, key := "ap-pass", "ap-key"
+	return &configuration.DeviceConfiguration{
+		WiFi: &configuration.WiFiConfiguration{
+			AccessPoint: &configuration.AccessPointConfig{Password: &pass, Key: &key},
+		},
+	}
+}
+
+// The access point has two secrets, pass and key. Both are redacted and both are masked.
+func TestSecretSlots_CoverTheAccessPointKey(t *testing.T) {
+	masked := apSecrets()
+	maskSecrets(masked)
+	require.NotNil(t, masked.WiFi.AccessPoint.Key)
+	assert.Equal(t, secretMask, *masked.WiFi.AccessPoint.Key)
+	assert.Equal(t, secretMask, *masked.WiFi.AccessPoint.Password)
+
+	redacted := apSecrets()
+	redactSecrets(redacted)
+	assert.Nil(t, redacted.WiFi.AccessPoint.Key)
+	assert.Nil(t, redacted.WiFi.AccessPoint.Password)
+}
+
+// restoreMaskedSecrets turns a secret that came back as the mask into the stored value, and
+// drops it when nothing is stored, so the mask itself is never stored.
+func TestRestoreMaskedSecrets(t *testing.T) {
+	stored := apSecrets()
+	incoming := apSecrets()
+	maskSecrets(incoming)
+	restoreMaskedSecrets(incoming, stored)
+	assert.Equal(t, "ap-pass", *incoming.WiFi.AccessPoint.Password)
+	assert.Equal(t, "ap-key", *incoming.WiFi.AccessPoint.Key)
+
+	none := apSecrets()
+	maskSecrets(none)
+	restoreMaskedSecrets(none, &configuration.DeviceConfiguration{})
+	assert.Nil(t, none.WiFi.AccessPoint.Password)
+	assert.Nil(t, none.WiFi.AccessPoint.Key)
+
+	// A new value is kept as typed.
+	typed := apSecrets()
+	restoreMaskedSecrets(typed, apSecrets())
+	assert.Equal(t, "ap-pass", *typed.WiFi.AccessPoint.Password)
+	assert.NotPanics(t, func() { restoreMaskedSecrets(nil, nil) })
+}
+
+func overridesRequest(t *testing.T, method string, id uint, body string) *http.Request {
+	t.Helper()
+	req := httptest.NewRequest(method, "/api/v1/devices/1/overrides/new", bytes.NewBufferString(body))
+	return mux.SetURLVars(req, map[string]string{"id": strconv.FormatUint(uint64(id), 10)})
+}
+
+// A saved secret in the device overrides shows as the mask, not as nothing, so a form can tell
+// that it is set. Sending the mask back on a save keeps the stored value instead of dropping it.
+func TestDeviceOverrides_SavedSecretShowsAsMaskAndSurvivesASave(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	device := testutil.TestDevice()
+	require.NoError(t, handler.DB.AddDevice(device))
+	svc := handler.ConfigService.ConfigurationSvc
+
+	stored := "saved-secret"
+	user := "admin"
+	enable := true
+	require.NoError(t, svc.SetDeviceOverrides(device.ID, &configuration.DeviceConfiguration{
+		Auth: &configuration.AuthConfiguration{Enable: &enable, Username: &user, Password: &stored},
+	}))
+
+	// GET: the mask, never the value.
+	w := httptest.NewRecorder()
+	handler.GetDeviceNewOverrides(w, overridesRequest(t, "GET", device.ID, ""))
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), secretMask)
+	assert.NotContains(t, w.Body.String(), stored)
+
+	// PUT the body the form would send for an unrelated edit: the mask stays in it.
+	w = httptest.NewRecorder()
+	handler.SetDeviceNewOverrides(w, overridesRequest(t, "PUT", device.ID,
+		`{"auth":{"enable":true,"user":"admin","pass":"`+secretMask+`"},"mqtt":{"port":8883}}`))
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.NotContains(t, w.Body.String(), stored)
+	got, err := svc.GetDeviceOverrides(device.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.Auth.Password)
+	assert.Equal(t, stored, *got.Auth.Password)
+
+	// PATCH with the mask changes nothing either.
+	w = httptest.NewRecorder()
+	handler.PatchDeviceNewOverrides(w, overridesRequest(t, "PATCH", device.ID,
+		`{"auth":{"pass":"`+secretMask+`"}}`))
+	require.Equal(t, http.StatusOK, w.Code)
+	got, err = svc.GetDeviceOverrides(device.ID)
+	require.NoError(t, err)
+	assert.Equal(t, stored, *got.Auth.Password)
+
+	// A new value replaces it, and the mask is never stored as a value.
+	w = httptest.NewRecorder()
+	handler.SetDeviceNewOverrides(w, overridesRequest(t, "PUT", device.ID, `{"auth":{"pass":"new-secret"}}`))
+	require.Equal(t, http.StatusOK, w.Code)
+	got, err = svc.GetDeviceOverrides(device.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "new-secret", *got.Auth.Password)
+}
+
 // The desired configuration keeps only the winning layer of a field, so a device override hides
 // the template value under it. The response also carries the template-only configuration, which
 // is what a reset field falls back to, with a set template secret shown as set and never as its value.

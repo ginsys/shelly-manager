@@ -84,6 +84,8 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 `GET /devices/{id}/desired-config` returns `config` and `sources`: the composed result of the device's templates and overrides, with the layer each value comes from. It also returns `inherited` and `inherited_sources`: the template layers alone, which is what a field falls back to when its override is removed. A field that a template and an override both set shows only the override in `config`, and the template value in `inherited`. A set secret is removed from `config`. In `inherited` it shows as the mask `********`, never as its value, so a client can see that a password is set. `PUT /devices/{id}/templates/new` returns the same two fields beside its `desired_config` and `sources`.
 
+The device overrides routes (`GET`, `PUT` and `PATCH /devices/{id}/overrides/new`) show a saved secret as the same mask `********`. The secrets are the Wi-Fi password, the access point password and key, the MQTT password and the authentication password. A write that sends the mask back keeps the stored secret. If no secret is stored, the field is dropped. The mask is never stored as a value. Any other value replaces the stored secret.
+
 #### Apply and verify the desired configuration
 
 The desired configuration is the composed result of the device's templates and overrides. Neither route takes a request body.

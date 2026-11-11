@@ -81,6 +81,16 @@ describe('config-form validation', () => {
     expect(validateOverrides(authSections, { auth: { user: 'operator' } }, inherited)).toEqual({})
   })
 
+  it('a saved secret that the overrides response masks is not asked for again', () => {
+    // GET overrides gives a set secret as the mask. The body the form edits then holds it, so an
+    // unrelated edit is valid and the save sends the mask back, which keeps the stored value.
+    const saved = { auth: { enable: true, user: 'admin', pass: '********' } }
+    expect(validateOverrides(authSections, saved, {})).toEqual({})
+    // Without it, the section is incomplete: that is the case the mask exists to tell apart.
+    expect(validateOverrides(authSections, { auth: { enable: true, user: 'admin' } }, {}))
+      .toEqual({ 'auth.pass': 'Required' })
+  })
+
   it('then.required is not asked while the if condition fails', () => {
     expect(validateOverrides(authSections, { auth: { enable: false, user: 'admin' } }, {})).toEqual({})
     expect(validateOverrides(authSections, { auth: { user: 'admin' } }, {})).toEqual({})
