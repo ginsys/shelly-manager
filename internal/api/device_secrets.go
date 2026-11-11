@@ -32,13 +32,10 @@ func secretKey(key string) bool {
 }
 
 // secretKeyInText finds a secret-named key in text that is not valid JSON. It follows secretKey: the
-// quoted key contains one of the words anywhere, or ends in "key". A key written with an escape
-// cannot be read without a parser, so any escaped key counts too, and so does a \uXXXX escape
-// anywhere in the text, which could spell a secret word.
-var (
-	secretKeyInText = regexp.MustCompile(`(?i)"[^"]*(?:(?:pass|pwd|psk|secret|token)[^"]*|key|\\[^"]*)"\s*:`)
-	unicodeEscape   = regexp.MustCompile(`(?i)\\u[0-9a-f]{4}`)
-)
+// quoted key contains one of the words anywhere, or ends in "key". A backslash anywhere in such a
+// text counts too (maskJSONText): an escaped quote or a \uXXXX escape can split or spell a secret
+// word, and a text that cannot be parsed cannot be read around them.
+var secretKeyInText = regexp.MustCompile(`(?i)"[^"]*(?:(?:pass|pwd|psk|secret|token)[^"]*|key)"\s*:`)
 
 // secretScalar reports whether a JSON value is one that a secret key can hold: a non-empty string
 // or a number. A number is a secret too ({"auth_pass": 12345678}), so it is masked like a string.
@@ -84,7 +81,7 @@ func maskJSONText(text string) string {
 	}
 	doc, ok := decodeDocument(text)
 	if !ok {
-		if secretKeyInText.MatchString(text) || unicodeEscape.MatchString(text) {
+		if secretKeyInText.MatchString(text) || strings.Contains(text, `\`) {
 			return secretMask
 		}
 		return text
