@@ -1451,6 +1451,21 @@ func (h *Handler) UpdateDeviceAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A client that read the device sends the mask back as the password: it keeps the stored one,
+	// and the mask is never stored. With none stored there is nothing to keep.
+	if authConfig.Password == secretMask {
+		device, getErr := h.DB.GetDevice(uint(id))
+		if getErr != nil {
+			if errors.Is(getErr, gorm.ErrRecordNotFound) {
+				h.responseWriter().WriteNotFoundError(w, r, "Device")
+			} else {
+				h.responseWriter().WriteInternalError(w, r, getErr)
+			}
+			return
+		}
+		authConfig.Password = storedAuthPassword(device.Settings)
+	}
+
 	// Both client builders need a user and a password, so a user without a password would be
 	// stored as enabled auth that is never used. An empty user is how auth is turned off.
 	if authConfig.Username != "" && authConfig.Password == "" {
