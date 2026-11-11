@@ -239,9 +239,20 @@ var writeOnlyApplicablePaths = map[string]bool{
 // that is not named above, and when a named field is no longer both applicable and skipped.
 func TestDeviceSchemaApplicableFieldsAreVerifiedOrNamed(t *testing.T) {
 	comparator := NewConfigComparator()
+	// The comparator checks a rule for every section before it descends into it, so a skip rule
+	// on an ancestor ("location") skips every field below it. Test the path and each ancestor.
+	skippedByVerify := func(path string) bool {
+		parts := strings.Split(path, ".")
+		for n := 1; n <= len(parts); n++ {
+			rule := comparator.findRule(strings.Join(parts[:n], "."))
+			if rule != nil && rule.SkipCompare {
+				return true
+			}
+		}
+		return false
+	}
 	for path := range gen1ApplicablePaths {
-		rule := comparator.findRule(path)
-		skipped := rule != nil && rule.SkipCompare
+		skipped := skippedByVerify(path)
 		if skipped && !writeOnlyApplicablePaths[path] {
 			t.Errorf("%s is applicable but verify skips it; compare it or name it as write-only", path)
 		}
