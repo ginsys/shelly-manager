@@ -154,10 +154,28 @@ func keepOmittedValue(in, stored map[string]any) {
 		case cur == nil:
 			// null removes
 		default:
-			curMap, curIsMap := cur.(map[string]any)
-			storedMap, storedIsMap := sv.(map[string]any)
-			if curIsMap && storedIsMap {
-				keepOmittedValue(curMap, storedMap)
+			keepOmittedIn(cur, sv)
+		}
+	}
+}
+
+// keepOmittedIn follows a present value into an object, or into an array whose entries pair with the
+// stored ones by position. An entry pairs only when the two agree on everything but their secrets,
+// the same test that restores a mask, so a reordered or removed entry takes nothing from another.
+func keepOmittedIn(cur, stored any) {
+	switch s := stored.(type) {
+	case map[string]any:
+		if c, ok := cur.(map[string]any); ok {
+			keepOmittedValue(c, s)
+		}
+	case []any:
+		c, ok := cur.([]any)
+		if !ok {
+			return
+		}
+		for i := range c {
+			if i < len(s) && encodeDocument(withoutSecrets(c[i])) == encodeDocument(withoutSecrets(s[i])) {
+				keepOmittedIn(c[i], s[i])
 			}
 		}
 	}
