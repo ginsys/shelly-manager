@@ -14,7 +14,10 @@ All notable changes to this project are documented here. The project follows Con
   password, and the template form no longer asks for a saved password again
   after an edit. It has a "Clear stored password" action. Limit: the
   `network.wifi.*.pass` fields are plain strings, so an empty value there keeps
-  the stored password and it cannot be cleared through the API. (#395)
+  the stored password and it cannot be cleared through the API, and the form
+  offers no Clear action for them. The rule covers the template routes and
+  `PUT` on the overrides. `PATCH` on the overrides keeps a pointer secret, but
+  its merge still drops the plain `network.wifi.*.pass` fields (#435). (#395)
 - The device routes no longer return saved secrets in clear. The list, get, add
   and update routes and the configuration reads (`/config`, `/config/import`,
   `/config/current`) show a secret held in `settings`, `overrides`,
