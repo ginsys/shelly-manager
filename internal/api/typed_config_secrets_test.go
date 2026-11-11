@@ -313,6 +313,37 @@ func TestTypedConfigRoutes_ClearingOneArraySecretKeepsTheOther(t *testing.T) {
 	}
 }
 
+// An array entry that leaves out its secret keeps it when it is the stored entry at its position
+// (compared without secrets), and takes nothing when it is not. An explicit "" removes it.
+func TestTypedConfigRoutes_ArrayEntryOmittingItsSecretKeepsIt(t *testing.T) {
+	const stored = `{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[` +
+		`{"name":"alice","password":"t7pe-alice-s3cret"},{"name":"bob","password":"t7pe-bob-s3cret"}]}}`
+	cases := map[string]struct {
+		accounts string
+		alice    bool
+		bob      bool
+	}{
+		"both omit":     {`[{"name":"alice"},{"name":"bob"}]`, true, true},
+		"swapped":       {`[{"name":"bob"},{"name":"alice"}]`, false, false},
+		"first removed": {`[{"name":"bob"}]`, false, false},
+		"empty clears":  {`[{"name":"alice","password":""},{"name":"bob"}]`, false, true},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, stored)
+
+			body := `{"configuration":{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":` + c.accounts + `}}}`
+			put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+			require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+			got := storedConfig(t, h, id)
+			assert.Equal(t, c.alice, strings.Contains(got, "t7pe-alice-s3cret"), "stored: %s", got)
+			assert.Equal(t, c.bob, strings.Contains(got, "t7pe-bob-s3cret"), "stored: %s", got)
+		})
+	}
+}
+
 // A raw part the body omits is the stored one, an array secret included.
 func TestTypedConfigRoutes_OmittedRawKeepsArraySecrets(t *testing.T) {
 	h, cleanup := typedHandler(t)
