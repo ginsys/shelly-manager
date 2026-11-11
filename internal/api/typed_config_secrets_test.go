@@ -96,6 +96,41 @@ func TestTypedConfigRoutes_Gen1CredentialsSurviveASave(t *testing.T) {
 	}
 }
 
+// The typed name wins where a configuration has both spellings, even when its value is null: the
+// device spelling then never takes its place, in the typed read or in a save.
+func TestConvertToTypedConfig_PassWinsOverTheDeviceSpelling(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	device := testutil.TestDevice()
+	require.NoError(t, h.DB.AddDevice(device))
+
+	cases := map[string]struct {
+		stored string
+		wifi   *string
+		auth   *string
+	}{
+		"device spelling alone": {
+			`{"wifi_sta":{"key":"dev-key"},"login":{"password":"dev-pwd"}}`, strPtr("dev-key"), strPtr("dev-pwd")},
+		"both spellings: pass wins": {
+			`{"wifi_sta":{"pass":"typed-key","key":"dev-key"},"login":{"pass":"typed-pwd","password":"dev-pwd"}}`, strPtr("typed-key"), strPtr("typed-pwd")},
+		"pass null: no fallback": {
+			`{"wifi_sta":{"pass":null,"key":"dev-key"},"login":{"pass":null,"password":"dev-pwd"}}`, nil, nil},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			device.Settings = "{}"
+			typed, _, err := h.convertToTypedConfig(json.RawMessage(c.stored), device)
+			require.NoError(t, err)
+			require.NotNil(t, typed.WiFi)
+			require.NotNil(t, typed.Auth)
+			assert.Equal(t, c.wifi, typed.WiFi.Password)
+			assert.Equal(t, c.auth, typed.Auth.Password)
+		})
+	}
+}
+
+func strPtr(s string) *string { return &s }
+
 func typedHandler(t *testing.T) (*Handler, func()) {
 	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)

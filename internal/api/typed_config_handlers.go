@@ -948,6 +948,18 @@ func (h *Handler) getDeviceCapabilities(model string, generation int) []string {
 
 // Helper conversion functions
 
+// passwordField reads a password under its typed name, or under the device's own name where the
+// typed name is not in the map. A typed name that is present wins even when its value is not a
+// string, so a null "pass" never lets the device spelling take its place.
+func passwordField(data map[string]interface{}, typed, device string) (string, bool) {
+	if v, present := data[typed]; present {
+		s, ok := v.(string)
+		return s, ok
+	}
+	s, ok := data[device].(string)
+	return s, ok
+}
+
 func (h *Handler) convertWiFiConfig(data map[string]interface{}) (*configuration.WiFiConfiguration, []string) {
 	wifi := &configuration.WiFiConfiguration{}
 	var warnings []string
@@ -962,10 +974,8 @@ func (h *Handler) convertWiFiConfig(data map[string]interface{}) (*configuration
 			wifi.SSID = configuration.StringPtr(ssid)
 		}
 		// The device spells the station password "key"; "pass" wins where a configuration has both.
-		if pass, ok := staData["pass"].(string); ok {
+		if pass, ok := passwordField(staData, "pass", "key"); ok {
 			wifi.Password = configuration.StringPtr(pass)
-		} else if key, ok := staData["key"].(string); ok {
-			wifi.Password = configuration.StringPtr(key)
 		}
 		if ipv4mode, ok := staData["ipv4mode"].(string); ok {
 			wifi.IPv4Mode = configuration.StringPtr(ipv4mode)
@@ -1102,10 +1112,8 @@ func (h *Handler) convertAuthConfig(data map[string]interface{}) (*configuration
 	}
 
 	// The device spells the login password "password"; "pass" wins where a configuration has both.
-	if pass, ok := data["pass"].(string); ok {
+	if pass, ok := passwordField(data, "pass", "password"); ok {
 		auth.Password = configuration.StringPtr(pass)
-	} else if password, ok := data["password"].(string); ok {
-		auth.Password = configuration.StringPtr(password)
 	}
 
 	if realm, ok := data["realm"].(string); ok {
