@@ -171,6 +171,8 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 // rememberOverrides returns held with every key of body added, objects merged deeply. It is the
 // memory of what an override body has held: a key stays once it was there, even after Reset
 // removes it from the body. It skips the keys of UNSAFE_KEYS, so it never writes through a prototype.
+// A null, a scalar or a list in place of a section the memory holds as an object leaves that object
+// alone: the JSON view passes through such bodies while the user types, and they must not erase it.
 export function rememberOverrides(held: ConfigBody, body: ConfigBody): ConfigBody {
   const out: ConfigBody = clone(held)
   const add = (target: any, source: any) => {
@@ -179,7 +181,7 @@ export function rememberOverrides(held: ConfigBody, body: ConfigBody): ConfigBod
       if (isPlainObject(value)) {
         if (!isPlainObject(target[key])) target[key] = {}
         add(target[key], value)
-      } else {
+      } else if (!isPlainObject(target[key])) {
         target[key] = value
       }
     }
