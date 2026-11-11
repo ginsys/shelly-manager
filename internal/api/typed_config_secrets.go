@@ -143,13 +143,22 @@ func keepOmittedRawSecrets(incoming, stored json.RawMessage) (json.RawMessage, e
 	doc, _ := decodeDocument(string(incoming))
 	storedMap, storedIsMap := storedDoc.(map[string]any)
 	docMap, docIsMap := doc.(map[string]any)
-	if !storedIsMap || !docIsMap {
-		return incoming, nil
+	if storedIsMap && docIsMap {
+		if err := keepOmittedValue(docMap, storedMap); err != nil {
+			return nil, err
+		}
+		return json.RawMessage(encodeDocument(docMap)), nil
 	}
-	if err := keepOmittedValue(docMap, storedMap); err != nil {
-		return nil, err
+	// A part that is an array at the top pairs its entries by position, as one inside an object does.
+	storedList, storedIsList := storedDoc.([]any)
+	docList, docIsList := doc.([]any)
+	if storedIsList && docIsList {
+		if err := keepOmittedIn(docList, storedList); err != nil {
+			return nil, err
+		}
+		return json.RawMessage(encodeDocument(docList)), nil
 	}
-	return json.RawMessage(encodeDocument(docMap)), nil
+	return incoming, nil
 }
 
 // keepOmittedValue adds to in, in place, what stored holds that in leaves out, where that is or
@@ -179,7 +188,8 @@ func keepOmittedValue(in, stored map[string]any) error {
 // keepOmittedIn follows a present value into an object, or into an array whose entries pair with the
 // stored ones by position. An entry pairs only when the two agree on everything but their secrets,
 // the same test that restores a mask, so a reordered or removed entry takes nothing from another.
-// An entry that leaves out a stored secret and matches more than one stored entry is ambiguous.
+// An entry is ambiguous when it matches more than one stored entry and those disagree at a secret it
+// leaves out.
 func keepOmittedIn(cur, stored any) error {
 	switch s := stored.(type) {
 	case map[string]any:
@@ -195,7 +205,7 @@ func keepOmittedIn(cur, stored any) error {
 			if i >= len(s) || !sameWithoutSecrets(c[i], s[i]) {
 				continue
 			}
-			if omitsSecret(c[i], s[i]) && ambiguousEntry(c[i], s) {
+			if ambiguousEntry(c[i], s, true) {
 				return errAmbiguousEntry
 			}
 			if err := keepOmittedIn(c[i], s[i]); err != nil {
@@ -204,34 +214,6 @@ func keepOmittedIn(cur, stored any) error {
 		}
 	}
 	return nil
-}
-
-// omitsSecret reports whether stored holds a secret that in leaves out, at the same place.
-func omitsSecret(in, stored any) bool {
-	switch s := stored.(type) {
-	case map[string]any:
-		c, _ := in.(map[string]any)
-		for k, sv := range s {
-			cv, present := c[k]
-			if !present {
-				if holdsSecret(k, sv) {
-					return true
-				}
-				continue
-			}
-			if omitsSecret(cv, sv) {
-				return true
-			}
-		}
-	case []any:
-		c, _ := in.([]any)
-		for i, sv := range s {
-			if i < len(c) && omitsSecret(c[i], sv) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // holdsSecret reports whether a value under key is a secret or contains one.
@@ -250,7 +232,8 @@ func holdsSecret(key string, v any) bool {
 			}
 		}
 	}
-	return secretKey(key) && secretScalar(v)
+	// The mask is never a saved secret: a stored mask is dropped, not copied back.
+	return secretKey(key) && secretScalar(v) && v != secretMask
 }
 
 // storedTypedConfig returns the typed form of the configuration stored for a device, or nil when
