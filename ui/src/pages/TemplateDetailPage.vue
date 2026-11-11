@@ -72,6 +72,8 @@
             :device-type="schemaTarget?.deviceType"
             :scope="schemaTarget?.scope"
             :inherited="savedSecrets"
+            layer
+            :kept="keptSecrets"
           />
           <ul v-if="saveErrors.length > 0" class="save-errors" data-testid="template-save-errors">
             <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>
@@ -159,11 +161,14 @@ const lastAffectedDevices = ref<number | null>(null)
 // The body the template had when Edit opened. It is the same until the form changes it.
 const configUntouched = computed(() =>
   template.value !== null && sameValue(configBody.value, template.value.config || {}))
-// While the body is untouched, a saved password counts as given for the required check. Once
-// the form changes the body, a save would replace the config without the password the server
-// holds, so the field is required again and the password must be entered.
+// While the body is untouched, the saved passwords show as a mask and the update leaves the config
+// out. Once the form changes the body, a save would replace the config without the password the
+// server holds, so a field that held a password is required again (`kept`) and it must be
+// entered. A template is a layer: no other field is required for being incomplete.
 const savedSecrets = computed(() =>
   template.value && configUntouched.value ? savedSecretBaseline(template.value) : null)
+const keptSecrets = computed(() =>
+  template.value && !configUntouched.value ? savedSecretBaseline(template.value) : null)
 
 const showAssignDialog = ref(false)
 const assign = ref<{ deviceId: number | null; position: number | null }>({ deviceId: null, position: null })
@@ -292,7 +297,9 @@ async function handleDelete() {
 
 async function copyConfig() {
   try {
-    await navigator.clipboard.writeText(configJson.value)
+    // In edit mode the body being edited is the config on screen, not the saved one.
+    const text = editMode.value ? JSON.stringify(configBody.value, null, 2) : configJson.value
+    await navigator.clipboard.writeText(text)
   } catch {
     alert('Copy failed')
   }
