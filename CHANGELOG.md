@@ -11,6 +11,11 @@ All notable changes to this project are documented here. The project follows Con
   and validation routes, the drift schedules and the drift reports under
   `/api/v1/config`. They answered any request before. Without a configured key
   they stay open. (ginsys/shelly-manager#465)
+- A forced SMA import that replaces a template now recomputes the devices that use it.
+  Before, a device outside the archive kept its old desired configuration and stayed
+  marked applied, so the restored template had no effect on it. The recompute runs in the
+  import transaction and marks each device pending. A device the archive restored with its
+  own desired configuration keeps it, and a recompute failure fails the whole import. (#410)
 - The configuration template routes, the device template assignment routes and
   `GET /api/v1/config/schema` now need the admin key when one is configured.
   They answered any request before. Without a configured key they stay open.
