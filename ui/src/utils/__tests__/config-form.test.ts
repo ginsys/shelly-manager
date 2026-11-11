@@ -88,6 +88,29 @@ describe('config-form validation', () => {
       .toEqual({})
   })
 
+  // A template is one layer: another layer can give the field, and the server accepts the body.
+  it('a template layer is not required to be complete, except for a saved value it would drop', () => {
+    const layer = { kept: null }
+    const partial = { auth: { enable: true } }
+    expect(validateOverrides(authSections, partial, {})).toEqual({ 'auth.user': 'Required', 'auth.pass': 'Required' })
+    expect(validateOverrides(authSections, partial, {}, null, layer)).toEqual({})
+    // The same holds for a section-level required list.
+    const wifi: Record<string, SchemaProperty> = {
+      wifi: { type: 'object', required: ['ssid'], properties: { ssid: { type: 'string' }, ipv4_method: { type: 'string' } } },
+    }
+    expect(validateOverrides(wifi, { wifi: { ipv4_method: 'dhcp' } }, {}, null, layer)).toEqual({})
+    // A password the server holds is kept out of the body: a changed body must give it again.
+    const kept = { auth: { pass: '********' } }
+    expect(validateOverrides(authSections, partial, {}, null, { kept })).toEqual({ 'auth.pass': 'Required' })
+    expect(validateOverrides(authSections, { auth: { enable: true, pass: 'new' } }, {}, null, { kept })).toEqual({})
+    // Values are still checked.
+    const range: Record<string, SchemaProperty> = {
+      power_metering: { type: 'object', properties: { max_power: { type: 'integer', minimum: 0 } } },
+    }
+    expect(validateOverrides(range, { power_metering: { max_power: -1 } }, {}, null, layer))
+      .toEqual({ 'power_metering.max_power': 'Must be at least 0' })
+  })
+
   it('a template secret that arrives masked still counts as the value the section inherits', () => {
     // The server never sends a set password: the inherited configuration holds a mask in its place.
     const inherited = { auth: { enable: true, user: 'admin', pass: '********' } }

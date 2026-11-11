@@ -130,6 +130,10 @@ interface Props {
   // used only when neither deviceId nor deviceType is given.
   scope?: string
   inherited?: ConfigBody | null
+  // True when the body is one layer of the configuration (a template): a field another layer can
+  // supply is not required. `kept` holds saved values the body must not drop (see validateOverrides).
+  layer?: boolean
+  kept?: ConfigBody | null
   sources?: Record<string, string>
   // The keys the override body has held since it was loaded (see `held` below). Optional.
   held?: ConfigBody
@@ -194,7 +198,8 @@ const baseline = computed<ConfigBody>(() => props.inherited || {})
 
 const errors = computed<Record<string, string>>(() =>
   schema.value?.properties
-    ? validateOverrides(schema.value.properties, localConfig.value, baseline.value, held.value)
+    ? validateOverrides(schema.value.properties, localConfig.value, baseline.value, held.value,
+        props.layer ? { kept: props.kept } : undefined)
     : {},
 )
 

@@ -197,11 +197,18 @@ export function rememberOverrides(held: ConfigBody, body: ConfigBody): ConfigBod
 // lost the last one by Reset is still checked: saving would remove what was saved, and the
 // effective configuration must stay complete. A section nobody touched is not checked, so a
 // template that leaves it incomplete does not block Save.
+//
+// A template is one layer of the configuration: another layer can supply a field this one leaves
+// out, and the server accepts such a body. With `layer` a field is therefore never required for
+// being incomplete. The one exception is `layer.kept`, a body that holds a saved value the server
+// keeps out of the template body (a password): saving a changed body would drop that value, so a
+// field it holds must be given again.
 export function validateOverrides(
   sections: Record<string, SchemaProperty>,
   overrides: ConfigBody,
   inherited: ConfigBody | null | undefined,
   held?: ConfigBody | null,
+  layer?: { kept: ConfigBody | null | undefined },
 ): Record<string, string> {
   const errors: Record<string, string> = {}
   const walk = (schema: SchemaProperty, path: ConfigPath) => {
@@ -215,6 +222,7 @@ export function validateOverrides(
         walk(child, [...path, key])
       }
       const required = requiredKeys(schema, path, overrides, inherited)
+        .filter(key => !layer || getAt(layer.kept, [...path, key]) !== undefined)
       const touched = (node: any) => isPlainObject(node) && Object.keys(node).length > 0
       if (required.length > 0 && (touched(own) || touched(getAt(held, path)))) {
         for (const key of required) {

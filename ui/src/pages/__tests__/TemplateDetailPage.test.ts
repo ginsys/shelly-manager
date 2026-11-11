@@ -85,6 +85,26 @@ describe('TemplateDetailPage template form', () => {
     expect(wrapper.find('[data-testid="template-save-errors"]').text()).toContain('Unknown key "auto_of"')
   })
 
+  // Copy copies the config on screen: in edit mode that is the body being edited.
+  it('Copy copies the edited body in edit mode and the saved one otherwise', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    vi.mocked(getTemplate).mockResolvedValue({ ...stored, config: { power_metering: { max_power: 100 } } } as any)
+    const wrapper = mountPage()
+    await flushPromises()
+    const copy = () => wrapper.findAll('.header-row .btn').find(b => b.text() === 'Copy')!.trigger('click')
+    await copy()
+    expect(JSON.parse(writeText.mock.calls[0][0])).toEqual({ power_metering: { max_power: 100 } })
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    if (!wrapper.find('[data-section="power_metering"] .section-content').exists()) {
+      await wrapper.find('[data-section="power_metering"] .section-header').trigger('click')
+    }
+    await wrapper.find('[data-path="power_metering.max_power"] input').setValue('1400')
+    await copy()
+    expect(JSON.parse(writeText.mock.calls[1][0])).toEqual({ power_metering: { max_power: 1400 } })
+  })
+
   const editDisabled = (wrapper: ReturnType<typeof mountPage>) =>
     toolbarButton(wrapper, 'Edit').attributes('disabled') !== undefined
 

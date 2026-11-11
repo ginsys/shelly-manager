@@ -180,6 +180,29 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
   })
 
+  // A template is one layer of the configuration: another layer can give the field the body leaves
+  // out, and the server accepts such a body.
+  it('a partial template body is valid: a field another layer can give is not required', async () => {
+    const partial = {
+      id: 8, name: 'partial', description: '', scope: 'global', created_at: '', updated_at: '',
+      config: { auth: { enable: true } }, has_auth_password: false,
+    }
+    vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+    vi.mocked(listTemplates).mockResolvedValue([partial] as any)
+    vi.mocked(updateTemplate).mockResolvedValue({ template: partial } as any)
+    const wrapper = mountPage()
+    await openSavedTemplate(wrapper)
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+    await openSection(wrapper, 'power_metering')
+    await wrapper.find('[data-path="power_metering.max_power"] input').setValue('1400')
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    const sent = vi.mocked(updateTemplate).mock.calls[0][1] as { config?: Record<string, any> }
+    expect(sent.config?.auth).toEqual({ enable: true })
+    expect(sent.config?.power_metering).toEqual({ max_power: 1400 })
+  })
+
   // A save answers after the dialog it came from was closed, and another dialog is open. The
   // answer belongs to the closed dialog, so it must not show an error in, or close, the new one.
   // While a save runs the store hides the table, so the only way to a new dialog is the Create
