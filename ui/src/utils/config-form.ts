@@ -201,8 +201,8 @@ export function rememberOverrides(held: ConfigBody, body: ConfigBody): ConfigBod
 // A template is one layer of the configuration: another layer can supply a field this one leaves
 // out, and the server accepts such a body. With `layer` a field is therefore never required for
 // being incomplete. The one exception is `layer.kept`, a body that holds a saved value the server
-// keeps out of the template body (a password): saving a changed body would drop that value, so a
-// field it holds must be given again.
+// keeps out of the template body (a password): saving a changed body would drop that value, so
+// every field it holds must be given again, whether or not the schema requires the field.
 export function validateOverrides(
   sections: Record<string, SchemaProperty>,
   overrides: ConfigBody,
@@ -221,8 +221,7 @@ export function validateOverrides(
       for (const [key, child] of Object.entries(schema.properties)) {
         walk(child, [...path, key])
       }
-      const required = requiredKeys(schema, path, overrides, inherited)
-        .filter(key => !layer || getAt(layer.kept, [...path, key]) !== undefined)
+      const required = layer ? [] : requiredKeys(schema, path, overrides, inherited)
       const touched = (node: any) => isPlainObject(node) && Object.keys(node).length > 0
       if (required.length > 0 && (touched(own) || touched(getAt(held, path)))) {
         for (const key of required) {
@@ -234,7 +233,13 @@ export function validateOverrides(
       }
       return
     }
-    const error = validateValue(schema, getAt(overrides, path))
+    const value = getAt(overrides, path)
+    // A saved value the layer would drop: required whatever the schema says about the field.
+    if (layer && value === undefined && getAt(layer.kept, path) !== undefined) {
+      errors[pathKey(path)] = 'Required'
+      return
+    }
+    const error = validateValue(schema, value)
     if (error) errors[pathKey(path)] = error
   }
   for (const [key, section] of Object.entries(sections)) {

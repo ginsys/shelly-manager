@@ -180,6 +180,44 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
   })
 
+  // The wifi password is not a required field of any schema, so only the saved-password flag can
+  // protect it. Setting another field and saving would replace the config and delete it.
+  it('a config edit that leaves out a saved password the schema does not require stays blocked', async () => {
+    const wifiSchema: ConfigSchema = {
+      type: 'object',
+      'x-apply-supported': true,
+      properties: {
+        wifi: {
+          type: 'object',
+          title: 'WiFi',
+          properties: {
+            enable: { type: 'boolean', 'x-applicable': true },
+            ssid: { type: 'string', 'x-applicable': true },
+            password: { type: 'string', 'x-applicable': true },
+          },
+        },
+        power_metering: schema.properties!.power_metering,
+      },
+    }
+    const saved = {
+      id: 9, name: 'office', description: '', scope: 'global', created_at: '', updated_at: '',
+      config: { wifi: { enable: true, ssid: 'office' } }, has_wifi_password: true,
+    }
+    vi.mocked(getConfigSchema).mockResolvedValue(wifiSchema)
+    vi.mocked(listTemplates).mockResolvedValue([saved] as any)
+    vi.mocked(updateTemplate).mockResolvedValue({ template: saved } as any)
+    const wrapper = mountPage()
+    await openSavedTemplate(wrapper)
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+    await openSection(wrapper, 'power_metering')
+    await wrapper.find('[data-path="power_metering.max_power"] input').setValue('1400')
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+    // Giving the password again lifts the block.
+    await openSection(wrapper, 'wifi')
+    await wrapper.find('[data-path="wifi.password"] input').setValue('secret')
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+  })
+
   // A template is one layer of the configuration: another layer can give the field the body leaves
   // out, and the server accepts such a body.
   it('a partial template body is valid: a field another layer can give is not required', async () => {
