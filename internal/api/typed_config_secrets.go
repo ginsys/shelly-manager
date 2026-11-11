@@ -52,11 +52,15 @@ func maskTypedSecrets(c *configuration.TypedConfiguration) {
 }
 
 // restoreTypedSecrets answers a client that sends back what maskTypedSecrets gave it, from the
-// stored configuration (nil when none is stored). A mask becomes the stored secret, or is dropped
-// when there is none: the mask itself is never stored.
-func restoreTypedSecrets(incoming, stored *configuration.TypedConfiguration) {
+// stored configuration (nil when none is stored), by the same rules as the overrides routes: a
+// mask becomes the stored secret (or is dropped when there is none, since the mask is never
+// stored), a secret the body leaves out keeps its stored value, an explicit "" clears it, and a
+// path in removed, sent as null, is not kept.
+func restoreTypedSecrets(incoming, stored *configuration.TypedConfiguration, removed map[string]bool) {
 	view := typedSecretView(incoming)
-	restoreMaskedSecrets(view, typedSecretView(stored))
+	storedView := typedSecretView(stored)
+	restoreMaskedSecrets(view, storedView)
+	keepOmittedSecrets(view, storedView, removed)
 	adoptTypedSections(incoming, view)
 
 	var storedRaw json.RawMessage

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -155,6 +156,35 @@ func TestTypedConfigRoutes_NewSecretReplacesStoredOne(t *testing.T) {
 	assert.NotContains(t, stored, typMQTT)
 	assert.Contains(t, stored, typAuth)
 	assert.NotContains(t, stored, secretMask)
+}
+
+// The save rules are those of the overrides routes: a secret the body leaves out keeps its stored
+// value, an explicit "" or a null removes it, and the other secrets stay.
+func TestTypedConfigRoutes_OmittedKeepsEmptyAndNullRemove(t *testing.T) {
+	cases := map[string]struct {
+		mqtt string
+		kept bool
+	}{
+		"omitted keeps": {`{"enable":true,"server":"mqtt.example.net:1883"}`, true},
+		"empty clears":  {`{"enable":true,"server":"mqtt.example.net:1883","pass":""}`, false},
+		"null removes":  {`{"enable":true,"server":"mqtt.example.net:1883","pass":null}`, false},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, typedStored)
+
+			body := `{"configuration":{"mqtt":` + c.mqtt + `,"auth":{"enable":true,"user":"admin","pass":"` + secretMask + `"}}}`
+			put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+			require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+
+			stored := storedConfig(t, h, id)
+			assert.Equal(t, c.kept, strings.Contains(stored, typMQTT), "stored configuration: %s", stored)
+			assert.Contains(t, stored, typAuth, "the mask keeps the auth secret")
+			assert.NotContains(t, stored, secretMask)
+		})
+	}
 }
 
 // A mask with nothing stored behind it is dropped, never stored.

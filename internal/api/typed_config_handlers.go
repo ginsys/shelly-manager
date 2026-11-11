@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -200,9 +201,11 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Decode request
+	// Decode request. The raw body is kept: a decoded struct cannot tell a secret sent as null
+	// from one left out.
+	raw, readErr := io.ReadAll(r.Body)
 	var req TypedConfigurationRequest
-	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+	if readErr != nil || json.Unmarshal(raw, &req) != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -223,9 +226,14 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// The client read the configuration masked: a mask becomes the stored secret before the
-	// configuration is validated and stored.
-	restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device))
+	// The client read the configuration masked: a mask or an omitted secret keeps the stored
+	// value, and only an explicit "" or null removes it. This happens before the configuration is
+	// validated and stored.
+	var body struct {
+		Configuration json.RawMessage `json:"configuration"`
+	}
+	_ = json.Unmarshal(raw, &body)
+	restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device), nullSecretPaths(body.Configuration))
 
 	// Validate the configuration
 	validationLevel := req.ValidationLevel
