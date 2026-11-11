@@ -293,6 +293,26 @@ func TestTypedConfigRoutes_ArrayEntriesNeverTakeAnotherEntrysSecret(t *testing.T
 	}
 }
 
+// Clearing one secret of an array entry leaves the entry's other masked secret in place.
+func TestTypedConfigRoutes_ClearingOneArraySecretKeepsTheOther(t *testing.T) {
+	for name, cleared := range map[string]string{"empty": `""`, "null": `null`} {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[`+
+				`{"name":"alice","password":"t7pe-alice-s3cret","api_token":"t7pe-token-s3cret"}]}}`)
+
+			body := `{"configuration":{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[` +
+				`{"name":"alice","password":` + cleared + `,"api_token":"` + secretMask + `"}]}}}`
+			put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+			require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+			got := storedConfig(t, h, id)
+			assert.NotContains(t, got, "t7pe-alice-s3cret")
+			assert.Contains(t, got, "t7pe-token-s3cret", "stored: %s", got)
+		})
+	}
+}
+
 // A raw part the body omits is the stored one, an array secret included.
 func TestTypedConfigRoutes_OmittedRawKeepsArraySecrets(t *testing.T) {
 	h, cleanup := typedHandler(t)
