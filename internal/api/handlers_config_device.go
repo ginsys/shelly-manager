@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -282,20 +283,22 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	raw, readBodyErr := io.ReadAll(r.Body)
 	var overrides configuration.DeviceConfiguration
-	if err := json.NewDecoder(r.Body).Decode(&overrides); err != nil {
+	if readBodyErr != nil || json.Unmarshal(raw, &overrides) != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
 
 	// The body replaces the stored overrides, so a secret sent back as the mask or left out is the
-	// stored one, and only an explicit "" clears it.
+	// stored one. An explicit "" clears it, and null removes the override so the device inherits the
+	// template secret again.
 	stored, readErr := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id))
 	if readErr != nil {
 		stored = nil
 	}
 	restoreMaskedSecrets(&overrides, stored)
-	keepOmittedSecrets(&overrides, stored)
+	keepOmittedSecrets(&overrides, stored, nullSecretPaths(raw))
 
 	if err := h.ConfigService.ConfigurationSvc.SetDeviceOverrides(uint(id), &overrides); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {

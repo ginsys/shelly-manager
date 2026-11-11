@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   countOverrides,
   deleteAt,
+  nullRemovedSecrets,
   savedSecretBaseline,
   setAt,
   subtreeApplicable,
@@ -43,6 +44,36 @@ describe('config-form paths', () => {
   it('countOverrides counts leaves', () => {
     expect(countOverrides({ mqtt: { enable: true, server: 'b', tls: {} } }, ['mqtt'])).toBe(2)
     expect(countOverrides({}, ['mqtt'])).toBe(0)
+  })
+})
+
+describe('nullRemovedSecrets', () => {
+  const mask = '********'
+
+  it('sends null where a saved secret is gone from the edited body', () => {
+    const saved = { mqtt: { user: 'iot', pass: mask }, wifi: { ap: { pass: mask } } }
+    expect(nullRemovedSecrets({ mqtt: { user: 'iot' }, wifi: { ap: { pass: mask } } }, saved)).toEqual({
+      mqtt: { user: 'iot', pass: null },
+      wifi: { ap: { pass: mask } },
+    })
+  })
+
+  it('creates the section again when a reset removed it whole', () => {
+    expect(nullRemovedSecrets({}, { auth: { pass: mask } })).toEqual({ auth: { pass: null } })
+  })
+
+  it('leaves a kept mask, a new value and a plain saved value alone', () => {
+    const saved = { mqtt: { user: 'iot', pass: mask }, auth: { pass: mask } }
+    const edited = { mqtt: { user: 'iot', pass: mask }, auth: { pass: 'new' } }
+    expect(nullRemovedSecrets(edited, saved)).toEqual(edited)
+    expect(nullRemovedSecrets({}, { mqtt: { user: 'iot' } })).toEqual({})
+  })
+
+  it('does not change its input and accepts no saved body', () => {
+    const edited = { mqtt: { user: 'iot' } }
+    nullRemovedSecrets(edited, { mqtt: { pass: mask } })
+    expect(edited).toEqual({ mqtt: { user: 'iot' } })
+    expect(nullRemovedSecrets(edited, null)).toEqual(edited)
   })
 })
 

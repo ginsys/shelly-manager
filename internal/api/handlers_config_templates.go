@@ -245,7 +245,11 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 	}
 	if req.Config != nil {
 		// The client read the template without its secrets: a mask or an omitted secret keeps the
-		// stored value, and only an explicit "" clears it.
+		// stored value, and only an explicit "" or null clears it.
+		var body struct {
+			Config json.RawMessage `json:"config"`
+		}
+		_ = json.Unmarshal(raw, &body)
 		var stored configuration.DeviceConfiguration
 		if len(existing.Config) > 0 {
 			if err := json.Unmarshal(existing.Config, &stored); err != nil {
@@ -254,7 +258,7 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 			}
 		}
 		restoreMaskedSecrets(req.Config, &stored)
-		keepOmittedSecrets(req.Config, &stored)
+		keepOmittedSecrets(req.Config, &stored, nullSecretPaths(body.Config))
 
 		configJSON, err := json.Marshal(req.Config)
 		if err != nil {
@@ -592,23 +596,69 @@ func storedSecretPaths(config *configuration.DeviceConfiguration) []string {
 	return paths
 }
 
+// allSecretPaths lists every secret path that secretSlots can return, sorted.
+func allSecretPaths() []string {
+	all := &configuration.DeviceConfiguration{}
+	for _, section := range []string{"wifi.ap.", "mqtt.", "auth.", "network.wifi.sta.", "network.wifi.ap."} {
+		ensureSecretSection(all, section)
+	}
+	paths := make([]string, 0, len(secretSlots(all)))
+	for path := range secretSlots(all) {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+// nullSecretPaths names the secrets that a raw configuration body sets to JSON null. A decoded
+// struct cannot tell null from omitted, so the raw text is read. Null means "remove this secret":
+// an override stops pinning it and inherits the template secret again (RFC 7396, the merge patch
+// convention). It also clears a plain-string password, which "" cannot.
+func nullSecretPaths(raw []byte) map[string]bool {
+	var tree map[string]any
+	if json.Unmarshal(raw, &tree) != nil {
+		return nil
+	}
+	nulls := map[string]bool{}
+	for _, path := range allSecretPaths() {
+		node := any(tree)
+		for _, key := range strings.Split(path, ".") {
+			m, isMap := node.(map[string]any)
+			if !isMap {
+				node = "absent"
+				break
+			}
+			var found bool
+			if node, found = m[key]; !found {
+				node = "absent"
+				break
+			}
+		}
+		if node == nil {
+			nulls[path] = true
+		}
+	}
+	return nulls
+}
+
 // keepOmittedSecrets answers a client that read a body without its secrets and sends it back
 // edited. A secret the incoming body leaves out keeps its stored value, whether or not the section
 // around it is there. An explicit empty string is a value and clears the secret, and a stored
-// empty secret is kept as empty, so it still beats the secret of a template. Run it after
-// restoreMaskedSecrets, so a mask has already become the stored value.
-func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration) {
+// empty secret is kept as empty, so it still beats the secret of a template. A path in removed was
+// sent as null: it is not kept. Run it after restoreMaskedSecrets, so a mask has already become the
+// stored value.
+func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, removed map[string]bool) {
 	if incoming == nil {
 		return
 	}
 	storedSlots := secretSlots(stored)
 	for path, old := range storedSlots {
-		if old.present() {
+		if old.present() && !removed[path] {
 			ensureSecretSection(incoming, path)
 		}
 	}
 	for path, slot := range secretSlots(incoming) {
-		if old, ok := storedSlots[path]; ok && old.present() && !slot.present() {
+		if old, ok := storedSlots[path]; ok && old.present() && !slot.present() && !removed[path] {
 			slot.put(old.get())
 		}
 	}

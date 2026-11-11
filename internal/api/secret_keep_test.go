@@ -276,3 +276,76 @@ func TestPatchOverridesKeepsAnOmittedSecret(t *testing.T) {
 	require.NotNil(t, stored.MQTT.Password)
 	assert.Equal(t, "x", *stored.MQTT.Password)
 }
+
+// JSON null on a secret path removes the override, so a device inherits the template secret again.
+// It is the fourth value beside omitted (keep), "" (clear) and the mask (restore).
+func TestSetOverridesRemovesASecretOnNull(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	svc := handler.ConfigService.ConfigurationSvc
+	tmplID := newKeepTemplate(t, handler, `{"mqtt":{"user":"iot","pass":"template-secret"}}`)
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"x"},"wifi":{"ap":{"pass":"ap-secret"}}}`)
+	require.NoError(t, svc.SetDeviceTemplates(id, []uint{tmplID}))
+
+	w := sendOverrides(t, handler, "PUT", id, `{"mqtt":{"user":"iot","pass":null}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := svc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.Nil(t, stored.MQTT.Password, "null removes the override, it is not stored as empty")
+	require.NotNil(t, stored.WiFi.AccessPoint.Password, "a secret the body omits is still kept")
+	assert.Equal(t, "ap-secret", *stored.WiFi.AccessPoint.Password)
+	desired, _, err := svc.GetDesiredConfig(id)
+	require.NoError(t, err)
+	require.NotNil(t, desired.MQTT.Password)
+	assert.Equal(t, "template-secret", *desired.MQTT.Password, "the device inherits the template password again")
+}
+
+func TestSetOverridesRemovesANetworkPasswordOnNull(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"network":{"wifi":{"sta":{"ssid":"home","pass":"net-pass"}}}}`)
+
+	w := sendOverrides(t, handler, "PUT", id, `{"network":{"wifi":{"sta":{"ssid":"home","pass":null}}}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.Equal(t, "", stored.Network.WiFi.STA.Password, "null clears a plain-string password that \"\" cannot")
+}
+
+// Each secret path is a JSON key path, so a raw body can be read for null at it. This fails when a
+// slot is listed under a name that is not its JSON key, which would make null silently do nothing.
+func TestNullSecretPathsReadEverySecretSlot(t *testing.T) {
+	paths := allSecretPaths()
+	require.Len(t, paths, 7)
+	nest := func(path string, leaf any) []byte {
+		keys := strings.Split(path, ".")
+		node := leaf
+		for i := len(keys) - 1; i >= 0; i-- {
+			node = map[string]any{keys[i]: node}
+		}
+		raw, err := json.Marshal(node)
+		require.NoError(t, err)
+		return raw
+	}
+	for _, path := range paths {
+		assert.Equal(t, map[string]bool{path: true}, nullSecretPaths(nest(path, nil)), "null at %s", path)
+		assert.Empty(t, nullSecretPaths(nest(path, "")), "an empty string at %s is not null", path)
+		assert.Empty(t, nullSecretPaths(nest(path, "x")), "a value at %s is not null", path)
+	}
+	assert.Empty(t, nullSecretPaths([]byte(`{"mqtt":{"user":null}}`)), "null elsewhere is not a secret reset")
+	assert.Empty(t, nullSecretPaths([]byte(`{"mqtt":null}`)), "a null section is not a secret reset")
+}
+
+func TestUpdateTemplateRemovesASecretOnNull(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := newKeepTemplate(t, handler, `{"mqtt":{"user":"iot","pass":"x"}}`)
+
+	w := putKeepTemplate(t, handler, id, `{"config":{"mqtt":{"user":"iot","pass":null}}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	assert.JSONEq(t, `{"mqtt":{"user":"iot"}}`, storedTemplateConfig(t, handler, id))
+	assert.Empty(t, templateStoredSecrets(t, w))
+}
