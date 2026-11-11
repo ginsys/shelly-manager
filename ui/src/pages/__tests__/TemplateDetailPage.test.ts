@@ -25,7 +25,7 @@ vi.mock('@/api/templates', async (importOriginal) => {
 })
 
 import { getConfigSchema } from '@/api/typedConfig'
-import { getTemplate, updateTemplate, TemplateSaveError } from '@/api/templates'
+import { deleteTemplate, getTemplate, updateTemplate, TemplateSaveError } from '@/api/templates'
 import TemplateDetailPage from '../TemplateDetailPage.vue'
 
 const schema: ConfigSchema = {
@@ -71,6 +71,7 @@ describe('TemplateDetailPage template form', () => {
     vi.mocked(getTemplate).mockReset()
     vi.mocked(getTemplate).mockResolvedValue(stored as any)
     vi.mocked(updateTemplate).mockReset()
+    vi.mocked(deleteTemplate).mockReset()
   })
 
   it('shows the error of a refused save while that edit stays open', async () => {
@@ -151,7 +152,10 @@ describe('TemplateDetailPage template form', () => {
     expect(second[1]).not.toHaveProperty('config')
   })
 
-  it('Edit comes back when the refresh after a save fails', async () => {
+  // The refresh failed, so the page holds the template as it was before the save and shows an
+  // error instead of it. An edit would start from that old copy and its Save would undo the saved
+  // change, so Edit stays off while the error shows.
+  it('Edit stays off when the refresh after a save fails', async () => {
     vi.mocked(getTemplate).mockResolvedValueOnce(stored as any).mockRejectedValueOnce(new Error('refresh down'))
     const save = deferred<any>()
     vi.mocked(updateTemplate).mockReturnValueOnce(save.promise)
@@ -160,10 +164,64 @@ describe('TemplateDetailPage template form', () => {
     expect(editDisabled(wrapper)).toBe(true)
     save.resolve({ template: stored })
     await flushPromises()
-    expect(editDisabled(wrapper)).toBe(false)
+    expect(wrapper.text()).toContain('refresh down')
+    expect(editDisabled(wrapper)).toBe(true)
     await toolbarButton(wrapper, 'Edit').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="save-template"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="save-template"]').exists()).toBe(false)
+  })
+
+  // Two Save clicks: the first failing must not release Edit while the second still runs.
+  it('a second Save click while a save is pending sends nothing', async () => {
+    const first = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(first.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    expect(vi.mocked(updateTemplate)).toHaveBeenCalledTimes(1)
+    first.reject(refusal())
+    await flushPromises()
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('a save that succeeds in the same edit leaves edit mode and shows the refreshed template', async () => {
+    const renamed = { ...stored, name: 'renamed' }
+    vi.mocked(getTemplate).mockResolvedValueOnce(stored as any).mockResolvedValueOnce(renamed as any)
+    vi.mocked(updateTemplate).mockResolvedValueOnce({ template: renamed, affected_devices: 3 } as any)
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="save-template"]').exists()).toBe(false)
+    expect(wrapper.find('.title').text()).toBe('renamed')
+    expect(editDisabled(wrapper)).toBe(false)
+  })
+
+  it('Delete is off while a save is pending and does nothing', async () => {
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(save.promise)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    const del = wrapper.find('.btn.danger')
+    expect(del.attributes('disabled')).toBeDefined()
+    await del.trigger('click')
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(vi.mocked(deleteTemplate)).not.toHaveBeenCalled()
+    save.reject(refusal())
+    await flushPromises()
+    expect(wrapper.find('.btn.danger').attributes('disabled')).toBeUndefined()
+    confirmSpy.mockRestore()
   })
 
   it('Edit comes back when the save itself fails', async () => {

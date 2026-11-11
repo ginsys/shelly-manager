@@ -4,9 +4,9 @@
       <router-link class="btn" to="/templates">← Back</router-link>
       <h1 class="title">{{ template?.name || 'Template' }}</h1>
       <div class="spacer" />
-      <button v-if="!editMode" class="btn primary" :disabled="saving" @click="enterEdit">Edit</button>
+      <button v-if="!editMode" class="btn primary" :disabled="saving || error !== null" @click="enterEdit">Edit</button>
       <button v-else class="btn" @click="cancelEdit">Cancel</button>
-      <button v-if="editMode" class="btn primary" data-testid="save-template" :disabled="!configValid" @click="handleSave">
+      <button v-if="editMode" class="btn primary" data-testid="save-template" :disabled="!configValid || saving" @click="handleSave">
         Save
       </button>
     </div>
@@ -19,7 +19,7 @@
         <div class="header-row">
           <h2 class="h2">Template</h2>
           <div class="spacer" />
-          <button class="btn danger" @click="handleDelete">Delete</button>
+          <button class="btn danger" :disabled="saving" @click="handleDelete">Delete</button>
         </div>
 
         <div class="info-grid">
@@ -207,13 +207,16 @@ async function load() {
 // if the number is still the same, because the answer of a cancelled edit belongs to nobody.
 let editSession = 0
 
-// True from the Save click until the save and the refresh after it have settled. A new edit would
-// copy the config the page holds, and the refresh then replaces it under that edit, so no edit
-// starts in between. Cancel stays allowed.
+// True from the Save click until the save and the refresh after it have settled. While it is set
+// there is one save and nothing else that starts or replaces the template: Save, Edit and Delete are
+// off, and Cancel is the only action left. A new edit would copy the config the page holds, and the
+// refresh then replaces it under that edit.
 const saving = ref(false)
 
 function enterEdit() {
-  if (!template.value || saving.value) return
+  // After a failed load or refresh the page shows an error and not the template, and holds a copy
+  // that may be older than the server's, so no edit starts from it.
+  if (!template.value || saving.value || error.value !== null) return
   editSession++
   configBody.value = clone(template.value.config || {})
   saveErrors.value = []
@@ -240,7 +243,7 @@ function cancelEdit() {
 }
 
 async function handleSave() {
-  if (!template.value || !configValid.value) return
+  if (!template.value || !configValid.value || saving.value) return
   const parsedConfig = clone(configBody.value)
   const session = editSession
   saveErrors.value = []
@@ -276,7 +279,7 @@ async function handleSave() {
 }
 
 async function handleDelete() {
-  if (!template.value) return
+  if (!template.value || saving.value) return
   if (!confirm('Delete this template?')) return
 
   try {

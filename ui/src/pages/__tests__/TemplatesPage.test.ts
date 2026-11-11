@@ -257,6 +257,23 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('.modal').exists()).toBe(true)
   })
 
+  it('a second Save click while a save is pending sends nothing', async () => {
+    const pending = deferred<any>()
+    vi.mocked(createTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('.modal .form-input[type="text"]').setValue('once')
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    pending.reject(refusal())
+    await flushPromises()
+    expect(vi.mocked(createTemplate)).toHaveBeenCalledTimes(1)
+    // The save has settled, so Save works again.
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+  })
+
   it('an error shows in the dialog it came from while that dialog stays open', async () => {
     vi.mocked(listTemplates).mockResolvedValue([plainTemplate(1, 'A')] as any)
     vi.mocked(updateTemplate).mockRejectedValue(refusal())
