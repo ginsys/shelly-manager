@@ -381,6 +381,24 @@ func TestTypedConfigRoutes_AmbiguousArrayEntryIsRefused(t *testing.T) {
 	}
 }
 
+// A mask that no stored entry holds a secret for needs no choosing, so it is dropped as before and
+// the explicit new password is kept, even when the entries look alike.
+func TestTypedConfigRoutes_UnmatchedMaskInAmbiguousEntryIsDropped(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[`+
+		`{"name":"x","password":"t7pe-a-s3cret"},{"name":"x","password":"t7pe-b-s3cret"}]}}`)
+
+	body := `{"configuration":{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[` +
+		`{"name":"x","password":"t7pe-new-s3cret","api_token":"` + secretMask + `"}]}}}`
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	got := storedConfig(t, h, id)
+	assert.Contains(t, got, "t7pe-new-s3cret")
+	assert.NotContains(t, got, secretMask)
+	assert.NotContains(t, got, "api_token")
+}
+
 // The text helper reports the same ambiguity, which the device routes share.
 func TestRestoreMaskedText_AmbiguousEntryIsAnError(t *testing.T) {
 	stored := `{"accounts":[{"token":"alice","password":"A"},{"token":"bob","password":"B"}]}`
