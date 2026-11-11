@@ -235,14 +235,31 @@ func TestScrubValidation(t *testing.T) {
 			{Code: "TEMPLATE_SYNTAX_ERROR", Message: "Invalid template syntax: bad a&b here"},
 			{Code: "WIFI_PASSWORD_SHORT", Message: "WiFi password must be at least 8 characters"},
 		},
-		Warnings: []configuration.ValidationWarning{{Code: "DANGEROUS_TEMPLATE_FUNCTION", Message: "Template contains potentially dangerous function: {{exec \"x\"}}"}},
-		Info:     []configuration.ValidationInfo{{Code: "ENV_VARIABLE_REFERENCE", Message: "Template references environment variables: prefix-{{envOr \"T\" \"d\"}}"}},
+		Warnings: []configuration.ValidationWarning{
+			{Code: "DANGEROUS_TEMPLATE_FUNCTION", Message: "Template contains potentially dangerous function: {{exec \"x\"}}"},
+			{Code: "CUSTOM_VARIABLE_REFERENCE", Message: "Custom variable referenced: t7pe-secret - ensure it's provided"},
+		},
+		Info: []configuration.ValidationInfo{{Code: "ENV_VARIABLE_REFERENCE", Message: "Template references environment variables: prefix-{{envOr \"T\" \"d\"}}"}},
 	}
 	scrubValidation(result)
 	assert.Equal(t, "Invalid template syntax: "+secretMask, result.Errors[0].Message)
 	assert.Equal(t, "WiFi password must be at least 8 characters", result.Errors[1].Message)
 	assert.Equal(t, "Template contains potentially dangerous function: "+secretMask, result.Warnings[0].Message)
+	assert.NotContains(t, result.Warnings[1].Message, "t7pe-secret")
 	assert.Equal(t, "Template references environment variables: "+secretMask, result.Info[0].Message)
+}
+
+// An edited raw part that leaves out a key holding an array secret keeps that key.
+func TestTypedConfigRoutes_EditedRawKeepsOmittedArraySecrets(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[{"password":"`+typRaw+`"}],"other":"x"}}`)
+
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, `{"configuration":{"raw":{}}}`)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	stored := storedConfig(t, h, id)
+	assert.Contains(t, stored, typRaw)
+	assert.NotContains(t, stored, `"other"`, "a stored key with no secret is not restored")
 }
 
 // A raw part the body omits is the stored one, an array secret included.

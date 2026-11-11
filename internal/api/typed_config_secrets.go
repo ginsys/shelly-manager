@@ -59,6 +59,7 @@ var templateMessageCodes = map[string]bool{
 	"TEMPLATE_SYNTAX_ERROR":       true,
 	"DANGEROUS_TEMPLATE_FUNCTION": true,
 	"ENV_VARIABLE_REFERENCE":      true,
+	"CUSTOM_VARIABLE_REFERENCE":   true,
 }
 
 // scrubValidation replaces what follows the colon in each message that quotes a template fragment
@@ -126,54 +127,59 @@ func keepOmittedRawSecrets(incoming, stored json.RawMessage) json.RawMessage {
 	if len(incoming) == 0 {
 		return stored
 	}
-	storedDoc, ok := decodeDocument(string(stored))
-	if !ok || string(incoming) == "null" {
+	storedDoc, _ := decodeDocument(string(stored))
+	doc, _ := decodeDocument(string(incoming))
+	storedMap, storedIsMap := storedDoc.(map[string]any)
+	docMap, docIsMap := doc.(map[string]any)
+	if !storedIsMap || !docIsMap {
 		return incoming
 	}
-	doc, ok := decodeDocument(string(incoming))
-	if !ok {
-		return incoming
-	}
-	return json.RawMessage(encodeDocument(keepOmittedValue(doc, storedDoc)))
+	keepOmittedValue(docMap, storedMap)
+	return json.RawMessage(encodeDocument(docMap))
 }
 
-// keepOmittedValue returns in with the secrets of stored that in leaves out added, or nil when in is
-// absent and stored holds none. It follows objects only: an array is the client's own.
-func keepOmittedValue(in, stored any) any {
-	storedMap, ok := stored.(map[string]any)
-	if !ok {
-		return in
-	}
-	inMap, isMap := in.(map[string]any)
-	if in != nil && !isMap {
-		return in
-	}
-	for k, sv := range storedMap {
-		cur, present := inMap[k]
-		if present && cur == nil {
-			continue // null removes
-		}
-		var kept any
+// keepOmittedValue adds to in, in place, what stored holds that in leaves out, where that is or
+// contains a secret. A key that in leaves out comes back whole when its stored value holds a secret
+// anywhere, an array included, since the client dropped that part and not one secret in it. A key
+// that is present is followed into an object only: null removes it, and any other value is the
+// client's own.
+func keepOmittedValue(in, stored map[string]any) {
+	for k, sv := range stored {
+		cur, present := in[k]
 		switch {
-		case secretKey(k) && secretScalar(sv):
-			if present {
-				continue
+		case !present:
+			if holdsSecret(k, sv) {
+				in[k] = sv
 			}
-			kept = sv
+		case cur == nil:
+			// null removes
 		default:
-			if kept = keepOmittedValue(cur, sv); kept == nil {
-				continue
+			curMap, curIsMap := cur.(map[string]any)
+			storedMap, storedIsMap := sv.(map[string]any)
+			if curIsMap && storedIsMap {
+				keepOmittedValue(curMap, storedMap)
 			}
 		}
-		if inMap == nil {
-			inMap = map[string]any{}
+	}
+}
+
+// holdsSecret reports whether a value under key is a secret or contains one.
+func holdsSecret(key string, v any) bool {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			if holdsSecret(k, child) {
+				return true
+			}
 		}
-		inMap[k] = kept
+	case []any:
+		for _, child := range x {
+			if holdsSecret("", child) {
+				return true
+			}
+		}
 	}
-	if inMap == nil {
-		return in
-	}
-	return inMap
+	return secretKey(key) && secretScalar(v)
 }
 
 // storedTypedConfig returns the typed form of the configuration stored for a device, or nil when
