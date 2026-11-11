@@ -200,9 +200,9 @@ describe('TemplatesPage template form', () => {
     expect(sent.config.auth.pass).toBe('')
   })
 
-  // The network passwords are plain strings: the server reads "" as omitted and keeps them, so the
-  // form must not promise that Clear removes one.
-  it('offers no Clear action for a saved network password', async () => {
+  // The network passwords are pointers like the other secrets: "" clears one on the server, so the
+  // form offers Clear for them too.
+  it('offers a Clear action for a saved network password', async () => {
     const networkSchema: ConfigSchema = {
       type: 'object',
       'x-apply-supported': true,
@@ -241,7 +241,7 @@ describe('TemplatesPage template form', () => {
     await openSection(wrapper, 'mqtt')
     expect(wrapper.find('[data-path="mqtt.pass"] [data-action="clear-secret"]').exists()).toBe(true)
     expect(wrapper.find('[data-path="network.wifi.sta.pass"]').exists()).toBe(true)
-    expect(wrapper.find('[data-path="network.wifi.sta.pass"] [data-action="clear-secret"]').exists()).toBe(false)
+    expect(wrapper.find('[data-path="network.wifi.sta.pass"] [data-action="clear-secret"]').exists()).toBe(true)
   })
 
   // The wifi password is not a required field of any schema. Setting another field and saving keeps

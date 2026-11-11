@@ -207,6 +207,53 @@ describe('ConfigEditor', () => {
     expect(lastValid(wrapper)).toBe(true)
   })
 
+  it('a network switch the server omits shows as off, and an override of false is kept', async () => {
+    // The server no longer sends `enable: false` for a Network field nobody set. The form must read
+    // the missing key as off, and an explicit false must stay in the override body.
+    const networkSchema: ConfigSchema = {
+      type: 'object',
+      'x-device-type': 'SHPLG-S',
+      'x-apply-supported': true,
+      properties: {
+        network: {
+          type: 'object',
+          title: 'Network',
+          properties: {
+            wifi: {
+              type: 'object',
+              title: 'Wifi',
+              properties: {
+                sta: {
+                  type: 'object',
+                  title: 'Sta',
+                  properties: {
+                    enable: { type: 'boolean', 'x-applicable': true },
+                    ssid: { type: 'string', 'x-applicable': true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+    vi.mocked(getConfigSchema).mockResolvedValue(networkSchema)
+    const path = '[data-path="network.wifi.sta.enable"] input[type="checkbox"]'
+
+    const wrapper = mountEditor({}, { inherited: { network: { wifi: { sta: { ssid: 'home' } } } } })
+    await flushPromises()
+    await openSection(wrapper, 'network')
+    expect((wrapper.find(path).element as HTMLInputElement).checked).toBe(false)
+
+    // An inherited true is shown on, and switching it off is an override of false.
+    const inheritedOn = mountEditor({}, { inherited: { network: { wifi: { sta: { enable: true } } } } })
+    await flushPromises()
+    await openSection(inheritedOn, 'network')
+    expect((inheritedOn.find(path).element as HTMLInputElement).checked).toBe(true)
+    await inheritedOn.find(path).setValue(false)
+    expect(lastModel(inheritedOn)).toEqual({ network: { wifi: { sta: { enable: false } } } })
+  })
+
   it('puts only the changed field into the override body', async () => {
     const wrapper = mountEditor({}, { inherited: { system: { device: { name: 'tv-office' } } } })
     await flushPromises()
