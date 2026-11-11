@@ -56,6 +56,18 @@ func TestNullPathsAcceptsNumbersOfAnySize(t *testing.T) {
 	assert.Equal(t, [][]string{{"mqtt", "pass"}}, got)
 }
 
+// No field of the configuration sits deeper than maxPathDepth, so a deeper null addresses nothing.
+// It must not be kept, or a small body of nested arrays costs memory in proportion to its depth
+// times its null count.
+func TestNullPathsDropsAPathThatIsTooDeepToAddressAField(t *testing.T) {
+	deep := `{"unknown":` + strings.Repeat("[", 200) + `null,null` + strings.Repeat("]", 200) + `,"mqtt":{"pass":null}}`
+
+	got, err := NullPaths([]byte(deep))
+	require.NoError(t, err)
+
+	assert.Equal(t, [][]string{{"mqtt", "pass"}}, got)
+}
+
 func TestNullPathsRefusesAKeyThatAppearsTwice(t *testing.T) {
 	for _, raw := range []string{
 		`{"mqtt":{"pass":"a"},"mqtt":{"pass":null}}`,
@@ -126,6 +138,15 @@ func TestRemovePathsKeepsASectionThatStillWritesAField(t *testing.T) {
 	require.NotNil(t, config.System)
 	require.NotNil(t, config.System.Sleep, "enable has no omitempty, so the section still writes it")
 	assert.False(t, config.System.Sleep.Enable)
+}
+
+// A null for a field that is not stored changes nothing, and so does the section around it.
+func TestRemovePathsLeavesAnEmptySectionWhenTheFieldIsAlreadyAbsent(t *testing.T) {
+	config := &DeviceConfiguration{MQTT: &MQTTConfiguration{}}
+
+	RemovePaths(config, [][]string{{"mqtt", "pass"}})
+
+	assert.NotNil(t, config.MQTT)
 }
 
 func TestRemovePathsRemovesAWholeSection(t *testing.T) {

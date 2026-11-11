@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -335,7 +336,7 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 
 	raw, readBodyErr := io.ReadAll(r.Body)
 	var patch configuration.DeviceConfiguration
-	if readBodyErr != nil || json.Unmarshal(raw, &patch) != nil {
+	if readBodyErr != nil || json.NewDecoder(bytes.NewReader(raw)).Decode(&patch) != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}

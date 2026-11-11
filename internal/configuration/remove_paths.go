@@ -11,6 +11,10 @@ import (
 	"unicode"
 )
 
+// maxPathDepth is the longest path that can address a field of DeviceConfiguration, with a wide
+// margin. A null below it is not kept, so a body of deeply nested arrays costs no memory.
+const maxPathDepth = 16
+
 // NullPaths lists the path of every field that a raw JSON body sets to null. A decoded struct
 // cannot tell null from an omitted field, so the raw text is read. Keys are lower case, because the
 // decoder matches keys without regard to case, so the keys keep their own spelling here and
@@ -34,7 +38,7 @@ func readNulls(dec *json.Decoder, path []string, paths *[][]string) error {
 	}
 	switch t := tok.(type) {
 	case nil:
-		if len(path) > 0 {
+		if len(path) > 0 && len(path) <= maxPathDepth {
 			*paths = append(*paths, append([]string{}, path...))
 		}
 	case json.Delim:
@@ -111,6 +115,9 @@ func removeAt(v reflect.Value, path []string) bool {
 			return false
 		}
 		if len(path) == 1 {
+			if field.IsZero() {
+				return false
+			}
 			field.Set(reflect.Zero(field.Type()))
 			return true
 		}
