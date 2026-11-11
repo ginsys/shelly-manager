@@ -227,14 +227,34 @@ func TestTypedConfigRoutes_ValidationMessagesCarryNoSavedSecret(t *testing.T) {
 	assert.NotContains(t, get.Body.String(), "t7pe-tmpl-s3cret")
 }
 
+// The messages that quote a template fragment are masked after the colon, whatever the fragment
+// holds (a token with "&", or a secret that is only part of an expression). Others stay.
 func TestScrubValidation(t *testing.T) {
 	result := &configuration.ValidationResult{
-		Errors: []configuration.ValidationError{{Message: "bad hunter2abc here"}},
-		Info:   []configuration.ValidationInfo{{Message: "default hunter2 used"}},
+		Errors: []configuration.ValidationError{
+			{Code: "TEMPLATE_SYNTAX_ERROR", Message: "Invalid template syntax: bad a&b here"},
+			{Code: "WIFI_PASSWORD_SHORT", Message: "WiFi password must be at least 8 characters"},
+		},
+		Warnings: []configuration.ValidationWarning{{Code: "DANGEROUS_TEMPLATE_FUNCTION", Message: "Template contains potentially dangerous function: {{exec \"x\"}}"}},
+		Info:     []configuration.ValidationInfo{{Code: "ENV_VARIABLE_REFERENCE", Message: "Template references environment variables: prefix-{{envOr \"T\" \"d\"}}"}},
 	}
-	scrubValidation(result, []string{"hunter2abc", "hunter2"})
-	assert.Equal(t, "bad "+secretMask+" here", result.Errors[0].Message)
-	assert.Equal(t, "default "+secretMask+" used", result.Info[0].Message)
+	scrubValidation(result)
+	assert.Equal(t, "Invalid template syntax: "+secretMask, result.Errors[0].Message)
+	assert.Equal(t, "WiFi password must be at least 8 characters", result.Errors[1].Message)
+	assert.Equal(t, "Template contains potentially dangerous function: "+secretMask, result.Warnings[0].Message)
+	assert.Equal(t, "Template references environment variables: "+secretMask, result.Info[0].Message)
+}
+
+// A raw part the body omits is the stored one, an array secret included.
+func TestTypedConfigRoutes_OmittedRawKeepsArraySecrets(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"},"raw":{"accounts":[{"password":"`+typRaw+`"}]}}`)
+
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, `{"configuration":{}}`)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	assertNoTypedSecret(t, "PUT config/typed", put.Body.String())
+	assert.Contains(t, storedConfig(t, h, id), typRaw)
 }
 
 // A mask with nothing stored behind it is dropped, never stored.
