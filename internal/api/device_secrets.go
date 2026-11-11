@@ -142,6 +142,20 @@ func restoreValue(v, stored any) {
 	}
 }
 
+// storedAuthPassword returns the device login password held in a device's Settings text: the flat
+// auth_pass the client builders read, else the nested auth.password an older version wrote. It is
+// empty when none is stored.
+func storedAuthPassword(settings string) string {
+	doc, _ := decodeDocument(settings)
+	m, _ := doc.(map[string]any)
+	if pass, ok := m["auth_pass"].(string); ok && pass != "" {
+		return pass
+	}
+	nested, _ := m["auth"].(map[string]any)
+	pass, _ := nested["password"].(string)
+	return pass
+}
+
 // maskDeviceSecrets returns a copy of the device that is safe to send out. The stored record is
 // never changed: drift detection and apply read the real values from it.
 func maskDeviceSecrets(d database.Device) database.Device {

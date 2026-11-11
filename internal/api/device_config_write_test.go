@@ -15,6 +15,48 @@ import (
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
+// GET /devices/{id} shows settings.auth as {"username":"admin","password":"********"}. A client that
+// sends that pair to PUT /devices/{id}/config/auth keeps the stored login password and stores no
+// mask; a new password replaces it; with no stored password the mask is refused.
+func TestDeviceRoutes_AuthPutWithTheMaskKeepsTheStoredPassword(t *testing.T) {
+	// The write goes through the service, which setupTestHandler does not build.
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
+
+	device := secretDevice()
+	require.NoError(t, handler.DB.AddDevice(device))
+	id := idString(device)
+
+	put := serve(handler.UpdateDeviceAuth, "PUT", "/api/v1/devices/1/config/auth", id,
+		`{"username":"admin","password":"`+secretMask+`"}`)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	stored, err := handler.DB.GetDevice(device.ID)
+	require.NoError(t, err)
+	assert.Contains(t, stored.Settings, secFlat, "the mask replaced the stored login password")
+	assert.NotContains(t, stored.Settings, secretMask, "the mask was stored")
+
+	put = serve(handler.UpdateDeviceAuth, "PUT", "/api/v1/devices/1/config/auth", id,
+		`{"username":"admin","password":"s3cr3t-new-login"}`)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	stored, err = handler.DB.GetDevice(device.ID)
+	require.NoError(t, err)
+	assert.Contains(t, stored.Settings, "s3cr3t-new-login")
+	assert.NotContains(t, stored.Settings, secFlat)
+
+	bare := testutil.TestDevice()
+	bare.MAC = "AA:BB:CC:DD:EE:99"
+	bare.IP = "192.168.1.99"
+	bare.Settings = `{"model":"SHSW-25","gen":1}`
+	require.NoError(t, handler.DB.AddDevice(bare))
+	put = serve(handler.UpdateDeviceAuth, "PUT", "/api/v1/devices/2/config/auth", idString(bare),
+		`{"username":"admin","password":"`+secretMask+`"}`)
+	assert.Equal(t, http.StatusBadRequest, put.Code, "a mask with no stored password must be refused: %s", put.Body.String())
+	stored, err = handler.DB.GetDevice(bare.ID)
+	require.NoError(t, err)
+	assert.NotContains(t, stored.Settings, secretMask, "the mask was stored")
+}
+
 // A client that reads GET /devices/{id}/config and sends the config member back to
 // PUT /devices/{id}/config sends the mask. The stored credentials must survive that round trip,
 // and the answer to the PUT must not return them either.
