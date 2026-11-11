@@ -174,7 +174,7 @@ A `device_type` template names a model from `GET /api/v1/config/device-types`. `
 
 ---
 
-### 7. Typed Configuration (8 endpoints)
+### 7. Typed Configuration (9 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
