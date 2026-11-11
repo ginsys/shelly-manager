@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
@@ -144,7 +145,7 @@ func restoreValue(v, stored any) error {
 			// take another entry's password, so its mask is dropped instead.
 			var counterpart any
 			if i < len(old) && sameWithoutSecrets(child, old[i]) {
-				if ambiguousEntry(child, old) && maskNeedsChoice(child, old) {
+				if ambiguousEntry(child, old, false) {
 					return errAmbiguousEntry
 				}
 				counterpart = old[i]
@@ -158,21 +159,25 @@ func restoreValue(v, stored any) error {
 }
 
 func sameWithoutSecrets(a, b any) bool {
-	return encodeDocument(withoutSecrets(a)) == encodeDocument(withoutSecrets(b))
+	return encodeDocument(canonicalNumbers(withoutSecrets(a))) == encodeDocument(canonicalNumbers(withoutSecrets(b)))
 }
 
 // ambiguousEntry reports whether an entry matches more than one stored entry (they agree on
-// everything but their secrets) and those entries differ in what their secrets hold.
-func ambiguousEntry(entry any, stored []any) bool {
+// everything but their secrets) and those entries disagree at a secret the entry gets back from
+// them. Entries that differ only in a secret the entry does not restore (it sends a new value) are
+// not ambiguous. omitted says whether a secret the entry leaves out counts as restored, as in the
+// typed raw part, or only a mask does.
+func ambiguousEntry(entry any, stored []any, omitted bool) bool {
 	var first string
 	matches := 0
 	for _, s := range stored {
 		if !sameWithoutSecrets(entry, s) {
 			continue
 		}
+		view := encodeDocument(canonicalNumbers(restoredView(entry, s, omitted)))
 		if matches == 0 {
-			first = encodeDocument(s)
-		} else if encodeDocument(s) != first {
+			first = view
+		} else if view != first {
 			return true
 		}
 		matches++
@@ -180,43 +185,157 @@ func ambiguousEntry(entry any, stored []any) bool {
 	return false
 }
 
-// maskNeedsChoice reports whether the entry sends a mask for a secret that at least one matching
-// stored entry holds. A mask no stored entry has a secret for is dropped, so nothing is chosen.
-func maskNeedsChoice(entry any, stored []any) bool {
-	for _, s := range stored {
-		if sameWithoutSecrets(entry, s) && maskHasSavedSecret(entry, s) {
-			return true
-		}
-	}
-	return false
-}
-
-// maskHasSavedSecret reports whether v holds the mask under a secret-named key where stored holds a
-// saved secret.
-func maskHasSavedSecret(v, stored any) bool {
+// restoredView returns what stored would give back to v: the saved secret under each key where v
+// sends the mask and, when omitted is set, under each key it leaves out. It is nil when nothing is
+// restored. A mask no stored entry holds a secret for is dropped, so it gives back nothing.
+func restoredView(v, stored any, omitted bool) any {
 	switch x := v.(type) {
 	case map[string]any:
 		old, _ := stored.(map[string]any)
+		out := map[string]any{}
 		for k, child := range x {
 			if s, isString := child.(string); isString && s == secretMask && secretKey(k) {
-				if kept, ok := old[k]; ok && secretScalar(kept) {
-					return true
+				if kept, ok := old[k]; ok && secretScalar(kept) && kept != secretMask {
+					out[k] = kept
 				}
 				continue
 			}
-			if maskHasSavedSecret(child, old[k]) {
-				return true
+			if view := restoredView(child, old[k], omitted); view != nil {
+				out[k] = view
 			}
 		}
+		if omitted {
+			for k, sv := range old {
+				if _, present := x[k]; !present && holdsSecret(k, sv) {
+					out[k] = sv
+				}
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
 	case []any:
 		old, _ := stored.([]any)
+		out := make([]any, len(x))
+		found := false
 		for i, child := range x {
-			if i < len(old) && maskHasSavedSecret(child, old[i]) {
-				return true
+			if i < len(old) && sameWithoutSecrets(child, old[i]) {
+				if view := restoredView(child, old[i], omitted); view != nil {
+					out[i] = view
+					found = true
+				}
 			}
 		}
+		if !found {
+			return nil
+		}
+		return out
 	}
-	return false
+	return nil
+}
+
+// canonicalNumbers returns a copy of a decoded document in which every number is spelled in one
+// canonical form, so two numbers compare equal when they have the same value (1.0, 1 and 1e0).
+func canonicalNumbers(v any) any {
+	switch x := v.(type) {
+	case json.Number:
+		return json.Number(canonicalNumber(string(x)))
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, child := range x {
+			out[k] = canonicalNumbers(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, child := range x {
+			out[i] = canonicalNumbers(child)
+		}
+		return out
+	}
+	return v
+}
+
+// canonicalNumber spells a JSON number as its significant digits and a power of ten, with no
+// leading or trailing zeros ("1.0" and "1e0" are both "1e0", and every zero is "0"). It works on the
+// text, so a number larger than a float64 holds exactly keeps every digit, and two different values
+// never meet.
+func canonicalNumber(s string) string {
+	body := strings.TrimPrefix(s, "-")
+	expText := ""
+	if i := strings.IndexAny(body, "eE"); i >= 0 {
+		expText, body = body[i+1:], body[:i]
+	}
+	intPart, frac, _ := strings.Cut(body, ".")
+	digits := intPart + frac
+	if digits == "" || strings.Trim(digits, "0123456789") != "" {
+		return s
+	}
+	trimmed := strings.TrimLeft(digits, "0")
+	significant := strings.TrimRight(trimmed, "0")
+	if significant == "" {
+		return "0" // zero is zero, whatever its exponent
+	}
+	expNeg := strings.HasPrefix(expText, "-")
+	expDigits := strings.TrimLeft(strings.TrimLeft(expText, "+-"), "0") // leading zeros carry no value
+	if strings.Trim(expDigits, "0123456789") != "" {
+		return s
+	}
+	exp := addToExponent(expNeg, expDigits, int64(len(trimmed)-len(significant)-len(frac)))
+	sign := ""
+	if strings.HasPrefix(s, "-") {
+		sign = "-"
+	}
+	return sign + significant + "e" + exp
+}
+
+// addToExponent adds k to the exponent held as a sign and a digit string with no leading zeros, and
+// returns it in the same canonical form. It works on the digits, so an exponent of any length
+// compares by value in time linear in its length, and |k| is never larger than the number's own
+// digit count.
+func addToExponent(neg bool, digits string, k int64) string {
+	if len(digits) <= 18 { // fits an int64 with room for k
+		n, _ := strconv.ParseInt(digits, 10, 64)
+		if neg {
+			n = -n
+		}
+		return strconv.FormatInt(n+k, 10)
+	}
+	// More than 18 digits: the magnitude exceeds |k|, so the sign cannot change.
+	delta := k
+	if neg {
+		delta = -k // the magnitude moves the other way
+	}
+	b := []byte(digits)
+	carry := 0
+	if delta >= 0 {
+		add := uint64(delta)
+		for i := len(b) - 1; i >= 0 && (add > 0 || carry > 0); i-- {
+			d := int(b[i]-'0') + int(add%10) + carry
+			add /= 10
+			b[i], carry = byte('0'+d%10), d/10
+		}
+		if carry > 0 {
+			b = append([]byte{'1'}, b...)
+		}
+	} else {
+		sub := uint64(-delta)
+		for i := len(b) - 1; i >= 0 && (sub > 0 || carry > 0); i-- {
+			d := int(b[i]-'0') - int(sub%10) - carry
+			sub /= 10
+			carry = 0
+			if d < 0 {
+				d, carry = d+10, 1
+			}
+			b[i] = byte('0' + d)
+		}
+		b = []byte(strings.TrimLeft(string(b), "0")) // a borrow can leave a leading zero
+	}
+	if neg {
+		return "-" + string(b)
+	}
+	return string(b)
 }
 
 func isContainer(v any) bool {

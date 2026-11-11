@@ -20,6 +20,15 @@ All notable changes to this project are documented here. The project follows Con
   temporary address the import parks a device on, under an accent-insensitive collation.
   The temporary address now carries 128 random bits, so a stored or archived address matches
   it under no collation in practice. (ginsys/shelly-manager#413)
+- A save that sends a secret of an array entry as the mask, or leaves it out,
+  now gets the stored secret back in three cases that dropped it or refused it.
+  A `raw` part that is an array at the top is restored like one inside an
+  object. Stored entries that share a password and differ in another secret are
+  ambiguous only for the secrets the save gets back, so replacing both tokens
+  and sending the password as the mask works; entries that disagree at a
+  restored secret are still refused with 400. Numbers match by value, so a
+  stored `1.0` matches the `1` of a client that writes its JSON again.
+  (ginsys/shelly-manager#464)
 - The device configuration routes now need the admin key when one is configured:
   every route under `/api/v1/devices/{id}/config`, the device overrides, the
   desired configuration and the device drift report. So do the typed conversion
