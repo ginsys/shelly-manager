@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,15 @@ func TestNullPathsAndRemovePathsFoldKeysLikeTheDecoder(t *testing.T) {
 
 	_, err = NullPaths([]byte("{\"mqtt\":{\"id\":\"client\",\"İd\":1}}"))
 	assert.NoError(t, err, "two keys the decoder keeps apart are not duplicates")
+}
+
+func TestFoldKeyAgreesWithEqualFold(t *testing.T) {
+	keys := []string{"id", "ID", "Id", "İd", "ıd", "k", "K", "K", "s", "S", "ſ", "σ", "ς", "Σ", "ǆ", "ǅ", "Ǆ", ""}
+	for _, a := range keys {
+		for _, b := range keys {
+			assert.Equal(t, strings.EqualFold(a, b), foldKey(a) == foldKey(b), "%q vs %q", a, b)
+		}
+	}
 }
 
 func TestNullPathsReadsAFieldInsideAnArrayElement(t *testing.T) {

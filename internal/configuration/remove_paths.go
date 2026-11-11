@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // NullPaths lists the path of every field that a raw JSON body sets to null. A decoded struct
@@ -39,19 +40,18 @@ func readNulls(dec *json.Decoder, path []string, paths *[][]string) error {
 	case json.Delim:
 		switch t {
 		case '{':
-			var seen []string
+			seen := map[string]bool{}
 			for dec.More() {
 				keyTok, err := dec.Token()
 				if err != nil {
 					return err
 				}
 				key := keyTok.(string)
-				for _, other := range seen {
-					if strings.EqualFold(key, other) {
-						return fmt.Errorf("duplicate key %q", key)
-					}
+				if folded := foldKey(key); seen[folded] {
+					return fmt.Errorf("duplicate key %q", key)
+				} else {
+					seen[folded] = true
 				}
-				seen = append(seen, key)
 				if err := readNulls(dec, append(path, key), paths); err != nil {
 					return err
 				}
@@ -68,6 +68,22 @@ func readNulls(dec *json.Decoder, path []string, paths *[][]string) error {
 		}
 	}
 	return nil
+}
+
+// foldKey maps each rune to the smallest rune of its case-folding orbit, so two keys get the same
+// result exactly when strings.EqualFold says they are equal.
+func foldKey(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		smallest := r
+		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+			if f < smallest {
+				smallest = f
+			}
+		}
+		b.WriteRune(smallest)
+	}
+	return b.String()
 }
 
 // RemovePaths removes the fields at the given paths from config. An optional field (a pointer) is
