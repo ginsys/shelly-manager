@@ -160,12 +160,9 @@ const placeholder = computed(() => {
 })
 
 // A template form shows a saved password as the mask. A save that leaves it out keeps it, so the
-// form offers an explicit way to remove it: an empty string clears it on the server. The passwords
-// of the network part are plain strings there, so the server reads "" as omitted and keeps them:
-// no Clear action is offered for them.
+// form offers an explicit way to remove it: an empty string clears it on the server.
 const isSavedSecret = computed(() =>
-  !!props.layer && props.path[0] !== 'network' && props.schema.format === 'password' &&
-  inheritedValue.value === SAVED_SECRET_MASK)
+  !!props.layer && props.schema.format === 'password' && inheritedValue.value === SAVED_SECRET_MASK)
 const keepsSecret = computed(() => isSavedSecret.value && !overridden.value)
 const clearsSecret = computed(() => isSavedSecret.value && overridden.value && override.value === '')
 
