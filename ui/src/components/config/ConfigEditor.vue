@@ -290,6 +290,9 @@ watch(() => [props.deviceType, props.deviceId, props.scope], () => {
   schema.value = null
   loadSchema()
 })
+
+// The device page reads the schema to find the password fields when it saves.
+defineExpose({ schema })
 </script>
 
 <style scoped>

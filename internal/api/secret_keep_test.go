@@ -301,6 +301,22 @@ func TestSetOverridesRemovesASecretOnNull(t *testing.T) {
 	assert.Equal(t, "template-secret", *desired.MQTT.Password, "the device inherits the template password again")
 }
 
+// The JSON decoder matches keys without regard to case, so null must be found the same way. A
+// miss would save the body and keep the password, with no error.
+func TestSetOverridesRemovesASecretOnNullInAnyKeyCase(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"x"}}`)
+
+	w := sendOverrides(t, handler, "PUT", id, `{"MQTT":{"user":"iot","PASS":null}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.Nil(t, stored.MQTT.Password)
+	assert.Equal(t, map[string]bool{"mqtt.pass": true}, nullSecretPaths([]byte(`{"Mqtt":{"Pass":null}}`)))
+}
+
 func TestSetOverridesRemovesANetworkPasswordOnNull(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()

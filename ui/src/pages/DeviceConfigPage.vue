@@ -107,6 +107,7 @@
         </div>
         <div v-else-if="editOverrides" class="editor">
           <ConfigEditor
+            ref="overridesEditor"
             v-model="overridesData"
             v-model:valid="overridesValid"
             :held="overridesHeld"
@@ -196,6 +197,7 @@ const store = useDeviceConfigNewStore()
 // to another, and every save, apply and template change below must target the device on screen.
 const deviceId = computed<number | string>(() => route.params.id as string)
 const editOverrides = ref(false)
+const overridesEditor = ref<InstanceType<typeof ConfigEditor> | null>(null)
 const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
 // The overrides as they were saved, which the editor's required-field guard reads. The editor is
@@ -320,7 +322,7 @@ async function handleSaveOverrides() {
   const id = deviceId.value
   const generation = routeGeneration
   try {
-    await store.saveOverrides(id, nullRemovedSecrets(overridesData.value, overridesHeld.value))
+    await store.saveOverrides(id, nullRemovedSecrets(overridesData.value, overridesHeld.value, overridesEditor.value?.schema))
     if (routeGeneration !== generation) return
     editOverrides.value = false
     await handleRefresh()

@@ -619,6 +619,20 @@ func nullSecretPaths(raw []byte) map[string]bool {
 	if json.Unmarshal(raw, &tree) != nil {
 		return nil
 	}
+	// The decoder matches keys without regard to case, so "PASS" fills the same field as "pass".
+	// Read the keys the same way, or a null under another casing would be missed and the secret kept.
+	var lower func(map[string]any) map[string]any
+	lower = func(in map[string]any) map[string]any {
+		out := make(map[string]any, len(in))
+		for key, value := range in {
+			if child, ok := value.(map[string]any); ok {
+				value = lower(child)
+			}
+			out[strings.ToLower(key)] = value
+		}
+		return out
+	}
+	tree = lower(tree)
 	nulls := map[string]bool{}
 	for _, path := range allSecretPaths() {
 		node := any(tree)
