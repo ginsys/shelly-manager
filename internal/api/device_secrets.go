@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"regexp"
 	"strings"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
@@ -30,12 +29,6 @@ func secretKey(key string) bool {
 	}
 	return strings.HasSuffix(k, "key")
 }
-
-// secretKeyInText finds a secret-named key in text that is not valid JSON. It follows secretKey: the
-// quoted key contains one of the words anywhere, or ends in "key". A backslash anywhere in such a
-// text counts too (maskJSONText): an escaped quote or a \uXXXX escape can split or spell a secret
-// word, and a text that cannot be parsed cannot be read around them.
-var secretKeyInText = regexp.MustCompile(`(?i)"[^"]*(?:(?:pass|pwd|psk|secret|token)[^"]*|key)"\s*:`)
 
 // secretScalar reports whether a JSON value is one that a secret key can hold: a non-empty string
 // or a number. A number is a secret too ({"auth_pass": 12345678}), so it is masked like a string.
@@ -73,18 +66,15 @@ func encodeDocument(doc any) string {
 }
 
 // maskJSONText returns text with every non-empty string held under a secret-named key replaced by
-// secretMask. Text that is not valid JSON cannot be walked: it is returned as it is when it names
-// no secret key, and as the mask when it does, so a malformed text never leaks.
+// secretMask. Text that is not valid JSON cannot be walked, and guessing key names in it fails
+// (escapes, truncation), so it is returned as the mask whole: a malformed text never leaks.
 func maskJSONText(text string) string {
 	if strings.TrimSpace(text) == "" {
 		return text
 	}
 	doc, ok := decodeDocument(text)
 	if !ok {
-		if secretKeyInText.MatchString(text) || strings.Contains(text, `\`) {
-			return secretMask
-		}
-		return text
+		return secretMask // text we cannot parse is masked whole, whatever it holds
 	}
 	maskValue(doc)
 	return encodeDocument(doc)
