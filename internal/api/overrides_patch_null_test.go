@@ -191,6 +191,43 @@ func TestPatchOverridesNullOnAPlainFieldReturnsItToTheZeroValue(t *testing.T) {
 	assert.Nil(t, stored.System)
 }
 
+func TestPatchOverridesNullOnAZeroValuedPlainFieldKeepsItsSection(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"system":{"sleep_mode":{"enable":false}}}`)
+
+	for _, body := range []string{
+		`{"system":{"sleep_mode":{"enable":null}}}`,
+		`{"system":{"sleep_mode":{"unknown":null}}}`,
+	} {
+		w := sendOverrides(t, handler, "PATCH", id, body)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+		stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+		require.NoError(t, err)
+		require.NotNil(t, stored.System, body)
+		require.NotNil(t, stored.System.Sleep, body)
+		assert.False(t, stored.System.Sleep.Enable, body)
+	}
+}
+
+func TestPatchOverridesKeysAreMatchedLikeTheDecoder(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"wifi":{"password":"secret"},"mqtt":{"id":"client"}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, "{\"wİfİ\":null}")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = sendOverrides(t, handler, "PATCH", id, "{\"mqtt\":{\"id\":\"client\",\"İd\":1}}")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.WiFi, "a key the decoder does not match removes nothing")
+	require.NotNil(t, stored.MQTT.ClientID)
+	assert.Equal(t, "client", *stored.MQTT.ClientID)
+}
+
 // A secret path takes four values on PATCH, as on PUT: omitted keeps the stored value, "" clears
 // it, the mask restores it and null removes it.
 func TestPatchOverridesSecretTakesFourValues(t *testing.T) {
