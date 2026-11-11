@@ -187,6 +187,34 @@ func TestTypedConfigRoutes_OmittedKeepsEmptyAndNullRemove(t *testing.T) {
 	}
 }
 
+// The network passwords follow the same rules, since the Network fields are pointers: omitted keeps,
+// "" clears and null removes.
+func TestTypedConfigRoutes_NetworkPasswordOmittedKeepsEmptyAndNullRemove(t *testing.T) {
+	cases := map[string]struct {
+		sta  string
+		kept bool
+	}{
+		"omitted keeps": {`{"ssid":"office"}`, true},
+		"empty clears":  {`{"ssid":"office","pass":""}`, false},
+		"null removes":  {`{"ssid":"office","pass":null}`, false},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, typedStored)
+
+			body := `{"configuration":{"network":{"wifi":{"sta":` + c.sta + `}}}}`
+			put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+			require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+
+			stored := storedConfig(t, h, id)
+			assert.Equal(t, c.kept, strings.Contains(stored, typSTA), "stored configuration: %s", stored)
+			assert.NotContains(t, stored, secretMask)
+		})
+	}
+}
+
 // A raw secret the body leaves out keeps its stored value, whether the raw part is edited or
 // omitted, and one sent as "" or null is removed.
 func TestTypedConfigRoutes_RawSecretOmittedKeepsEmptyAndNullRemove(t *testing.T) {
