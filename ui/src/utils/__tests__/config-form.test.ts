@@ -115,6 +115,25 @@ describe('config-form validation', () => {
     expect(held).toEqual({ auth: { pass: '********', user: 'a' }, mqtt: { port: 1 } })
   })
 
+  // CodeQL alert "Prototype-polluting function": JSON.parse makes __proto__ an own key, so the JSON
+  // view can hand such a key to the memory, which must neither write to Object.prototype nor keep it.
+  it('rememberOverrides never writes through __proto__, constructor or prototype', () => {
+    const polluted = () => Object.prototype.hasOwnProperty.call(Object.prototype, 'polluted')
+    try {
+      const body = JSON.parse(
+        '{"__proto__":{"polluted":true},"mqtt":{"__proto__":{"polluted":true},"port":1},' +
+          '"constructor":{"prototype":{"polluted":true}},"prototype":{"polluted":true}}',
+      )
+      const held = rememberOverrides({}, body)
+      expect(polluted()).toBe(false)
+      expect(({} as any).polluted).toBeUndefined()
+      expect(held).toEqual({ mqtt: { port: 1 } })
+      expect(Object.keys(held)).toEqual(['mqtt'])
+    } finally {
+      delete (Object.prototype as any).polluted
+    }
+  })
+
   it('then.required is not asked while the if condition fails', () => {
     expect(validateOverrides(authSections, { auth: { enable: false, user: 'admin' } }, {})).toEqual({})
     expect(validateOverrides(authSections, { auth: { user: 'admin' } }, {})).toEqual({})
