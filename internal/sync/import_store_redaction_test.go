@@ -6,10 +6,31 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ginsys/shelly-manager/internal/redact"
 )
 
 // An archive written by hand can hold the placeholder as a bare list element. The exporter never
 // writes one, but the import must still never store the placeholder.
+// What the export writes for a stored configuration comes back as the stored one: the exporter
+// masks with redact.Mask and the import resolves against the same stored object, numbers included.
+func TestResolveRedacted_ExportedConfigRoundTrips(t *testing.T) {
+	const stored = `{"psk":[12345678],"api_tokens":["one","two"],"mqtt":{"pass":"p","port":1883},"auth":{"key":7}}`
+	var exported, current map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(stored), &exported))
+	require.NoError(t, json.Unmarshal([]byte(stored), &current))
+	redact.Mask(exported, RedactedValue)
+	raw, err := json.Marshal(exported)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "12345678", "the export must hide the number")
+
+	// psk (1), api_tokens (2), mqtt.pass (1) and auth.key (1).
+	assert.Equal(t, 5, resolveRedacted(exported, current))
+	raw, err = json.Marshal(exported)
+	require.NoError(t, err)
+	assert.JSONEq(t, stored, string(raw))
+}
+
 func TestResolveRedactedStringElementsInLists(t *testing.T) {
 	cases := []struct {
 		name, archive, stored, want string
@@ -41,6 +62,20 @@ func TestResolveRedactedStringElementsInLists(t *testing.T) {
 			archive: `{"tokens":["[REDACTED]"]}`,
 			stored:  `{"tokens":[{"a":1}]}`,
 			want:    `{"tokens":[]}`,
+			found:   1,
+		},
+		{
+			name:    "a stored number at the same position is kept",
+			archive: `{"psk":["[REDACTED]"]}`,
+			stored:  `{"psk":[12345678]}`,
+			want:    `{"psk":[12345678]}`,
+			found:   1,
+		},
+		{
+			name:    "a stored number is kept when the key holds one",
+			archive: `{"psk":"[REDACTED]"}`,
+			stored:  `{"psk":12345678}`,
+			want:    `{"psk":12345678}`,
 			found:   1,
 		},
 		{

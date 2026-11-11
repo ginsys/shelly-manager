@@ -499,7 +499,7 @@ func holdsPlaceholder(value interface{}) bool {
 
 // resolveRedactedList resolves the redacted values inside list and returns the resolved list with
 // how many it found. Element i is resolved against stored element i. A bare RedactedValue element
-// takes the stored element when that is a string that is not a placeholder, and is left out
+// takes the stored element when that is a string or a number that is not a placeholder, and is left out
 // otherwise. A stored list that was reordered since the export pairs the wrong elements, which is
 // the limit of matching by position.
 func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
@@ -517,8 +517,11 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 				continue
 			}
 			found++
-			if s, ok := kept.(string); ok && !holdsPlaceholder(s) {
-				out = append(out, s)
+			switch kept.(type) {
+			case string, float64, json.Number:
+				if !holdsPlaceholder(kept) {
+					out = append(out, kept)
+				}
 			}
 			continue
 		case map[string]interface{}:
