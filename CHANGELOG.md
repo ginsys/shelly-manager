@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The project follows Con
   every field and for a whole section. The device then inherits the value of
   its templates again. An omitted key, `""` and the mask work as before.
   (ginsys/shelly-manager#462)
+- A forced SMA import no longer fails on MySQL when a stored device address spells the
+  temporary address the import parks a device on, under an accent-insensitive collation.
+  The temporary address now carries 128 random bits, so a stored or archived address matches
+  it under no collation in practice. (ginsys/shelly-manager#413)
 - The device configuration routes now need the admin key when one is configured:
   every route under `/api/v1/devices/{id}/config`, the device overrides, the
   desired configuration and the device drift report. So do the typed conversion

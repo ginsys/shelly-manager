@@ -1,52 +1,25 @@
 package sync
 
 import (
-	"strings"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestReleasePlaceholderAvoidsEveryAddressTheIndexTreatsAsEqual(t *testing.T) {
-	cases := map[string][]string{
-		"an exact match":                    {"import-hold-1"},
-		"a case-insensitive match":          {"IMPORT-HOLD-1"},
-		"a match with trailing pad spaces":  {"import-hold-1  "},
-		"several matches in a row":          {"import-hold-1", "import-hold-1-1", "IMPORT-HOLD-1-2"},
-		"a match for a different device id": {"import-hold-2"},
-	}
-	for name, addresses := range cases {
-		t.Run(name, func(t *testing.T) {
-			taken := map[string]bool{}
-			for _, address := range addresses {
-				taken[addressKey(address)] = true
-			}
+// A placeholder that is a function of the device id can be spelled by a stored free-text address,
+// and a collation the code does not model (accent-insensitive utf8mb4_general_ci) can then equate
+// the two. A random suffix removes that whole class: a stored or archived value matches it only by
+// a 2^-128 chance.
+func TestReleasePlaceholderIsUnguessable(t *testing.T) {
+	shape := regexp.MustCompile(`^import-hold-1-[0-9a-f]{32}$`)
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		hold := releasePlaceholder(1)
 
-			hold := releasePlaceholder(1, taken)
-
-			assert.False(t, hasAddress(addresses, hold), "%q must differ from every taken address", hold)
-			assert.True(t, taken[addressKey(hold)], "the placeholder is reserved")
-			assert.LessOrEqual(t, len(hold), 191)
-		})
+		assert.Regexp(t, shape, hold)
+		assert.LessOrEqual(t, len(hold), 191, "the ip column holds 191 characters")
+		assert.False(t, seen[hold], "%q was drawn twice", hold)
+		seen[hold] = true
 	}
-}
-
-func TestReleasePlaceholderStaysShortHoweverManyAreTaken(t *testing.T) {
-	taken := map[string]bool{}
-	var hold string
-	for i := 0; i < 500; i++ {
-		hold = releasePlaceholder(1, taken)
-	}
-	assert.LessOrEqual(t, len(hold), 191)
-	assert.True(t, strings.HasPrefix(hold, "import-hold-1"))
-	assert.Len(t, taken, 500)
-}
-
-func hasAddress(addresses []string, candidate string) bool {
-	for _, address := range addresses {
-		if addressKey(address) == addressKey(candidate) {
-			return true
-		}
-	}
-	return false
 }
