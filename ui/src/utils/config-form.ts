@@ -164,14 +164,37 @@ function requiredKeys(
   return keys
 }
 
+// rememberOverrides returns held with every key of body added, objects merged deeply. It is the
+// memory of what an override body has held: a key stays once it was there, even after Reset
+// removes it from the body.
+export function rememberOverrides(held: ConfigBody, body: ConfigBody): ConfigBody {
+  const out: ConfigBody = clone(held)
+  const add = (target: any, source: any) => {
+    for (const [key, value] of Object.entries(source || {})) {
+      if (isPlainObject(value)) {
+        if (!isPlainObject(target[key])) target[key] = {}
+        add(target[key], value)
+      } else {
+        target[key] = value
+      }
+    }
+  }
+  add(out, body)
+  return out
+}
+
 // validateOverrides walks the schema and returns the errors of the override body, keyed by
 // dotted path. A section that holds an override must be an object. A required field fails only
-// when its object holds an override and neither the override nor the inherited configuration
-// gives the field a value.
+// when its object holds an override, or held one (see rememberOverrides), and neither the override
+// nor the inherited configuration gives the field a value. A section that held an override and
+// lost the last one by Reset is still checked: saving would remove what was saved, and the
+// effective configuration must stay complete. A section nobody touched is not checked, so a
+// template that leaves it incomplete does not block Save.
 export function validateOverrides(
   sections: Record<string, SchemaProperty>,
   overrides: ConfigBody,
   inherited: ConfigBody | null | undefined,
+  held?: ConfigBody | null,
 ): Record<string, string> {
   const errors: Record<string, string> = {}
   const walk = (schema: SchemaProperty, path: ConfigPath) => {
@@ -185,7 +208,8 @@ export function validateOverrides(
         walk(child, [...path, key])
       }
       const required = requiredKeys(schema, path, overrides, inherited)
-      if (required.length > 0 && isPlainObject(own) && Object.keys(own).length > 0) {
+      const touched = (node: any) => isPlainObject(node) && Object.keys(node).length > 0
+      if (required.length > 0 && (touched(own) || touched(getAt(held, path)))) {
         for (const key of required) {
           const childPath = [...path, key]
           if (getAt(overrides, childPath) === undefined && getAt(inherited, childPath) === undefined) {

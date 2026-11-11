@@ -1183,7 +1183,8 @@ paths:
             config, and the template value in inherited. In config a set secret is removed. In
             inherited a set secret shows as the mask "********", never as its value. The
             set-templates route (PUT /api/v1/devices/{id}/templates/new) returns the same
-            inherited and inherited_sources beside its desired_config and sources.
+            inherited and inherited_sources beside its desired_config and sources, and removes
+            the set secrets from desired_config as well.
           content:
             application/json:
               schema:

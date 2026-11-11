@@ -41,8 +41,13 @@ All notable changes to this project are documented here. The project follows Con
   `/devices/{id}/overrides/new`) show a saved secret as the same mask, where
   they showed nothing. A write that sends the mask back keeps the stored
   secret, and the mask is never stored, so an unrelated edit no longer drops a
-  saved password and the form does not ask for it again. The Wi-Fi access point
-  key is a secret on every response. Lists still use a JSON box. (#385)
+  saved password and the form does not ask for it again. One list of secret
+  fields serves removal, masking and restoring. It covers the Wi-Fi access
+  point key and the station and access point passwords of the network part,
+  and the set-templates response no longer returns a template secret in its
+  desired configuration. A section whose last saved override is reset stays
+  checked for required fields, so Save cannot remove a saved password while a
+  template keeps authentication on. Lists still use a JSON box. (#385)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate
