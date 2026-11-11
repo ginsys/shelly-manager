@@ -71,6 +71,7 @@
                     :overrides="localConfig"
                     :inherited="baseline"
                     :sources="sources"
+                    :layer="layer"
                     :errors="errors"
                     @set="setField"
                     @reset="resetField"
@@ -84,6 +85,7 @@
                   :overrides="localConfig"
                   :inherited="baseline"
                   :sources="sources"
+                  :layer="layer"
                   :errors="errors"
                   @set="setField"
                   @reset="resetField"
@@ -130,9 +132,8 @@ interface Props {
   scope?: string
   inherited?: ConfigBody | null
   // True when the body is one layer of the configuration (a template): a field another layer can
-  // supply is not required. `kept` holds saved values the body must not drop (see validateOverrides).
+  // supply is not required (see validateOverrides).
   layer?: boolean
-  kept?: ConfigBody | null
   sources?: Record<string, string>
   // The overrides as they were saved: the page sets it when it loads them (see `held` below). The device page always gives it; template pages (layer) do not.
   held?: ConfigBody
@@ -178,7 +179,7 @@ const baseline = computed<ConfigBody>(() => props.inherited || {})
 const errors = computed<Record<string, string>>(() =>
   schema.value?.properties
     ? validateOverrides(schema.value.properties, localConfig.value, baseline.value, held.value,
-        props.layer ? { kept: props.kept } : undefined)
+        props.layer)
     : {},
 )
 

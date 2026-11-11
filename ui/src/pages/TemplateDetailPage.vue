@@ -76,7 +76,6 @@
             :scope="schemaTarget?.scope"
             :inherited="savedSecrets"
             layer
-            :kept="keptSecrets"
           />
           <ul v-if="saveErrors.length > 0" class="save-errors" data-testid="template-save-errors">
             <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>
@@ -164,14 +163,10 @@ const lastAffectedDevices = ref<number | null>(null)
 // The body the template had when Edit opened. It is the same until the form changes it.
 const configUntouched = computed(() =>
   template.value !== null && sameValue(configBody.value, template.value.config || {}))
-// While the body is untouched, the saved passwords show as a mask and the update leaves the config
-// out. Once the form changes the body, a save would replace the config without the password the
-// server holds, so a field that held a password is required again (`kept`) and it must be
-// entered. A template is a layer: no other field is required for being incomplete.
-const savedSecrets = computed(() =>
-  template.value && configUntouched.value ? savedSecretBaseline(template.value) : null)
-const keptSecrets = computed(() =>
-  template.value && !configUntouched.value ? savedSecretBaseline(template.value) : null)
+// The saved passwords show as a mask. While the body is untouched the update leaves the config
+// out; a changed body that leaves a password out keeps it, because the server keeps a password the
+// body omits. A template is a layer: no field is required for being incomplete.
+const savedSecrets = computed(() => (template.value ? savedSecretBaseline(template.value) : null))
 
 const showAssignDialog = ref(false)
 const assign = ref<{ deviceId: number | null; position: number | null }>({ deviceId: null, position: null })

@@ -11,6 +11,7 @@
       :overrides="overrides"
       :inherited="inherited"
       :sources="sources"
+      :layer="layer"
       :errors="errors"
       @set="(p, v) => emit('set', p, v)"
       @reset="p => emit('reset', p)"
@@ -90,10 +91,12 @@
     <p v-if="!overridden && inheritedValue !== undefined" class="field-inherited">
       Inherited: {{ schema.format === 'password' ? '••••' : formatValue(inheritedValue) }}<span v-if="source"> from {{ source }}</span>
     </p>
+    <p v-if="clearsSecret" class="field-note" data-note="clears-secret">The stored password is removed when you save.</p>
     <p v-if="readOnly" class="field-note">Apply cannot write this field to the device yet.</p>
     <p v-if="error" class="field-error" role="alert">{{ error }}</p>
 
-    <div v-if="overridden || canUseDefault" class="field-actions">
+    <div v-if="overridden || canUseDefault || keepsSecret" class="field-actions">
+      <button v-if="keepsSecret" type="button" class="link-btn" data-action="clear-secret" @click="emit('set', path, '')">Clear stored password</button>
       <button v-if="overridden" type="button" class="link-btn" data-action="reset" @click="onReset">Reset</button>
       <button v-if="canUseDefault" type="button" class="link-btn" data-action="use-default" @click="onUseDefault">
         Use default ({{ formatValue(schema.default) }})
@@ -111,6 +114,7 @@ import {
   getAt,
   hasAt,
   pathKey,
+  SAVED_SECRET_MASK,
   sameValue,
   subtreeApplicable,
   type ConfigBody,
@@ -124,6 +128,8 @@ interface Props {
   overrides: ConfigBody
   inherited?: ConfigBody | null
   sources?: Record<string, string>
+  // True in a template form, where a saved password belongs to the body being edited.
+  layer?: boolean
   errors: Record<string, string>
 }
 
@@ -152,6 +158,13 @@ const placeholder = computed(() => {
   }
   return props.schema.default !== undefined ? formatValue(props.schema.default) : ''
 })
+
+// A template form shows a saved password as the mask. A save that leaves it out keeps it, so the
+// form offers an explicit way to remove it: an empty string clears it on the server.
+const isSavedSecret = computed(() =>
+  !!props.layer && props.schema.format === 'password' && inheritedValue.value === SAVED_SECRET_MASK)
+const keepsSecret = computed(() => isSavedSecret.value && !overridden.value)
+const clearsSecret = computed(() => isSavedSecret.value && overridden.value && override.value === '')
 
 const canUseDefault = computed(() =>
   props.schema.default !== undefined &&
