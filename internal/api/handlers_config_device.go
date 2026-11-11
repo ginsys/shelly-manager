@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -334,9 +333,10 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	raw, readBodyErr := io.ReadAll(r.Body)
+	// Only the first JSON value is read, as before: what follows it is never read.
+	var raw json.RawMessage
 	var patch configuration.DeviceConfiguration
-	if readBodyErr != nil || json.NewDecoder(bytes.NewReader(raw)).Decode(&patch) != nil {
+	if json.NewDecoder(r.Body).Decode(&raw) != nil || json.Unmarshal(raw, &patch) != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
