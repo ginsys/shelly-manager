@@ -108,8 +108,8 @@ export const useTemplatesStore = defineStore('templates', () => {
   }
 
   function reset() {
+    // `pending` is not reset: a request still in flight releases its own share when it ends.
     templates.value = []
-    pending.value = 0
     error.value = null
     scopeFilter.value = ''
     deviceTypeFilter.value = ''

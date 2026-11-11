@@ -54,6 +54,26 @@ describe('templates store loading', () => {
     expect(store.loading).toBe(false)
   })
 
+  // reset() clears the data, not the requests in flight: each releases its own share when it ends,
+  // so the count never goes below zero and a later request still shows as loading.
+  it('reset() during a request leaves the count right', async () => {
+    const first = deferred<any[]>()
+    const second = deferred<any[]>()
+    vi.mocked(listTemplates).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    const store = useTemplatesStore()
+    const a = store.fetchTemplates()
+    store.reset()
+    expect(store.loading).toBe(true)
+    first.resolve([])
+    await a
+    expect(store.loading).toBe(false)
+    const b = store.fetchTemplates()
+    expect(store.loading).toBe(true)
+    second.resolve([])
+    await b
+    expect(store.loading).toBe(false)
+  })
+
   it('a failed request still releases its share', async () => {
     vi.mocked(listTemplates).mockRejectedValueOnce(new Error('down'))
     const store = useTemplatesStore()
