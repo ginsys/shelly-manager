@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Fixed
+- The device routes no longer return saved secrets in clear. The list, get, add
+  and update routes and the configuration reads (`/config`, `/config/import`,
+  `/config/current`) show a secret held in `settings`, `overrides`,
+  `desired_config` or the device's own settings as the mask `********`. A save
+  that sends the mask back keeps the stored secret and never stores the mask.
+  The JSON, YAML and GitOps exports are not covered. (#436)
+
 ### Added
 - SMA import now restores devices (with their desired configuration),
   templates and discovered devices. The import runs in one transaction, so a
