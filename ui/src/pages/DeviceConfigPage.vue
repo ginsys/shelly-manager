@@ -109,7 +109,7 @@
           <ConfigEditor
             v-model="overridesData"
             v-model:valid="overridesValid"
-            v-model:held="overridesHeld"
+            :held="overridesHeld"
             :device-id="deviceId"
             :inherited="store.inherited"
             :sources="store.inheritedSources"
@@ -197,9 +197,9 @@ const deviceId = computed<number | string>(() => route.params.id as string)
 const editOverrides = ref(false)
 const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
-// The keys the override body has held since it was loaded. The editor is removed and re-created
-// while the page loads (Verify Device does it), so the memory lives here, beside the body it
-// describes, and every load of the body starts it again.
+// The overrides as they were saved, which the editor's required-field guard reads. The editor is
+// removed and re-created while the page loads (Verify Device does it), so it lives here, beside the
+// body it describes. Only a load of the overrides sets it; no edit does.
 const overridesHeld = ref<Record<string, any>>({})
 const showSources = ref(false)
 const showRawJson = ref(false)
