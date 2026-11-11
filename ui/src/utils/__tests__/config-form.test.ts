@@ -72,6 +72,15 @@ describe('nullRemovedSecrets', () => {
     })
   })
 
+  it('also removes a masked secret that the schema leaves out, such as the AP password and key', () => {
+    const saved = { wifi: { ap: { pass: mask, key: mask } } }
+    const bare = { properties: { wifi: { type: 'object', properties: { ap: { type: 'object', properties: {} } } } } } as any
+    expect(nullRemovedSecrets({}, saved, bare)).toEqual({ wifi: { ap: { pass: null, key: null } } })
+    expect(nullRemovedSecrets({ wifi: { ap: { key: mask } } }, saved, bare)).toEqual({
+      wifi: { ap: { key: mask, pass: null } },
+    })
+  })
+
   it('creates the section again when a reset removed it whole', () => {
     expect(nullRemovedSecrets({}, { auth: { pass: mask } }, schema)).toEqual({ auth: { pass: null } })
   })
@@ -88,7 +97,11 @@ describe('nullRemovedSecrets', () => {
     nullRemovedSecrets(edited, { mqtt: { pass: mask } }, schema)
     expect(edited).toEqual({ mqtt: { user: 'iot' } })
     expect(nullRemovedSecrets(edited, null, schema)).toEqual(edited)
-    expect(nullRemovedSecrets(edited, { mqtt: { pass: mask } }, null)).toEqual(edited)
+    expect(nullRemovedSecrets(edited, { mqtt: { user: 'iot' } }, null)).toEqual(edited)
+  })
+
+  it('finds a masked secret by its mask when there is no schema yet', () => {
+    expect(nullRemovedSecrets({}, { mqtt: { pass: mask } }, null)).toEqual({ mqtt: { pass: null } })
   })
 })
 

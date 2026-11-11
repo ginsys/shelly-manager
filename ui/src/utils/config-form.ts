@@ -261,17 +261,26 @@ function secretPathsOf(properties: Record<string, SchemaProperty> | undefined, p
   )
 }
 
+// maskedPathsOf lists the path of every mask in a saved body. The server writes the mask only for a
+// secret, so this finds the secrets that the device schema leaves out (the AP password and key).
+function maskedPathsOf(body: any, prefix: ConfigPath = []): ConfigPath[] {
+  if (body === SAVED_SECRET_MASK) return [prefix]
+  if (!isPlainObject(body)) return []
+  return Object.entries(body).flatMap(([key, child]) => maskedPathsOf(child, [...prefix, key]))
+}
+
 // nullRemovedSecrets returns edited with null at each password field that the saved overrides hold
 // (masked, or saved as an empty string) and the edited body no longer has. The server keeps a secret
 // that a saved body leaves out, so null is how a removed override (Reset, or a deleted line in the
-// JSON view) reaches it: the device then inherits the template secret again.
+// JSON view) reaches it: the device then inherits the template secret again. A secret that the
+// schema leaves out is found by its mask only, so a saved empty one of those is not covered.
 export function nullRemovedSecrets(
   edited: ConfigBody,
   saved: ConfigBody | null | undefined,
   schema: { properties?: Record<string, SchemaProperty> } | null | undefined,
 ): ConfigBody {
   let body = edited
-  for (const path of secretPathsOf(schema?.properties)) {
+  for (const path of [...secretPathsOf(schema?.properties), ...maskedPathsOf(saved)]) {
     if (typeof getAt(saved, path) === 'string' && !hasAt(edited, path)) body = setAt(body, path, null)
   }
   return body
