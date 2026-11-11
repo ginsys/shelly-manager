@@ -181,6 +181,25 @@ describe('ConfigEditor', () => {
     expect(lastModel(wrapper)).toEqual({ system: { device: { name: 'plug2' } }, power_metering: { max_power: 180 } })
   })
 
+  it('a model changed from outside replaces the typed text in the box', async () => {
+    const wrapper = mountEditor({}, {
+      inherited: { system: { device: { name: 'plug' } }, power_metering: { max_power: 18 } },
+      sources: { 'system.device.name': 'Global', 'power_metering.max_power': 'Global' },
+    })
+    await flushPromises()
+    await openSection(wrapper, 'system')
+    await openSection(wrapper, 'power_metering')
+    const name = wrapper.find('[data-path="system.device.name"] input')
+    const power = wrapper.find('[data-path="power_metering.max_power"] input')
+    ;(name.element as HTMLInputElement).value = 'plug2'
+    await name.trigger('input')
+    ;(power.element as HTMLInputElement).value = '180'
+    await power.trigger('input')
+    await wrapper.setProps({ modelValue: { system: { device: { name: 'server' } }, power_metering: { max_power: 2500 } } })
+    expect((name.element as HTMLInputElement).value).toBe('server')
+    expect((power.element as HTMLInputElement).value).toBe('2500')
+  })
+
   it('is not valid while the schema request is pending', async () => {
     vi.mocked(getConfigSchema).mockReturnValue(new Promise(() => {}))
     const wrapper = mountEditor({ power_metering: { max_power: 70000 } })
