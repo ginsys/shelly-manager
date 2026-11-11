@@ -128,12 +128,15 @@ interface Props {
   deviceId?: number | string
   inherited?: ConfigBody | null
   sources?: Record<string, string>
+  // The keys the override body has held since it was loaded (see `held` below). Optional.
+  held?: ConfigBody
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: Record<string, any>]
   'update:valid': [value: boolean]
+  'update:held': [value: ConfigBody]
 }>()
 
 const typedConfigStore = useTypedConfigStore()
@@ -150,23 +153,36 @@ const localConfig = ref<ConfigBody>({})
 
 // What the override body has held since it was loaded. Reset can empty a section, and an emptied
 // section looks untouched, yet saving it removes what was saved. The required check keeps looking
-// at a section that held an override (see validateOverrides). A body that arrives from outside
-// (another device, a reload after Save) starts the memory again; our own echo does not.
-const held = ref<ConfigBody>({})
+// at a section that held an override (see validateOverrides). The page owns the memory (`held`
+// prop, `update:held` event) because it outlives this component: the page removes and re-creates
+// the editor while it loads, and the edited body survives that but the memory would not. Without
+// the prop the editor keeps its own. A body that arrives from outside (another device, a reload
+// after Save) starts the memory again; our own echo does not.
+const held = ref<ConfigBody>(rememberOverrides(clone(props.held || {}), props.modelValue || {}))
 
-watch(() => props.modelValue, (newValue) => {
+function setHeld(next: ConfigBody) {
+  held.value = next
+  emit('update:held', clone(next))
+}
+
+watch(() => props.modelValue, (newValue, previous) => {
   const incoming = newValue || {}
-  if (!sameValue(incoming, localConfig.value)) held.value = clone(incoming)
+  // The first run has no earlier body: the memory is what the page gave, plus what the body holds.
+  if (previous !== undefined && !sameValue(incoming, localConfig.value)) setHeld(clone(incoming))
   localConfig.value = clone(incoming)
   jsonText.value = JSON.stringify(incoming, null, 2)
 }, { immediate: true, deep: true })
 
+watch(() => props.held, (next) => {
+  if (next && !sameValue(next, held.value)) held.value = clone(next)
+}, { deep: true })
+
 watch(() => props.deviceId, () => {
-  held.value = clone(props.modelValue || {})
+  setHeld(clone(props.modelValue || {}))
 })
 
 function remember() {
-  held.value = rememberOverrides(held.value, localConfig.value)
+  setHeld(rememberOverrides(held.value, localConfig.value))
 }
 
 // The page passes the inherited configuration: the template layers alone, which is what a field

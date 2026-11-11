@@ -109,6 +109,7 @@
           <ConfigEditor
             v-model="overridesData"
             v-model:valid="overridesValid"
+            v-model:held="overridesHeld"
             :device-id="deviceId"
             :inherited="store.inherited"
             :sources="store.inheritedSources"
@@ -178,14 +179,23 @@ const deviceId = computed<number | string>(() => route.params.id as string)
 const editOverrides = ref(false)
 const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
+// The keys the override body has held since it was loaded. The editor is removed and re-created
+// while the page loads (Verify Device does it), so the memory lives here, beside the body it
+// describes, and every load of the body starts it again.
+const overridesHeld = ref<Record<string, any>>({})
 const showSources = ref(false)
 const showRawJson = ref(false)
 const showAddTemplate = ref(false)
 const newTemplateId = ref<number | null>(null)
 const newTemplatePosition = ref<number | null>(null)
 
+function loadOverrides(body: Record<string, any> | null | undefined) {
+  overridesData.value = JSON.parse(JSON.stringify(body || {}))
+  overridesHeld.value = JSON.parse(JSON.stringify(body || {}))
+}
+
 watch(() => store.overrides, (newOverrides) => {
-  overridesData.value = JSON.parse(JSON.stringify(newOverrides || {}))
+  loadOverrides(newOverrides)
 }, { immediate: true, deep: true })
 
 function formatDate(iso: string) {
@@ -207,7 +217,7 @@ async function handleRefresh() {
   try {
     await store.refresh(id)
     if (routeGeneration !== generation) return
-    overridesData.value = JSON.parse(JSON.stringify(store.overrides || {}))
+    loadOverrides(store.overrides)
   } catch (e: any) {
     console.error('Refresh failed:', e)
   }
@@ -325,7 +335,7 @@ watch(deviceId, (next, previous) => {
   if (!next || next === previous) return
   routeGeneration++
   store.reset()
-  overridesData.value = {}
+  loadOverrides(null)
   editOverrides.value = false
   showAddTemplate.value = false
   newTemplateId.value = null
