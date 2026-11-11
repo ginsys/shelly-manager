@@ -49,31 +49,46 @@ describe('config-form paths', () => {
 
 describe('nullRemovedSecrets', () => {
   const mask = '********'
+  const secret = { type: 'string', format: 'password' } as const
+  const schema = {
+    properties: {
+      mqtt: { type: 'object', properties: { user: { type: 'string' }, pass: secret } },
+      wifi: { type: 'object', properties: { ap: { type: 'object', properties: { pass: secret } } } },
+      auth: { type: 'object', properties: { pass: secret } },
+    },
+  } as any
 
   it('sends null where a saved secret is gone from the edited body', () => {
     const saved = { mqtt: { user: 'iot', pass: mask }, wifi: { ap: { pass: mask } } }
-    expect(nullRemovedSecrets({ mqtt: { user: 'iot' }, wifi: { ap: { pass: mask } } }, saved)).toEqual({
+    expect(nullRemovedSecrets({ mqtt: { user: 'iot' }, wifi: { ap: { pass: mask } } }, saved, schema)).toEqual({
       mqtt: { user: 'iot', pass: null },
       wifi: { ap: { pass: mask } },
     })
   })
 
-  it('creates the section again when a reset removed it whole', () => {
-    expect(nullRemovedSecrets({}, { auth: { pass: mask } })).toEqual({ auth: { pass: null } })
+  it('also removes a saved empty secret, which an omitted key would keep', () => {
+    expect(nullRemovedSecrets({ mqtt: { user: 'iot' } }, { mqtt: { user: 'iot', pass: '' } }, schema)).toEqual({
+      mqtt: { user: 'iot', pass: null },
+    })
   })
 
-  it('leaves a kept mask, a new value and a plain saved value alone', () => {
+  it('creates the section again when a reset removed it whole', () => {
+    expect(nullRemovedSecrets({}, { auth: { pass: mask } }, schema)).toEqual({ auth: { pass: null } })
+  })
+
+  it('leaves a kept mask, a new value and a field that is not a secret alone', () => {
     const saved = { mqtt: { user: 'iot', pass: mask }, auth: { pass: mask } }
     const edited = { mqtt: { user: 'iot', pass: mask }, auth: { pass: 'new' } }
-    expect(nullRemovedSecrets(edited, saved)).toEqual(edited)
-    expect(nullRemovedSecrets({}, { mqtt: { user: 'iot' } })).toEqual({})
+    expect(nullRemovedSecrets(edited, saved, schema)).toEqual(edited)
+    expect(nullRemovedSecrets({}, { mqtt: { user: '' } }, schema)).toEqual({})
   })
 
-  it('does not change its input and accepts no saved body', () => {
+  it('does not change its input and accepts no saved body or schema', () => {
     const edited = { mqtt: { user: 'iot' } }
-    nullRemovedSecrets(edited, { mqtt: { pass: mask } })
+    nullRemovedSecrets(edited, { mqtt: { pass: mask } }, schema)
     expect(edited).toEqual({ mqtt: { user: 'iot' } })
-    expect(nullRemovedSecrets(edited, null)).toEqual(edited)
+    expect(nullRemovedSecrets(edited, null, schema)).toEqual(edited)
+    expect(nullRemovedSecrets(edited, { mqtt: { pass: mask } }, null)).toEqual(edited)
   })
 })
 

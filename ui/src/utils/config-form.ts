@@ -254,20 +254,26 @@ export function savedSecretBaseline(saved: {
   return Object.keys(body).length > 0 ? body : null
 }
 
-// nullRemovedSecrets returns edited with null at each path where the saved overrides hold a masked
-// secret and the edited body no longer has the key. The server keeps a secret that a saved body
-// leaves out, so null is how a removed override (Reset, or a deleted line in the JSON view) reaches
-// it: the device then inherits the template secret again.
-export function nullRemovedSecrets(edited: ConfigBody, saved: ConfigBody | null | undefined): ConfigBody {
+// secretPathsOf lists the path of every password field in a schema.
+function secretPathsOf(properties: Record<string, SchemaProperty> | undefined, prefix: ConfigPath = []): ConfigPath[] {
+  return Object.entries(properties ?? {}).flatMap(([key, prop]) =>
+    prop.format === 'password' ? [[...prefix, key]] : secretPathsOf(prop.properties, [...prefix, key]),
+  )
+}
+
+// nullRemovedSecrets returns edited with null at each password field that the saved overrides hold
+// (masked, or saved as an empty string) and the edited body no longer has. The server keeps a secret
+// that a saved body leaves out, so null is how a removed override (Reset, or a deleted line in the
+// JSON view) reaches it: the device then inherits the template secret again.
+export function nullRemovedSecrets(
+  edited: ConfigBody,
+  saved: ConfigBody | null | undefined,
+  schema: { properties?: Record<string, SchemaProperty> } | null | undefined,
+): ConfigBody {
   let body = edited
-  const walk = (node: any, path: ConfigPath) => {
-    if (node === SAVED_SECRET_MASK) {
-      if (!hasAt(edited, path)) body = setAt(body, path, null)
-    } else if (node !== null && typeof node === 'object' && !Array.isArray(node)) {
-      for (const key of Object.keys(node)) walk(node[key], [...path, key])
-    }
+  for (const path of secretPathsOf(schema?.properties)) {
+    if (typeof getAt(saved, path) === 'string' && !hasAt(edited, path)) body = setAt(body, path, null)
   }
-  walk(saved, [])
   return body
 }
 
