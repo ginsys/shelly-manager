@@ -51,7 +51,7 @@
       :id="inputId"
       type="number"
       class="form-input"
-      :value="draft ?? (overridden ? override : '')"
+      :value="boxValue"
       :min="schema.minimum"
       :max="schema.maximum"
       :step="schema.type === 'integer' ? 1 : 'any'"
@@ -78,7 +78,7 @@
       :id="inputId"
       :type="schema.format === 'password' ? 'password' : 'text'"
       class="form-input"
-      :value="draft ?? (overridden ? override : '')"
+      :value="boxValue"
       :maxlength="schema.maxLength"
       :placeholder="placeholder"
       :disabled="readOnly"
@@ -111,6 +111,7 @@ import {
   getAt,
   hasAt,
   pathKey,
+  sameValue,
   subtreeApplicable,
   type ConfigBody,
   type ConfigPath,
@@ -187,6 +188,23 @@ function onEnumChange(value: string) {
 // "plug" would lose "plug". The draft keeps the box on what was typed until the box is left, or
 // Reset or Use default is chosen.
 const draft = ref<string | null>(null)
+
+// The box shows the draft only while the model is what typing that draft leaves: the override
+// equals it, or there is none because it equals the inherited value, or the box is empty. A model
+// that changed from outside (a refresh, another device) shows its own value, whatever was typed.
+const boxValue = computed(() => {
+  const model = overridden.value ? override.value : ''
+  if (draft.value === null) return model
+  const typed = props.schema.type === 'integer' || props.schema.type === 'number'
+    ? Number(draft.value)
+    : draft.value
+  const consistent = draft.value === ''
+    ? !overridden.value
+    : overridden.value
+      ? sameValue(override.value, typed)
+      : sameValue(inheritedValue.value, typed)
+  return consistent ? draft.value : model
+})
 
 function onReset() {
   draft.value = null
