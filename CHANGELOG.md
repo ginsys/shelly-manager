@@ -103,7 +103,10 @@ All notable changes to this project are documented here. The project follows Con
   timezone or location also switches off automatic detection. The device model
   is read from the stored device settings. A device that rejects the login
   during the write returns HTTP 502, and a refused write names the setting but
-  not the device's error text, which can echo the value sent. (#375)
+  not the device's error text, which can echo the value sent. Applies are
+  serialized inside one server process only, so run one manager replica when
+  you use apply (#425). The routes are documented in
+  `docs/api/api-overview.md`. (#375)
 
 ### Changed
 - Plugin list/detail responses are now modelled as exact DTOs (#266): `Plugin`
