@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- `PATCH /api/v1/devices/{id}/overrides/new` now removes a field that the body
+  sets to JSON `null`, as `PUT` already did for a secret. It answered 200 and
+  kept the stored value before, so a field could not be removed. This holds for
+  every field and for a whole section. The device then inherits the value of
+  its templates again. An omitted key, `""` and the mask work as before.
+  (ginsys/shelly-manager#462)
 - The device configuration routes now need the admin key when one is configured:
   every route under `/api/v1/devices/{id}/config`, the device overrides, the
   desired configuration and the device drift report. So do the typed conversion

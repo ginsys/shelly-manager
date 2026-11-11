@@ -333,11 +333,16 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	raw, readBodyErr := io.ReadAll(r.Body)
 	var patch configuration.DeviceConfiguration
-	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+	if readBodyErr != nil || json.Unmarshal(raw, &patch) != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
+
+	// A field sent as null is removed, so the device inherits it again. A decoded struct cannot
+	// tell null from a field that is left out, so the raw body is read.
+	removed := configuration.NullPaths(raw)
 
 	// A secret sent back as the mask leaves the stored one as it is.
 	if stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id)); err == nil {
@@ -346,7 +351,7 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 		restoreMaskedSecrets(&patch, nil)
 	}
 
-	if err := h.ConfigService.ConfigurationSvc.PatchDeviceOverrides(uint(id), &patch); err != nil {
+	if err := h.ConfigService.ConfigurationSvc.PatchDeviceOverrides(uint(id), &patch, removed); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {
 			rw.WriteNotFoundError(w, r, "Device")
 			return

@@ -543,7 +543,7 @@ func TestConfigurationService_DeviceOverrides(t *testing.T) {
 		},
 	}
 
-	err = svc.PatchDeviceOverrides(1, patch)
+	err = svc.PatchDeviceOverrides(1, patch, nil)
 	require.NoError(t, err)
 
 	retrieved, _ = svc.GetDeviceOverrides(1)
