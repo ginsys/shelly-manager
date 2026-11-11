@@ -441,6 +441,32 @@ func (s *ConfigurationService) GetDesiredConfig(deviceID uint) (*DeviceConfigura
 	return config, result.Sources, nil
 }
 
+// GetInheritedConfig returns what the device falls back to when its own overrides are removed:
+// the merge of its template layers alone, with the template each value comes from. The desired
+// configuration cannot give this, because the merge keeps only the winning layer of a field, so
+// a field that a template and the device override both set shows no template value there.
+func (s *ConfigurationService) GetInheritedConfig(deviceID uint) (*DeviceConfiguration, map[string]string, error) {
+	templates, err := s.GetDeviceTemplates(deviceID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	layers := make([]ConfigLayer, 0, len(templates))
+	for _, tmpl := range templates {
+		var tmplConfig DeviceConfiguration
+		if parseErr := json.Unmarshal(tmpl.Config, &tmplConfig); parseErr != nil {
+			continue
+		}
+		layers = append(layers, ConfigLayer{Name: tmpl.Name, Config: &tmplConfig})
+	}
+
+	result, mergeErr := s.merger.Merge(layers)
+	if mergeErr != nil {
+		return nil, nil, fmt.Errorf("failed to merge template configurations: %w", mergeErr)
+	}
+	return result.Config, result.Sources, nil
+}
+
 // parseDesiredConfig decodes a stored desired configuration. An empty value, or an empty
 // object, is an empty configuration.
 func parseDesiredConfig(raw string) (*DeviceConfiguration, error) {

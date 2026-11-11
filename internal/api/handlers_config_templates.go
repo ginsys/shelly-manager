@@ -362,6 +362,33 @@ func hasAuthPassword(config *configuration.DeviceConfiguration) bool {
 	return config.Auth.Password != nil && *config.Auth.Password != ""
 }
 
+// secretMask stands in for a secret that is set. It lets a client tell "has a password" from "has
+// none" (a form that requires one) without ever receiving the value.
+const secretMask = "********"
+
+// maskSecrets replaces each secret that is set with secretMask. A secret that is absent or empty
+// stays as it is.
+func maskSecrets(config *configuration.DeviceConfiguration) {
+	mask := func(p **string) {
+		if *p != nil && **p != "" {
+			m := secretMask
+			*p = &m
+		}
+	}
+	if config.WiFi != nil {
+		mask(&config.WiFi.Password)
+		if config.WiFi.AccessPoint != nil {
+			mask(&config.WiFi.AccessPoint.Password)
+		}
+	}
+	if config.MQTT != nil {
+		mask(&config.MQTT.Password)
+	}
+	if config.Auth != nil {
+		mask(&config.Auth.Password)
+	}
+}
+
 func redactSecrets(config *configuration.DeviceConfiguration) {
 	if config.WiFi != nil {
 		config.WiFi.Password = nil

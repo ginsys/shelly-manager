@@ -33,6 +33,11 @@ type DeviceOverridesRequest struct {
 type DesiredConfigResponse struct {
 	Config  *configuration.DeviceConfiguration `json:"config"`
 	Sources map[string]string                  `json:"sources"`
+	// Inherited is what the device falls back to without its overrides: the template layers
+	// alone, with the template each value comes from. A field that a template and an override
+	// both set shows only the override in Config. Secrets that are set show as a mask.
+	Inherited        *configuration.DeviceConfiguration `json:"inherited"`
+	InheritedSources map[string]string                  `json:"inherited_sources"`
 }
 
 type ConfigApplyResponse struct {
@@ -138,6 +143,10 @@ func (h *Handler) SetDeviceNewTemplates(w http.ResponseWriter, r *http.Request) 
 
 	templates, _ := h.ConfigService.ConfigurationSvc.GetDeviceTemplates(uint(id))
 	desiredConfig, sources, _ := h.ConfigService.ConfigurationSvc.GetDesiredConfig(uint(id))
+	inherited, inheritedSources, _ := h.ConfigService.ConfigurationSvc.GetInheritedConfig(uint(id))
+	if inherited != nil {
+		maskSecrets(inherited)
+	}
 
 	templateIDs := make([]uint, len(templates))
 	responses := make([]TemplateResponse, len(templates))
@@ -147,10 +156,12 @@ func (h *Handler) SetDeviceNewTemplates(w http.ResponseWriter, r *http.Request) 
 	}
 
 	rw.WriteSuccess(w, r, map[string]any{
-		"templates":      responses,
-		"template_ids":   templateIDs,
-		"desired_config": desiredConfig,
-		"sources":        sources,
+		"templates":         responses,
+		"template_ids":      templateIDs,
+		"desired_config":    desiredConfig,
+		"sources":           sources,
+		"inherited":         inherited,
+		"inherited_sources": inheritedSources,
 	})
 }
 
@@ -376,13 +387,22 @@ func (h *Handler) GetDeviceDesiredConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	inherited, inheritedSources, err := h.ConfigService.ConfigurationSvc.GetInheritedConfig(uint(id))
+	if err != nil {
+		rw.WriteInternalError(w, r, err)
+		return
+	}
+
 	if config != nil {
 		redactSecrets(config)
 	}
+	maskSecrets(inherited)
 
 	rw.WriteSuccess(w, r, DesiredConfigResponse{
-		Config:  config,
-		Sources: sources,
+		Config:           config,
+		Sources:          sources,
+		Inherited:        inherited,
+		InheritedSources: inheritedSources,
 	})
 }
 

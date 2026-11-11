@@ -110,8 +110,8 @@
             v-model="overridesData"
             v-model:valid="overridesValid"
             :device-id="deviceId"
-            :inherited="store.desiredConfig"
-            :sources="store.sources"
+            :inherited="store.inherited"
+            :sources="store.inheritedSources"
           />
         </div>
         <ConfigView v-else :config="store.overrides" />

@@ -33,7 +33,11 @@ All notable changes to this project are documented here. The project follows Con
   enabled) runs on every change, and Save stays disabled while a field is
   invalid or the schema is still loading. Only changed fields go into the
   override body: a value set back to the inherited one removes the override.
-  Lists still use a JSON box. (#385)
+  The inherited value is the one the templates give, also where an override
+  already sits on the field: `GET /devices/{id}/desired-config` and the
+  set-templates response now carry `inherited` and `inherited_sources` (the
+  template layers alone), and a template secret that is set shows as a mask,
+  never as its value. Lists still use a JSON box. (#385)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

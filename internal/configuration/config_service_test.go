@@ -630,6 +630,56 @@ func TestConfigurationService_GetDesiredConfig(t *testing.T) {
 	assert.Equal(t, "device-override", sources["mqtt.port"])
 }
 
+// A field that a template and the device override both set takes its desired value from the
+// override, and its source says so. The inherited configuration is what the device falls back to
+// when that override is removed, so it keeps the template's value and the template's source.
+func TestConfigurationService_GetInheritedConfig_KeepsTemplateValueUnderOverride(t *testing.T) {
+	repo := newMockRepository()
+	repo.addDevice(1)
+	svc := NewConfigurationService(repo, Engine{}, nil)
+
+	templateConfig, _ := json.Marshal(&DeviceConfiguration{
+		MQTT: &MQTTConfiguration{Server: StringPtr("global.broker"), Port: IntPtr(1883)},
+	})
+	template := &ServiceConfigTemplate{Name: "Global", Scope: "global", Config: templateConfig}
+	_ = svc.CreateTemplate(template)
+	_ = svc.SetDeviceTemplates(1, []uint{template.ID})
+	_ = svc.SetDeviceOverrides(1, &DeviceConfiguration{
+		MQTT: &MQTTConfiguration{Port: IntPtr(8883)},
+		WiFi: &WiFiConfiguration{Enable: BoolPtr(true)},
+	})
+
+	desired, desiredSources, err := svc.GetDesiredConfig(1)
+	require.NoError(t, err)
+	assert.Equal(t, 8883, *desired.MQTT.Port)
+	assert.Equal(t, "device-override", desiredSources["mqtt.port"])
+
+	inherited, sources, err := svc.GetInheritedConfig(1)
+	require.NoError(t, err)
+	require.NotNil(t, inherited.MQTT)
+	assert.Equal(t, "global.broker", *inherited.MQTT.Server)
+	assert.Equal(t, 1883, *inherited.MQTT.Port)
+	assert.Equal(t, "Global", sources["mqtt.port"])
+	assert.Equal(t, "Global", sources["mqtt.server"])
+	// A field only the override sets has nothing to fall back to.
+	assert.Nil(t, inherited.WiFi)
+	for path, source := range sources {
+		assert.NotEqual(t, "device-override", source, path)
+	}
+}
+
+func TestConfigurationService_GetInheritedConfig_NoTemplatesIsEmpty(t *testing.T) {
+	repo := newMockRepository()
+	repo.addDevice(1)
+	svc := NewConfigurationService(repo, Engine{}, nil)
+	_ = svc.SetDeviceOverrides(1, &DeviceConfiguration{MQTT: &MQTTConfiguration{Port: IntPtr(8883)}})
+
+	inherited, sources, err := svc.GetInheritedConfig(1)
+	require.NoError(t, err)
+	assert.Nil(t, inherited.MQTT)
+	assert.Empty(t, sources)
+}
+
 func TestConfigurationService_GetConfigStatus(t *testing.T) {
 	repo := newMockRepository()
 	repo.addDevice(1)

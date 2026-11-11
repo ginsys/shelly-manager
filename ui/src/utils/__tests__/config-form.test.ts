@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   countOverrides,
   deleteAt,
-  inheritedBaseline,
   setAt,
   subtreeApplicable,
   validateOverrides,
@@ -76,6 +75,12 @@ describe('config-form validation', () => {
       .toEqual({})
   })
 
+  it('a template secret that arrives masked still counts as the value the section inherits', () => {
+    // The server never sends a set password: the inherited configuration holds a mask in its place.
+    const inherited = { auth: { enable: true, user: 'admin', pass: '********' } }
+    expect(validateOverrides(authSections, { auth: { user: 'operator' } }, inherited)).toEqual({})
+  })
+
   it('then.required is not asked while the if condition fails', () => {
     expect(validateOverrides(authSections, { auth: { enable: false, user: 'admin' } }, {})).toEqual({})
     expect(validateOverrides(authSections, { auth: { user: 'admin' } }, {})).toEqual({})
@@ -100,11 +105,5 @@ describe('config-form applicability and baseline', () => {
     }
     expect(subtreeApplicable(relays)).toBe(false)
     expect(subtreeApplicable({ type: 'string' })).toBe(true)
-  })
-
-  it('the baseline drops values that came from the saved override', () => {
-    const desired = { mqtt: { server: 'broker', port: 1884 } }
-    const sources = { 'mqtt.server': 'Global', 'mqtt.port': 'device-override' }
-    expect(inheritedBaseline(desired, sources)).toEqual({ mqtt: { server: 'broker' } })
   })
 })

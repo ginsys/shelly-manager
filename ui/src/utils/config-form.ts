@@ -204,24 +204,6 @@ export function validateOverrides(
   return errors
 }
 
-// OVERRIDE_SOURCE is the layer name the backend gives saved device overrides in the
-// desired-configuration sources map (internal/configuration/config_service.go).
-export const OVERRIDE_SOURCE = 'device-override'
-
-// inheritedBaseline returns the desired configuration without the values that came from the
-// saved device overrides. What remains is what the device inherits from its templates, so a reset
-// field shows the value it falls back to, not the override it had.
-export function inheritedBaseline(
-  desired: ConfigBody | null | undefined,
-  sources: Record<string, string> | undefined,
-): ConfigBody {
-  let baseline: ConfigBody = clone(desired || {})
-  for (const [key, source] of Object.entries(sources || {})) {
-    if (source === OVERRIDE_SOURCE) baseline = deleteAt(baseline, key.split('.'))
-  }
-  return baseline
-}
-
 // countOverrides counts the leaf values set in the override body under path.
 export function countOverrides(body: ConfigBody, path: ConfigPath): number {
   const node = getAt(body, path)
