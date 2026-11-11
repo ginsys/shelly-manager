@@ -66,8 +66,8 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 |--------|----------|-------------|
 | GET | `/api/v1/devices/{id}/config` | Get stored device config |
 | PUT | `/api/v1/devices/{id}/config` | Update stored config |
-| GET | `/api/v1/devices/{id}/config/current` | Get live config from device |
-| GET | `/api/v1/devices/{id}/config/current/normalized` | Get normalized live config |
+| GET | `/api/v1/devices/{id}/config/current` | Get live config from device (stores nothing; drift keeps its baseline) |
+| GET | `/api/v1/devices/{id}/config/current/normalized` | Get normalized live config (stores nothing) |
 | GET | `/api/v1/devices/{id}/config/typed/normalized` | Get typed normalized config |
 | POST | `/api/v1/devices/{id}/config/import` | Import config to device |
 | GET | `/api/v1/devices/{id}/config/status` | Get import status |
@@ -84,7 +84,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 `GET /devices/{id}/desired-config` returns `config` and `sources`: the composed result of the device's templates and overrides, with the layer each value comes from. It also returns `inherited` and `inherited_sources`: the template layers alone, which is what a field falls back to when its override is removed. A field that a template and an override both set shows only the override in `config`, and the template value in `inherited`. A set secret is removed from `config`. In `inherited` it shows as the mask `********`, never as its value, so a client can see that a password is set. `PUT /devices/{id}/templates/new` returns the same two fields beside its `desired_config` and `sources`.
 
-The device overrides routes (`GET`, `PUT` and `PATCH /devices/{id}/overrides/new`) show a saved secret as the same mask `********`. The secrets are the Wi-Fi password, the access point password and key, the MQTT password, the authentication password, and the station and access point passwords of the `network.wifi` part. The desired-config, template and overrides routes remove the secrets (`config`, `desired_config`) or mask them (`inherited`, `overrides`). The live read `GET /devices/{id}/config/current` does not: it returns the stored device record as it is, so its `config` member can hold a secret (masking it is tracked in ginsys/shelly-manager#436). A write that sends the mask back keeps the stored secret. If no secret is stored, the field is dropped. The mask is never stored as a value. Any other value replaces the stored secret.
+The device overrides routes (`GET`, `PUT` and `PATCH /devices/{id}/overrides/new`) show a saved secret as the same mask `********`. The secrets are the Wi-Fi password, the access point password and key, the MQTT password, the authentication password, and the station and access point passwords of the `network.wifi` part. The desired-config, template and overrides routes remove the secrets (`config`, `desired_config`) or mask them (`inherited`, `overrides`). The live read `GET /devices/{id}/config/current` does not: it returns what the device reports as it is, so its `config` member can hold a secret (masking it is tracked in ginsys/shelly-manager#436). A write that sends the mask back keeps the stored secret. If no secret is stored, the field is dropped. The mask is never stored as a value. Any other value replaces the stored secret.
 
 #### Apply and verify the desired configuration
 

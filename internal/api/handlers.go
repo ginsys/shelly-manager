@@ -744,8 +744,9 @@ func (h *Handler) GetCurrentDeviceConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get current configuration directly from the device
-	config, err := h.Service.ImportDeviceConfig(uint(id))
+	// Read the current configuration from the device without storing it: the stored
+	// record is the baseline that drift detection compares against.
+	config, err := h.Service.ReadDeviceConfig(uint(id))
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
@@ -772,8 +773,9 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Get current configuration directly from the device
-	config, err := h.Service.ImportDeviceConfig(uint(id))
+	// Read the current configuration from the device without storing it: the stored
+	// record is the baseline that drift detection compares against.
+	config, err := h.Service.ReadDeviceConfig(uint(id))
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"device_id": id,

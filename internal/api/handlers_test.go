@@ -988,6 +988,120 @@ func TestGetCurrentDeviceConfigEnvelope(t *testing.T) {
 	}
 }
 
+// driftedDevice is a device whose stored configuration differs from what the
+// device now reports, with the stored record already marked "drift".
+type driftedDevice struct {
+	handler *Handler
+	svc     *service.ShellyService
+	id      uint
+	stored  *configuration.DeviceConfig
+}
+
+func newDriftedDevice(t *testing.T) driftedDevice {
+	t.Helper()
+	db, cleanup := testutil.TestDatabase(t)
+	t.Cleanup(cleanup)
+
+	var name atomic.Value
+	name.Store("Name At Import")
+	deviceMux := http.NewServeMux()
+	deviceMux.HandleFunc("/shelly", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"type":"SHSW-25","mac":"68C63A123456","auth":false,"fw":"1.14.0"}`)
+	})
+	deviceMux.HandleFunc("/settings", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{
+			"device": {"type": "SHSW-25", "mac": "68C63A123456", "hostname": "shelly1-68C63A123456"},
+			"wifi_sta": {"enabled": true, "ssid": "TestNetwork", "ipv4_method": "dhcp"},
+			"name": %q,
+			"fw": "1.14.0",
+			"relays": [{"name": "Relay 0", "ison": false, "default_state": "off"}]
+		}`, name.Load().(string))
+	})
+	srv := httptest.NewServer(deviceMux)
+	t.Cleanup(srv.Close)
+
+	device := testutil.TestDevice()
+	device.IP = strings.TrimPrefix(srv.URL, "http://")
+	device.MAC = "68C63A123456"
+	device.Type = "SHSW-25"
+	device.Settings = `{"model":"SHSW-25","gen":1,"auth_enabled":false}`
+	testutil.AssertNoError(t, db.AddDevice(device))
+
+	svc := testShellyService(t, db)
+	// The stored baseline is what the device reported at import time.
+	_, err := svc.ImportDeviceConfig(device.ID)
+	testutil.AssertNoError(t, err)
+
+	// The device then changes, and a drift check marks the stored record.
+	name.Store("Name Changed On Device")
+	drift, err := svc.DetectConfigDrift(device.ID)
+	testutil.AssertNoError(t, err)
+	if drift == nil {
+		t.Fatal("setup: the changed device must show drift")
+	}
+	stored, err := svc.GetDeviceConfig(device.ID)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, "drift", stored.SyncStatus)
+
+	return driftedDevice{
+		handler: NewHandlerWithLogger(db, svc, testNotificationHandler(t, db), nil, logging.GetDefault()),
+		svc:     svc,
+		id:      device.ID,
+		stored:  stored,
+	}
+}
+
+// requireBaselineKept fails unless the stored record, its sync status and its
+// sync time are exactly what they were, and drift is still reported.
+func (d driftedDevice) requireBaselineKept(t *testing.T) {
+	t.Helper()
+	after, err := d.svc.GetDeviceConfig(d.id)
+	testutil.AssertNoError(t, err)
+	testutil.AssertEqual(t, "drift", after.SyncStatus)
+	testutil.AssertEqual(t, string(d.stored.Config), string(after.Config))
+	if !after.UpdatedAt.Equal(d.stored.UpdatedAt) {
+		t.Errorf("stored record was written: updated_at %v -> %v", d.stored.UpdatedAt, after.UpdatedAt)
+	}
+	drift, err := d.svc.DetectConfigDrift(d.id)
+	testutil.AssertNoError(t, err)
+	if drift == nil {
+		t.Error("drift is no longer reported after the live read")
+	}
+}
+
+// TestGetCurrentDeviceConfigKeepsDriftBaseline pins that reading the live
+// configuration shows the device and changes nothing that drift compares with.
+func TestGetCurrentDeviceConfigKeepsDriftBaseline(t *testing.T) {
+	d := newDriftedDevice(t)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/config/current", d.id), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(d.id))})
+	w := httptest.NewRecorder()
+	d.handler.GetCurrentDeviceConfig(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+	if !strings.Contains(w.Body.String(), "Name Changed On Device") {
+		t.Errorf("the response must show what the device holds now: %s", w.Body.String())
+	}
+	d.requireBaselineKept(t)
+}
+
+// TestGetCurrentDeviceConfigNormalizedKeepsDriftBaseline is the same pin for the
+// normalized live read, which had the same write.
+func TestGetCurrentDeviceConfigNormalizedKeepsDriftBaseline(t *testing.T) {
+	d := newDriftedDevice(t)
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/config/current/normalized", d.id), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(d.id))})
+	w := httptest.NewRecorder()
+	d.handler.GetCurrentDeviceConfigNormalized(w, req)
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+	d.requireBaselineKept(t)
+}
+
 func TestWriteDeviceReadError(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
