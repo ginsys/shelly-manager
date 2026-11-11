@@ -19,6 +19,9 @@ export interface ConfigTemplate {
   has_wifi_password?: boolean
   has_mqtt_password?: boolean
   has_auth_password?: boolean
+  // Schema paths of the secrets the template holds, for example "wifi.ap.pass". The API never
+  // returns their values. A save that leaves one out keeps it; an empty string clears it.
+  stored_secrets?: string[]
 }
 
 export interface ListTemplatesParams {

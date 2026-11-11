@@ -174,15 +174,13 @@ function requiredKeys(
 //
 // A template is one layer of the configuration: another layer can supply a field this one leaves
 // out, and the server accepts such a body. With `layer` a field is therefore never required for
-// being incomplete. The one exception is `layer.kept`, a body that holds a saved value the server
-// keeps out of the template body (a password): saving a changed body would drop that value, so
-// every field it holds must be given again, whether or not the schema requires the field.
+// being incomplete. A saved password is no exception: the server keeps a password the body leaves out.
 export function validateOverrides(
   sections: Record<string, SchemaProperty>,
   overrides: ConfigBody,
   inherited: ConfigBody | null | undefined,
   held?: ConfigBody | null,
-  layer?: { kept: ConfigBody | null | undefined },
+  layer?: boolean,
 ): Record<string, string> {
   const errors: Record<string, string> = {}
   const walk = (schema: SchemaProperty, path: ConfigPath) => {
@@ -208,11 +206,6 @@ export function validateOverrides(
       return
     }
     const value = getAt(overrides, path)
-    // A saved value the layer would drop: required whatever the schema says about the field.
-    if (layer && value === undefined && getAt(layer.kept, path) !== undefined) {
-      errors[pathKey(path)] = 'Required'
-      return
-    }
     const error = validateValue(schema, value)
     if (error) errors[pathKey(path)] = error
   }
@@ -236,22 +229,28 @@ export function templateSchemaTarget(
   return { scope: scope || 'global' }
 }
 
-// The template API returns a saved password as a flag (has_wifi_password, has_mqtt_password,
-// has_auth_password) and leaves the value out of the body. savedSecretBaseline turns the flags
-// into a body that holds a mask at each such path, for the editor's `inherited` input: a field
-// that requires a password is then not reported as missing while the password is saved. It is
-// null when no flag is set. The mask is never sent; it only satisfies the required check.
+// The template API leaves a saved password out of the body and lists its path in stored_secrets
+// (for example "wifi.ap.pass"). Older answers carry three flags instead (has_wifi_password,
+// has_mqtt_password, has_auth_password), and one flag covers both Wi-Fi passwords. savedSecretBaseline
+// turns the list, or the flags when there is no list, into a body that holds a mask at each such
+// path, for the editor's `inherited` input: a field that requires a password is then not reported
+// as missing while the password is saved. It is null when nothing is saved. The mask is never
+// sent; it only satisfies the required check. A save that leaves a password out keeps it.
 export const SAVED_SECRET_MASK = '********'
 
-export function savedSecretBaseline(flags: {
+export function savedSecretBaseline(saved: {
+  stored_secrets?: string[]
   has_wifi_password?: boolean
   has_mqtt_password?: boolean
   has_auth_password?: boolean
 }): ConfigBody | null {
+  const paths = saved.stored_secrets ?? [
+    ...(saved.has_wifi_password ? ['wifi.password'] : []),
+    ...(saved.has_mqtt_password ? ['mqtt.pass'] : []),
+    ...(saved.has_auth_password ? ['auth.pass'] : []),
+  ]
   let body: ConfigBody = {}
-  if (flags.has_wifi_password) body = setAt(body, ['wifi', 'password'], SAVED_SECRET_MASK)
-  if (flags.has_mqtt_password) body = setAt(body, ['mqtt', 'pass'], SAVED_SECRET_MASK)
-  if (flags.has_auth_password) body = setAt(body, ['auth', 'pass'], SAVED_SECRET_MASK)
+  for (const path of paths) body = setAt(body, path.split('.'), SAVED_SECRET_MASK)
   return Object.keys(body).length > 0 ? body : null
 }
 

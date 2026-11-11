@@ -113,7 +113,6 @@
               :scope="schemaTarget.scope"
               :inherited="savedSecrets"
               layer
-              :kept="keptSecrets"
             />
             <div class="hint">
               Set only the fields this template must set. Password fields are accepted, but returned redacted.
@@ -169,14 +168,10 @@ const schemaTarget = computed(() => templateSchemaTarget(form.value.scope, schem
 // The body the template had when the dialog opened. It is the same until the form changes it.
 const configUntouched = computed(() =>
   editing.value !== null && sameValue(configBody.value, editing.value.config || {}))
-// While the body is untouched, the saved passwords show as a mask and the update leaves the config
-// out. Once the form changes the body, a save would replace the config without the password the
-// server holds, so a field that held a password is required again (`kept`) and it must be
-// entered. A template is a layer: no other field is required for being incomplete.
-const savedSecrets = computed(() =>
-  editing.value && configUntouched.value ? savedSecretBaseline(editing.value) : null)
-const keptSecrets = computed(() =>
-  editing.value && !configUntouched.value ? savedSecretBaseline(editing.value) : null)
+// The saved passwords show as a mask. While the body is untouched the update leaves the config
+// out; a changed body that leaves a password out keeps it, because the server keeps a password the
+// body omits. A template is a layer: no field is required for being incomplete.
+const savedSecrets = computed(() => (editing.value ? savedSecretBaseline(editing.value) : null))
 
 function formatDate(iso: string) {
   try {

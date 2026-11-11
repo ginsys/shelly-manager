@@ -136,7 +136,7 @@ describe('TemplatesPage template form', () => {
         properties: {
           enable: { type: 'boolean', 'x-applicable': true },
           user: { type: 'string', 'x-applicable': true },
-          pass: { type: 'string', 'x-applicable': true },
+          pass: { type: 'string', format: 'password', 'x-applicable': true },
         },
       },
       power_metering: schema.properties!.power_metering,
@@ -169,20 +169,40 @@ describe('TemplatesPage template form', () => {
     expect('config' in sent).toBe(false)
   })
 
-  it('a config edit that leaves out the saved password stays blocked', async () => {
+  // The server keeps a password the body leaves out, so the edit saves without entering it again.
+  it('a config edit that leaves out the saved password still saves', async () => {
     vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
     vi.mocked(listTemplates).mockResolvedValue([savedAuthTemplate] as any)
+    vi.mocked(updateTemplate).mockResolvedValue({ template: savedAuthTemplate } as any)
     const wrapper = mountPage()
     await openSavedTemplate(wrapper)
     await openSection(wrapper, 'power_metering')
     await wrapper.find('[data-path="power_metering.max_power"] input').setValue('1400')
-    // Saving this body would replace the config without the password the server holds.
-    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    const sent = vi.mocked(updateTemplate).mock.calls[0][1] as { config: { auth?: { pass?: string } } }
+    expect(sent.config.auth?.pass).toBeUndefined()
   })
 
-  // The wifi password is not a required field of any schema, so only the saved-password flag can
-  // protect it. Setting another field and saving would replace the config and delete it.
-  it('a config edit that leaves out a saved password the schema does not require stays blocked', async () => {
+  it('Clear stored password sends an empty string for that password', async () => {
+    vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+    vi.mocked(listTemplates).mockResolvedValue([{ ...savedAuthTemplate, stored_secrets: ['auth.pass'] }] as any)
+    vi.mocked(updateTemplate).mockResolvedValue({ template: savedAuthTemplate } as any)
+    const wrapper = mountPage()
+    await openSavedTemplate(wrapper)
+    await openSection(wrapper, 'auth')
+    await wrapper.find('[data-path="auth.pass"] [data-action="clear-secret"]').trigger('click')
+    expect(wrapper.find('[data-path="auth.pass"] [data-note="clears-secret"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    const sent = vi.mocked(updateTemplate).mock.calls[0][1] as { config: { auth: { pass: string } } }
+    expect(sent.config.auth.pass).toBe('')
+  })
+
+  // The wifi password is not a required field of any schema. Setting another field and saving keeps
+  // it, because the server keeps a password the body leaves out.
+  it('a config edit that leaves out a saved password the schema does not require still saves', async () => {
     const wifiSchema: ConfigSchema = {
       type: 'object',
       'x-apply-supported': true,
@@ -211,10 +231,6 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
     await openSection(wrapper, 'power_metering')
     await wrapper.find('[data-path="power_metering.max_power"] input').setValue('1400')
-    expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
-    // Giving the password again lifts the block.
-    await openSection(wrapper, 'wifi')
-    await wrapper.find('[data-path="wifi.password"] input').setValue('secret')
     expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeUndefined()
   })
 
