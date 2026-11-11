@@ -145,13 +145,22 @@ func restoreValue(v, stored any) {
 	}
 }
 
-// withoutSecrets returns a copy of a decoded document without the values held under secret keys.
+func isContainer(v any) bool {
+	switch v.(type) {
+	case map[string]any, []any:
+		return true
+	}
+	return false
+}
+
+// withoutSecrets returns a copy of a decoded document without the values held under secret keys,
+// whatever they hold: a secret the client cleared ("" or null) is as much a secret as one it kept.
 func withoutSecrets(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, child := range x {
-			if secretKey(k) && secretScalar(child) {
+			if secretKey(k) && !isContainer(child) {
 				continue
 			}
 			out[k] = withoutSecrets(child)
