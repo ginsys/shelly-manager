@@ -53,10 +53,14 @@ secret with the marker `[REDACTED]`: the values under a secret-named key (a
 name that contains `pass`, `pwd`, `psk`, `secret` or `token`, or ends in `key`)
 in the device settings, the device configurations, the templates and the
 template variables. An empty value stays empty. This holds for the JSON, YAML,
-GitOps and SMA plugins, and an import reads the marker as "keep the stored
-value". Set `"exclude_sensitive": false` in `config` to ask for a full export
-with the secrets in clear. The SMA export also redacts by its own wider key
-rule.
+GitOps and SMA plugins. A secret under a key that holds a list or an object is
+replaced throughout. Set `"exclude_sensitive": false` in `config` to ask for a
+full export with the secrets in clear. The SMA export also redacts by its own
+wider key rule.
+
+Only the SMA import reads the marker, as "keep the stored value". The JSON,
+YAML and GitOps plugins have no import, so a file they wrote cannot be
+restored.
 
 The `backup` plugin is not covered: it writes a database snapshot, which holds
 every secret by design, so protect that file as you protect the database. The
