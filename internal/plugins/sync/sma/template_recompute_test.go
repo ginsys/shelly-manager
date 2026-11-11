@@ -82,6 +82,25 @@ func TestForcedImportRecomputesADeviceOutsideTheArchive(t *testing.T) {
 	assert.False(t, outside.ConfigApplied, "the new configuration has not reached the device")
 }
 
+// The configuration service reads device_configs, not devices.desired_config, so a recomputed
+// device's row must follow its new desired configuration and be marked pending.
+func TestForcedImportSynchronizesTheConfigRowOfARecomputedDevice(t *testing.T) {
+	f := newRecomputeFixture(t)
+	require.NoError(t, f.db.GetDB().AutoMigrate(&configuration.DeviceConfig{}))
+	require.NoError(t, f.db.GetDB().Create(&configuration.DeviceConfig{
+		DeviceID: f.outsideID, Config: json.RawMessage(staleDesired), SyncStatus: "synced",
+	}).Error)
+
+	_, err := f.importFile(t, f.archive, sync.ImportOptions{ForceOverwrite: true})
+
+	require.NoError(t, err)
+	var row configuration.DeviceConfig
+	require.NoError(t, f.db.GetDB().Where("device_id = ?", f.outsideID).First(&row).Error)
+	assert.JSONEq(t, f.device(t, f.outsideID).DesiredConfig, string(row.Config))
+	assert.True(t, mqttEnabled(t, string(row.Config)), "the row follows the new template: %s", row.Config)
+	assert.Equal(t, "pending", row.SyncStatus)
+}
+
 // A device the archive restores with its own desired configuration keeps exactly that
 // configuration: recomputing it would overwrite what the import just wrote.
 func TestForcedImportKeepsTheDesiredConfigOfADeviceItRestores(t *testing.T) {

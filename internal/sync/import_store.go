@@ -378,6 +378,14 @@ func recomputeTemplateDevices(tx *gorm.DB, logger *logging.Logger, overwritten, 
 		if err := service.RecomputeDesiredConfig(device.ID); err != nil {
 			return fmt.Errorf("recompute device %d after a template update: %w", device.ID, err)
 		}
+		// The configuration service reads device_configs, so the row follows the new value.
+		var recomputed database.Device
+		if err := tx.Select("id", "desired_config").First(&recomputed, device.ID).Error; err != nil {
+			return fmt.Errorf("read device %d after recompute: %w", device.ID, err)
+		}
+		if err := writeDeviceConfigRow(tx, device.ID, recomputed.DesiredConfig); err != nil {
+			return fmt.Errorf("device %d configuration row: %w", device.ID, err)
+		}
 	}
 	return nil
 }

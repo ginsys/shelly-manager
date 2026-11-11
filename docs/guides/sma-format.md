@@ -153,7 +153,7 @@ it writes the archived addresses. An archived address that a device outside the
 archive still holds fails the import and writes nothing. When `force_overwrite`
 replaces a template, every device that uses it gets its desired configuration
 recomputed from the new template and is marked pending, as saving the template
-does. A device the archive restored with its own desired configuration keeps
+does. Its stored configuration row follows the same value. A device the archive restored with its own desired configuration keeps
 exactly that configuration. If any recompute fails, the import fails and writes
 nothing. The result lists every change and a warning for anything that was not
 done.
