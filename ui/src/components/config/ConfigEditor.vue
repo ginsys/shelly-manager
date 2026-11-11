@@ -112,6 +112,7 @@ import {
   deleteAt,
   getAt,
   hasAt,
+  rememberOverrides,
   sameValue,
   setAt,
   validateOverrides,
@@ -147,10 +148,26 @@ const jsonError = ref<string | null>(null)
 const expandedSections = ref<Record<string, boolean>>({})
 const localConfig = ref<ConfigBody>({})
 
+// What the override body has held since it was loaded. Reset can empty a section, and an emptied
+// section looks untouched, yet saving it removes what was saved. The required check keeps looking
+// at a section that held an override (see validateOverrides). A body that arrives from outside
+// (another device, a reload after Save) starts the memory again; our own echo does not.
+const held = ref<ConfigBody>({})
+
 watch(() => props.modelValue, (newValue) => {
-  localConfig.value = clone(newValue || {})
-  jsonText.value = JSON.stringify(newValue || {}, null, 2)
+  const incoming = newValue || {}
+  if (!sameValue(incoming, localConfig.value)) held.value = clone(incoming)
+  localConfig.value = clone(incoming)
+  jsonText.value = JSON.stringify(incoming, null, 2)
 }, { immediate: true, deep: true })
+
+watch(() => props.deviceId, () => {
+  held.value = clone(props.modelValue || {})
+})
+
+function remember() {
+  held.value = rememberOverrides(held.value, localConfig.value)
+}
 
 // The page passes the inherited configuration: the template layers alone, which is what a field
 // falls back to when its override is removed. A secret that a template sets arrives as a mask.
@@ -158,7 +175,7 @@ const baseline = computed<ConfigBody>(() => props.inherited || {})
 
 const errors = computed<Record<string, string>>(() =>
   schema.value?.properties
-    ? validateOverrides(schema.value.properties, localConfig.value, baseline.value)
+    ? validateOverrides(schema.value.properties, localConfig.value, baseline.value, held.value)
     : {},
 )
 
@@ -199,6 +216,7 @@ function emitChange() {
   jsonText.value = JSON.stringify(localConfig.value, null, 2)
   // The form body is valid JSON again, so an earlier JSON syntax error no longer applies.
   jsonError.value = null
+  remember()
   emit('update:modelValue', clone(localConfig.value))
 }
 
@@ -222,6 +240,7 @@ function handleJsonChange() {
   try {
     localConfig.value = JSON.parse(jsonText.value || '{}')
     jsonError.value = null
+    remember()
     emit('update:modelValue', clone(localConfig.value))
   } catch (e: any) {
     jsonError.value = e.message

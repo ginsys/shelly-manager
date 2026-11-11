@@ -144,9 +144,10 @@ func (h *Handler) SetDeviceNewTemplates(w http.ResponseWriter, r *http.Request) 
 	templates, _ := h.ConfigService.ConfigurationSvc.GetDeviceTemplates(uint(id))
 	desiredConfig, sources, _ := h.ConfigService.ConfigurationSvc.GetDesiredConfig(uint(id))
 	inherited, inheritedSources, _ := h.ConfigService.ConfigurationSvc.GetInheritedConfig(uint(id))
-	if inherited != nil {
-		maskSecrets(inherited)
-	}
+	// Both configurations are secret-bearing: the desired one is redacted, the inherited one shows
+	// a set secret as the mask. Both helpers accept nil.
+	redactSecrets(desiredConfig)
+	maskSecrets(inherited)
 
 	templateIDs := make([]uint, len(templates))
 	responses := make([]TemplateResponse, len(templates))

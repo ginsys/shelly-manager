@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   countOverrides,
   deleteAt,
+  rememberOverrides,
   setAt,
   subtreeApplicable,
   validateOverrides,
@@ -89,6 +90,29 @@ describe('config-form validation', () => {
     // Without it, the section is incomplete: that is the case the mask exists to tell apart.
     expect(validateOverrides(authSections, { auth: { enable: true, user: 'admin' } }, {}))
       .toEqual({ 'auth.pass': 'Required' })
+  })
+
+  it('a section whose last override was reset is still checked against the effective configuration', () => {
+    // The section held a saved override (the masked password). Reset removed it, so the body is
+    // {} and the section looks untouched, but saving {} deletes the password while the template
+    // keeps authentication on: the effective configuration lacks the password.
+    const inherited = { auth: { enable: true, user: 'admin' } }
+    const held = { auth: { pass: '********' } }
+    expect(validateOverrides(authSections, {}, inherited, held)).toEqual({ 'auth.pass': 'Required' })
+    // Without the memory of the override, a section nobody touched stays unchecked.
+    expect(validateOverrides(authSections, {}, inherited)).toEqual({})
+    expect(validateOverrides(authSections, {}, inherited, {})).toEqual({})
+    // The effective configuration decides: a password, or authentication off, makes it valid.
+    expect(validateOverrides(authSections, {}, { auth: { enable: true, user: 'admin', pass: '********' } }, held)).toEqual({})
+    expect(validateOverrides(authSections, {}, { auth: { enable: false } }, held)).toEqual({})
+    expect(validateOverrides(authSections, { auth: { pass: 'new' } }, inherited, held)).toEqual({})
+  })
+
+  it('rememberOverrides keeps every key that an override body ever held', () => {
+    let held = rememberOverrides({}, { auth: { pass: '********' } })
+    held = rememberOverrides(held, {})
+    held = rememberOverrides(held, { mqtt: { port: 1 }, auth: { user: 'a' } })
+    expect(held).toEqual({ auth: { pass: '********', user: 'a' }, mqtt: { port: 1 } })
   })
 
   it('then.required is not asked while the if condition fails', () => {

@@ -131,6 +131,72 @@ describe('ConfigEditor', () => {
     expect(lastModel(wrapper)).toEqual({})
   })
 
+  it('reset on the last saved override keeps checking the section against what it inherits', async () => {
+    // A template turns authentication on and gives no password; the saved override holds one, as the
+    // mask. Reset leaves {}, and saving {} would delete the password with authentication still on.
+    const authSchema: ConfigSchema = {
+      type: 'object',
+      'x-device-type': 'SHPLG-S',
+      'x-apply-supported': true,
+      properties: {
+        auth: {
+          type: 'object',
+          title: 'Auth',
+          properties: {
+            enable: { type: 'boolean', 'x-applicable': true },
+            user: { type: 'string', 'x-applicable': true },
+            pass: { type: 'string', 'x-applicable': true },
+          },
+          if: { properties: { enable: { const: true } } },
+          then: { required: ['user', 'pass'] },
+        },
+      },
+    }
+    vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+    const wrapper = mountEditor({ auth: { pass: '********' } }, {
+      inherited: { auth: { enable: true, user: 'admin' } },
+      sources: { 'auth.enable': 'Global', 'auth.user': 'Global' },
+    })
+    await flushPromises()
+    expect(lastValid(wrapper)).toBe(true)
+    await openSection(wrapper, 'auth')
+    await wrapper.find('[data-path="auth.pass"] [data-action="reset"]').trigger('click')
+    expect(lastModel(wrapper)).toEqual({})
+    await wrapper.setProps({ modelValue: lastModel(wrapper) })
+    expect(lastValid(wrapper)).toBe(false)
+    expect(wrapper.find('[data-path="auth.pass"]').text()).toContain('Required')
+
+    // A new password makes it valid again.
+    await wrapper.find('[data-path="auth.pass"] input').setValue('new-secret')
+    expect(lastModel(wrapper)).toEqual({ auth: { pass: 'new-secret' } })
+    await wrapper.setProps({ modelValue: lastModel(wrapper) })
+    expect(lastValid(wrapper)).toBe(true)
+  })
+
+  it('a section nobody touched is not checked when the template leaves it incomplete', async () => {
+    const authSchema: ConfigSchema = {
+      type: 'object',
+      'x-device-type': 'SHPLG-S',
+      'x-apply-supported': true,
+      properties: {
+        auth: {
+          type: 'object',
+          title: 'Auth',
+          properties: {
+            enable: { type: 'boolean', 'x-applicable': true },
+            pass: { type: 'string', 'x-applicable': true },
+          },
+          if: { properties: { enable: { const: true } } },
+          then: { required: ['pass'] },
+        },
+      },
+    }
+    vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+    const wrapper = mountEditor({}, { inherited: { auth: { enable: true } } })
+    await flushPromises()
+    expect(lastValid(wrapper)).toBe(true)
+  })
+
   it('puts only the changed field into the override body', async () => {
     const wrapper = mountEditor({}, { inherited: { system: { device: { name: 'tv-office' } } } })
     await flushPromises()

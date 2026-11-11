@@ -366,26 +366,63 @@ func hasAuthPassword(config *configuration.DeviceConfiguration) bool {
 // none" (a form that requires one) without ever receiving the value.
 const secretMask = "********"
 
-// secretSlots lists every secret of a configuration by its JSON path, as a pointer to the field.
-// A section that is absent has no slot. Redacting, masking and restoring all walk this one list, so
-// a new secret field is added in one place.
-func secretSlots(config *configuration.DeviceConfiguration) map[string]**string {
-	slots := map[string]**string{}
+// secretSlot reads and writes one secret of a configuration. The fields differ in type (a pointer
+// in most sections, a plain string in the Network part), so a slot hides that. Setting "" clears it.
+type secretSlot struct {
+	get func() string
+	set func(string)
+}
+
+func ptrSlot(p **string) secretSlot {
+	return secretSlot{
+		get: func() string {
+			if *p == nil {
+				return ""
+			}
+			return **p
+		},
+		set: func(v string) {
+			if v == "" {
+				*p = nil
+				return
+			}
+			*p = &v
+		},
+	}
+}
+
+func strSlot(p *string) secretSlot {
+	return secretSlot{get: func() string { return *p }, set: func(v string) { *p = v }}
+}
+
+// secretSlots lists every secret of a configuration by its JSON path. A section that is absent has
+// no slot. Redacting, masking and restoring all walk this one list, so a new secret field is added
+// in one place, and secret_invariant_test.go fails for a field named like a secret that is not here.
+func secretSlots(config *configuration.DeviceConfiguration) map[string]secretSlot {
+	slots := map[string]secretSlot{}
 	if config == nil {
 		return slots
 	}
 	if config.WiFi != nil {
-		slots["wifi.password"] = &config.WiFi.Password
-		if config.WiFi.AccessPoint != nil {
-			slots["wifi.ap.pass"] = &config.WiFi.AccessPoint.Password
-			slots["wifi.ap.key"] = &config.WiFi.AccessPoint.Key
+		slots["wifi.password"] = ptrSlot(&config.WiFi.Password)
+		if ap := config.WiFi.AccessPoint; ap != nil {
+			slots["wifi.ap.pass"] = ptrSlot(&ap.Password)
+			slots["wifi.ap.key"] = ptrSlot(&ap.Key)
 		}
 	}
 	if config.MQTT != nil {
-		slots["mqtt.pass"] = &config.MQTT.Password
+		slots["mqtt.pass"] = ptrSlot(&config.MQTT.Password)
 	}
 	if config.Auth != nil {
-		slots["auth.pass"] = &config.Auth.Password
+		slots["auth.pass"] = ptrSlot(&config.Auth.Password)
+	}
+	if config.Network != nil && config.Network.WiFi != nil {
+		if sta := config.Network.WiFi.STA; sta != nil {
+			slots["network.wifi.sta.pass"] = strSlot(&sta.Password)
+		}
+		if ap := config.Network.WiFi.AP; ap != nil {
+			slots["network.wifi.ap.pass"] = strSlot(&ap.Password)
+		}
 	}
 	return slots
 }
@@ -394,9 +431,8 @@ func secretSlots(config *configuration.DeviceConfiguration) map[string]**string 
 // stays as it is.
 func maskSecrets(config *configuration.DeviceConfiguration) {
 	for _, slot := range secretSlots(config) {
-		if *slot != nil && **slot != "" {
-			m := secretMask
-			*slot = &m
+		if slot.get() != "" {
+			slot.set(secretMask)
 		}
 	}
 }
@@ -404,7 +440,7 @@ func maskSecrets(config *configuration.DeviceConfiguration) {
 // redactSecrets removes every secret.
 func redactSecrets(config *configuration.DeviceConfiguration) {
 	for _, slot := range secretSlots(config) {
-		*slot = nil
+		slot.set("")
 	}
 }
 
@@ -414,13 +450,13 @@ func redactSecrets(config *configuration.DeviceConfiguration) {
 func restoreMaskedSecrets(incoming, stored *configuration.DeviceConfiguration) {
 	storedSlots := secretSlots(stored)
 	for path, slot := range secretSlots(incoming) {
-		if *slot == nil || **slot != secretMask {
+		if slot.get() != secretMask {
 			continue
 		}
-		*slot = nil
-		if old, ok := storedSlots[path]; ok && *old != nil && **old != "" {
-			kept := **old
-			*slot = &kept
+		kept := ""
+		if old, ok := storedSlots[path]; ok {
+			kept = old.get()
 		}
+		slot.set(kept)
 	}
 }
