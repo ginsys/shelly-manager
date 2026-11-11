@@ -41,7 +41,9 @@ jobs:
   # E2E tests block PR merges - flakiness issues have been resolved
   e2e-dev:
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where apt cannot resolve the Ubuntu
+    # mirrors, and `playwright install --with-deps` needs apt.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
