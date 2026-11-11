@@ -109,6 +109,88 @@ func TestPatchOverridesNullForAFieldThatIsNotStoredChangesNothing(t *testing.T) 
 	assert.Nil(t, stored.MQTT.Password)
 }
 
+func TestPatchOverridesNullRemovesAFieldInsideAnArrayElement(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"relay":{"relays":[{"id":0,"name":"old"},{"id":1,"name":"keep"}]}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"relay":{"relays":[{"id":0,"name":null}]}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.Len(t, stored.Relay.Relays, 2)
+	assert.Nil(t, stored.Relay.Relays[0].Name, "null removes the field of that element")
+	require.NotNil(t, stored.Relay.Relays[1].Name)
+	assert.Equal(t, "keep", *stored.Relay.Relays[1].Name)
+}
+
+// A null for another field must not change a stored number that a float cannot hold.
+func TestPatchOverridesNullKeepsAStoredNumberExact(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"relay":{"auto_off":9007199254740993},"mqtt":{"pass":"x"}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"pass":null},"unknown":null}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.Relay.AutoOff)
+	assert.Equal(t, 9007199254740993, *stored.Relay.AutoOff)
+}
+
+// The struct decode ignores a number it cannot hold in an unknown field, so the removal must too.
+func TestPatchOverridesNullStillRemovesWhenAnUnknownFieldHoldsAHugeNumber(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"secret"}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"pass":null},"unknown":1e400}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.Nil(t, stored.MQTT.Password)
+}
+
+// A key that appears twice leaves two readings of the body, so the request is refused.
+func TestPatchOverridesRefusesADuplicateKeyAndChangesNothing(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"mqtt":{"user":"iot","pass":"secret"}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id,
+		`{"mqtt":{"pass":"********"},"mqtt":{"pass":null},"mqtt":{"user":"iot2"}}`)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.MQTT.Password)
+	assert.Equal(t, "secret", *stored.MQTT.Password)
+	assert.Equal(t, "iot", *stored.MQTT.User)
+}
+
+// A plain field with no omitempty is written even at its zero value, so null cannot make it
+// absent. It returns to the zero value, and a null for the whole section removes it.
+func TestPatchOverridesNullOnAPlainFieldReturnsItToTheZeroValue(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := keepOverrideDevice(t, handler, `{"system":{"device":{"ble":{"enable":true,"rpc":{}}}}}`)
+
+	w := sendOverrides(t, handler, "PATCH", id, `{"system":{"device":{"ble":{"enable":null}}}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.False(t, stored.System.Device.BleConfig.Enable)
+
+	w = sendOverrides(t, handler, "PATCH", id, `{"system":{"device":{"ble":null}}}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	stored, err = handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	require.NoError(t, err)
+	assert.Nil(t, stored.System)
+}
+
 // A secret path takes four values on PATCH, as on PUT: omitted keeps the stored value, "" clears
 // it, the mask restores it and null removes it.
 func TestPatchOverridesSecretTakesFourValues(t *testing.T) {

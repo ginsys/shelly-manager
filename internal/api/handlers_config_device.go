@@ -342,7 +342,11 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 
 	// A field sent as null is removed, so the device inherits it again. A decoded struct cannot
 	// tell null from a field that is left out, so the raw body is read.
-	removed := configuration.NullPaths(raw)
+	removed, nullErr := configuration.NullPaths(raw)
+	if nullErr != nil {
+		rw.WriteValidationError(w, r, "Invalid JSON request body: "+nullErr.Error())
+		return
+	}
 
 	// A secret sent back as the mask leaves the stored one as it is.
 	if stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id)); err == nil {
