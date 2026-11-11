@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   countOverrides,
   deleteAt,
-  rememberOverrides,
   setAt,
   subtreeApplicable,
   templateSchemaTarget,
@@ -161,51 +160,6 @@ describe('config-form validation', () => {
     expect(validateOverrides(authSections, {}, { auth: { enable: true, user: 'admin', pass: '********' } }, held)).toEqual({})
     expect(validateOverrides(authSections, {}, { auth: { enable: false } }, held)).toEqual({})
     expect(validateOverrides(authSections, { auth: { pass: 'new' } }, inherited, held)).toEqual({})
-  })
-
-  it('rememberOverrides keeps every key that an override body ever held', () => {
-    let held = rememberOverrides({}, { auth: { pass: '********' } })
-    held = rememberOverrides(held, {})
-    held = rememberOverrides(held, { mqtt: { port: 1 }, auth: { user: 'a' } })
-    expect(held).toEqual({ auth: { pass: '********', user: 'a' }, mqtt: { port: 1 } })
-  })
-
-  // The JSON view passes through invalid intermediate bodies. A null, a scalar or a list in place of
-  // a section must not erase what the memory holds, or the next edit (an empty body) looks untouched.
-  it('rememberOverrides keeps the remembered keys when a section turns into null, a scalar or a list', () => {
-    const inherited = { auth: { enable: true, user: 'admin' } }
-    for (const intermediate of [null, 5, 'x', [], [1]]) {
-      let held = rememberOverrides({}, { auth: { pass: '********' } })
-      held = rememberOverrides(held, { auth: intermediate })
-      held = rememberOverrides(held, {})
-      expect(held).toEqual({ auth: { pass: '********' } })
-      // Saving {} would delete the stored password while the template keeps authentication on.
-      expect(validateOverrides(authSections, {}, inherited, held)).toEqual({ 'auth.pass': 'Required' })
-    }
-    // A section the memory never held as an object still takes the scalar, and a later object wins.
-    let fresh = rememberOverrides({}, { auth: null })
-    expect(fresh).toEqual({ auth: null })
-    fresh = rememberOverrides(fresh, { auth: { user: 'a' } })
-    expect(fresh).toEqual({ auth: { user: 'a' } })
-  })
-
-  // CodeQL alert "Prototype-polluting function": JSON.parse makes __proto__ an own key, so the JSON
-  // view can hand such a key to the memory, which must neither write to Object.prototype nor keep it.
-  it('rememberOverrides never writes through __proto__, constructor or prototype', () => {
-    const polluted = () => Object.prototype.hasOwnProperty.call(Object.prototype, 'polluted')
-    try {
-      const body = JSON.parse(
-        '{"__proto__":{"polluted":true},"mqtt":{"__proto__":{"polluted":true},"port":1},' +
-          '"constructor":{"prototype":{"polluted":true}},"prototype":{"polluted":true}}',
-      )
-      const held = rememberOverrides({}, body)
-      expect(polluted()).toBe(false)
-      expect(({} as any).polluted).toBeUndefined()
-      expect(held).toEqual({ mqtt: { port: 1 } })
-      expect(Object.keys(held)).toEqual(['mqtt'])
-    } finally {
-      delete (Object.prototype as any).polluted
-    }
   })
 
   it('then.required is not asked while the if condition fails', () => {

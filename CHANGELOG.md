@@ -112,6 +112,11 @@ All notable changes to this project are documented here. The project follows Con
   configuration/testing/enablement is tracked as a design vertical (#290).
 
 ### Fixed
+- The device configuration editor no longer lets Save delete a stored password.
+  Typing `null`, a number, `false` or `""` as the whole body in the JSON view
+  cleared the editor's memory of what was saved, so a following `{}` passed the
+  required-field check. The check now reads the overrides as the page loaded
+  them, and no edit changes that. (#437)
 - The device detail page always showed "No Drift", and the configuration page
   had no way to see what the device holds. The UI read `hasDrift` and
   `driftFields`, which the drift endpoint never sends; it now maps the

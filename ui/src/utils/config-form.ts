@@ -164,39 +164,13 @@ function requiredKeys(
   return keys
 }
 
-// The keys that reach a prototype when used as a property name. JSON.parse makes "__proto__" an own
-// key, so the JSON view can hand one to a deep copy. No configuration field has these names.
-const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
-
-// rememberOverrides returns held with every key of body added, objects merged deeply. It is the
-// memory of what an override body has held: a key stays once it was there, even after Reset
-// removes it from the body. It skips the keys of UNSAFE_KEYS, so it never writes through a prototype.
-// A null, a scalar or a list in place of a section the memory holds as an object leaves that object
-// alone: the JSON view passes through such bodies while the user types, and they must not erase it.
-export function rememberOverrides(held: ConfigBody, body: ConfigBody): ConfigBody {
-  const out: ConfigBody = clone(held)
-  const add = (target: any, source: any) => {
-    for (const [key, value] of Object.entries(source || {})) {
-      if (UNSAFE_KEYS.has(key)) continue
-      if (isPlainObject(value)) {
-        if (!isPlainObject(target[key])) target[key] = {}
-        add(target[key], value)
-      } else if (!isPlainObject(target[key])) {
-        target[key] = value
-      }
-    }
-  }
-  add(out, body)
-  return out
-}
-
 // validateOverrides walks the schema and returns the errors of the override body, keyed by
 // dotted path. A section that holds an override must be an object. A required field fails only
-// when its object holds an override, or held one (see rememberOverrides), and neither the override
-// nor the inherited configuration gives the field a value. A section that held an override and
-// lost the last one by Reset is still checked: saving would remove what was saved, and the
-// effective configuration must stay complete. A section nobody touched is not checked, so a
-// template that leaves it incomplete does not block Save.
+// when its object holds an override, or `held` does (the overrides as they were saved, which no
+// edit changes), and neither the override nor the inherited configuration gives the field a value.
+// A section that was saved with an override and lost the last one by Reset is still checked: saving
+// would remove what was saved, and the effective configuration must stay complete. A section
+// nobody saved or touched is not checked, so a template that leaves it incomplete does not block Save.
 //
 // A template is one layer of the configuration: another layer can supply a field this one leaves
 // out, and the server accepts such a body. With `layer` a field is therefore never required for

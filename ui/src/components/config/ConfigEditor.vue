@@ -112,7 +112,6 @@ import {
   deleteAt,
   getAt,
   hasAt,
-  rememberOverrides,
   sameValue,
   setAt,
   validateOverrides,
@@ -135,7 +134,7 @@ interface Props {
   layer?: boolean
   kept?: ConfigBody | null
   sources?: Record<string, string>
-  // The keys the override body has held since it was loaded (see `held` below). Optional.
+  // The overrides as they were saved: the page sets it when it loads them (see `held` below). Optional.
   held?: ConfigBody
 }
 
@@ -143,7 +142,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: Record<string, any>]
   'update:valid': [value: boolean]
-  'update:held': [value: ConfigBody]
 }>()
 
 const typedConfigStore = useTypedConfigStore()
@@ -158,39 +156,25 @@ const jsonError = ref<string | null>(null)
 const expandedSections = ref<Record<string, boolean>>({})
 const localConfig = ref<ConfigBody>({})
 
-// What the override body has held since it was loaded. Reset can empty a section, and an emptied
-// section looks untouched, yet saving it removes what was saved. The required check keeps looking
-// at a section that held an override (see validateOverrides). The page owns the memory (`held`
-// prop, `update:held` event) because it outlives this component: the page removes and re-creates
-// the editor while it loads, and the edited body survives that but the memory would not. Without
-// the prop the editor keeps its own. A body that arrives from outside (another device, a reload
-// after Save) starts the memory again; our own echo does not.
-const held = ref<ConfigBody>(rememberOverrides(clone(props.held || {}), props.modelValue || {}))
+// The overrides as they were saved. Reset can empty a section, and an emptied section looks
+// untouched, yet saving it removes what was saved, so the required check keeps looking at a
+// section that was saved with an override (see validateOverrides). The memory is the saved body
+// and nothing the editor sees: no edit, typed in the form or in the JSON view, can change it, so
+// no sequence of edits can lose it. The page gives it (`held` prop) and replaces it only when it
+// loads the overrides again (another device, a reload after Save, Cancel). Without the prop the
+// editor takes the body it was given, at mount and when the device changes.
+const savedBody = ref<ConfigBody>(clone(props.modelValue || {}))
+const held = computed<ConfigBody>(() => props.held ?? savedBody.value)
 
-function setHeld(next: ConfigBody) {
-  held.value = next
-  emit('update:held', clone(next))
-}
-
-watch(() => props.modelValue, (newValue, previous) => {
+watch(() => props.modelValue, (newValue) => {
   const incoming = newValue || {}
-  // The first run has no earlier body: the memory is what the page gave, plus what the body holds.
-  if (previous !== undefined && !sameValue(incoming, localConfig.value)) setHeld(clone(incoming))
   localConfig.value = clone(incoming)
   jsonText.value = JSON.stringify(incoming, null, 2)
 }, { immediate: true, deep: true })
 
-watch(() => props.held, (next) => {
-  if (next && !sameValue(next, held.value)) held.value = clone(next)
-}, { deep: true })
-
 watch(() => props.deviceId, () => {
-  setHeld(clone(props.modelValue || {}))
+  savedBody.value = clone(props.modelValue || {})
 })
-
-function remember() {
-  setHeld(rememberOverrides(held.value, localConfig.value))
-}
 
 // The page passes the inherited configuration: the template layers alone, which is what a field
 // falls back to when its override is removed. A secret that a template sets arrives as a mask.
@@ -249,7 +233,6 @@ function emitChange() {
   jsonText.value = JSON.stringify(localConfig.value, null, 2)
   // The form body is valid JSON again, so an earlier JSON syntax error no longer applies.
   jsonError.value = null
-  remember()
   emit('update:modelValue', clone(localConfig.value))
 }
 
@@ -273,7 +256,6 @@ function handleJsonChange() {
   try {
     localConfig.value = JSON.parse(jsonText.value || '{}')
     jsonError.value = null
-    remember()
     emit('update:modelValue', clone(localConfig.value))
   } catch (e: any) {
     jsonError.value = e.message

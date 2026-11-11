@@ -372,6 +372,97 @@ describe('ConfigEditor', () => {
     expect(lastValid(wrapper)).toBe(false)
   })
 
+  // The required-field guard reads what the page loaded, never what the editor saw. A template
+  // turns authentication on and gives no password; the saved override holds one as the mask, so
+  // saving {} would delete it. No edit in the JSON view may make {} valid.
+  describe('the required-field guard does not depend on editor memory', () => {
+    const authSchema: ConfigSchema = {
+      type: 'object',
+      'x-device-type': 'SHPLG-S',
+      'x-apply-supported': true,
+      properties: {
+        auth: {
+          type: 'object',
+          title: 'Auth',
+          properties: {
+            enable: { type: 'boolean', 'x-applicable': true },
+            user: { type: 'string', 'x-applicable': true },
+            pass: { type: 'string', 'x-applicable': true },
+          },
+          if: { properties: { enable: { const: true } } },
+          then: { required: ['user', 'pass'] },
+        },
+      },
+    }
+    const saved = { auth: { pass: '********' } }
+    const inherited = { auth: { enable: true, user: 'admin' } }
+
+    // The editor as the page uses it: the page owns the saved body (`held`) and echoes every
+    // update back as the model, the way v-model does.
+    async function mountSaved(withHeld: boolean) {
+      vi.mocked(getConfigSchema).mockResolvedValue(authSchema)
+      const wrapper = mountEditor(saved, { inherited, ...(withHeld ? { held: saved } : {}) })
+      await flushPromises()
+      expect(lastValid(wrapper)).toBe(true)
+      return wrapper
+    }
+    async function echo(wrapper: ReturnType<typeof mountEditor>) {
+      await wrapper.setProps({ modelValue: lastModel(wrapper) })
+    }
+    async function typeJson(wrapper: ReturnType<typeof mountEditor>, text: string) {
+      await wrapper.find('textarea').setValue(text)
+      await echo(wrapper)
+    }
+    async function openJson(wrapper: ReturnType<typeof mountEditor>) {
+      await wrapper.findAll('.mode-btn')[1].trigger('click')
+    }
+
+    describe.each([['the page gives held', true], ['the editor keeps its own', false]])('when %s', (_name, withHeld) => {
+      it.each(['null', '0', 'false', '""'])('a whole body of %s, then {}, keeps Save off', async (text) => {
+        const wrapper = await mountSaved(withHeld)
+        await openJson(wrapper)
+        await typeJson(wrapper, text)
+        await typeJson(wrapper, '{}')
+        expect(lastValid(wrapper)).toBe(false)
+      })
+
+      it.each(['null', '5', '[]', '"x"'])('the auth section set to %s, then {}, keeps Save off', async (value) => {
+        const wrapper = await mountSaved(withHeld)
+        await openJson(wrapper)
+        await typeJson(wrapper, `{"auth":${value}}`)
+        await typeJson(wrapper, '{}')
+        expect(lastValid(wrapper)).toBe(false)
+      })
+
+      it('Reset of the saved password keeps Save off', async () => {
+        const wrapper = await mountSaved(withHeld)
+        await openSection(wrapper, 'auth')
+        await wrapper.find('[data-path="auth.pass"] [data-action="reset"]').trigger('click')
+        await echo(wrapper)
+        expect(lastModel(wrapper)).toEqual({})
+        expect(lastValid(wrapper)).toBe(false)
+      })
+    })
+
+    it('a new password after the whole body was cleared makes Save valid again', async () => {
+      const wrapper = await mountSaved(true)
+      await openJson(wrapper)
+      await typeJson(wrapper, 'null')
+      await typeJson(wrapper, '{"auth":{"pass":"new-secret"}}')
+      expect(lastValid(wrapper)).toBe(true)
+    })
+
+    it('a new saved body from the page starts the guard again', async () => {
+      const wrapper = await mountSaved(true)
+      await openJson(wrapper)
+      await typeJson(wrapper, '{}')
+      expect(lastValid(wrapper)).toBe(false)
+      // The page saved and reloaded: the stored override no longer holds a password.
+      await wrapper.setProps({ held: {}, modelValue: {} })
+      expect(lastValid(wrapper)).toBe(true)
+    })
+  })
+
   it('a field apply cannot write is read-only but its override can be reset', async () => {
     const wrapper = mountEditor({ relay: { default_state: 'on' } })
     await flushPromises()
