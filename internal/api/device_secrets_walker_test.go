@@ -105,13 +105,15 @@ func TestMaskJSONText_NumericSecretsAreMasked(t *testing.T) {
 }
 
 func TestMaskJSONText_MalformedTextNamingASecretKeyIsMaskedWhole(t *testing.T) {
+	bs := string(rune(92)) // a backslash, built here so the u-escape cases below are real escapes
 	for name, text := range map[string]string{
 		"password key":      `{"password":"saved-secret"`,
 		"key suffix":        `{"wifi_sta":{"key":"saved-secret"`,
 		"token anywhere":    `{"api_token_v2":"saved-secret"`,
-		"escaped key":       `{"password":"saved-secret"`,
+		"escaped key":       `{"pa` + bs + `u0073sword":"saved-secret"`,
 		"escaped quote key": `{"a\"pass":"saved-secret"`,
-		"unicode escape":    `{"password":"saved-secret"`,
+		"split by a quote":  `{"pass\"word":"saved-secret"`,
+		"unicode escape":    `{"name":"x","` + bs + `u0070assword":"saved-secret"`,
 	} {
 		assert.Equal(t, secretMask, maskJSONText(text), name)
 	}
