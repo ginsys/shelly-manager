@@ -75,9 +75,14 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | GET | `/api/v1/devices/{id}/config/drift` | Detect configuration drift |
 | POST | `/api/v1/devices/{id}/config/apply-template` | Apply template to device |
 | GET | `/api/v1/devices/{id}/config/history` | Get config change history |
+| GET | `/api/v1/devices/{id}/desired-config` | Get the desired configuration and what the device inherits from its templates |
 | GET | `/api/v1/devices/{id}/config/new/status` | Get whether the desired configuration is applied |
 | POST | `/api/v1/devices/{id}/config/new/apply` | Write the desired configuration to the device (admin key) |
 | POST | `/api/v1/devices/{id}/config/new/verify` | Compare the desired configuration with the device |
+
+#### The desired configuration and its inherited part
+
+`GET /devices/{id}/desired-config` returns `config` and `sources`: the composed result of the device's templates and overrides, with the layer each value comes from. It also returns `inherited` and `inherited_sources`: the template layers alone, which is what a field falls back to when its override is removed. A field that a template and an override both set shows only the override in `config`, and the template value in `inherited`. A set secret is removed from `config`. In `inherited` it shows as the mask `********`, never as its value, so a client can see that a password is set. `PUT /devices/{id}/templates/new` returns the same two fields beside its `desired_config` and `sources`.
 
 #### Apply and verify the desired configuration
 
