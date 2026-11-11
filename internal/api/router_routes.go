@@ -52,29 +52,29 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/status", handler.GetDeviceStatus).Methods("GET")
 	api.HandleFunc("/devices/{id}/energy", handler.GetDeviceEnergy).Methods("GET")
 
+	// admin guards a route with the admin key. Every configuration route uses it, except the
+	// bulk import, export and drift routes, whose handlers call requireAdmin themselves.
+	admin := handler.adminOnly
+
 	// Device configuration routes
-	api.HandleFunc("/devices/{id}/config", handler.GetDeviceConfig).Methods("GET")
-	api.HandleFunc("/devices/{id}/config", handler.UpdateDeviceConfig).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/current", handler.GetCurrentDeviceConfig).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/current/normalized", handler.GetCurrentDeviceConfigNormalized).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/typed/normalized", handler.GetTypedDeviceConfigNormalized).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/import", handler.ImportDeviceConfig).Methods("POST")
-	api.HandleFunc("/devices/{id}/config/status", handler.GetImportStatus).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/export", handler.ExportDeviceConfig).Methods("POST")
-	api.HandleFunc("/devices/{id}/config/drift", handler.DetectConfigDrift).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/apply-template", handler.ApplyConfigTemplate).Methods("POST")
-	api.HandleFunc("/devices/{id}/config/history", handler.GetConfigHistory).Methods("GET")
+	api.HandleFunc("/devices/{id}/config", admin(handler.GetDeviceConfig)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config", admin(handler.UpdateDeviceConfig)).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/current", admin(handler.GetCurrentDeviceConfig)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/current/normalized", admin(handler.GetCurrentDeviceConfigNormalized)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/typed/normalized", admin(handler.GetTypedDeviceConfigNormalized)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/import", admin(handler.ImportDeviceConfig)).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/status", admin(handler.GetImportStatus)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/export", admin(handler.ExportDeviceConfig)).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/drift", admin(handler.DetectConfigDrift)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/apply-template", admin(handler.ApplyConfigTemplate)).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/history", admin(handler.GetConfigHistory)).Methods("GET")
 
 	// Device capability-specific configuration routes
-	api.HandleFunc("/devices/{id}/config/relay", handler.UpdateRelayConfig).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/dimming", handler.UpdateDimmingConfig).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/roller", handler.UpdateRollerConfig).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/power-metering", handler.UpdatePowerMeteringConfig).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/auth", handler.UpdateDeviceAuth).Methods("PUT")
-
-	// admin guards a route with the admin key. The template routes, the template assignment
-	// routes and the schema read use it.
-	admin := handler.adminOnly
+	api.HandleFunc("/devices/{id}/config/relay", admin(handler.UpdateRelayConfig)).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/dimming", admin(handler.UpdateDimmingConfig)).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/roller", admin(handler.UpdateRollerConfig)).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/power-metering", admin(handler.UpdatePowerMeteringConfig)).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/auth", admin(handler.UpdateDeviceAuth)).Methods("PUT")
 
 	// Configuration template routes
 	api.HandleFunc("/config/templates", admin(handler.GetConfigTemplates)).Methods("GET")
@@ -83,8 +83,8 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/config/templates/{id}", admin(handler.DeleteConfigTemplate)).Methods("DELETE")
 
 	// Typed configuration routes
-	api.HandleFunc("/devices/{id}/config/typed", handler.GetTypedDeviceConfig).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/typed", handler.UpdateTypedDeviceConfig).Methods("PUT")
+	api.HandleFunc("/devices/{id}/config/typed", admin(handler.GetTypedDeviceConfig)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/typed", admin(handler.UpdateTypedDeviceConfig)).Methods("PUT")
 	api.HandleFunc("/devices/{id}/capabilities", handler.GetDeviceCapabilities).Methods("GET")
 	api.HandleFunc("/config/validate-typed", handler.ValidateTypedConfig).Methods("POST")
 	api.HandleFunc("/config/convert-to-typed", handler.ConvertConfigToTyped).Methods("POST")
@@ -114,7 +114,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/config/drift-trends/{id}/resolve", handler.MarkTrendResolved).Methods("POST")
 
 	// Device-specific drift reporting
-	api.HandleFunc("/devices/{id}/drift-report", handler.GenerateDeviceDriftReport).Methods("POST")
+	api.HandleFunc("/devices/{id}/drift-report", admin(handler.GenerateDeviceDriftReport)).Methods("POST")
 
 	// New template management routes (pointer-based config system)
 	api.HandleFunc("/config/templates/new", admin(handler.GetNewConfigTemplates)).Methods("GET")
@@ -137,16 +137,16 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/tags/new/{tag}/devices", handler.GetDevicesByNewTag).Methods("GET")
 
 	// Device override routes
-	api.HandleFunc("/devices/{id}/overrides/new", handler.GetDeviceNewOverrides).Methods("GET")
-	api.HandleFunc("/devices/{id}/overrides/new", handler.SetDeviceNewOverrides).Methods("PUT")
-	api.HandleFunc("/devices/{id}/overrides/new", handler.PatchDeviceNewOverrides).Methods("PATCH")
-	api.HandleFunc("/devices/{id}/overrides/new", handler.DeleteDeviceNewOverrides).Methods("DELETE")
+	api.HandleFunc("/devices/{id}/overrides/new", admin(handler.GetDeviceNewOverrides)).Methods("GET")
+	api.HandleFunc("/devices/{id}/overrides/new", admin(handler.SetDeviceNewOverrides)).Methods("PUT")
+	api.HandleFunc("/devices/{id}/overrides/new", admin(handler.PatchDeviceNewOverrides)).Methods("PATCH")
+	api.HandleFunc("/devices/{id}/overrides/new", admin(handler.DeleteDeviceNewOverrides)).Methods("DELETE")
 
-	// Desired config and apply routes
-	api.HandleFunc("/devices/{id}/desired-config", handler.GetDeviceDesiredConfig).Methods("GET")
+	// Desired config and apply routes. Apply also checks the key in its own handler.
+	api.HandleFunc("/devices/{id}/desired-config", admin(handler.GetDeviceDesiredConfig)).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/new/apply", handler.ApplyDeviceNewConfig).Methods("POST")
-	api.HandleFunc("/devices/{id}/config/new/status", handler.GetDeviceNewConfigStatus).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/new/verify", handler.VerifyDeviceNewConfig).Methods("POST")
+	api.HandleFunc("/devices/{id}/config/new/status", admin(handler.GetDeviceNewConfigStatus)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/new/verify", admin(handler.VerifyDeviceNewConfig)).Methods("POST")
 
 	// Notification routes
 	if handler != nil && handler.NotificationHandler != nil {
