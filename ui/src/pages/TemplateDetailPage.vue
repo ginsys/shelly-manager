@@ -202,8 +202,14 @@ async function load() {
   }
 }
 
+// The number of the edit that is open now. It changes when an edit starts or is cancelled. A save
+// keeps the number it started with and writes edit state (the error list, leaving edit mode) only
+// if the number is still the same, because the answer of a cancelled edit belongs to nobody.
+let editSession = 0
+
 function enterEdit() {
   if (!template.value) return
+  editSession++
   configBody.value = clone(template.value.config || {})
   saveErrors.value = []
   editMode.value = true
@@ -211,6 +217,7 @@ function enterEdit() {
 }
 
 function cancelEdit() {
+  editSession++
   if (!template.value) {
     editMode.value = false
     return
@@ -230,6 +237,7 @@ function cancelEdit() {
 async function handleSave() {
   if (!template.value || !configValid.value) return
   const parsedConfig = clone(configBody.value)
+  const session = editSession
   saveErrors.value = []
 
   try {
@@ -241,12 +249,18 @@ async function handleSave() {
       ...(configUntouched.value ? {} : { config: parsedConfig }),
     })
 
+    if (session !== editSession) {
+      // The edit was cancelled while the save ran. A newer edit keeps its own form; with none
+      // open, the page shows what the server holds now.
+      if (!editMode.value) await load()
+      return
+    }
     lastAffectedDevices.value = result.affected_devices ?? null
     editMode.value = false
     await load()
   } catch (e: any) {
     if (e instanceof TemplateSaveError) {
-      saveErrors.value = e.fields
+      if (session === editSession) saveErrors.value = e.fields
       return
     }
     alert('Save failed: ' + (e?.message || 'Unknown error'))

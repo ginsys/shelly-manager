@@ -180,6 +180,94 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('[data-testid="save-template"]').attributes('disabled')).toBeDefined()
   })
 
+  // A save answers after the dialog it came from was closed, and another dialog is open. The
+  // answer belongs to the closed dialog, so it must not show an error in, or close, the new one.
+  // While a save runs the store hides the table, so the only way to a new dialog is the Create
+  // button of the toolbar: Save, Cancel, Create.
+  const plainTemplate = (id: number, name: string) => ({
+    id, name, description: '', scope: 'global', created_at: '', updated_at: '', config: {},
+  })
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    let reject!: (reason: unknown) => void
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+    return { promise, resolve, reject }
+  }
+
+  async function clickEdit(wrapper: ReturnType<typeof mountPage>, index: number) {
+    await wrapper.findAll('.action-btn').filter(b => b.text() === 'Edit')[index].trigger('click')
+    await flushPromises()
+  }
+
+  async function cancelDialog(wrapper: ReturnType<typeof mountPage>) {
+    await wrapper.find('.modal-actions .btn:not(.primary)').trigger('click')
+    await flushPromises()
+  }
+
+  const refusal = () => new TemplateSaveError('Validation failed',
+    [{ path: 'relay.auto_of', message: 'Unknown key "auto_of"' }])
+
+  it('an update error that arrives after the dialog closed does not show in the next dialog', async () => {
+    vi.mocked(listTemplates).mockResolvedValue([plainTemplate(1, 'A')] as any)
+    const pending = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickEdit(wrapper, 0)
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await cancelDialog(wrapper)
+    await openCreate(wrapper)
+    pending.reject(refusal())
+    await flushPromises()
+    expect(wrapper.find('[data-testid="template-save-errors"]').exists()).toBe(false)
+    expect(wrapper.find('.modal').exists()).toBe(true)
+  })
+
+  it('an update that finishes after the dialog closed does not close the next dialog', async () => {
+    vi.mocked(listTemplates).mockResolvedValue([plainTemplate(1, 'A')] as any)
+    const pending = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickEdit(wrapper, 0)
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await cancelDialog(wrapper)
+    await openCreate(wrapper)
+    await wrapper.find('.modal .form-input[type="text"]').setValue('draft')
+    pending.resolve({ template: plainTemplate(1, 'A') })
+    await flushPromises()
+    expect(wrapper.find('.modal').exists()).toBe(true)
+    expect((wrapper.find('.modal .form-input[type="text"]').element as HTMLInputElement).value).toBe('draft')
+  })
+
+  it('a create error that arrives after the dialog closed does not show in the next dialog', async () => {
+    const pending = deferred<any>()
+    vi.mocked(createTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('.modal .form-input[type="text"]').setValue('first')
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await cancelDialog(wrapper)
+    await openCreate(wrapper)
+    pending.reject(refusal())
+    await flushPromises()
+    expect(wrapper.find('[data-testid="template-save-errors"]').exists()).toBe(false)
+    expect(wrapper.find('.modal').exists()).toBe(true)
+  })
+
+  it('an error shows in the dialog it came from while that dialog stays open', async () => {
+    vi.mocked(listTemplates).mockResolvedValue([plainTemplate(1, 'A')] as any)
+    vi.mocked(updateTemplate).mockRejectedValue(refusal())
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickEdit(wrapper, 0)
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="template-save-errors"]').text()).toContain('Unknown key "auto_of"')
+  })
+
   it('shows each field the server refused', async () => {
     vi.mocked(createTemplate).mockRejectedValue(
       new TemplateSaveError('Validation failed', [{ path: 'roller', message: 'SHPLG-S has no roller settings' }]),
