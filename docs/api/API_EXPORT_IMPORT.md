@@ -52,11 +52,11 @@ The generic export, its preview and the GitOps export replace every saved
 secret with the marker `[REDACTED]`: the values under a secret-named key (a
 name that contains `pass`, `pwd`, `psk`, `secret` or `token`, or ends in `key`)
 in the device settings, the device configurations, the templates and the
-template variables. An empty value stays empty. This holds for the JSON, YAML,
-GitOps and SMA plugins. A secret under a key that holds a list or an object is
-replaced throughout. Set `"exclude_sensitive": false` in `config` to ask for a
-full export with the secrets in clear. The SMA export also redacts by its own
-wider key rule.
+template variables. This holds for the JSON, YAML, GitOps and SMA plugins. A
+secret under a key that holds a list or an object is replaced throughout. An
+empty value stays empty, except in the SMA export, whose own wider key rule
+replaces a matching field whatever it holds. Set `"exclude_sensitive": false`
+in `config` to ask for a full export with the secrets in clear.
 
 Only the SMA import reads the marker, as "keep the stored value". The JSON,
 YAML and GitOps plugins have no import, so a file they wrote cannot be
