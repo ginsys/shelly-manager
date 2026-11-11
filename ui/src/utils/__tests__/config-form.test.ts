@@ -54,6 +54,42 @@ describe('config-form validation', () => {
     expect(validateOverrides(sections, { wifi: { ipv4_method: 'dhcp' } }, {})).toEqual({ 'wifi.ssid': 'Required' })
     expect(validateOverrides(sections, { wifi: { ipv4_method: 'dhcp' } }, { wifi: { ssid: 'home' } })).toEqual({})
   })
+
+  // The shape the backend emits for auth (internal/configuration/typed_models.go): the keys are
+  // required only while the section is enabled.
+  const authSections: Record<string, SchemaProperty> = {
+    auth: {
+      type: 'object',
+      properties: { enable: { type: 'boolean' }, user: { type: 'string' }, pass: { type: 'string' } },
+      if: { properties: { enable: { const: true } } },
+      then: { required: ['user', 'pass'] },
+    },
+  }
+
+  it('then.required applies while the if condition holds', () => {
+    const body = { auth: { enable: true, user: 'admin' } }
+    expect(validateOverrides(authSections, body, {})).toEqual({ 'auth.pass': 'Required' })
+    // The condition reads the effective value, so an inherited enable counts.
+    expect(validateOverrides(authSections, { auth: { user: 'admin' } }, { auth: { enable: true } }))
+      .toEqual({ 'auth.pass': 'Required' })
+    expect(validateOverrides(authSections, { auth: { enable: true, user: 'admin' } }, { auth: { pass: 'x' } }))
+      .toEqual({})
+  })
+
+  it('then.required is not asked while the if condition fails', () => {
+    expect(validateOverrides(authSections, { auth: { enable: false, user: 'admin' } }, {})).toEqual({})
+    expect(validateOverrides(authSections, { auth: { user: 'admin' } }, {})).toEqual({})
+  })
+
+  it('a section that is not an object is an error', () => {
+    const sections: Record<string, SchemaProperty> = {
+      mqtt: { type: 'object', properties: { enable: { type: 'boolean' } } },
+    }
+    expect(validateOverrides(sections, { mqtt: 'invalid' }, {})).toEqual({ mqtt: 'Must be an object' })
+    expect(validateOverrides(sections, { mqtt: [] }, {})).toEqual({ mqtt: 'Must be an object' })
+    expect(validateOverrides(sections, { mqtt: null }, {})).toEqual({ mqtt: 'Must be an object' })
+    expect(validateOverrides(sections, { mqtt: { enable: true } }, {})).toEqual({})
+  })
 })
 
 describe('config-form applicability and baseline', () => {

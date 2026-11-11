@@ -140,6 +140,57 @@ describe('ConfigEditor', () => {
     expect(lastValid(wrapper)).toBe(false)
   })
 
+  it('setting a field back to its inherited value leaves no override', async () => {
+    const wrapper = mountEditor({}, {
+      inherited: { power_metering: { max_power: 1800 } },
+      sources: { 'power_metering.max_power': 'Global' },
+    })
+    await flushPromises()
+    await openSection(wrapper, 'power_metering')
+    const input = wrapper.find('[data-path="power_metering.max_power"] input')
+    await input.setValue('2000')
+    expect(lastModel(wrapper)).toEqual({ power_metering: { max_power: 2000 } })
+    await input.setValue('1800')
+    expect(lastModel(wrapper)).toEqual({})
+  })
+
+  it('is not valid while the schema request is pending', async () => {
+    vi.mocked(getConfigSchema).mockReturnValue(new Promise(() => {}))
+    const wrapper = mountEditor({ power_metering: { max_power: 70000 } })
+    await flushPromises()
+    expect(lastValid(wrapper)).toBe(false)
+  })
+
+  it('is valid again, and says so, when the schema request fails', async () => {
+    vi.mocked(getConfigSchema).mockRejectedValue(new Error('boom'))
+    const wrapper = mountEditor({})
+    await flushPromises()
+    expect(lastValid(wrapper)).toBe(true)
+    expect(wrapper.find('.no-schema').text()).toContain('Changes are not validated here')
+  })
+
+  it('a corrected JSON error no longer blocks save', async () => {
+    const wrapper = mountEditor({})
+    await flushPromises()
+    await wrapper.findAll('.mode-btn')[1].trigger('click')
+    const box = wrapper.find('textarea')
+    await box.setValue('{')
+    expect(lastValid(wrapper)).toBe(false)
+    await wrapper.findAll('.mode-btn')[0].trigger('click')
+    await openSection(wrapper, 'power_metering')
+    await wrapper.find('[data-path="power_metering.max_power"] input').setValue('2000')
+    expect(lastModel(wrapper)).toEqual({ power_metering: { max_power: 2000 } })
+    expect(lastValid(wrapper)).toBe(true)
+  })
+
+  it('a section that is not an object makes the editor invalid', async () => {
+    const wrapper = mountEditor({})
+    await flushPromises()
+    await wrapper.findAll('.mode-btn')[1].trigger('click')
+    await wrapper.find('textarea').setValue('{"power_metering":"invalid"}')
+    expect(lastValid(wrapper)).toBe(false)
+  })
+
   it('a field apply cannot write is read-only but its override can be reset', async () => {
     const wrapper = mountEditor({ relay: { default_state: 'on' } })
     await flushPromises()
