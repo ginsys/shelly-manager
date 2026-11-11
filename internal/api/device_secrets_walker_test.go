@@ -89,6 +89,35 @@ func TestMaskJSONText_EmptySecretStaysEmptyAndMaskingIsStable(t *testing.T) {
 	assert.Equal(t, "{}", maskJSONText("{}"))
 }
 
+// A number under a secret key is a secret too, and a malformed text that names a secret key in any
+// spelling is masked whole (review round 1 of the 436 account: findings on both).
+func TestMaskJSONText_NumericSecretsAreMasked(t *testing.T) {
+	got := maskJSONText(`{"auth_pass":12345678,"mqtt":{"pass":9007199254740993},"keep_alive":60}`)
+	assert.NotContains(t, got, "12345678")
+	assert.NotContains(t, got, "9007199254740993")
+	assert.Equal(t, []string{"auth_pass", "mqtt.pass"}, maskedPaths(t, got))
+	assert.Contains(t, got, `"keep_alive":60`)
+
+	stored := `{"auth_pass":12345678}`
+	back := restoreMaskedText(got, stored)
+	assert.Contains(t, back, `"auth_pass":12345678`, "a returned mask takes the stored number")
+	assert.NotContains(t, back, secretMask)
+}
+
+func TestMaskJSONText_MalformedTextNamingASecretKeyIsMaskedWhole(t *testing.T) {
+	for name, text := range map[string]string{
+		"password key":      `{"password":"saved-secret"`,
+		"key suffix":        `{"wifi_sta":{"key":"saved-secret"`,
+		"token anywhere":    `{"api_token_v2":"saved-secret"`,
+		"escaped key":       `{"password":"saved-secret"`,
+		"escaped quote key": `{"a\"pass":"saved-secret"`,
+		"unicode escape":    `{"password":"saved-secret"`,
+	} {
+		assert.Equal(t, secretMask, maskJSONText(text), name)
+	}
+	assert.Equal(t, `{"name":"nothing here"`, maskJSONText(`{"name":"nothing here"`))
+}
+
 func TestRestoreMaskedText_TakesTheStoredValueOrDropsTheMask(t *testing.T) {
 	stored := `{"mqtt":{"pass":"kept","server":"old"},"list":[{"token":"t0"}]}`
 	back := `{"mqtt":{"pass":"` + secretMask + `","server":"new"},"list":[{"token":"` + secretMask + `"}],"auth":{"pass":"` + secretMask + `"}}`
