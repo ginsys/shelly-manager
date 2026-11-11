@@ -49,6 +49,14 @@ describe('strict SMA 2026.1 parser', () => {
       expect(generated.success).toBe(false)
       expect(generated.error).toContain('scope')
     })
+
+    it('refuses a device_type scope with no device type, as the server does', async () => {
+      const generated = await generateSMAFile({ templates: [{ ...template, scope: 'device_type', device_type: '' }] })
+      expect(generated.success).toBe(false)
+      expect(generated.error).toContain('device_type')
+      const group = await generateSMAFile({ templates: [{ ...template, scope: 'group', device_type: '' }] })
+      expect(group.success, group.error).toBe(true)
+    })
   })
 
   it('rejects malformed gzip, invalid UTF-8, and legacy versions', async () => {

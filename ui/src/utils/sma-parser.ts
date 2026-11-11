@@ -284,6 +284,10 @@ function validateTemplate(template: Record<string, unknown>): void {
   safeInteger(template.id, 'id')
   safeInteger(template.generation, 'generation')
   for (const name of ['name', 'description', 'device_type']) string(template[name], name, true)
+  // As the server's ValidateTemplateScope: a device_type scope names a device type.
+  if (template.scope === 'device_type' && template.device_type === '') {
+    throw new Error('a device_type scope needs a device_type')
+  }
   object(template.config, 'config')
   object(template.variables, 'variables')
   if (typeof template.is_default !== 'boolean') throw new Error('is_default must be boolean')
