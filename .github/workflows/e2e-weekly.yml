@@ -15,7 +15,9 @@ on:
 jobs:
   e2e-comprehensive:
     timeout-minutes: 180
-    runs-on: ubuntu-latest
+    # Pinned like e2e-tests.yml: ubuntu-latest moved to 26.04, where apt cannot
+    # resolve the Ubuntu mirrors, and `playwright install --with-deps` needs apt.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
