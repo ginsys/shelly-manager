@@ -12,7 +12,10 @@ import {
 
 export const useTemplatesStore = defineStore('templates', () => {
   const templates = ref<ConfigTemplate[]>([])
-  const loading = ref(false)
+  // The number of requests in flight. `loading` is true while any is, so a request that ends
+  // cannot release the busy state of one that has not.
+  const pending = ref(0)
+  const loading = computed(() => pending.value > 0)
   const error = ref<string | null>(null)
 
   const scopeFilter = ref<TemplateScope | ''>('')
@@ -36,7 +39,7 @@ export const useTemplatesStore = defineStore('templates', () => {
   })
 
   async function fetchTemplates() {
-    loading.value = true
+    pending.value++
     error.value = null
 
     try {
@@ -46,7 +49,7 @@ export const useTemplatesStore = defineStore('templates', () => {
       error.value = e?.message || 'Failed to load templates'
       throw e
     } finally {
-      loading.value = false
+      pending.value--
     }
   }
 
@@ -57,7 +60,7 @@ export const useTemplatesStore = defineStore('templates', () => {
     device_type?: string
     config: Record<string, any>
   }) {
-    loading.value = true
+    pending.value++
     error.value = null
 
     try {
@@ -68,12 +71,12 @@ export const useTemplatesStore = defineStore('templates', () => {
       error.value = e?.message || 'Failed to create template'
       throw e
     } finally {
-      loading.value = false
+      pending.value--
     }
   }
 
   async function update(id: number | string, data: UpdateTemplateRequest) {
-    loading.value = true
+    pending.value++
     error.value = null
 
     try {
@@ -85,12 +88,12 @@ export const useTemplatesStore = defineStore('templates', () => {
       error.value = e?.message || 'Failed to update template'
       throw e
     } finally {
-      loading.value = false
+      pending.value--
     }
   }
 
   async function remove(id: number | string) {
-    loading.value = true
+    pending.value++
     error.value = null
 
     try {
@@ -100,13 +103,13 @@ export const useTemplatesStore = defineStore('templates', () => {
       error.value = e?.message || 'Failed to delete template'
       throw e
     } finally {
-      loading.value = false
+      pending.value--
     }
   }
 
   function reset() {
     templates.value = []
-    loading.value = false
+    pending.value = 0
     error.value = null
     scopeFilter.value = ''
     deviceTypeFilter.value = ''

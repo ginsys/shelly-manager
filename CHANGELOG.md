@@ -113,6 +113,12 @@ All notable changes to this project are documented here. The project follows Con
   configuration/testing/enablement is tracked as a design vertical (#290).
 
 ### Fixed
+- The template pages no longer start an action while a save or a refresh is
+  pending. A list request that ended brought Edit back while the save was still
+  running, so Edit could open from the old row and its Save could undo the
+  saved change. Edit, Delete, Create, Save, the scope filter and (on the detail
+  page) Copy now stay off until every request has finished, and a failed
+  refresh on the detail page has a Retry button. (#441)
 - The device configuration editor no longer lets Save delete a stored password.
   Typing `null`, a number, `false` or `""` as the whole body in the JSON view
   cleared the editor's memory of what was saved, so a following `{}` passed the

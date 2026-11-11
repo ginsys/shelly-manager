@@ -241,10 +241,10 @@ describe('TemplatesPage template form', () => {
     expect(sent.config?.power_metering).toEqual({ max_power: 1400 })
   })
 
-  // A save answers after the dialog it came from was closed, and another dialog is open. The
-  // answer belongs to the closed dialog, so it must not show an error in, or close, the new one.
-  // While a save runs the store hides the table, so the only way to a new dialog is the Create
-  // button of the toolbar: Save, Cancel, Create.
+  // A save answers after the dialog it came from was closed. The answer belongs to the closed
+  // dialog, so it must not show an error in, or close, the next one. While a save runs no dialog
+  // opens (Create and row Edit are off), so the next dialog opens once the save has settled:
+  // Save, Cancel, answer, Create.
   const plainTemplate = (id: number, name: string) => ({
     id, name, description: '', scope: 'global', created_at: '', updated_at: '', config: {},
   })
@@ -278,9 +278,9 @@ describe('TemplatesPage template form', () => {
     await clickEdit(wrapper, 0)
     await wrapper.find('[data-testid="save-template"]').trigger('click')
     await cancelDialog(wrapper)
-    await openCreate(wrapper)
     pending.reject(refusal())
     await flushPromises()
+    await openCreate(wrapper)
     expect(wrapper.find('[data-testid="template-save-errors"]').exists()).toBe(false)
     expect(wrapper.find('.modal').exists()).toBe(true)
   })
@@ -294,9 +294,10 @@ describe('TemplatesPage template form', () => {
     await clickEdit(wrapper, 0)
     await wrapper.find('[data-testid="save-template"]').trigger('click')
     await cancelDialog(wrapper)
+    pending.resolve({ template: plainTemplate(1, 'A') })
+    await flushPromises()
     await openCreate(wrapper)
     await wrapper.find('.modal .form-input[type="text"]').setValue('draft')
-    pending.resolve({ template: plainTemplate(1, 'A') })
     await flushPromises()
     expect(wrapper.find('.modal').exists()).toBe(true)
     expect((wrapper.find('.modal .form-input[type="text"]').element as HTMLInputElement).value).toBe('draft')
@@ -311,9 +312,9 @@ describe('TemplatesPage template form', () => {
     await wrapper.find('.modal .form-input[type="text"]').setValue('first')
     await wrapper.find('[data-testid="save-template"]').trigger('click')
     await cancelDialog(wrapper)
-    await openCreate(wrapper)
     pending.reject(refusal())
     await flushPromises()
+    await openCreate(wrapper)
     expect(wrapper.find('[data-testid="template-save-errors"]').exists()).toBe(false)
     expect(wrapper.find('.modal').exists()).toBe(true)
   })
