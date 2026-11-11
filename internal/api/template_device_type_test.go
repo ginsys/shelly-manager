@@ -151,3 +151,23 @@ func TestGetDeviceTypesListsTheSupportedModels(t *testing.T) {
 	}
 	assert.Equal(t, configuration.NewGen1Converter(nil).SupportedDeviceTypes(), codes)
 }
+
+// With an admin key configured the list needs it, like every new endpoint (AGENTS.md).
+func TestGetDeviceTypesRequiresTheAdminKey(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	handler.SetAdminAPIKey("secret")
+
+	get := func(setHeader func(*http.Request)) int {
+		req := httptest.NewRequest("GET", "/api/v1/config/device-types", nil)
+		setHeader(req)
+		w := httptest.NewRecorder()
+		handler.GetDeviceTypes(w, req)
+		return w.Code
+	}
+
+	assert.Equal(t, http.StatusUnauthorized, get(func(*http.Request) {}), "no credentials")
+	assert.Equal(t, http.StatusUnauthorized, get(func(r *http.Request) { r.Header.Set("Authorization", "Bearer wrong") }), "wrong key")
+	assert.Equal(t, http.StatusOK, get(func(r *http.Request) { r.Header.Set("Authorization", "Bearer secret") }), "bearer key")
+	assert.Equal(t, http.StatusOK, get(func(r *http.Request) { r.Header.Set("X-API-Key", "secret") }), "x-api-key")
+}

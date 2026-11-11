@@ -185,7 +185,7 @@ A `device_type` template names a model from `GET /api/v1/config/device-types`. `
 | POST | `/api/v1/configuration/convert-to-typed` | Convert raw to typed |
 | POST | `/api/v1/configuration/convert-to-raw` | Convert typed to raw |
 | GET | `/api/v1/config/schema` | Get configuration schema. With `?device_type=<model>` or `?device_id=<id>`: the stored-configuration schema for that model, with each field marked `x-applicable` when apply can write it. With `?scope=global` or `?scope=group`: the schema of such a template, every stored section |
-| GET | `/api/v1/config/device-types` | List the models a `device_type` template can name. `data.device_types` holds `{device_type, name, generation}` for each of the six supported Gen1 models (`SHPLG-S`, `SHPLG-1`, `SHSW-1`, `SHSW-PM`, `SHSW-25`, `SHIX3-1`) |
+| GET | `/api/v1/config/device-types` | List the models a `device_type` template can name. `data.device_types` holds `{device_type, name, generation}` for each of the six supported Gen1 models (`SHPLG-S`, `SHPLG-1`, `SHSW-1`, `SHSW-PM`, `SHSW-25`, `SHIX3-1`) (admin key) |
 | POST | `/api/v1/configuration/bulk-validate` | Bulk validate configs |
 
 ---
