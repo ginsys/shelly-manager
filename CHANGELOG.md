@@ -29,9 +29,11 @@ All notable changes to this project are documented here. The project follows Con
   inherited value and its source. Editing a field makes it an override, Reset
   removes it, and "Use default" sets the schema default. A field that apply
   cannot write yet is read-only. Schema validation (type, range, length,
-  pattern, enum, required) runs on every change, and Save stays disabled while
-  a field is invalid. Only changed fields go into the override body. Lists
-  still use a JSON box. (#385)
+  pattern, enum, required, including the keys auth and Wi-Fi require while
+  enabled) runs on every change, and Save stays disabled while a field is
+  invalid or the schema is still loading. Only changed fields go into the
+  override body: a value set back to the inherited one removes the override.
+  Lists still use a JSON box. (#385)
 
 ### Changed
 - Go toolchain is 1.27.3, including the crypto/x509 intermediate-certificate

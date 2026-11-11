@@ -34,7 +34,7 @@
 
       <div v-else class="form-editor">
         <div v-if="!schema" class="no-schema">
-          {{ loadError ? `Schema not available (${loadError}).` : 'Schema not available.' }} Use JSON view.
+          {{ loadError ? `Schema not available (${loadError}).` : 'Schema not available.' }} Changes are not validated here. Use JSON view.
         </div>
 
         <template v-else>
@@ -110,7 +110,10 @@ import {
   clone,
   countOverrides,
   deleteAt,
+  getAt,
+  hasAt,
   inheritedBaseline,
+  sameValue,
   setAt,
   validateOverrides,
   type ConfigBody,
@@ -137,7 +140,8 @@ const typedConfigStore = useTypedConfigStore()
 
 const mode = ref<'form' | 'json'>('form')
 const schema = ref<ConfigSchema | null>(null)
-const loading = ref(false)
+// True from the first render: the schema request starts on mount, and nothing is validated before it ends.
+const loading = ref(true)
 const loadError = ref<string | null>(null)
 const jsonText = ref('{}')
 const jsonError = ref<string | null>(null)
@@ -159,7 +163,14 @@ const errors = computed<Record<string, string>>(() =>
     : {},
 )
 
-const valid = computed(() => jsonError.value === null && Object.keys(errors.value).length === 0)
+// Valid means checked and clean. While the schema request is pending nothing is checked yet, so
+// Save stays off. After a failed request the form says it cannot validate, and the server's
+// validation on save is the check left.
+const valid = computed(() =>
+  jsonError.value === null &&
+  !loading.value &&
+  Object.keys(errors.value).length === 0,
+)
 
 watch(valid, (value) => emit('update:valid', value), { immediate: true })
 
@@ -187,11 +198,19 @@ async function loadSchema() {
 
 function emitChange() {
   jsonText.value = JSON.stringify(localConfig.value, null, 2)
+  // The form body is valid JSON again, so an earlier JSON syntax error no longer applies.
+  jsonError.value = null
   emit('update:modelValue', clone(localConfig.value))
 }
 
+// A value equal to the inherited one is not an override: it would pin the field and stop it
+// following later template changes. Setting it back removes the override instead.
 function setField(path: ConfigPath, value: any) {
-  localConfig.value = setAt(localConfig.value, path, value)
+  if (hasAt(baseline.value, path) && sameValue(getAt(baseline.value, path), value)) {
+    localConfig.value = deleteAt(localConfig.value, path)
+  } else {
+    localConfig.value = setAt(localConfig.value, path, value)
+  }
   emitChange()
 }
 

@@ -71,6 +71,12 @@ export function clone<T>(value: T): T {
   return value === undefined ? value : JSON.parse(JSON.stringify(value))
 }
 
+// sameValue compares two JSON values. Objects compare by their serialised form, so only use it on
+// leaves and lists, where key order does not vary.
+export function sameValue(a: any, b: any): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 // isApplicable is false only when the device schema marks the field x-applicable: false. The
 // generic schema carries no mark, so every field stays editable there.
 export function isApplicable(schema: SchemaProperty): boolean {
@@ -128,9 +134,40 @@ export function validateValue(schema: SchemaProperty, value: any): string | null
   return null
 }
 
+// isPlainObject is true for a JSON object, not for null or a list.
+function isPlainObject(value: any): boolean {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+// requiredKeys returns the child keys an object schema requires for the effective configuration
+// (the override over the inherited value): its own `required`, plus `then.required` when the
+// `if` condition holds. The condition reads each `if.properties.<key>.const` against the
+// effective value of that key.
+function requiredKeys(
+  schema: SchemaProperty,
+  path: ConfigPath,
+  overrides: ConfigBody,
+  inherited: ConfigBody | null | undefined,
+): string[] {
+  const keys = [...(schema.required || [])]
+  const conditions = Object.entries(schema.if?.properties || {})
+  if (schema.then?.required && conditions.length > 0) {
+    const holds = conditions.every(([key, rule]) => {
+      const childPath = [...path, key]
+      const effective = getAt(overrides, childPath) !== undefined
+        ? getAt(overrides, childPath)
+        : getAt(inherited, childPath)
+      return rule.const !== undefined && effective === rule.const
+    })
+    if (holds) keys.push(...schema.then.required)
+  }
+  return keys
+}
+
 // validateOverrides walks the schema and returns the errors of the override body, keyed by
-// dotted path. A required field fails only when its object holds an override and neither the
-// override nor the inherited configuration gives the field a value.
+// dotted path. A section that holds an override must be an object. A required field fails only
+// when its object holds an override and neither the override nor the inherited configuration
+// gives the field a value.
 export function validateOverrides(
   sections: Record<string, SchemaProperty>,
   overrides: ConfigBody,
@@ -139,12 +176,16 @@ export function validateOverrides(
   const errors: Record<string, string> = {}
   const walk = (schema: SchemaProperty, path: ConfigPath) => {
     if (schema.type === 'object' && schema.properties) {
+      const own = getAt(overrides, path)
+      if (own !== undefined && !isPlainObject(own)) {
+        errors[pathKey(path)] = 'Must be an object'
+        return
+      }
       for (const [key, child] of Object.entries(schema.properties)) {
         walk(child, [...path, key])
       }
-      const required = schema.required
-      const own = getAt(overrides, path)
-      if (required && own !== null && typeof own === 'object' && Object.keys(own).length > 0) {
+      const required = requiredKeys(schema, path, overrides, inherited)
+      if (required.length > 0 && isPlainObject(own) && Object.keys(own).length > 0) {
         for (const key of required) {
           const childPath = [...path, key]
           if (getAt(overrides, childPath) === undefined && getAt(inherited, childPath) === undefined) {

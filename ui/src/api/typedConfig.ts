@@ -38,6 +38,10 @@ export interface SchemaProperty {
   pattern?: string
   // Object schemas list required child keys; array schemas give their item schema.
   required?: string[]
+  // Section schemas (wifi, auth) require more keys when a switch is on: `then.required` applies
+  // when every `if.properties.<key>.const` equals the value of that key.
+  if?: { properties?: Record<string, { const?: any }> }
+  then?: { required?: string[] }
   items?: SchemaProperty
   // Device-type schema only (GET /config/schema?device_id=...): false when apply cannot write
   // the field to the device yet. The generic schema omits it.
