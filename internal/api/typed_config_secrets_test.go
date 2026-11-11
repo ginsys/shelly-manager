@@ -187,6 +187,56 @@ func TestTypedConfigRoutes_OmittedKeepsEmptyAndNullRemove(t *testing.T) {
 	}
 }
 
+// A raw secret the body leaves out keeps its stored value, whether the raw part is edited or
+// omitted, and one sent as "" or null is removed.
+func TestTypedConfigRoutes_RawSecretOmittedKeepsEmptyAndNullRemove(t *testing.T) {
+	cases := map[string]struct {
+		raw  string
+		kept bool
+	}{
+		"edited, secret left out": {`"raw":{"future":{"label":"edited"}},`, true},
+		"raw omitted":             {``, true},
+		"empty clears":            {`"raw":{"future":{"api_token":"","label":"edited"}},`, false},
+		"null removes":            {`"raw":{"future":{"api_token":null,"label":"edited"}},`, false},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, typedStored)
+
+			body := `{"configuration":{` + c.raw + `"wifi":{"enable":true,"ssid":"home"}}}`
+			put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+			require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+			assertNoTypedSecret(t, "PUT config/typed", put.Body.String())
+			assert.Equal(t, c.kept, strings.Contains(storedConfig(t, h, id), typRaw), "stored configuration: %s", storedConfig(t, h, id))
+		})
+	}
+}
+
+// The validator reads the real configuration and a message can quote a value from it, so the
+// validation part of an answer is scrubbed too.
+func TestTypedConfigRoutes_ValidationMessagesCarryNoSavedSecret(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	const tmpl = `{{envOr \"T7PE_UNSET\" \"t7pe-tmpl-s3cret\"}}`
+	id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"},"raw":{"future":{"api_token":"`+tmpl+`"}}}`)
+
+	get := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+	require.Equal(t, http.StatusOK, get.Code, get.Body.String())
+	assert.NotContains(t, get.Body.String(), "t7pe-tmpl-s3cret")
+}
+
+func TestScrubValidation(t *testing.T) {
+	result := &configuration.ValidationResult{
+		Errors: []configuration.ValidationError{{Message: "bad hunter2abc here"}},
+		Info:   []configuration.ValidationInfo{{Message: "default hunter2 used"}},
+	}
+	scrubValidation(result, []string{"hunter2abc", "hunter2"})
+	assert.Equal(t, "bad "+secretMask+" here", result.Errors[0].Message)
+	assert.Equal(t, "default "+secretMask+" used", result.Info[0].Message)
+}
+
 // A mask with nothing stored behind it is dropped, never stored.
 func TestTypedConfigRoutes_MaskWithNothingStoredStoresNoMask(t *testing.T) {
 	h, cleanup := typedHandler(t)
