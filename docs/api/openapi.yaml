@@ -1253,7 +1253,8 @@ paths:
         the route is open. Takes no request body. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
         change during the apply. Supported Gen1 settings: name, timezone, location, eco mode,
-        discoverable, max power, LED and MQTT. Applies to one device are serialized inside one
+        discoverable, max power, LED, MQTT and relays (default_state, auto_on, auto_off and
+        name per channel). Applies to one device are serialized inside one
         server process only, so run one manager replica when you use apply.
       operationId: applyDeviceNewConfig
       security:
@@ -1290,9 +1291,10 @@ paths:
         '422':
           description: >-
             Nothing written (VALIDATION_FAILED). The desired configuration holds an unsupported
-            section (Wi-Fi, cloud, CoIoT, relays, login, inputs), a section with no Gen1 mapping
-            such as SNTP, or a stored field the configuration model does not know. The error
-            names the sections.
+            section (Wi-Fi, cloud, CoIoT, login, inputs), a relay key other than default_state,
+            auto_on, auto_off and name, a relay id that differs from its position in the list,
+            a section with no Gen1 mapping such as SNTP, or a stored field the configuration
+            model does not know. The error names the sections.
           content:
             application/json:
               schema:

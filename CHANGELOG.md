@@ -192,10 +192,10 @@ All notable changes to this project are documented here. The project follows Con
   differences and changes nothing. Secret values (passwords, keys, tokens)
   are masked in the differences. Only Gen1 devices are supported; Gen2 and
   Gen3 return HTTP 501 rather than a false success. On Gen1, apply writes the
-  name, timezone, location, eco mode, discoverable, max power, LED and MQTT
-  settings. A desired configuration that holds any other setting (Wi-Fi,
-  cloud, CoIoT, relays, login, inputs) returns HTTP 422 naming the settings,
-  and nothing is written. Apply clears `config_applied` before writing, and a
+  name, timezone, location, eco mode, discoverable, max power, LED, MQTT and
+  relay settings. A desired configuration that holds any other setting
+  (Wi-Fi, cloud, CoIoT, login, inputs, or a relay key other than the four
+  written ones) returns HTTP 422 naming the settings, and nothing is written. Apply clears `config_applied` before writing, and a
   desired configuration edited during the apply leaves the device pending.
   Settings the converter has no Gen1 mapping for (for example SNTP) are also
   refused, and so is a stored desired configuration with fields the
