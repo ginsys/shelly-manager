@@ -127,7 +127,7 @@
           <button
             class="btn primary"
             data-testid="save-template"
-            :disabled="!configValid || schemaTarget === null"
+            :disabled="!configValid || schemaTarget === null || saving"
             @click="handleSave"
           >
             Save
@@ -190,6 +190,10 @@ function hasSecrets(t: ConfigTemplate) {
 // number is still the same, because the answer of a closed dialog belongs to nobody.
 let dialogSession = 0
 
+// True from the Save click until the save and the list refresh after it have settled, so two saves
+// never overlap. Cancel and Create stay allowed: the dialog number covers them.
+const saving = ref(false)
+
 function openCreate() {
   dialogSession++
   editing.value = null
@@ -223,10 +227,11 @@ function closeDialog() {
 }
 
 async function handleSave() {
-  if (!configValid.value || schemaTarget.value === null) return
+  if (!configValid.value || schemaTarget.value === null || saving.value) return
   const parsedConfig = clone(configBody.value)
   const session = dialogSession
   saveErrors.value = []
+  saving.value = true
 
   try {
     if (editing.value) {
@@ -255,6 +260,8 @@ async function handleSave() {
       return
     }
     alert('Failed to save template: ' + (e?.message || 'Unknown error'))
+  } finally {
+    saving.value = false
   }
 }
 
