@@ -216,13 +216,20 @@ discovery:
 		t.Fatalf("Failed to start server: %v", err)
 	}
 
-	// Wait for server to start by polling health endpoint
-	serverURL := "http://127.0.0.1:8082/health"
+	// Wait for the server to start by polling the health endpoint. A busy machine can take
+	// several seconds, so allow 15 seconds before giving up. The route is /healthz: the
+	// server has no /health, which this test used to poll and always got a 404 from.
+	serverURL := "http://127.0.0.1:8082/healthz"
 	serverReady := false
 
-	for i := 0; i < 20; i++ { // Poll for up to 1 second (20 * 50ms)
+	// One deadline bounds the sleeps and the requests, and a request that stalls cannot
+	// outlast its own timeout, so the test always reaches the kill below.
+	client := &http.Client{Timeout: time.Second}
+	deadline := time.Now().Add(15 * time.Second)
+
+	for time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
-		resp, err := http.Get(serverURL)
+		resp, err := client.Get(serverURL)
 		if err == nil {
 			if closeErr := resp.Body.Close(); closeErr != nil {
 				t.Logf("Failed to close response body: %v", closeErr)
@@ -234,25 +241,18 @@ discovery:
 		}
 	}
 
-	if !serverReady {
-		// If health endpoint is not available, just verify the server process is running
-		// This ensures the test doesn't fail if health endpoint is not implemented
-		if cmd.Process == nil {
-			t.Fatal("Server process should be running")
-		}
-	}
-
 	// Kill the server
-	if cmd.Process != nil {
-		if killErr := cmd.Process.Kill(); killErr != nil {
-			t.Logf("Failed to kill process: %v", killErr)
-		}
-		if waitErr := cmd.Wait(); waitErr != nil {
-			t.Logf("Process wait error: %v", waitErr)
-		}
+	if killErr := cmd.Process.Kill(); killErr != nil {
+		t.Logf("Failed to kill process: %v", killErr)
+	}
+	if waitErr := cmd.Wait(); waitErr != nil {
+		t.Logf("Process wait error: %v", waitErr)
 	}
 
 	output := out.String()
+	if !serverReady {
+		t.Fatalf("Server did not answer %s within 15 seconds, output: %s", serverURL, output)
+	}
 	if !strings.Contains(output, "Starting server") {
 		t.Errorf("Expected server startup message, got: %s", output)
 	}
