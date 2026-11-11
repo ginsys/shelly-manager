@@ -235,7 +235,10 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 		Configuration json.RawMessage `json:"configuration"`
 	}
 	_ = json.Unmarshal(raw, &body)
-	restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device), nullSecretPaths(body.Configuration))
+	if restoreErr := restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device), nullSecretPaths(body.Configuration)); restoreErr != nil {
+		http.Error(w, restoreErr.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Validate the configuration
 	validationLevel := req.ValidationLevel
