@@ -136,10 +136,12 @@ Supported devices and settings:
 
 | Method | Endpoint | Description | Input |
 |--------|----------|-------------|-------|
-| GET | `/api/v1/config/templates` | List templates | Query: pagination |
-| POST | `/api/v1/config/templates` | Create template | `{name, description, device_type, generation, config, variables}` |
-| PUT | `/api/v1/config/templates/{id}` | Update template | Template fields |
-| DELETE | `/api/v1/config/templates/{id}` | Delete template | Path: `id` |
+| GET | `/api/v1/config/templates` | List templates (admin key) | Query: pagination |
+| POST | `/api/v1/config/templates` | Create template (admin key) | `{name, description, device_type, generation, config, variables}` |
+| PUT | `/api/v1/config/templates/{id}` | Update template (admin key) | Template fields |
+| DELETE | `/api/v1/config/templates/{id}` | Delete template (admin key) | Path: `id` |
+
+**Admin key.** If the server has an admin key configured, these routes need it, as `Authorization: Bearer <key>` or `X-API-Key: <key>`. Without it they return 401 `UNAUTHORIZED`. The same holds for every route under `/api/v1/config/templates/new`, the four routes under `/api/v1/devices/{id}/templates/new` and `GET /api/v1/config/schema`. If no admin key is configured, the routes are open, like the other admin routes. The web UI sends the key it holds.
 
 `POST` and `PUT` on `/api/v1/config/templates/new` check the `config` body against the schema of the template (the model for a `device_type` template, every stored section for a `global` or `group` template) and refuse it with 400 `VALIDATION_FAILED`, one entry per field in `error.details.fields`, and store nothing. The check covers the value of each field and the keys: an unknown key, a key that differs from the stored key only in case (`Relay` for `relay`), and a repeated key are refused with the key named, because the stored body is decoded without regard to case and merges repeated keys. A request key that is repeated or differs in case is refused the same way. The response returns a saved password as `has_wifi_password`, `has_mqtt_password` or `has_auth_password` and leaves the value out. It also returns `stored_secrets`, the path of each secret the template holds (for example `wifi.ap.pass`), which the three flags cannot give: `has_wifi_password` covers both the station and the access point password. A `PUT` without `config` keeps the stored config.
 
@@ -184,7 +186,7 @@ A `device_type` template names a model from `GET /api/v1/config/device-types`. `
 | POST | `/api/v1/configuration/validate-typed` | Validate typed config |
 | POST | `/api/v1/configuration/convert-to-typed` | Convert raw to typed |
 | POST | `/api/v1/configuration/convert-to-raw` | Convert typed to raw |
-| GET | `/api/v1/config/schema` | Get configuration schema. With `?device_type=<model>` or `?device_id=<id>`: the stored-configuration schema for that model, with each field marked `x-applicable` when apply can write it. With `?scope=global` or `?scope=group`: the schema of such a template, every stored section |
+| GET | `/api/v1/config/schema` | Get configuration schema (admin key). With `?device_type=<model>` or `?device_id=<id>`: the stored-configuration schema for that model, with each field marked `x-applicable` when apply can write it. With `?scope=global` or `?scope=group`: the schema of such a template, every stored section |
 | GET | `/api/v1/config/device-types` | List the models a `device_type` template can name. `data.device_types` holds `{device_type, name, generation}` for each of the six supported Gen1 models (`SHPLG-S`, `SHPLG-1`, `SHSW-1`, `SHSW-PM`, `SHSW-25`, `SHIX3-1`) (admin key) |
 | POST | `/api/v1/configuration/bulk-validate` | Bulk validate configs |
 

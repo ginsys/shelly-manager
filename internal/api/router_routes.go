@@ -9,6 +9,18 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
+// adminOnly wraps a handler so it answers only a request that carries the admin key, when one is
+// set. With no key set the route stays open, as with every handler that calls requireAdmin.
+// Guarding a route here, in the table, means a new handler cannot forget the call.
+func (h *Handler) adminOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !h.requireAdmin(w, r) {
+			return
+		}
+		next(w, r)
+	}
+}
+
 // registerAPIRoutes registers the production /api/v1 table on api.
 // securityMonitor nil omits GET /metrics/security, which closes over it.
 // handler must be non-nil. Optional notification, metrics, export, and import
@@ -60,11 +72,15 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/config/power-metering", handler.UpdatePowerMeteringConfig).Methods("PUT")
 	api.HandleFunc("/devices/{id}/config/auth", handler.UpdateDeviceAuth).Methods("PUT")
 
+	// admin guards a route with the admin key. The template routes, the template assignment
+	// routes and the schema read use it.
+	admin := handler.adminOnly
+
 	// Configuration template routes
-	api.HandleFunc("/config/templates", handler.GetConfigTemplates).Methods("GET")
-	api.HandleFunc("/config/templates", handler.CreateConfigTemplate).Methods("POST")
-	api.HandleFunc("/config/templates/{id}", handler.UpdateConfigTemplate).Methods("PUT")
-	api.HandleFunc("/config/templates/{id}", handler.DeleteConfigTemplate).Methods("DELETE")
+	api.HandleFunc("/config/templates", admin(handler.GetConfigTemplates)).Methods("GET")
+	api.HandleFunc("/config/templates", admin(handler.CreateConfigTemplate)).Methods("POST")
+	api.HandleFunc("/config/templates/{id}", admin(handler.UpdateConfigTemplate)).Methods("PUT")
+	api.HandleFunc("/config/templates/{id}", admin(handler.DeleteConfigTemplate)).Methods("DELETE")
 
 	// Typed configuration routes
 	api.HandleFunc("/devices/{id}/config/typed", handler.GetTypedDeviceConfig).Methods("GET")
@@ -73,7 +89,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/config/validate-typed", handler.ValidateTypedConfig).Methods("POST")
 	api.HandleFunc("/config/convert-to-typed", handler.ConvertConfigToTyped).Methods("POST")
 	api.HandleFunc("/config/convert-to-raw", handler.ConvertTypedToRaw).Methods("POST")
-	api.HandleFunc("/config/schema", handler.GetConfigurationSchema).Methods("GET")
+	api.HandleFunc("/config/schema", admin(handler.GetConfigurationSchema)).Methods("GET")
 	api.HandleFunc("/config/device-types", handler.GetDeviceTypes).Methods("GET")
 	api.HandleFunc("/config/bulk-validate", handler.BulkValidateConfigs).Methods("POST")
 
@@ -101,17 +117,17 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/drift-report", handler.GenerateDeviceDriftReport).Methods("POST")
 
 	// New template management routes (pointer-based config system)
-	api.HandleFunc("/config/templates/new", handler.GetNewConfigTemplates).Methods("GET")
-	api.HandleFunc("/config/templates/new", handler.CreateNewConfigTemplate).Methods("POST")
-	api.HandleFunc("/config/templates/new/{id}", handler.GetNewConfigTemplate).Methods("GET")
-	api.HandleFunc("/config/templates/new/{id}", handler.UpdateNewConfigTemplate).Methods("PUT")
-	api.HandleFunc("/config/templates/new/{id}", handler.DeleteNewConfigTemplate).Methods("DELETE")
+	api.HandleFunc("/config/templates/new", admin(handler.GetNewConfigTemplates)).Methods("GET")
+	api.HandleFunc("/config/templates/new", admin(handler.CreateNewConfigTemplate)).Methods("POST")
+	api.HandleFunc("/config/templates/new/{id}", admin(handler.GetNewConfigTemplate)).Methods("GET")
+	api.HandleFunc("/config/templates/new/{id}", admin(handler.UpdateNewConfigTemplate)).Methods("PUT")
+	api.HandleFunc("/config/templates/new/{id}", admin(handler.DeleteNewConfigTemplate)).Methods("DELETE")
 
 	// Device template assignment routes
-	api.HandleFunc("/devices/{id}/templates/new", handler.GetDeviceNewTemplates).Methods("GET")
-	api.HandleFunc("/devices/{id}/templates/new", handler.SetDeviceNewTemplates).Methods("PUT")
-	api.HandleFunc("/devices/{id}/templates/new/{templateId}", handler.AddDeviceNewTemplate).Methods("POST")
-	api.HandleFunc("/devices/{id}/templates/new/{templateId}", handler.RemoveDeviceNewTemplate).Methods("DELETE")
+	api.HandleFunc("/devices/{id}/templates/new", admin(handler.GetDeviceNewTemplates)).Methods("GET")
+	api.HandleFunc("/devices/{id}/templates/new", admin(handler.SetDeviceNewTemplates)).Methods("PUT")
+	api.HandleFunc("/devices/{id}/templates/new/{templateId}", admin(handler.AddDeviceNewTemplate)).Methods("POST")
+	api.HandleFunc("/devices/{id}/templates/new/{templateId}", admin(handler.RemoveDeviceNewTemplate)).Methods("DELETE")
 
 	// Device tag routes
 	api.HandleFunc("/devices/{id}/tags/new", handler.GetDeviceNewTags).Methods("GET")
