@@ -45,6 +45,57 @@ const gen1Stored = `{"mqtt":{"enable":true,"server":"mqtt.example.net:1883","pas
 	`"login":{"enabled":true,"username":"admin","password":"` + typAuth + `"},` +
 	`"vendor_blob":{"api_key":"` + typGen1 + `","label":"keep-me"}}`
 
+// gen1Credentials is a configuration in the device's own shape, whose Wi-Fi and login secrets use
+// the device's spelling: "key" for the Wi-Fi passwords and "password" for the login.
+const (
+	gen1STAPwd   = "t7pe-gen1sta-s3cret"
+	gen1APPwd    = "t7pe-gen1ap-s3cret"
+	gen1LoginPwd = "t7pe-gen1login-s3cret"
+)
+
+const gen1Credentials = `{"wifi_sta":{"enabled":true,"ssid":"home","key":"` + gen1STAPwd + `"},` +
+	`"wifi_ap":{"enabled":false,"ssid":"shelly","key":"` + gen1APPwd + `"},` +
+	`"login":{"enabled":true,"username":"admin","password":"` + gen1LoginPwd + `"}}`
+
+var gen1CredentialSecrets = []string{gen1STAPwd, gen1APPwd, gen1LoginPwd}
+
+// A configuration in the device's own shape keeps its Wi-Fi key and login password through a typed
+// save: the converted view holds them, the read shows the mask, and the save restores them.
+func TestTypedConfigRoutes_Gen1CredentialsSurviveASave(t *testing.T) {
+	bodies := map[string]func(t *testing.T, h *Handler, id string) string{
+		"read then save": func(t *testing.T, h *Handler, id string) string {
+			get := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+			require.Equal(t, http.StatusOK, get.Code, get.Body.String())
+			for _, s := range gen1CredentialSecrets {
+				assert.NotContains(t, get.Body.String(), s, "the read returns the saved secret %s", s)
+			}
+			var read struct {
+				Configuration json.RawMessage `json:"configuration"`
+			}
+			require.NoError(t, json.Unmarshal(dataOf(t, get.Body.Bytes()), &read))
+			return `{"configuration":` + string(read.Configuration) + `}`
+		},
+		"sections sent without the secrets": func(*testing.T, *Handler, string) string {
+			return `{"configuration":{"wifi":{"enable":true,"ssid":"home"},"auth":{"enable":true,"user":"admin"}}}`
+		},
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			id := typedDevice(t, h, gen1Credentials)
+
+			put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body(t, h, id))
+			require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+
+			stored := storedConfig(t, h, id)
+			assert.Contains(t, stored, gen1STAPwd, "the Wi-Fi key is lost by a typed save")
+			assert.Contains(t, stored, gen1LoginPwd, "the login password is lost by a typed save")
+			assert.NotContains(t, stored, secretMask, "the mask must never be stored")
+		})
+	}
+}
+
 func typedHandler(t *testing.T) (*Handler, func()) {
 	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)

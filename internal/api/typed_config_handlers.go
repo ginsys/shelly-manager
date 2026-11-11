@@ -961,8 +961,11 @@ func (h *Handler) convertWiFiConfig(data map[string]interface{}) (*configuration
 		if ssid, ok := staData["ssid"].(string); ok {
 			wifi.SSID = configuration.StringPtr(ssid)
 		}
+		// The device spells the station password "key"; "pass" wins where a configuration has both.
 		if pass, ok := staData["pass"].(string); ok {
 			wifi.Password = configuration.StringPtr(pass)
+		} else if key, ok := staData["key"].(string); ok {
+			wifi.Password = configuration.StringPtr(key)
 		}
 		if ipv4mode, ok := staData["ipv4mode"].(string); ok {
 			wifi.IPv4Mode = configuration.StringPtr(ipv4mode)
@@ -1098,8 +1101,11 @@ func (h *Handler) convertAuthConfig(data map[string]interface{}) (*configuration
 		auth.Username = configuration.StringPtr(username)
 	}
 
+	// The device spells the login password "password"; "pass" wins where a configuration has both.
 	if pass, ok := data["pass"].(string); ok {
 		auth.Password = configuration.StringPtr(pass)
+	} else if password, ok := data["password"].(string); ok {
+		auth.Password = configuration.StringPtr(password)
 	}
 
 	if realm, ok := data["realm"].(string); ok {
