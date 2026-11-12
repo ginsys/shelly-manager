@@ -167,6 +167,7 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"main", a.applyMainSettings}, // name, timezone, location, etc.
 		{"WiFi", a.applyWiFiSettings},
 		{"MQTT", a.applyMQTTSettings},
+		{"SNTP", a.applySNTPSettings},
 		{"Cloud", a.applyCloudSettings},
 		{"CoIoT", a.applyCoIoTSettings},
 		{"Relay", a.applyRelaySettings},
@@ -304,6 +305,33 @@ func (a *ConfigApplier) applyMQTTSettings(ctx context.Context, client ShellyClie
 	return nil
 }
 
+// applySNTPSettings writes the time server. The device reports it as the nested sntp.server and
+// takes it as the flat sntp_server parameter. The parameter name is unverified until the
+// hardware readback (the reference was read through a summary only).
+func (a *ConfigApplier) applySNTPSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+	sntp, ok := apiConfig["sntp"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	server, ok := sntp["server"].(string)
+	if !ok || server == "" {
+		return nil
+	}
+
+	if err := client.SetConfig(ctx, map[string]interface{}{"sntp_server": server}); err != nil {
+		result.Failures = append(result.Failures, ApplyFailure{
+			Path:  "sntp",
+			Value: server,
+			Error: err.Error(),
+		})
+		result.FailedCount++
+		return err
+	}
+
+	result.AppliedCount++
+	return nil
+}
+
 // gen1MQTTKeys maps the nested "mqtt" document that Gen1 returns from GET /settings to the
 // flat form parameters that POST /settings accepts. The device reads nested maps on output but
 // only understands flat mqtt_* parameters on input.
@@ -315,6 +343,9 @@ var gen1MQTTKeys = map[string]string{
 	"id":            "mqtt_id",
 	"clean_session": "mqtt_clean_session",
 	"keep_alive":    "mqtt_keep_alive",
+	// The key name is unverified until the hardware readback (the reference was read through a
+	// summary only).
+	"update_period": "mqtt_update_period",
 }
 
 // gen1MQTTForm converts a nested mqtt document into Gen1 form parameters. Keys it does not know
@@ -684,6 +715,12 @@ func (a *ConfigApplier) detectRebootRequired(oldConfigJSON json.RawMessage, newC
 		"login.username",
 		"login.password",
 	}
+	// The Gen1 reference says an MQTT change needs a reboot (read through a summary, so unverified
+	// until the hardware readback). Every key apply writes counts, so a new key in gen1MQTTKeys is
+	// covered at once. The password is never read back, so a configured one always counts as changed.
+	for key := range gen1MQTTKeys {
+		rebootSettings = append(rebootSettings, "mqtt."+key)
+	}
 
 	// Check if any reboot-required settings changed
 	var oldConfig, newAPIConfig map[string]interface{}
@@ -712,8 +749,9 @@ func (a *ConfigApplier) detectRebootRequired(oldConfigJSON json.RawMessage, newC
 		oldVal := oldSection[field]
 		newVal := newSection[field]
 
-		// If new value is set and different from old value
-		if newVal != nil && fmt.Sprintf("%v", oldVal) != fmt.Sprintf("%v", newVal) {
+		// A value the device does not report (a write-only password) counts as changed. Comparing
+		// formatted strings alone would read a password of "<nil>" as equal to a missing one.
+		if newVal != nil && (oldVal == nil || fmt.Sprintf("%v", oldVal) != fmt.Sprintf("%v", newVal)) {
 			return true
 		}
 	}

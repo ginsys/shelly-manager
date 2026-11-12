@@ -135,6 +135,16 @@ All notable changes to this project are documented here. The project follows Con
   full database snapshot. (#443)
 
 ### Added
+- Apply to a Gen1 device now writes the time server and the MQTT update period.
+  It sends `sntp_server` and `mqtt_update_period` as flat parameters on
+  `POST /settings` and checks both on the read-back. A time server that is not an
+  IPv4 address or a valid host name, and a negative update period (`0` is kept as
+  "off"), are refused with 422 before anything is written. Wi-Fi and inputs stay
+  refused. A change to any MQTT setting apply writes now reports that a reboot is
+  required (it did not before for any of them). The
+  parameter names, the accepted period range and that reboot were read from a
+  summary of the Shelly reference and are not confirmed on hardware.
+  (Refs ginsys/shelly-manager#381)
 - Apply to a Gen1 device now writes the login (`POST /settings/login`: `enabled`,
   `username`, `password`, 1 to 50 bytes each, both together). It is written
   last, after every other setting. Once the device accepts it, the manager stores

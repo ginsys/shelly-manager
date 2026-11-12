@@ -33,9 +33,10 @@ type LoginHooks interface {
 // relays section, which is written per channel with POST /settings/relay/<n>, and the cloud
 // section, whose enabled flag is written with POST /settings/cloud, the coiot section, which is
 // flattened to coiot_* parameters, and the login section, which is written with POST
-// /settings/login, but only where LoginHooks is set. Every other section (wifi_sta, wifi_ap,
-// inputs) is refused before the device is touched, because the applier would send it in a shape
-// the device ignores. Wi-Fi in particular is never written. A relay key outside name,
+// /settings/login, but only where LoginHooks is set, and the sntp section, whose server is
+// written as the flat sntp_server parameter. Every other section (wifi_sta, wifi_ap, inputs) is
+// refused before the device is touched, because the applier would send it in a shape the device
+// ignores. Wi-Fi in particular is never written. A relay key outside name,
 // default_state, auto_on and auto_off is refused through the round-trip check below, and so is a
 // cloud server, which Gen1 neither reports nor accepts.
 var gen1ApplyKeys = map[string]bool{
@@ -53,6 +54,7 @@ var gen1ApplyKeys = map[string]bool{
 	"cloud":              true,
 	"coiot":              true,
 	"login":              true,
+	"sntp":               true,
 }
 
 // gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
@@ -89,6 +91,8 @@ var gen1ApplicablePaths = map[string]bool{
 	"mqtt.id":                    true,
 	"mqtt.clean_session":         true,
 	"mqtt.keep_alive":            true,
+	"mqtt.update_period":         true,
+	"system.sntp.server":         true,
 	"cloud.enable":               true,
 	"coiot.enable":               true,
 	"coiot.update_period":        true,
@@ -137,6 +141,31 @@ func unsupportedLogin(auth *AuthConfiguration) []string {
 		}
 	}
 	return unsupported
+}
+
+// validTimeServer reports whether s is an IPv4 address or a DNS host name: labels of letters,
+// digits and hyphens, no label empty, over 63 bytes or starting or ending with a hyphen, and at
+// most 253 bytes in all. A dotted IPv4 address is such a name; an IPv6 literal has colons, so it is
+// refused (Gen1 devices are IPv4 only, so one could never be used as a time source).
+func validTimeServer(s string) bool {
+	// The optional terminal dot is not part of the 253-byte limit.
+	name := strings.TrimSuffix(s, ".")
+	if len(name) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(name, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			default:
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // unsupportedApplySettings returns the sorted top-level Gen1 keys of desired that apply cannot
@@ -189,6 +218,17 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		if peer := desired.CoIoT.Peer; peer != nil && *peer == gen1CoIoTMulticast {
 			unsupported = append(unsupported, "coiot.peer")
 		}
+	}
+
+	// A time server must be a host the device can resolve. The device takes any string, so a typo
+	// would silently stop its clock and every schedule that depends on it. The accepted length and
+	// the MQTT period range are unverified until the hardware readback (the reference gives none),
+	// so the period is only refused where it cannot mean anything: below zero.
+	if desired.System != nil && desired.System.SNTP != nil && desired.System.SNTP.Server != "" && !validTimeServer(desired.System.SNTP.Server) {
+		unsupported = append(unsupported, "system.sntp.server")
+	}
+	if desired.MQTT != nil && desired.MQTT.UpdatePeriod != nil && *desired.MQTT.UpdatePeriod < 0 {
+		unsupported = append(unsupported, "mqtt.update_period")
 	}
 
 	// The converted configuration holds no channel id: the list position is the channel that
