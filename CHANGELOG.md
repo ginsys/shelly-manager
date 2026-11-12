@@ -61,7 +61,10 @@ All notable changes to this project are documented here. The project follows Con
   is the timer on with that delay, 0 is the timer off. A timer that the device keeps on with a
   delay that is not a whole number of seconds above 0 is read as unset, so verify reports a
   difference. Verify pairs a channel with the device channel of the same id; a list with a
-  repeated id is compared by position, as before. Refused with 422 before anything is
+  repeated id is compared by position, as before. The mode of input N is written as the
+  `in_mode` of switch N. Where a model lets a switch take another input (`input_id`), verify
+  reads the mode on that input and reports a difference, and the write is not redirected.
+  Refused with 422 before anything is
   written, with one path for each setting: any other value (the Gen1 mode `action`, an input
   type `analog` or `count`, a negative timer), an input push action or timing, a relay
   schedule and the top-level relay and input settings. `cycle` and `activate` are left to the device, which answers with its

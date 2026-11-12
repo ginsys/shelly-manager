@@ -86,7 +86,8 @@ func gen2ChannelIDs(doc map[string]interface{}, kind string) []int {
 }
 
 // gen2ChannelsFromDoc reads the switch and input sections. The in_mode of switch:N is the mode of
-// input N: the stored model keeps the mode with the input. An auto timer is its seconds, or 0 when
+// the input that switch:N takes (input N, or the one input_id names): the stored model keeps the
+// mode with the input. An auto timer is its seconds, or 0 when
 // the device has it off, whatever delay it keeps. A null value is an unset setting.
 func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig) {
 	inputs := map[int]*SingleInputConfig{}
@@ -113,7 +114,12 @@ func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig
 		relay.AutoOn = gen2AutoTimerFromDoc(raw, "auto_on")
 		relay.AutoOff = gen2AutoTimerFromDoc(raw, "auto_off")
 		if mode, ok := raw["in_mode"].(string); ok {
-			input(id).Mode = StringPtr(mode)
+			// A model with a selectable input (input_id) runs the mode on the input it names.
+			target := id
+			if selected, ok := raw["input_id"].(float64); ok && selected >= 0 && selected == math.Trunc(selected) {
+				target = int(selected)
+			}
+			input(target).Mode = StringPtr(mode)
 		}
 		relays = append(relays, relay)
 	}
