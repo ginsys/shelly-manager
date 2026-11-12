@@ -15,8 +15,8 @@ All notable changes to this project are documented here. The project follows Con
   configuration in the API and in exports carry it. It writes that column only when the value changes, and leaves
   the config, the sync time and `updated_at` as they were. (ginsys/shelly-manager#287)
 - A device request that the device rejected with 401 could erase a login that was saved
-  while the request ran. Both retry paths (reading a device and controlling it) now clear
-  the saved login only while it is still the rejected one. Saving a login now holds the
+  while the request ran. The three retry paths (reading a device, controlling it, and the
+  configuration client) now clear the saved login only while it is still the rejected one. Saving a login now holds the
   client cache lock for its read, write and cache drop. (ginsys/shelly-manager#477)
 - A device read that overlapped a credential update could cache a client that still
   used the old login, and later reads reused it. The read now reloads the device

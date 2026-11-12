@@ -180,6 +180,78 @@ func TestControlDevice_401ClearsALoginThatIsStillTheRejectedOne(t *testing.T) {
 	}
 }
 
+// The third retry path, used by configuration import, export and drift checks: its test request
+// is rejected, a credential update lands, and the retry must not erase the new login.
+func TestGetClientWithAuthRetry_401DoesNotEraseALoginSavedDuringTheTest(t *testing.T) {
+	gate := &gatedDevice{accept: map[string]bool{"new": true}, gateGET: true}
+	service, device := retryFixture(t, gate)
+	gate.setReject(func() {
+		if err := service.UpdateDeviceAuth(device.ID, "new", "newpw"); err != nil {
+			t.Errorf("UpdateDeviceAuth failed: %v", err)
+		}
+	})
+
+	if _, err := service.getClientWithAuthRetry(device); err != nil {
+		t.Fatalf("getClientWithAuthRetry failed: %v", err)
+	}
+
+	if user, _ := storedLogin(t, service, device.ID); user != "new" {
+		t.Errorf("the stored login is %q after the retry, want new", user)
+	}
+	if got := gate.last(); got != "new" {
+		t.Errorf("the retry sent login %q, want new", got)
+	}
+}
+
+// A device that stores its login only in the legacy settings.auth pair counts as auth enabled.
+// After the pair is cleared, the retry must fall back to the provisioning login and not go
+// unauthenticated.
+func TestGetClient_401ClearingALegacyLoginFallsBackToTheProvisioningLogin(t *testing.T) {
+	gate := &gatedDevice{accept: map[string]bool{"prov": true}, gateGET: true}
+	service, device := retryFixture(t, gate)
+	service.Config.Provisioning.AuthEnabled = true
+	service.Config.Provisioning.AuthUser = "prov"
+	service.Config.Provisioning.AuthPassword = "provpw"
+	device.Settings = `{"gen":1,"auth":{"username":"old","password":"bad"}}`
+	if err := service.DB.UpdateDevice(device); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.getClientWithRetry(device, true); err != nil {
+		t.Fatalf("getClientWithRetry failed: %v", err)
+	}
+
+	if got := gate.last(); got != "prov" {
+		t.Errorf("the retry sent login %q, want prov", got)
+	}
+}
+
+// A cache hit never refreshes the caller's snapshot, so the cached client can carry a login that
+// differs from the snapshot. When the stored login is not the one the caller compared, the
+// helper keeps the stored login and drops the cached client, so the retry builds a new one.
+func TestClearRejectedLogin_StoredLoginDiffersDropsTheCachedClient(t *testing.T) {
+	gate := &gatedDevice{accept: map[string]bool{"old": true}}
+	service, device := retryFixture(t, gate)
+	if _, err := service.getClientWithRetry(device, false); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot := *device
+	if !service.clearRejectedLogin(&snapshot, "other", "otherpw") {
+		t.Error("clearRejectedLogin returned false, want true so the caller retries")
+	}
+
+	if user, _ := storedLogin(t, service, device.ID); user != "old" {
+		t.Errorf("the stored login is %q, want old kept", user)
+	}
+	service.clientMu.RLock()
+	cached := len(service.clients)
+	service.clientMu.RUnlock()
+	if cached != 0 {
+		t.Errorf("%d client(s) stay cached, want 0", cached)
+	}
+}
+
 // Both 401 paths and UpdateDeviceAuth run together. The device accepts every login that an
 // update stores, so nothing may ever clear one. Run under -race. The deadline turns a deadlock
 // into a failure instead of a hung Job.
