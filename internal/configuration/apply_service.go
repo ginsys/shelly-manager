@@ -37,9 +37,10 @@ type LoginHooks interface {
 // /settings/login, but only where LoginHooks is set, and the sntp section, whose server is
 // written as the flat sntp_server parameter, and the inputs section, whose btn_type and
 // btn_reverse are written per input (POST /settings/relay/<n> on a Shelly 1, 1PM or 2.5, POST
-// /settings/input/<n> on a Shelly i3). Every other section (wifi_sta, wifi_ap) is
-// refused before the device is touched, because the applier would send it in a shape the device
-// ignores. Wi-Fi in particular is never written. A relay key outside name,
+// /settings/input/<n> on a Shelly i3), and the wifi_sta and wifi_ap sections, which are written
+// with POST /settings/sta and /settings/ap (unsupportedWiFi names what stays refused). Every other
+// section is refused before the device is touched, because the applier would send it in a shape the
+// device ignores. A relay key outside name,
 // default_state, auto_on and auto_off is refused through the round-trip check below, and so is a
 // cloud server, which Gen1 neither reports nor accepts.
 var gen1ApplyKeys = map[string]bool{
@@ -60,6 +61,8 @@ var gen1ApplyKeys = map[string]bool{
 	"login":              true,
 	"sntp":               true,
 	"inputs":             true,
+	"wifi_sta":           true,
+	"wifi_ap":            true,
 }
 
 // gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
@@ -125,6 +128,21 @@ var gen1ApplicablePaths = map[string]bool{
 	// The input name, type and push actions are not written.
 	"input.inputs[].mode":     true,
 	"input.inputs[].inverted": true,
+
+	// Wi-Fi: the station is written with POST /settings/sta and the access point with POST
+	// /settings/ap, and both are read back from GET /settings. wifi.password and wifi.ap.pass are
+	// write-only like mqtt.pass: the device never reports a key, so verify skips them. The access
+	// point SSID, the roam threshold and the access point key field are not applicable.
+	"wifi.enable":               true,
+	"wifi.ssid":                 true,
+	"wifi.password":             true,
+	"wifi.ipv4mode":             true,
+	"wifi.static_ip.ip":         true,
+	"wifi.static_ip.netmask":    true,
+	"wifi.static_ip.gw":         true,
+	"wifi.static_ip.nameserver": true,
+	"wifi.ap.enable":            true,
+	"wifi.ap.pass":              true,
 }
 
 // gen1LoginMaxLength is the longest username or password POST /settings/login accepts. The
@@ -275,6 +293,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	}
 
 	unsupported = append(unsupported, unsupportedInputs(desired, deviceType)...)
+	unsupported = append(unsupported, unsupportedWiFi(desired.WiFi)...)
 
 	sort.Strings(unsupported)
 	return slices.Compact(unsupported), nil

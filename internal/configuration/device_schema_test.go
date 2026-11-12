@@ -240,8 +240,10 @@ func TestDeviceSchemaApplicableMatchesApply(t *testing.T) {
 // never returns the value, so apply writes it and no read-back can confirm it. Every other
 // applicable field is compared on verify.
 var writeOnlyApplicablePaths = map[string]bool{
-	"mqtt.pass": true,
-	"auth.pass": true,
+	"mqtt.pass":     true,
+	"auth.pass":     true,
+	"wifi.password": true,
+	"wifi.ap.pass":  true,
 }
 
 // TestDeviceSchemaApplicableFieldsAreVerifiedOrNamed fails when verify skips an applicable field

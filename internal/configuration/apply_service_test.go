@@ -371,7 +371,8 @@ func TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting(t *testing.T
 	svc, repo := newServiceWithDesiredName(t, "tv-office")
 	setDesired(t, repo, &DeviceConfiguration{
 		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}},
-		WiFi:   &WiFiConfiguration{SSID: StringPtr("other-net"), Password: StringPtr("s3cret")},
+		// The access point SSID cannot be changed on a Gen1 device.
+		WiFi: &WiFiConfiguration{AccessPoint: &AccessPointConfig{SSID: StringPtr("other-net"), Password: StringPtr("s3cret")}},
 	})
 	repo.devices[1].ConfigApplied = true
 	dev := newFakeGen1Device()
@@ -381,7 +382,7 @@ func TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting(t *testing.T
 	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
-	assert.Contains(t, err.Error(), "wifi_sta")
+	assert.Contains(t, err.Error(), "wifi.ap.ssid")
 	assert.NotContains(t, err.Error(), "s3cret")
 	assert.Equal(t, 0, dev.setCalls, "nothing may be written, not even the supported name")
 	assert.Equal(t, "", dev.settings["name"])

@@ -42,12 +42,15 @@ type DesiredConfigResponse struct {
 }
 
 type ConfigApplyResponse struct {
-	Success        bool     `json:"success"`
-	AppliedCount   int      `json:"applied_count"`
-	FailedCount    int      `json:"failed_count"`
-	RequiresReboot bool     `json:"requires_reboot"`
-	Failures       []string `json:"failures,omitempty"`
-	Warnings       []string `json:"warnings,omitempty"`
+	Success        bool `json:"success"`
+	AppliedCount   int  `json:"applied_count"`
+	FailedCount    int  `json:"failed_count"`
+	RequiresReboot bool `json:"requires_reboot"`
+	// Unconfirmed: a Wi-Fi write changed the station network and the device stopped answering, so
+	// it may be on another network. Neither a success nor a failure; the device stays pending.
+	Unconfirmed bool     `json:"unconfirmed"`
+	Failures    []string `json:"failures,omitempty"`
+	Warnings    []string `json:"warnings,omitempty"`
 }
 
 type ConfigStatusResponse struct {
@@ -493,6 +496,13 @@ func (h *Handler) ApplyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rw.WriteSuccess(w, r, configApplyResponse(result))
+}
+
+// configApplyResponse maps an apply and verify result to the response. An unconfirmed apply is not
+// a success (nothing was verified) and has no failures (nothing was refused), so the client needs
+// the Unconfirmed flag to tell it from both.
+func configApplyResponse(result *configuration.ApplyVerifyResult) ConfigApplyResponse {
 	resp := ConfigApplyResponse{
 		Success:  result.ConfigApplied,
 		Failures: applyFailureMessages(result),
@@ -501,10 +511,10 @@ func (h *Handler) ApplyDeviceNewConfig(w http.ResponseWriter, r *http.Request) {
 		resp.AppliedCount = result.ApplyResult.AppliedCount
 		resp.FailedCount = result.ApplyResult.FailedCount
 		resp.RequiresReboot = result.ApplyResult.RequiresReboot
+		resp.Unconfirmed = result.ApplyResult.Unconfirmed
 		resp.Warnings = result.ApplyResult.Warnings
 	}
-
-	rw.WriteSuccess(w, r, resp)
+	return resp
 }
 
 // applyFailureMessages lists the settings the device refused and the read-back differences.

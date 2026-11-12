@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Added
+- Apply to a Gen1 device now writes its Wi-Fi settings. The station goes out with
+  `POST /settings/sta` (`enable`, `ssid`, `key`, `ipv4mode`, and for a static address `ip`,
+  `netmask`, `gw`, `nameserver`) and the access point with `POST /settings/ap` (`enable` and
+  password only), each only for the keys the desired configuration sets, then both are read
+  back from `GET /settings`. A new `ssid` with an empty or redacted password, a failed
+  `GET /settings` before the write, an access point name or key, `roam_threshold`, and a
+  station and an access point both enabled are refused with 422 before anything is written.
+  The password is never sent empty or redacted, never logged and never echoed. A Wi-Fi change
+  no longer reports `requires_reboot`. If a write changes the station network and the device
+  stops answering, the apply response has `unconfirmed: true`: neither success nor failure, the
+  device stays pending, and the device page shows it as its own state. The converter now reads
+  the `mask` key a real device reports, and still accepts `netmask` in old data. Not confirmed
+  on hardware (read from a summary of the Shelly reference): the route behaviour, the key
+  names, `enabled` as 1 or 0, that no reboot is needed and that `GET /settings` never returns
+  the key. Part of ginsys/shelly-manager#381.
 - Apply to a Gen1 device now writes the button type and the reverse flag of its
   inputs. For each entry of `input.inputs`, `mode` goes out as `btn_type` (`momentary`,
   `follow` as `toggle`, `flip` as `edge`, `detached`) and `inverted` as `btn_reverse`,
@@ -14,7 +29,7 @@ All notable changes to this project are documented here. The project follows Con
   `name`, `type` or push action, and an `id` that differs from its position are refused
   with 422 before anything is written. The converter now reads and writes the keys a real
   device has (`btn_type`, `btn_reverse`), and a Shelly 1, 1PM or 2.5 reports its inputs
-  from its relays. Wi-Fi stays refused. The parameter names, the toggle and edge mapping,
+  from its relays. The parameter names, the toggle and edge mapping,
   the i3 mode set and whether a button type change needs a reboot were read from the Shelly
   reference and are not confirmed on hardware. Part of ginsys/shelly-manager#381.
 - The device page has a Device Login card for the username and password the manager

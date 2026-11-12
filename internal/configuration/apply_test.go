@@ -229,32 +229,6 @@ func TestApplyConfig_MQTTSettings(t *testing.T) {
 	assert.Equal(t, "broker.local:1883", sent["mqtt_server"])
 }
 
-func TestApplyConfig_WiFiSettings(t *testing.T) {
-	client := newApplyTestClient()
-	converter := NewGen1Converter(nil)
-	applier := NewConfigApplier(converter, nil)
-
-	config := &DeviceConfiguration{
-		WiFi: &WiFiConfiguration{
-			SSID:     StringPtr("MyNetwork"),
-			Password: StringPtr("secret"),
-		},
-	}
-
-	result, err := applier.ApplyConfig(context.Background(), client, config, "SHPLG-S")
-
-	require.NoError(t, err)
-	assert.True(t, result.Success)
-
-	foundWiFi := false
-	for _, cfg := range client.configs {
-		if _, ok := cfg["wifi_sta"]; ok {
-			foundWiFi = true
-		}
-	}
-	assert.True(t, foundWiFi, "WiFi settings should have been sent")
-}
-
 func TestApplyConfig_RelaySettings(t *testing.T) {
 	client := newApplyTestClient()
 	converter := NewGen1Converter(nil)
@@ -279,6 +253,7 @@ func TestApplyConfig_RelaySettings(t *testing.T) {
 var _ RelaySettingsClient = (*gen1.Client)(nil)
 var _ CloudSettingsClient = (*gen1.Client)(nil)
 var _ LoginSettingsClient = (*gen1.Client)(nil)
+var _ WiFiSettingsClient = (*gen1.Client)(nil)
 
 func relayApplyConfig() *DeviceConfiguration {
 	return &DeviceConfiguration{
@@ -688,14 +663,14 @@ func TestApplyConfig_SetConfigError(t *testing.T) {
 
 func TestApplyConfig_RequiresReboot(t *testing.T) {
 	client := newApplyTestClient()
-	client.currentRaw = json.RawMessage(`{"wifi_sta":{"ssid":"OldNetwork"}}`)
+	client.currentRaw = json.RawMessage(`{"mqtt":{"server":"old-broker:1883"}}`)
 
 	converter := NewGen1Converter(nil)
 	applier := NewConfigApplier(converter, nil)
 
 	config := &DeviceConfiguration{
-		WiFi: &WiFiConfiguration{
-			SSID: StringPtr("NewNetwork"),
+		MQTT: &MQTTConfiguration{
+			Server: StringPtr("new-broker:1883"),
 		},
 	}
 

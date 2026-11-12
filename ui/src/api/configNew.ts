@@ -176,6 +176,9 @@ export interface ConfigApplyData {
   applied_count: number
   failed_count: number
   requires_reboot: boolean
+  // A Wi-Fi write changed the station network and the device stopped answering: neither a success
+  // nor a failure, and the device stays pending.
+  unconfirmed?: boolean
   failures?: string[]
 }
 
