@@ -184,6 +184,22 @@ func TestApplyDesiredConfig_Gen2RefusesAServerThatAlreadyHasAPort(t *testing.T) 
 	assert.Empty(t, dev.calls)
 }
 
+// A broker written as one bracketed IPv6 endpoint is written unchanged and read back split into
+// host and port, so verify must split the desired form the same way.
+func TestApplyDesiredConfig_Gen2ConfirmsABracketedIPv6Endpoint(t *testing.T) {
+	desired := &DeviceConfiguration{MQTT: &MQTTConfiguration{Server: StringPtr("[fd00::1]:1883")}}
+	svc, repo := newGen2Service(t, desired)
+	dev := newFakeGen2Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied, "%v", result.VerifyResult)
+	assert.True(t, repo.devices[1].ConfigApplied)
+	require.Len(t, dev.calls, 1)
+	assert.Equal(t, "[fd00::1]:1883", dev.calls[0].config["server"])
+}
+
 func TestGen2Converter_WritesAnIPv6BrokerWithItsPortInBrackets(t *testing.T) {
 	desired := &DeviceConfiguration{MQTT: &MQTTConfiguration{Server: StringPtr("fd00::1"), Port: IntPtr(1883)}}
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
+	"net"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -130,26 +130,27 @@ func withoutLoginPassword(desired *DeviceConfiguration) *DeviceConfiguration {
 	return &shown
 }
 
-// comparableDesired returns the desired configuration in the shape the Gen1 read-back has.
-// A Gen1 device stores the MQTT endpoint as one "host:port" string, and the converter splits
-// it into server and port on read-back. A desired server in that combined form, with no
-// separate port, is split the same way, so a matching device is not reported as drift.
+// comparableDesired returns the desired configuration in the shape the read-back has.
+// A Gen1, Gen2 or Gen3 device stores the MQTT endpoint as one "host:port" string, and the
+// converter splits it into server and port on read-back. A desired server in that combined
+// form, with no separate port, is split the same way, a bracketed IPv6 host included, so a
+// matching device is not reported as drift.
 // The caller's configuration is never changed.
 func comparableDesired(desired *DeviceConfiguration) *DeviceConfiguration {
 	if desired == nil || desired.MQTT == nil || desired.MQTT.Server == nil || desired.MQTT.Port != nil {
 		return desired
 	}
-	parts := strings.Split(*desired.MQTT.Server, ":")
-	if len(parts) != 2 {
+	host, portText, splitErr := net.SplitHostPort(*desired.MQTT.Server)
+	if splitErr != nil {
 		return desired
 	}
 	var port int
-	if _, err := fmt.Sscanf(parts[1], "%d", &port); err != nil {
+	if _, err := fmt.Sscanf(portText, "%d", &port); err != nil {
 		return desired
 	}
 	normalized := *desired
 	mqtt := *desired.MQTT
-	mqtt.Server = StringPtr(parts[0])
+	mqtt.Server = StringPtr(host)
 	mqtt.Port = IntPtr(port)
 	normalized.MQTT = &mqtt
 	return &normalized
