@@ -728,6 +728,7 @@ func (s *SQLiteProvider) createGormLogger() logger.Interface {
 			SlowThreshold:             s.config.SlowQueryThreshold,
 			LogLevel:                  logLevel,
 			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      true, // keep bound values, such as device logins, out of the SQL log
 			Colorful:                  false,
 		},
 	)

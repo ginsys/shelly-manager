@@ -550,6 +550,7 @@ func (m *MySQLProvider) createGormLogger() logger.Interface {
 			SlowThreshold:             m.config.SlowQueryThreshold,
 			LogLevel:                  logLevel,
 			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      true, // keep bound values, such as device logins, out of the SQL log
 			Colorful:                  false,
 		},
 	)

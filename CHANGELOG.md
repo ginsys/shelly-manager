@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- The SQL log no longer prints device logins. With `database.log_level` set to
+  `info` and `logging.level` set to `debug`, every statement was logged with its
+  values filled in, and `devices.settings` holds the clear-text login, so any
+  device write printed it. The sqlite, postgresql and mysql loggers now log
+  placeholders instead of values. (ginsys/shelly-manager#489)
 - One model now owns the `config_templates` table, and one migration creates it.
   Three Go structs used to map onto it and three startup steps took turns
   migrating it, so the table was the union of their columns and a change to one
