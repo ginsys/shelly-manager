@@ -8,6 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/database"
 )
 
 // These tests pin the version check of the plain device PUT (ginsys/shelly-manager#502). The
@@ -55,6 +58,43 @@ func TestUpdateDevice_ResponseCarriesTheNewVersion(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var saved map[string]any
 	require.NoError(t, json.Unmarshal(dataOf(t, rec.Body.Bytes()), &saved))
+
+	saved["name"] = "Second"
+	code, body := putDevice(t, handler, saved)
+	assert.Equal(t, http.StatusOK, code, body)
+}
+
+// A database can store updated_at with less precision than the clock gives (PostgreSQL keeps
+// microseconds). The PUT answer must carry the stored value, or a client that sends the answer
+// back gets a false 409. The callback below makes the test database round to microseconds after
+// each update, as PostgreSQL does.
+func TestUpdateDevice_ResponseVersionIsTheStoredValueWhenTheDatabaseRounds(t *testing.T) {
+	handler, db, device := loginDeviceHandler(t)
+	const name = "test:round-updated-at-to-microseconds"
+	require.NoError(t, db.GetDB().Callback().Update().After("gorm:update").Register(name, func(tx *gorm.DB) {
+		saved, ok := tx.Statement.Dest.(*database.Device)
+		if !ok || tx.Error != nil {
+			return
+		}
+		rounded := saved.UpdatedAt.Truncate(time.Microsecond)
+		tx.Session(&gorm.Session{NewDB: true}).Exec("UPDATE devices SET updated_at = ? WHERE id = ?", rounded, saved.ID)
+	}))
+	t.Cleanup(func() { _ = db.GetDB().Callback().Update().Remove(name) })
+
+	read := readForPut(t, handler, device)
+	read["name"] = "First"
+	text, err := json.Marshal(read)
+	require.NoError(t, err)
+	rec := serve(handler.UpdateDevice, "PUT", "/api/v1/devices/1", "1", string(text))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var saved map[string]any
+	require.NoError(t, json.Unmarshal(dataOf(t, rec.Body.Bytes()), &saved))
+
+	stored, err := db.GetDevice(device.ID)
+	require.NoError(t, err)
+	answered, err := time.Parse(time.RFC3339Nano, saved["updated_at"].(string))
+	require.NoError(t, err)
+	require.True(t, answered.Equal(stored.UpdatedAt), "the answer carries %v and the row holds %v", answered, stored.UpdatedAt)
 
 	saved["name"] = "Second"
 	code, body := putDevice(t, handler, saved)
