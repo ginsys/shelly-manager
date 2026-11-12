@@ -181,6 +181,10 @@ func mergeStructs(dstVal, srcVal reflect.Value, sources map[string]string, sourc
 					dstField.Set(reflect.New(dstField.Type().Elem()))
 				}
 				mergeStructs(dstField.Elem(), srcField.Elem(), sources, sourceName, fieldPath)
+			} else if srcField.Elem().Kind() == reflect.Slice {
+				// A pointer to a list replaces the list whole, an empty one included: nil leaves it alone.
+				dstField.Set(srcField)
+				sources[fieldPath] = sourceName
 			}
 		} else if srcField.Kind() == reflect.Struct {
 			mergeStructs(dstField, srcField, sources, sourceName, fieldPath)

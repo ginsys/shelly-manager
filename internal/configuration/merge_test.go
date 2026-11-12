@@ -248,6 +248,30 @@ func TestMergeConfigurations_SliceMerge(t *testing.T) {
 	assert.Equal(t, "global", result.Sources["relay.relays.1.auto_off"])
 }
 
+// A device override of schedule_rules replaces the global list whole, an empty list (clear the
+// rules) included, and an unstated list leaves the global one alone.
+func TestMergeConfigurations_ScheduleRulesReplaceWhole(t *testing.T) {
+	relay := func(rules *[]string) *DeviceConfiguration {
+		return &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, ScheduleRules: rules}}}}
+	}
+	global := ConfigLayer{Name: "global", Config: relay(StringsPtr("0700-0123456-on", "2200-0123456-off"))}
+
+	cleared, err := MergeConfigurations([]ConfigLayer{global, {Name: "device", Config: relay(StringsPtr())}})
+	require.NoError(t, err)
+	require.NotNil(t, cleared.Config.Relay.Relays[0].ScheduleRules)
+	assert.Empty(t, *cleared.Config.Relay.Relays[0].ScheduleRules)
+	assert.Equal(t, "device", cleared.Sources["relay.relays.0.schedule_rules"])
+
+	replaced, err := MergeConfigurations([]ConfigLayer{global, {Name: "device", Config: relay(StringsPtr("0900-0123456-on"))}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"0900-0123456-on"}, *replaced.Config.Relay.Relays[0].ScheduleRules)
+
+	kept, err := MergeConfigurations([]ConfigLayer{global, {Name: "device", Config: relay(nil)}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"0700-0123456-on", "2200-0123456-off"}, *kept.Config.Relay.Relays[0].ScheduleRules)
+	assert.Equal(t, "global", kept.Sources["relay.relays.0.schedule_rules"])
+}
+
 func TestMergeConfigurations_SourceTracking(t *testing.T) {
 	layers := []ConfigLayer{
 		{
