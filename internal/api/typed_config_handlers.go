@@ -231,11 +231,7 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	// The client read the configuration masked: a mask or an omitted secret keeps the stored
 	// value, and only an explicit "" or null removes it. This happens before the configuration is
 	// validated and stored.
-	var body struct {
-		Configuration json.RawMessage `json:"configuration"`
-	}
-	_ = json.Unmarshal(raw, &body)
-	removed, nullErr := nullSecretPaths(body.Configuration)
+	removed, nullErr := wrappedNullSecretPaths(raw, "configuration")
 	if nullErr != nil {
 		http.Error(w, "Invalid JSON: "+nullErr.Error(), http.StatusBadRequest)
 		return
