@@ -165,6 +165,11 @@ func TestDeviceRoutes_UpdateWithTheMaskKeepsStoredSecrets(t *testing.T) {
 	assert.Contains(t, stored.Settings, secLegacy)
 	assert.Contains(t, stored.Overrides, "keep-me")
 
+	// The first PUT moved updated_at. The next PUT sends the new version that the answer carries.
+	var saved map[string]any
+	require.NoError(t, json.Unmarshal(dataOf(t, put.Body.Bytes()), &saved))
+	read["updated_at"] = saved["updated_at"]
+
 	// A new value is a new secret: it is stored, and the answer masks it.
 	read["overrides"] = strings.Replace(secretOverrides, secMQTT, "brand-new-mqtt", 1)
 	fresh, err := json.Marshal(read)

@@ -188,6 +188,19 @@ describe('Devices API', () => {
 
       await expect(updateDevice(1, { name: 'New Name' })).rejects.toThrow('Failed to update device')
     })
+
+    it('should send the version it read and show the server reason on a 409', async () => {
+      const request = { name: 'New Name', updated_at: '2026-11-12T06:00:00.123456789Z' }
+      mockApi.put.mockRejectedValue({
+        response: {
+          status: 409,
+          data: { error: { message: 'The device changed after you read it. Reload it and try again.' } },
+        },
+      })
+
+      await expect(updateDevice(1, request)).rejects.toThrow('The device changed after you read it')
+      expect(mockApi.put).toHaveBeenCalledWith('/devices/1', request)
+    })
   })
 
   describe('deleteDevice', () => {

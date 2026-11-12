@@ -404,6 +404,11 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	updatedDevice.ID = existingDevice.ID
 	// The write keeps a login that was saved after the read above, unless the request changes it.
 	if err := h.Service.UpdateDeviceKeepingLogin(existingDevice, &updatedDevice); err != nil {
+		if errors.Is(err, service.ErrDeviceChanged) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict,
+				"The device changed after you read it. Reload it and try again.", nil)
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"error":      err.Error(),
 			"device_id":  updatedDevice.ID,

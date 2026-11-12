@@ -44,13 +44,22 @@ export async function createDevice(data: Partial<Device>): Promise<Device> {
   return res.data.data
 }
 
+// Send the updated_at that the device was read with. The server refuses the save with a 409 when
+// the device changed after that read, so a save never puts old data over a newer one.
 export async function updateDevice(id: number | string, data: Partial<Device>): Promise<Device> {
-  const res = await api.put<APIResponse<Device>>(`/devices/${id}`, data)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to update device'
-    throw new Error(msg)
+  try {
+    const res = await api.put<APIResponse<Device>>(`/devices/${id}`, data)
+    if (!res.data.success || !res.data.data) {
+      const msg = res.data.error?.message || 'Failed to update device'
+      throw new Error(msg)
+    }
+    return res.data.data
+  } catch (e: any) {
+    // A 409 carries the server's reason in the body; show it rather than the status line.
+    const message = e?.response?.status === 409 ? e?.response?.data?.error?.message : undefined
+    if (message) throw new Error(message)
+    throw e
   }
-  return res.data.data
 }
 
 // The login the manager uses to reach the device. An empty username turns device auth off. A

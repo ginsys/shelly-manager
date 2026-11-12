@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -87,9 +88,17 @@ func keepStoredLogin(incoming, basis, stored string) (string, error) {
 	return string(merged), nil
 }
 
+// ErrDeviceChanged means a save carried an updated_at that is not the stored one: the device was
+// saved after the client read it (ginsys/shelly-manager#502).
+var ErrDeviceChanged = errors.New("the device changed after it was read")
+
 // UpdateDeviceKeepingLogin saves the incoming device row for a plain device PUT. basis is the
-// stored record that the request was read against. Where the request leaves the login as it was in
-// basis, the row keeps the login that is stored now. A request that changes the login saves it.
+// stored record that the request was read against.
+//
+// A request that carries updated_at is a versioned save. If that time is not the stored one, the
+// write does nothing and returns ErrDeviceChanged. A request with no updated_at is an older client
+// or a script. Where it leaves the login as it was in basis, the row keeps the login that is
+// stored now. A request that changes the login saves it.
 func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Device) error {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
@@ -97,6 +106,9 @@ func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Devic
 	stored, err := s.DB.GetDevice(incoming.ID)
 	if err != nil {
 		return err
+	}
+	if !incoming.UpdatedAt.IsZero() && !incoming.UpdatedAt.Equal(stored.UpdatedAt) {
+		return ErrDeviceChanged
 	}
 	if stored.Settings != basis.Settings {
 		merged, mergeErr := keepStoredLogin(incoming.Settings, basis.Settings, stored.Settings)

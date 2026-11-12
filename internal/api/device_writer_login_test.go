@@ -97,10 +97,20 @@ func readForPut(t *testing.T, handler *Handler, device *database.Device) map[str
 	return read
 }
 
+// readWithoutVersion is readForPut for a client that sends no updated_at: an older client or a
+// script. A PUT with updated_at is refused after any other save (ginsys/shelly-manager#502), so the
+// login merge below is the path of a client that sends none.
+func readWithoutVersion(t *testing.T, handler *Handler, device *database.Device) map[string]any {
+	t.Helper()
+	read := readForPut(t, handler, device)
+	delete(read, "updated_at")
+	return read
+}
+
 // A plain device PUT that does not change the login keeps the login saved after its read.
 func TestUpdateDevice_KeepsALoginSavedAfterItsRead(t *testing.T) {
 	handler, db, device := loginDeviceHandler(t)
-	read := readForPut(t, handler, device)
+	read := readWithoutVersion(t, handler, device)
 	read["name"] = "Renamed"
 	body, err := json.Marshal(read)
 	require.NoError(t, err)
@@ -122,7 +132,7 @@ func TestUpdateDevice_KeepsALoginSavedAfterItsRead(t *testing.T) {
 // validation of the PUT adds it, and that default must not count as a change of the login.
 func TestUpdateDevice_KeepsALoginSavedAfterItsReadOfLegacySettings(t *testing.T) {
 	handler, db, device := loginDeviceHandlerWith(t, `{"gen":1,"auth":{"username":"old","password":"oldpw"}}`)
-	read := readForPut(t, handler, device)
+	read := readWithoutVersion(t, handler, device)
 	read["name"] = "Renamed"
 	body, err := json.Marshal(read)
 	require.NoError(t, err)
@@ -142,7 +152,7 @@ func TestUpdateDevice_KeepsALoginSavedAfterItsReadOfLegacySettings(t *testing.T)
 // above fail without the fix.
 func TestUpdateDevice_SavesALoginTheRequestChanges(t *testing.T) {
 	handler, db, device := loginDeviceHandler(t)
-	read := readForPut(t, handler, device)
+	read := readWithoutVersion(t, handler, device)
 	read["settings"] = `{"gen":1,"auth_enabled":true,"auth_user":"carol","auth_pass":"carolpw","note":"keep"}`
 	body, err := json.Marshal(read)
 	require.NoError(t, err)
@@ -160,7 +170,7 @@ func TestUpdateDevice_SavesALoginTheRequestChanges(t *testing.T) {
 // A PUT keeps every other setting that the request sends, and drops none of the stored ones.
 func TestUpdateDevice_KeepsTheRequestsOtherSettings(t *testing.T) {
 	handler, db, device := loginDeviceHandler(t)
-	read := readForPut(t, handler, device)
+	read := readWithoutVersion(t, handler, device)
 	read["settings"] = `{"gen":1,"auth_enabled":true,"auth_user":"old","auth_pass":"` + secretMask + `","note":"changed"}`
 	body, err := json.Marshal(read)
 	require.NoError(t, err)
