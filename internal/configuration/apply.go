@@ -72,6 +72,10 @@ type ConfigApplier struct {
 	// credentials and rebuilds its client afterwards (ConfigVerifier.WithLogin), because a
 	// login written behind the caller's back locks the manager out of the device.
 	writeLogin bool
+
+	// owed carries a reboot an earlier apply left owed and records a new one before any write
+	// (ConfigVerifier.WithPendingReboot). Nil keeps the old behaviour: nothing is persisted.
+	owed *pendingReboot
 }
 
 // NewConfigApplier creates a new configuration applier
@@ -98,10 +102,10 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	}
 
 	// Get current config for comparison (to detect reboot requirements)
-	currentConfig, err := client.GetConfig(ctx)
-	if err != nil {
+	currentConfig, readErr := client.GetConfig(ctx)
+	if readErr != nil {
 		a.logger.WithFields(map[string]any{
-			"error":     err.Error(),
+			"error":     readErr.Error(),
 			"device_ip": client.GetIP(),
 			"component": "config_applier",
 		}).Warn("Could not get current config for comparison")
@@ -122,19 +126,40 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	// Count settings
 	result.SettingsCount = a.countSettings(apiConfig)
 
+	// Decide the reboot from the settings as they are before any write, and record it before the
+	// first one. A write that fails can still have landed (the answer may be lost), and a later
+	// failure returns before the reboot, so the obligation has to be stored first: a retry reads
+	// the written value as already stored and would see nothing to reboot for. A setting that was
+	// refused for good costs one reboot too many, which is cheap.
+	if currentConfig != nil {
+		result.RequiresReboot = a.detectRebootRequired(currentConfig.Raw, apiJSON, config)
+	}
+	if a.owed != nil {
+		if currentConfig == nil {
+			// Without the stored settings the reboot cannot be decided, and a later write that fails
+			// would leave nothing owed. Nothing has been written yet, so stopping costs nothing.
+			return nil, fmt.Errorf("could not read the device's settings, nothing was written: %w", readErr)
+		}
+		if a.owed.pending && !result.RequiresReboot {
+			result.RequiresReboot = true
+			result.Warnings = append(result.Warnings, "Device reboot still owed from an earlier apply")
+		}
+		if result.RequiresReboot && !a.owed.pending {
+			if storeErr := a.owed.store(true); storeErr != nil {
+				return nil, fmt.Errorf("could not record the pending reboot, nothing was written: %w", storeErr)
+			}
+			a.owed.pending = true
+		}
+	}
+	if result.RequiresReboot {
+		result.Warnings = append(result.Warnings,
+			"Device reboot required for some settings to take effect")
+	}
+
 	// Apply configuration sections. A rejected login is an error, not a failed setting: the caller
 	// maps it to "the device rejected the stored credentials".
 	if err := a.applyConfigSections(ctx, client, apiConfig, result); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
-	}
-
-	// Check if reboot is required
-	if currentConfig != nil {
-		result.RequiresReboot = a.detectRebootRequired(currentConfig.Raw, apiJSON, config)
-		if result.RequiresReboot {
-			result.Warnings = append(result.Warnings,
-				"Device reboot required for some settings to take effect")
-		}
 	}
 
 	result.Duration = time.Since(startTime)

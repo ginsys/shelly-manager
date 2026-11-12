@@ -56,6 +56,7 @@ type DbDevice struct {
 	Overrides     string    `gorm:"column:overrides"`
 	DesiredConfig string    `gorm:"column:desired_config"`
 	ConfigApplied bool      `gorm:"column:config_applied"`
+	PendingReboot bool      `gorm:"column:pending_reboot"`
 	UpdatedAt     time.Time `gorm:"column:updated_at"`
 }
 
@@ -209,6 +210,7 @@ func (r *GormConfigRepository) GetDevice(id uint) (*ServiceDevice, error) {
 		Overrides:     dbDevice.Overrides,
 		DesiredConfig: dbDevice.DesiredConfig,
 		ConfigApplied: dbDevice.ConfigApplied,
+		PendingReboot: dbDevice.PendingReboot,
 		UpdatedAt:     dbDevice.UpdatedAt,
 	}, nil
 }
@@ -255,6 +257,15 @@ func (r *GormConfigRepository) UpdateDeviceDesiredConfig(deviceID uint, config j
 func (r *GormConfigRepository) SetDeviceConfigApplied(deviceID uint, applied bool) error {
 	if err := r.db.Model(&DbDevice{}).Where("id = ?", deviceID).Update("config_applied", applied).Error; err != nil {
 		return fmt.Errorf("failed to set device config applied: %w", err)
+	}
+	return nil
+}
+
+// SetDevicePendingReboot is one UPDATE of the pending_reboot column. The database.Device model
+// marks that column read-only, so a Save of a device row read before this write cannot undo it.
+func (r *GormConfigRepository) SetDevicePendingReboot(deviceID uint, pending bool) error {
+	if err := r.db.Model(&DbDevice{}).Where("id = ?", deviceID).Update("pending_reboot", pending).Error; err != nil {
+		return fmt.Errorf("failed to set device pending reboot: %w", err)
 	}
 	return nil
 }
@@ -375,6 +386,7 @@ func dbDeviceToService(d DbDevice) ServiceDevice {
 		Overrides:     d.Overrides,
 		DesiredConfig: d.DesiredConfig,
 		ConfigApplied: d.ConfigApplied,
+		PendingReboot: d.PendingReboot,
 		UpdatedAt:     d.UpdatedAt,
 	}
 }
