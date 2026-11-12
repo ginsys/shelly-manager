@@ -18,14 +18,26 @@ var ErrUnsupportedGeneration = errors.New("applying configuration is not support
 // cannot write to the device yet. Nothing is sent to the device in that case.
 var ErrUnsupportedSettings = errors.New("desired configuration contains settings that cannot be applied yet")
 
+// LoginHooks connects apply to the owner of a device's stored credentials.
+type LoginHooks interface {
+	// Store records the login the device accepted, so the manager keeps reaching it.
+	Store(ctx context.Context, deviceID uint, change LoginChange) error
+	// Client returns a client that sends the device's stored credentials, none when its login
+	// is off. Apply calls it once the per-device lock is held, so a queued apply does not keep a
+	// client that predates the previous apply's login, and again after Store.
+	Client(ctx context.Context, deviceID uint) (ShellyClient, error)
+}
+
 // gen1ApplyKeys are the Gen1 settings keys that apply writes correctly today: flat parameters
 // on POST /settings, the mqtt section, which is flattened to mqtt_* parameters, and the
 // relays section, which is written per channel with POST /settings/relay/<n>, and the cloud
-// section, whose enabled flag is written with POST /settings/cloud. Every other section
-// (wifi_sta, wifi_ap, coiot, login, inputs) is refused before the device is touched, because the
-// applier would send it in a shape the device ignores. Wi-Fi in particular is never written. A
-// relay key outside name, default_state, auto_on and auto_off is refused through the round-trip
-// check below, and so is a cloud server, which Gen1 neither reports nor accepts.
+// section, whose enabled flag is written with POST /settings/cloud, the coiot section, which is
+// flattened to coiot_* parameters, and the login section, which is written with POST
+// /settings/login, but only where LoginHooks is set. Every other section (wifi_sta, wifi_ap,
+// inputs) is refused before the device is touched, because the applier would send it in a shape
+// the device ignores. Wi-Fi in particular is never written. A relay key outside name,
+// default_state, auto_on and auto_off is refused through the round-trip check below, and so is a
+// cloud server, which Gen1 neither reports nor accepts.
 var gen1ApplyKeys = map[string]bool{
 	"name":               true,
 	"timezone":           true,
@@ -40,6 +52,7 @@ var gen1ApplyKeys = map[string]bool{
 	"relays":             true,
 	"cloud":              true,
 	"coiot":              true,
+	"login":              true,
 }
 
 // gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
@@ -80,6 +93,9 @@ var gen1ApplicablePaths = map[string]bool{
 	"coiot.enable":               true,
 	"coiot.update_period":        true,
 	"coiot.peer":                 true,
+	"auth.enable":                true,
+	"auth.user":                  true,
+	"auth.pass":                  true,
 
 	// relays are written per channel with POST /settings/relay/<n> and read back from
 	// GET /settings/relay/<n>. The id is an item's position, not a setting.
@@ -89,9 +105,43 @@ var gen1ApplicablePaths = map[string]bool{
 	"relay.relays[].auto_off":      true,
 }
 
+// gen1LoginMaxLength is the longest username or password POST /settings/login accepts. The
+// shortest is 1. The limit is in bytes, which is the stricter reading for a multibyte character.
+const gen1LoginMaxLength = 50
+
+// unsupportedLogin returns the auth paths of a desired login that the device could not keep.
+// The device takes a username and a password together, 1 to 50 characters each, and never
+// returns the password. A switched-off login carries no credentials: the device keeps or drops a
+// stored username as it likes, so a desired one could not be read back as written.
+func unsupportedLogin(auth *AuthConfiguration) []string {
+	var unsupported []string
+	badLength := func(s *string) bool { return s == nil || len(*s) < 1 || len(*s) > gen1LoginMaxLength }
+	switch {
+	case auth.Enable == nil:
+		if auth.Username != nil || auth.Password != nil {
+			unsupported = append(unsupported, "auth.enable")
+		}
+	case *auth.Enable:
+		if badLength(auth.Username) {
+			unsupported = append(unsupported, "auth.user")
+		}
+		if badLength(auth.Password) {
+			unsupported = append(unsupported, "auth.pass")
+		}
+	default:
+		if auth.Username != nil {
+			unsupported = append(unsupported, "auth.user")
+		}
+		if auth.Password != nil {
+			unsupported = append(unsupported, "auth.pass")
+		}
+	}
+	return unsupported
+}
+
 // unsupportedApplySettings returns the sorted top-level Gen1 keys of desired that apply cannot
-// write.
-func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfiguration, deviceType string) ([]string, error) {
+// write. loginSupported says whether the caller can store new credentials (LoginHooks).
+func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfiguration, deviceType string, loginSupported bool) ([]string, error) {
 	apiJSON, err := converter.ToAPIConfig(desired, deviceType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert desired config: %w", err)
@@ -103,9 +153,12 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 
 	var unsupported []string
 	for key := range apiConfig {
-		if !gen1ApplyKeys[key] {
+		if !gen1ApplyKeys[key] || (key == "login" && !loginSupported) {
 			unsupported = append(unsupported, key)
 		}
+	}
+	if loginSupported && desired.Auth != nil {
+		unsupported = append(unsupported, unsupportedLogin(desired.Auth)...)
 	}
 
 	// The converter drops desired settings it has no Gen1 mapping for (for example system.sntp
@@ -172,6 +225,8 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	// below guards the stored configuration, this lock guards the order of writes to hardware.
 	defer s.lockApply(deviceID)()
 
+	hooks := s.loginHooks
+
 	// Snapshot first: if the desired configuration changes after this read, the final
 	// compare-and-set below fails and the newer configuration stays pending.
 	device, err := s.repo.GetDevice(deviceID)
@@ -189,7 +244,7 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	}
 
 	converter := NewGen1Converter(s.logger)
-	unsupported, err := unsupportedApplySettings(converter, desired, deviceType)
+	unsupported, err := unsupportedApplySettings(converter, desired, deviceType, hooks != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -202,6 +257,28 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	}
 
 	verifier := NewConfigVerifier(converter, s.logger)
+	if hooks != nil {
+		// The client handed in may predate a login that an apply queued ahead of this one
+		// changed, so the lock holder builds its own from the stored login.
+		fresh, clientErr := hooks.Client(ctx, deviceID)
+		if clientErr != nil {
+			return nil, fmt.Errorf("could not build a client for the device: %w", clientErr)
+		}
+		client = fresh
+
+		// Order on success: the device accepted the write, then the new credentials are stored,
+		// then the client is rebuilt. A failed write reaches none of it.
+		verifier.WithLogin(func(ctx context.Context, client ShellyClient, change LoginChange) (ShellyClient, error) {
+			if storeErr := hooks.Store(ctx, deviceID, change); storeErr != nil {
+				return nil, fmt.Errorf("the device accepted the new login but it could not be stored, so the stored login is now stale; enter it again: %w", storeErr)
+			}
+			rebuilt, reconnectErr := hooks.Client(ctx, deviceID)
+			if reconnectErr != nil {
+				return nil, fmt.Errorf("the new login was stored but the client for it could not be built: %w", reconnectErr)
+			}
+			return rebuilt, nil
+		})
+	}
 	result, err := verifier.ApplyAndVerify(ctx, client, desired, deviceType)
 	if err != nil {
 		return nil, err

@@ -25,6 +25,12 @@ type fakeGen1Device struct {
 	posted       []map[string]interface{}
 	onWrite      func()          // runs after each accepted write, to simulate a concurrent edit
 	dropKeys     map[string]bool // form keys the device accepts but does not store
+
+	// HTTP Basic login: loginOn, loginUser and loginPass are the stored login; asUser and asPass
+	// are what the original client sends with every request.
+	loginOn              bool
+	loginUser, loginPass string
+	asUser, asPass       string
 }
 
 func newFakeGen1Device() *fakeGen1Device {
@@ -35,7 +41,15 @@ func newFakeGen1Device() *fakeGen1Device {
 }
 
 func (d *fakeGen1Device) SetConfig(_ context.Context, cfg map[string]interface{}) error {
+	return d.setConfigAs(d.asUser, d.asPass, cfg)
+}
+
+// setConfigAs is POST /settings with the given credentials.
+func (d *fakeGen1Device) setConfigAs(user, pass string, cfg map[string]interface{}) error {
 	d.setCalls++
+	if err := d.authorize(user, pass); err != nil {
+		return err
+	}
 	if d.setErr != nil {
 		return d.setErr
 	}
@@ -94,9 +108,89 @@ func (d *fakeGen1Device) SetCloudConfig(ctx context.Context, enabled bool, serve
 	return nil
 }
 
-// GetConfig returns the stored settings. Like a real Gen1 device it never returns the MQTT
-// password: GET /settings omits mqtt.pass even after a write.
+// authorize is HTTP Basic auth on the device: once a login is on, a request that does not carry
+// the stored username and password gets 401, whatever the request is.
+func (d *fakeGen1Device) authorize(user, pass string) error {
+	if d.loginOn && (user != d.loginUser || pass != d.loginPass) {
+		return fmt.Errorf("401: %w", shelly.ErrAuthFailed)
+	}
+	return nil
+}
+
+// SetAuth is POST /settings/login with enabled=true. Like a real Gen1 device it reports the login
+// as {enabled, unprotected, username} on GET /settings and never the password.
+func (d *fakeGen1Device) SetAuth(ctx context.Context, username, password string) error {
+	if err := d.authorize(d.asUser, d.asPass); err != nil {
+		return err
+	}
+	if err := d.applyTestClient.SetAuth(ctx, username, password); err != nil {
+		return err
+	}
+	if !d.ignoreWrites {
+		d.loginOn, d.loginUser, d.loginPass = true, username, password
+		d.settings["login"] = map[string]interface{}{"enabled": true, "unprotected": false, "username": username}
+	}
+	return nil
+}
+
+// ResetAuth is POST /settings/login with enabled=false.
+func (d *fakeGen1Device) ResetAuth(ctx context.Context) error {
+	if err := d.authorize(d.asUser, d.asPass); err != nil {
+		return err
+	}
+	if err := d.applyTestClient.ResetAuth(ctx); err != nil {
+		return err
+	}
+	if !d.ignoreWrites {
+		d.loginOn = false
+		d.settings["login"] = map[string]interface{}{"enabled": false, "unprotected": false, "username": d.loginUser}
+	}
+	return nil
+}
+
+// Reboot needs the credentials too.
+func (d *fakeGen1Device) Reboot(ctx context.Context) error {
+	if err := d.authorize(d.asUser, d.asPass); err != nil {
+		return err
+	}
+	return d.applyTestClient.Reboot(ctx)
+}
+
+// loggedIn is the same device seen through a client that sends the given credentials.
+type loggedIn struct {
+	*fakeGen1Device
+	user, pass string
+}
+
+func (c *loggedIn) SetConfig(_ context.Context, cfg map[string]interface{}) error {
+	return c.setConfigAs(c.user, c.pass, cfg)
+}
+
+func (c *loggedIn) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
+	if err := c.authorize(c.user, c.pass); err != nil {
+		return nil, err
+	}
+	return c.read()
+}
+
+func (c *loggedIn) Reboot(ctx context.Context) error {
+	if err := c.authorize(c.user, c.pass); err != nil {
+		return err
+	}
+	return c.applyTestClient.Reboot(ctx)
+}
+
+// GetConfig is GET /settings as the original client (asUser, asPass) sends it.
 func (d *fakeGen1Device) GetConfig(_ context.Context) (*shelly.DeviceConfig, error) {
+	if err := d.authorize(d.asUser, d.asPass); err != nil {
+		return nil, err
+	}
+	return d.read()
+}
+
+// read returns the stored settings. Like a real Gen1 device it never returns the MQTT
+// password: GET /settings omits mqtt.pass even after a write.
+func (d *fakeGen1Device) read() (*shelly.DeviceConfig, error) {
 	out := make(map[string]interface{}, len(d.settings))
 	for k, v := range d.settings {
 		out[k] = v
@@ -420,6 +514,282 @@ func TestApplyDesiredConfig_AcceptsCoIoTPeriodBounds(t *testing.T) {
 		require.NoError(t, err, "period %d", period)
 		assert.True(t, result.ConfigApplied, "period %d", period)
 	}
+}
+
+// fakeLoginHooks stands in for the service that stores a device's credentials and builds its
+// client. calls records the order in which the apply used it.
+type fakeLoginHooks struct {
+	dev       *fakeGen1Device
+	calls     []string
+	stored    []LoginChange
+	storeErr  error
+	clientErr error
+}
+
+func (h *fakeLoginHooks) Store(_ context.Context, deviceID uint, change LoginChange) error {
+	h.calls = append(h.calls, "store")
+	if h.storeErr != nil {
+		return h.storeErr
+	}
+	h.stored = append(h.stored, change)
+	return nil
+}
+
+// Client builds from the stored login: the last one stored, or the device's own before any.
+func (h *fakeLoginHooks) Client(_ context.Context, _ uint) (ShellyClient, error) {
+	h.calls = append(h.calls, "client")
+	if h.clientErr != nil {
+		return nil, h.clientErr
+	}
+	if len(h.stored) == 0 {
+		return &loggedIn{fakeGen1Device: h.dev, user: h.dev.loginUser, pass: h.dev.loginPass}, nil
+	}
+	last := h.stored[len(h.stored)-1]
+	if !last.Enabled {
+		return &loggedIn{fakeGen1Device: h.dev}, nil
+	}
+	return &loggedIn{fakeGen1Device: h.dev, user: last.Username, pass: last.Password}, nil
+}
+
+func loginDesired(enable *bool, user, pass *string) *DeviceConfiguration {
+	return &DeviceConfiguration{Auth: &AuthConfiguration{Enable: enable, Username: user, Password: pass}}
+}
+
+// Login apply is wired only once the service can store the new credentials and rebuild its
+// client. Without hooks the login stays refused, as before, and nothing is written.
+func TestApplyDesiredConfig_RefusesLoginWithoutLoginHooks(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword)))
+	dev := newFakeGen1Device()
+
+	_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+	assert.Contains(t, err.Error(), "login")
+	assert.Empty(t, dev.loginWrites)
+	assert.NotContains(t, err.Error(), testLoginPassword)
+}
+
+func TestApplyDesiredConfig_AppliesALoginStoresItAndVerifiesWithTheNewClient(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	hooks := &fakeLoginHooks{dev: dev}
+	svc.SetLoginHooks(hooks)
+	setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword)))
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied, "the read-back must use the new credentials, the old client gets 401")
+	assert.Equal(t, []string{"client", "store", "client"}, hooks.calls,
+		"a client under the lock, then the device accepts, then store, then the client is rebuilt")
+	assert.Equal(t, []LoginChange{{Enabled: true, Username: "admin", Password: testLoginPassword}}, hooks.stored)
+	assert.True(t, dev.loginOn)
+	assert.True(t, repo.devices[1].ConfigApplied)
+	raw, jerr := json.Marshal(result)
+	require.NoError(t, jerr)
+	assert.NotContains(t, string(raw), testLoginPassword, "the password never leaves the apply")
+}
+
+func TestApplyDesiredConfig_DisablingTheLoginStoresNoCredentials(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	dev.loginOn, dev.loginUser, dev.loginPass = true, "admin", "old"
+	dev.asUser, dev.asPass = "admin", "old"
+	dev.settings["login"] = map[string]interface{}{"enabled": true, "unprotected": false, "username": "admin"}
+	hooks := &fakeLoginHooks{dev: dev}
+	svc.SetLoginHooks(hooks)
+	setDesired(t, repo, loginDesired(BoolPtr(false), nil, nil))
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied)
+	assert.Equal(t, []LoginChange{{Enabled: false}}, hooks.stored)
+	assert.False(t, dev.loginOn)
+}
+
+// A write the device rejects changes nothing, so nothing is stored.
+func TestApplyDesiredConfig_RejectedLoginWriteStoresNothing(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	dev.loginErr = errors.New("500 busy")
+	hooks := &fakeLoginHooks{dev: dev}
+	svc.SetLoginHooks(hooks)
+	setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword)))
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	assert.Equal(t, []string{"client"}, hooks.calls, "nothing is stored after a rejected write")
+	assert.False(t, repo.devices[1].ConfigApplied)
+	assert.False(t, dev.loginOn)
+}
+
+// An earlier setting that fails keeps the login unwritten. Writing it would leave the device on
+// a login that the stored credentials and the cached client do not know.
+func TestApplyDesiredConfig_LoginIsNotWrittenAfterAnEarlierFailure(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	dev.setErr = errors.New("503 busy")
+	hooks := &fakeLoginHooks{dev: dev}
+	svc.SetLoginHooks(hooks)
+	desired := loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword))
+	desired.System = &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}}
+	setDesired(t, repo, desired)
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	assert.Empty(t, dev.loginWrites, "the login must stay unwritten")
+	assert.Equal(t, []string{"client"}, hooks.calls)
+}
+
+// A queued apply holds the client it was called with, which may predate the login that the apply
+// ahead of it changed. The lock holder builds its own from the stored login.
+func TestApplyDesiredConfig_UsesAClientBuiltUnderTheLock(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	dev.loginOn, dev.loginUser, dev.loginPass = true, "admin", "new"
+	dev.settings["login"] = map[string]interface{}{"enabled": true, "unprotected": false, "username": "admin"}
+	hooks := &fakeLoginHooks{dev: dev}
+	svc.SetLoginHooks(hooks)
+	setDesired(t, repo, &DeviceConfiguration{System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office-2")}}})
+	stale := &loggedIn{fakeGen1Device: dev, user: "admin", pass: "old"}
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, stale, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied, "the stale client would get 401")
+}
+
+// A read-back with no login section must not put the desired password into a difference.
+func TestVerifyDesiredConfig_MissingLoginReadBackNeverEchoesThePassword(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword)))
+	dev := newFakeGen1Device()
+
+	result, err := svc.VerifyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Match)
+	raw, jerr := json.Marshal(result)
+	require.NoError(t, jerr)
+	assert.NotContains(t, string(raw), testLoginPassword)
+}
+
+// The device accepted the login but the new credentials could not be stored. The apply says
+// so by error and never claims applied, because the stored login is now stale.
+func TestApplyDesiredConfig_StoreFailureAfterAnAcceptedLoginIsAnError(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	hooks := &fakeLoginHooks{dev: dev, storeErr: errors.New("database is locked")}
+	svc.SetLoginHooks(hooks)
+	setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword)))
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "could not be stored")
+	assert.NotContains(t, err.Error(), testLoginPassword)
+	assert.Equal(t, []string{"client", "store"}, hooks.calls, "no client is rebuilt after a failed store")
+	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+// A device that answers 200 and keeps the old login stays pending.
+func TestApplyDesiredConfig_LoginStaysPendingWhenDeviceKeepsTheOldLogin(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	dev := newFakeGen1Device()
+	dev.ignoreWrites = true
+	hooks := &fakeLoginHooks{dev: dev}
+	svc.SetLoginHooks(hooks)
+	setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword)))
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+// The device takes a username and password of 1 to 50 characters, both together. Anything else
+// is refused before any write, and so is a credential with the flag off or unset, which could
+// never read back as written.
+func TestApplyDesiredConfig_RefusesALoginTheDeviceCannotKeep(t *testing.T) {
+	long := strings.Repeat("x", 51)
+	cases := map[string]struct {
+		desired *DeviceConfiguration
+		path    string
+	}{
+		"enabled without a username":  {loginDesired(BoolPtr(true), nil, StringPtr("pw")), "auth.user"},
+		"enabled with empty username": {loginDesired(BoolPtr(true), StringPtr(""), StringPtr("pw")), "auth.user"},
+		"enabled without a password":  {loginDesired(BoolPtr(true), StringPtr("admin"), nil), "auth.pass"},
+		"username too long":           {loginDesired(BoolPtr(true), StringPtr(long), StringPtr("pw")), "auth.user"},
+		"password too long":           {loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(long)), "auth.pass"},
+		"username without the flag":   {loginDesired(nil, StringPtr("admin"), nil), "auth.enable"},
+		"disabled with a username":    {loginDesired(BoolPtr(false), StringPtr("admin"), nil), "auth.user"},
+		"disabled with a password":    {loginDesired(BoolPtr(false), nil, StringPtr("pw")), "auth.pass"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, repo := newServiceWithDesiredName(t, "tv-office")
+			dev := newFakeGen1Device()
+			svc.SetLoginHooks(&fakeLoginHooks{dev: dev})
+			tc.desired.System = &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}}
+			setDesired(t, repo, tc.desired)
+
+			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			assert.Contains(t, err.Error(), tc.path)
+			assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
+			assert.Empty(t, dev.loginWrites)
+			assert.NotContains(t, err.Error(), testLoginPassword)
+		})
+	}
+}
+
+func TestApplyDesiredConfig_AcceptsLoginLengthBounds(t *testing.T) {
+	for _, n := range []int{1, 50} {
+		svc, repo := newServiceWithDesiredName(t, "tv-office")
+		dev := newFakeGen1Device()
+		svc.SetLoginHooks(&fakeLoginHooks{dev: dev})
+		setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr(strings.Repeat("u", n)), StringPtr(strings.Repeat("p", n))))
+
+		result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+		require.NoError(t, err, "length %d", n)
+		assert.True(t, result.ConfigApplied, "length %d", n)
+	}
+}
+
+// Verify alone never needs the password: the device does not return it.
+func TestVerifyDesiredConfig_DoesNotCompareTheLoginPassword(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, loginDesired(BoolPtr(true), StringPtr("admin"), StringPtr(testLoginPassword)))
+	dev := newFakeGen1Device()
+	dev.settings["login"] = map[string]interface{}{"enabled": true, "unprotected": false, "username": "admin"}
+
+	result, err := svc.VerifyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.Match, "differences: %+v", result.Differences)
+}
+
+func TestLoginChangeNeverPrintsThePassword(t *testing.T) {
+	change := LoginChange{Enabled: true, Username: "admin", Password: testLoginPassword}
+
+	for _, text := range []string{fmt.Sprintf("%v", change), fmt.Sprintf("%+v", change), fmt.Sprintf("%#v", change), fmt.Sprint(&change)} {
+		assert.NotContains(t, text, testLoginPassword)
+	}
+	raw, err := json.Marshal(change)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), testLoginPassword)
 }
 
 func TestApplyDesiredConfig_RefusesSettingsTheConverterDrops(t *testing.T) {

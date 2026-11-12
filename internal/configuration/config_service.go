@@ -79,6 +79,15 @@ type ConfigurationService struct {
 	// applyLocks holds one *sync.Mutex per device ID. It serializes applies to the same
 	// device so a slow apply cannot overwrite a newer one and leave the flag claiming applied.
 	applyLocks sync.Map
+
+	// loginHooks is set once at startup by the code that owns the device credentials. While it
+	// is nil, apply refuses a login instead of writing one it could not store.
+	loginHooks LoginHooks
+}
+
+// SetLoginHooks lets apply write a device's login. Call it before the service handles requests.
+func (s *ConfigurationService) SetLoginHooks(hooks LoginHooks) {
+	s.loginHooks = hooks
 }
 
 // lockApply serializes applies to one device and returns the unlock function.

@@ -34,6 +34,8 @@ var defaultCompareRules = []FieldCompareRule{
 	// never equal what was written. Apply still writes it, so the device schema marks it
 	// applicable (gen1ApplicablePaths); it is the one named write-only exception.
 	{Path: "mqtt.pass", SkipCompare: true},
+	// Same for the login: Gen1 GET /settings returns enabled and username, never the password.
+	{Path: "auth.pass", SkipCompare: true},
 
 	// Tolerance for coordinates (about 10 meters)
 	{Path: "location.latitude", Tolerance: 0.0001, Category: "system"},

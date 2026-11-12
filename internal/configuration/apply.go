@@ -23,7 +23,25 @@ type ApplyResult struct {
 	RequiresReboot bool           `json:"requires_reboot"` // Device needs reboot to apply
 	Warnings       []string       `json:"warnings"`        // Non-fatal issues
 	Duration       time.Duration  `json:"duration"`        // Time taken to apply
+
+	// login is the login change the device accepted in this apply, or nil. It is unexported so
+	// the credentials never reach a response or a log.
+	login *LoginChange
 }
+
+// LoginChange is a login that a device accepted. The password is never printed or marshalled.
+type LoginChange struct {
+	Enabled  bool   `json:"enabled"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"-"`
+}
+
+// String and GoString keep the password out of every fmt verb, including %+v and %#v.
+func (c LoginChange) String() string {
+	return fmt.Sprintf("login{enabled=%t user=%q}", c.Enabled, c.Username)
+}
+
+func (c LoginChange) GoString() string { return c.String() }
 
 // ApplyFailure represents a single failed setting
 type ApplyFailure struct {
@@ -49,6 +67,11 @@ type ConfigApplier struct {
 	converter  ConfigConverter
 	comparator *ConfigComparator
 	logger     *logging.Logger
+
+	// writeLogin lets apply write the login. It is off unless the caller stores the new
+	// credentials and rebuilds its client afterwards (ConfigVerifier.WithLogin), because a
+	// login written behind the caller's back locks the manager out of the device.
+	writeLogin bool
 }
 
 // NewConfigApplier creates a new configuration applier
@@ -147,6 +170,9 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"Cloud", a.applyCloudSettings},
 		{"CoIoT", a.applyCoIoTSettings},
 		{"Relay", a.applyRelaySettings},
+		// The login goes last: it changes the credentials every later request needs, and an
+		// earlier failure then never leaves a changed login behind.
+		{"Login", a.applyLoginSettings},
 	}
 	for _, section := range sections {
 		err := section.apply(ctx, client, apiConfig, result)
@@ -310,6 +336,82 @@ func sortedKeys(m map[string]interface{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// LoginSettingsClient is the login surface of a Gen1 client: POST /settings/login. SetAuth turns
+// the login on with a username and password, ResetAuth turns it off.
+type LoginSettingsClient interface {
+	SetAuth(ctx context.Context, username, password string) error
+	ResetAuth(ctx context.Context) error
+}
+
+var errNoLoginClient = errors.New("client cannot write the login")
+
+// redactedError hides a secret from an error's text and keeps the wrapped error for errors.Is.
+type redactedError struct {
+	msg string
+	err error
+}
+
+func (e *redactedError) Error() string { return e.msg }
+func (e *redactedError) Unwrap() error { return e.err }
+
+func redact(err error, secret string) error {
+	if secret == "" || !strings.Contains(err.Error(), secret) {
+		return err
+	}
+	return &redactedError{msg: strings.ReplaceAll(err.Error(), secret, "***"), err: err}
+}
+
+// applyLoginSettings writes the login with POST /settings/login, never as part of POST /settings.
+// The device never returns the password, so verify cannot confirm it. A rejected write returns
+// the error with the password removed, and records no login change.
+func (a *ConfigApplier) applyLoginSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+	// A section that failed earlier means the apply as a whole failed: the login then stays
+	// unwritten, so the stored credentials and the cached client never fall behind the device.
+	if !a.writeLogin || result.FailedCount > 0 {
+		return nil
+	}
+	login, ok := apiConfig["login"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	enabled, ok := login["enabled"].(bool)
+	if !ok {
+		return nil
+	}
+	username, _ := login["username"].(string)
+	password, _ := login["password"].(string)
+	failure := ApplyFailure{Path: "login", Value: strings.Join(sortedKeys(login), ",")}
+
+	loginClient, ok := client.(LoginSettingsClient)
+	if !ok {
+		failure.Error = errNoLoginClient.Error()
+		result.Failures = append(result.Failures, failure)
+		result.FailedCount += len(login)
+		return errNoLoginClient
+	}
+
+	var err error
+	if enabled {
+		err = loginClient.SetAuth(ctx, username, password)
+	} else {
+		err = loginClient.ResetAuth(ctx)
+	}
+	if err != nil {
+		err = redact(err, password)
+		failure.Error = err.Error()
+		result.Failures = append(result.Failures, failure)
+		result.FailedCount += len(login)
+		return err
+	}
+
+	result.AppliedCount += len(login)
+	result.login = &LoginChange{Enabled: enabled}
+	if enabled {
+		result.login.Username, result.login.Password = username, password
+	}
+	return nil
 }
 
 // CloudSettingsClient is the cloud surface of a Gen1 client: POST /settings/cloud. A client
