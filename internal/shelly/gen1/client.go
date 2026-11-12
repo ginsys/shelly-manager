@@ -808,7 +808,11 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			lastErr = err
+			// A transport error never replaces a DeviceError, as in getJSON.
+			var answered *shelly.DeviceError
+			if !errors.As(lastErr, &answered) {
+				lastErr = err
+			}
 			continue
 		}
 		defer func() {
