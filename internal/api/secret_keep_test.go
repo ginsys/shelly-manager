@@ -332,7 +332,15 @@ func TestSetOverridesRemovesASecretOnNullInAnyKeyCase(t *testing.T) {
 	stored, err := handler.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
 	require.NoError(t, err)
 	assert.Nil(t, stored.MQTT.Password)
-	assert.Equal(t, map[string]bool{"mqtt.pass": true}, nullSecretPaths([]byte(`{"Mqtt":{"Pass":null}}`)))
+	assert.Equal(t, map[string]bool{"mqtt.pass": true}, nullSecrets(t, `{"Mqtt":{"Pass":null}}`))
+}
+
+// nullSecrets reads the secret paths that a body sets to null, and fails on a body it refuses.
+func nullSecrets(t *testing.T, raw string) map[string]bool {
+	t.Helper()
+	paths, err := nullSecretPaths([]byte(raw))
+	require.NoError(t, err, raw)
+	return paths
 }
 
 func TestSetOverridesRemovesANetworkPasswordOnNull(t *testing.T) {
@@ -353,7 +361,7 @@ func TestSetOverridesRemovesANetworkPasswordOnNull(t *testing.T) {
 func TestNullSecretPathsReadEverySecretSlot(t *testing.T) {
 	paths := allSecretPaths()
 	require.Len(t, paths, 7)
-	nest := func(path string, leaf any) []byte {
+	nest := func(path string, leaf any) string {
 		keys := strings.Split(path, ".")
 		node := leaf
 		for i := len(keys) - 1; i >= 0; i-- {
@@ -361,15 +369,34 @@ func TestNullSecretPathsReadEverySecretSlot(t *testing.T) {
 		}
 		raw, err := json.Marshal(node)
 		require.NoError(t, err)
-		return raw
+		return string(raw)
 	}
 	for _, path := range paths {
-		assert.Equal(t, map[string]bool{path: true}, nullSecretPaths(nest(path, nil)), "null at %s", path)
-		assert.Empty(t, nullSecretPaths(nest(path, "")), "an empty string at %s is not null", path)
-		assert.Empty(t, nullSecretPaths(nest(path, "x")), "a value at %s is not null", path)
+		assert.Equal(t, map[string]bool{path: true}, nullSecrets(t, nest(path, nil)), "null at %s", path)
+		assert.Empty(t, nullSecrets(t, nest(path, "")), "an empty string at %s is not null", path)
+		assert.Empty(t, nullSecrets(t, nest(path, "x")), "a value at %s is not null", path)
 	}
-	assert.Empty(t, nullSecretPaths([]byte(`{"mqtt":{"user":null}}`)), "null elsewhere is not a secret reset")
-	assert.Empty(t, nullSecretPaths([]byte(`{"mqtt":null}`)), "a null section is not a secret reset")
+	assert.Empty(t, nullSecrets(t, `{"mqtt":{"user":null}}`), "null elsewhere is not a secret reset")
+	assert.Empty(t, nullSecrets(t, `{"mqtt":null}`), "a null section is not a secret reset")
+}
+
+// The decoder folds case with the Unicode rules, so a key spelled with the long s still fills
+// the field. The reading of null must fold the same way.
+func TestNullSecretPathsFoldKeysLikeTheDecoder(t *testing.T) {
+	assert.Equal(t, map[string]bool{"mqtt.pass": true}, nullSecrets(t, "{\"mqtt\":{\"paſs\":null}}"))
+	var config configuration.DeviceConfiguration
+	require.NoError(t, json.Unmarshal([]byte("{\"mqtt\":{\"paſs\":\"x\"}}"), &config))
+	require.NotNil(t, config.MQTT.Password, "control: the decoder fills the field from this spelling")
+}
+
+func TestNullSecretPathsRefuseARepeatedKeyAndAcceptAnEmptyBody(t *testing.T) {
+	for name, body := range repeatedKeyBodies {
+		_, err := nullSecretPaths([]byte(body))
+		assert.Error(t, err, name)
+	}
+	paths, err := nullSecretPaths(nil)
+	assert.NoError(t, err)
+	assert.Empty(t, paths)
 }
 
 func TestUpdateTemplateRemovesASecretOnNull(t *testing.T) {

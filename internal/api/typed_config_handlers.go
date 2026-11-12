@@ -235,7 +235,12 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 		Configuration json.RawMessage `json:"configuration"`
 	}
 	_ = json.Unmarshal(raw, &body)
-	if restoreErr := restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device), nullSecretPaths(body.Configuration)); restoreErr != nil {
+	removed, nullErr := nullSecretPaths(body.Configuration)
+	if nullErr != nil {
+		http.Error(w, "Invalid JSON: "+nullErr.Error(), http.StatusBadRequest)
+		return
+	}
+	if restoreErr := restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device), removed); restoreErr != nil {
 		http.Error(w, restoreErr.Error(), http.StatusBadRequest)
 		return
 	}
