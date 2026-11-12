@@ -599,6 +599,17 @@ func (c *Client) SetInputSettings(ctx context.Context, input int, settings map[s
 	return c.postForm(ctx, url, settings)
 }
 
+// GetInputSettings reads input settings with GET /settings/input/<input>. Only the Shelly i3
+// has this route.
+func (c *Client) GetInputSettings(ctx context.Context, input int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/settings/input/%d", c.ip, input)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // GetInputStatus retrieves input status
 func (c *Client) GetInputStatus(ctx context.Context, input int) (map[string]interface{}, error) {
 	url := fmt.Sprintf("http://%s/input/%d", c.ip, input)

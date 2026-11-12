@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Added
+- Apply to a Gen1 device now writes the button type and the reverse flag of its
+  inputs. For each entry of `input.inputs`, `mode` goes out as `btn_type` (`momentary`,
+  `follow` as `toggle`, `flip` as `edge`, `detached`) and `inverted` as `btn_reverse`,
+  and each input is read back. A Shelly 1, 1PM or 2.5 keeps both in its relay channel; a
+  Shelly i3 has its own `/settings/input/<n>` route, and `GET` on it is new in the Gen1
+  client. A Shelly i3 accepts `momentary` and `follow` only; any other mode, an input
+  `name`, `type` or push action, and an `id` that differs from its position are refused
+  with 422 before anything is written. The converter now reads and writes the keys a real
+  device has (`btn_type`, `btn_reverse`), and a Shelly 1, 1PM or 2.5 reports its inputs
+  from its relays. Wi-Fi stays refused. The parameter names, the toggle and edge mapping,
+  the i3 mode set and whether a button type change needs a reboot were read from the Shelly
+  reference and are not confirmed on hardware. Part of ginsys/shelly-manager#381.
 - The device page has a Device Login card for the username and password the manager
   uses to reach a device. Until now only the API could store them, and a device that
   rejected the stored login gave the user no way to fix it in the UI. A saved password

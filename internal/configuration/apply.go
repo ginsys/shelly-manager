@@ -158,7 +158,7 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 
 	// Apply configuration sections. A rejected login is an error, not a failed setting: the caller
 	// maps it to "the device rejected the stored credentials".
-	if err := a.applyConfigSections(ctx, client, apiConfig, result); err != nil {
+	if err := a.applyConfigSections(ctx, client, apiConfig, deviceType, result); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
 	}
 
@@ -182,7 +182,7 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 // applyConfigSections applies each section of the configuration. A section the device refuses
 // is recorded in result and the next section is tried, except when the device rejects the login:
 // every later write would be rejected too, so that error stops the apply and is returned.
-func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, deviceType string, result *ApplyResult) error {
 	// For Gen1 devices, we can send settings to /settings endpoint
 	// Different setting groups go to different endpoints
 	sections := []struct {
@@ -197,6 +197,10 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"CoIoT", a.applyCoIoTSettings},
 		{"Relay", a.applyRelaySettings},
 		{"Roller", a.applyRollerSettings},
+		// Inputs follow the relays: on a relay model they are keys of the same channel.
+		{"Input", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+			return a.applyInputSettings(ctx, client, apiConfig, deviceType, result)
+		}},
 		// The login goes last: it changes the credentials every later request needs, and an
 		// earlier failure then never leaves a changed login behind.
 		{"Login", a.applyLoginSettings},
@@ -589,19 +593,72 @@ func (a *ConfigApplier) applyRelaySettings(ctx context.Context, client ShellyCli
 
 	relayClient, ok := client.(RelaySettingsClient)
 	if !ok {
-		result.Failures = append(result.Failures, ApplyFailure{
-			Path:  "relays",
-			Error: errNoRelayClient.Error(),
-		})
-		result.FailedCount++
-		return errNoRelayClient
+		return failSection(result, "relays", errNoRelayClient)
+	}
+	return applyChannels(ctx, result, "relays", relays, gen1RelayKeys, relayClient.SetRelaySettings, relayClient.GetRelaySettings)
+}
+
+// InputSettingsClient is the per-input surface of a Shelly i3: POST and GET on
+// /settings/input/<n>. The relay models keep their button type in the relay channel instead, so
+// they go through RelaySettingsClient. A client without the route a model needs cannot apply
+// inputs, and apply reports that as a failure instead of sending a nested "inputs" document, which
+// Gen1 ignores.
+type InputSettingsClient interface {
+	SetInputSettings(ctx context.Context, input int, settings map[string]interface{}) error
+	GetInputSettings(ctx context.Context, input int) (map[string]interface{}, error)
+}
+
+var errNoInputClient = errors.New("client cannot write per-input settings")
+
+// gen1InputKeys are the input settings apply writes: the flat form parameters btn_type and
+// btn_reverse. Anything else in an input document is refused before the device is touched (see
+// unsupportedApplySettings).
+var gen1InputKeys = []string{"btn_type", "btn_reverse"}
+
+func (a *ConfigApplier) applyInputSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, deviceType string, result *ApplyResult) error {
+	inputs := relayMaps(apiConfig["inputs"])
+	if len(inputs) == 0 {
+		return nil
 	}
 
+	if inputsLiveInRelays(deviceType) {
+		relayClient, ok := client.(RelaySettingsClient)
+		if !ok {
+			return failSection(result, "inputs", errNoRelayClient)
+		}
+		return applyChannels(ctx, result, "inputs", inputs, gen1InputKeys, relayClient.SetRelaySettings, relayClient.GetRelaySettings)
+	}
+	inputClient, ok := client.(InputSettingsClient)
+	if !ok {
+		return failSection(result, "inputs", errNoInputClient)
+	}
+	return applyChannels(ctx, result, "inputs", inputs, gen1InputKeys, inputClient.SetInputSettings, inputClient.GetInputSettings)
+}
+
+// failSection records a section that cannot be written at all as one failed path.
+func failSection(result *ApplyResult, section string, err error) error {
+	result.Failures = append(result.Failures, ApplyFailure{Path: section, Error: err.Error()})
+	result.FailedCount++
+	return err
+}
+
+// applyChannels writes the listed keys of each item with one POST per channel, then reads the
+// channel back and compares every key just written. A device can answer 200 and keep the old
+// value, so a mismatch is a failure of that path.
+func applyChannels(
+	ctx context.Context,
+	result *ApplyResult,
+	section string,
+	items []map[string]interface{},
+	keys []string,
+	set func(context.Context, int, map[string]interface{}) error,
+	get func(context.Context, int) (map[string]interface{}, error),
+) error {
 	var firstErr error
-	for channel, relay := range relays {
-		form := make(map[string]interface{}, len(gen1RelayKeys))
-		for _, key := range gen1RelayKeys {
-			if value, present := relay[key]; present {
+	for channel, item := range items {
+		form := make(map[string]interface{}, len(keys))
+		for _, key := range keys {
+			if value, present := item[key]; present {
 				form[key] = value
 			}
 		}
@@ -609,17 +666,15 @@ func (a *ConfigApplier) applyRelaySettings(ctx context.Context, client ShellyCli
 			continue
 		}
 
-		if err := relayClient.SetRelaySettings(ctx, channel, form); err != nil {
-			a.failRelay(result, channel, form, err.Error())
+		if err := set(ctx, channel, form); err != nil {
+			failChannel(result, section, channel, form, err.Error())
 			firstErr = firstError(firstErr, err)
 			continue
 		}
 
-		// Read back this channel and compare every key just written. A device can answer 200
-		// and keep the old value, so a mismatch is a failure of that path.
-		live, err := relayClient.GetRelaySettings(ctx, channel)
+		live, err := get(ctx, channel)
 		if err != nil {
-			a.failRelay(result, channel, form, "read-back failed: "+err.Error())
+			failChannel(result, section, channel, form, "read-back failed: "+err.Error())
 			firstErr = firstError(firstErr, err)
 			continue
 		}
@@ -629,22 +684,21 @@ func (a *ConfigApplier) applyRelaySettings(ctx context.Context, client ShellyCli
 				continue
 			}
 			result.Failures = append(result.Failures, ApplyFailure{
-				Path:  fmt.Sprintf("relays[%d].%s", channel, key),
+				Path:  fmt.Sprintf("%s[%d].%s", section, channel, key),
 				Value: fmt.Sprintf("%v", form[key]),
 				Error: fmt.Sprintf("device reports %v after the write", live[key]),
 			})
 			result.FailedCount++
 		}
 	}
-
 	return firstErr
 }
 
-// failRelay records every key of one channel's form as failed.
-func (a *ConfigApplier) failRelay(result *ApplyResult, channel int, form map[string]interface{}, message string) {
+// failChannel records every key of one channel's form as failed.
+func failChannel(result *ApplyResult, section string, channel int, form map[string]interface{}, message string) {
 	for _, key := range sortedKeys(form) {
 		result.Failures = append(result.Failures, ApplyFailure{
-			Path:  fmt.Sprintf("relays[%d].%s", channel, key),
+			Path:  fmt.Sprintf("%s[%d].%s", section, channel, key),
 			Value: fmt.Sprintf("%v", form[key]),
 			Error: message,
 		})
@@ -792,11 +846,15 @@ func toFloat(v interface{}) (float64, bool) {
 func (a *ConfigApplier) countSettings(config map[string]interface{}) int {
 	count := 0
 	for key, val := range config {
-		if key == "relays" {
-			// One setting per relay key apply writes, as applyRelaySettings counts them.
-			for _, relay := range relayMaps(val) {
-				for _, relayKey := range gen1RelayKeys {
-					if _, ok := relay[relayKey]; ok {
+		if key == "relays" || key == "inputs" {
+			// One setting per key apply writes, as applyChannels counts them.
+			keys := gen1RelayKeys
+			if key == "inputs" {
+				keys = gen1InputKeys
+			}
+			for _, item := range relayMaps(val) {
+				for _, itemKey := range keys {
+					if _, ok := item[itemKey]; ok {
 						count++
 					}
 				}
