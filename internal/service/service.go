@@ -44,6 +44,10 @@ type ShellyService struct {
 
 	// discover runs the network discovery. Nil means discovery.CombinedDiscovery.
 	discover DiscoverFunc
+
+	// beforeClientBuild is a test hook. getClientWithRetry calls it after a cache miss and before
+	// it takes the cache lock to build a client. It is nil in production.
+	beforeClientBuild func()
 }
 
 // DiscoverFunc runs one combined HTTP and mDNS discovery.
@@ -402,6 +406,35 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 	return client, testErr // Return the client anyway, let the caller handle the auth error
 }
 
+// clientSettings is what the client builders read from the settings of a device.
+type clientSettings struct {
+	Model       string `json:"model"`
+	Gen         int    `json:"gen"`
+	AuthEnabled bool   `json:"auth_enabled"`
+	AuthUser    string `json:"auth_user,omitempty"`
+	AuthPass    string `json:"auth_pass,omitempty"`
+}
+
+// parseClientSettings reads the generation and the login from the settings of a device.
+func parseClientSettings(raw string) (clientSettings, error) {
+	// Handle empty settings gracefully: a device without configuration is a Gen1 device.
+	if raw == "" {
+		return clientSettings{Model: "Unknown", Gen: 1}, nil
+	}
+	var settings clientSettings
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+		return settings, fmt.Errorf("failed to parse device settings: %w", err)
+	}
+	// Credentials saved before the flat keys existed are still honoured.
+	if settings.AuthUser == "" && settings.AuthPass == "" {
+		if user, pass, ok := configuration.LegacyDeviceAuth(raw); ok {
+			settings.AuthEnabled = true
+			settings.AuthUser, settings.AuthPass = user, pass
+		}
+	}
+	return settings, nil
+}
+
 // getClientWithRetry returns a cached client or creates a new one with retry logic
 func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry bool) (shelly.Client, error) {
 	s.clientMu.Lock()
@@ -419,40 +452,8 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		s.evictClient(device.IP, client)
 	}
 
-	// Parse device settings to get generation and auth info
-	var settings struct {
-		Model       string `json:"model"`
-		Gen         int    `json:"gen"`
-		AuthEnabled bool   `json:"auth_enabled"`
-		AuthUser    string `json:"auth_user,omitempty"`
-		AuthPass    string `json:"auth_pass,omitempty"`
-	}
-
-	// Handle empty or invalid settings gracefully
-	if device.Settings == "" {
-		// Use default settings for devices without configuration
-		settings = struct {
-			Model       string `json:"model"`
-			Gen         int    `json:"gen"`
-			AuthEnabled bool   `json:"auth_enabled"`
-			AuthUser    string `json:"auth_user,omitempty"`
-			AuthPass    string `json:"auth_pass,omitempty"`
-		}{
-			Model:       "Unknown",
-			Gen:         1, // Default to Gen1 for unknown devices
-			AuthEnabled: false,
-		}
-	} else {
-		if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
-			return nil, fmt.Errorf("failed to parse device settings: %w", err)
-		}
-		// Credentials saved before the flat keys existed are still honoured.
-		if settings.AuthUser == "" && settings.AuthPass == "" {
-			if user, pass, ok := configuration.LegacyDeviceAuth(device.Settings); ok {
-				settings.AuthEnabled = true
-				settings.AuthUser, settings.AuthPass = user, pass
-			}
-		}
+	if s.beforeClientBuild != nil {
+		s.beforeClientBuild()
 	}
 
 	// Create new client based on generation
@@ -464,6 +465,22 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	if client, exists = s.cachedClientLocked(device); exists {
 		s.clientMu.Unlock()
 		return client, nil
+	}
+
+	// The device passed in may predate a credential update. UpdateDeviceAuth writes the
+	// database and then clears the cache under this lock, so a reload here sees the new login,
+	// or the clear runs after the publish below and removes the client built from the old one.
+	if device.ID != 0 {
+		if fresh, loadErr := s.DB.GetDevice(device.ID); loadErr == nil {
+			device.Settings = fresh.Settings
+		}
+	}
+
+	// Parse device settings to get generation and auth info
+	settings, parseErr := parseClientSettings(device.Settings)
+	if parseErr != nil {
+		s.clientMu.Unlock()
+		return nil, parseErr
 	}
 
 	// Determine auth credentials to use
