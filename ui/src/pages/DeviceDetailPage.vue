@@ -247,10 +247,17 @@ function formatUptime(seconds: number): string {
   return `${mins}m`
 }
 
+// Only the newest read may replace the device: an older response that arrives late would
+// put back settings from before a save, and the login card would show the old login.
+let deviceReadSeq = 0
+
 async function fetchDevice() {
+  const seq = ++deviceReadSeq
   try {
     const id = route.params.id as string
-    d.value = await getDevice(id, abortController.signal)
+    const fetched = await getDevice(id, abortController.signal)
+    if (seq !== deviceReadSeq) return
+    d.value = fetched
     // Populate edit form
     editForm.value.name = d.value.name || ''
     editForm.value.settings = d.value.settings || ''
