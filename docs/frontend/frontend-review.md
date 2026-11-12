@@ -371,7 +371,7 @@ The remaining "View schema" action opens a read-only viewer:
 |----------|--------|---------|
 | `/version` | GET | API/server version info |
 
-### 4.4 Unused Endpoints by Category (64 total)
+### 4.4 Unused Endpoints by Category (63 total)
 
 #### Device Management (6 unused)
 - `POST /api/v1/devices` - Create device
