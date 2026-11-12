@@ -551,6 +551,72 @@ describe('DeviceConfigNew Store', () => {
     })
   })
 
+  describe('an action that settles after a reset', () => {
+    // An action starts for device 7 and stays pending. The page resets the store and starts a
+    // refresh for device 8, which also stays pending. The old action then settles. The store now
+    // belongs to device 8, so the old action must hand its answer back to its caller and write
+    // nothing: not its answer, not its error, and not its loading flag, which the refresh holds.
+    function startActionThenResetThenRefreshOtherDevice() {
+      const store = useDeviceConfigNewStore()
+
+      let settleOld!: { resolve: (v: ConfigTemplate[]) => void; reject: (e: Error) => void }
+      mockApi.addDeviceTemplateNew.mockReturnValue(
+        new Promise<ConfigTemplate[]>((resolve, reject) => {
+          settleOld = { resolve, reject }
+        }),
+      )
+      const oldAction = store.addTemplate(7, 1)
+      expect(store.loading).toBe(true)
+
+      store.reset()
+
+      const pending = () => new Promise<never>(() => {})
+      mockApi.getDeviceTemplatesNew.mockReturnValue(pending())
+      mockApi.getDeviceOverridesNew.mockReturnValue(pending())
+      mockApi.getDesiredConfigNew.mockReturnValue(pending())
+      mockApi.getConfigStatusNew.mockReturnValue(pending())
+      void store.refresh(8)
+      expect(store.loading).toBe(true)
+
+      return { store, oldAction, settleOld }
+    }
+
+    it('keeps the store as it is when the old action succeeds late', async () => {
+      const { store, oldAction, settleOld } = startActionThenResetThenRefreshOtherDevice()
+      const before = {
+        templates: [...store.templates],
+        templateIds: [...store.templateIds],
+        error: store.error,
+      }
+
+      settleOld.resolve([mockTemplate])
+      await oldAction
+
+      expect(store.loading).toBe(true)
+      expect(store.templates).toEqual(before.templates)
+      expect(store.templateIds).toEqual(before.templateIds)
+      expect(store.error).toBe(before.error)
+    })
+
+    it('keeps the store as it is when the old action fails late', async () => {
+      const { store, oldAction, settleOld } = startActionThenResetThenRefreshOtherDevice()
+      const before = {
+        templates: [...store.templates],
+        templateIds: [...store.templateIds],
+        error: store.error,
+      }
+
+      settleOld.reject(new Error('late failure of device 7'))
+      // The caller still gets the failure of its own action.
+      await expect(oldAction).rejects.toThrow('late failure of device 7')
+
+      expect(store.loading).toBe(true)
+      expect(store.templates).toEqual(before.templates)
+      expect(store.templateIds).toEqual(before.templateIds)
+      expect(store.error).toBe(before.error)
+    })
+  })
+
   describe('Error handling', () => {
     it('should clear previous errors on new operations', async () => {
       const store = useDeviceConfigNewStore()
