@@ -481,6 +481,27 @@ func TestUnsupportedGen2Settings_NamesAnOutOfRangeTimerAtItsOwnIndex(t *testing.
 	assert.Equal(t, []string{"relay.relays.1.auto_on"}, unsupported)
 }
 
+// A channel with nothing to write is left out of the check, and a path that the round trip reports
+// still names the channel's place in the desired list.
+func TestUnsupportedGen2Settings_NamesARoundTripRefusalAtItsOwnIndex(t *testing.T) {
+	relays := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0}, {ID: 1, Name: StringPtr("good")}, {ID: -1, Name: StringPtr("bad")},
+	}}}
+	inputs := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{
+		{ID: 0}, {ID: 1, Name: StringPtr("good")}, {ID: -1, Name: StringPtr("bad")},
+	}}}
+
+	relayPaths, err := unsupportedGen2Settings(NewGen2Converter(nil), relays)
+	require.NoError(t, err)
+	inputPaths, err := unsupportedGen2Settings(NewGen2Converter(nil), inputs)
+	require.NoError(t, err)
+
+	assert.Contains(t, relayPaths, "relay.relays.2")
+	assert.NotContains(t, relayPaths, "relay.relays.1", "the valid entry is not refused")
+	assert.Contains(t, inputPaths, "input.inputs.2")
+	assert.NotContains(t, inputPaths, "input.inputs.1", "the valid entry is not refused")
+}
+
 func TestVerifyConfig_Gen2PairsChannelsByID(t *testing.T) {
 	dev := fakeGen2DeviceWithChannels()
 	dev.doc["switch:1"].(map[string]interface{})["name"] = "b"
