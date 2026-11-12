@@ -83,6 +83,24 @@ type RollerConfig struct {
 	TiltEnabled        *bool   `json:"tilt_enabled,omitempty"`
 	TiltPosition       *int    `json:"tilt_position,omitempty"`
 	MaxTiltTime        *int    `json:"max_tilt_time,omitempty"`
+
+	// Gen1 roller settings beyond the travel times (Shelly 2.5, POST /settings/roller/0). The names
+	// are the device's own, except ButtonType and ButtonReverse, which the device calls btn_type and
+	// btn_reverse. ScheduleRules is a pointer so that nil leaves the rules alone and an empty list
+	// clears them. EndsDelay is in milliseconds.
+	DefaultState           *string   `json:"default_state,omitempty"`
+	ButtonType             *string   `json:"button_type,omitempty"`
+	ButtonReverse          *bool     `json:"button_reverse,omitempty"`
+	Schedule               *bool     `json:"schedule,omitempty"`
+	ScheduleRules          *[]string `json:"schedule_rules,omitempty"`
+	ObstacleMode           *string   `json:"obstacle_mode,omitempty"`
+	ObstacleAction         *string   `json:"obstacle_action,omitempty"`
+	ObstacleDelay          *int      `json:"obstacle_delay,omitempty"`
+	SafetyMode             *string   `json:"safety_mode,omitempty"`
+	SafetyAction           *string   `json:"safety_action,omitempty"`
+	SafetyAllowedOnTrigger *string   `json:"safety_allowed_on_trigger,omitempty"`
+	OffPower               *int      `json:"off_power,omitempty"`
+	EndsDelay              *int      `json:"ends_delay,omitempty"`
 }
 
 // InputConfig represents input/button configuration
