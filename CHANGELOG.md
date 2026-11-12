@@ -21,7 +21,8 @@ All notable changes to this project are documented here. The project follows Con
   the device page shows it as its own state. A station write whose own response is lost
   counts the same: it is read back, and silence there is unconfirmed. A device that answers
   with an error is a failure, even if the retries after that answer got none. The Gen1 client now keeps an HTTP
-  error from an earlier attempt when a later retry fails at the transport. The converter now reads
+  error from an earlier attempt, on a read or a write, when a later retry fails at the
+  transport. The converter now reads
   the `mask` key a real device reports, and still accepts `netmask` in old data. Not confirmed
   on hardware (read from a summary of the Shelly reference): the route behaviour, the key
   names, `enabled` as 1 or 0, that no reboot is needed and that `GET /settings` never returns

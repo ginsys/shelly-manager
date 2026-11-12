@@ -47,6 +47,38 @@ func TestGen1Client_GetKeepsTheEvidenceOfAnAnsweredAttempt(t *testing.T) {
 	}
 }
 
+func TestGen1Client_PostKeepsTheEvidenceOfAnAnsweredAttempt(t *testing.T) {
+	var requests int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&requests, 1) == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Errorf("Hijack: %v", err)
+			return
+		}
+		_ = conn.Close() // no answer
+	}))
+	defer server.Close()
+
+	client := NewClient(strings.TrimPrefix(server.URL, "http://"), WithRetry(2, time.Millisecond))
+	err := client.SetWiFiConfig(context.Background(), map[string]interface{}{"ssid": "guest"})
+
+	if err == nil {
+		t.Fatal("SetWiFiConfig: expected an error")
+	}
+	// The control: the retries ran. The HTTP transport may add one resend of its own.
+	if got := atomic.LoadInt32(&requests); got < 3 {
+		t.Fatalf("requests = %d, want at least 3", got)
+	}
+	var deviceErr *shelly.DeviceError
+	if !errors.As(err, &deviceErr) {
+		t.Fatalf("error %v (%T) lost the evidence that the device answered with HTTP 400", err, err)
+	}
+}
+
 // postedForm runs one write against a fake device and returns the method, the path and the form.
 func postedForm(t *testing.T, write func(c *Client) error) (string, string, map[string][]string) {
 	t.Helper()
