@@ -445,26 +445,25 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 		return nil, fmt.Errorf("failed to get stored config: %w", err)
 	}
 
-	// Import current configuration from device
-	currentConfig, err := s.ImportFromDevice(deviceID, client)
+	// Read the current configuration from the device. This stores nothing: the stored row is the
+	// baseline and stays as it is until a real import or export replaces it.
+	currentConfig, err := s.readDeviceConfigData(deviceID, client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to import current config: %w", err)
+		return nil, fmt.Errorf("failed to read current config: %w", err)
 	}
 
 	// Compare configurations, ignoring volatile bookkeeping metadata (_metadata, device_info)
-	// that ImportFromDevice re-stamps on every import.
-	differences := s.compareConfigurationsForDrift(storedConfig.Config, currentConfig.Config)
+	// that reading the device re-stamps every time.
+	differences := s.compareConfigurationsForDrift(storedConfig.Config, currentConfig)
 
 	if len(differences) == 0 {
 		// No drift detected
-		storedConfig.SyncStatus = "synced"
-		s.db.Save(&storedConfig)
+		s.markSyncStatus(&storedConfig, "synced")
 		return nil, nil
 	}
 
 	// Drift detected
-	storedConfig.SyncStatus = "drift"
-	s.db.Save(&storedConfig)
+	s.markSyncStatus(&storedConfig, "drift")
 
 	// Get device name
 	var device Device
@@ -492,6 +491,23 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 	}
 
 	return drift, nil
+}
+
+// markSyncStatus stores the result of a drift check on the stored row. It writes the status column
+// and nothing else, and only when the value changes, so the check leaves the config, the sync
+// time, updated_at and the history alone. A failed write is logged: the check itself still holds.
+func (s *Service) markSyncStatus(stored *DeviceConfig, status string) {
+	if stored.SyncStatus == status {
+		return
+	}
+	if err := s.db.Model(stored).UpdateColumn("sync_status", status).Error; err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": stored.DeviceID,
+			"status":    status,
+			"error":     err.Error(),
+			"component": "configuration",
+		}).Warn("Failed to store the drift check status")
+	}
 }
 
 // BulkDetectDrift checks for configuration drift across multiple devices
