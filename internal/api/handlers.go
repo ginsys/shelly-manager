@@ -402,7 +402,8 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 
 	// Update existing device with new data
 	updatedDevice.ID = existingDevice.ID
-	if err := h.DB.UpdateDevice(&updatedDevice); err != nil {
+	// The write keeps a login that was saved after the read above, unless the request changes it.
+	if err := h.Service.UpdateDeviceKeepingLogin(existingDevice, &updatedDevice); err != nil {
 		h.logger.WithFields(map[string]any{
 			"error":      err.Error(),
 			"device_id":  updatedDevice.ID,
@@ -514,17 +515,7 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 
 		for _, device := range devices {
 			// Check if device already exists by MAC
-			existing, err := h.DB.GetDeviceByMAC(device.MAC)
-			if err == nil && existing != nil {
-				// Update existing device
-				existing.IP = device.IP
-				existing.Status = device.Status
-				existing.LastSeen = device.LastSeen
-				existing.Firmware = device.Firmware
-				if err := h.DB.UpdateDevice(existing); err != nil && h.logger != nil {
-					h.logger.Error("Failed to update device during import", "error", err, "deviceID", existing.ID)
-				}
-
+			if existing, known := h.refreshKnownDevice(device); known {
 				// Import config if requested
 				if req.ImportConfig {
 					if _, err := h.Service.ImportDeviceConfig(existing.ID); err == nil {
@@ -565,6 +556,23 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 		"status":  "discovery_started",
 		"message": "Device discovery has been initiated in background",
 	})
+}
+
+// refreshKnownDevice updates the device that a discovery found again. It reports false when the
+// database has no device with that MAC.
+func (h *Handler) refreshKnownDevice(found database.Device) (*database.Device, bool) {
+	existing, err := h.DB.GetDeviceByMAC(found.MAC)
+	if err != nil || existing == nil {
+		return nil, false
+	}
+	refreshed, err := h.Service.RefreshDiscoveredDevice(existing.ID, found.IP, found.Status, found.LastSeen, found.Firmware)
+	if err != nil && h.logger != nil {
+		h.logger.Error("Failed to update device during import", "error", err, "deviceID", existing.ID)
+	}
+	if refreshed == nil {
+		refreshed = existing
+	}
+	return refreshed, true
 }
 
 // GetProvisioningStatus handles GET /api/v1/provisioning/status

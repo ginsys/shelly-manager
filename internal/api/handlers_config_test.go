@@ -25,6 +25,7 @@ func setupTestHandler(t *testing.T) (*Handler, func()) {
 
 	handler := &Handler{
 		DB:            db,
+		Service:       testShellyService(t, db),
 		logger:        logger,
 		ConfigService: configuration.NewService(db.GetDB(), logger),
 	}

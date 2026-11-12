@@ -186,31 +186,8 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 			continue
 		}
 
-		// Update device settings with latest discovery info (preserve existing settings)
-		var existingSettings map[string]interface{}
-		if err := json.Unmarshal([]byte(device.Settings), &existingSettings); err != nil {
-			// If parsing fails, create new settings
-			existingSettings = make(map[string]interface{})
-		}
-
-		// Update discovery-related settings only
-		existingSettings["model"] = sd.Model
-		existingSettings["gen"] = sd.Generation
-		existingSettings["auth_enabled"] = sd.AuthEn
-
-		// Preserve existing auth credentials if they exist
-		if _, hasUser := existingSettings["auth_user"]; !hasUser {
-			existingSettings["auth_user"] = ""
-		}
-		if _, hasPass := existingSettings["auth_pass"]; !hasPass {
-			existingSettings["auth_pass"] = ""
-		}
-
-		updatedSettings, _ := json.Marshal(existingSettings)
-		device.Settings = string(updatedSettings)
-
-		// Save updated settings
-		if err := s.DB.UpdateDevice(device); err != nil {
+		// Store the latest discovery info in the settings and keep the rest, the login included
+		if err := s.backfillDiscoverySettings(device, sd.Model, sd.Generation, sd.AuthEn); err != nil {
 			s.logger.WithFields(map[string]any{
 				"device_id": device.ID,
 				"error":     err.Error(),

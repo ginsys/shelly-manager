@@ -13,6 +13,14 @@ All notable changes to this project are documented here. The project follows Con
   anything is sent. (ginsys/shelly-manager#137)
 
 ### Fixed
+- A device save no longer restores an older login. A plain device `PUT`, the refresh
+  after a discovery import and the settings backfill of a discovery each saved a whole
+  device row that they had read earlier, so a login saved in between was lost. Each
+  one now takes `clientMu`, reloads the row and changes only its own fields. A `PUT`
+  that leaves the login as the client read it keeps the login that is stored now, and
+  a `PUT` that changes the login saves the new one. This closes the gap that the next
+  entry names. A client that saves old data it read long before is not covered, and
+  ginsys/shelly-manager#502 tracks that. (ginsys/shelly-manager#496)
 - A rejected login is now read from the client that the device rejected. The auth
   retry used to take it from the caller's copy of the device record, and a cache hit
   does not refresh that copy. A login saved as A, changed to B and restored to A
