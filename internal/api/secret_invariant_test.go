@@ -148,6 +148,72 @@ func TestSecretSlots_EverySecretNamedFieldIsRedactedMaskedAndRestored(t *testing
 	assertNoSecret(t, "restoreMaskedSecrets", body, secrets)
 }
 
+// valid returns config with each constrained value moved inside its schema, so the override routes,
+// which check values against the schema, accept it. Every field stays set and every secret keeps its
+// sentinel: only an enum, an address, a time, a number outside its bounds or a string over its
+// length changes, and a secret has none of those.
+func valid(t *testing.T, config *configuration.DeviceConfiguration) *configuration.DeviceConfiguration {
+	t.Helper()
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(marshalConfig(t, config)), &body))
+	sections, _ := configuration.GetDeviceConfigurationSchema("")["properties"].(map[string]interface{})
+	for name, section := range sections {
+		if value, ok := body[name]; ok {
+			body[name] = fitSchema(section.(map[string]interface{}), value)
+		}
+	}
+	fitted, err := json.Marshal(body)
+	require.NoError(t, err)
+	out := &configuration.DeviceConfiguration{}
+	require.NoError(t, json.Unmarshal(fitted, out))
+	require.Empty(t, configuration.ValidateConfigBody("", body), "the fitted body must be valid")
+	return out
+}
+
+func fitSchema(schema map[string]interface{}, value interface{}) interface{} {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		props, _ := schema["properties"].(map[string]interface{})
+		for key, child := range v {
+			if childSchema, ok := props[key].(map[string]interface{}); ok {
+				v[key] = fitSchema(childSchema, child)
+			}
+		}
+		return v
+	case []interface{}:
+		if items, ok := schema["items"].(map[string]interface{}); ok {
+			for i := range v {
+				v[i] = fitSchema(items, v[i])
+			}
+		}
+		return v
+	case string:
+		if options, ok := schema["enum"].([]string); ok && len(options) > 0 {
+			return options[0]
+		}
+		if schema["format"] == "ipv4" {
+			return "192.0.2.1"
+		}
+		if _, ok := schema["pattern"].(string); ok {
+			return "12:30" // the one pattern in the schema is a time of day
+		}
+		if limit, ok := schema["maxLength"].(int); ok && len([]rune(v)) > limit {
+			return string([]rune(v)[:limit])
+		}
+		return v
+	case float64:
+		if min, ok := schema["minimum"].(int); ok && v < float64(min) {
+			return float64(min)
+		}
+		if max, ok := schema["maximum"].(int); ok && v > float64(max) {
+			return float64(max)
+		}
+		return v
+	default:
+		return v
+	}
+}
+
 func idRequest(method, target, id, body string) *http.Request {
 	req := httptest.NewRequest(method, target, bytes.NewBufferString(body))
 	return mux.SetURLVars(req, map[string]string{"id": id})
@@ -161,9 +227,14 @@ func TestSecretInvariant_NoResponsePathReturnsASecret(t *testing.T) {
 	defer cleanup()
 
 	full, secrets, _ := populated(t)
+	// The override routes check values against the device schema, and a device with no model gets
+	// the schema of every section, so the body is moved inside it first (valid).
+	full = valid(t, full)
 	fullJSON := marshalConfig(t, full)
 
 	device := testutil.TestDevice()
+	device.Type = ""
+	device.Settings = ""
 	require.NoError(t, handler.DB.AddDevice(device))
 	id := strconv.FormatUint(uint64(device.ID), 10)
 	svc := handler.ConfigService.ConfigurationSvc
@@ -213,6 +284,7 @@ func TestSecretInvariant_NoResponsePathReturnsASecret(t *testing.T) {
 	// compared: the merge of a patch is not what this test is about. The Network passwords are
 	// among them, since the Network fields are pointers and the merge keeps them.
 	patch, _, _ := populated(t)
+	patch = valid(t, patch)
 	maskSecrets(patch)
 	call("patch overrides", handler.PatchDeviceNewOverrides,
 		idRequest("PATCH", "/api/v1/devices/1/overrides/new", id, marshalConfig(t, patch)))

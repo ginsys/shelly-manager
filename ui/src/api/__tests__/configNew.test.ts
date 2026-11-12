@@ -13,6 +13,7 @@ vi.mock('../client', () => {
 })
 
 import api from '../client'
+import { TemplateSaveError } from '../templates'
 import {
   getDeviceTemplatesNew,
   setDeviceTemplatesNew,
@@ -117,6 +118,24 @@ describe('configNew API', () => {
     const result = await setDeviceOverridesNew(123, { mqtt: { enable: false } })
     expect(result.overrides).toEqual({ mqtt: { enable: false } })
     expect(api.put).toHaveBeenCalledWith('/devices/123/overrides/new', { mqtt: { enable: false } })
+  })
+
+  // The override routes refuse a value outside the schema with 400 and error.details.fields, as the
+  // template routes do (ginsys/shelly-manager#522).
+  it('a refused override body becomes a TemplateSaveError with the field list, for PUT and PATCH', async () => {
+    const fields = [{ path: 'mqtt.port', message: 'Must be at most 65535' }]
+    const refused = {
+      response: { status: 400, data: { success: false, error: { code: 'VALIDATION_FAILED', message: 'Validation failed', details: { fields } } } },
+    }
+    ;(api.put as any).mockRejectedValue(refused)
+    ;(api.patch as any).mockRejectedValue(refused)
+    for (const err of [
+      await setDeviceOverridesNew(123, { mqtt: { port: 99999 } }).catch((e) => e),
+      await patchDeviceOverridesNew(123, { mqtt: { port: 99999 } }).catch((e) => e),
+    ]) {
+      expect(err).toBeInstanceOf(TemplateSaveError)
+      expect(err.fields).toEqual(fields)
+    }
   })
 
   it('patchDeviceOverridesNew patches overrides', async () => {

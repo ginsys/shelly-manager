@@ -19,7 +19,7 @@ import {
   type ConfigVerifyData,
   verifyDeviceConfigNew,
 } from '@/api/configNew'
-import type { ConfigTemplate } from '@/api/templates'
+import { TemplateSaveError, type ConfigTemplate } from '@/api/templates'
 
 export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
   const templates = ref<ConfigTemplate[]>([])
@@ -149,7 +149,11 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       overrides.value = result.overrides
       if (result.desired_config !== undefined) desiredConfig.value = result.desired_config
     } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to save overrides'
+      // A refused value is shown on the form by the caller. Setting `error` would replace the
+      // whole page with an error card and throw the edit away.
+      if (epoch === deviceEpoch && !(e instanceof TemplateSaveError)) {
+        error.value = e?.message || 'Failed to save overrides'
+      }
       throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
@@ -166,7 +170,9 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       if (epoch !== deviceEpoch) return
       overrides.value = result
     } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to patch overrides'
+      if (epoch === deviceEpoch && !(e instanceof TemplateSaveError)) {
+        error.value = e?.message || 'Failed to patch overrides'
+      }
       throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false

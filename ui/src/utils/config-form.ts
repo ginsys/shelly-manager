@@ -95,6 +95,9 @@ export function subtreeApplicable(schema: SchemaProperty): boolean {
   return isApplicable(schema)
 }
 
+// IPV4 is four decimal parts of 0 to 255 with no leading zero, as Go's netip.ParseAddr reads one.
+const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
+
 // validateValue returns an error message for one leaf value, or null when it is valid. An
 // undefined value is not checked here: required checks need the inherited value too.
 export function validateValue(schema: SchemaProperty, value: any): string | null {
@@ -126,6 +129,11 @@ export function validateValue(schema: SchemaProperty, value: any): string | null
     }
     if (schema.pattern && !new RegExp(`^(?:${schema.pattern})$`).test(value)) {
       return 'Does not match the required format'
+    }
+    // An empty string reads as "not set". The server holds the same rule (isIPv4 in
+    // internal/configuration/schema_validate.go).
+    if (schema.format === 'ipv4' && value !== '' && !IPV4.test(value)) {
+      return 'Must be an IPv4 address'
     }
   }
   if (schema.enum && !schema.enum.some(option => option === value)) {

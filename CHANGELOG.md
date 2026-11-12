@@ -88,6 +88,15 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- `PUT` and `PATCH /devices/{id}/overrides/new` now check the body against the schema of the
+  device model, as the template routes do. A value outside it (an out-of-range number, a text
+  that is not an option, a malformed address, a section the model lacks) answers 400
+  `VALIDATION_FAILED` with one entry per field in `error.details.fields`, and nothing is stored.
+  Before, the server stored any value and only the form checked it. A field of format `ipv4`
+  is now checked on the override and template routes and in the form: four decimal parts, an empty value passes. The
+  device configuration page lists the refused fields beside the editor. An override that is
+  already stored with a bad value still loads, and a `PUT` of it is refused until the value is
+  fixed or removed. (ginsys/shelly-manager#522)
 - `PUT /devices/{id}` with a body that leaves out `last_seen` or `created_at` no longer
   answers 500 on MySQL. The missing values decoded to a zero time, which MySQL rejects as an
   invalid datetime. A device save now keeps the stored `created_at` and `last_seen` where the

@@ -87,8 +87,9 @@ export class TemplateSaveError extends Error {
 }
 
 // toSaveError turns a refused create or update into a TemplateSaveError. The server answers a
-// schema failure with 400 and error.details.fields.
-function toSaveError(e: any, fallback: string): Error {
+// schema failure with 400 and error.details.fields. The device override routes answer the same
+// way, so they use it too.
+export function toSaveError(e: any, fallback: string): Error {
   const error = e?.response?.data?.error
   const fields = error?.details?.fields
   if (Array.isArray(fields)) return new TemplateSaveError(error?.message || fallback, fields)

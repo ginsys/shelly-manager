@@ -145,9 +145,12 @@ func getDeviceNetworkSchema() map[string]interface{} {
 	ipv4mode := func() map[string]interface{} {
 		return map[string]interface{}{"type": "string", "title": "IP Mode", "enum": []string{"dhcp", "static"}}
 	}
+	addr := func(title string) map[string]interface{} {
+		return map[string]interface{}{"type": "string", "title": title, "format": "ipv4"}
+	}
 	staticIP := func() map[string]interface{} {
 		return obj("Static IP Settings", map[string]interface{}{
-			"ip": str("IP Address"), "netmask": str("Netmask"), "gw": str("Gateway"), "nameserver": str("DNS Server"),
+			"ip": addr("IP Address"), "netmask": addr("Netmask"), "gw": addr("Gateway"), "nameserver": addr("DNS Server"),
 		})
 	}
 	return map[string]interface{}{
@@ -162,13 +165,13 @@ func getDeviceNetworkSchema() map[string]interface{} {
 				"sta": obj("Station", map[string]interface{}{
 					"enable": flag("Enable"), "ssid": str("Network Name (SSID)"), "pass": secret("Password"),
 					"is_open": flag("Open Network"), "ipv4mode": ipv4mode(), "ip": staticIP(),
-					"nameserver": str("DNS Server"),
+					"nameserver": addr("DNS Server"),
 				}),
 				"ap": obj("Access Point", map[string]interface{}{
 					"enable": flag("Enable"), "ssid": str("Network Name (SSID)"), "pass": secret("Password"),
 					"is_open":     flag("Open Network"),
 					"max_sta":     map[string]interface{}{"type": "integer", "title": "Max Clients"},
-					"range_start": str("DHCP Range Start"), "range_end": str("DHCP Range End"),
+					"range_start": addr("DHCP Range Start"), "range_end": addr("DHCP Range End"),
 				}),
 			}),
 		},

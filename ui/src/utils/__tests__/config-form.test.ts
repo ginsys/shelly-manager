@@ -117,6 +117,17 @@ describe('config-form validation', () => {
     expect(validateValue({ type: 'integer', minimum: 1 }, undefined)).toBeNull()
   })
 
+  // The server holds the same rule (isIPv4): an empty string reads as "not set".
+  it('checks the ipv4 format and lets an empty string pass', () => {
+    const ip: SchemaProperty = { type: 'string', format: 'ipv4' }
+    for (const bad of ['300.1.1.1', '1.2.3', '1.2.3.4.5', '010.0.0.1', ' 10.0.0.9', '10.0.0.9 ', 'fe80::1', 'dns.example', '1.2.3.-4']) {
+      expect(validateValue(ip, bad), bad).toBe('Must be an IPv4 address')
+    }
+    for (const good of ['', '0.0.0.0', '192.0.2.1', '255.255.255.255']) {
+      expect(validateValue(ip, good), good).toBeNull()
+    }
+  })
+
   it('required fails only when the object is overridden and nothing gives a value', () => {
     const sections: Record<string, SchemaProperty> = {
       wifi: { type: 'object', required: ['ssid'], properties: { ssid: { type: 'string' }, ipv4_method: { type: 'string' } } },
