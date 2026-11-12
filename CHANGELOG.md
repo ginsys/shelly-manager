@@ -39,10 +39,14 @@ All notable changes to this project are documented here. The project follows Con
 - A plain device `PUT` can no longer overwrite changes saved after the client read the
   device. The client sends back the `updated_at` that it read. If the stored `updated_at`
   differs, the server saves nothing and answers `409`. A body with no `updated_at` saves
-  as before. The device page and the devices list send the version. Two limits remain.
-  MySQL keeps whole seconds in `updated_at`, so two saves inside one second look equal.
-  A writer that uses `UpdateColumn` does not move `updated_at`, and the only one on the
-  device row is the temporary address hold of an import swap. (ginsys/shelly-manager#502)
+  as before. The device page and the devices list send the version. Three limits remain.
+  The discovery upsert, the GitOps importer, the archive import and the configuration
+  repository do not take the lock of the `PUT`, so one of them can save between its
+  compare and its save; a conditional SQL update will close this
+  (ginsys/shelly-manager#509). MySQL keeps `updated_at` in milliseconds, and whole
+  seconds on a legacy column, where two saves inside one second look equal. A writer that
+  uses `UpdateColumn` does not move `updated_at`, and the only one on the device row is the
+  temporary address hold of a forced archive restore. (ginsys/shelly-manager#502)
 - A device save no longer restores an older login. A plain device `PUT`, the refresh
   after a discovery import and the settings backfill of a discovery each saved a whole
   device row that they had read earlier, so a login saved in between was lost. Each

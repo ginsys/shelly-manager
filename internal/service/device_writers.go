@@ -117,7 +117,18 @@ func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Devic
 		}
 		incoming.Settings = merged
 	}
-	return s.DB.UpdateDevice(incoming)
+	if err = s.DB.UpdateDevice(incoming); err != nil {
+		return err
+	}
+	// The save stamps updated_at in memory with the clock's full precision, and a database can
+	// store less (PostgreSQL keeps microseconds). The caller returns this object, and the client
+	// sends its updated_at back, so it must be the stored value or the next PUT is a false 409.
+	saved, err := s.DB.GetDevice(incoming.ID)
+	if err != nil {
+		return fmt.Errorf("device saved, but reading it back failed: %w", err)
+	}
+	incoming.UpdatedAt = saved.UpdatedAt
+	return nil
 }
 
 // RefreshDiscoveredDevice stores what a discovery found again about a known device: address,
