@@ -148,7 +148,7 @@ Create Backup → Select devices/format → Preview → Create → (later) Resto
 
 ### 3.2 Component Status
 
-All components in `ui/src/components/` are actively imported and used. No orphaned components found.
+The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` components were removed (ginsys/shelly-manager#256). `components/bulk/BulkOperationsDialog.vue` and `components/shared/ErrorDisplay.vue` have no importer and stay until someone decides their fate.
 
 ---
 

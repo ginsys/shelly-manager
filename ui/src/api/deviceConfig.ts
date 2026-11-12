@@ -22,23 +22,6 @@ export interface ConfigHistoryEntry {
   user?: string
 }
 
-export interface ConfigImportStatus {
-  status: 'pending' | 'in_progress' | 'completed' | 'failed'
-  progress?: number
-  message?: string
-  completedAt?: string
-}
-
-// Get stored device configuration
-export async function getDeviceConfig(id: number | string): Promise<DeviceConfig> {
-  const res = await api.get<APIResponse<DeviceConfig>>(`/devices/${id}/config`)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to get device configuration'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
 // Update stored device configuration
 export async function updateDeviceConfig(id: number | string, config: DeviceConfig): Promise<DeviceConfig> {
   const res = await api.put<APIResponse<DeviceConfig>>(`/devices/${id}/config`, config)
@@ -54,55 +37,6 @@ export async function getCurrentDeviceConfig(id: number | string): Promise<Devic
   const res = await api.get<APIResponse<DeviceConfig>>(`/devices/${id}/config/current`)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get current device configuration'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Get normalized live configuration from device
-export async function getNormalizedCurrentConfig(id: number | string): Promise<DeviceConfig> {
-  const res = await api.get<APIResponse<DeviceConfig>>(`/devices/${id}/config/current/normalized`)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to get normalized configuration'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Get typed normalized configuration
-export async function getTypedNormalizedConfig(id: number | string): Promise<DeviceConfig> {
-  const res = await api.get<APIResponse<DeviceConfig>>(`/devices/${id}/config/typed/normalized`)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to get typed normalized configuration'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Import configuration to device
-export async function importDeviceConfig(id: number | string, config: DeviceConfig): Promise<void> {
-  const res = await api.post<APIResponse<void>>(`/devices/${id}/config/import`, config)
-  if (!res.data.success) {
-    const msg = res.data.error?.message || 'Failed to import device configuration'
-    throw new Error(msg)
-  }
-}
-
-// Get configuration import status
-export async function getConfigImportStatus(id: number | string): Promise<ConfigImportStatus> {
-  const res = await api.get<APIResponse<ConfigImportStatus>>(`/devices/${id}/config/status`)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to get import status'
-    throw new Error(msg)
-  }
-  return res.data.data
-}
-
-// Export configuration from device
-export async function exportDeviceConfig(id: number | string): Promise<DeviceConfig> {
-  const res = await api.post<APIResponse<DeviceConfig>>(`/devices/${id}/config/export`)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to export device configuration'
     throw new Error(msg)
   }
   return res.data.data
@@ -151,15 +85,6 @@ export async function detectConfigDrift(id: number | string, signal?: AbortSigna
     throw new Error(msg)
   }
   return mapDriftResponse(res.data.data)
-}
-
-// Apply template to device configuration
-export async function applyConfigTemplate(id: number | string, templateId: number | string): Promise<void> {
-  const res = await api.post<APIResponse<void>>(`/devices/${id}/config/apply-template`, { templateId })
-  if (!res.data.success) {
-    const msg = res.data.error?.message || 'Failed to apply configuration template'
-    throw new Error(msg)
-  }
 }
 
 // Get configuration change history

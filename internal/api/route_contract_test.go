@@ -882,7 +882,6 @@ func assertKnownRouteBypasses(t *testing.T, root string, calls []routeContractCa
 		{"ui/src/pages/BackupManagementPage.vue", "GET", "/api/v1/export/history", "api.get", 3},
 		{"ui/src/pages/BackupManagementPage.vue", "GET", "/api/v1/devices", "api.get", 1},
 		{"ui/src/pages/BackupManagementPage.vue", "GET", "/api/v1/version", "api.get", 1},
-		{"ui/src/api/metrics.ts", "GET", "/metrics/ws", "new WebSocket", 1},
 		{"ui/src/stores/metrics.ts", "GET", "/metrics/ws", "useWebSocket", 1},
 	}
 	for _, w := range want {
