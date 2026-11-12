@@ -41,6 +41,8 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | GET | `/api/v1/devices/{id}/status` | Get device status | Path: `id` | Status object |
 | GET | `/api/v1/devices/{id}/energy` | Get energy metrics | Path: `id` | Energy data |
 
+**Login in a device `PUT`:** A `PUT /devices/{id}` saves the whole device row. The login that the manager uses to reach the device sits in `settings` (`auth_enabled`, `auth_user`, `auth_pass` and `auth`). The server reads the stored device when the request starts. If the request leaves the login as it is in that stored device, the save keeps the login that is stored at the moment of the save. This holds when another request saved a new login after the request started. If the request changes the login, the new login is saved. A missing `auth_enabled` counts as `false`. Limit: a client that sends a copy that it read before another save is not protected. The server can take the older login in that copy for a change, and then the save writes it, with the older values of every other field. A password that comes back as the mask keeps the stored password.
+
 **Device Model:**
 ```json
 {
