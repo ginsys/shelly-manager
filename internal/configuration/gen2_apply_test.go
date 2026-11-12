@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -229,7 +230,9 @@ func TestApplyDesiredConfig_Gen2FailsWhenTheAskedRebootCannotBeRecorded(t *testi
 	assert.False(t, result.ApplyResult.Success)
 	assert.Equal(t, 1, result.ApplyResult.FailedCount)
 	assert.Equal(t, "reboot", result.ApplyResult.Failures[len(result.ApplyResult.Failures)-1].Path)
-	assert.Contains(t, result.ApplyResult.Failures[len(result.ApplyResult.Failures)-1].Error, "reboot the device")
+	// The API lists a failure by its path and returns the warnings in full, so the instruction
+	// is a warning.
+	assert.Contains(t, strings.Join(result.ApplyResult.Warnings, " "), "Reboot the device by hand")
 	assert.Equal(t, 0, dev.reboots, "an apply that failed does not reboot")
 	assert.Nil(t, result.VerifyResult)
 }
