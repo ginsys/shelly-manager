@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"math"
 	"slices"
 	"strings"
 )
@@ -36,10 +37,11 @@ func rollerEnum(raw interface{}, allowed []string) *string {
 	return &value
 }
 
-// rollerNumber returns a JSON number as a whole number, and nil for anything else.
+// rollerNumber returns a JSON number as a whole number, and nil for anything else. A fraction is left
+// unread and never truncated, so a live 2.5 shows as a difference from a desired 2.
 func rollerNumber(raw interface{}) *int {
 	n, ok := raw.(float64)
-	if !ok {
+	if !ok || n != math.Trunc(n) {
 		return nil
 	}
 	whole := int(n)

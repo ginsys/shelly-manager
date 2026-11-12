@@ -97,6 +97,10 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 					dstField.Set(reflect.New(dstField.Type().Elem()))
 				}
 				mergeInto(dstField.Interface(), srcField.Interface(), sources, sourceName, fieldPath)
+			} else if srcField.Elem().Kind() == reflect.Slice {
+				// A pointer to a list replaces the list whole, an empty one included: nil leaves it alone.
+				dstField.Set(srcField)
+				sources[fieldPath] = sourceName
 			}
 		} else if srcField.Kind() == reflect.Slice {
 			if srcField.Len() == 0 {
