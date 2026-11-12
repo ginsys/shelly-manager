@@ -5,6 +5,9 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- A device read that overlapped a credential update could cache a client that still
+  used the old login, and later reads reused it. The read now reloads the device
+  under the client cache lock before it builds a client. (ginsys/shelly-manager#399)
 - The device overrides `PUT`, the template `PUT` and `PUT /devices/{id}/config/typed`
   now refuse a configuration body that repeats a key, in any casing, with 400 and
   save nothing. Before, a secret sent as `null` beside the same key in another
