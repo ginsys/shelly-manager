@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
@@ -48,6 +50,11 @@ type ShellyService struct {
 	// beforeClientBuild is a test hook. getClientWithRetry calls it after a cache miss and before
 	// it takes the cache lock to build a client. It is nil in production.
 	beforeClientBuild func()
+
+	// beforeClientPublish is a test hook. getClientWithRetry calls it while it holds the cache
+	// lock, after it reloaded the device and built the client, and before it caches the client.
+	// It is nil in production.
+	beforeClientPublish func()
 }
 
 // DiscoverFunc runs one combined HTTP and mDNS discovery.
@@ -470,9 +477,17 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	// The device passed in may predate a credential update. UpdateDeviceAuth writes the
 	// database and then clears the cache under this lock, so a reload here sees the new login,
 	// or the clear runs after the publish below and removes the client built from the old one.
+	// A failed reload is an error: the old settings could be the ones the update replaced. A
+	// device that the database does not hold has no update to miss, because UpdateDeviceAuth
+	// refuses it, so its own settings stand.
 	if device.ID != 0 {
-		if fresh, loadErr := s.DB.GetDevice(device.ID); loadErr == nil {
+		fresh, loadErr := s.DB.GetDevice(device.ID)
+		switch {
+		case loadErr == nil:
 			device.Settings = fresh.Settings
+		case !errors.Is(loadErr, gorm.ErrRecordNotFound):
+			s.clientMu.Unlock()
+			return nil, fmt.Errorf("failed to reload device %d: %w", device.ID, loadErr)
 		}
 	}
 
@@ -582,6 +597,10 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 				"component": "service",
 			}).Debug("Config credentials did not work for device")
 		}
+	}
+
+	if s.beforeClientPublish != nil {
+		s.beforeClientPublish()
 	}
 
 	// Cache the client

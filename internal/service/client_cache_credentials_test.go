@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -115,5 +117,81 @@ func TestGetClient_UpdateAfterThePublishRemovesTheOldClient(t *testing.T) {
 	}
 	if got := useLogin(t, service, device, rec); got != "new" {
 		t.Errorf("the read after the update sent login %q, want new", got)
+	}
+}
+
+// The update lands after the read reloaded the device and built its client, and before the
+// client is cached. The read holds the cache lock, so the update waits at its cache clear, and the
+// clear removes the client that the read cached from the old login.
+func TestGetClient_UpdateBetweenReloadAndPublishRemovesTheOldClient(t *testing.T) {
+	service, device, rec := credentialCacheFixture(t)
+
+	updated := make(chan error, 1)
+	service.beforeClientPublish = func() {
+		go func() { updated <- service.UpdateDeviceAuth(device.ID, "new", "newpw") }()
+		// Wait until the update has written the database. Its cache clear then waits for the
+		// lock that this read holds.
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if stored, err := service.DB.GetDevice(device.ID); err == nil && strings.Contains(stored.Settings, `"new"`) {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Error("the update did not write the database in time")
+	}
+
+	if got := useLogin(t, service, device, rec); got != "old" {
+		t.Fatalf("the read sent login %q, want old: it reloaded before the update", got)
+	}
+	service.beforeClientPublish = nil
+	if err := <-updated; err != nil {
+		t.Fatalf("UpdateDeviceAuth failed: %v", err)
+	}
+
+	service.clientMu.RLock()
+	cached := len(service.clients)
+	service.clientMu.RUnlock()
+	if cached != 0 {
+		t.Errorf("%d client(s) stay cached after the update, want 0", cached)
+	}
+	if got := useLogin(t, service, device, rec); got != "new" {
+		t.Errorf("the next read sent login %q, want new", got)
+	}
+}
+
+// failingReload is a database whose device read fails on demand.
+type failingReload struct {
+	database.DatabaseInterface
+	fail bool
+}
+
+func (f *failingReload) GetDevice(id uint) (*database.Device, error) {
+	if f.fail {
+		return nil, errors.New("database unavailable")
+	}
+	return f.DatabaseInterface.GetDevice(id)
+}
+
+// If the reload fails, the read cannot know which login is current, so it returns the error and
+// caches nothing.
+func TestGetClient_FailedReloadCachesNothing(t *testing.T) {
+	service, device, _ := credentialCacheFixture(t)
+	db := &failingReload{DatabaseInterface: service.DB, fail: true}
+	service.DB = db
+
+	if _, err := service.getClientWithRetry(device, false); err == nil {
+		t.Fatal("getClientWithRetry succeeded although the reload failed")
+	}
+	service.clientMu.RLock()
+	cached := len(service.clients)
+	service.clientMu.RUnlock()
+	if cached != 0 {
+		t.Errorf("%d client(s) cached after a failed reload, want 0", cached)
+	}
+
+	db.fail = false
+	if _, err := service.getClientWithRetry(device, false); err != nil {
+		t.Errorf("the read after the database came back failed: %v", err)
 	}
 }
