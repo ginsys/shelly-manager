@@ -36,12 +36,16 @@ func TestMergeConfigurations_RollerScheduleRulesReplaceWhole(t *testing.T) {
 // The device reports a whole number for these keys. A fraction is no whole number, so it is not read
 // as its truncation: a desired 2 must not verify against a live 2.5.
 func TestVerifyConfig_RollerNumberWithAFractionIsDrift(t *testing.T) {
-	for _, key := range []string{"off_power", "obstacle_power", "obstacle_delay"} {
+	for _, key := range []string{"off_power", "obstacle_power", "obstacle_delay", "maxtime_open", "maxtime_close"} {
 		t.Run(key, func(t *testing.T) {
 			desired := &DeviceConfiguration{Roller: &RollerConfig{}}
 			switch key {
 			case "off_power":
 				desired.Roller.OffPower = IntPtr(2)
+			case "maxtime_open":
+				desired.Roller.MaxOpenTime = IntPtr(2)
+			case "maxtime_close":
+				desired.Roller.MaxCloseTime = IntPtr(2)
 			case "obstacle_power":
 				desired.Roller.ObstaclePower = IntPtr(2)
 			default:
