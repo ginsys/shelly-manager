@@ -128,6 +128,23 @@ var gen1ApplicablePaths = map[string]bool{
 	"roller.swap_inputs":     true,
 	"roller.input_mode":      true,
 
+	// The remaining Shelly 2.5 roller keys, written to the same path. Positioning and its
+	// calibration are not applicable: they need a separate action.
+	"roller.default_state":             true,
+	"roller.button_type":               true,
+	"roller.button_reverse":            true,
+	"roller.schedule":                  true,
+	"roller.schedule_rules":            true,
+	"roller.obstacle_mode":             true,
+	"roller.obstacle_action":           true,
+	"roller.obstacle_power":            true,
+	"roller.obstacle_delay":            true,
+	"roller.safety_mode":               true,
+	"roller.safety_action":             true,
+	"roller.safety_allowed_on_trigger": true,
+	"roller.off_power":                 true,
+	"roller.ends_delay":                true,
+
 	// Inputs: the stored mode is the Gen1 button type and the stored inverted flag is btn_reverse.
 	// The input name, type and push actions are not written.
 	"input.inputs[].mode":     true,
@@ -298,6 +315,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		if t := desired.Roller.MaxCloseTime; t != nil && *t < 1 {
 			unsupported = append(unsupported, "roller.max_close_time")
 		}
+		unsupported = append(unsupported, unsupportedRollerValues(desired.Roller)...)
 	}
 
 	unsupported = append(unsupported, unsupportedInputs(desired, deviceType)...)
