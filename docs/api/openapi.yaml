@@ -1261,7 +1261,9 @@ paths:
         discoverable, max power, LED, MQTT (including the update period), SNTP server, cloud (the enabled flag), CoIoT (enabled, update
         period of 15 to 65535 seconds and peer), login (enable, username and password of 1 to 50
         bytes each, written last; the new login is stored once the device accepts it) and
-        relays (default_state, auto_on, auto_off and name per channel). Applies to one device are serialized inside one
+        relays (default_state, auto_on, auto_off and name per channel) and, for a model with roller mode
+        (SHSW-25), rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
+        input_mode, each read back). Applies to one device are serialized inside one
         server process only, so run one manager replica when you use apply.
       operationId: applyDeviceNewConfig
       security:
@@ -1305,7 +1307,10 @@ paths:
             bytes or with credentials while it is off, a cloud server, a CoIoT update period outside
             15 to 65535 seconds, the CoIoT peer "mcast" (an empty peer is the multicast value),
             a relay key other than default_state, auto_on, auto_off and
-            name, a relay id that differs from its position in the list,
+            name, a relay id that differs from its position in the list, a roller section on a
+            model without roller mode, a roller travel time below 1 second, an unknown roller
+            motor_direction or input_mode, a roller field other than max_open_time, max_close_time,
+            motor_direction, swap_inputs and input_mode,
             an SNTP server that is not an IPv4 address or a host name, a negative MQTT update
             period, a section with no Gen1 mapping such as the debug settings, or a stored field the configuration
             model does not know. The error names the sections.
