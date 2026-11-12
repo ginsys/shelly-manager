@@ -288,7 +288,7 @@ func TestDeviceSchemaPlugApplicableFields(t *testing.T) {
 	sort.Strings(got)
 	var want []string
 	for path := range gen1ApplicablePaths {
-		// A plug has no roller section, so a roller path is applicable on another model only.
+		// A plug has no roller or input section, so those paths are applicable on another model only.
 		if _, onPlug := leaves[path]; onPlug {
 			want = append(want, path)
 		}

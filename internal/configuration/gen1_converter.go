@@ -726,9 +726,91 @@ func (c *Gen1Converter) exportLED(config *DeviceConfiguration, gen1 map[string]i
 
 // Input conversion methods
 
+// gen1ButtonTypes maps a stored input mode to the btn_type of a Gen1 device. The mapping is read
+// from the reference and is not yet checked on hardware: Gen1 documents no names for "follow" and
+// "flip", so toggle and edge are the closest button types.
+var gen1ButtonTypes = map[string]string{
+	"momentary": "momentary",
+	"follow":    "toggle",
+	"flip":      "edge",
+	"detached":  "detached",
+}
+
+// gen1ButtonTypesOfI3 are the stored modes a Shelly i3 accepts: its inputs are toggle or
+// momentary only.
+var gen1ButtonTypesOfI3 = map[string]bool{"momentary": true, "follow": true}
+
+// inputModeOfButtonType is the stored mode of a device's btn_type. A button type with no stored
+// name (momentary_on_release, action, ...) is kept as the device spells it.
+func inputModeOfButtonType(buttonType string) string {
+	for mode, name := range gen1ButtonTypes {
+		if name == buttonType {
+			return mode
+		}
+	}
+	return buttonType
+}
+
+// buttonTypeOfInputMode is the btn_type to send for a stored mode. A mode with no mapping is sent
+// as it is: unsupportedApplySettings refuses it before it reaches a device.
+func buttonTypeOfInputMode(mode string) string {
+	if name, ok := gen1ButtonTypes[mode]; ok {
+		return name
+	}
+	return mode
+}
+
+// inputsLiveInRelays reports whether a model keeps its button type and reverse flag in the relay
+// channels (Shelly 1, 1PM, 2.5, written with POST /settings/relay/<n>). The Shelly i3 has no relay:
+// its inputs have their own array and route.
+func inputsLiveInRelays(deviceType string) bool {
+	switch deviceType {
+	case "SHSW-1", "SHSW-PM", "SHSW-25":
+		return true
+	default:
+		return false
+	}
+}
+
+// reverseFlag reads btn_reverse, which a device reports as 0 or 1 (the reference also shows a bool).
+func reverseFlag(raw interface{}) (bool, bool) {
+	switch v := raw.(type) {
+	case bool:
+		return v, true
+	case float64:
+		return v != 0, true
+	}
+	return false, false
+}
+
+// relayInputs lists the inputs a relay model reports in its relays, one per relay with a button
+// setting, and nil when none has one.
+func relayInputs(gen1 map[string]interface{}) []interface{} {
+	relays := relayMaps(gen1["relays"])
+	inputs := make([]interface{}, len(relays))
+	found := false
+	for i, relay := range relays {
+		input := map[string]interface{}{}
+		for _, key := range gen1InputKeys {
+			if value, ok := relay[key]; ok {
+				input[key] = value
+				found = true
+			}
+		}
+		inputs[i] = input
+	}
+	if !found {
+		return nil
+	}
+	return inputs
+}
+
 func (c *Gen1Converter) convertInput(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
 	inputsData, ok := gen1["inputs"].([]interface{})
-	if !ok || len(inputsData) == 0 {
+	if (!ok || len(inputsData) == 0) && inputsLiveInRelays(deviceType) {
+		inputsData = relayInputs(gen1)
+	}
+	if len(inputsData) == 0 {
 		return nil
 	}
 
@@ -758,6 +840,13 @@ func (c *Gen1Converter) convertInput(gen1 map[string]interface{}, config *Device
 		if inverted, ok := inputMap["inverted"].(bool); ok {
 			singleInput.Inverted = BoolPtr(inverted)
 		}
+		// The keys a real device reports win over the older, invented ones above.
+		if buttonType, ok := inputMap["btn_type"].(string); ok {
+			singleInput.Mode = StringPtr(inputModeOfButtonType(buttonType))
+		}
+		if reverse, ok := reverseFlag(inputMap["btn_reverse"]); ok {
+			singleInput.Inverted = BoolPtr(reverse)
+		}
 		if action, ok := inputMap["single_push_action"].(string); ok {
 			singleInput.SinglePushAction = StringPtr(action)
 		}
@@ -783,25 +872,20 @@ func (c *Gen1Converter) exportInput(config *DeviceConfiguration, gen1 map[string
 	inputs := make([]map[string]interface{}, len(config.Input.Inputs))
 
 	for i, input := range config.Input.Inputs {
+		// Only the keys a Gen1 device has: the button type and the reverse flag. The stored name,
+		// type and push actions have no Gen1 setting here, so they do not survive the export and
+		// unsupportedApplySettings reports them.
 		inputMap := make(map[string]interface{})
 
-		if input.Name != nil {
-			inputMap["name"] = *input.Name
-		}
-		if input.Type != nil {
-			inputMap["type"] = *input.Type
-		}
 		if input.Mode != nil {
-			inputMap["mode"] = *input.Mode
+			inputMap["btn_type"] = buttonTypeOfInputMode(*input.Mode)
 		}
 		if input.Inverted != nil {
-			inputMap["inverted"] = *input.Inverted
-		}
-		if input.SinglePushAction != nil {
-			inputMap["single_push_action"] = *input.SinglePushAction
-		}
-		if input.LongPushAction != nil {
-			inputMap["long_push_action"] = *input.LongPushAction
+			reverse := 0
+			if *input.Inverted {
+				reverse = 1
+			}
+			inputMap["btn_reverse"] = reverse
 		}
 
 		inputs[i] = inputMap

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -34,7 +35,9 @@ type LoginHooks interface {
 // section, whose enabled flag is written with POST /settings/cloud, the coiot section, which is
 // flattened to coiot_* parameters, and the login section, which is written with POST
 // /settings/login, but only where LoginHooks is set, and the sntp section, whose server is
-// written as the flat sntp_server parameter. Every other section (wifi_sta, wifi_ap, inputs) is
+// written as the flat sntp_server parameter, and the inputs section, whose btn_type and
+// btn_reverse are written per input (POST /settings/relay/<n> on a Shelly 1, 1PM or 2.5, POST
+// /settings/input/<n> on a Shelly i3). Every other section (wifi_sta, wifi_ap) is
 // refused before the device is touched, because the applier would send it in a shape the device
 // ignores. Wi-Fi in particular is never written. A relay key outside name,
 // default_state, auto_on and auto_off is refused through the round-trip check below, and so is a
@@ -56,6 +59,7 @@ var gen1ApplyKeys = map[string]bool{
 	"coiot":              true,
 	"login":              true,
 	"sntp":               true,
+	"inputs":             true,
 }
 
 // gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
@@ -116,6 +120,11 @@ var gen1ApplicablePaths = map[string]bool{
 	"roller.motor_direction": true,
 	"roller.swap_inputs":     true,
 	"roller.input_mode":      true,
+
+	// Inputs: the stored mode is the Gen1 button type and the stored inverted flag is btn_reverse.
+	// The input name, type and push actions are not written.
+	"input.inputs[].mode":     true,
+	"input.inputs[].inverted": true,
 }
 
 // gen1LoginMaxLength is the longest username or password POST /settings/login accepts. The
@@ -265,8 +274,37 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		}
 	}
 
+	unsupported = append(unsupported, unsupportedInputs(desired, deviceType)...)
+
 	sort.Strings(unsupported)
-	return unsupported, nil
+	return slices.Compact(unsupported), nil
+}
+
+// unsupportedInputs returns the input paths of desired that the round trip cannot see. A model
+// with no inputs refuses the whole section. A mode must be one the model's button types can
+// carry, and an id must equal its position for the same reason as a relay's: the list position is
+// the channel that gets written. The stored name, type and push actions need no rule here: the
+// converter drops them, so the round trip reports them.
+func unsupportedInputs(desired *DeviceConfiguration, deviceType string) []string {
+	if desired.Input == nil {
+		return nil
+	}
+	if !hasInputSettings(deviceType) {
+		return []string{"input"}
+	}
+	var unsupported []string
+	for i, input := range desired.Input.Inputs {
+		path := fmt.Sprintf("input.inputs[%d].", i)
+		if input.ID != i {
+			unsupported = append(unsupported, path+"id")
+		}
+		if input.Mode != nil {
+			if _, known := gen1ButtonTypes[*input.Mode]; !known || (!inputsLiveInRelays(deviceType) && !gen1ButtonTypesOfI3[*input.Mode]) {
+				unsupported = append(unsupported, path+"mode")
+			}
+		}
+	}
+	return unsupported
 }
 
 // ApplyDesiredConfig sends the device's desired configuration to the device,

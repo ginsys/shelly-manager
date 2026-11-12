@@ -98,7 +98,7 @@
   - No outputs (input only)
 - **API Endpoints**:
   - ✅ `/status` - Input states
-  - ❌ `/settings/input/0-2` - Configure inputs
+  - ✅ `/settings/input/0-2` - Configure inputs (button type and reverse flag)
   - ❌ `/settings/actions` - Configure actions
 
 #### **Shelly Plug/Plug S**

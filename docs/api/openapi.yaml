@@ -1261,9 +1261,10 @@ paths:
         discoverable, max power, LED, MQTT (including the update period), SNTP server, cloud (the enabled flag), CoIoT (enabled, update
         period of 15 to 65535 seconds and peer), login (enable, username and password of 1 to 50
         bytes each, written last; the new login is stored once the device accepts it) and
-        relays (default_state, auto_on, auto_off and name per channel) and, for a model with roller mode
-        (SHSW-25), rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
-        input_mode, each read back). Applies to one device are serialized inside one
+        relays (default_state, auto_on, auto_off and name per channel), for a model with roller mode
+        (SHSW-25) rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
+        input_mode, each read back), and input button types (mode as btn_type and inverted as
+        btn_reverse per input). Applies to one device are serialized inside one
         server process only, so run one manager replica when you use apply.
       operationId: applyDeviceNewConfig
       security:
@@ -1303,7 +1304,9 @@ paths:
         '422':
           description: >-
             Nothing written (VALIDATION_FAILED). The desired configuration holds an unsupported
-            section (Wi-Fi, inputs), a login without a username and password of 1 to 50
+            section (Wi-Fi), an input name, type, push action or id that differs from its position,
+            a mode the model does not accept (a Shelly i3 takes momentary and follow only), an input
+            section on a model with no inputs, a login without a username and password of 1 to 50
             bytes or with credentials while it is off, a cloud server, a CoIoT update period outside
             15 to 65535 seconds, the CoIoT peer "mcast" (an empty peer is the multicast value),
             a relay key other than default_state, auto_on, auto_off and
