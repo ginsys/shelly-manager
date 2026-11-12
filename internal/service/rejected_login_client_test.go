@@ -34,13 +34,23 @@ func cacheClientWithOtherLogin(t *testing.T, service *ShellyService, device *dat
 }
 
 // loginGoesAToBToA moves the saved login from A to B and back to A, as a request is rejected.
-func loginGoesAToBToA(t *testing.T, service *ShellyService, id uint) func() {
+// It writes the record directly, as a writer that takes no clientMu does. UpdateDeviceAuth would
+// drop the cached client, and then the test would not read the login from the cache entry.
+func loginGoesAToBToA(t *testing.T, service *ShellyService, id uint, saved string) func() {
 	return func() {
-		if err := service.UpdateDeviceAuth(id, "bee", "beepw"); err != nil {
-			t.Errorf("UpdateDeviceAuth to B failed: %v", err)
-		}
-		if err := service.UpdateDeviceAuth(id, "old", "oldpw"); err != nil {
-			t.Errorf("UpdateDeviceAuth back to A failed: %v", err)
+		for _, settings := range []string{
+			`{"gen":1,"auth_enabled":true,"auth_user":"bee","auth_pass":"beepw","note":"keep"}`,
+			saved,
+		} {
+			stored, err := service.DB.GetDevice(id)
+			if err != nil {
+				t.Errorf("GetDevice failed: %v", err)
+				return
+			}
+			stored.Settings = settings
+			if err := service.DB.UpdateDevice(stored); err != nil {
+				t.Errorf("UpdateDevice failed: %v", err)
+			}
 		}
 	}
 }
@@ -107,8 +117,9 @@ func TestGetClientWithAuthRetry_401RetriesWhenTheCachedClientHadNoSavedLogin(t *
 func TestControlDevice_401TakesTheRejectedLoginFromTheCachedClient(t *testing.T) {
 	gate := &gatedDevice{accept: map[string]bool{"old:oldpw": true}, byPair: true, gatePOST: true}
 	service, device := retryFixture(t, gate)
+	saved := device.Settings
 	cacheClientWithOtherLogin(t, service, device)
-	gate.setReject(loginGoesAToBToA(t, service, device.ID))
+	gate.setReject(loginGoesAToBToA(t, service, device.ID, saved))
 
 	if err := service.ControlDevice(device.ID, "on", nil); err != nil {
 		t.Fatalf("ControlDevice failed: %v", err)
