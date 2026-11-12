@@ -14,6 +14,11 @@ All notable changes to this project are documented here. The project follows Con
   kept, because exports and the template routes read them. An existing database
   needs no step: a table that already has them is left alone, an older table gains
   them as nullable columns, and no row is changed. (ginsys/shelly-manager#280)
+- A device status read could put an old login back. It loaded the device, asked it for its
+  status, and then wrote the whole record, so a login saved while the device answered was
+  lost. This held for the normal read and for the recovery of a device that was marked
+  offline. Both writes now go through a reloaded record under the client cache lock.
+  (ginsys/shelly-manager#482)
 - A drift check no longer writes to the stored configuration or its history. It used
   to run a full import first, which replaced the stored config with the device's,
   added a history row and moved `updated_at`, and then wrote the old config back.

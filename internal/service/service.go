@@ -882,9 +882,7 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 				probeCtx, probeCancel := context.WithTimeout(s.ctx, 3*time.Second)
 				defer probeCancel()
 				if status, probeErr := client.GetStatus(probeCtx); probeErr == nil {
-					device.Status = "online"
-					device.LastSeen = time.Now()
-					_ = s.DB.UpdateDevice(device)
+					_ = s.recordDeviceOnline(device)
 					return map[string]interface{}{
 						"device_id":   deviceID,
 						"ip":          device.IP,
@@ -926,10 +924,9 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 		"meters":      status.Meters,
 	}
 
-	// Update device in database
-	device.Status = "online"
-	device.LastSeen = time.Now()
-	if err := s.DB.UpdateDevice(device); err != nil {
+	// Record the device as online through a reloaded record, so the write keeps a login that
+	// UpdateDeviceAuth saved while the request ran.
+	if err := s.recordDeviceOnline(device); err != nil {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"error":     err.Error(),
