@@ -120,33 +120,38 @@ func TestGetClient_UpdateAfterThePublishRemovesTheOldClient(t *testing.T) {
 	}
 }
 
-// The update lands after the read reloaded the device and built its client, and before the
-// client is cached. The read holds the cache lock, so the update waits at its cache clear, and the
-// clear removes the client that the read cached from the old login.
+// The update starts after the read reloaded the device and built its client, and before the
+// client is cached. The read holds the cache lock, and the update takes the same lock before its
+// database write, so the update waits. It then writes and removes the client that the read cached
+// from the old login.
 func TestGetClient_UpdateBetweenReloadAndPublishRemovesTheOldClient(t *testing.T) {
 	service, device, rec := credentialCacheFixture(t)
 
 	updated := make(chan error, 1)
 	service.beforeClientPublish = func() {
 		go func() { updated <- service.UpdateDeviceAuth(device.ID, "new", "newpw") }()
-		// Wait until the update has written the database. Its cache clear then waits for the
-		// lock that this read holds.
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			if stored, err := service.DB.GetDevice(device.ID); err == nil && strings.Contains(stored.Settings, `"new"`) {
-				return
-			}
-			time.Sleep(5 * time.Millisecond)
+		// The update cannot finish while this read holds the lock. Give it time to try.
+		select {
+		case err := <-updated:
+			t.Errorf("the update finished while the read held the cache lock (err %v)", err)
+		case <-time.After(100 * time.Millisecond):
 		}
-		t.Error("the update did not write the database in time")
+		if stored, err := service.DB.GetDevice(device.ID); err != nil || strings.Contains(stored.Settings, `"new"`) {
+			t.Errorf("the update wrote the database while the read held the cache lock (err %v)", err)
+		}
 	}
 
 	if got := useLogin(t, service, device, rec); got != "old" {
 		t.Fatalf("the read sent login %q, want old: it reloaded before the update", got)
 	}
 	service.beforeClientPublish = nil
-	if err := <-updated; err != nil {
-		t.Fatalf("UpdateDeviceAuth failed: %v", err)
+	select {
+	case err := <-updated:
+		if err != nil {
+			t.Fatalf("UpdateDeviceAuth failed: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the update did not finish after the read released the lock")
 	}
 
 	service.clientMu.RLock()
