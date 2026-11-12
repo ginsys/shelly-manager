@@ -817,11 +817,20 @@ func relayMaps(raw interface{}) []map[string]interface{} {
 
 // relayValuesEqual compares a written form value with the JSON the device returns. JSON numbers
 // arrive as float64, while the converter holds ints. A string must come back as a string: a
-// null or a number that prints the same as the written text is a mismatch.
+// null or a number that prints the same as the written text is a mismatch. A written 0 or 1 matches
+// a live false or true, and the reverse, and nothing else about a boolean changes.
 func relayValuesEqual(written, live interface{}) bool {
 	if wf, ok := toFloat(written); ok {
 		lf, lok := toFloat(live)
+		if !lok {
+			lf, lok = flagAsFloat(live)
+		}
 		return lok && wf == lf
+	}
+	if wf, ok := flagAsFloat(written); ok {
+		if lf, lok := toFloat(live); lok {
+			return wf == lf
+		}
 	}
 	if ws, ok := written.(string); ok {
 		ls, lok := live.(string)
@@ -840,6 +849,18 @@ func toFloat(v interface{}) (float64, bool) {
 		return n, true
 	}
 	return 0, false
+}
+
+// flagAsFloat reads a JSON boolean as 0 or 1, because a device may report a 0/1 flag as true/false.
+func flagAsFloat(v interface{}) (float64, bool) {
+	b, ok := v.(bool)
+	if !ok {
+		return 0, false
+	}
+	if b {
+		return 1, true
+	}
+	return 0, true
 }
 
 // countSettings counts the number of settings being applied
