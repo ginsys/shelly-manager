@@ -229,5 +229,12 @@ func markApplicable(node map[string]interface{}, path string, supported bool) {
 			return
 		}
 	}
-	node[SchemaKeyApplicable] = supported && gen1ApplicablePaths[path]
+	applicable := supported && gen1ApplicablePaths[path]
+	node[SchemaKeyApplicable] = applicable
+	// A default is a promise that the field does something, so a field apply never writes shows
+	// none, and an applied field shows only the one the Gen1 reference states (gen1_defaults.go).
+	delete(node, "default")
+	if value, ok := gen1FieldDefaults[path]; ok && applicable {
+		node["default"] = value
+	}
 }
