@@ -214,6 +214,26 @@ func TestApplyDesiredConfig_Gen2KeepsAnAskedRebootOwedWhenTheRebootFails(t *test
 	assert.True(t, repo.devices[1].PendingReboot)
 }
 
+// When the restart the device asked for cannot be recorded, a failed reboot would leave nothing
+// owed, so the apply fails and names the reboot instead of going on.
+func TestApplyDesiredConfig_Gen2FailsWhenTheAskedRebootCannotBeRecorded(t *testing.T) {
+	svc, repo := newGen2Service(t, systemDesired())
+	repo.pendingRebootErr = errors.New("database is locked")
+	dev := newFakeGen2Device()
+	dev.restart = true
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	assert.False(t, result.ApplyResult.Success)
+	assert.Equal(t, 1, result.ApplyResult.FailedCount)
+	assert.Equal(t, "reboot", result.ApplyResult.Failures[len(result.ApplyResult.Failures)-1].Path)
+	assert.Contains(t, result.ApplyResult.Failures[len(result.ApplyResult.Failures)-1].Error, "reboot the device")
+	assert.Equal(t, 0, dev.reboots, "an apply that failed does not reboot")
+	assert.Nil(t, result.VerifyResult)
+}
+
 func TestApplyDesiredConfig_Gen2StaysPendingWhenTheDeviceRefusesTheWrite(t *testing.T) {
 	svc, repo := newGen2Service(t, systemDesired())
 	dev := newFakeGen2Device()

@@ -200,8 +200,14 @@ func (a *ConfigApplier) markGen2RestartOwed(method string, result *ApplyResult) 
 		return
 	}
 	if err := a.owed.store(true); err != nil {
-		result.Warnings = append(result.Warnings,
-			"The device asked for a restart but the pending reboot could not be recorded: "+err.Error())
+		// A reboot that fails after this would leave nothing owed. Failing the apply keeps it
+		// from rebooting or verifying, and the failure names what is still to do.
+		result.Failures = append(result.Failures, ApplyFailure{
+			Path:  "reboot",
+			Value: method,
+			Error: "the device asked for a restart but it could not be recorded as owed; reboot the device and apply again: " + err.Error(),
+		})
+		result.FailedCount++
 		return
 	}
 	a.owed.pending = true
