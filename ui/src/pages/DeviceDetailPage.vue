@@ -134,8 +134,9 @@
     </template>
 
     <!-- Outside the loading conditional on purpose: Refresh sets loading, and a card inside it would
-         be unmounted and lose what the user has typed. -->
-    <DeviceLoginCard v-if="d.id && !error" :device-id="d.id" :settings="d.settings" @saved="fetchDevice" />
+         be unmounted and lose what the user has typed. Keyed by device: a draft typed for one
+         device must never be saved to another when the page shows a different device. -->
+    <DeviceLoginCard v-if="d.id && !error" :key="d.id" :device-id="d.id" :settings="d.settings" @saved="fetchDevice" />
 
     <!-- Edit Device Dialog -->
     <div v-if="showEditDialog" class="modal-overlay" @click.self="showEditDialog = false">
