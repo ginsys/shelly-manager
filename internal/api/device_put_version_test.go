@@ -46,6 +46,19 @@ func TestUpdateDevice_AcceptsTheVersionItRead(t *testing.T) {
 	assert.Equal(t, "First", stored.Name, "the stale PUT must save nothing")
 }
 
+// A status read records the device as online while the page is open. That is no edit, so the
+// version the client read must still pass.
+func TestUpdateDevice_AcceptsTheVersionAfterAStatusRecord(t *testing.T) {
+	handler, db, device := loginDeviceHandler(t)
+	read := readForPut(t, handler, device)
+	time.Sleep(20 * time.Millisecond)
+	require.NoError(t, db.RecordDeviceSeen(device.ID, "online", time.Now()))
+
+	read["name"] = "First"
+	code, body := putDevice(t, handler, read)
+	assert.Equal(t, http.StatusOK, code, body)
+}
+
 // The PUT response carries the new updated_at, so the client can save again without a new GET.
 func TestUpdateDevice_ResponseCarriesTheNewVersion(t *testing.T) {
 	handler, _, device := loginDeviceHandler(t)

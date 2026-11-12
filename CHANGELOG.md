@@ -44,9 +44,14 @@ All notable changes to this project are documented here. The project follows Con
   repository do not take the lock of the `PUT`, so one of them can save between its
   compare and its save; a conditional SQL update will close this
   (ginsys/shelly-manager#509). MySQL keeps `updated_at` in milliseconds, and whole
-  seconds on a legacy column, where two saves inside one second look equal. A writer that
-  uses `UpdateColumn` does not move `updated_at`, and the only one on the device row is the
-  temporary address hold of a forced archive restore. (ginsys/shelly-manager#502)
+  seconds on a legacy column, where two saves inside one second look equal. The status and
+  the last seen time are not part of the version: a status read and a control command now
+  record them with a narrow write, so a device page that polls the status keeps a version
+  that the next `PUT` accepts. A change of the stored login still moves `updated_at`, also
+  when a status read causes it once, because it changes the settings that a client edits.
+  The only other write on the device row that does not move
+  `updated_at` is the temporary address hold of a forced archive restore.
+  (ginsys/shelly-manager#502)
 - A device save no longer restores an older login. A plain device `PUT`, the refresh
   after a discovery import and the settings backfill of a discovery each saved a whole
   device row that they had read earlier, so a login saved in between was lost. Each
