@@ -104,9 +104,10 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 		unsupported = append(unsupported, "mqtt.pass")
 	}
 	// The device stores one host:port string. A server that has a port and a separate port would be
-	// written as host:port:port.
-	if m := desired.MQTT; m != nil && m.Server != nil && m.Port != nil {
-		if _, _, splitErr := net.SplitHostPort(*m.Server); splitErr == nil {
+	// written as host:port:port. A bracketed IPv6 endpoint in one string is read back split, and the
+	// verify step shared with Gen1 does not split it, so IPv6 takes a host and a port apart.
+	if m := desired.MQTT; m != nil && m.Server != nil {
+		if host, _, splitErr := net.SplitHostPort(*m.Server); splitErr == nil && (m.Port != nil || strings.Contains(host, ":")) {
 			unsupported = append(unsupported, "mqtt.server")
 		}
 	}
@@ -228,7 +229,15 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 
 		restart, err := setter.CallConfigSetter(ctx, section.method, map[string]interface{}{"config": body})
 		if err != nil {
-			err = redactGen2Secret(err, secret)
+			if secret != "" {
+				// A device may echo a request in any encoding, and no list of encodings is
+				// complete, so while the apply holds a password the text of every error is hidden
+				// whole. The cause stays for errors.Is.
+				err = &redactedError{
+					msg: "the device refused the " + section.method + " write; its error text is hidden because this apply holds a password",
+					err: err,
+				}
+			}
 			a.logger.WithFields(map[string]any{
 				"error":     err.Error(),
 				"method":    section.method,
@@ -254,18 +263,6 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 		}
 	}
 	return nil
-}
-
-// redactGen2Secret removes a secret from an error's text. A device that echoes the request as JSON
-// writes a quote or backslash of the secret escaped, so the escaped form goes too.
-func redactGen2Secret(err error, secret string) error {
-	err = redact(err, secret)
-	if encoded, marshalErr := json.Marshal(secret); marshalErr == nil {
-		if escaped := string(encoded[1 : len(encoded)-1]); escaped != secret {
-			err = redact(err, escaped)
-		}
-	}
-	return err
 }
 
 // markGen2RestartOwed records that the device asked for a restart.
