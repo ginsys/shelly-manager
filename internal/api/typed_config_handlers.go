@@ -1248,9 +1248,8 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 
 				if name, ok := relayMap["name"].(string); ok && name != "" {
 					singleRelay.Name = configuration.StringPtr(name)
-				} else if appType, ok := relayMap["appliance_type"].(string); ok {
-					singleRelay.Name = configuration.StringPtr(appType)
 				}
+				readRelayChannelFields(&singleRelay, relayMap)
 
 				if defaultState, ok := relayMap["default_state"].(string); ok {
 					singleRelay.DefaultState = configuration.StringPtr(defaultState)
@@ -1321,6 +1320,7 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 				if schedule, ok := relayData["schedule"].(bool); ok {
 					singleRelay.Schedule = configuration.BoolPtr(schedule)
 				}
+				readRelayChannelFields(&singleRelay, relayData)
 				relayConfigs = append(relayConfigs, singleRelay)
 			}
 		}
@@ -1343,6 +1343,27 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 	}
 
 	return relay, warnings
+}
+
+// readRelayChannelFields reads the three Gen1 channel fields beside the name, state and timers:
+// appliance_type, schedule_rules and max_power. Each stays unset when the entry does not state it,
+// and an empty rule list is kept, because it asks for no rules.
+func readRelayChannelFields(channel *configuration.SingleRelayConfig, entry map[string]interface{}) {
+	if applianceType, ok := entry["appliance_type"].(string); ok {
+		channel.ApplianceType = configuration.StringPtr(applianceType)
+	}
+	if rules, ok := entry["schedule_rules"].([]interface{}); ok {
+		list := make([]string, 0, len(rules))
+		for _, rule := range rules {
+			if text, isText := rule.(string); isText {
+				list = append(list, text)
+			}
+		}
+		channel.ScheduleRules = &list
+	}
+	if maxPower, ok := entry["max_power"].(float64); ok {
+		channel.MaxPower = configuration.IntPtr(int(maxPower))
+	}
 }
 
 func (h *Handler) convertPowerMeteringConfig(data map[string]interface{}) (*configuration.PowerMeteringConfig, []string) {
