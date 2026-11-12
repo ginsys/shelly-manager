@@ -101,6 +101,40 @@ func TestUpdateDevice_ResponseVersionIsTheStoredValueWhenTheDatabaseRounds(t *te
 	assert.Equal(t, http.StatusOK, code, body)
 }
 
+// A writer that does not take the service lock can save between the PUT's save and its reload.
+// The answer must carry the fields and the version of one read. If it carried the old fields
+// under the new version, sending it back would pass the compare and overwrite that write.
+func TestUpdateDevice_ResponseIsOneReadOfTheRow(t *testing.T) {
+	handler, db, device := loginDeviceHandler(t)
+	const name = "test:write-between-save-and-reload"
+	const between = `{"written":"between save and reload"}`
+	require.NoError(t, db.GetDB().Callback().Update().After("gorm:update").Register(name, func(tx *gorm.DB) {
+		saved, ok := tx.Statement.Dest.(*database.Device)
+		if !ok || tx.Error != nil {
+			return
+		}
+		later := saved.UpdatedAt.Add(time.Second)
+		tx.Session(&gorm.Session{NewDB: true}).Exec("UPDATE devices SET overrides = ?, updated_at = ? WHERE id = ?", between, later, saved.ID)
+	}))
+	t.Cleanup(func() { _ = db.GetDB().Callback().Update().Remove(name) })
+
+	read := readForPut(t, handler, device)
+	read["name"] = "First"
+	text, err := json.Marshal(read)
+	require.NoError(t, err)
+	rec := serve(handler.UpdateDevice, "PUT", "/api/v1/devices/1", "1", string(text))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var saved map[string]any
+	require.NoError(t, json.Unmarshal(dataOf(t, rec.Body.Bytes()), &saved))
+
+	stored, err := db.GetDevice(device.ID)
+	require.NoError(t, err)
+	assert.Equal(t, between, saved["overrides"], "the answer must carry the fields that the version belongs to")
+	answered, err := time.Parse(time.RFC3339Nano, saved["updated_at"].(string))
+	require.NoError(t, err)
+	assert.True(t, answered.Equal(stored.UpdatedAt), "the answer carries %v and the row holds %v", answered, stored.UpdatedAt)
+}
+
 // Two spellings of one instant are one version. The compare uses time.Equal and not a text match.
 func TestUpdateDevice_AcceptsTheSameInstantInAnotherZone(t *testing.T) {
 	handler, _, device := loginDeviceHandler(t)
