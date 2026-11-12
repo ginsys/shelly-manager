@@ -23,7 +23,10 @@ type gatedDevice struct {
 	gatePOST bool
 	onReject func()
 	once     sync.Once
-	users    []string
+	// onServe runs once, on the first request that the device answers with 200.
+	onServe   func()
+	serveOnce sync.Once
+	users     []string
 }
 
 func (g *gatedDevice) handler(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +47,12 @@ func (g *gatedDevice) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
+	}
+	g.mu.Lock()
+	serve := g.onServe
+	g.mu.Unlock()
+	if serve != nil {
+		g.serveOnce.Do(serve)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method == http.MethodPost {
