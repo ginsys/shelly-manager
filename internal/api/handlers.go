@@ -409,6 +409,11 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 				"The device changed after you read it. Reload it and try again.", nil)
 			return
 		}
+		// The device was deleted after the read above.
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			h.responseWriter().WriteNotFoundError(w, r, "Device")
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"error":      err.Error(),
 			"device_id":  updatedDevice.ID,
