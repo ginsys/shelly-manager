@@ -124,8 +124,33 @@ func TestGetDeviceCapabilities_SuccessStaysBare(t *testing.T) {
 	assert.NotContains(t, body, "success")
 }
 
+// A stored configuration that is not an object cannot be converted. Both typed reads answer 500
+// with the generic message and say nothing of the conversion error. Before this change the typed
+// read answered {success:false, error:"<string>"} with the conversion error in the string.
+func TestTypedConfigReads_ConversionFailureIsAGeneric500(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, `5`)
+
+	reads := map[string]http.HandlerFunc{
+		"typed read":      h.GetTypedDeviceConfig,
+		"normalized read": h.GetTypedDeviceConfigNormalized,
+	}
+	for name, handler := range reads {
+		t.Run(name, func(t *testing.T) {
+			w := serve(handler, "GET", "/api/v1/x", id, "")
+			env := requireError(t, w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR")
+			assert.Equal(t, "Internal server error", env.Error.Message, w.Body.String())
+			assert.NotContains(t, w.Body.String(), "convert")
+			assert.Empty(t, env.Error.Details, w.Body.String())
+		})
+	}
+}
+
 // Each failure answers with the error envelope, a status, a code and a message the web client can
-// show. The refusals that carry a stored secret keep their own tests.
+// show. The refusals that carry a stored secret keep their own tests. Some cases (the bad id and
+// no-device answers of the reads, the not-an-object conversion) already answered as they do now
+// and pin that answer; the rest answered plain text or another shape before this change.
 func TestTypedConfigRoutes_FailuresAreEnveloped(t *testing.T) {
 	h, cleanup := typedHandler(t)
 	defer cleanup()
@@ -180,6 +205,26 @@ func TestTypedConfigRoutes_FailuresAreEnveloped(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			w := serve(c.handler, c.method, "/api/v1/x", c.id, c.body)
+			requireError(t, w, c.status, c.code)
+		})
+	}
+
+	// The schema route is the ninth handler of the file; its failures are read from the query.
+	schema := []struct {
+		name   string
+		query  string
+		status int
+		code   string
+	}{
+		{"schema: empty device_type", "device_type=", 400, badReq},
+		{"schema: bad device_id", "device_id=abc", 400, badReq},
+		{"schema: no device", "device_id=9999", 404, notFound},
+		{"schema: two selectors", "device_type=SHPLG-S&device_id=1", 400, badReq},
+		{"schema: bad scope", "scope=nope", 400, badReq},
+	}
+	for _, c := range schema {
+		t.Run(c.name, func(t *testing.T) {
+			w := serve(h.GetConfigurationSchema, "GET", "/api/v1/configuration/schema?"+c.query, "", "")
 			requireError(t, w, c.status, c.code)
 		})
 	}
