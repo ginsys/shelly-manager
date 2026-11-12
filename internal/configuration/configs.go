@@ -21,6 +21,13 @@ type SingleRelayConfig struct {
 	AutoOn       *int    `json:"auto_on,omitempty"`
 	AutoOff      *int    `json:"auto_off,omitempty"`
 	Schedule     *bool   `json:"schedule,omitempty"`
+
+	// ApplianceType is the free-text appliance label of a Gen1 channel (appliance_type).
+	ApplianceType *string `json:"appliance_type,omitempty"`
+	// ScheduleRules are the Gen1 schedule rules of the channel, each like "0000-0123456-on".
+	ScheduleRules []string `json:"schedule_rules,omitempty"`
+	// MaxPower is the per-channel overpower threshold in watts (max_power).
+	MaxPower *int `json:"max_power,omitempty"`
 }
 
 // PowerMeteringConfig represents power metering configuration

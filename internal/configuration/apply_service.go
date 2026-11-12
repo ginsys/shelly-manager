@@ -40,9 +40,9 @@ type LoginHooks interface {
 // /settings/input/<n> on a Shelly i3), and the wifi_sta and wifi_ap sections, which are written
 // with POST /settings/sta and /settings/ap (unsupportedWiFi names what stays refused). Every other
 // section is refused before the device is touched, because the applier would send it in a shape the
-// device ignores. A relay key outside name,
-// default_state, auto_on and auto_off is refused through the round-trip check below, and so is a
-// cloud server, which Gen1 neither reports nor accepts.
+// device ignores. A relay key outside gen1RelayKeys
+// is refused through the round-trip check below, and so is a cloud server, which Gen1 neither
+// reports nor accepts.
 var gen1ApplyKeys = map[string]bool{
 	"name":               true,
 	"timezone":           true,
@@ -111,10 +111,14 @@ var gen1ApplicablePaths = map[string]bool{
 
 	// relays are written per channel with POST /settings/relay/<n> and read back from
 	// GET /settings/relay/<n>. The id is an item's position, not a setting.
-	"relay.relays[].name":          true,
-	"relay.relays[].default_state": true,
-	"relay.relays[].auto_on":       true,
-	"relay.relays[].auto_off":      true,
+	"relay.relays[].name":           true,
+	"relay.relays[].default_state":  true,
+	"relay.relays[].auto_on":        true,
+	"relay.relays[].auto_off":       true,
+	"relay.relays[].appliance_type": true,
+	"relay.relays[].schedule":       true,
+	"relay.relays[].schedule_rules": true,
+	"relay.relays[].max_power":      true,
 
 	// The roller is written with POST /settings/roller/0 and read back from the same path.
 	// Only a model with roller mode has the section.
@@ -278,7 +282,11 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 			if relay.ID != i {
 				unsupported = append(unsupported, fmt.Sprintf("relay.relays[%d].id", i))
 			}
+			unsupported = append(unsupported, unsupportedRelayValues(i, relay)...)
 		}
+	}
+	if desired.PowerMetering != nil && desired.PowerMetering.MaxPower != nil && *desired.PowerMetering.MaxPower < 0 {
+		unsupported = append(unsupported, "power_metering.max_power")
 	}
 
 	// The device keeps a roller travel time of one second or more only. Zero or below is a value it

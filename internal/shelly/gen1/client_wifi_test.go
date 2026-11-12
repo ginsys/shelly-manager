@@ -128,6 +128,30 @@ func TestGen1Client_StationWriteGoesToSettingsSta(t *testing.T) {
 	}
 }
 
+// schedule_rules is a list: it goes out as one comma-separated parameter, whether it arrives as a
+// []string or as decoded JSON.
+func TestGen1Client_RelayWriteSendsScheduleRulesCommaSeparated(t *testing.T) {
+	for name, rules := range map[string]interface{}{
+		"strings":   []string{"0700-0123456-on", "2200-0123456-off"},
+		"json list": []interface{}{"0700-0123456-on", "2200-0123456-off"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			method, path, form := postedForm(t, func(c *Client) error {
+				return c.SetRelaySettings(context.Background(), 1, map[string]interface{}{"schedule_rules": rules, "schedule": true})
+			})
+			if method != http.MethodPost || path != "/settings/relay/1" {
+				t.Errorf("write went to %s %s, want POST /settings/relay/1", method, path)
+			}
+			if got := form["schedule_rules"]; len(got) != 1 || got[0] != "0700-0123456-on,2200-0123456-off" {
+				t.Errorf("form schedule_rules = %v, want one comma-separated value", got)
+			}
+			if got := form["schedule"]; len(got) != 1 || got[0] != "true" {
+				t.Errorf("form schedule = %v, want true", got)
+			}
+		})
+	}
+}
+
 func TestGen1Client_AccessPointWriteGoesToSettingsAp(t *testing.T) {
 	method, path, form := postedForm(t, func(c *Client) error {
 		return c.SetAPConfig(context.Background(), map[string]interface{}{

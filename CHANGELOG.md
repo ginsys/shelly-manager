@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Added
+- Apply to a Gen1 device now writes `appliance_type`, `schedule`, `schedule_rules` and `max_power`
+  of each relay channel, next to `name`, `default_state`, `auto_on` and `auto_off`, and reads
+  them back. `schedule_rules` goes out as one comma-separated parameter. A negative `max_power`,
+  an empty schedule rule, a rule with a comma and more than 20 rules are refused with 422
+  before anything is written. Fixed: on a Shelly 2.5 in relay mode, `power_metering.max_power`
+  was written to `POST /settings`, where the Shelly reference says it applies "for roller mode
+  only". It is now written to each channel that states no `max_power` of its own, and `POST
+  /settings` is used for it in roller mode and on every other model. Not confirmed on hardware
+  (read from the Shelly reference): the comma-separated rule form, the rule bound and that no
+  reboot is needed. Part of ginsys/shelly-manager#381.
 - Apply to a Gen1 device now writes its Wi-Fi settings. The station goes out with
   `POST /settings/sta` (`enabled`, `ssid`, `key`, `ipv4_method`, and for a static address `ip`,
   `netmask`, `gateway`, `dns`) and the access point with `POST /settings/ap` (`enabled` and
