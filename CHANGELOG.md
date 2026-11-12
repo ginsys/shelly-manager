@@ -32,10 +32,12 @@ All notable changes to this project are documented here. The project follows Con
   topic prefix and the RPC and status notification flags go out with `MQTT.SetConfig`. Cloud:
   enable and server go out with `Cloud.SetConfig`. The password is write-only: it is sent only
   with a user, never when it is empty or the mask `********`, never compared, and never shown in
-  a failure, a log line or an error. Other MQTT settings (keep alive, clean session, update
-  period, retained-message limits, certificate and SNI flags) are refused with 422 before
-  anything is written, and so is a password with no user, or a server that already carries a
-  port beside a separate port. Not confirmed on hardware: the
+  a failure or a log line. While an apply holds a password, the text of every device error is
+  replaced by a fixed message, because a device may echo the request in any encoding. Other
+  MQTT settings (keep alive, clean session, update period, retained-message limits,
+  certificate and SNI flags) are refused with 422 before anything is written, and so is a
+  password with no user, a server that already carries a port beside a separate port, and an
+  IPv6 endpoint in one string (give the host and the port apart). Not confirmed on hardware: the
   read-back of each key, and whether a section whose write the device refused leaves the
   earlier sections written. Part of ginsys/shelly-manager#381.
 - Apply and verify now work on a Gen2 or Gen3 device, for the system section only: device

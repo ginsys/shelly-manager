@@ -1346,7 +1346,8 @@ paths:
             and cloud settings, an MQTT setting with no Gen2 key (keep alive, clean session,
             update period, retained-message limits, certificate and SNI flags), an MQTT
             password with no user, an MQTT server that already carries a port beside a separate
-            port, and an SNTP server written as host:port, are refused the
+            port, an IPv6 MQTT endpoint in one string, and an SNTP server written as host:port,
+            are refused the
             same way. The error names the sections.
           content:
             application/json:
