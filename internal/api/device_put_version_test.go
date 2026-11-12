@@ -71,6 +71,10 @@ func TestUpdateDevice_ResponseCarriesTheNewVersion(t *testing.T) {
 func TestUpdateDevice_ResponseVersionIsTheStoredValueWhenTheDatabaseRounds(t *testing.T) {
 	handler, db, device := loginDeviceHandler(t)
 	const name = "test:round-updated-at-to-microseconds"
+	// A fixed clock with nonzero digits below the microsecond, so the rounding always changes the value.
+	clock := db.GetDB().NowFunc
+	db.GetDB().NowFunc = func() time.Time { return time.Date(2026, 11, 12, 8, 0, 0, 123456789, time.UTC) }
+	t.Cleanup(func() { db.GetDB().NowFunc = clock })
 	require.NoError(t, db.GetDB().Callback().Update().After("gorm:update").Register(name, func(tx *gorm.DB) {
 		saved, ok := tx.Statement.Dest.(*database.Device)
 		if !ok || tx.Error != nil {
