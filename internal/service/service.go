@@ -620,19 +620,8 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 				"component": "service",
 			}).Info("Saved credentials failed, retrying with config credentials")
 
-			// Clear the bad saved credentials
-			settings.AuthUser = ""
-			settings.AuthPass = ""
-			updatedSettings, _ := json.Marshal(settings)
-			device.Settings = string(updatedSettings)
-			if err := s.DB.UpdateDevice(device); err != nil {
-				s.logger.WithFields(map[string]any{
-					"device_id": device.ID,
-					"error":     err.Error(),
-				}).Error("Failed to update device after clearing credentials")
-			}
-
-			// Clear from cache
+			// Clear the saved login the device rejected, unless a newer one replaced it.
+			s.clearRejectedLogin(device, settings.AuthUser, settings.AuthPass)
 			s.evictClient(device.IP, client)
 
 			// Retry with config credentials
@@ -652,6 +641,97 @@ func (s *ShellyService) evictClient(ip string, client shelly.Client) {
 	if cached, ok := s.clients[ip]; ok && cached == client {
 		s.dropClientLocked(ip)
 	}
+}
+
+// clearRejectedLogin removes the saved login from the device record, but only while the record
+// still holds the login that the device rejected. It reloads the record under clientMu, the lock
+// that UpdateDeviceAuth holds for its write, so a login saved after the rejected request is
+// never erased, and it writes the reloaded record, never the caller's older snapshot. It
+// returns true when the caller should retry: the login was cleared, or a different login is
+// stored now. The caller must not hold clientMu.
+func (s *ShellyService) clearRejectedLogin(device *database.Device, rejectedUser, rejectedPass string) bool {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+
+	record := device
+	if device.ID != 0 {
+		fresh, err := s.DB.GetDevice(device.ID)
+		if err != nil {
+			s.logger.WithFields(map[string]any{
+				"device_id": device.ID,
+				"error":     err.Error(),
+				"component": "service",
+			}).Error("Failed to reload device before clearing credentials")
+			return false
+		}
+		record = fresh
+	}
+
+	stored, err := parseClientSettings(record.Settings)
+	if err != nil {
+		return false
+	}
+	if stored.AuthUser != rejectedUser || stored.AuthPass != rejectedPass {
+		// A newer login was saved. Keep it and let the caller retry with it.
+		device.Settings = record.Settings
+		return true
+	}
+
+	var settings map[string]interface{}
+	if err = json.Unmarshal([]byte(record.Settings), &settings); err != nil {
+		return false
+	}
+	// The nested pair counts too: the client builders fall back to it when the flat keys are
+	// gone, so leaving it would retry with the login the device just rejected. A boolean "auth"
+	// from discovery is not a login and stays.
+	_, nestedPair := settings["auth"].(map[string]interface{})
+	if settings["auth_user"] == nil && settings["auth_pass"] == nil && !nestedPair {
+		return false
+	}
+	delete(settings, "auth_user")
+	delete(settings, "auth_pass")
+	if nestedPair {
+		delete(settings, "auth")
+	}
+	updated, err := json.Marshal(settings)
+	if err != nil {
+		return false
+	}
+	record.Settings = string(updated)
+	if err := s.DB.UpdateDevice(record); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+			"component": "service",
+		}).Error("Failed to update device after clearing credentials")
+		return false
+	}
+	device.Settings = record.Settings
+	s.dropClientLocked(device.IP)
+	return true
+}
+
+// recordDeviceOnline marks the device online. It writes the reloaded record under clientMu, so
+// the write cannot put an older login back over one that UpdateDeviceAuth saved meanwhile.
+func (s *ShellyService) recordDeviceOnline(device *database.Device) error {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+
+	record := device
+	if device.ID != 0 {
+		fresh, err := s.DB.GetDevice(device.ID)
+		if err != nil {
+			return err
+		}
+		record = fresh
+	}
+	record.Status = "online"
+	record.LastSeen = time.Now()
+	if err := s.DB.UpdateDevice(record); err != nil {
+		return err
+	}
+	device.Status, device.LastSeen, device.Settings = record.Status, record.LastSeen, record.Settings
+	return nil
 }
 
 // ControlDevice sends a control command to a device
@@ -729,32 +809,10 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 			"component": "service",
 		}).Info("Auth failed, clearing credentials and retrying")
 
-		// Parse and clear credentials
-		var settings map[string]interface{}
-		if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil {
-			// The nested pair counts too: the client builders fall back to it when the flat keys
-			// are gone, so leaving it would retry with the login the device just rejected. A
-			// boolean "auth" from discovery is not a login and stays.
-			_, nestedPair := settings["auth"].(map[string]interface{})
-			if settings["auth_user"] != nil || settings["auth_pass"] != nil || nestedPair {
-				// Clear bad credentials
-				delete(settings, "auth_user")
-				delete(settings, "auth_pass")
-				if nestedPair {
-					delete(settings, "auth")
-				}
-				updatedSettings, _ := json.Marshal(settings)
-				device.Settings = string(updatedSettings)
-				if updateErr := s.DB.UpdateDevice(device); updateErr != nil {
-					s.logger.WithFields(map[string]any{
-						"device_id": device.ID,
-						"error":     updateErr.Error(),
-					}).Error("Failed to update device")
-				}
-
-				// Clear from cache
-				s.ClearClientCache(device.IP)
-
+		// Clear the login the device rejected, unless a newer one was saved meanwhile.
+		rejected, parseErr := parseClientSettings(device.Settings)
+		if parseErr == nil {
+			if s.clearRejectedLogin(device, rejected.AuthUser, rejected.AuthPass) {
 				// Get new client and retry
 				client, err = s.getClient(device)
 				if err == nil {
@@ -809,9 +867,7 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 	}
 
 	// Update device status in database
-	device.Status = "online"
-	device.LastSeen = time.Now()
-	if err := s.DB.UpdateDevice(device); err != nil {
+	if err := s.recordDeviceOnline(device); err != nil {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"error":     err.Error(),
@@ -1075,6 +1131,12 @@ func (s *ShellyService) UpdatePowerMeteringConfig(deviceID uint, config *configu
 
 // UpdateDeviceAuth updates device authentication credentials
 func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password string) error {
+	// The read, the write and the cache drop happen under one hold of clientMu. A 401 path that
+	// compares the stored login with the one the device rejected (clearRejectedLogin) then sees
+	// either the old record or the finished update, never the middle.
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+
 	// Get device
 	device, err := s.DB.GetDevice(deviceID)
 	if err != nil {
@@ -1125,8 +1187,13 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 		return err
 	}
 
-	// A cached client still carries the previous credentials.
-	s.ClearClientCache(device.IP)
+	// A cached client still carries the previous credentials. ClearClientCache takes clientMu,
+	// which this function already holds, so the entry goes inline.
+	s.dropClientLocked(device.IP)
+	s.logger.WithFields(map[string]any{
+		"device_ip": device.IP,
+		"component": "service",
+	}).Info("Cleared cached client for device")
 	return nil
 }
 
