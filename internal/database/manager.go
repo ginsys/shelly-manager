@@ -302,11 +302,14 @@ func (m *Manager) UpdateDeviceIfVersion(device *Device, version time.Time) error
 	// The new updated_at is at least a millisecond past the old one, so the UPDATE changes the row
 	// on every driver. MySQL counts changed rows and keeps milliseconds, so a save inside the same
 	// millisecond would otherwise count zero rows and look like a conflict.
-	device.UpdatedAt = time.Now()
-	if min := version.Add(time.Millisecond); device.UpdatedAt.Before(min) {
-		device.UpdatedAt = min
+	// GORM stamps updated_at from its own clock on an update, so that clock is the one to set.
+	next := time.Now()
+	if min := version.Add(time.Millisecond); next.Before(min) {
+		next = min
 	}
-	result := m.GetDB().Model(device).Where("updated_at = ?", version).Select("*").Updates(device)
+	device.UpdatedAt = next
+	db := m.GetDB().Session(&gorm.Session{NowFunc: func() time.Time { return next }})
+	result := db.Model(device).Where("updated_at = ?", version).Select("*").Updates(device)
 	if result.Error != nil {
 		m.logger.WithFields(map[string]any{
 			"device_id": device.ID,

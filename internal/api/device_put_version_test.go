@@ -197,3 +197,35 @@ func TestUpdateDevice_WithoutAVersionStillSaves(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Renamed", stored.Name)
 }
+
+// deleteAfterRead deletes the device right after the first GetDevice of the service returns. That
+// is the instant between the compare of the PUT and its save.
+type deleteAfterRead struct {
+	database.DatabaseInterface
+	remove func()
+	fired  bool
+}
+
+func (d *deleteAfterRead) GetDevice(id uint) (*database.Device, error) {
+	device, err := d.DatabaseInterface.GetDevice(id)
+	if !d.fired {
+		d.fired = true
+		d.remove()
+	}
+	return device, err
+}
+
+// A device that is deleted between the compare and the save is a 404, as when it is deleted before
+// the PUT starts (ginsys/shelly-manager#509).
+func TestUpdateDevice_ADeviceDeletedBeforeTheSaveIsNotFound(t *testing.T) {
+	handler, db, device := loginDeviceHandler(t)
+	read := readForPut(t, handler, device)
+	handler.Service.DB = &deleteAfterRead{
+		DatabaseInterface: handler.Service.DB,
+		remove:            func() { require.NoError(t, db.DeleteDevice(device.ID)) },
+	}
+
+	read["name"] = "Too late"
+	code, body := putDevice(t, handler, read)
+	assert.Equal(t, http.StatusNotFound, code, body)
+}

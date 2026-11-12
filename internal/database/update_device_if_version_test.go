@@ -46,6 +46,21 @@ func checkVersionedUpdate(t *testing.T, manager *Manager) {
 		read = saved
 	}
 
+	// A row whose updated_at is ahead of the clock still gets a newer version. This is the case of
+	// two saves in one millisecond: an unchanged save on MySQL would count zero rows if the new
+	// updated_at equalled the old one. GORM stamps updated_at from its own clock, so the test
+	// proves that the adjusted value is the one stored.
+	ahead := time.Now().Add(time.Hour)
+	require.NoError(t, manager.GetDB().Model(&Device{}).Where("id = ?", device.ID).UpdateColumn("updated_at", ahead).Error)
+	aheadRead, err := manager.GetDevice(device.ID)
+	require.NoError(t, err)
+	unchanged := *aheadRead
+	require.NoError(t, manager.UpdateDeviceIfVersion(&unchanged, aheadRead.UpdatedAt))
+	moved, err := manager.GetDevice(device.ID)
+	require.NoError(t, err)
+	assert.True(t, moved.UpdatedAt.After(aheadRead.UpdatedAt), "updated_at did not move past %v: it is %v", aheadRead.UpdatedAt, moved.UpdatedAt)
+	read = moved
+
 	// A version that is no longer stored saves nothing.
 	stale := *read
 	stale.Name = "from a stale read"
