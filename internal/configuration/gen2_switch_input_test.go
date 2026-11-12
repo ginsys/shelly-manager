@@ -401,3 +401,28 @@ func TestApplyDesiredConfig_Gen2DoesNotReportAMatchForAnotherSelectedInput(t *te
 	require.Len(t, result.VerifyResult.Differences, 1)
 	assert.Equal(t, "input.inputs.0.mode", result.VerifyResult.Differences[0].Path)
 }
+
+func TestConfigComparator_PairsChannelsByIDAndPositionalOnRequest(t *testing.T) {
+	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, Name: StringPtr("b")}}}}
+	actual := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, Name: StringPtr("a")}, {ID: 1, Name: StringPtr("b")},
+	}}}
+
+	assert.True(t, NewConfigComparator().Compare(desired, actual).Match, "id 1 is compared with id 1")
+	assert.False(t, NewPositionalConfigComparator().Compare(desired, actual).Match, "position 0 is compared with position 0")
+}
+
+func TestConfigComparator_ComparesByPositionWhereAnIDRepeats(t *testing.T) {
+	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, Name: StringPtr("a")}, {ID: 0, Name: StringPtr("b")},
+	}}}
+	actual := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, Name: StringPtr("a")}, {ID: 1, Name: StringPtr("b")},
+	}}}
+
+	result := NewConfigComparator().Compare(desired, actual)
+
+	assert.False(t, result.Match, "the second desired element is compared with the second actual one")
+	require.NotEmpty(t, result.Differences)
+	assert.Equal(t, "relay.relays.1.id", result.Differences[0].Path)
+}

@@ -63,6 +63,16 @@ var defaultCompareRules = []FieldCompareRule{
 // ConfigComparator compares device configurations
 type ConfigComparator struct {
 	rules []FieldCompareRule
+
+	// byPosition compares every list element with the one at the same position, even where the
+	// elements carry an id. The Gen1 refusal check wants that: it names an id that is not its
+	// position by itself.
+	byPosition bool
+}
+
+// NewPositionalConfigComparator creates a comparator that pairs list elements by position only.
+func NewPositionalConfigComparator() *ConfigComparator {
+	return &ConfigComparator{rules: defaultCompareRules, byPosition: true}
 }
 
 // NewConfigComparator creates a new comparator with default rules
@@ -231,10 +241,12 @@ func (c *ConfigComparator) compareSlicesByID(expected, actual reflect.Value, exp
 }
 
 func (c *ConfigComparator) compareSlices(expected, actual reflect.Value, path string, rule *FieldCompareRule, result *CompareResult) {
-	if expectedIDs, ok := elementIDs(expected); ok {
-		if actualIDs, ok := elementIDs(actual); ok {
-			c.compareSlicesByID(expected, actual, expectedIDs, actualIDs, path, rule, result)
-			return
+	if !c.byPosition {
+		if expectedIDs, ok := elementIDs(expected); ok {
+			if actualIDs, ok := elementIDs(actual); ok {
+				c.compareSlicesByID(expected, actual, expectedIDs, actualIDs, path, rule, result)
+				return
+			}
 		}
 	}
 
