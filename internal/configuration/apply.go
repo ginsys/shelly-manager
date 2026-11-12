@@ -106,6 +106,10 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 		Duration: 0,
 	}
 
+	if a.converter.Generation() >= 2 {
+		return a.applyGen2Config(ctx, client, config, deviceType, result, startTime)
+	}
+
 	// Get current config for comparison (to detect reboot requirements)
 	currentConfig, readErr := client.GetConfig(ctx)
 	if readErr != nil {

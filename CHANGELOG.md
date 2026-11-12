@@ -27,6 +27,15 @@ All notable changes to this project are documented here. The project follows Con
   on hardware (read from a summary of the Shelly reference): the route behaviour, the key
   names, `enabled` as 1 or 0, that no reboot is needed and that `GET /settings` never returns
   the key. Part of ginsys/shelly-manager#381.
+- Apply and verify now work on a Gen2 or Gen3 device, for the system section only: device
+  name, eco mode, discoverable, time zone, latitude, longitude and time server go out with
+  `Sys.SetConfig` and are read back from `Shelly.GetConfig`. Only the keys the desired
+  configuration sets are sent, because the Shelly documentation does not say that
+  `SetConfig` merges. The device decides about a reboot: the apply reboots only when the
+  answer says `restart_required`, and keeps that reboot owed if it fails. Any other section
+  (MQTT, cloud, Wi-Fi, login, switches, inputs) and a time server written as `host:port` are
+  refused with 422 before anything is written; later changes add the sections. Refs
+  ginsys/shelly-manager#381.
 - Apply to a Gen1 device now writes the button type and the reverse flag of its
   inputs. For each entry of `input.inputs`, `mode` goes out as `btn_type` (`momentary`,
   `follow` as `toggle`, `flip` as `edge`, `detached`) and `inverted` as `btn_reverse`,
