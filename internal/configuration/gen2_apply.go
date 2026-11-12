@@ -201,13 +201,16 @@ func (a *ConfigApplier) markGen2RestartOwed(method string, result *ApplyResult) 
 	}
 	if err := a.owed.store(true); err != nil {
 		// A reboot that fails after this would leave nothing owed. Failing the apply keeps it
-		// from rebooting or verifying, and the failure names what is still to do.
+		// from rebooting or verifying. The API shows a failure by its path only, so the warning
+		// carries what is still to do.
 		result.Failures = append(result.Failures, ApplyFailure{
 			Path:  "reboot",
 			Value: method,
-			Error: "the device asked for a restart but it could not be recorded as owed; reboot the device and apply again: " + err.Error(),
+			Error: "the restart the device asked for could not be recorded as owed: " + err.Error(),
 		})
 		result.FailedCount++
+		result.Warnings = append(result.Warnings,
+			"The device asked for a restart that could not be recorded as owed. Reboot the device by hand, then apply again.")
 		return
 	}
 	a.owed.pending = true
