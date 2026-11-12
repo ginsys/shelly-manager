@@ -96,7 +96,14 @@ func (d *fakeGen2Device) checkInMode(id int, config map[string]interface{}) erro
 	if !ok {
 		return nil
 	}
-	input, _ := d.doc[fmt.Sprintf("input:%d", id)].(map[string]interface{})
+	// The switch runs on the input it names (input_id), or on its own number.
+	inputID := id
+	if sw, ok := d.doc[fmt.Sprintf("switch:%d", id)].(map[string]interface{}); ok {
+		if selected, ok := sw["input_id"].(float64); ok {
+			inputID = int(selected)
+		}
+	}
+	input, _ := d.doc[fmt.Sprintf("input:%d", inputID)].(map[string]interface{})
 	kind, _ := input["type"].(string)
 	switch {
 	case (mode == "follow" || mode == "flip") && kind != "switch":

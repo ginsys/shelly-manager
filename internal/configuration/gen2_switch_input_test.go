@@ -366,3 +366,38 @@ func TestApplyDesiredConfig_Gen2FailsAModeThatTheInputTypeCannotDrive(t *testing
 	require.NotEmpty(t, result.ApplyResult.Failures)
 	assert.Contains(t, result.ApplyResult.Failures[0].Error, "needs a switch input")
 }
+
+// A switch that takes another input (input_id) runs its in_mode on that input, so the mode is read
+// as the mode of that input and never as the mode of the input with the switch's own number.
+func TestGen2Converter_ReadsTheModeOnTheInputTheSwitchTakes(t *testing.T) {
+	raw, err := json.Marshal(map[string]interface{}{
+		"switch:0": map[string]interface{}{"id": 0, "in_mode": "flip", "input_id": 1},
+		"input:0":  map[string]interface{}{"id": 0, "type": "switch"},
+		"input:1":  map[string]interface{}{"id": 1, "type": "switch"},
+	})
+	require.NoError(t, err)
+
+	got, err := NewGen2Converter(nil).FromAPIConfig(raw, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	require.Len(t, got.Input.Inputs, 2)
+	assert.Nil(t, got.Input.Inputs[0].Mode, "input 0 does not drive switch 0")
+	require.NotNil(t, got.Input.Inputs[1].Mode)
+	assert.Equal(t, "flip", *got.Input.Inputs[1].Mode)
+}
+
+// Verify reports a difference, and does not report a match, when the mode written for input 0 runs
+// on the input that switch 0 takes instead.
+func TestApplyDesiredConfig_Gen2DoesNotReportAMatchForAnotherSelectedInput(t *testing.T) {
+	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Type: StringPtr("switch"), Mode: StringPtr("flip")}}}}
+	svc, _ := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithChannels()
+	dev.doc["switch:0"].(map[string]interface{})["input_id"] = 1.0
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	require.Len(t, result.VerifyResult.Differences, 1)
+	assert.Equal(t, "input.inputs.0.mode", result.VerifyResult.Differences[0].Path)
+}
