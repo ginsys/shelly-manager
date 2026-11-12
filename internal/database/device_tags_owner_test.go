@@ -45,10 +45,14 @@ func deviceTagsSchema(t *testing.T, db *gorm.DB) string {
 func TestDeviceTagsOwner_ManagerAloneCreatesTheTable(t *testing.T) {
 	manager := mustStartManager(t, filepath.Join(t.TempDir(), "fresh.db"))
 
-	schema := deviceTagsSchema(t, manager.GetDB())
-	assert.Contains(t, schema, deviceTagsCurrent)
-	assert.Contains(t, schema, "idx_device_tags_device_id")
-	assert.Contains(t, schema, "idx_device_tags_tag")
+	// The whole definition of the table and of each index, not their names: a model
+	// that turns an index unique would otherwise differ on a fresh database only.
+	want := []string{
+		"device_tags | " + deviceTagsCurrent,
+		"idx_device_tags_device_id | " + deviceTagsIndexDDL[0],
+		"idx_device_tags_tag | " + deviceTagsIndexDDL[1],
+	}
+	assert.Equal(t, strings.Join(want, "\n"), deviceTagsSchema(t, manager.GetDB()))
 }
 
 // TestDeviceTagsOwner_CurrentShapeIssuesNoDDL: on the shape a current install has, the
