@@ -30,6 +30,21 @@ type applyTestClient struct {
 	relayLive   map[int]map[string]interface{}
 	relaySetErr error
 	relayGetErr error
+
+	// Cloud surface (CloudSettingsClient): POST /settings/cloud. cloudServers records the server
+	// argument of each call, so a test can prove that apply never sends one.
+	cloudWrites  []bool
+	cloudServers []string
+	cloudSetErr  error
+}
+
+func (m *applyTestClient) SetCloudConfig(ctx context.Context, enabled bool, server string) error {
+	if m.cloudSetErr != nil {
+		return m.cloudSetErr
+	}
+	m.cloudWrites = append(m.cloudWrites, enabled)
+	m.cloudServers = append(m.cloudServers, server)
+	return nil
 }
 
 type relayWrite struct {
@@ -220,6 +235,7 @@ func TestApplyConfig_RelaySettings(t *testing.T) {
 // The applier reaches the relay endpoints through RelaySettingsClient, so the real Gen1 client
 // must satisfy it, or apply fails every relay on a real device.
 var _ RelaySettingsClient = (*gen1.Client)(nil)
+var _ CloudSettingsClient = (*gen1.Client)(nil)
 
 func relayApplyConfig() *DeviceConfiguration {
 	return &DeviceConfiguration{
@@ -524,6 +540,42 @@ func TestApplyConfig_CloudSettings(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
+	assert.Equal(t, []bool{false}, client.cloudWrites, "cloud is written with POST /settings/cloud")
+	assert.Equal(t, []string{""}, client.cloudServers, "Gen1 has no cloud server parameter, so none is sent")
+	assert.Equal(t, 1, result.AppliedCount)
+	assert.Empty(t, client.configs, "a nested cloud map on POST /settings is ignored by Gen1 and must not be sent")
+}
+
+func TestApplyConfig_CloudSettingFailureIsReportedByPath(t *testing.T) {
+	client := newApplyTestClient()
+	client.cloudSetErr = errors.New("503 busy")
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client,
+		&DeviceConfiguration{Cloud: &CloudConfiguration{Enable: BoolPtr(true)}}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "cloud.enabled", result.Failures[0].Path)
+	assert.Contains(t, result.Failures[0].Error, "503 busy")
+	assert.Equal(t, 0, result.AppliedCount)
+}
+
+// A client without the cloud surface cannot write the setting. Apply says so as a failure
+// and does not fall back to the nested map that Gen1 ignores.
+func TestApplyConfig_CloudNeedsACloudClient(t *testing.T) {
+	inner := newApplyTestClient()
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), struct{ ShellyClient }{inner},
+		&DeviceConfiguration{Cloud: &CloudConfiguration{Enable: BoolPtr(false)}}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "cloud.enabled", result.Failures[0].Path)
+	assert.Empty(t, inner.configs)
 }
 
 func TestApplyConfig_CoIoTSettings(t *testing.T) {

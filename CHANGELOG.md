@@ -86,6 +86,11 @@ All notable changes to this project are documented here. The project follows Con
   full database snapshot. (#443)
 
 ### Added
+- Apply to a Gen1 device now writes the cloud setting. It sends the `enabled` flag with
+  `POST /settings/cloud` and checks it on the read-back, so a device that answers 200 and
+  keeps the old flag stays pending. A cloud `server` in the desired configuration is
+  refused with 422, because Gen1 reports no cloud server and accepts none. Wi-Fi, CoIoT, login
+  and inputs stay refused. (Refs ginsys/shelly-manager#381)
 - An SMA archive now carries each template's scope. A template row has an optional
   `scope` key (`global`, `group` or `device_type`), the export always writes it, and an
   import creates the template with it, so a `group` template no longer comes back as
@@ -277,9 +282,9 @@ All notable changes to this project are documented here. The project follows Con
   differences and changes nothing. Secret values (passwords, keys, tokens)
   are masked in the differences. Only Gen1 devices are supported; Gen2 and
   Gen3 return HTTP 501 rather than a false success. On Gen1, apply writes the
-  name, timezone, location, eco mode, discoverable, max power, LED, MQTT and
-  relay settings. A desired configuration that holds any other setting
-  (Wi-Fi, cloud, CoIoT, login, inputs, or a relay key other than the four
+  name, timezone, location, eco mode, discoverable, max power, LED, MQTT,
+  relay and cloud settings. A desired configuration that holds any other setting
+  (Wi-Fi, CoIoT, login, inputs, a cloud server, or a relay key other than the four
   written ones) returns HTTP 422 naming the settings, and nothing is written. Apply clears `config_applied` before writing, and a
   desired configuration edited during the apply leaves the device pending.
   Settings the converter has no Gen1 mapping for (for example SNTP) are also
