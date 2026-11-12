@@ -282,10 +282,6 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 	if req.Config != nil {
 		// The client read the template without its secrets: a mask or an omitted secret keeps the
 		// stored value, and only an explicit "" or null clears it.
-		var body struct {
-			Config json.RawMessage `json:"config"`
-		}
-		_ = json.Unmarshal(raw, &body)
 		var stored configuration.DeviceConfiguration
 		if len(existing.Config) > 0 {
 			if err := json.Unmarshal(existing.Config, &stored); err != nil {
@@ -293,7 +289,7 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 				return
 			}
 		}
-		removed, nullErr := nullSecretPaths(body.Config)
+		removed, nullErr := wrappedNullSecretPaths(raw, "config")
 		if nullErr != nil {
 			rw.WriteValidationError(w, r, "Invalid JSON request body: "+nullErr.Error())
 			return
@@ -656,6 +652,31 @@ func nullSecretPaths(raw []byte) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
+	return matchSecretNulls(found), nil
+}
+
+// wrappedNullSecretPaths does the same for a body that holds the configuration under one member,
+// such as {"config": {...}}. It reads the whole body, so a wrapper member that appears twice is
+// refused too: the decoder merges both copies, and reading only one would miss a null in the other.
+func wrappedNullSecretPaths(raw []byte, member string) (map[string]bool, error) {
+	if strings.TrimSpace(string(raw)) == "" {
+		return nil, nil
+	}
+	found, err := configuration.NullPaths(raw)
+	if err != nil {
+		return nil, err
+	}
+	inner := make([][]string, 0, len(found))
+	for _, path := range found {
+		if len(path) > 1 && strings.EqualFold(path[0], member) {
+			inner = append(inner, path[1:])
+		}
+	}
+	return matchSecretNulls(inner), nil
+}
+
+// matchSecretNulls turns the null paths of a body into the secret slots they reset.
+func matchSecretNulls(found [][]string) map[string]bool {
 	// The decoder matches keys by case folding, so "PASS" fills the same field as "pass". Match
 	// the same way, or a null under another casing would be missed and the secret kept.
 	nulls := map[string]bool{}
@@ -677,7 +698,7 @@ func nullSecretPaths(raw []byte) (map[string]bool, error) {
 			}
 		}
 	}
-	return nulls, nil
+	return nulls
 }
 
 // keepOmittedSecrets answers a client that read a body without its secrets and sends it back
