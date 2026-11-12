@@ -130,6 +130,19 @@ All notable changes to this project are documented here. The project follows Con
   full database snapshot. (#443)
 
 ### Added
+- Apply to a Gen1 device now writes the login (`POST /settings/login`: `enabled`,
+  `username`, `password`, 1 to 50 bytes each, both together). It is written
+  last, after every other setting. Once the device accepts it, the manager stores
+  the new credentials (the same way as `PUT /devices/{id}/config/auth`), builds a
+  new client from them, and reboots and reads back with that client, because the
+  device answers the old credentials with 401. A rejected write stores nothing.
+  The password is never logged, returned or compared (the device does not return
+  it). A credential with the login off or unset, and a username or password of the
+  wrong length, are refused with 422 before anything is written. Two limits: a
+  response lost after the device accepted the write leaves the stored login stale,
+  and entering the login again recovers it; and the Gen1 login reference was read
+  through a summary only, so the field names and whether a reboot is needed are
+  not confirmed on hardware. (Refs ginsys/shelly-manager#381)
 - Apply to a Gen1 device now writes the CoIoT settings. It sends `coiot_enable`,
   `coiot_update_period` and `coiot_peer` as flat parameters on `POST /settings`
   (Gen1 has no `/settings/coiot` endpoint, and the nested document that

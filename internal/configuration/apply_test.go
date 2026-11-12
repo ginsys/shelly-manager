@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -23,6 +24,12 @@ type applyTestClient struct {
 	testConnErr error
 	configs     []map[string]interface{}
 	currentRaw  json.RawMessage
+
+	// Login surface (LoginSettingsClient): POST /settings/login. order records "config" and
+	// "login" writes in the sequence they arrive.
+	loginWrites []loginWrite
+	loginErr    error
+	order       []string
 
 	// Per-channel relay surface (RelaySettingsClient). relayLive is what GET /settings/relay/<n>
 	// returns; when nil the device echoes the last form written to that channel.
@@ -97,6 +104,34 @@ func (m *applyTestClient) SetConfig(ctx context.Context, config map[string]inter
 		return m.setErr
 	}
 	m.configs = append(m.configs, config)
+	m.order = append(m.order, "config")
+	return nil
+}
+
+// loginWrite is one call to POST /settings/login: SetAuth, or ResetAuth when reset is true.
+type loginWrite struct {
+	reset    bool
+	username string
+	password string
+}
+
+// SetAuth is POST /settings/login with enabled=true (LoginSettingsClient).
+func (m *applyTestClient) SetAuth(_ context.Context, username, password string) error {
+	if m.loginErr != nil {
+		return m.loginErr
+	}
+	m.loginWrites = append(m.loginWrites, loginWrite{username: username, password: password})
+	m.order = append(m.order, "login")
+	return nil
+}
+
+// ResetAuth is POST /settings/login with enabled=false (LoginSettingsClient).
+func (m *applyTestClient) ResetAuth(_ context.Context) error {
+	if m.loginErr != nil {
+		return m.loginErr
+	}
+	m.loginWrites = append(m.loginWrites, loginWrite{reset: true})
+	m.order = append(m.order, "login")
 	return nil
 }
 
@@ -236,6 +271,7 @@ func TestApplyConfig_RelaySettings(t *testing.T) {
 // must satisfy it, or apply fails every relay on a real device.
 var _ RelaySettingsClient = (*gen1.Client)(nil)
 var _ CloudSettingsClient = (*gen1.Client)(nil)
+var _ LoginSettingsClient = (*gen1.Client)(nil)
 
 func relayApplyConfig() *DeviceConfiguration {
 	return &DeviceConfiguration{
@@ -368,7 +404,7 @@ func TestUnsupportedApplySettings_RelayKeys(t *testing.T) {
 	ok := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
 		{ID: 0, Name: StringPtr("a"), DefaultState: StringPtr("off"), AutoOn: IntPtr(1), AutoOff: IntPtr(2)},
 	}}}
-	unsupported, err := unsupportedApplySettings(converter, ok, "SHPLG-S")
+	unsupported, err := unsupportedApplySettings(converter, ok, "SHPLG-S", false)
 	require.NoError(t, err)
 	assert.Empty(t, unsupported)
 
@@ -376,7 +412,7 @@ func TestUnsupportedApplySettings_RelayKeys(t *testing.T) {
 	withSchedule := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
 		{ID: 0, Schedule: BoolPtr(true)},
 	}}}
-	unsupported, err = unsupportedApplySettings(converter, withSchedule, "SHPLG-S")
+	unsupported, err = unsupportedApplySettings(converter, withSchedule, "SHPLG-S", false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, unsupported)
 }
@@ -390,7 +426,7 @@ func TestUnsupportedApplySettings_RelayIDMustMatchPosition(t *testing.T) {
 	wrongChannel := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
 		{ID: 1, AutoOff: IntPtr(60)},
 	}}}
-	unsupported, err := unsupportedApplySettings(converter, wrongChannel, "SHSW-25")
+	unsupported, err := unsupportedApplySettings(converter, wrongChannel, "SHSW-25", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"relay.relays[0].id"}, unsupported)
 
@@ -398,7 +434,7 @@ func TestUnsupportedApplySettings_RelayIDMustMatchPosition(t *testing.T) {
 		{ID: 0, AutoOff: IntPtr(60)},
 		{ID: 1, AutoOff: IntPtr(30)},
 	}}}
-	unsupported, err = unsupportedApplySettings(converter, inOrder, "SHSW-25")
+	unsupported, err = unsupportedApplySettings(converter, inOrder, "SHSW-25", false)
 	require.NoError(t, err)
 	assert.Empty(t, unsupported)
 
@@ -411,7 +447,7 @@ func TestUnsupportedApplySettings_RelayIDMustMatchPosition(t *testing.T) {
 		"id out of run": {{ID: 0, AutoOff: IntPtr(60)}, {ID: 2, AutoOff: IntPtr(30)}},
 	} {
 		cfg := &DeviceConfiguration{Relay: &RelayConfig{Relays: relays}}
-		unsupported, err = unsupportedApplySettings(converter, cfg, "SHSW-25")
+		unsupported, err = unsupportedApplySettings(converter, cfg, "SHSW-25", false)
 		require.NoError(t, err, name)
 		assert.Equal(t, []string{"relay.relays[1].id"}, unsupported, name)
 	}
@@ -492,6 +528,101 @@ func TestApplyConfig_AuthChangeRequiresReboot(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.RequiresReboot)
+}
+
+const testLoginPassword = "s3cret-pw-9"
+
+func loginApplier() *ConfigApplier {
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+	applier.writeLogin = true
+	return applier
+}
+
+// The login is written with POST /settings/login, after every other section, so a failure of
+// an earlier section never leaves a changed login behind.
+func TestApplyConfig_LoginIsWrittenLastWithSetAuth(t *testing.T) {
+	client := newApplyTestClient()
+
+	result, err := loginApplier().ApplyConfig(context.Background(), client, &DeviceConfiguration{
+		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv")}},
+		Auth: &AuthConfiguration{
+			Enable: BoolPtr(true), Username: StringPtr("admin"), Password: StringPtr(testLoginPassword),
+		},
+	}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	assert.Equal(t, []loginWrite{{username: "admin", password: testLoginPassword}}, client.loginWrites)
+	assert.Equal(t, []string{"config", "login"}, client.order)
+	for _, cfg := range client.configs {
+		assert.NotContains(t, cfg, "login", "login goes to /settings/login, never to /settings")
+	}
+	require.NotNil(t, result.login)
+	assert.Equal(t, LoginChange{Enabled: true, Username: "admin", Password: testLoginPassword}, *result.login)
+	assert.Equal(t, 4, result.AppliedCount)
+}
+
+func TestApplyConfig_LoginDisabledUsesResetAuth(t *testing.T) {
+	client := newApplyTestClient()
+
+	result, err := loginApplier().ApplyConfig(context.Background(), client,
+		&DeviceConfiguration{Auth: &AuthConfiguration{Enable: BoolPtr(false)}}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+	assert.Equal(t, []loginWrite{{reset: true}}, client.loginWrites)
+	require.NotNil(t, result.login)
+	assert.False(t, result.login.Enabled)
+	assert.Equal(t, 1, result.AppliedCount)
+}
+
+// Login is opt-in on the applier: a caller that cannot store new credentials and rebuild its
+// client must never change the login behind its own back.
+func TestApplyConfig_LoginIsNotWrittenUnlessEnabled(t *testing.T) {
+	client := newApplyTestClient()
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client, &DeviceConfiguration{
+		Auth: &AuthConfiguration{Enable: BoolPtr(true), Username: StringPtr("a"), Password: StringPtr("b")},
+	}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.Empty(t, client.loginWrites)
+	assert.Nil(t, result.login)
+}
+
+func TestApplyConfig_LoginFailureIsReportedByPathWithoutThePassword(t *testing.T) {
+	client := newApplyTestClient()
+	client.loginErr = fmt.Errorf("POST /settings/login password=%s: 500", testLoginPassword)
+
+	result, err := loginApplier().ApplyConfig(context.Background(), client, &DeviceConfiguration{
+		Auth: &AuthConfiguration{
+			Enable: BoolPtr(true), Username: StringPtr("admin"), Password: StringPtr(testLoginPassword),
+		},
+	}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "login", result.Failures[0].Path)
+	assert.Equal(t, "enabled,password,username", result.Failures[0].Value)
+	assert.NotContains(t, result.Failures[0].Error, testLoginPassword)
+	assert.Equal(t, 3, result.FailedCount)
+	assert.Nil(t, result.login, "a failed write records no login change")
+}
+
+func TestApplyConfig_LoginNeedsALoginClient(t *testing.T) {
+	inner := newApplyTestClient()
+
+	result, err := loginApplier().ApplyConfig(context.Background(), struct{ ShellyClient }{inner}, &DeviceConfiguration{
+		Auth: &AuthConfiguration{Enable: BoolPtr(true), Username: StringPtr("a"), Password: StringPtr("b")},
+	}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "login", result.Failures[0].Path)
+	assert.Nil(t, result.login)
 }
 
 func TestApplyConfig_MeasuresDuration(t *testing.T) {

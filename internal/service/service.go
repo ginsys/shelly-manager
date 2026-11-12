@@ -76,7 +76,7 @@ func NewServiceWithLogger(db database.DatabaseInterface, cfg *config.Config, log
 	// Create configuration service
 	configSvc := configuration.NewService(db.GetDB(), logger)
 
-	return &ShellyService{
+	svc := &ShellyService{
 		DB:        db,
 		Config:    cfg,
 		ConfigSvc: configSvc,
@@ -88,6 +88,28 @@ func NewServiceWithLogger(db database.DatabaseInterface, cfg *config.Config, log
 		clientOwner: make(map[string]uint),
 		clientAddr:  make(map[uint]string),
 	}
+	configSvc.ConfigurationSvc.SetLoginHooks(loginHooks{svc})
+	return svc
+}
+
+// loginHooks lets a configuration apply change a device's login: the new credentials are stored
+// through UpdateDeviceAuth, which also drops the cached client, and the client for the rest of the
+// apply is built from the stored record.
+type loginHooks struct{ s *ShellyService }
+
+func (h loginHooks) Store(_ context.Context, deviceID uint, change configuration.LoginChange) error {
+	if !change.Enabled {
+		return h.s.UpdateDeviceAuth(deviceID, "", "")
+	}
+	return h.s.UpdateDeviceAuth(deviceID, change.Username, change.Password)
+}
+
+func (h loginHooks) Client(_ context.Context, deviceID uint) (configuration.ShellyClient, error) {
+	device, err := h.s.DB.GetDevice(deviceID)
+	if err != nil {
+		return nil, fmt.Errorf("device not found: %w", err)
+	}
+	return h.s.getClient(device)
 }
 
 // DiscoverDevices performs device discovery using HTTP and mDNS

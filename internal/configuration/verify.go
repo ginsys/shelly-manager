@@ -33,6 +33,18 @@ type ConfigVerifier struct {
 	converter  ConfigConverter
 	comparator *ConfigComparator
 	logger     *logging.Logger
+
+	// afterLogin runs once the device accepted a login change. It stores the new credentials
+	// and returns the client for every later request, which is the only one the device still
+	// answers.
+	afterLogin func(ctx context.Context, client ShellyClient, change LoginChange) (ShellyClient, error)
+}
+
+// WithLogin lets apply write the login. afterLogin must store the new credentials and return a
+// client that uses them (none when the login is switched off). Without it a login stays unwritten.
+func (v *ConfigVerifier) WithLogin(afterLogin func(ctx context.Context, client ShellyClient, change LoginChange) (ShellyClient, error)) {
+	v.afterLogin = afterLogin
+	v.applier.writeLogin = afterLogin != nil
 }
 
 // NewConfigVerifier creates a new configuration verifier
@@ -55,7 +67,7 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 	result := &VerifyResult{
 		Match:       true,
 		Differences: []ConfigDifference{},
-		Desired:     desired,
+		Desired:     withoutLoginPassword(desired),
 	}
 
 	deviceConfig, err := client.GetConfig(ctx)
@@ -70,7 +82,9 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 
 	result.Imported = imported
 
-	compareResult := v.comparator.Compare(comparableDesired(desired), imported)
+	// The login password is write-only. Compare without it, so a missing read-back section never
+	// puts the whole desired auth object, password included, into a difference.
+	compareResult := v.comparator.Compare(comparableDesired(withoutLoginPassword(desired)), imported)
 	result.Match = compareResult.Match
 	result.Differences = compareResult.Differences
 	result.Duration = time.Since(startTime)
@@ -85,6 +99,19 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 	}).Info("Configuration verification completed")
 
 	return result, nil
+}
+
+// withoutLoginPassword returns desired as the verify result reports it: the device login password
+// is write-only, so the result never echoes it. The caller's configuration is never changed.
+func withoutLoginPassword(desired *DeviceConfiguration) *DeviceConfiguration {
+	if desired == nil || desired.Auth == nil || desired.Auth.Password == nil {
+		return desired
+	}
+	shown := *desired
+	auth := *desired.Auth
+	auth.Password = nil
+	shown.Auth = &auth
+	return &shown
 }
 
 // comparableDesired returns the desired configuration in the shape the Gen1 read-back has.
@@ -137,6 +164,15 @@ func (v *ConfigVerifier) ApplyAndVerify(ctx context.Context, client ShellyClient
 			"component":      "config_verifier",
 		}).Info("Apply and verify completed (apply failed)")
 		return result, nil
+	}
+
+	// From here on the device answers only the new credentials, for the reboot and the read-back.
+	if applyResult.login != nil && v.afterLogin != nil {
+		client, err = v.afterLogin(ctx, client, *applyResult.login)
+		if err != nil {
+			result.Duration = time.Since(startTime)
+			return nil, err
+		}
 	}
 
 	if applyResult.RequiresReboot {

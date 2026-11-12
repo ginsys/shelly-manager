@@ -182,6 +182,14 @@ func configWithLeaf(t *testing.T, path string, value interface{}) *DeviceConfigu
 	if path == "mqtt.port" {
 		node["server"] = "broker.local"
 	}
+	// A login is applied as a whole: the flag with a username and a password.
+	if path == "auth.enable" || path == "auth.user" || path == "auth.pass" {
+		for key, companion := range map[string]interface{}{"enable": true, "user": "admin", "pass": "secret"} {
+			if _, set := node[key]; !set {
+				node[key] = companion
+			}
+		}
+	}
 
 	raw, err := json.Marshal(root)
 	if err != nil {
@@ -208,7 +216,7 @@ func TestDeviceSchemaApplicableMatchesApply(t *testing.T) {
 				continue // an array item's index, not a setting
 			}
 			cfg := configWithLeaf(t, path, sampleValue(leaf))
-			unsupported, err := unsupportedApplySettings(converter, cfg, deviceType)
+			unsupported, err := unsupportedApplySettings(converter, cfg, deviceType, true)
 			if err != nil {
 				t.Fatalf("%s %s: %v", deviceType, path, err)
 			}
@@ -233,6 +241,7 @@ func TestDeviceSchemaApplicableMatchesApply(t *testing.T) {
 // applicable field is compared on verify.
 var writeOnlyApplicablePaths = map[string]bool{
 	"mqtt.pass": true,
+	"auth.pass": true,
 }
 
 // TestDeviceSchemaApplicableFieldsAreVerifiedOrNamed fails when verify skips an applicable field
