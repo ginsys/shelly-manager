@@ -258,9 +258,38 @@ func (m *Manager) GetDevice(id uint) (*Device, error) {
 	return &device, nil
 }
 
+// keepStoredTimes gives a device with a zero created_at or last_seen the values that are stored
+// for it, so that a whole-row save never writes a zero time (ginsys/shelly-manager#515). A request
+// body that leaves them out decodes to zero times. MySQL rejects a zero datetime with error 1292,
+// and SQLite and PostgreSQL would store it. A device that has no stored row is left as it is.
+func (m *Manager) keepStoredTimes(device *Device) error {
+	if device.ID == 0 || (!device.CreatedAt.IsZero() && !device.LastSeen.IsZero()) {
+		return nil
+	}
+	var stored Device
+	err := m.GetDB().Select("created_at", "last_seen").Where("id = ?", device.ID).Take(&stored).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if device.CreatedAt.IsZero() {
+		device.CreatedAt = stored.CreatedAt
+	}
+	if device.LastSeen.IsZero() {
+		device.LastSeen = stored.LastSeen
+	}
+	return nil
+}
+
 // UpdateDevice updates a device (legacy compatibility)
 func (m *Manager) UpdateDevice(device *Device) error {
 	// Note: Device settings validation can be added here if needed
+
+	if err := m.keepStoredTimes(device); err != nil {
+		return err
+	}
 
 	start := time.Now()
 	result := m.GetDB().Save(device)
@@ -299,6 +328,9 @@ var ErrDeviceVersionChanged = errors.New("the device row changed since it was re
 // gorm.ErrRecordNotFound when no device has that id. version must be a value read from the
 // database, so that it survives the timestamp round trip of the driver.
 func (m *Manager) UpdateDeviceIfVersion(device *Device, version time.Time) error {
+	if err := m.keepStoredTimes(device); err != nil {
+		return err
+	}
 	// The new updated_at is at least a millisecond past the old one, so the UPDATE changes the row
 	// on every driver. MySQL counts changed rows and keeps milliseconds, so a save inside the same
 	// millisecond would otherwise count zero rows and look like a conflict.

@@ -66,6 +66,11 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- `PUT /devices/{id}` with a body that leaves out `last_seen` or `created_at` no longer
+  answers 500 on MySQL. The missing values decoded to a zero time, which MySQL rejects as an
+  invalid datetime. A device save now keeps the stored `created_at` and `last_seen` where the
+  device carries a zero value. A value the request does carry is still saved.
+  (ginsys/shelly-manager#515)
 - `GET /devices/{id}/capabilities` now lists `mqtt`, `cloud` and `auth` for a Gen1
   device. It listed them for generation 2 and later only, so a Gen1 device looked as if
   it had no MQTT, cloud or login settings, although the manager already writes them. The
