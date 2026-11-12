@@ -293,8 +293,13 @@ func (h *Handler) UpdateNewConfigTemplate(w http.ResponseWriter, r *http.Request
 				return
 			}
 		}
+		removed, nullErr := nullSecretPaths(body.Config)
+		if nullErr != nil {
+			rw.WriteValidationError(w, r, "Invalid JSON request body: "+nullErr.Error())
+			return
+		}
 		restoreMaskedSecrets(req.Config, &stored)
-		keepOmittedSecrets(req.Config, &stored, nullSecretPaths(body.Config))
+		keepOmittedSecrets(req.Config, &stored, removed)
 
 		configJSON, err := json.Marshal(req.Config)
 		if err != nil {
@@ -640,45 +645,39 @@ func allSecretPaths() []string {
 // struct cannot tell null from omitted, so the raw text is read. Null means "remove this secret":
 // an override stops pinning it and inherits the template secret again (RFC 7396, the merge patch
 // convention). It also clears a plain-string password, which "" cannot.
-func nullSecretPaths(raw []byte) map[string]bool {
-	var tree map[string]any
-	if json.Unmarshal(raw, &tree) != nil {
-		return nil
+//
+// A key that appears twice in one object, in any casing, is an error: the decoder and this reading
+// could not agree on which member counts, so the caller answers 400 and saves nothing.
+func nullSecretPaths(raw []byte) (map[string]bool, error) {
+	if strings.TrimSpace(string(raw)) == "" {
+		return nil, nil
 	}
-	// The decoder matches keys without regard to case, so "PASS" fills the same field as "pass".
-	// Read the keys the same way, or a null under another casing would be missed and the secret kept.
-	var lower func(map[string]any) map[string]any
-	lower = func(in map[string]any) map[string]any {
-		out := make(map[string]any, len(in))
-		for key, value := range in {
-			if child, ok := value.(map[string]any); ok {
-				value = lower(child)
-			}
-			out[strings.ToLower(key)] = value
-		}
-		return out
+	found, err := configuration.NullPaths(raw)
+	if err != nil {
+		return nil, err
 	}
-	tree = lower(tree)
+	// The decoder matches keys by case folding, so "PASS" fills the same field as "pass". Match
+	// the same way, or a null under another casing would be missed and the secret kept.
 	nulls := map[string]bool{}
-	for _, path := range allSecretPaths() {
-		node := any(tree)
-		for _, key := range strings.Split(path, ".") {
-			m, isMap := node.(map[string]any)
-			if !isMap {
-				node = "absent"
-				break
+	for _, secret := range allSecretPaths() {
+		want := strings.Split(secret, ".")
+		for _, path := range found {
+			if len(path) != len(want) {
+				continue
 			}
-			var found bool
-			if node, found = m[key]; !found {
-				node = "absent"
-				break
+			same := true
+			for i := range want {
+				if !strings.EqualFold(path[i], want[i]) {
+					same = false
+					break
+				}
 			}
-		}
-		if node == nil {
-			nulls[path] = true
+			if same {
+				nulls[secret] = true
+			}
 		}
 	}
-	return nulls
+	return nulls, nil
 }
 
 // keepOmittedSecrets answers a client that read a body without its secrets and sends it back

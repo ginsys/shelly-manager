@@ -297,8 +297,13 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	if readErr != nil {
 		stored = nil
 	}
+	removed, nullErr := nullSecretPaths(raw)
+	if nullErr != nil {
+		rw.WriteValidationError(w, r, "Invalid JSON request body: "+nullErr.Error())
+		return
+	}
 	restoreMaskedSecrets(&overrides, stored)
-	keepOmittedSecrets(&overrides, stored, nullSecretPaths(raw))
+	keepOmittedSecrets(&overrides, stored, removed)
 
 	if err := h.ConfigService.ConfigurationSvc.SetDeviceOverrides(uint(id), &overrides); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {

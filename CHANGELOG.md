@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- The device overrides `PUT`, the template `PUT` and `PUT /devices/{id}/config/typed`
+  now refuse a configuration body that repeats a key, in any casing, with 400 and
+  save nothing. Before, a secret sent as `null` beside the same key in another
+  casing, or inside a repeated section, could be missed, and the old password
+  came back. No client of ours sends such a body. (ginsys/shelly-manager#458)
 - `PATCH /api/v1/devices/{id}/overrides/new` now removes a field that the body
   sets to JSON `null`, as `PUT` already did for a secret. It answered 200 and
   kept the stored value before, so a field could not be removed. This holds for
