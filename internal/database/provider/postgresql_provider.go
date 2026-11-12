@@ -503,6 +503,7 @@ func (p *PostgreSQLProvider) createGormLogger() logger.Interface {
 			SlowThreshold:             p.config.SlowQueryThreshold,
 			LogLevel:                  logLevel,
 			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      true, // keep bound values, such as device logins, out of the SQL log
 			Colorful:                  false,
 		},
 	)
