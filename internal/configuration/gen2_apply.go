@@ -121,7 +121,8 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	if err != nil {
 		return nil, fmt.Errorf("failed to check converted config: %w", err)
 	}
-	for _, diff := range NewConfigComparator().Compare(&checked, back).Differences {
+	// Channels pair by id, as verify does: a desired list may skip an id or sit in any order.
+	for _, diff := range NewChannelIDConfigComparator().Compare(&checked, back).Differences {
 		if diff.Actual == nil {
 			unsupported = append(unsupported, diff.Path)
 		}

@@ -1417,7 +1417,7 @@ func getInputSchema() map[string]interface{} {
 						},
 						"mode": map[string]interface{}{
 							"type": "string",
-							"enum": []string{"momentary", "follow", "flip", "detached", "cycle", "activate"},
+							"enum": []string{"momentary", "follow", "flip", "detached", "cycle", "activate", "toggle", "edge"},
 						},
 						"inverted": map[string]interface{}{
 							"type": "boolean",
