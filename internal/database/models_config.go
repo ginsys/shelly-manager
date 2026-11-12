@@ -1,26 +1,16 @@
 package database
 
 import (
-	"encoding/json"
 	"time"
+
+	"github.com/ginsys/shelly-manager/internal/configuration"
 )
 
-// ConfigTemplate represents a reusable configuration template
-type ConfigTemplate struct {
-	ID          uint            `gorm:"primaryKey" json:"id"`
-	Name        string          `gorm:"size:191;uniqueIndex;not null" json:"name"`
-	Description string          `json:"description,omitempty"`
-	Scope       string          `gorm:"size:191;not null;index" json:"scope"` // "global", "group", "device_type"
-	DeviceType  string          `gorm:"size:191;index" json:"device_type,omitempty"`
-	Config      json.RawMessage `gorm:"type:text;not null" json:"config"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-}
-
-// TableName specifies the table name for ConfigTemplate
-func (ConfigTemplate) TableName() string {
-	return "config_templates"
-}
+// ConfigTemplate is a reusable configuration template. The model lives in the
+// configuration package, which this package imports and which therefore cannot
+// import this one; the alias keeps the Manager's template methods and the schema
+// fixups on the one owner of the table.
+type ConfigTemplate = configuration.ConfigTemplate
 
 // DeviceTag represents a tag assigned to a device for group templates
 type DeviceTag struct {

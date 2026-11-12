@@ -613,11 +613,10 @@ func TestConfigTemplateScopeMigration_PartialConstraintRecovery(t *testing.T) {
 }
 
 // TestConfigTemplateScopeMigration_PreservesExtendedColumns guards the columns
-// that only the wider sibling model knows about (#280). database.ConfigTemplate
-// does not declare generation, variables or is_default, and tightening a
-// constraint on SQLite rebuilds the table — so if that rebuild worked from the
-// model rather than from the table's own DDL, a normal pre-scope upgrade would
-// quietly discard this metadata.
+// that older tables carry beyond the eight the fixup reads (generation, variables
+// and is_default). Tightening a constraint on SQLite rebuilds the table, so if that
+// rebuild worked from a narrow model rather than from the table's own DDL, a normal
+// pre-scope upgrade would quietly discard this metadata.
 func TestConfigTemplateScopeMigration_PreservesExtendedColumns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	db := openRawSQLite(t, path)
@@ -702,11 +701,12 @@ func TestDevicesTableStabilizes(t *testing.T) {
 // startup rebuilds nothing. A sentinel index GORM knows nothing about survives a
 // no-op but would be dropped by a table rebuild.
 //
-// The full production sequence is reproduced deliberately: the Manager is only
-// the first of three AutoMigrate passes over config_templates (see #280), and
-// testing the Manager alone hid a real defect — configuration.ConfigTemplate
-// declared config nullable, so each boot relaxed the constraint and the next
-// fixup re-tightened it, rebuilding the table twice per start.
+// The full production sequence is reproduced deliberately, although the Manager is
+// now the only AutoMigrate of config_templates. Three structs used to migrate it, and
+// testing the Manager alone hid a real defect there: one declared config nullable,
+// so each boot relaxed the constraint and the next fixup re-tightened it,
+// rebuilding the table twice per start. The sequence now also proves the service
+// start that follows leaves the table alone.
 func TestConfigTemplateScopeMigration_NoRebuildOnCleanStartup(t *testing.T) {
 	path := writeLegacyDB(t, legacyTemplate{name: "wildcard", deviceType: strPtr("all"), config: strPtr(`{}`)})
 
@@ -727,9 +727,9 @@ func TestConfigTemplateScopeMigration_NoRebuildOnCleanStartup(t *testing.T) {
 	assertMigratedSchema(t, third)
 }
 
-// startFullStack mirrors what the server does at boot: the Manager migrates,
-// then the configuration service and its repository migrate their own views of
-// the same tables.
+// startFullStack mirrors what the server does at boot: the Manager migrates
+// config_templates, then the configuration service starts and migrates its own
+// tables.
 func startFullStack(t *testing.T, path string) *Manager {
 	t.Helper()
 
