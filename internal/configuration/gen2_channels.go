@@ -1,6 +1,8 @@
 package configuration
 
 import (
+	"math"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -152,7 +154,9 @@ func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig
 	return relayConfig, inputConfig
 }
 
-// gen2AutoTimerFromDoc reads auto_on or auto_off with its delay as one number of seconds.
+// gen2AutoTimerFromDoc reads auto_on or auto_off with its delay as one number of seconds. An
+// enabled timer whose delay is not a whole number above 0 has no stored value: it is read as unset,
+// so a desired value reports a difference. It is never turned into 0, which means off.
 func gen2AutoTimerFromDoc(raw map[string]interface{}, key string) *int {
 	enabled, ok := raw[key].(bool)
 	if !ok {
@@ -162,7 +166,7 @@ func gen2AutoTimerFromDoc(raw map[string]interface{}, key string) *int {
 		return IntPtr(0)
 	}
 	delay, ok := raw[key+"_delay"].(float64)
-	if !ok {
+	if !ok || delay < 1 || delay != math.Trunc(delay) || delay > math.MaxInt32 {
 		return nil
 	}
 	return IntPtr(int(delay))
@@ -238,18 +242,46 @@ func gen2AutoTimerToDoc(body map[string]interface{}, key string, seconds *int) {
 	}
 }
 
-// unmappedChannelSettings returns the paths of the switch and input settings that no Gen2 word
-// names, and a copy of the configuration without them. The caller's configuration is never changed.
+// gen2ChannelFields are the fields of a switch or input channel that have a Gen2 key. Every other
+// field that a desired channel sets has no key to write.
+var gen2ChannelFields = map[string]bool{
+	"id": true, "name": true, "default_state": true, "auto_on": true, "auto_off": true,
+	"type": true, "mode": true, "inverted": true,
+}
+
+// unkeyedFields names, and clears in v, every field of the struct that v points to which is set and
+// that no Gen2 key carries. keep lists the JSON names that stay.
+func unkeyedFields(v interface{}, prefix string, keep map[string]bool) []string {
+	var paths []string
+	elem := reflect.ValueOf(v).Elem()
+	for i := 0; i < elem.NumField(); i++ {
+		field := elem.Type().Field(i)
+		name := strings.Split(field.Tag.Get("json"), ",")[0]
+		if keep[name] || elem.Field(i).Kind() != reflect.Pointer || elem.Field(i).IsNil() {
+			continue
+		}
+		paths = append(paths, prefix+"."+name)
+		elem.Field(i).Set(reflect.Zero(field.Type))
+	}
+	return paths
+}
+
+// unmappedChannelSettings returns the paths of the switch and input settings that no Gen2 key or
+// word carries, and a copy of the configuration without them. Each path is named on its own, so a
+// channel that sets nothing else still gets its own paths. A channel left with no setting is not in
+// the copy. The caller's configuration is never changed.
 func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceConfiguration) {
 	var paths []string
 	checked := *desired
 
 	if desired.Relay != nil {
 		relay := *desired.Relay
-		relay.Relays = append([]SingleRelayConfig(nil), desired.Relay.Relays...)
-		for i := range relay.Relays {
-			r := &relay.Relays[i]
+		paths = append(paths, unkeyedFields(&relay, "relay", map[string]bool{"relays": true})...)
+		relay.Relays = nil
+		for i, source := range desired.Relay.Relays {
+			r := source
 			prefix := "relay.relays." + strconv.Itoa(i)
+			paths = append(paths, unkeyedFields(&r, prefix, gen2ChannelFields)...)
 			if r.DefaultState != nil {
 				if _, ok := gen2InitialStates[*r.DefaultState]; !ok {
 					paths, r.DefaultState = append(paths, prefix+".default_state"), nil
@@ -261,16 +293,24 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			if r.AutoOff != nil && *r.AutoOff < 0 {
 				paths, r.AutoOff = append(paths, prefix+".auto_off"), nil
 			}
+			if r.Name != nil || r.DefaultState != nil || r.AutoOn != nil || r.AutoOff != nil {
+				relay.Relays = append(relay.Relays, r)
+			}
 		}
-		checked.Relay = &relay
+		checked.Relay = nil
+		if len(relay.Relays) > 0 {
+			checked.Relay = &relay
+		}
 	}
 
 	if desired.Input != nil {
 		input := *desired.Input
-		input.Inputs = append([]SingleInputConfig(nil), desired.Input.Inputs...)
-		for i := range input.Inputs {
-			in := &input.Inputs[i]
+		paths = append(paths, unkeyedFields(&input, "input", map[string]bool{"inputs": true})...)
+		input.Inputs = nil
+		for i, source := range desired.Input.Inputs {
+			in := source
 			prefix := "input.inputs." + strconv.Itoa(i)
+			paths = append(paths, unkeyedFields(&in, prefix, gen2ChannelFields)...)
 			if in.Mode != nil {
 				if _, ok := gen2InModes[*in.Mode]; !ok {
 					paths, in.Mode = append(paths, prefix+".mode"), nil
@@ -279,8 +319,14 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			if in.Type != nil && !gen2InputTypes[*in.Type] {
 				paths, in.Type = append(paths, prefix+".type"), nil
 			}
+			if in.Name != nil || in.Type != nil || in.Mode != nil || in.Inverted != nil {
+				input.Inputs = append(input.Inputs, in)
+			}
 		}
-		checked.Input = &input
+		checked.Input = nil
+		if len(input.Inputs) > 0 {
+			checked.Input = &input
+		}
 	}
 	return paths, &checked
 }

@@ -58,10 +58,13 @@ All notable changes to this project are documented here. The project follows Con
   `Shelly.GetConfig`. A Gen1 word of the same meaning is accepted and read as the Gen2 word:
   `last` is `restore_last`, `switch` is `match_input`, `toggle` is `follow` and `edge` is
   `flip`; verify treats each pair as one value. `auto_on` and `auto_off` are seconds: above 0
-  is the timer on with that delay, 0 is the timer off. Refused with 422 before anything is
-  written: any other value (the Gen1 mode `action`, an input type `analog` or `count`, a
-  negative timer), an input push action or timing, a relay schedule and the top-level relay
-  and input settings. `cycle` and `activate` are left to the device, which answers with its
+  is the timer on with that delay, 0 is the timer off. A timer that the device keeps on with a
+  delay that is not a whole number of seconds above 0 is read as unset, so verify reports a
+  difference. Verify pairs a channel with the device channel of the same id; a list with a
+  repeated id is compared by position, as before. Refused with 422 before anything is
+  written, with one path for each setting: any other value (the Gen1 mode `action`, an input
+  type `analog` or `count`, a negative timer), an input push action or timing, a relay
+  schedule and the top-level relay and input settings. `cycle` and `activate` are left to the device, which answers with its
   own error on a model that lacks them. Not confirmed on hardware (read from the Shelly
   Gen2 Switch and Input reference): every key, the read-back and whether a write needs a
   restart. Part of ginsys/shelly-manager#381.
