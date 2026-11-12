@@ -45,6 +45,10 @@ var defaultCompareRules = []FieldCompareRule{
 	{Path: "relay.relays.*.schedule_rules", ExactList: true},
 	{Path: "roller.schedule_rules", ExactList: true},
 
+	// A Gen1 word and the Gen2 word of the same meaning are one value (gen2_channels.go).
+	{Path: "relay.relays.*.default_state", Normalize: gen2InitialStateWord},
+	{Path: "input.inputs.*.mode", Normalize: gen2InModeWord},
+
 	// Tolerance for coordinates (about 10 meters)
 	{Path: "location.latitude", Tolerance: 0.0001, Category: "system"},
 	{Path: "location.longitude", Tolerance: 0.0001, Category: "system"},
