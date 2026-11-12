@@ -122,7 +122,7 @@
       </div>
 
       <!-- Device Capabilities -->
-      <div class="card" v-if="capabilities.length > 0">
+      <div class="card" v-if="capabilities.length > 0" data-testid="capabilities-card">
         <h2 class="section-title">Capabilities</h2>
         <div class="capabilities-grid">
           <div v-for="cap in capabilities" :key="cap.name" class="capability-item">
@@ -169,6 +169,7 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevice, isAbortError } from '../api/devices'
 import { detectConfigDrift } from '../api/deviceConfig'
+import { getDeviceCapabilities } from '../api/typedConfig'
 import DeviceLoginCard from '../components/devices/DeviceLoginCard.vue'
 import type { Device } from '../api/types'
 import type { DeviceStatus, DeviceEnergy } from '../api/devices'
@@ -197,41 +198,30 @@ const hasEnergyData = computed(() => {
          energy.value.total !== undefined
 })
 
-const capabilities = computed(() => {
-  const caps: Array<{ name: string; icon: string }> = []
-  const deviceType = d.value.type?.toLowerCase() || ''
+// How the names GET /devices/{id}/capabilities returns are shown. A name the page does not know
+// is shown as it came, so a capability the server adds is never hidden.
+const capabilityLabels: Record<string, { name: string; icon: string }> = {
+  wifi: { name: 'WiFi', icon: '📶' },
+  mqtt: { name: 'MQTT', icon: '📡' },
+  cloud: { name: 'Cloud', icon: '☁️' },
+  auth: { name: 'Login', icon: '🔐' },
+  relay: { name: 'Relay Control', icon: '🔌' },
+  dimming: { name: 'Dimmer', icon: '💡' },
+  roller: { name: 'Roller/Shutter', icon: '🪟' },
+  power_metering: { name: 'Power Metering', icon: '⚡' },
+  rgbw: { name: 'RGB/RGBW', icon: '🌈' },
+  temperature: { name: 'Temperature Sensor', icon: '🌡️' },
+  humidity: { name: 'Humidity Sensor', icon: '💧' },
+  input: { name: 'Inputs', icon: '🔘' },
+  ble: { name: 'Bluetooth', icon: '🔷' },
+  ethernet: { name: 'Ethernet', icon: '🔌' },
+}
 
-  // Determine capabilities based on device type
-  if (deviceType.includes('relay') || deviceType.includes('shsw')) {
-    caps.push({ name: 'Relay Control', icon: '🔌' })
-  }
-  if (deviceType.includes('dimmer') || deviceType.includes('shdm')) {
-    caps.push({ name: 'Dimmer', icon: '💡' })
-  }
-  if (deviceType.includes('roller') || deviceType.includes('shutter')) {
-    caps.push({ name: 'Roller/Shutter', icon: '🪟' })
-  }
-  if (deviceType.includes('pm') || hasEnergyData.value) {
-    caps.push({ name: 'Power Metering', icon: '⚡' })
-  }
-  if (status.value?.wifi) {
-    caps.push({ name: 'WiFi', icon: '📶' })
-  }
-  if (status.value?.mqtt) {
-    caps.push({ name: 'MQTT', icon: '📡' })
-  }
-  if (status.value?.cloud) {
-    caps.push({ name: 'Cloud', icon: '☁️' })
-  }
-  if (deviceType.includes('rgbw')) {
-    caps.push({ name: 'RGB/RGBW', icon: '🌈' })
-  }
-  if (deviceType.includes('ht') || status.value?.temperature !== undefined) {
-    caps.push({ name: 'Temperature Sensor', icon: '🌡️' })
-  }
+const capabilityNames = ref<string[]>([])
 
-  return caps
-})
+const capabilities = computed(() =>
+  capabilityNames.value.map(key => capabilityLabels[key] ?? { name: key, icon: '•' })
+)
 
 function formatDate(iso?: string) {
   if (!iso) return '-'
@@ -293,6 +283,25 @@ async function fetchStatus() {
   }
 }
 
+// Same rule as the device read: only the newest capabilities read may change the card, so a late
+// answer for another device neither replaces the list nor clears it.
+let capabilitiesReadSeq = 0
+
+async function fetchCapabilities() {
+  const seq = ++capabilitiesReadSeq
+  try {
+    const id = route.params.id as string
+    const fetched = await getDeviceCapabilities(id, abortController.signal)
+    if (seq !== capabilitiesReadSeq) return
+    capabilityNames.value = fetched.capabilities
+  } catch (e: any) {
+    if (isAbortError(e) || seq !== capabilitiesReadSeq) return
+    // The card is hidden when the server cannot list them, so a failed refresh drops the old list
+    capabilityNames.value = []
+    console.warn('Failed to load capabilities:', e)
+  }
+}
+
 async function fetchEnergy() {
   try {
     const id = route.params.id as string
@@ -308,7 +317,7 @@ async function fetchData() {
   loading.value = true
   error.value = null
   try {
-    await Promise.all([fetchDevice(), fetchStatus(), fetchEnergy(), fetchDrift()])
+    await Promise.all([fetchDevice(), fetchStatus(), fetchEnergy(), fetchDrift(), fetchCapabilities()])
   } catch (e: any) {
     error.value = e?.message || 'Failed to load device'
   } finally {

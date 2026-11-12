@@ -939,6 +939,10 @@ func (h *Handler) getDeviceCapabilities(model string, generation int) []string {
 		capabilities = append(capabilities, "input")
 	}
 
+	if configuration.HasRollerMode(model) {
+		capabilities = append(capabilities, "roller")
+	}
+
 	// Generation-specific capabilities
 	if generation >= 2 {
 		capabilities = append(capabilities, "ble", "ethernet")

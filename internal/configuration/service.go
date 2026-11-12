@@ -724,50 +724,6 @@ func (s *Service) UpdateDeviceConfig(deviceID uint, configUpdate map[string]inte
 	return s.db.Save(&config).Error
 }
 
-// UpdateCapabilityConfig updates a specific capability configuration
-func (s *Service) UpdateCapabilityConfig(deviceID uint, capability string, capabilityConfig interface{}) error {
-	// Get existing config
-	var config DeviceConfig
-	err := s.db.Where("device_id = ?", deviceID).First(&config).Error
-	if err != nil {
-		return fmt.Errorf("device config not found: %w", err)
-	}
-
-	// Parse existing config
-	var configMap map[string]interface{}
-	if unmarshalErr := json.Unmarshal(config.Config, &configMap); unmarshalErr != nil {
-		return fmt.Errorf("failed to parse existing config: %w", unmarshalErr)
-	}
-
-	// Update the specific capability
-	configMap[capability] = capabilityConfig
-
-	// Marshal back to JSON
-	updatedConfig, err := json.Marshal(configMap)
-	if err != nil {
-		return fmt.Errorf("failed to marshal updated config: %w", err)
-	}
-
-	// Create history entry
-	oldConfig := config.Config
-	s.createHistory(deviceID, config.ID, "manual", oldConfig, updatedConfig, "user")
-
-	// Update the config
-	config.Config = updatedConfig
-	config.SyncStatus = "pending"
-	now := time.Now()
-	config.UpdatedAt = now
-
-	// Log the update
-	s.logger.WithFields(map[string]any{
-		"device_id":  deviceID,
-		"capability": capability,
-		"component":  "configuration",
-	}).Info("Updated device capability configuration")
-
-	return s.db.Save(&config).Error
-}
-
 // GetTemplates gets all configuration templates
 func (s *Service) GetTemplates() ([]ConfigTemplate, error) {
 	var templates []ConfigTemplate

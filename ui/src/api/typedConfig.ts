@@ -48,12 +48,13 @@ export interface SchemaProperty {
   'x-applicable'?: boolean
 }
 
+// The body of GET /devices/{id}/capabilities. The server sends it bare, with no
+// {success, data} envelope, and the names are snake_case.
 export interface DeviceCapabilities {
-  deviceId: string
-  deviceType: string
+  device_id: number
+  device_model: string
+  generation: number
   capabilities: string[]
-  supportedFeatures: Record<string, boolean>
-  firmwareVersion?: string
 }
 
 export interface ValidationError {
@@ -115,13 +116,12 @@ export async function updateTypedConfig(deviceId: number | string, config: Recor
 }
 
 // Get device capabilities
-export async function getDeviceCapabilities(deviceId: number | string): Promise<DeviceCapabilities> {
-  const res = await api.get<APIResponse<DeviceCapabilities>>(`/devices/${deviceId}/capabilities`)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to get device capabilities'
-    throw new Error(msg)
+export async function getDeviceCapabilities(deviceId: number | string, signal?: AbortSignal): Promise<DeviceCapabilities> {
+  const res = await api.get<DeviceCapabilities>(`/devices/${deviceId}/capabilities`, { signal })
+  if (!Array.isArray(res.data?.capabilities)) {
+    throw new Error('Failed to get device capabilities')
   }
-  return res.data.data
+  return res.data
 }
 
 export async function validateTypedConfig(request: ConversionRequest): Promise<ValidationResult> {

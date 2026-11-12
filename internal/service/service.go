@@ -1118,26 +1118,6 @@ func (s *ShellyService) GetImportStatus(deviceID uint) (*configuration.ImportSta
 	return s.ConfigSvc.GetImportStatus(deviceID)
 }
 
-// UpdateRelayConfig updates relay-specific configuration
-func (s *ShellyService) UpdateRelayConfig(deviceID uint, config *configuration.RelayConfig) error {
-	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "relay", config)
-}
-
-// UpdateDimmingConfig updates dimming-specific configuration
-func (s *ShellyService) UpdateDimmingConfig(deviceID uint, config *configuration.DimmingConfig) error {
-	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "dimming", config)
-}
-
-// UpdateRollerConfig updates roller-specific configuration
-func (s *ShellyService) UpdateRollerConfig(deviceID uint, config *configuration.RollerConfig) error {
-	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "roller", config)
-}
-
-// UpdatePowerMeteringConfig updates power metering configuration
-func (s *ShellyService) UpdatePowerMeteringConfig(deviceID uint, config *configuration.PowerMeteringConfig) error {
-	return s.ConfigSvc.UpdateCapabilityConfig(deviceID, "power_metering", config)
-}
-
 // UpdateDeviceAuth updates device authentication credentials
 func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password string) error {
 	// The read, the write and the cache drop happen under one hold of clientMu. A 401 path that

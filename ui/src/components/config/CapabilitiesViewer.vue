@@ -2,14 +2,12 @@
   <div class="capabilities-viewer">
     <div class="capabilities-header">
       <h3>Device Capabilities</h3>
-      <span v-if="capabilities.firmwareVersion" class="firmware-version">
-        Firmware: {{ capabilities.firmwareVersion }}
-      </span>
+      <span class="firmware-version">Generation {{ capabilities.generation }}</span>
     </div>
 
     <div class="capabilities-section">
-      <h4>Device Type</h4>
-      <span class="device-type">{{ capabilities.deviceType }}</span>
+      <h4>Device Model</h4>
+      <span class="device-type">{{ capabilities.device_model }}</span>
     </div>
 
     <div class="capabilities-section">
@@ -24,31 +22,6 @@
         </span>
       </div>
     </div>
-
-    <div class="capabilities-section">
-      <h4>Supported Features</h4>
-      <table class="features-table">
-        <thead>
-          <tr>
-            <th>Feature</th>
-            <th>Supported</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(supported, feature) in capabilities.supportedFeatures"
-            :key="feature"
-            :class="{ supported }"
-          >
-            <td>{{ formatFeatureName(feature) }}</td>
-            <td>
-              <span v-if="supported" class="status-icon success">✓</span>
-              <span v-else class="status-icon">✗</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
   </div>
 </template>
 
@@ -60,13 +33,6 @@ interface Props {
 }
 
 defineProps<Props>()
-
-function formatFeatureName(feature: string): string {
-  return feature
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
-    .trim()
-}
 </script>
 
 <style scoped>
@@ -144,58 +110,4 @@ function formatFeatureName(feature: string): string {
   font-weight: 500;
 }
 
-.features-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.features-table thead {
-  background: #f9fafb;
-}
-
-.features-table th {
-  padding: 10px 12px;
-  text-align: left;
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.features-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f3f4f6;
-  font-size: 14px;
-}
-
-.features-table tbody tr:hover {
-  background: #f9fafb;
-}
-
-.features-table tbody tr.supported {
-  background: #f0fdf4;
-}
-
-.status-icon {
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  text-align: center;
-  line-height: 20px;
-  border-radius: 50%;
-  font-weight: bold;
-  font-size: 14px;
-}
-
-.status-icon.success {
-  background: #dcfce7;
-  color: #16a34a;
-}
-
-.status-icon:not(.success) {
-  background: #fee2e2;
-  color: #dc2626;
-}
 </style>
