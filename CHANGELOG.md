@@ -75,11 +75,8 @@ All notable changes to this project are documented here. The project follows Con
 - A plain device `PUT` can no longer overwrite changes saved after the client read the
   device. The client sends back the `updated_at` that it read. If the stored `updated_at`
   differs, the server saves nothing and answers `409`. A body with no `updated_at` saves
-  as before. The device page and the devices list send the version. Three limits remain.
-  The discovery upsert, the GitOps importer, the archive import and the configuration
-  repository do not take the lock of the `PUT`, so one of them can save between its
-  compare and its save; a conditional SQL update will close this
-  (ginsys/shelly-manager#509). MySQL keeps `updated_at` in milliseconds, and whole
+  as before. The device page and the devices list send the version. Two limits remain.
+  MySQL keeps `updated_at` in milliseconds, and whole
   seconds on a legacy column, where two saves inside one second look equal. The status and
   the last seen time are not part of the version: a status read and a control command now
   record them with a narrow write, so a device page that polls the status keeps a version
@@ -88,6 +85,13 @@ All notable changes to this project are documented here. The project follows Con
   The only other write on the device row that does not move
   `updated_at` is the temporary address hold of a forced archive restore.
   (ginsys/shelly-manager#502)
+- The save of a device `PUT` that carries `updated_at` is now one conditional SQL
+  `UPDATE` that matches the `updated_at` that the server read. Before, the server compared
+  and saved in two steps, and a writer that does not take the lock of the `PUT` (the
+  discovery upsert, the GitOps importer, the archive import, the configuration
+  repository) could save between them, so the `PUT` overwrote that change and answered
+  `200`. Now the `PUT` saves nothing and answers `409`. Tests cover SQLite, and
+  PostgreSQL and MySQL in the provider job of the CI. (ginsys/shelly-manager#509)
 - A device save no longer restores an older login. A plain device `PUT`, the refresh
   after a discovery import and the settings backfill of a discovery each saved a whole
   device row that they had read earlier, so a login saved in between was lost. Each
