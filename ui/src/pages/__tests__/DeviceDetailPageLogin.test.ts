@@ -70,6 +70,33 @@ describe('DeviceDetailPage Device Login card', () => {
     expect((wrapper.get('[data-testid="device-login-password"]').element as HTMLInputElement).value).toBe('half-typed')
   })
 
+  it('drops a typed login when the page comes to show another device', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/devices/:id', component: DeviceDetailPage }],
+    })
+    router.push('/devices/7')
+    await router.isReady()
+    const wrapper = mount(RouterView, { global: { plugins: [router], stubs: { RouterLink: true } } })
+    await flushPromises()
+    await wrapper.get('[data-testid="device-login-username"]').setValue('typed-for-7')
+    await wrapper.get('[data-testid="device-login-password"]').setValue('secret-for-7')
+
+    // The same page instance now shows device 8 after a Refresh.
+    vi.mocked(getDevice).mockImplementation(async () => ({
+      ...device,
+      id: 8,
+      settings: JSON.stringify({ auth_user: 'admin8', auth_pass: '********' }),
+    }))
+    await router.push('/devices/8')
+    const refresh = wrapper.findAll('button').find((b) => b.text().trim() === 'Refresh')!
+    await refresh.trigger('click')
+    await flushPromises()
+
+    expect((wrapper.get('[data-testid="device-login-username"]').element as HTMLInputElement).value).toBe('admin8')
+    expect((wrapper.get('[data-testid="device-login-password"]').element as HTMLInputElement).value).toBe('********')
+  })
+
   it('ignores a read that started before a save and arrives after it', async () => {
     const wrapper = await openPage()
 
