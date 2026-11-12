@@ -61,6 +61,15 @@ func TestConvertRelayConfig_ImportKeepsApplianceTypeScheduleRulesAndMaxPower(t *
 		assert.Nil(t, relay.Relays[0].MaxPower)
 	})
 
+	t.Run("a fractional max_power reads as no value, not its truncation", func(t *testing.T) {
+		relay, _ := h.convertRelayConfig(map[string]interface{}{
+			"relays": []interface{}{map[string]interface{}{"max_power": float64(7.5)}},
+		}, "SHSW-25")
+
+		require.Len(t, relay.Relays, 1)
+		assert.Nil(t, relay.Relays[0].MaxPower)
+	})
+
 	t.Run("relay_0 and relay_1", func(t *testing.T) {
 		relay, _ := h.convertRelayConfig(map[string]interface{}{
 			"relay_0": map[string]interface{}{

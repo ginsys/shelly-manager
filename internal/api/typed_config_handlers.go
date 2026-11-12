@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -1361,7 +1362,8 @@ func readRelayChannelFields(channel *configuration.SingleRelayConfig, entry map[
 		}
 		channel.ScheduleRules = &list
 	}
-	if maxPower, ok := entry["max_power"].(float64); ok {
+	// A fraction reads as no value, never as its truncation, so a stored 7 never stands for a 7.5.
+	if maxPower, ok := entry["max_power"].(float64); ok && maxPower == math.Trunc(maxPower) {
 		channel.MaxPower = configuration.IntPtr(int(maxPower))
 	}
 }
