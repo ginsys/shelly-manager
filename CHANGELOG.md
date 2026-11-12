@@ -36,6 +36,13 @@ All notable changes to this project are documented here. The project follows Con
   configuration validator reads the same list, so a Gen1 device with MQTT enabled no longer
   draws the "device may not support MQTT" warning. Bluetooth and Ethernet stay listed for
   generation 2 and later. The API overview describes the list. (ginsys/shelly-manager#507)
+- A plain device `PUT` can no longer overwrite changes saved after the client read the
+  device. The client sends back the `updated_at` that it read. If the stored `updated_at`
+  differs, the server saves nothing and answers `409`. A body with no `updated_at` saves
+  as before. The device page and the devices list send the version. Two limits remain.
+  MySQL keeps whole seconds in `updated_at`, so two saves inside one second look equal.
+  A writer that uses `UpdateColumn` does not move `updated_at`, and the only one on the
+  device row is the temporary address hold of an import swap. (ginsys/shelly-manager#502)
 - A device save no longer restores an older login. A plain device `PUT`, the refresh
   after a discovery import and the settings backfill of a discovery each saved a whole
   device row that they had read earlier, so a login saved in between was lost. Each

@@ -348,7 +348,8 @@ async function handleSaveDevice() {
     const id = route.params.id as string
     await updateDevice(id, {
       name: editForm.value.name,
-      settings: editForm.value.settings
+      settings: editForm.value.settings,
+      updated_at: d.value?.updated_at
     })
     showEditDialog.value = false
     await fetchDevice()

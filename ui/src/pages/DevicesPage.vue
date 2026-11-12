@@ -210,7 +210,7 @@ function handleEdit(device: Device) {
 async function handleFormSubmit(data: Partial<Device>) {
   try {
     if (showEditDialog.value && editingDevice.value) {
-      await updateDevice(editingDevice.value.id, data)
+      await updateDevice(editingDevice.value.id, { ...data, updated_at: editingDevice.value.updated_at })
     } else {
       await createDevice(data)
     }
