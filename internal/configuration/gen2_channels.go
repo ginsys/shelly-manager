@@ -306,13 +306,14 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			if r.AutoOff != nil && (*r.AutoOff < 0 || *r.AutoOff > math.MaxInt32) {
 				paths, r.AutoOff = append(paths, prefix+".auto_off"), nil
 			}
+			// A second channel with the same id cannot say which channel its settings belong to. An entry
+			// that sets nothing holds its id too: verify compares the desired list as it stands.
+			if seenRelays[r.ID] {
+				paths = append(paths, prefix+".id")
+				continue
+			}
+			seenRelays[r.ID] = true
 			if r.Name != nil || r.DefaultState != nil || r.AutoOn != nil || r.AutoOff != nil {
-				// A second channel with the same id cannot say which channel its settings belong to.
-				if seenRelays[r.ID] {
-					paths = append(paths, prefix+".id")
-					continue
-				}
-				seenRelays[r.ID] = true
 				relay.Relays = append(relay.Relays, r)
 				kept["relay.relays"] = append(kept["relay.relays"], i)
 			}
@@ -340,12 +341,12 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			if in.Type != nil && !gen2InputTypes[*in.Type] {
 				paths, in.Type = append(paths, prefix+".type"), nil
 			}
+			if seenInputs[in.ID] {
+				paths = append(paths, prefix+".id")
+				continue
+			}
+			seenInputs[in.ID] = true
 			if in.Name != nil || in.Type != nil || in.Mode != nil || in.Inverted != nil {
-				if seenInputs[in.ID] {
-					paths = append(paths, prefix+".id")
-					continue
-				}
-				seenInputs[in.ID] = true
 				input.Inputs = append(input.Inputs, in)
 				kept["input.inputs"] = append(kept["input.inputs"], i)
 			}

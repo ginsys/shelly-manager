@@ -64,9 +64,10 @@ All notable changes to this project are documented here. The project follows Con
   repeated id is compared by position, as before. The mode of input N is written as the
   `in_mode` of switch N. Where a model lets a switch take another input (`input_id`), apply
   reads the device first and refuses the mode with 422, because the write would change the
-  input that switch runs and not input N. A channel list that holds one id twice with settings
-  is refused too, at the second entry (for example `relay.relays.1.id`), because it cannot say
-  which channel the settings belong to. A template and an override that the configuration merge
+  input that switch runs and not input N; the path is `input.inputs.I.mode`, with I the position
+  in the desired list. A channel list that holds one id twice is refused too, at the second
+  entry (for example `relay.relays.1.id`), whether or not the entries set anything, because it
+  cannot say which channel the settings belong to. A template and an override that the configuration merge
   pairs by position can still put a channel's settings under another id when the ids differ:
   ginsys/shelly-manager#537 tracks it.
   Refused with 422 before anything is
