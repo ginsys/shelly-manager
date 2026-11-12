@@ -23,8 +23,9 @@ type fakeWiFiDevice struct {
 	staWrites, apWrites []map[string]interface{}
 	staErr, apErr       error
 	gets                int
-	failGetFrom         int   // GET /settings number from which the device does not answer; 0 never
-	getErr              error // what that failing GET returns; the default is a dial error (no answer)
+	failGetFrom         int         // GET /settings number from which the device does not answer; 0 never
+	getErr              error       // what that failing GET returns; the default is a dial error (no answer)
+	onGet               func(n int) // runs at the start of GET /settings number n
 }
 
 func newFakeWiFiDevice() *fakeWiFiDevice {
@@ -39,6 +40,9 @@ func newFakeWiFiDevice() *fakeWiFiDevice {
 
 func (d *fakeWiFiDevice) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 	d.gets++
+	if d.onGet != nil {
+		d.onGet(d.gets)
+	}
 	if d.failGetFrom > 0 && d.gets >= d.failGetFrom {
 		if d.getErr != nil {
 			return nil, d.getErr
@@ -618,4 +622,76 @@ func TestApplyConfig_WiFiReadBackThatRejectsTheLoginReachesTheCaller(t *testing.
 	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.True(t, shelly.IsAuthError(err))
+}
+
+func TestApplyDesiredConfig_ARefusedApplyNeverMarksANewerConfigurationApplied(t *testing.T) {
+	// The desired configuration is edited while the pre-read is pending. Nothing wrote the newer
+	// one, so the restore must not mark it applied.
+	svc, repo := newServiceWithDesiredName(t, "plug")
+	setDesired(t, repo, &DeviceConfiguration{WiFi: &WiFiConfiguration{SSID: StringPtr("office"), Password: StringPtr("pw")}})
+	repo.devices[1].ConfigApplied = true
+	dev := newFakeWiFiDevice()
+	dev.failGetFrom = 1
+	dev.onGet = func(int) {
+		setDesired(t, repo, &DeviceConfiguration{WiFi: &WiFiConfiguration{SSID: StringPtr("guest"), Password: StringPtr("pw")}})
+		repo.devices[1].ConfigApplied = false // an edit of the desired configuration clears the flag
+	}
+
+	_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHSW-1")
+
+	require.Error(t, err)
+	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+func TestApplyConfig_WiFiRejectedLoginOutranksAnEarlierOrdinaryError(t *testing.T) {
+	both := &WiFiConfiguration{
+		SSID: StringPtr("office"), Password: StringPtr("pw"),
+		AccessPoint: &AccessPointConfig{Enable: BoolPtr(false)},
+	}
+
+	t.Run("read-back after an access point write error", func(t *testing.T) {
+		dev := newFakeWiFiDevice()
+		dev.apErr = errors.New("503 busy")
+		dev.failGetFrom = 2
+		dev.getErr = shelly.ErrAuthRequired
+
+		result, err := applyWiFi(t, dev, wifiDesired(both))
+
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.True(t, shelly.IsAuthError(err), "got %v", err)
+	})
+
+	t.Run("access point write after a station write error", func(t *testing.T) {
+		dev := newFakeWiFiDevice()
+		dev.staErr = errors.New("400 bad request: key pw is too short")
+		dev.apErr = shelly.ErrAuthRequired
+
+		result, err := applyWiFi(t, dev, wifiDesired(both))
+
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.True(t, shelly.IsAuthError(err), "got %v", err)
+		assert.NotContains(t, err.Error(), "key pw", "the redaction stays")
+	})
+}
+
+func TestApplyConfig_UnconfirmedWiFiStopsTheLaterSections(t *testing.T) {
+	// The device may be on another network, so MQTT and the rest are not written to it. They would
+	// only pile failures behind the unconfirmed state.
+	dev := newFakeWiFiDevice()
+	dev.failGetFrom = 2
+
+	result, err := applyWiFi(t, dev, &DeviceConfiguration{
+		WiFi: &WiFiConfiguration{SSID: StringPtr("guest"), Password: StringPtr("guest-pass")},
+		MQTT: &MQTTConfiguration{Enable: BoolPtr(true), Server: StringPtr("broker.local")},
+	})
+
+	require.NoError(t, err)
+	assert.True(t, result.Unconfirmed)
+	assert.Empty(t, result.Failures)
+	assert.Zero(t, result.FailedCount)
+	assert.Zero(t, dev.setCalls, "no POST /settings after the Wi-Fi write")
+	assert.Empty(t, dev.posted)
+	assert.Contains(t, strings.Join(result.Warnings, " "), "not written")
 }

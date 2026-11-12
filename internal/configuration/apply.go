@@ -223,16 +223,19 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"Login", a.applyLoginSettings},
 	}
 	for _, section := range sections {
-		err := section.apply(ctx, client, apiConfig, result)
-		if err == nil {
-			continue
+		if err := section.apply(ctx, client, apiConfig, result); err != nil {
+			a.logger.WithFields(map[string]any{
+				"error":     err.Error(),
+				"component": "config_applier",
+			}).Warn("Failed to apply " + section.name + " settings")
+			if shelly.IsAuthError(err) {
+				return err
+			}
 		}
-		a.logger.WithFields(map[string]any{
-			"error":     err.Error(),
-			"component": "config_applier",
-		}).Warn("Failed to apply " + section.name + " settings")
-		if shelly.IsAuthError(err) {
-			return err
+		if result.Unconfirmed {
+			// The device may be on another network, so the later sections would only fail against it.
+			result.Warnings = append(result.Warnings, wifiLaterSectionsWarning)
+			break
 		}
 	}
 	return nil
