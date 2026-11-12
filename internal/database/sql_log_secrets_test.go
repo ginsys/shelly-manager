@@ -17,6 +17,11 @@ import (
 // parameterized queries it prints the bound values too, and devices.settings
 // holds the clear-text device login (ginsys/shelly-manager#489).
 func TestDeviceLoginSaveKeepsSecretsOutOfSQLLog(t *testing.T) {
+	// `make test` sets this to true, and the sqlite provider then swaps the
+	// GORM logger for one that discards output. Turn it off so the logger
+	// under test is the production one.
+	t.Setenv("SHELLY_SECURITY_VALIDATION_TEST_MODE", "false")
+
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "app.log")
 
@@ -60,7 +65,8 @@ func TestDeviceLoginSaveKeepsSecretsOutOfSQLLog(t *testing.T) {
 
 	// Control: the SQL trace is on, so a missing secret means redaction and
 	// not a silent logger.
-	require.Contains(t, text, "devices", "the info-level SQL trace did not run")
+	require.Contains(t, text, "INSERT INTO `devices`", "the info-level SQL trace of the insert did not run")
+	require.Contains(t, text, "UPDATE `devices`", "the info-level SQL trace of the update did not run")
 
 	for _, secret := range []string{userSecret, passSecret, nestedSecret} {
 		// Boolean form: a failure must not print the whole log back.
