@@ -3,12 +3,15 @@ package configuration
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
@@ -20,7 +23,8 @@ type fakeWiFiDevice struct {
 	staWrites, apWrites []map[string]interface{}
 	staErr, apErr       error
 	gets                int
-	failGetFrom         int // GET /settings number from which the device does not answer; 0 never
+	failGetFrom         int   // GET /settings number from which the device does not answer; 0 never
+	getErr              error // what that failing GET returns; the default is a dial error (no answer)
 }
 
 func newFakeWiFiDevice() *fakeWiFiDevice {
@@ -36,6 +40,9 @@ func newFakeWiFiDevice() *fakeWiFiDevice {
 func (d *fakeWiFiDevice) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 	d.gets++
 	if d.failGetFrom > 0 && d.gets >= d.failGetFrom {
+		if d.getErr != nil {
+			return nil, d.getErr
+		}
 		return nil, errors.New("dial tcp 192.168.1.50:80: connect: no route to host")
 	}
 	return d.fakeGen1Device.GetConfig(ctx)
@@ -492,4 +499,123 @@ func TestApplyDesiredConfig_UnconfirmedWiFiStaysPending(t *testing.T) {
 	require.NotNil(t, result.ApplyResult)
 	assert.True(t, result.ApplyResult.Unconfirmed)
 	assert.False(t, repo.devices[1].ConfigApplied, "an unconfirmed write is not an applied configuration")
+}
+
+func TestApplyConfig_WiFiKeyAppearsInNoLogLineAndNoErrorText(t *testing.T) {
+	// The device echoes the key it was sent in its error. The key reaches neither the log, nor the
+	// failure list, nor an error text.
+	logFile := filepath.Join(t.TempDir(), "apply.log")
+	logger, err := logging.New(logging.Config{Level: logging.LevelDebug, Format: "json", Output: logFile})
+	require.NoError(t, err)
+	dev := newFakeWiFiDevice()
+	dev.staErr = errors.New("400 bad request: key hunter2 is too short")
+
+	result, applyErr := NewConfigApplier(NewGen1Converter(nil), logger).ApplyConfig(context.Background(), dev, wifiDesired(&WiFiConfiguration{
+		SSID: StringPtr("office"), Password: StringPtr("hunter2"),
+	}), "SHSW-1")
+
+	require.NoError(t, applyErr)
+	require.NotEmpty(t, result.Failures)
+	for _, f := range result.Failures {
+		assert.NotContains(t, f.Error, "hunter2")
+		assert.NotContains(t, f.Value, "hunter2")
+	}
+	logged, readErr := os.ReadFile(logFile)
+	require.NoError(t, readErr)
+	require.Contains(t, string(logged), "Failed to apply WiFi settings", "the control: the failure was logged at all")
+	assert.NotContains(t, string(logged), "hunter2")
+}
+
+func TestApplyWiFiSettings_ReturnsTheKeyRedactedError(t *testing.T) {
+	dev := newFakeWiFiDevice()
+	dev.staErr = errors.New("400 bad request: key hunter2 is too short")
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+	apiConfig := map[string]interface{}{"wifi_sta": map[string]interface{}{"ssid": "office", "key": "hunter2"}}
+	live := []byte(`{"wifi_sta":{"ssid":"office"}}`)
+
+	err := applier.applyWiFiSettings(context.Background(), dev, apiConfig, live, &ApplyResult{})
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "hunter2")
+}
+
+func TestApplyDesiredConfig_APrecheckRefusalKeepsAnAppliedConfigurationApplied(t *testing.T) {
+	// Nothing is written when the precheck refuses, so the device still holds what it held.
+	cases := []struct {
+		name string
+		wifi *WiFiConfiguration
+		dev  func() *fakeWiFiDevice
+	}{
+		{"read fails", &WiFiConfiguration{SSID: StringPtr("office"), Password: StringPtr("pw")},
+			func() *fakeWiFiDevice { d := newFakeWiFiDevice(); d.failGetFrom = 1; return d }},
+		{"new network without a key", &WiFiConfiguration{SSID: StringPtr("guest")}, newFakeWiFiDevice},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, repo := newServiceWithDesiredName(t, "plug")
+			setDesired(t, repo, &DeviceConfiguration{WiFi: tc.wifi})
+			repo.devices[1].ConfigApplied = true
+			dev := tc.dev()
+
+			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHSW-1")
+
+			require.Error(t, err)
+			assert.Empty(t, dev.staWrites)
+			assert.True(t, repo.devices[1].ConfigApplied, "no write happened, so the flag stays")
+		})
+	}
+}
+
+func TestApplyConfig_WiFiDNSOnlyChangeIsNotANetworkChange(t *testing.T) {
+	// The accepted network-change keys are ssid, enabled, ipv4_method, ip, netmask and gateway.
+	dev := newFakeWiFiDevice()
+	dev.failGetFrom = 2
+
+	result, err := applyWiFi(t, dev, wifiDesired(&WiFiConfiguration{
+		StaticIP: &StaticIPConfig{Nameserver: StringPtr("9.9.9.9")},
+	}))
+
+	require.NoError(t, err)
+	assert.False(t, result.Unconfirmed)
+	assert.False(t, result.Success)
+	require.NotEmpty(t, result.Failures)
+}
+
+func TestApplyConfig_WiFiReadBackThatAnswersWithAnErrorIsAFailureNotUnconfirmed(t *testing.T) {
+	// A device that answers with an HTTP error or bad JSON is on its network. Only no answer at all
+	// is unconfirmed.
+	answers := map[string]error{
+		"http 500": &shelly.DeviceError{IP: "192.168.1.50", Generation: 1, Operation: "GET /settings", StatusCode: 500},
+		"bad json": &shelly.DeviceError{IP: "192.168.1.50", Generation: 1, Operation: "GET /settings", Err: errors.New("invalid character")},
+	}
+	for name, getErr := range answers {
+		t.Run(name, func(t *testing.T) {
+			dev := newFakeWiFiDevice()
+			dev.failGetFrom = 2
+			dev.getErr = getErr
+
+			result, err := applyWiFi(t, dev, wifiDesired(&WiFiConfiguration{
+				SSID: StringPtr("guest"), Password: StringPtr("guest-pass"),
+			}))
+
+			require.NoError(t, err)
+			assert.False(t, result.Unconfirmed)
+			assert.False(t, result.Success)
+			require.NotEmpty(t, result.Failures)
+		})
+	}
+}
+
+func TestApplyConfig_WiFiReadBackThatRejectsTheLoginReachesTheCaller(t *testing.T) {
+	dev := newFakeWiFiDevice()
+	dev.failGetFrom = 2
+	dev.getErr = shelly.ErrAuthRequired
+
+	result, err := applyWiFi(t, dev, wifiDesired(&WiFiConfiguration{
+		SSID: StringPtr("guest"), Password: StringPtr("guest-pass"),
+	}))
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, shelly.IsAuthError(err))
 }

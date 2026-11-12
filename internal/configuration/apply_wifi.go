@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // WiFiSettingsClient is the Wi-Fi surface of a Gen1 client: POST /settings/sta for the station and
@@ -94,6 +96,20 @@ func liveWiFiSection(raw json.RawMessage, section string) map[string]interface{}
 // with no key leaves it unable to join. The same network without a key is a change of the other
 // settings and stays allowed.
 func checkWiFiBeforeWrite(live json.RawMessage, haveLive bool, readErr error, apiConfig map[string]interface{}) error {
+	if err := wifiPrecheck(live, haveLive, readErr, apiConfig); err != nil {
+		return &refusedBeforeWriteError{err}
+	}
+	return nil
+}
+
+// refusedBeforeWriteError marks an apply that stopped before the first write. The device still
+// holds what it held, so the caller can leave config_applied as it was.
+type refusedBeforeWriteError struct{ err error }
+
+func (e *refusedBeforeWriteError) Error() string { return e.err.Error() }
+func (e *refusedBeforeWriteError) Unwrap() error { return e.err }
+
+func wifiPrecheck(live json.RawMessage, haveLive bool, readErr error, apiConfig map[string]interface{}) error {
 	sta, ap := gen1WiFiForms(apiConfig)
 	if len(sta) == 0 && len(ap) == 0 {
 		return nil
@@ -115,11 +131,12 @@ func checkWiFiBeforeWrite(live json.RawMessage, haveLive bool, readErr error, ap
 }
 
 // stationNetworkChanged reports whether the station write moves the device's network: its ssid,
-// enabled flag or addressing differs from what the device reported before the write. Only then can
-// a silent device mean it is on another network.
+// enabled flag, addressing method or static address differs from what the device reported before
+// the write. Only then can a silent device mean it is on another network. The name server does not
+// move the device, and the key is never read back.
 func stationNetworkChanged(sta map[string]interface{}, live map[string]interface{}) bool {
 	for _, key := range gen1StationKeys {
-		if key.api == "key" {
+		if key.api == "key" || key.api == "dns" {
 			continue
 		}
 		value, written := sta[key.form]
@@ -163,8 +180,10 @@ func (a *ConfigApplier) applyWiFiSettings(ctx context.Context, client ShellyClie
 			continue
 		}
 		if err := route.write(ctx, route.form); err != nil {
+			// The caller logs the returned error, so the returned one is redacted too.
 			secret, _ := route.form["key"].(string)
-			failWiFi(result, route.section, route.form, redact(err, secret).Error())
+			err = redact(err, secret)
+			failWiFi(result, route.section, route.form, err.Error())
 			firstErr = firstError(firstErr, err)
 			continue
 		}
@@ -176,7 +195,7 @@ func (a *ConfigApplier) applyWiFiSettings(ctx context.Context, client ShellyClie
 
 	after, err := client.GetConfig(ctx)
 	if err != nil {
-		if networkChanged && written["wifi_sta"] != nil {
+		if networkChanged && written["wifi_sta"] != nil && !deviceAnswered(err) {
 			result.Unconfirmed = true
 			result.Warnings = append(result.Warnings, wifiUnconfirmedWarning)
 			return firstErr
@@ -192,6 +211,14 @@ func (a *ConfigApplier) applyWiFiSettings(ctx context.Context, client ShellyClie
 		}
 	}
 	return firstErr
+}
+
+// deviceAnswered reports whether a failed read came from a device that answered: an HTTP status,
+// a rejected login or a body that is not JSON all prove it is on its network. A transport error
+// (no route, refused, timeout) is no answer.
+func deviceAnswered(err error) bool {
+	var deviceErr *shelly.DeviceError
+	return errors.As(err, &deviceErr) || shelly.IsAuthError(err)
 }
 
 // compareWiFiReadBack checks every key just written against what GET /settings reports. The key is

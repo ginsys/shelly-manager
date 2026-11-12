@@ -1269,8 +1269,10 @@ paths:
         does not report requires_reboot because the reference documents no reboot for it) and
         Wi-Fi (station through POST /settings/sta, access point enable and password through
         POST /settings/ap, only the keys the desired configuration sets; a new ssid without a
-        usable password, a failed GET /settings before the write, an access point ssid or key,
-        roam_threshold and a station and an access point both enabled return 422; the password
+        usable password, an access point ssid or key, roam_threshold and a station and an access
+        point both enabled return 422, and a failed GET /settings before the write refuses with
+        the read's own error and writes nothing; a refused apply leaves config_applied as it
+        was; the password
         is write-only and never echoed; Wi-Fi does not report requires_reboot; the route
         behaviour and key names are read from the Shelly reference and not confirmed on
         hardware). Applies
