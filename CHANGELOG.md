@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- A drift check no longer writes to the stored configuration or its history. It used
+  to run a full import first, which replaced the stored config with the device's,
+  added a history row and moved `updated_at`, and then wrote the old config back.
+  A check left a history row whenever the imported JSON differed from the stored
+  bytes, which its own import timestamp usually caused, and between the two writes
+  the stored row held the device's config. It now only reads the device and compares. The one thing it stores
+  is the sync status (`synced` or `drift`), because the import status and the stored
+  configuration in the API and in exports carry it. It writes that column only when the value changes, and leaves
+  the config, the sync time and `updated_at` as they were. (ginsys/shelly-manager#287)
 - A device read that overlapped a credential update could cache a client that still
   used the old login, and later reads reused it. The read now reloads the device
   under the client cache lock before it builds a client. (ginsys/shelly-manager#399)

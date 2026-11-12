@@ -952,6 +952,94 @@ func TestDetectDrift_MetadataOnly(t *testing.T) {
 	mockClient.AssertExpectations(t)
 }
 
+// driftCheckState is what a drift check must leave alone: the stored row and its history.
+type driftCheckState struct {
+	row       DeviceConfig
+	histories int64
+}
+
+func readDriftCheckState(t *testing.T, db *gorm.DB, deviceID uint) driftCheckState {
+	t.Helper()
+	var s driftCheckState
+	require.NoError(t, db.Where("device_id = ?", deviceID).First(&s.row).Error)
+	require.NoError(t, db.Model(&ConfigHistory{}).Where("device_id = ?", deviceID).Count(&s.histories).Error)
+	return s
+}
+
+// requireBaselineUntouched fails unless the drift check left the stored config, its sync time,
+// its update time and the history exactly as they were. Only the sync status may move, to want.
+func requireBaselineUntouched(t *testing.T, before, after driftCheckState, wantStatus string) {
+	t.Helper()
+	assert.Equal(t, wantStatus, after.row.SyncStatus)
+	assert.Equal(t, string(before.row.Config), string(after.row.Config), "stored config was rewritten")
+	assert.Equal(t, before.row.LastSynced, after.row.LastSynced, "last_synced was re-stamped")
+	assert.True(t, before.row.UpdatedAt.Equal(after.row.UpdatedAt), "updated_at moved: %v -> %v",
+		before.row.UpdatedAt, after.row.UpdatedAt)
+	assert.Equal(t, before.histories, after.histories, "a drift check appended a history row")
+}
+
+// TestDetectDrift_WritesNothingButStatus pins the read-only contract: a drift check reads the
+// device and compares, and the only thing it may store is the sync status.
+func TestDetectDrift_WritesNothingButStatus(t *testing.T) {
+	service, db := setupTestService(t)
+	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
+
+	synced := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	stored := DeviceConfig{
+		DeviceID:   1,
+		Config:     json.RawMessage(`{"name":"old-name","wifi":{"enable":true,"ssid":"OldNetwork"}}`),
+		LastSynced: &synced,
+		SyncStatus: "synced",
+	}
+	require.NoError(t, db.Create(&stored).Error)
+	before := readDriftCheckState(t, db, 1)
+
+	mockClient := new(mockShellyClient)
+	mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{ID: "dev", Generation: 1, Model: "SHSW-1"}, nil)
+	mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
+		Raw: json.RawMessage(`{"name":"new-name","wifi":{"enable":true,"ssid":"NewNetwork"}}`),
+	}, nil)
+
+	drift, err := service.DetectDrift(1, mockClient)
+	require.NoError(t, err)
+	require.NotNil(t, drift, "the changed device must show drift")
+	requireBaselineUntouched(t, before, readDriftCheckState(t, db, 1), "drift")
+
+	// The baseline stays, so a second check against the same device reports the same drift.
+	drift, err = service.DetectDrift(1, mockClient)
+	require.NoError(t, err)
+	require.NotNil(t, drift, "the baseline must survive a drift check")
+	requireBaselineUntouched(t, before, readDriftCheckState(t, db, 1), "drift")
+}
+
+// TestDetectDrift_InSyncWritesNothing covers the other branch: a device that matches its baseline
+// leaves the row and the history alone, and a stale drift mark is cleared without a re-stamp.
+func TestDetectDrift_InSyncWritesNothing(t *testing.T) {
+	service, db := setupTestService(t)
+	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
+
+	synced := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	stored := DeviceConfig{
+		DeviceID:   1,
+		Config:     json.RawMessage(`{"name":"dev","_metadata":{"imported_at":"2020-01-01T00:00:00Z"}}`),
+		LastSynced: &synced,
+		SyncStatus: "drift",
+	}
+	require.NoError(t, db.Create(&stored).Error)
+	before := readDriftCheckState(t, db, 1)
+
+	mockClient := new(mockShellyClient)
+	mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{ID: "dev", Generation: 1, Model: "SHSW-1"}, nil)
+	mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
+		Raw: json.RawMessage(`{"name":"dev"}`),
+	}, nil)
+
+	drift, err := service.DetectDrift(1, mockClient)
+	require.NoError(t, err)
+	require.Nil(t, drift)
+	requireBaselineUntouched(t, before, readDriftCheckState(t, db, 1), "synced")
+}
+
 // TestCompareConfigurationsForDrift_IgnoresMetadataSubtrees confirms the drift comparator drops
 // added/removed/modified _metadata and device_info subtrees at the raw-key level.
 func TestCompareConfigurationsForDrift_IgnoresMetadataSubtrees(t *testing.T) {
