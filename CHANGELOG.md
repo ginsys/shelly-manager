@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The project follows Con
 
 ## [Unreleased]
 
+### Added
+- The device page has a Device Login card for the username and password the manager
+  uses to reach a device. Until now only the API could store them, and a device that
+  rejected the stored login gave the user no way to fix it in the UI. A saved password
+  shows as a mask and is kept when the mask is sent back, an empty username turns
+  device authentication off, and a username without a password is refused before
+  anything is sent. (ginsys/shelly-manager#137)
+
 ### Fixed
 - The SQL log no longer prints device logins. With `database.log_level` set to
   `info` and `logging.level` set to `debug`, every statement was logged with its
