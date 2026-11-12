@@ -21,6 +21,7 @@ type FieldCompareRule struct {
 	Normalize   func(interface{}) interface{} // Normalize before compare
 	Severity    string                        // "critical", "warning", "info" (default: critical)
 	Category    string                        // "security", "network", "device", "system", "metadata"
+	ExactList   bool                          // A list must match whole: an extra actual element is a difference
 }
 
 // defaultCompareRules defines the default comparison rules
@@ -39,6 +40,9 @@ var defaultCompareRules = []FieldCompareRule{
 	// And for the Wi-Fi keys: GET /settings never returns the station or the access point key.
 	{Path: "wifi.password", SkipCompare: true},
 	{Path: "wifi.ap.pass", SkipCompare: true},
+
+	// A schedule is the whole list the device keeps: a rule left on the device is not the desired schedule.
+	{Path: "relay.relays.*.schedule_rules", ExactList: true},
 
 	// Tolerance for coordinates (about 10 meters)
 	{Path: "location.latitude", Tolerance: 0.0001, Category: "system"},
@@ -191,6 +195,14 @@ func (c *ConfigComparator) compareSlices(expected, actual reflect.Value, path st
 	for i := actualLen; i < expectedLen; i++ {
 		elemPath := fmt.Sprintf("%s.%d", path, i)
 		c.addDifference(result, elemPath, expected.Index(i).Interface(), nil, "removed", rule)
+	}
+
+	// An exact list also reports the elements the device holds beyond the desired ones
+	if rule != nil && rule.ExactList {
+		for i := expectedLen; i < actualLen; i++ {
+			elemPath := fmt.Sprintf("%s.%d", path, i)
+			c.addDifference(result, elemPath, nil, actual.Index(i).Interface(), "added", rule)
+		}
 	}
 }
 

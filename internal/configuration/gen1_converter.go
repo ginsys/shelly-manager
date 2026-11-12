@@ -431,11 +431,13 @@ func (c *Gen1Converter) convertRelay(gen1 map[string]interface{}, config *Device
 			singleRelay.Schedule = BoolPtr(schedule)
 		}
 		if rules, ok := relayMap["schedule_rules"].([]interface{}); ok {
+			list := []string{}
 			for _, rule := range rules {
 				if text, isString := rule.(string); isString {
-					singleRelay.ScheduleRules = append(singleRelay.ScheduleRules, text)
+					list = append(list, text)
 				}
 			}
+			singleRelay.ScheduleRules = &list
 		}
 		if maxPower, ok := relayMap["max_power"].(float64); ok {
 			singleRelay.MaxPower = IntPtr(int(maxPower))
@@ -747,7 +749,7 @@ func (c *Gen1Converter) exportRelay(config *DeviceConfiguration, gen1 map[string
 			relayMap["schedule"] = *relay.Schedule
 		}
 		if relay.ScheduleRules != nil {
-			relayMap["schedule_rules"] = relay.ScheduleRules
+			relayMap["schedule_rules"] = *relay.ScheduleRules
 		}
 		if relay.MaxPower != nil {
 			relayMap["max_power"] = *relay.MaxPower

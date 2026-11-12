@@ -14,7 +14,7 @@ func TestApplyConfig_RelayWritesTheScheduleApplianceTypeAndMaxPower(t *testing.T
 
 	result := applyMaxPower(t, client, "SHSW-PM", &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{
 		ID: 0, ApplianceType: StringPtr("heater"), Schedule: BoolPtr(true),
-		ScheduleRules: []string{"0700-0123456-on", "2200-0123456-off"}, MaxPower: IntPtr(1500),
+		ScheduleRules: StringsPtr("0700-0123456-on", "2200-0123456-off"), MaxPower: IntPtr(1500),
 	}}}})
 
 	assert.True(t, result.Success, "failures: %+v", result.Failures)
@@ -37,7 +37,7 @@ func TestApplyConfig_RelayScheduleRulesReadBackMismatchFails(t *testing.T) {
 	}
 
 	result := applyMaxPower(t, client, "SHSW-PM", &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{
-		ID: 0, ScheduleRules: []string{"0700-0123456-on", "2200-0123456-off"},
+		ID: 0, ScheduleRules: StringsPtr("0700-0123456-on", "2200-0123456-off"),
 	}}}})
 
 	assert.False(t, result.Success)
@@ -53,7 +53,7 @@ func TestApplyConfig_RelayScheduleRulesReadBackMatches(t *testing.T) {
 	}
 
 	result := applyMaxPower(t, client, "SHSW-PM", &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{
-		ID: 0, ScheduleRules: []string{"0700-0123456-on", "2200-0123456-off"},
+		ID: 0, ScheduleRules: StringsPtr("0700-0123456-on", "2200-0123456-off"),
 	}}}})
 
 	assert.True(t, result.Success, "failures: %+v", result.Failures)
@@ -70,9 +70,9 @@ func TestUnsupportedApplySettings_RelayValues(t *testing.T) {
 		want  string
 	}{
 		"negative channel max power": {SingleRelayConfig{MaxPower: IntPtr(-1)}, "relay.relays[0].max_power"},
-		"empty rule":                 {SingleRelayConfig{ScheduleRules: []string{""}}, "relay.relays[0].schedule_rules"},
-		"rule with a comma":          {SingleRelayConfig{ScheduleRules: []string{"0000-0123456-on,1000-0123456-off"}}, "relay.relays[0].schedule_rules"},
-		"too many rules":             {SingleRelayConfig{ScheduleRules: tooMany}, "relay.relays[0].schedule_rules"},
+		"empty rule":                 {SingleRelayConfig{ScheduleRules: StringsPtr("")}, "relay.relays[0].schedule_rules"},
+		"rule with a comma":          {SingleRelayConfig{ScheduleRules: StringsPtr("0000-0123456-on,1000-0123456-off")}, "relay.relays[0].schedule_rules"},
+		"too many rules":             {SingleRelayConfig{ScheduleRules: &tooMany}, "relay.relays[0].schedule_rules"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

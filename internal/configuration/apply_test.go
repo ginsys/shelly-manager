@@ -392,7 +392,7 @@ func TestUnsupportedApplySettings_RelayKeys(t *testing.T) {
 
 	// The schedule, its rules, the appliance type and the channel's max power are written too.
 	more := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
-		{ID: 0, Schedule: BoolPtr(true), ScheduleRules: []string{"0000-0123456-on"}, ApplianceType: StringPtr("heater"), MaxPower: IntPtr(1500)},
+		{ID: 0, Schedule: BoolPtr(true), ScheduleRules: StringsPtr("0000-0123456-on"), ApplianceType: StringPtr("heater"), MaxPower: IntPtr(1500)},
 	}}}
 	unsupported, err = unsupportedApplySettings(converter, more, "SHSW-PM", false)
 	require.NoError(t, err)
