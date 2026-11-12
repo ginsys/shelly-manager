@@ -133,6 +133,13 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- Importing a device's typed configuration now keeps, for each Gen1 relay channel,
+  `schedule_rules` and `max_power`, and reads `appliance_type` as the appliance type. Before, the
+  import dropped the first two and stored `appliance_type` as the relay name when the entry had
+  none, so an import followed by an apply lost the schedule rules and the per-channel max power
+  and could rename the relay. It covers both the `relays` array and the `relay_0`, `relay_1`
+  form. Not confirmed on hardware: the device document is read as the Gen1 reference describes
+  it. Fixes ginsys/shelly-manager#528.
 - `PUT` and `PATCH /devices/{id}/overrides/new` now check the body against the schema of the
   device model, as the template routes do. A value outside it (an out-of-range number, a text
   that is not an option, a malformed address, a section the model lacks) answers 400
