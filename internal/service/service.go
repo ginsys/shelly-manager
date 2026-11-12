@@ -333,50 +333,24 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		"component": "service",
 	}).Debug("Auth failed, attempting recovery")
 
-	// Parse settings
-	var settings struct {
-		Model       string `json:"model"`
-		Gen         int    `json:"gen"`
-		AuthEnabled bool   `json:"auth_enabled"`
-		AuthUser    string `json:"auth_user,omitempty"`
-		AuthPass    string `json:"auth_pass,omitempty"`
+	// Parse settings. A login saved only in the legacy settings.auth pair counts as a saved
+	// login: the client builders use it, so a rejected one is cleared the same way.
+	settings, parseErr := parseClientSettings(device.Settings)
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse settings: %w", parseErr)
 	}
-
-	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
-		return nil, fmt.Errorf("failed to parse settings: %w", err)
-	}
-
-	// A login saved only in the legacy settings.auth pair is a saved login too: the client
-	// builders use it, so a rejected one must be cleared the same way.
-	_, _, legacySaved := configuration.LegacyDeviceAuth(device.Settings)
 
 	// Only retry if we had saved credentials (to avoid infinite loop)
-	if settings.AuthUser != "" || settings.AuthPass != "" || legacySaved {
-		// The client builders treat a legacy pair as auth enabled; keep that for the retry, so
-		// it falls back to the provisioning login and does not go unauthenticated.
-		if legacySaved {
-			settings.AuthEnabled = true
-		}
+	if settings.AuthUser != "" || settings.AuthPass != "" {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"device_ip": device.IP,
 			"component": "service",
 		}).Info("Clearing failed credentials and retrying with config")
 
-		// Clear bad credentials
-		settings.AuthUser = ""
-		settings.AuthPass = ""
-		updatedSettings, _ := json.Marshal(settings)
-		device.Settings = string(updatedSettings)
-		if err := s.DB.UpdateDevice(device); err != nil {
-			s.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"error":     err.Error(),
-			}).Error("Failed to update device with new settings")
-		}
-
-		// Clear from cache
-		s.ClearClientCache(device.IP)
+		// Clear the login the device rejected, unless a newer one was saved meanwhile. The
+		// retry below reads the stored record either way.
+		s.clearRejectedLogin(device, settings.AuthUser, settings.AuthPass)
 
 		// Retry with config credentials - use getClientWithRetry with false to prevent infinite recursion
 		s.logger.WithFields(map[string]any{
@@ -672,8 +646,11 @@ func (s *ShellyService) clearRejectedLogin(device *database.Device, rejectedUser
 		return false
 	}
 	if stored.AuthUser != rejectedUser || stored.AuthPass != rejectedPass {
-		// A newer login was saved. Keep it and let the caller retry with it.
+		// The stored login is not the rejected one. Keep it. The cached client may carry the
+		// rejected login (a cache hit never refreshes the caller's snapshot), so drop it and
+		// let the caller retry from the stored record.
 		device.Settings = record.Settings
+		s.dropClientLocked(device.IP)
 		return true
 	}
 
@@ -692,6 +669,11 @@ func (s *ShellyService) clearRejectedLogin(device *database.Device, rejectedUser
 	delete(settings, "auth_pass")
 	if nestedPair {
 		delete(settings, "auth")
+	}
+	// The client builders read a legacy pair as auth enabled. Keep that after the pair is gone,
+	// so the retry falls back to the provisioning login and does not go unauthenticated.
+	if stored.AuthEnabled {
+		settings["auth_enabled"] = true
 	}
 	updated, err := json.Marshal(settings)
 	if err != nil {
