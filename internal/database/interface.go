@@ -1,6 +1,8 @@
 package database
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 )
 
@@ -16,6 +18,7 @@ type DatabaseInterface interface {
 	GetDevices() ([]Device, error)
 	GetDevice(id uint) (*Device, error)
 	UpdateDevice(device *Device) error
+	RecordDeviceSeen(id uint, status string, lastSeen time.Time) error
 	DeleteDevice(id uint) error
 	GetDeviceByMAC(mac string) (*Device, error)
 	UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, initialName string) (*Device, error)

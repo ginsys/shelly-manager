@@ -289,6 +289,29 @@ func (m *Manager) UpdateDevice(device *Device) error {
 	return nil
 }
 
+// RecordDeviceSeen stores what a status read observed: the status and the last seen time. It is
+// one UPDATE of those two columns and it does not move updated_at. updated_at is the version of
+// the device that a client edits (ginsys/shelly-manager#502), and an observation is not an edit.
+// It reports gorm.ErrRecordNotFound when no device has that id.
+func (m *Manager) RecordDeviceSeen(id uint, status string, lastSeen time.Time) error {
+	result := m.GetDB().Model(&Device{}).Where("id = ?", id).
+		UpdateColumns(map[string]any{"status": status, "last_seen": lastSeen})
+	if result.Error != nil {
+		m.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     result.Error.Error(),
+			"operation": "record-seen",
+			"table":     "devices",
+			"component": "database",
+		}).Error("Database operation failed")
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 // DeleteDevice deletes a device (legacy compatibility)
 func (m *Manager) DeleteDevice(id uint) error {
 	start := time.Now()

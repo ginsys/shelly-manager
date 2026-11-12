@@ -722,26 +722,17 @@ func (s *ShellyService) clearRejectedLogin(device *database.Device, rejectedUser
 	return true
 }
 
-// recordDeviceOnline marks the device online. It writes the reloaded record under clientMu, so
-// the write cannot put an older login back over one that UpdateDeviceAuth saved meanwhile.
+// recordDeviceOnline marks the device online. It writes the status and the last seen time and
+// nothing else, and it does not move updated_at. A status read is an observation, not an edit:
+// a whole-row save here would write old fields over a login or an edit that was saved meanwhile,
+// and it would make the version of the device page stale on every status poll
+// (ginsys/shelly-manager#502).
 func (s *ShellyService) recordDeviceOnline(device *database.Device) error {
-	s.clientMu.Lock()
-	defer s.clientMu.Unlock()
-
-	record := device
-	if device.ID != 0 {
-		fresh, err := s.DB.GetDevice(device.ID)
-		if err != nil {
-			return err
-		}
-		record = fresh
-	}
-	record.Status = "online"
-	record.LastSeen = time.Now()
-	if err := s.DB.UpdateDevice(record); err != nil {
+	lastSeen := time.Now()
+	if err := s.DB.RecordDeviceSeen(device.ID, "online", lastSeen); err != nil {
 		return err
 	}
-	device.Status, device.LastSeen, device.Settings = record.Status, record.LastSeen, record.Settings
+	device.Status, device.LastSeen = "online", lastSeen
 	return nil
 }
 
