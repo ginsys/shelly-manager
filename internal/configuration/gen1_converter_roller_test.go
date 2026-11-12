@@ -9,7 +9,8 @@ import (
 )
 
 // The Gen1 roller settings, as the device lists them in the rollers array of GET /settings: the
-// five keys the converter maps, and others it leaves alone.
+// keys the converter maps (travel times, direction, inputs, default state, button type, obstacle
+// mode), and one it leaves alone (maxtime).
 const gen1RollerSettingsJSON = `{"rollers":[{
 	"maxtime":60,"maxtime_open":20,"maxtime_close":22,
 	"default_state":"stop","swap":true,"swap_inputs":false,"input_mode":"openclose",
@@ -26,6 +27,9 @@ func TestGen1Converter_RollerFromAPI(t *testing.T) {
 		MotorDirection: StringPtr("reversed"),
 		SwapInputs:     BoolPtr(false),
 		InputMode:      StringPtr("dual"),
+		DefaultState:   StringPtr("stop"),
+		ButtonType:     StringPtr("momentary"),
+		ObstacleMode:   StringPtr("disabled"),
 	}, config.Roller)
 }
 
@@ -61,7 +65,6 @@ func TestGen1Converter_RollerDropsFieldsWithoutAGen1Key(t *testing.T) {
 		DefaultPosition:    IntPtr(30),
 		PositioningEnabled: BoolPtr(true),
 		ObstacleDetection:  BoolPtr(true),
-		ObstaclePower:      IntPtr(100),
 		SafetySwitch:       BoolPtr(true),
 		TiltEnabled:        BoolPtr(true),
 	}}

@@ -51,6 +51,10 @@ func (m *rollerApplyClient) GetRollerSettingsForm(ctx context.Context, channel i
 			if n, ok := v.(int); ok {
 				v = float64(n)
 			}
+			if k == "btn_type" {
+				// The device reads the button type back under another name than it is written under.
+				k = "button_type"
+			}
 			echo[k] = v
 		}
 	}
@@ -186,15 +190,15 @@ func TestUnsupportedApplySettings_Roller(t *testing.T) {
 
 	t.Run("fields with no Gen1 key are refused", func(t *testing.T) {
 		config := &DeviceConfiguration{Roller: &RollerConfig{
-			MaxOpenTime: IntPtr(20), ObstaclePower: IntPtr(100), SafetySwitch: BoolPtr(true),
+			MaxOpenTime: IntPtr(20), MotorSpeed: IntPtr(50), SafetySwitch: BoolPtr(true),
 		}}
 		unsupported, err := unsupportedApplySettings(converter, config, "SHSW-25", true)
 		require.NoError(t, err)
-		assert.Equal(t, []string{"roller.obstacle_power", "roller.safety_switch"}, unsupported)
+		assert.Equal(t, []string{"roller.motor_speed", "roller.safety_switch"}, unsupported)
 	})
 
 	t.Run("a section none of whose fields has a Gen1 key is refused whole", func(t *testing.T) {
-		config := &DeviceConfiguration{Roller: &RollerConfig{ObstaclePower: IntPtr(100)}}
+		config := &DeviceConfiguration{Roller: &RollerConfig{MotorSpeed: IntPtr(50)}}
 		unsupported, err := unsupportedApplySettings(converter, config, "SHSW-25", true)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"roller"}, unsupported)
