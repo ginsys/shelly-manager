@@ -11,6 +11,13 @@ All notable changes to this project are documented here. The project follows Con
   shows as a mask and is kept when the mask is sent back, an empty username turns
   device authentication off, and a username without a password is refused before
   anything is sent. (ginsys/shelly-manager#137)
+- Applying a configuration to a Gen1 device with roller mode (Shelly 2.5) now writes five
+  roller settings: the open and close travel times, the motor direction, the input swap
+  and the input mode. Each one is written with POST /settings/roller/0 and read back, and
+  a value the device keeps unchanged is reported as a failed path. A travel time below one
+  second, a value with no Gen1 spelling and every other roller field are refused before
+  the device is touched. The key names are unverified until a hardware readback, and a
+  device in relay mode refuses the endpoint. (ginsys/shelly-manager#504)
 
 ### Changed
 - The four legacy capability routes are removed: `PUT /devices/{id}/config/relay`,

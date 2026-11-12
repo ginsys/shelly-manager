@@ -17,7 +17,8 @@ const (
 // Unlike GetConfigurationSchema, it holds only fields that DeviceConfiguration stores, so a form
 // built on it never writes a key that is silently dropped (TestDeviceSchemaHoldsOnlyStoredFields).
 // For a supported Gen1 model it holds only the sections that model has, applicable or not (the
-// network section, and roller for a model with roller mode, are stored but never applied). Every field carries
+// network section is stored but never applied, and roller for a model with roller mode is applied
+// for five of its fields). Every field carries
 // SchemaKeyApplicable: true when apply can write that field to this model today. For a model
 // apply does not support, every section of DeviceConfiguration is present and no field is
 // applicable.

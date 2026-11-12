@@ -88,6 +88,9 @@ func (c *Gen1Converter) FromAPIConfig(apiJSON json.RawMessage, deviceType string
 		return nil, fmt.Errorf("failed to convert Input: %w", err)
 	}
 
+	// Convert Roller settings (roller-mode models only)
+	c.convertRoller(gen1, config, deviceType)
+
 	return config, nil
 }
 
@@ -131,6 +134,9 @@ func (c *Gen1Converter) ToAPIConfig(config *DeviceConfiguration, deviceType stri
 
 	// Convert Input settings
 	c.exportInput(config, gen1, deviceType)
+
+	// Convert Roller settings
+	c.exportRoller(config, gen1, deviceType)
 
 	// Marshal to JSON
 	return json.Marshal(gen1)
@@ -802,6 +808,113 @@ func (c *Gen1Converter) exportInput(config *DeviceConfiguration, gen1 map[string
 	}
 
 	gen1["inputs"] = inputs
+}
+
+// Roller conversion. The stored form names a value one way and Gen1 another: motor_direction is
+// "normal" or "reversed" where Gen1 has the boolean swap, and input_mode is "single" or "dual"
+// where Gen1 has "onebutton" or "openclose". The times are seconds on both sides.
+
+const (
+	rollerMotorNormal   = "normal"
+	rollerMotorReversed = "reversed"
+	rollerInputSingle   = "single"
+	rollerInputDual     = "dual"
+	gen1RollerOneButton = "onebutton"
+	gen1RollerOpenClose = "openclose"
+)
+
+func (c *Gen1Converter) convertRoller(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) {
+	if !HasRollerMode(deviceType) {
+		return
+	}
+
+	rollersData, ok := gen1["rollers"].([]interface{})
+	if !ok || len(rollersData) == 0 {
+		return
+	}
+	rollerMap, ok := rollersData[0].(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	roller := &RollerConfig{}
+	hasData := false
+
+	if openTime, ok := rollerMap["maxtime_open"].(float64); ok {
+		roller.MaxOpenTime = IntPtr(int(openTime))
+		hasData = true
+	}
+	if closeTime, ok := rollerMap["maxtime_close"].(float64); ok {
+		roller.MaxCloseTime = IntPtr(int(closeTime))
+		hasData = true
+	}
+	if swap, ok := rollerMap["swap"].(bool); ok {
+		direction := rollerMotorNormal
+		if swap {
+			direction = rollerMotorReversed
+		}
+		roller.MotorDirection = StringPtr(direction)
+		hasData = true
+	}
+	if swapInputs, ok := rollerMap["swap_inputs"].(bool); ok {
+		roller.SwapInputs = BoolPtr(swapInputs)
+		hasData = true
+	}
+	if mode, ok := rollerMap["input_mode"].(string); ok {
+		switch mode {
+		case gen1RollerOneButton:
+			roller.InputMode = StringPtr(rollerInputSingle)
+			hasData = true
+		case gen1RollerOpenClose:
+			roller.InputMode = StringPtr(rollerInputDual)
+			hasData = true
+		}
+	}
+
+	if hasData {
+		config.Roller = roller
+	}
+}
+
+// exportRoller writes the one roller a Gen1 model with roller mode has. Only the five fields with a
+// Gen1 counterpart are written, so a stored field with none stays in the refusal check's diff.
+func (c *Gen1Converter) exportRoller(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
+	if !HasRollerMode(deviceType) || config.Roller == nil {
+		return
+	}
+
+	rollerMap := make(map[string]interface{})
+
+	if config.Roller.MaxOpenTime != nil {
+		rollerMap["maxtime_open"] = *config.Roller.MaxOpenTime
+	}
+	if config.Roller.MaxCloseTime != nil {
+		rollerMap["maxtime_close"] = *config.Roller.MaxCloseTime
+	}
+	if config.Roller.MotorDirection != nil {
+		switch *config.Roller.MotorDirection {
+		case rollerMotorNormal:
+			rollerMap["swap"] = false
+		case rollerMotorReversed:
+			rollerMap["swap"] = true
+		}
+	}
+	if config.Roller.SwapInputs != nil {
+		rollerMap["swap_inputs"] = *config.Roller.SwapInputs
+	}
+	if config.Roller.InputMode != nil {
+		switch *config.Roller.InputMode {
+		case rollerInputSingle:
+			rollerMap["input_mode"] = gen1RollerOneButton
+		case rollerInputDual:
+			rollerMap["input_mode"] = gen1RollerOpenClose
+		}
+	}
+
+	if len(rollerMap) == 0 {
+		return
+	}
+	gen1["rollers"] = []map[string]interface{}{rollerMap}
 }
 
 // Device capability helper methods
