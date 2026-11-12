@@ -72,10 +72,16 @@ func requireStoredLogin(t *testing.T, db database.DatabaseInterface, id uint, us
 // loginDeviceHandler is a handler with one device that stores login old/oldpw.
 func loginDeviceHandler(t *testing.T) (*Handler, *database.Manager, *database.Device) {
 	t.Helper()
+	return loginDeviceHandlerWith(t, loginADevice)
+}
+
+// loginDeviceHandlerWith is a handler with one device that has the given settings.
+func loginDeviceHandlerWith(t *testing.T, settings string) (*Handler, *database.Manager, *database.Device) {
+	t.Helper()
 	handler, db := newTestHandler(t)
 	device := &database.Device{
 		IP: "127.0.0.1:1", MAC: "A4:CF:12:34:56:78", Type: "Shelly1", Name: "Before",
-		Firmware: "1.0.0", Status: "online", Settings: loginADevice,
+		Firmware: "1.0.0", Status: "online", Settings: settings,
 	}
 	require.NoError(t, db.AddDevice(device))
 	return handler, db, device
@@ -112,7 +118,28 @@ func TestUpdateDevice_KeepsALoginSavedAfterItsRead(t *testing.T) {
 	requireStoredLogin(t, db, device.ID, "bee", "beepw")
 }
 
-// A PUT that changes the login on purpose wins over a login saved after its read.
+// Settings that hold only the nested login of an older version have no auth_enabled key. The
+// validation of the PUT adds it, and that default must not count as a change of the login.
+func TestUpdateDevice_KeepsALoginSavedAfterItsReadOfLegacySettings(t *testing.T) {
+	handler, db, device := loginDeviceHandlerWith(t, `{"gen":1,"auth":{"username":"old","password":"oldpw"}}`)
+	read := readForPut(t, handler, device)
+	read["name"] = "Renamed"
+	body, err := json.Marshal(read)
+	require.NoError(t, err)
+
+	handler.DB = &readHookDB{
+		DatabaseInterface: db,
+		afterGetDevice:    func() { saveLogin(t, db, device.ID, "bee", "beepw") },
+	}
+	put := serve(handler.UpdateDevice, "PUT", "/api/v1/devices/1", idString(device), string(body))
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+
+	requireStoredLogin(t, db, device.ID, "bee", "beepw")
+}
+
+// A PUT that changes the login on purpose wins over a login saved after its read. This case also
+// passes without the fix: it guards against a fix that swallows an intended change. The cases
+// above fail without the fix.
 func TestUpdateDevice_SavesALoginTheRequestChanges(t *testing.T) {
 	handler, db, device := loginDeviceHandler(t)
 	read := readForPut(t, handler, device)

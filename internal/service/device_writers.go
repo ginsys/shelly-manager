@@ -31,12 +31,23 @@ func decodeSettings(text string) (map[string]any, error) {
 	return settings, nil
 }
 
-// sameLogin reports whether two settings documents hold the same login.
+// sameLogin reports whether two settings documents hold the same login. A missing auth_enabled
+// reads as false, because the validation of a device PUT adds that default.
 func sameLogin(a, b map[string]any) bool {
 	for _, key := range deviceLoginKeys {
 		av, aok := a[key]
 		bv, bok := b[key]
-		if aok != bok || !reflect.DeepEqual(av, bv) {
+		if key == "auth_enabled" {
+			if !aok {
+				av = false
+			}
+			if !bok {
+				bv = false
+			}
+		} else if aok != bok {
+			return false
+		}
+		if !reflect.DeepEqual(av, bv) {
 			return false
 		}
 	}
