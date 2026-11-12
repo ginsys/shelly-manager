@@ -37,6 +37,16 @@ All notable changes to this project are documented here. The project follows Con
   on hardware (read from a summary of the Shelly reference): the route behaviour, the key
   names, `enabled` as 1 or 0, that no reboot is needed and that `GET /settings` never returns
   the key. Part of ginsys/shelly-manager#381.
+- Apply and verify on a Gen2 or Gen3 device now also write the MQTT and cloud settings. MQTT:
+  enable, server and port (one `host:port` string on the device), user, password, client ID,
+  topic prefix and the RPC and status notification flags go out with `MQTT.SetConfig`. Cloud:
+  enable and server go out with `Cloud.SetConfig`. The password is write-only: it is sent only
+  with a user, never when it is empty or the mask `********`, never compared, and never shown in
+  a failure, a log line or an error. Other MQTT settings (keep alive, clean session, update
+  period, retained-message limits, certificate and SNI flags) are refused with 422 before
+  anything is written, and so is a password with no user. Not confirmed on hardware: the
+  read-back of each key, and whether a section whose write the device refused leaves the
+  earlier sections written. Part of ginsys/shelly-manager#381.
 - Apply and verify now work on a Gen2 or Gen3 device, for the system section only: device
   name, eco mode, discoverable, time zone, latitude, longitude and time server go out with
   `Sys.SetConfig` and are read back from `Shelly.GetConfig`. Only the keys the desired

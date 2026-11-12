@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/shelly"
@@ -18,16 +19,18 @@ type Gen2ConfigClient interface {
 }
 
 // gen2Sections lists the sections of the Gen2 config document that apply writes, in order, with
-// the RPC method that writes each. S1 writes sys only; later slices add their sections here.
+// the RPC method that writes each. Later slices add their sections here.
 var gen2Sections = []struct {
 	key    string
 	method string
 }{
 	{"sys", "Sys.SetConfig"},
+	{"mqtt", "MQTT.SetConfig"},
+	{"cloud", "Cloud.SetConfig"},
 }
 
 // gen2ApplyKeys are the top-level keys of a Gen2 config document that apply writes.
-var gen2ApplyKeys = map[string]bool{"sys": true}
+var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true}
 
 // applyCheck returns the paths of a desired configuration that apply cannot write.
 type applyCheck func(desired *DeviceConfiguration, deviceType string) ([]string, error)
@@ -54,10 +57,18 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 }
 
 // unsupportedGen2Settings returns the sorted paths of desired that the Gen2 apply cannot write
-// and read back. Only the sys section has a mapping so far, so every other populated setting is
-// reported through the round trip: the converter drops it, and it is missing on the way back.
+// and read back. Only the sys, mqtt and cloud sections have a mapping so far, so every other
+// populated setting is reported through the round trip: the converter drops it, and it is missing
+// on the way back. An MQTT password with no user is refused too: the device takes the password
+// only together with the user.
 func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfiguration) ([]string, error) {
-	apiJSON, err := converter.ToAPIConfig(desired, "")
+	// An MQTT setting with no key is named on its own: left in, the round trip reports the whole
+	// mqtt section.
+	unsupported, mapped := unmappedMQTTSettings(desired.MQTT)
+	checked := *desired
+	checked.MQTT = mapped
+
+	apiJSON, err := converter.ToAPIConfig(&checked, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert desired config: %w", err)
 	}
@@ -66,7 +77,6 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 		return nil, fmt.Errorf("failed to parse converted config: %w", err)
 	}
 
-	var unsupported []string
 	for key := range apiConfig {
 		if !gen2ApplyKeys[key] {
 			unsupported = append(unsupported, key)
@@ -77,7 +87,7 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	if err != nil {
 		return nil, fmt.Errorf("failed to check converted config: %w", err)
 	}
-	for _, diff := range NewConfigComparator().Compare(desired, back).Differences {
+	for _, diff := range NewConfigComparator().Compare(&checked, back).Differences {
 		if diff.Actual == nil {
 			unsupported = append(unsupported, diff.Path)
 		}
@@ -89,6 +99,10 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 		unsupported = append(unsupported, "system.sntp.server")
 	}
 
+	if desired.MQTT != nil && gen2PasswordIsSet(desired.MQTT) && desired.MQTT.User == nil {
+		unsupported = append(unsupported, "mqtt.pass")
+	}
+
 	sort.Strings(unsupported)
 	out := unsupported[:0]
 	for i, path := range unsupported {
@@ -97,6 +111,41 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 		}
 	}
 	return out, nil
+}
+
+// unmappedMQTTSettings returns the paths of the MQTT settings that MQTT.SetConfig has no key for
+// here, and the rest of the section, or nil when nothing else is set.
+func unmappedMQTTSettings(m *MQTTConfiguration) ([]string, *MQTTConfiguration) {
+	if m == nil {
+		return nil, nil
+	}
+	rest := *m
+	var paths []string
+	if rest.CleanSession != nil {
+		paths, rest.CleanSession = append(paths, "mqtt.clean_session"), nil
+	}
+	if rest.KeepAlive != nil {
+		paths, rest.KeepAlive = append(paths, "mqtt.keep_alive"), nil
+	}
+	if rest.MaxQueuedMessages != nil {
+		paths, rest.MaxQueuedMessages = append(paths, "mqtt.max_qos_msgs"), nil
+	}
+	if rest.RetainPeriod != nil {
+		paths, rest.RetainPeriod = append(paths, "mqtt.retain"), nil
+	}
+	if rest.UpdatePeriod != nil {
+		paths, rest.UpdatePeriod = append(paths, "mqtt.update_period"), nil
+	}
+	if rest.UseClientCert != nil {
+		paths, rest.UseClientCert = append(paths, "mqtt.ssl_ca"), nil
+	}
+	if rest.EnableSNI != nil {
+		paths, rest.EnableSNI = append(paths, "mqtt.enable_sni"), nil
+	}
+	if rest == (MQTTConfiguration{}) {
+		return paths, nil
+	}
+	return paths, &rest
 }
 
 // applyGen2Config applies a configuration to a Gen2 or later device. It has its own flow because
@@ -157,6 +206,11 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 // persisted. Unlike the Gen1 flow, a write whose answer was lost is not recorded beforehand,
 // because the device, not the manager, decides whether it needs a restart.
 func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2ConfigClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+	// The MQTT password stays out of every error, log line and failure, whichever section fails.
+	var secret string
+	if mqtt, ok := apiConfig["mqtt"].(map[string]interface{}); ok {
+		secret, _ = mqtt["pass"].(string)
+	}
 	for _, section := range gen2Sections {
 		body, ok := apiConfig[section.key].(map[string]interface{})
 		if !ok || len(body) == 0 {
@@ -166,13 +220,18 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 
 		restart, err := setter.CallConfigSetter(ctx, section.method, map[string]interface{}{"config": body})
 		if err != nil {
+			err = redact(err, secret)
 			a.logger.WithFields(map[string]any{
 				"error":     err.Error(),
 				"method":    section.method,
 				"component": "config_applier",
 			}).Warn("Failed to apply " + section.key + " settings")
 			for _, leaf := range leaves {
-				result.Failures = append(result.Failures, ApplyFailure{Path: leaf.path, Value: fmt.Sprintf("%v", leaf.value), Error: err.Error()})
+				value := fmt.Sprintf("%v", leaf.value)
+				if strings.HasSuffix(leaf.path, ".pass") {
+					value = redactedSecret
+				}
+				result.Failures = append(result.Failures, ApplyFailure{Path: leaf.path, Value: value, Error: err.Error()})
 			}
 			result.FailedCount += len(leaves)
 			if shelly.IsAuthError(err) {

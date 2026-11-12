@@ -68,8 +68,10 @@ func (d *fakeGen2Device) CallConfigSetter(_ context.Context, method string, para
 	}
 	config, _ := params["config"].(map[string]interface{})
 	d.calls = append(d.calls, gen2Call{method: method, config: config})
-	if !d.ignoreWrites && method == "Sys.SetConfig" {
-		storeKeys(d.doc["sys"].(map[string]interface{}), config)
+	if section, ok := d.doc[strings.ToLower(strings.TrimSuffix(method, ".SetConfig"))].(map[string]interface{}); ok && !d.ignoreWrites {
+		storeKeys(section, config)
+		// A device never returns the MQTT password.
+		delete(section, "pass")
 	}
 	return d.restart, nil
 }
@@ -276,15 +278,13 @@ func TestApplyDesiredConfig_Gen2RefusesSectionsItCannotWriteYet(t *testing.T) {
 		desired *DeviceConfiguration
 		path    string
 	}{
-		"mqtt":  {&DeviceConfiguration{MQTT: &MQTTConfiguration{Server: StringPtr("broker.example.net")}}, "mqtt"},
 		"wifi":  {&DeviceConfiguration{WiFi: &WiFiConfiguration{SSID: StringPtr("home")}}, "wifi"},
-		"cloud": {&DeviceConfiguration{Cloud: &CloudConfiguration{Enable: BoolPtr(false)}}, "cloud"},
 		"login": {&DeviceConfiguration{Auth: &AuthConfiguration{Enable: BoolPtr(true), Username: StringPtr("a"), Password: StringPtr("b")}}, "auth"},
 		"relay": {&DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, Name: StringPtr("x")}}}}, "relay"},
 		"mixed": {&DeviceConfiguration{
 			System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("lamp")}},
-			MQTT:   &MQTTConfiguration{Server: StringPtr("broker.example.net")},
-		}, "mqtt"},
+			WiFi:   &WiFiConfiguration{SSID: StringPtr("home")},
+		}, "wifi"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
