@@ -58,6 +58,13 @@ All notable changes to this project are documented here. The project follows Con
   has a roller section. The configuration editor says "not applied" on a section that
   apply never writes, such as the network section. (ginsys/shelly-manager#490)
 
+### Removed
+- Dead frontend and backend code that nothing called: the `typed_config_handlers.go.backup`
+  file, the `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` components, the
+  `openMetricsWebSocket` helper, seven functions of `api/deviceConfig.ts`, and the six
+  typed-configuration client functions with the store actions that called them. No page
+  reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
+
 ### Fixed
 - `GET /devices/{id}/capabilities` now lists `mqtt`, `cloud` and `auth` for a Gen1
   device. It listed them for generation 2 and later only, so a Gen1 device looked as if

@@ -1,12 +1,5 @@
 [
   {
-    "file": "ui/src/api/metrics.ts",
-    "line": 24,
-    "kind": "new-websocket",
-    "method": "GET",
-    "template": "/metrics/ws"
-  },
-  {
     "file": "ui/src/stores/metrics.ts",
     "line": 112,
     "kind": "use-websocket",
