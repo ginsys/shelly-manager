@@ -383,9 +383,15 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 	// rejected one is cleared the same way. known is false when the cache dropped the client
 	// meanwhile: then nothing is cleared and the retry reads the stored record.
 	rejectedUser, rejectedPass, known := s.rejectedLogin(device.IP, client)
+	settings, parseErr := parseClientSettings(device.Settings)
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse settings: %w", parseErr)
+	}
 
-	// Only retry if we had saved credentials (to avoid infinite loop)
-	if !known || rejectedUser != "" || rejectedPass != "" {
+	// Only retry if a saved login is in play (to avoid infinite loop): the client's, or the one
+	// in the caller's record. A client built without a login can meet a login that a writer
+	// without clientMu stored later, and the clear below keeps that one.
+	if !known || rejectedUser != "" || rejectedPass != "" || settings.AuthUser != "" || settings.AuthPass != "" {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"device_ip": device.IP,
