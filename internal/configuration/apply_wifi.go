@@ -196,6 +196,12 @@ func (a *ConfigApplier) applyWiFiSettings(ctx context.Context, client ShellyClie
 			// The caller logs the returned error, so the returned one is redacted too.
 			secret, _ := route.form["key"].(string)
 			err = redact(err, secret)
+			if route.section == "wifi_sta" && networkChanged && !deviceAnswered(err) {
+				// No answer is not a refusal: the device may have applied the new network and left
+				// this address before it replied. Read it back; silence there is unconfirmed.
+				written[route.section] = route.form
+				continue
+			}
 			failWiFi(result, route.section, route.form, err.Error())
 			firstErr = firstWiFiError(firstErr, err)
 			continue

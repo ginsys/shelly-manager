@@ -610,6 +610,72 @@ func TestApplyConfig_WiFiReadBackThatAnswersWithAnErrorIsAFailureNotUnconfirmed(
 	}
 }
 
+func TestApplyConfig_WiFiLostResponseToANetworkChangeIsUnconfirmedNotAFailure(t *testing.T) {
+	// The device may apply a new ssid and drop off the old address before its answer arrives, so a
+	// station write that ends in a transport error is read back, and silence there is unconfirmed.
+	dev := newFakeWiFiDevice()
+	dev.staErr = errors.New(`Post "http://192.168.1.50/settings/sta": EOF`)
+	dev.failGetFrom = 2
+
+	result, err := applyWiFi(t, dev, wifiDesired(&WiFiConfiguration{
+		SSID: StringPtr("guest"), Password: StringPtr("guest-pass"),
+	}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Unconfirmed)
+	assert.Empty(t, result.Failures, "a lost answer is not a refused setting")
+	assert.Zero(t, result.FailedCount)
+	assert.Equal(t, 2, dev.gets, "the write is read back once")
+}
+
+func TestApplyConfig_WiFiLostResponseThatTheReadBackContradictsIsAFailure(t *testing.T) {
+	// The device is still on its network and reports the old ssid: the write did not land.
+	dev := newFakeWiFiDevice()
+	dev.staErr = errors.New(`Post "http://192.168.1.50/settings/sta": EOF`)
+
+	result, err := applyWiFi(t, dev, wifiDesired(&WiFiConfiguration{
+		SSID: StringPtr("guest"), Password: StringPtr("guest-pass"),
+	}))
+
+	require.NoError(t, err)
+	assert.False(t, result.Unconfirmed)
+	assert.False(t, result.Success)
+	require.NotEmpty(t, result.Failures)
+}
+
+func TestApplyConfig_WiFiStationWriteTheDeviceRefusedIsAFailureEvenOnANetworkChange(t *testing.T) {
+	// An HTTP status is an answer: the device is on its network and said no.
+	dev := newFakeWiFiDevice()
+	dev.staErr = &shelly.DeviceError{IP: "192.168.1.50", Generation: 1, Operation: "POST /settings/sta", StatusCode: 400}
+	dev.failGetFrom = 2
+
+	result, err := applyWiFi(t, dev, wifiDesired(&WiFiConfiguration{
+		SSID: StringPtr("guest"), Password: StringPtr("guest-pass"),
+	}))
+
+	require.NoError(t, err)
+	assert.False(t, result.Unconfirmed)
+	assert.False(t, result.Success)
+	require.NotEmpty(t, result.Failures)
+	assert.Equal(t, 1, dev.gets, "a refused write is not read back")
+}
+
+func TestApplyConfig_WiFiLostResponseWithoutANetworkChangeIsAFailure(t *testing.T) {
+	// The same ssid with a new key keeps the device on its address, so a lost answer is a failure.
+	dev := newFakeWiFiDevice()
+	dev.staErr = errors.New(`Post "http://192.168.1.50/settings/sta": EOF`)
+
+	result, err := applyWiFi(t, dev, wifiDesired(&WiFiConfiguration{
+		SSID: StringPtr("office"), Password: StringPtr("pw"),
+	}))
+
+	require.NoError(t, err)
+	assert.False(t, result.Unconfirmed)
+	assert.False(t, result.Success)
+	require.NotEmpty(t, result.Failures)
+	assert.Equal(t, 1, dev.gets)
+}
+
 func TestApplyConfig_WiFiReadBackThatRejectsTheLoginReachesTheCaller(t *testing.T) {
 	dev := newFakeWiFiDevice()
 	dev.failGetFrom = 2

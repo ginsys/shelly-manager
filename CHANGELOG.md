@@ -18,8 +18,9 @@ All notable changes to this project are documented here. The project follows Con
   `enabled`, `ipv4_method`, `ip`, `netmask` or `gateway`) and the device then gives no answer
   to the read-back, the apply response has `unconfirmed: true`: neither success nor failure,
   the device stays pending, the sections after Wi-Fi are not written (a warning says so), and
-  the device page shows it as its own state. A device that answers with an error is a
-  failure, even if the retries after that answer got none. The Gen1 client now keeps an HTTP
+  the device page shows it as its own state. A station write whose own response is lost
+  counts the same: it is read back, and silence there is unconfirmed. A device that answers
+  with an error is a failure, even if the retries after that answer got none. The Gen1 client now keeps an HTTP
   error from an earlier attempt when a later retry fails at the transport. The converter now reads
   the `mask` key a real device reports, and still accepts `netmask` in old data. Not confirmed
   on hardware (read from a summary of the Shelly reference): the route behaviour, the key
