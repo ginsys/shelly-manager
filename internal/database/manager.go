@@ -307,7 +307,15 @@ func (m *Manager) RecordDeviceSeen(id uint, status string, lastSeen time.Time) e
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+		// MySQL counts changed rows, not matched rows, so an observation equal to the stored one
+		// affects none. Only a missing device is an error.
+		var found int64
+		if err := m.GetDB().Model(&Device{}).Where("id = ?", id).Count(&found).Error; err != nil {
+			return err
+		}
+		if found == 0 {
+			return gorm.ErrRecordNotFound
+		}
 	}
 	return nil
 }
