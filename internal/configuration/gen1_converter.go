@@ -1025,12 +1025,16 @@ func (c *Gen1Converter) convertRoller(gen1 map[string]interface{}, config *Devic
 		}
 	}
 
+	if convertRollerRemainder(rollerMap, roller) {
+		hasData = true
+	}
+
 	if hasData {
 		config.Roller = roller
 	}
 }
 
-// exportRoller writes the one roller a Gen1 model with roller mode has. Only the five fields with a
+// exportRoller writes the one roller a Gen1 model with roller mode has. Only the fields with a
 // Gen1 counterpart are written, so a stored field with none stays in the refusal check's diff.
 func (c *Gen1Converter) exportRoller(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
 	if !HasRollerMode(deviceType) || config.Roller == nil {
@@ -1064,6 +1068,8 @@ func (c *Gen1Converter) exportRoller(config *DeviceConfiguration, gen1 map[strin
 			rollerMap["input_mode"] = gen1RollerOpenClose
 		}
 	}
+
+	exportRollerRemainder(config.Roller, rollerMap)
 
 	if len(rollerMap) == 0 {
 		return

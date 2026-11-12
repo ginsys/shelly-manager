@@ -5,6 +5,19 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Added
+- Apply to a Shelly 2.5 in roller mode now writes the roller keys beyond the travel times,
+  direction and inputs, with `POST /settings/roller/0`, and reads them back: `default_state`,
+  the button type (`button_type`, sent as `btn_type`, read back as `button_type`),
+  `button_reverse` (`btn_reverse`), `schedule`, `schedule_rules`, `obstacle_mode`,
+  `obstacle_action`, `obstacle_power`, `obstacle_delay`, `safety_mode`, `safety_action`,
+  `safety_allowed_on_trigger`, `off_power` and `ends_delay`. A value outside the reference's list,
+  a negative power or delay, an `ends_delay` outside 0 to 10000 or off the step of 100, and an
+  empty or comma-holding schedule rule or more than 20 rules are refused with 422 before anything
+  is written. An omitted `schedule_rules` leaves the rules alone, an empty list clears them, and
+  verify compares the whole list. Positioning and its calibration are not applied. Not confirmed
+  on hardware: the key names and values, read from the Gen1 reference for the Shelly 2.5, and the
+  differing types the reference gives for `btn_reverse` and `positioning`. Part of
+  ginsys/shelly-manager#381.
 - Apply to a Gen1 device now writes `appliance_type`, `schedule`, `schedule_rules` and `max_power`
   of each relay channel, next to `name`, `default_state`, `auto_on` and `auto_off`, and reads
   them back. `schedule_rules` goes out as one comma-separated parameter. A negative `max_power`,

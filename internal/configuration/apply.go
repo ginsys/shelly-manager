@@ -711,7 +711,21 @@ var errNoRollerClient = errors.New("client cannot write per-channel roller setti
 // POST /settings/roller/<n>. Anything else in a roller document is refused before the device is
 // touched (see unsupportedApplySettings). The key names and their spellings are unverified until
 // the hardware readback, and a device in relay mode refuses the endpoint.
-var gen1RollerKeys = []string{"maxtime_open", "maxtime_close", "swap", "swap_inputs", "input_mode"}
+var gen1RollerKeys = []string{
+	"maxtime_open", "maxtime_close", "swap", "swap_inputs", "input_mode",
+	"default_state", "btn_type", "btn_reverse", "schedule", "schedule_rules",
+	"obstacle_mode", "obstacle_action", "obstacle_power", "obstacle_delay",
+	"safety_mode", "safety_action", "safety_allowed_on_trigger", "off_power", "ends_delay",
+}
+
+// gen1RollerReadKey is the key GET /settings/roller/<n> reports a written key under. The reference
+// lists the button type as btn_type for the write and button_type for the read.
+func gen1RollerReadKey(written string) string {
+	if written == "btn_type" {
+		return "button_type"
+	}
+	return written
+}
 
 func (a *ConfigApplier) applyRollerSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
 	rollers := relayMaps(apiConfig["rollers"])
@@ -755,14 +769,15 @@ func (a *ConfigApplier) applyRollerSettings(ctx context.Context, client ShellyCl
 			continue
 		}
 		for _, key := range sortedKeys(form) {
-			if relayValuesEqual(form[key], live[key]) {
+			reported := live[gen1RollerReadKey(key)]
+			if relayValuesEqual(form[key], reported) {
 				result.AppliedCount++
 				continue
 			}
 			result.Failures = append(result.Failures, ApplyFailure{
 				Path:  fmt.Sprintf("rollers[%d].%s", channel, key),
 				Value: fmt.Sprintf("%v", form[key]),
-				Error: fmt.Sprintf("device reports %v after the write", live[key]),
+				Error: fmt.Sprintf("device reports %v after the write", reported),
 			})
 			result.FailedCount++
 		}

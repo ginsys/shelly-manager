@@ -43,6 +43,7 @@ var defaultCompareRules = []FieldCompareRule{
 
 	// A schedule is the whole list the device keeps: a rule left on the device is not the desired schedule.
 	{Path: "relay.relays.*.schedule_rules", ExactList: true},
+	{Path: "roller.schedule_rules", ExactList: true},
 
 	// Tolerance for coordinates (about 10 meters)
 	{Path: "location.latitude", Tolerance: 0.0001, Category: "system"},
