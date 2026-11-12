@@ -24,6 +24,12 @@ All notable changes to this project are documented here. The project follows Con
   ginsys/shelly-manager#504. (ginsys/shelly-manager#490)
 
 ### Fixed
+- `GET /devices/{id}/capabilities` now lists `mqtt`, `cloud` and `auth` for a Gen1
+  device. It listed them for generation 2 and later only, so a Gen1 device looked as if
+  it had no MQTT, cloud or login settings, although the manager already writes them. The
+  configuration validator reads the same list, so a Gen1 device with MQTT enabled no longer
+  draws the "device may not support MQTT" warning. Bluetooth and Ethernet stay listed for
+  generation 2 and later. (ginsys/shelly-manager#507)
 - A device save no longer restores an older login. A plain device `PUT`, the refresh
   after a discovery import and the settings backfill of a discovery each saved a whole
   device row that they had read earlier, so a login saved in between was lost. Each
