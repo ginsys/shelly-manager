@@ -17,15 +17,18 @@ type GormConfigRepository struct {
 	logger *logging.Logger
 }
 
-// DbConfigTemplate is the database model for config templates
-// This mirrors database.ConfigTemplate but is defined here to avoid import cycles
+// DbConfigTemplate is the repository's narrow view of the config_templates table: the
+// eight columns a ServiceConfigTemplate carries. ConfigTemplate owns the table and the
+// database Manager migrates it, so this type declares no constraint or index and is
+// never migrated; saving through it leaves generation, variables and is_default as
+// they were.
 type DbConfigTemplate struct {
 	ID          uint            `gorm:"primaryKey" json:"id"`
-	Name        string          `gorm:"size:191;uniqueIndex;not null" json:"name"`
+	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
-	Scope       string          `gorm:"size:191;not null;index" json:"scope"`
-	DeviceType  string          `gorm:"size:191;index" json:"device_type,omitempty"`
-	Config      json.RawMessage `gorm:"type:text;not null" json:"config"`
+	Scope       string          `json:"scope"`
+	DeviceType  string          `json:"device_type,omitempty"`
+	Config      json.RawMessage `json:"config"`
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
@@ -66,8 +69,8 @@ func NewGormConfigRepository(db *gorm.DB, logger *logging.Logger) *GormConfigRep
 		logger = logging.GetDefault()
 	}
 
-	// Auto-migrate tables
-	if err := db.AutoMigrate(&DbConfigTemplate{}, &DbDeviceTag{}); err != nil {
+	// Auto-migrate tables. config_templates is not one of them: the database Manager owns it.
+	if err := db.AutoMigrate(&DbDeviceTag{}); err != nil {
 		logger.Error("Failed to auto-migrate config tables", "error", err)
 	}
 

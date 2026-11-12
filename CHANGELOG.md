@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Fixed
+- One model now owns the `config_templates` table, and one migration creates it.
+  Three Go structs used to map onto it and three startup steps took turns
+  migrating it, so the table was the union of their columns and a change to one
+  struct could rebuild it. The database migration, which runs after the legacy
+  repair and stops startup when it fails, is now the only one. The three columns
+  that only the wider struct had (`generation`, `variables`, `is_default`) are
+  kept, because exports and the template routes read them. An existing database
+  needs no step: a table that already has them is left alone, an older table gains
+  them as nullable columns, and no row is changed. (ginsys/shelly-manager#280)
 - A drift check no longer writes to the stored configuration or its history. It used
   to run a full import first, which replaced the stored config with the device's,
   added a history row and moved `updated_at`, and then wrote the old config back.

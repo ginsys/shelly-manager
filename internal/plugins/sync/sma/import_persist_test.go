@@ -38,9 +38,9 @@ func newPersistFixture(t *testing.T) *persistFixture {
 	require.NoError(t, err)
 
 	// Production start-up migrates the configuration models on top of the database package's own
-	// tables (several structs share config_templates, see #280); the test database only has the
-	// latter.
-	require.NoError(t, db.GetDB().AutoMigrate(&configuration.ConfigTemplate{}, &configuration.DeviceConfig{}))
+	// tables; the test database only has the latter. config_templates is already there, made by
+	// the database Manager from the owner model.
+	require.NoError(t, db.GetDB().AutoMigrate(&configuration.DeviceConfig{}))
 
 	dir := t.TempDir()
 	engine := sync.NewSyncEngine(db, logger)

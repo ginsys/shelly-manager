@@ -32,8 +32,8 @@ import (
 //
 // In every case the next startup must be able to finish the job.
 //
-// Note: three structs currently map onto config_templates (see issue #280); this
-// file deliberately repairs the table rather than reconciling the models.
+// configuration.ConfigTemplate owns config_templates and the Manager's migration is the
+// only AutoMigrate of it; these fixups run before that migration.
 
 const configTemplatesTable = "config_templates"
 
