@@ -25,15 +25,15 @@ All notable changes to this project are documented here. The project follows Con
   `POST /config/bulk-validate` and `GET /devices/{id}/config/typed/normalized` used to answer
   a bare object, so a client that read the bare object now reads it from `data`, and the
   normalized read puts its configuration at `data.configuration`. The failures of `PUT`,
-  `validate-typed`, `convert-to-typed` and `GET /devices/{id}/capabilities` used to be plain
-  text and are now JSON: 400 `BAD_REQUEST`, 404 `NOT_FOUND` or 500 `INTERNAL_SERVER_ERROR`,
+  `validate-typed` and `GET /devices/{id}/capabilities`, and a malformed `convert-to-typed`
+  body, used to be plain text and are now JSON: 400 `BAD_REQUEST`, 404 `NOT_FOUND` or 500 `INTERNAL_SERVER_ERROR`,
   with no internal detail on a 500. The failures of the normalized read, and a failed
   conversion on `GET /devices/{id}/config/typed`, were JSON with a string `error` and now
   carry the structured `error`. A refused `PUT /devices/{id}/config/typed` used to answer
   `{error, validation}` and now answers 400 `VALIDATION_FAILED` with the validation result
   in `error.details`. The request failures of `convert-to-raw` and `bulk-validate` are 400
   `BAD_REQUEST` with the specific message, where they were 400 `VALIDATION_FAILED`.
-  `convert-to-typed` without a `configuration` is 400, where it was 500. The success body of
+  `convert-to-typed` without a `configuration` is 400, where it was a 500 with the same envelope. The success body of
   `GET /devices/{id}/capabilities` stays bare. The request keys are `configuration`,
   `device_model` and `configurations`, and the API docs now give the routes under their real
   `/config/` paths. (ginsys/shelly-manager#251)
