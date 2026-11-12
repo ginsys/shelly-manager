@@ -16,7 +16,7 @@ import (
 func checkVersionedUpdate(t *testing.T, manager *Manager) {
 	t.Helper()
 
-	device := &Device{MAC: "AA:BB:CC:DD:EE:11", IP: "192.0.2.11", Name: "lamp", Status: "online", Settings: `{"a":1}`}
+	device := &Device{MAC: "AA:BB:CC:DD:EE:11", IP: "192.0.2.11", Name: "lamp", Status: "online", LastSeen: time.Now(), Settings: `{"a":1}`}
 	require.NoError(t, manager.AddDevice(device))
 	read, err := manager.GetDevice(device.ID)
 	require.NoError(t, err)
