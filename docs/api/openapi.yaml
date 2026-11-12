@@ -97,6 +97,10 @@ components:
             - CONFIGURATION_ERROR
             - TEMPLATE_ERROR
             - EXTERNAL_SERVICE_ERROR
+            - NOT_IMPLEMENTED
+            - UNSUPPORTED_MEDIA_TYPE
+            - REQUEST_TIMEOUT
+            - IP_BLOCKED
         message:
           type: string
         details:
@@ -1232,7 +1236,8 @@ paths:
         '200':
           description: >-
             data holds device_id, config_applied, has_overrides, template_count,
-            last_applied (when known) and pending_changes.
+            last_applied (the time the device row last changed, also for a device that was
+            never applied) and pending_changes.
           content:
             application/json:
               schema:
@@ -1260,6 +1265,7 @@ paths:
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
+        - {}
       parameters:
         - name: id
           in: path

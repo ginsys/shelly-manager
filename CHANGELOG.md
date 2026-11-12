@@ -304,7 +304,8 @@ All notable changes to this project are documented here. The project follows Con
   Settings the converter has no Gen1 mapping for (for example SNTP) are also
   refused, and so is a stored desired configuration with fields the
   configuration model does not know, such as a legacy row from an SMA import.
-  Applies to one device run one at a time, apply needs the admin key,
+  Applies to one device run one at a time, apply needs the admin key when
+  one is configured and is open without one,
   the write-only MQTT password is not compared on read-back, an MQTT server
   given as `host:port` matches the device's split read-back, and a custom
   timezone or location also switches off automatic detection. The device model
