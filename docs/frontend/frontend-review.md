@@ -16,7 +16,7 @@ and [SMA browser import](images/sma-import-preview.png).
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 54% of backend API functionality (74/138 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 54% of backend API functionality (75/138 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
 - 41 Vue components (21 pages + 1 layout + 19 reusable components)
@@ -167,7 +167,7 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 |----------|-----------------|------|--------|----------|
 | Device Management | 8 | 8 | 0 | 100% |
 | Device Configuration | 11 | 11 | 0 | 100% |
-| Capability Config | 5 | 0 | 5 | 0% |
+| Capability Config | 5 | 1 | 4 | 20% |
 | Configuration Templates | 8 | 8 | 0 | 100% |
 | Typed Configuration | 8 | 8 | 0 | 100% |
 | Bulk Operations | 4 | 4 | 0 | 100% |
@@ -183,9 +183,9 @@ All components in `ui/src/components/` are actively imported and used. No orphan
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **138** | **74** | **64** | **54%** |
+| **TOTAL** | **138** | **75** | **63** | **54%** |
 
-### 4.3 Used Endpoints (74 total)
+### 4.3 Used Endpoints (75 total)
 
 #### Devices (2 endpoints)
 | Endpoint | Method | Purpose |
@@ -394,12 +394,15 @@ The remaining "View schema" action opens a read-only viewer:
 - `POST /api/v1/devices/{id}/config/apply-template` - Apply template
 - `GET /api/v1/devices/{id}/config/history` - Get config history
 
-#### Capability Config (5 unused)
+#### Capability Config (4 unused, 1 used)
 - `PUT /api/v1/devices/{id}/config/relay` - Update relay settings
 - `PUT /api/v1/devices/{id}/config/dimming` - Update dimming settings
 - `PUT /api/v1/devices/{id}/config/roller` - Update roller settings
 - `PUT /api/v1/devices/{id}/config/power-metering` - Update power metering
-- `PUT /api/v1/devices/{id}/config/auth` - Update device auth
+- `PUT /api/v1/devices/{id}/config/auth` - Update device auth (used: the Device Login card on the device page)
+
+The four unused routes write a legacy stored key that the override editor does not read. The
+editor covers relay, power metering and roller sections through the device schema.
 
 #### Configuration Templates (8 unused)
 - `GET /api/v1/config/templates` - List templates

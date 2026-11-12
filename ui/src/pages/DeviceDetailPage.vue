@@ -133,6 +133,10 @@
       </div>
     </template>
 
+    <!-- Outside the loading conditional on purpose: Refresh sets loading, and a card inside it would
+         be unmounted and lose what the user has typed. -->
+    <DeviceLoginCard v-if="d.id && !error" :device-id="d.id" :settings="d.settings" @saved="fetchDevice" />
+
     <!-- Edit Device Dialog -->
     <div v-if="showEditDialog" class="modal-overlay" @click.self="showEditDialog = false">
       <div class="modal-dialog">
@@ -164,6 +168,7 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevice, isAbortError } from '../api/devices'
 import { detectConfigDrift } from '../api/deviceConfig'
+import DeviceLoginCard from '../components/devices/DeviceLoginCard.vue'
 import type { Device } from '../api/types'
 import type { DeviceStatus, DeviceEnergy } from '../api/devices'
 import type { ConfigDrift } from '../api/deviceConfig'
