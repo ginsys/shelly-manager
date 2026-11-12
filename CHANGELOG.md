@@ -71,6 +71,11 @@ All notable changes to this project are documented here. The project follows Con
   invalid datetime. A device save now keeps the stored `created_at` and `last_seen` where the
   device carries a zero value. A value the request does carry is still saved.
   (ginsys/shelly-manager#515)
+- Importing an archive with a zero time (`0001-01-01T00:00:00Z`) no longer fails on
+  MySQL, which rejects a zero datetime. A device with a zero `last_seen` is dated by the
+  import time when it is new, and keeps its stored `last_seen` with force overwrite. A
+  discovered device with a zero `discovered` time is dated by the import time on both
+  paths. A time the archive carries is saved as before (ginsys/shelly-manager#518).
 - `GET /devices/{id}/capabilities` now lists `mqtt`, `cloud` and `auth` for a Gen1
   device. It listed them for generation 2 and later only, so a Gen1 device looked as if
   it had no MQTT, cloud or login settings, although the manager already writes them. The
