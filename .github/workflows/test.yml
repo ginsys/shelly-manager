@@ -193,7 +193,7 @@ jobs:
         MYSQL_TEST_PORT: '3306'
         MYSQL_TEST_USER: root
         MYSQL_TEST_PASSWORD: root
-      run: go test ./internal/database -run '^TestConfigTemplateScopeMigrationProviders$' -v
+      run: go test ./internal/database -run '^(TestConfigTemplateScopeMigrationProviders|TestUpdateDeviceIfVersionProviders)$' -v
 
   vitest:
     name: Frontend Unit Tests

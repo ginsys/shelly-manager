@@ -18,6 +18,7 @@ type DatabaseInterface interface {
 	GetDevices() ([]Device, error)
 	GetDevice(id uint) (*Device, error)
 	UpdateDevice(device *Device) error
+	UpdateDeviceIfVersion(device *Device, version time.Time) error
 	RecordDeviceSeen(id uint, status string, lastSeen time.Time) error
 	DeleteDevice(id uint) error
 	GetDeviceByMAC(mac string) (*Device, error)

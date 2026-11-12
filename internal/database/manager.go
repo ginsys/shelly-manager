@@ -289,6 +289,49 @@ func (m *Manager) UpdateDevice(device *Device) error {
 	return nil
 }
 
+// ErrDeviceVersionChanged means a conditional save found no row with that id and that updated_at:
+// another writer saved the device after the caller read it (ginsys/shelly-manager#509).
+var ErrDeviceVersionChanged = errors.New("the device row changed since it was read")
+
+// UpdateDeviceIfVersion saves the whole device row like UpdateDevice, but only where the stored
+// updated_at is still version. Check and save are one UPDATE, so no writer can commit between them.
+// It returns ErrDeviceVersionChanged when the row exists with another updated_at, and
+// gorm.ErrRecordNotFound when no device has that id. version must be a value read from the
+// database, so that it survives the timestamp round trip of the driver.
+func (m *Manager) UpdateDeviceIfVersion(device *Device, version time.Time) error {
+	// The new updated_at is at least a millisecond past the old one, so the UPDATE changes the row
+	// on every driver. MySQL counts changed rows and keeps milliseconds, so a save inside the same
+	// millisecond would otherwise count zero rows and look like a conflict.
+	device.UpdatedAt = time.Now()
+	if min := version.Add(time.Millisecond); device.UpdatedAt.Before(min) {
+		device.UpdatedAt = min
+	}
+	result := m.GetDB().Model(device).Where("updated_at = ?", version).Select("*").Updates(device)
+	if result.Error != nil {
+		m.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     result.Error.Error(),
+			"operation": "update-if-version",
+			"table":     "devices",
+			"component": "database",
+		}).Error("Database operation failed")
+		return result.Error
+	}
+	if result.RowsAffected > 0 {
+		return nil
+	}
+	// The UPDATE always sets a new updated_at, so a matched row counts as changed on every driver.
+	// Zero rows therefore means no match: tell a missing device from a changed one.
+	var found int64
+	if err := m.GetDB().Model(&Device{}).Where("id = ?", device.ID).Count(&found).Error; err != nil {
+		return err
+	}
+	if found == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return ErrDeviceVersionChanged
+}
+
 // RecordDeviceSeen stores what a status read observed: the status and the last seen time. It is
 // one UPDATE of those two columns and it does not move updated_at. updated_at is the version of
 // the device that a client edits (ginsys/shelly-manager#502), and an observation is not an edit.

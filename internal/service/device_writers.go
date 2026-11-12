@@ -117,7 +117,18 @@ func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Devic
 		}
 		incoming.Settings = merged
 	}
-	if err = s.DB.UpdateDevice(incoming); err != nil {
+	if incoming.UpdatedAt.IsZero() {
+		err = s.DB.UpdateDevice(incoming)
+	} else {
+		// The compare above is not enough: a writer that does not take clientMu can commit
+		// before this save. So the save repeats the compare in its own UPDATE, against the
+		// value that the database gave us (ginsys/shelly-manager#509).
+		err = s.DB.UpdateDeviceIfVersion(incoming, stored.UpdatedAt)
+		if errors.Is(err, database.ErrDeviceVersionChanged) {
+			return ErrDeviceChanged
+		}
+	}
+	if err != nil {
 		return err
 	}
 	// The caller returns this object, and the client sends its updated_at back. The save stamps
