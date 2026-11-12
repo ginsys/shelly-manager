@@ -401,6 +401,14 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	}
 	result, err := verifier.ApplyAndVerify(ctx, client, desired, deviceType)
 	if err != nil {
+		var refused *refusedBeforeWriteError
+		if errors.As(err, &refused) && device.ConfigApplied {
+			// Nothing was written, so the device still holds what the flag said.
+			if restoreErr := s.repo.SetDeviceConfigApplied(deviceID, true); restoreErr != nil {
+				s.logger.WithFields(map[string]any{"error": restoreErr.Error(), "device_id": deviceID}).
+					Warn("Could not restore config_applied after a refused apply")
+			}
+		}
 		return nil, err
 	}
 

@@ -6,16 +6,19 @@ All notable changes to this project are documented here. The project follows Con
 
 ### Added
 - Apply to a Gen1 device now writes its Wi-Fi settings. The station goes out with
-  `POST /settings/sta` (`enable`, `ssid`, `key`, `ipv4mode`, and for a static address `ip`,
-  `netmask`, `gw`, `nameserver`) and the access point with `POST /settings/ap` (`enable` and
-  password only), each only for the keys the desired configuration sets, then both are read
-  back from `GET /settings`. A new `ssid` with an empty or redacted password, a failed
-  `GET /settings` before the write, an access point name or key, `roam_threshold`, and a
-  station and an access point both enabled are refused with 422 before anything is written.
+  `POST /settings/sta` (`enabled`, `ssid`, `key`, `ipv4_method`, and for a static address `ip`,
+  `netmask`, `gateway`, `dns`) and the access point with `POST /settings/ap` (`enabled` and
+  `key` only), each only for the keys the desired configuration sets, then both are read
+  back from `GET /settings`. A new `ssid` with an empty or redacted password, an access point
+  name or key, `roam_threshold`, and a station and an access point both enabled are refused
+  with 422 before anything is written. A failed `GET /settings` before the write also writes
+  nothing and returns the read's own error. A refused apply leaves `config_applied` as it was.
   The password is never sent empty or redacted, never logged and never echoed. A Wi-Fi change
-  no longer reports `requires_reboot`. If a write changes the station network and the device
-  stops answering, the apply response has `unconfirmed: true`: neither success nor failure, the
-  device stays pending, and the device page shows it as its own state. The converter now reads
+  no longer reports `requires_reboot`. If a write changes the station network (`ssid`,
+  `enabled`, `ipv4_method`, `ip`, `netmask` or `gateway`) and the device then gives no answer
+  to the read-back, the apply response has `unconfirmed: true`: neither success nor failure,
+  the device stays pending, and the device page shows it as its own state. A device that
+  answers with an error is a failure. The converter now reads
   the `mask` key a real device reports, and still accepts `netmask` in old data. Not confirmed
   on hardware (read from a summary of the Shelly reference): the route behaviour, the key
   names, `enabled` as 1 or 0, that no reboot is needed and that `GET /settings` never returns
