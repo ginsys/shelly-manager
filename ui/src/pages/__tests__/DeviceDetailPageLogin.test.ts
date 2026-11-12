@@ -120,6 +120,8 @@ describe('DeviceDetailPage Device Login card', () => {
     await wrapper.get('[data-testid="device-login-save"]').trigger('click')
     await flushPromises()
     expect((wrapper.get('[data-testid="device-login-username"]').element as HTMLInputElement).value).toBe('newuser')
+    // Opening the page, Refresh, and the read the save triggers through the card's saved event.
+    expect(vi.mocked(getDevice)).toHaveBeenCalledTimes(3)
 
     // The older read now arrives with the login from before the save.
     answerStale({ ...device })
