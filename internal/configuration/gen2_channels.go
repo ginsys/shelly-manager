@@ -289,6 +289,7 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 		relay := *desired.Relay
 		paths = append(paths, unkeyedFields(&relay, "relay", map[string]bool{"relays": true})...)
 		relay.Relays = nil
+		seenRelays := map[int]bool{}
 		for i, source := range desired.Relay.Relays {
 			r := source
 			prefix := "relay.relays." + strconv.Itoa(i)
@@ -306,6 +307,12 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 				paths, r.AutoOff = append(paths, prefix+".auto_off"), nil
 			}
 			if r.Name != nil || r.DefaultState != nil || r.AutoOn != nil || r.AutoOff != nil {
+				// A second channel with the same id cannot say which channel its settings belong to.
+				if seenRelays[r.ID] {
+					paths = append(paths, prefix+".id")
+					continue
+				}
+				seenRelays[r.ID] = true
 				relay.Relays = append(relay.Relays, r)
 				kept["relay.relays"] = append(kept["relay.relays"], i)
 			}
@@ -320,6 +327,7 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 		input := *desired.Input
 		paths = append(paths, unkeyedFields(&input, "input", map[string]bool{"inputs": true})...)
 		input.Inputs = nil
+		seenInputs := map[int]bool{}
 		for i, source := range desired.Input.Inputs {
 			in := source
 			prefix := "input.inputs." + strconv.Itoa(i)
@@ -333,6 +341,11 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 				paths, in.Type = append(paths, prefix+".type"), nil
 			}
 			if in.Name != nil || in.Type != nil || in.Mode != nil || in.Inverted != nil {
+				if seenInputs[in.ID] {
+					paths = append(paths, prefix+".id")
+					continue
+				}
+				seenInputs[in.ID] = true
 				input.Inputs = append(input.Inputs, in)
 				kept["input.inputs"] = append(kept["input.inputs"], i)
 			}
