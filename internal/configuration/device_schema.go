@@ -170,7 +170,8 @@ func getDeviceCoIoTSchema() map[string]interface{} {
 				"type":        "integer",
 				"title":       "Update Period",
 				"description": "Status update interval in seconds",
-				"minimum":     1,
+				"minimum":     gen1CoIoTMinPeriod,
+				"maximum":     gen1CoIoTMaxPeriod,
 			},
 		},
 	}

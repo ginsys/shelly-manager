@@ -359,18 +359,52 @@ func (a *ConfigApplier) applyCoIoTSettings(ctx context.Context, client ShellyCli
 		return nil
 	}
 
-	if err := client.SetConfig(ctx, map[string]interface{}{"coiot": coiot}); err != nil {
+	form := gen1CoIoTForm(coiot)
+	if len(form) == 0 {
+		return nil
+	}
+
+	if err := client.SetConfig(ctx, form); err != nil {
 		result.Failures = append(result.Failures, ApplyFailure{
 			Path:  "coiot",
-			Value: fmt.Sprintf("%v", coiot),
+			Value: strings.Join(sortedKeys(form), ","),
 			Error: err.Error(),
 		})
-		result.FailedCount++
+		result.FailedCount += len(form)
 		return err
 	}
 
-	result.AppliedCount++
+	result.AppliedCount += len(form)
 	return nil
+}
+
+// gen1CoIoTKeys maps the nested "coiot" document that Gen1 returns from GET /settings to the
+// flat parameters that POST /settings accepts (there is no /settings/coiot endpoint).
+var gen1CoIoTKeys = map[string]string{
+	"enabled":       "coiot_enable",
+	"update_period": "coiot_update_period",
+	"peer":          "coiot_peer",
+}
+
+// gen1CoIoTMulticast is the peer value that switches CoIoT to multicast. The device reports
+// multicast as an empty peer.
+const gen1CoIoTMulticast = "mcast"
+
+// gen1CoIoTForm converts a nested coiot document into Gen1 form parameters. Keys it does not know
+// are dropped, never sent. An empty peer is written as "mcast".
+func gen1CoIoTForm(coiot map[string]interface{}) map[string]interface{} {
+	form := make(map[string]interface{}, len(coiot))
+	for key, value := range coiot {
+		formKey, ok := gen1CoIoTKeys[key]
+		if !ok {
+			continue
+		}
+		if peer, isString := value.(string); key == "peer" && isString && peer == "" {
+			value = gen1CoIoTMulticast
+		}
+		form[formKey] = value
+	}
+	return form
 }
 
 // RelaySettingsClient is the per-channel relay surface of a Gen1 client: POST and GET on
