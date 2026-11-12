@@ -50,6 +50,21 @@ All notable changes to this project are documented here. The project follows Con
   on hardware (read from a summary of the Shelly reference): the route behaviour, the key
   names, `enabled` as 1 or 0, that no reboot is needed and that `GET /settings` never returns
   the key. Part of ginsys/shelly-manager#381.
+- Apply and verify on a Gen2 or Gen3 device now also write the switch and input settings.
+  Each input is written with `Input.SetConfig` (`name`, `type` as `switch` or `button`, and
+  `inverted` as `invert`), then each switch with `Switch.SetConfig` (`name`, `default_state` as
+  `initial_state`, `auto_on` and `auto_off`, and the `mode` of input N as `in_mode`), one call
+  per channel, after the system, MQTT and cloud sections, and read back from
+  `Shelly.GetConfig`. A Gen1 word of the same meaning is accepted and read as the Gen2 word:
+  `last` is `restore_last`, `switch` is `match_input`, `toggle` is `follow` and `edge` is
+  `flip`; verify treats each pair as one value. `auto_on` and `auto_off` are seconds: above 0
+  is the timer on with that delay, 0 is the timer off. Refused with 422 before anything is
+  written: any other value (the Gen1 mode `action`, an input type `analog` or `count`, a
+  negative timer), an input push action or timing, a relay schedule and the top-level relay
+  and input settings. `cycle` and `activate` are left to the device, which answers with its
+  own error on a model that lacks them. Not confirmed on hardware (read from the Shelly
+  Gen2 Switch and Input reference): every key, the read-back and whether a write needs a
+  restart. Part of ginsys/shelly-manager#381.
 - Apply and verify on a Gen2 or Gen3 device now also write the MQTT and cloud settings. MQTT:
   enable, server and port (one `host:port` string on the device), user, password, client ID,
   topic prefix and the RPC and status notification flags go out with `MQTT.SetConfig`. Cloud:

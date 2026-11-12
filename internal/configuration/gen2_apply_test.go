@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 // gen2Call is one call to a Gen2 <Component>.SetConfig method.
 type gen2Call struct {
 	method string
+	id     int // the component id, or -1 for a component with none
 	config map[string]interface{}
 }
 
@@ -67,8 +69,14 @@ func (d *fakeGen2Device) CallConfigSetter(_ context.Context, method string, para
 		return false, d.refuse
 	}
 	config, _ := params["config"].(map[string]interface{})
-	d.calls = append(d.calls, gen2Call{method: method, config: config})
-	if section, ok := d.doc[strings.ToLower(strings.TrimSuffix(method, ".SetConfig"))].(map[string]interface{}); ok && !d.ignoreWrites {
+	key := strings.ToLower(strings.TrimSuffix(method, ".SetConfig"))
+	id := -1
+	if n, ok := params["id"].(int); ok {
+		id = n
+		key = fmt.Sprintf("%s:%d", key, n)
+	}
+	d.calls = append(d.calls, gen2Call{method: method, id: id, config: config})
+	if section, ok := d.doc[key].(map[string]interface{}); ok && !d.ignoreWrites {
 		storeKeys(section, config)
 		// A device never returns the MQTT password.
 		delete(section, "pass")
@@ -278,9 +286,9 @@ func TestApplyDesiredConfig_Gen2RefusesSectionsItCannotWriteYet(t *testing.T) {
 		desired *DeviceConfiguration
 		path    string
 	}{
-		"wifi":  {&DeviceConfiguration{WiFi: &WiFiConfiguration{SSID: StringPtr("home")}}, "wifi"},
-		"login": {&DeviceConfiguration{Auth: &AuthConfiguration{Enable: BoolPtr(true), Username: StringPtr("a"), Password: StringPtr("b")}}, "auth"},
-		"relay": {&DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, Name: StringPtr("x")}}}}, "relay"},
+		"wifi":   {&DeviceConfiguration{WiFi: &WiFiConfiguration{SSID: StringPtr("home")}}, "wifi"},
+		"login":  {&DeviceConfiguration{Auth: &AuthConfiguration{Enable: BoolPtr(true), Username: StringPtr("a"), Password: StringPtr("b")}}, "auth"},
+		"roller": {&DeviceConfiguration{Roller: &RollerConfig{MotorSpeed: IntPtr(50)}}, "roller"},
 		"mixed": {&DeviceConfiguration{
 			System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("lamp")}},
 			WiFi:   &WiFiConfiguration{SSID: StringPtr("home")},

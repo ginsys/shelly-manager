@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,8 +31,38 @@ var gen2Sections = []struct {
 	{"cloud", "Cloud.SetConfig"},
 }
 
-// gen2ApplyKeys are the top-level keys of a Gen2 config document that apply writes.
+// gen2ApplyKeys are the fixed top-level keys of a Gen2 config document that apply writes. The
+// channel sections switch:N and input:N are written too (gen2KeyApplies).
 var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true}
+
+// gen2Write is one SetConfig call of an apply: the section key, the method and its parameters.
+type gen2Write struct {
+	key    string
+	method string
+	params map[string]interface{}
+	body   map[string]interface{}
+}
+
+// gen2WritesOf lists the calls an apply makes, in order: the fixed sections, then each input, then
+// each switch, by id. An input comes before the switch it drives, because the type of the input
+// must be set before the in_mode of the switch (follow and flip need an input that has a state).
+func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
+	var writes []gen2Write
+	for _, section := range gen2Sections {
+		if body, ok := apiConfig[section.key].(map[string]interface{}); ok && len(body) > 0 {
+			writes = append(writes, gen2Write{key: section.key, method: section.method, params: map[string]interface{}{"config": body}, body: body})
+		}
+	}
+	for _, channel := range []struct{ kind, method string }{{"input", "Input.SetConfig"}, {"switch", "Switch.SetConfig"}} {
+		for _, id := range gen2ChannelIDs(apiConfig, channel.kind) {
+			key := channel.kind + ":" + strconv.Itoa(id)
+			if body, ok := apiConfig[key].(map[string]interface{}); ok && len(body) > 0 {
+				writes = append(writes, gen2Write{key: key, method: channel.method, params: map[string]interface{}{"id": id, "config": body}, body: body})
+			}
+		}
+	}
+	return writes
+}
 
 // applyCheck returns the paths of a desired configuration that apply cannot write.
 type applyCheck func(desired *DeviceConfiguration, deviceType string) ([]string, error)
@@ -58,15 +89,17 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 }
 
 // unsupportedGen2Settings returns the sorted paths of desired that the Gen2 apply cannot write
-// and read back. Only the sys, mqtt and cloud sections have a mapping so far, so every other
-// populated setting is reported through the round trip: the converter drops it, and it is missing
-// on the way back. An MQTT password with no user is refused too: the device takes the password
-// only together with the user.
+// and read back. Only the sys, mqtt, cloud, switch and input sections have a mapping so far, so
+// every other populated setting is reported through the round trip: the converter drops it, and it
+// is missing on the way back. An MQTT password with no user is refused too: the device takes the
+// password only together with the user.
 func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfiguration) ([]string, error) {
-	// An MQTT setting with no key is named on its own: left in, the round trip reports the whole
-	// mqtt section.
+	// A setting with no key, or a value no Gen2 word names, is named on its own: left in, the round
+	// trip reports the whole section.
 	unsupported, mapped := unmappedMQTTSettings(desired.MQTT)
-	checked := *desired
+	channelPaths, checkedChannels := unmappedChannelSettings(desired)
+	unsupported = append(unsupported, channelPaths...)
+	checked := *checkedChannels
 	checked.MQTT = mapped
 
 	apiJSON, err := converter.ToAPIConfig(&checked, "")
@@ -79,7 +112,7 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	}
 
 	for key := range apiConfig {
-		if !gen2ApplyKeys[key] {
+		if !gen2KeyApplies(key) {
 			unsupported = append(unsupported, key)
 		}
 	}
@@ -174,10 +207,8 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	if err := json.Unmarshal(apiJSON, &apiConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse API config: %w", err)
 	}
-	for _, section := range gen2Sections {
-		if body, ok := apiConfig[section.key].(map[string]interface{}); ok {
-			result.SettingsCount += len(gen2Leaves(section.key, body))
-		}
+	for _, write := range gen2WritesOf(apiConfig) {
+		result.SettingsCount += len(gen2Leaves(write.key, write.body))
 	}
 
 	// A reboot an earlier apply left owed stays owed until a reboot succeeds.
@@ -220,14 +251,10 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 	if mqtt, ok := apiConfig["mqtt"].(map[string]interface{}); ok {
 		secret, _ = mqtt["pass"].(string)
 	}
-	for _, section := range gen2Sections {
-		body, ok := apiConfig[section.key].(map[string]interface{})
-		if !ok || len(body) == 0 {
-			continue
-		}
-		leaves := gen2Leaves(section.key, body)
+	for _, section := range gen2WritesOf(apiConfig) {
+		leaves := gen2Leaves(section.key, section.body)
 
-		restart, err := setter.CallConfigSetter(ctx, section.method, map[string]interface{}{"config": body})
+		restart, err := setter.CallConfigSetter(ctx, section.method, section.params)
 		if err != nil {
 			if secret != "" {
 				// A device may echo a request in any encoding, and no list of encodings is
