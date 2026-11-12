@@ -205,6 +205,8 @@ func TestApplyDesiredConfig_RefusesATimeServerOrPeriodTheDeviceCannotUse(t *test
 		"label over 63 bytes":    {sntpDesired(strings.Repeat("a", 64) + ".example.net"), "system.sntp.server"},
 		"name over 253 bytes":    {sntpDesired(strings.Repeat("a.", 127) + "a"), "system.sntp.server"},
 		"non ASCII letter":       {sntpDesired("ntp.exämple.net"), "system.sntp.server"},
+		"mistyped address":       {sntpDesired("192.168.1.300"), "system.sntp.server"},
+		"address of five parts":  {sntpDesired("10.0.0.1.5"), "system.sntp.server"},
 		"negative update period": {&DeviceConfiguration{MQTT: &MQTTConfiguration{UpdatePeriod: IntPtr(-1)}}, "mqtt.update_period"},
 		"far negative period":    {&DeviceConfiguration{MQTT: &MQTTConfiguration{UpdatePeriod: IntPtr(-3600)}}, "mqtt.update_period"},
 		"254 bytes, no dot":      {sntpDesired(longTimeServer(62)), "system.sntp.server"},
@@ -222,6 +224,36 @@ func TestApplyDesiredConfig_RefusesATimeServerOrPeriodTheDeviceCannotUse(t *test
 			require.Error(t, err)
 			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
 			assert.Contains(t, err.Error(), tc.path)
+			assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
+		})
+	}
+}
+
+// A Gen1 device stores the MQTT broker as one host:port string. The write joins the server, a colon
+// and the port, so an IPv6 address would be stored as "fd00::1:1883", which the device cannot parse
+// and the read-back splits at the first colon. The reference documents no bracketed form, so apply
+// refuses an IPv6 broker rather than guess one. (The Gen2 apply writes one, because Gen2 takes a
+// bracketed endpoint.)
+func TestApplyDesiredConfig_Gen1RefusesAnIPv6MQTTServer(t *testing.T) {
+	cases := map[string]*MQTTConfiguration{
+		"bare address":                      {Server: StringPtr("fd00::1")},
+		"bare address with a port field":    {Server: StringPtr("fd00::1"), Port: IntPtr(1883)},
+		"bracketed address with a port":     {Server: StringPtr("[fd00::1]:1883")},
+		"bracketed address alone":           {Server: StringPtr("[fd00::1]")},
+		"loopback":                          {Server: StringPtr("::1")},
+		"host with a second colon and port": {Server: StringPtr("broker.local:1883:1")},
+	}
+	for name, mqtt := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, repo := newServiceWithDesiredName(t, "tv-office")
+			setDesired(t, repo, &DeviceConfiguration{MQTT: mqtt, System: mergeName(nil)})
+			dev := newFakeGen1Device()
+
+			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			assert.Contains(t, err.Error(), "mqtt.server")
 			assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
 		})
 	}

@@ -98,6 +98,50 @@ export function subtreeApplicable(schema: SchemaProperty): boolean {
 // IPV4 is four decimal parts of 0 to 255 with no leading zero, as Go's netip.ParseAddr reads one.
 const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
 
+const DNS_LABEL_CHARS = /^[A-Za-z0-9-]+$/
+const ALL_DIGITS = /^\d+$/
+const PORT = /^[1-9]\d{0,4}$/
+
+// isHostName is validTimeServer in internal/configuration/apply_service.go: an IPv4 address or a
+// DNS name of letters, digits and hyphens, no label empty, over 63 characters or edged by a hyphen,
+// 253 characters at most, one terminal dot allowed. A name whose last label is all digits is a
+// mistyped address, so it must be a valid IPv4 address. Both sides read testdata/config/hosts.json.
+export function isHostName(value: string): boolean {
+  const name = value.endsWith('.') ? value.slice(0, -1) : value
+  if (name.length > 253) return false
+  const labels = name.split('.')
+  for (const label of labels) {
+    if (label.length === 0 || label.length > 63 || label.startsWith('-') || label.endsWith('-')) return false
+    if (!DNS_LABEL_CHARS.test(label)) return false
+  }
+  if (ALL_DIGITS.test(labels[labels.length - 1])) return IPV4.test(name)
+  return true
+}
+
+// isHostPort is isHostPort in internal/configuration/schema_validate.go: a host name or IPv4
+// address, one colon, and a decimal port from 1 to 65535 with no sign and no leading zero.
+export function isHostPort(value: string): boolean {
+  const colon = value.indexOf(':')
+  if (colon < 0) return false
+  const port = value.slice(colon + 1)
+  return isHostName(value.slice(0, colon)) && PORT.test(port) && Number(port) <= 65535
+}
+
+const HEX_GROUP = /^[0-9a-fA-F]{1,4}$/
+
+// isIPv6Literal is isIPv6Literal in internal/configuration/schema_validate.go: an IPv6 address in
+// colon-hex form, with no brackets, zone, embedded IPv4 part or port. One "::" stands for at least
+// one group of zeros. Both sides read testdata/config/hosts.json.
+export function isIPv6Literal(value: string): boolean {
+  if (!/^[0-9a-fA-F:]+$/.test(value) || !value.includes(':')) return false
+  const halves = value.split('::')
+  if (halves.length > 2) return false
+  const groups = halves.map(half => (half === '' ? [] : half.split(':')))
+  if (!groups.every(list => list.every(group => HEX_GROUP.test(group)))) return false
+  const count = groups.reduce((sum, list) => sum + list.length, 0)
+  return halves.length === 2 ? count <= 7 : count === 8
+}
+
 // validateValue returns an error message for one leaf value, or null when it is valid. An
 // undefined value is not checked here: required checks need the inherited value too.
 export function validateValue(schema: SchemaProperty, value: any): string | null {
@@ -130,10 +174,17 @@ export function validateValue(schema: SchemaProperty, value: any): string | null
     if (schema.pattern && !new RegExp(`^(?:${schema.pattern})$`).test(value)) {
       return 'Does not match the required format'
     }
-    // An empty string reads as "not set". The server holds the same rule (isIPv4 in
-    // internal/configuration/schema_validate.go).
-    if (schema.format === 'ipv4' && value !== '' && !IPV4.test(value)) {
-      return 'Must be an IPv4 address'
+    // An empty string reads as "not set" (and an empty peer means multicast). The server holds the
+    // same rules (internal/configuration/schema_validate.go).
+    if (value !== '') {
+      if (schema.format === 'ipv4' && !IPV4.test(value)) return 'Must be an IPv4 address'
+      if (schema.format === 'hostname' && !isHostName(value)) return 'Must be a host name or an IPv4 address'
+      if (schema.format === 'endpoint' && !isHostName(value) && !isHostPort(value) && !isIPv6Literal(value)) {
+        return 'Must be a host name or an IP address, optionally followed by :port (an IPv6 address takes its port in the Port field)'
+      }
+      if (schema.format === 'hostport' && !isHostPort(value)) {
+        return 'Must be host:port, with a host name or IPv4 address and a port from 1 to 65535'
+      }
     }
   }
   if (schema.enum && !schema.enum.some(option => option === value)) {

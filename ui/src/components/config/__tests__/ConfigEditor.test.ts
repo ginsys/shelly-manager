@@ -298,6 +298,66 @@ describe('ConfigEditor', () => {
     expect(lastValid(wrapper)).toBe(false)
   })
 
+  it('a bad time server, MQTT server or CoIoT peer is an error under the field before Save', async () => {
+    vi.mocked(getConfigSchema).mockResolvedValue({
+      type: 'object',
+      'x-device-type': 'SHPLG-S',
+      'x-apply-supported': true,
+      properties: {
+        system: {
+          type: 'object',
+          title: 'System',
+          properties: {
+            sntp: {
+              type: 'object',
+              title: 'Time Server',
+              properties: { server: { type: 'string', format: 'hostname', 'x-applicable': true } },
+            },
+          },
+        },
+        mqtt: {
+          type: 'object',
+          title: 'MQTT',
+          properties: { server: { type: 'string', format: 'endpoint', 'x-applicable': true } },
+        },
+        coiot: {
+          type: 'object',
+          title: 'CoIoT',
+          properties: { peer: { type: 'string', format: 'hostport', 'x-applicable': true } },
+        },
+      },
+    } as ConfigSchema)
+    const wrapper = mountEditor({})
+    await flushPromises()
+    const cases = [
+      { section: 'system', path: 'system.sntp.server', bad: 'not a host!', message: 'Must be a host name or an IPv4 address', good: 'time.google.com' },
+      {
+        section: 'mqtt',
+        path: 'mqtt.server',
+        bad: '192.168.1.300',
+        message: 'Must be a host name or an IP address, optionally followed by :port (an IPv6 address takes its port in the Port field)',
+        good: 'broker.local:1883',
+      },
+      {
+        section: 'coiot',
+        path: 'coiot.peer',
+        bad: '192.168.1.5:99999',
+        message: 'Must be host:port, with a host name or IPv4 address and a port from 1 to 65535',
+        good: '192.168.1.5:5683',
+      },
+    ]
+    for (const c of cases) {
+      await openSection(wrapper, c.section)
+      const input = wrapper.find(`[data-path="${c.path}"] input`)
+      await input.setValue(c.bad)
+      expect(wrapper.find(`[data-path="${c.path}"] .field-error`).text(), c.path).toBe(c.message)
+      expect(lastValid(wrapper), c.path).toBe(false)
+      await input.setValue(c.good)
+      expect(wrapper.find(`[data-path="${c.path}"] .field-error`).exists(), c.path).toBe(false)
+      expect(lastValid(wrapper), c.path).toBe(true)
+    }
+  })
+
   it('setting a field back to its inherited value leaves no override', async () => {
     const wrapper = mountEditor({}, {
       inherited: { power_metering: { max_power: 1800 } },

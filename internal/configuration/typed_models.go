@@ -805,7 +805,8 @@ func getMQTTSchema() map[string]interface{} {
 			"server": map[string]interface{}{
 				"type":        "string",
 				"title":       "Server",
-				"description": "MQTT broker hostname or IP address",
+				"description": "MQTT broker hostname or IP address, optionally followed by :port (an IPv6 address takes its port in the Port field)",
+				"format":      "endpoint",
 			},
 			"port": map[string]interface{}{
 				"type":        "integer",
@@ -1030,6 +1031,7 @@ func getSystemSchema() map[string]interface{} {
 						"type":        "string",
 						"title":       "SNTP Server",
 						"description": "NTP server hostname",
+						"format":      "hostname",
 						"default":     "time.google.com",
 					},
 				},

@@ -195,6 +195,7 @@ func getDeviceCoIoTSchema() map[string]interface{} {
 				"type":        "string",
 				"title":       "Peer",
 				"description": "CoIoT unicast peer (host:port); empty for multicast",
+				"format":      "hostport",
 			},
 			"update_period": map[string]interface{}{
 				"type":        "integer",

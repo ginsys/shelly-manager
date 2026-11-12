@@ -111,6 +111,18 @@ All notable changes to this project are documented here. The project follows Con
   them from the model name, and that route now lists `roller` for the model whose schema
   has a roller section. The configuration editor says "not applied" on a section that
   apply never writes, such as the network section. (ginsys/shelly-manager#490)
+- The time server (`system.sntp.server`), the MQTT server (`mqtt.server`) and the CoIoT peer
+  (`coiot.peer`) are checked when the configuration is saved, not only at apply. The two servers
+  take an IPv4 address or a host name, the one rule apply uses; the MQTT server may also carry
+  `:port`, as a stored broker does, or be a bare IPv6 address with the port in its own field (the
+  bracketed one-string form `[addr]:port` is refused, as the Gen2 apply refuses it). The peer takes `host:port` with a
+  port from 1 to 65535, or nothing for multicast. The form shows the error under the field, and the
+  override and template routes answer 400 `VALIDATION_FAILED` with the field in `error.details.fields`.
+  An empty value passes. A Gen1 apply now refuses an IPv6 MQTT server (422 `VALIDATION_FAILED`
+  naming `mqtt.server`); it used to write it joined to the port as `fd00::1:1883`, which the device
+  cannot parse. A name whose last label is all digits must be a valid IPv4 address, so
+  `192.168.1.300` is refused here and at apply, where it used to pass as a host name.
+  (ginsys/shelly-manager#523)
 
 ### Removed
 - Dead frontend and backend code that nothing called: the `typed_config_handlers.go.backup`
