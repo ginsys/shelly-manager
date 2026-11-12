@@ -26,6 +26,14 @@ All notable changes to this project are documented here. The project follows Con
   values filled in, and `devices.settings` holds the clear-text login, so any
   device write printed it. The sqlite, postgresql and mysql loggers now log
   placeholders instead of values. (ginsys/shelly-manager#489)
+- One model now owns the `device_tags` table, and one migration creates it.
+  Two Go structs with identical columns mapped onto it, and both the database
+  migration and the configuration repository created it. The database migration is
+  now the only one. The unused template, tag and device-config methods of the
+  database `Manager` are removed with their tests; the configuration service
+  keeps the live ones. An existing database needs no step: the table keeps its
+  columns, indexes and rows, and startup issues no schema statement for it.
+  (ginsys/shelly-manager#485)
 - One model now owns the `config_templates` table, and one migration creates it.
   Three Go structs used to map onto it and three startup steps took turns
   migrating it, so the table was the union of their columns and a change to one

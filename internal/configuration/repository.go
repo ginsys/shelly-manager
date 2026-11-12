@@ -37,7 +37,8 @@ func (DbConfigTemplate) TableName() string {
 	return "config_templates"
 }
 
-// DbDeviceTag is the database model for device tags
+// DbDeviceTag is the one model of the device_tags table. The database Manager
+// migrates it; nothing else does.
 type DbDeviceTag struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	DeviceID  uint      `gorm:"not null;index;constraint:OnDelete:CASCADE" json:"device_id"`
@@ -69,11 +70,7 @@ func NewGormConfigRepository(db *gorm.DB, logger *logging.Logger) *GormConfigRep
 		logger = logging.GetDefault()
 	}
 
-	// Auto-migrate tables. config_templates is not one of them: the database Manager owns it.
-	if err := db.AutoMigrate(&DbDeviceTag{}); err != nil {
-		logger.Error("Failed to auto-migrate config tables", "error", err)
-	}
-
+	// No migration here: the database Manager creates config_templates and device_tags.
 	return &GormConfigRepository{
 		db:     db,
 		logger: logger,
