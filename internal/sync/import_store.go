@@ -212,9 +212,14 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 
 		switch {
 		case errors.Is(lookup.Error, gorm.ErrRecordNotFound):
+			// MySQL cannot store a zero time, so a device the archive never saw is dated by the import.
+			lastSeen := in.LastSeen
+			if lastSeen.IsZero() {
+				lastSeen = time.Now().UTC()
+			}
 			device := database.Device{
 				IP: in.IP, MAC: in.MAC, Type: in.Type, Name: in.Name, Firmware: in.Firmware,
-				Status: in.Status, LastSeen: in.LastSeen, Settings: settings, DesiredConfig: desired,
+				Status: in.Status, LastSeen: lastSeen, Settings: settings, DesiredConfig: desired,
 				CreatedAt: in.CreatedAt, UpdatedAt: in.UpdatedAt,
 			}
 			if err := tx.Create(&device).Error; err != nil {
@@ -238,7 +243,11 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 		default:
 			updates := map[string]interface{}{
 				"ip": in.IP, "type": in.Type, "name": in.Name, "firmware": in.Firmware,
-				"status": in.Status, "last_seen": in.LastSeen, "settings": settings,
+				"status": in.Status, "settings": settings,
+			}
+			// A zero last_seen means the archive never saw the device: keep the stored value.
+			if !in.LastSeen.IsZero() {
+				updates["last_seen"] = in.LastSeen
 			}
 			if desired != "" {
 				// A new desired configuration has not reached the device yet.
@@ -392,7 +401,13 @@ func importDiscovered(tx *gorm.DB, data *ExportData, opts ImportOptions, result 
 		if err := discoveredIdentityError(in); err != nil {
 			return err
 		}
-		expires := time.Now().Add(discoveredDeviceTTL)
+		now := time.Now()
+		expires := now.Add(discoveredDeviceTTL)
+		// MySQL cannot store a zero time, so a device the archive gives no time for is dated by the import.
+		seen := in.Discovered
+		if seen.IsZero() {
+			seen = now.UTC()
+		}
 
 		var existing database.DiscoveredDevice
 		lookup := tx.Where("mac = ? AND agent_id = ?", in.MAC, in.AgentID).First(&existing)
@@ -400,7 +415,7 @@ func importDiscovered(tx *gorm.DB, data *ExportData, opts ImportOptions, result 
 		case errors.Is(lookup.Error, gorm.ErrRecordNotFound):
 			discovered := database.DiscoveredDevice{
 				MAC: in.MAC, SSID: in.SSID, Model: in.Model, Generation: in.Generation,
-				IP: in.IP, Signal: in.Signal, AgentID: in.AgentID, Discovered: in.Discovered,
+				IP: in.IP, Signal: in.Signal, AgentID: in.AgentID, Discovered: seen,
 				ExpiresAt: expires,
 			}
 			if err := tx.Create(&discovered).Error; err != nil {
@@ -419,7 +434,7 @@ func importDiscovered(tx *gorm.DB, data *ExportData, opts ImportOptions, result 
 			// Assign fields and save: GORM names the SSID column ss_id, which a map key
 			// would get wrong.
 			existing.SSID, existing.Model, existing.Generation, existing.IP = in.SSID, in.Model, in.Generation, in.IP
-			existing.Signal, existing.Discovered, existing.ExpiresAt = in.Signal, in.Discovered, expires
+			existing.Signal, existing.Discovered, existing.ExpiresAt = in.Signal, seen, expires
 			if err := tx.Save(&existing).Error; err != nil {
 				return fmt.Errorf("update discovered device %s: %w", in.MAC, err)
 			}
