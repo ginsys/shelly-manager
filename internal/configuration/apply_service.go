@@ -334,8 +334,9 @@ func unsupportedInputs(desired *DeviceConfiguration, deviceType string) []string
 // The applied flag is cleared before the first write, so a failed re-apply of a previously
 // applied device reports pending, not applied.
 func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID uint, client ShellyClient, deviceType string) (*ApplyVerifyResult, error) {
-	if client.GetGeneration() != 1 {
-		return nil, fmt.Errorf("%w: generation %d", ErrUnsupportedGeneration, client.GetGeneration())
+	converter, check, err := s.applyPathFor(client, s.loginHooks != nil)
+	if err != nil {
+		return nil, err
 	}
 
 	// One apply per device at a time, from the snapshot to the flag update: the compare-and-set
@@ -360,8 +361,7 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 		return nil, err
 	}
 
-	converter := NewGen1Converter(s.logger)
-	unsupported, err := unsupportedApplySettings(converter, desired, deviceType, hooks != nil)
+	unsupported, err := check(desired, deviceType)
 	if err != nil {
 		return nil, err
 	}
@@ -433,8 +433,9 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 // VerifyDesiredConfig reads the live configuration from the device and
 // compares it with the desired configuration. It changes nothing on the device.
 func (s *ConfigurationService) VerifyDesiredConfig(ctx context.Context, deviceID uint, client ShellyClient, deviceType string) (*VerifyResult, error) {
-	if client.GetGeneration() != 1 {
-		return nil, fmt.Errorf("%w: generation %d", ErrUnsupportedGeneration, client.GetGeneration())
+	converter, _, err := s.applyPathFor(client, s.loginHooks != nil)
+	if err != nil {
+		return nil, err
 	}
 
 	device, err := s.repo.GetDevice(deviceID)
@@ -446,6 +447,6 @@ func (s *ConfigurationService) VerifyDesiredConfig(ctx context.Context, deviceID
 		return nil, err
 	}
 
-	verifier := NewConfigVerifier(NewGen1Converter(s.logger), s.logger)
+	verifier := NewConfigVerifier(converter, s.logger)
 	return verifier.VerifyOnly(ctx, client, desired, deviceType)
 }
