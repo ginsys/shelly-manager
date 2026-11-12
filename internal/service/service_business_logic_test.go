@@ -300,8 +300,8 @@ func TestShellyService_ClearClientCache(t *testing.T) {
 
 	// Add some mock clients to cache
 	service.clientMu.Lock()
-	service.clients["192.168.1.100"] = nil
-	service.clients["192.168.1.101"] = nil
+	service.clients["192.168.1.100"] = cachedClient{}
+	service.clients["192.168.1.101"] = cachedClient{}
 	service.clientMu.Unlock()
 
 	// Clear specific client

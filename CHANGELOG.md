@@ -13,6 +13,14 @@ All notable changes to this project are documented here. The project follows Con
   anything is sent. (ginsys/shelly-manager#137)
 
 ### Fixed
+- A rejected login is now read from the client that the device rejected. The auth
+  retry used to take it from the caller's copy of the device record, and a cache hit
+  does not refresh that copy. A login saved as A, changed to B and restored to A
+  during one request made the retry clear A, although the device had rejected B.
+  Each cached client now keeps the saved login it was built with, and the clear
+  compares the stored login with that one. Writers that take no `clientMu` can still
+  overwrite a saved login, which ginsys/shelly-manager#496 tracks.
+  (ginsys/shelly-manager#487)
 - The SQL log no longer prints device logins. With `database.log_level` set to
   `info` and `logging.level` set to `debug`, every statement was logged with its
   values filled in, and `devices.settings` holds the clear-text login, so any

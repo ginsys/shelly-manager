@@ -35,7 +35,7 @@ type ShellyService struct {
 
 	// Client cache for device connections
 	clientMu sync.RWMutex
-	clients  map[string]shelly.Client
+	clients  map[string]cachedClient
 
 	// clientOwner and clientAddr record which device each cached client was built for, so an
 	// entry left at a device's old address is found and dropped when the device moves, and is
@@ -83,7 +83,7 @@ func NewServiceWithLogger(db database.DatabaseInterface, cfg *config.Config, log
 		logger:    logger,
 		ctx:       ctx,
 		cancel:    cancel,
-		clients:   make(map[string]shelly.Client),
+		clients:   make(map[string]cachedClient),
 
 		clientOwner: make(map[string]uint),
 		clientAddr:  make(map[uint]string),
@@ -245,7 +245,7 @@ func (s *ShellyService) ClearClientCache(deviceIP string) {
 
 	if deviceIP == "" {
 		// Clear all cached clients
-		s.clients = make(map[string]shelly.Client)
+		s.clients = make(map[string]cachedClient)
 		s.clientOwner = make(map[string]uint)
 		s.clientAddr = make(map[uint]string)
 		s.logger.WithFields(map[string]any{
@@ -284,15 +284,37 @@ func (s *ShellyService) cachedClientLocked(device *database.Device) (shelly.Clie
 	if owner, ok := s.clientOwner[device.IP]; ok && owner != device.ID {
 		s.dropClientLocked(device.IP)
 	}
-	client, ok := s.clients[device.IP]
-	return client, ok
+	entry, ok := s.clients[device.IP]
+	return entry.client, ok
 }
 
-// storeClientLocked caches the client for the device at its current address and records the
-// device as its owner. The caller holds clientMu for writing.
-func (s *ShellyService) storeClientLocked(device *database.Device, client shelly.Client) {
+// cachedClient is a cached client with the saved login of the record it was built from. The
+// device compares that login, so a rejection is read against it and not against a caller's
+// older snapshot of the record.
+type cachedClient struct {
+	client shelly.Client
+	user   string
+	pass   string
+}
+
+// rejectedLogin returns the saved login that the cached client was built with. ok is false when
+// the cache no longer holds that exact client, so the login it carried is unknown.
+func (s *ShellyService) rejectedLogin(ip string, client shelly.Client) (user, pass string, ok bool) {
+	s.clientMu.RLock()
+	defer s.clientMu.RUnlock()
+	entry, cached := s.clients[ip]
+	if !cached || entry.client != client {
+		return "", "", false
+	}
+	return entry.user, entry.pass, true
+}
+
+// storeClientLocked caches the client for the device at its current address, with the saved
+// login it was built from, and records the device as its owner. The caller holds clientMu for
+// writing.
+func (s *ShellyService) storeClientLocked(device *database.Device, client shelly.Client, user, pass string) {
 	s.dropClientLocked(device.IP)
-	s.clients[device.IP] = client
+	s.clients[device.IP] = cachedClient{client: client, user: user, pass: pass}
 	if device.ID == 0 {
 		return
 	}
@@ -355,15 +377,15 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 		"component": "service",
 	}).Debug("Auth failed, attempting recovery")
 
-	// Parse settings. A login saved only in the legacy settings.auth pair counts as a saved
-	// login: the client builders use it, so a rejected one is cleared the same way.
-	settings, parseErr := parseClientSettings(device.Settings)
-	if parseErr != nil {
-		return nil, fmt.Errorf("failed to parse settings: %w", parseErr)
-	}
+	// The rejected login is the one that the cached client was built with. The caller's record
+	// may predate it, because a cache hit never refreshes the record. A login saved only in the
+	// legacy settings.auth pair counts as a saved login: the client builders use it, so a
+	// rejected one is cleared the same way. known is false when the cache dropped the client
+	// meanwhile: then nothing is cleared and the retry reads the stored record.
+	rejectedUser, rejectedPass, known := s.rejectedLogin(device.IP, client)
 
 	// Only retry if we had saved credentials (to avoid infinite loop)
-	if settings.AuthUser != "" || settings.AuthPass != "" {
+	if !known || rejectedUser != "" || rejectedPass != "" {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"device_ip": device.IP,
@@ -372,7 +394,9 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 
 		// Clear the login the device rejected, unless a newer one was saved meanwhile. The
 		// retry below reads the stored record either way.
-		s.clearRejectedLogin(device, settings.AuthUser, settings.AuthPass)
+		if known {
+			s.clearRejectedLogin(device, rejectedUser, rejectedPass)
+		}
 
 		// Retry with config credentials - use getClientWithRetry with false to prevent infinite recursion
 		s.logger.WithFields(map[string]any{
@@ -600,7 +624,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 	}
 
 	// Cache the client
-	s.storeClientLocked(device, client)
+	s.storeClientLocked(device, client, settings.AuthUser, settings.AuthPass)
 	s.clientMu.Unlock()
 
 	// Test the client works
@@ -634,7 +658,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 func (s *ShellyService) evictClient(ip string, client shelly.Client) {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
-	if cached, ok := s.clients[ip]; ok && cached == client {
+	if cached, ok := s.clients[ip]; ok && cached.client == client {
 		s.dropClientLocked(ip)
 	}
 }
@@ -813,54 +837,55 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 			"component": "service",
 		}).Info("Auth failed, clearing credentials and retrying")
 
-		// Clear the login the device rejected, unless a newer one was saved meanwhile.
-		rejected, parseErr := parseClientSettings(device.Settings)
-		if parseErr == nil {
-			if s.clearRejectedLogin(device, rejected.AuthUser, rejected.AuthPass) {
-				// Get new client and retry
-				client, err = s.getClient(device)
-				if err == nil {
-					// Retry the action
-					switch action {
-					case "on":
-						channel := 0
-						if ch, ok := params["channel"].(float64); ok {
-							channel = int(ch)
-						}
-						actionErr = client.SetSwitch(ctx, channel, true)
+		// Clear the login the device rejected, unless a newer one was saved meanwhile. The
+		// rejected login is the one the cached client carries, not the one in the record read at
+		// the start of the call. When the cache dropped that client, nothing is cleared and the
+		// retry reads the stored record.
+		rejectedUser, rejectedPass, known := s.rejectedLogin(device.IP, client)
+		if !known || s.clearRejectedLogin(device, rejectedUser, rejectedPass) {
+			// Get new client and retry
+			client, err = s.getClient(device)
+			if err == nil {
+				// Retry the action
+				switch action {
+				case "on":
+					channel := 0
+					if ch, ok := params["channel"].(float64); ok {
+						channel = int(ch)
+					}
+					actionErr = client.SetSwitch(ctx, channel, true)
 
-					case "off":
-						channel := 0
-						if ch, ok := params["channel"].(float64); ok {
-							channel = int(ch)
-						}
-						actionErr = client.SetSwitch(ctx, channel, false)
+				case "off":
+					channel := 0
+					if ch, ok := params["channel"].(float64); ok {
+						channel = int(ch)
+					}
+					actionErr = client.SetSwitch(ctx, channel, false)
 
-					case "toggle":
-						channel := 0
-						if ch, ok := params["channel"].(float64); ok {
-							channel = int(ch)
-						}
-						status, err := client.GetStatus(ctx)
-						if err == nil && len(status.Switches) > channel {
-							newState := !status.Switches[channel].Output
-							actionErr = client.SetSwitch(ctx, channel, newState)
-						} else {
-							actionErr = err
-						}
-
-					case "reboot":
-						actionErr = client.Reboot(ctx)
+				case "toggle":
+					channel := 0
+					if ch, ok := params["channel"].(float64); ok {
+						channel = int(ch)
+					}
+					status, err := client.GetStatus(ctx)
+					if err == nil && len(status.Switches) > channel {
+						newState := !status.Switches[channel].Output
+						actionErr = client.SetSwitch(ctx, channel, newState)
+					} else {
+						actionErr = err
 					}
 
-					if actionErr == nil {
-						s.logger.WithFields(map[string]any{
-							"device_id": deviceID,
-							"device_ip": device.IP,
-							"action":    action,
-							"component": "service",
-						}).Info("Action succeeded after auth retry")
-					}
+				case "reboot":
+					actionErr = client.Reboot(ctx)
+				}
+
+				if actionErr == nil {
+					s.logger.WithFields(map[string]any{
+						"device_id": deviceID,
+						"device_ip": device.IP,
+						"action":    action,
+						"component": "service",
+					}).Info("Action succeeded after auth retry")
 				}
 			}
 		}

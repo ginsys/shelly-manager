@@ -503,7 +503,7 @@ func TestShellyService_UpdateDeviceAuth_EvictsCachedClient(t *testing.T) {
 	service := NewService(db, createTestConfig())
 
 	device := createTestDevice(t, db, "192.0.2.10:80")
-	service.clients[device.IP] = nil // stands in for a client built with the old credentials
+	service.clients[device.IP] = cachedClient{} // stands in for a client built with the old credentials
 
 	if err := service.UpdateDeviceAuth(device.ID, "admin", "newpassword"); err != nil {
 		t.Fatalf("UpdateDeviceAuth failed: %v", err)
@@ -521,7 +521,7 @@ func TestShellyService_UpdateDeviceAuth_EmptyUserDisablesAuth(t *testing.T) {
 	if err := service.UpdateDeviceAuth(device.ID, "admin", "pw"); err != nil {
 		t.Fatalf("UpdateDeviceAuth failed: %v", err)
 	}
-	service.clients[device.IP] = nil // stands in for a client built with the old credentials
+	service.clients[device.IP] = cachedClient{} // stands in for a client built with the old credentials
 	if err := service.UpdateDeviceAuth(device.ID, "", ""); err != nil {
 		t.Fatalf("UpdateDeviceAuth clear failed: %v", err)
 	}
@@ -800,9 +800,9 @@ func TestShellyService_evictClient_KeepsReplacement(t *testing.T) {
 	stale := gen1.NewClient(ip)
 	replacement := gen1.NewClient(ip)
 
-	service.clients[ip] = replacement
+	service.clients[ip] = cachedClient{client: replacement}
 	service.evictClient(ip, stale)
-	if service.clients[ip] != replacement {
+	if service.clients[ip].client != replacement {
 		t.Fatal("evicting a stale client removed the cached replacement")
 	}
 
