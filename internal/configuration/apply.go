@@ -196,6 +196,7 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"Cloud", a.applyCloudSettings},
 		{"CoIoT", a.applyCoIoTSettings},
 		{"Relay", a.applyRelaySettings},
+		{"Roller", a.applyRollerSettings},
 		// The login goes last: it changes the credentials every later request needs, and an
 		// earlier failure then never leaves a changed login behind.
 		{"Login", a.applyLoginSettings},
@@ -651,6 +652,92 @@ func (a *ConfigApplier) failRelay(result *ApplyResult, channel int, form map[str
 	}
 }
 
+// RollerSettingsClient is the per-channel roller surface of a Gen1 client: POST and GET on
+// /settings/roller/<n>. A client without it cannot apply roller settings, and apply reports that
+// as a failure instead of sending the nested "rollers" document, which Gen1 ignores.
+type RollerSettingsClient interface {
+	SetRollerSettingsForm(ctx context.Context, channel int, settings map[string]interface{}) error
+	GetRollerSettingsForm(ctx context.Context, channel int) (map[string]interface{}, error)
+}
+
+var errNoRollerClient = errors.New("client cannot write per-channel roller settings")
+
+// gen1RollerKeys are the roller settings apply writes: the flat form parameters of
+// POST /settings/roller/<n>. Anything else in a roller document is refused before the device is
+// touched (see unsupportedApplySettings). The key names and their spellings are unverified until
+// the hardware readback, and a device in relay mode refuses the endpoint.
+var gen1RollerKeys = []string{"maxtime_open", "maxtime_close", "swap", "swap_inputs", "input_mode"}
+
+func (a *ConfigApplier) applyRollerSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+	rollers := relayMaps(apiConfig["rollers"])
+	if len(rollers) == 0 {
+		return nil
+	}
+
+	rollerClient, ok := client.(RollerSettingsClient)
+	if !ok {
+		result.Failures = append(result.Failures, ApplyFailure{
+			Path:  "rollers",
+			Error: errNoRollerClient.Error(),
+		})
+		result.FailedCount++
+		return errNoRollerClient
+	}
+
+	var firstErr error
+	for channel, roller := range rollers {
+		form := make(map[string]interface{}, len(gen1RollerKeys))
+		for _, key := range gen1RollerKeys {
+			if value, present := roller[key]; present {
+				form[key] = value
+			}
+		}
+		if len(form) == 0 {
+			continue
+		}
+
+		if err := rollerClient.SetRollerSettingsForm(ctx, channel, form); err != nil {
+			a.failRoller(result, channel, form, err.Error())
+			firstErr = firstError(firstErr, err)
+			continue
+		}
+
+		// Read back every key just written: a device can answer 200 and keep the old value.
+		live, err := rollerClient.GetRollerSettingsForm(ctx, channel)
+		if err != nil {
+			a.failRoller(result, channel, form, "read-back failed: "+err.Error())
+			firstErr = firstError(firstErr, err)
+			continue
+		}
+		for _, key := range sortedKeys(form) {
+			if relayValuesEqual(form[key], live[key]) {
+				result.AppliedCount++
+				continue
+			}
+			result.Failures = append(result.Failures, ApplyFailure{
+				Path:  fmt.Sprintf("rollers[%d].%s", channel, key),
+				Value: fmt.Sprintf("%v", form[key]),
+				Error: fmt.Sprintf("device reports %v after the write", live[key]),
+			})
+			result.FailedCount++
+		}
+	}
+
+	return firstErr
+}
+
+// failRoller records every key of one channel's form as failed.
+func (a *ConfigApplier) failRoller(result *ApplyResult, channel int, form map[string]interface{}, message string) {
+	for _, key := range sortedKeys(form) {
+		result.Failures = append(result.Failures, ApplyFailure{
+			Path:  fmt.Sprintf("rollers[%d].%s", channel, key),
+			Value: fmt.Sprintf("%v", form[key]),
+			Error: message,
+		})
+		result.FailedCount++
+	}
+}
+
 func firstError(current, next error) error {
 	if current != nil {
 		return current
@@ -710,6 +797,17 @@ func (a *ConfigApplier) countSettings(config map[string]interface{}) int {
 			for _, relay := range relayMaps(val) {
 				for _, relayKey := range gen1RelayKeys {
 					if _, ok := relay[relayKey]; ok {
+						count++
+					}
+				}
+			}
+			continue
+		}
+		if key == "rollers" {
+			// One setting per roller key apply writes, as applyRollerSettings counts them.
+			for _, roller := range relayMaps(val) {
+				for _, rollerKey := range gen1RollerKeys {
+					if _, ok := roller[rollerKey]; ok {
 						count++
 					}
 				}

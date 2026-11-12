@@ -51,6 +51,7 @@ var gen1ApplyKeys = map[string]bool{
 	"led_status_disable": true,
 	"mqtt":               true,
 	"relays":             true,
+	"rollers":            true,
 	"cloud":              true,
 	"coiot":              true,
 	"login":              true,
@@ -107,6 +108,14 @@ var gen1ApplicablePaths = map[string]bool{
 	"relay.relays[].default_state": true,
 	"relay.relays[].auto_on":       true,
 	"relay.relays[].auto_off":      true,
+
+	// The roller is written with POST /settings/roller/0 and read back from the same path.
+	// Only a model with roller mode has the section.
+	"roller.max_open_time":   true,
+	"roller.max_close_time":  true,
+	"roller.motor_direction": true,
+	"roller.swap_inputs":     true,
+	"roller.input_mode":      true,
 }
 
 // gen1LoginMaxLength is the longest username or password POST /settings/login accepts. The
@@ -242,6 +251,17 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 			if relay.ID != i {
 				unsupported = append(unsupported, fmt.Sprintf("relay.relays[%d].id", i))
 			}
+		}
+	}
+
+	// The device keeps a roller travel time of one second or more only. Zero or below is a value it
+	// cannot run a motor on, whatever it echoes back.
+	if desired.Roller != nil {
+		if t := desired.Roller.MaxOpenTime; t != nil && *t < 1 {
+			unsupported = append(unsupported, "roller.max_open_time")
+		}
+		if t := desired.Roller.MaxCloseTime; t != nil && *t < 1 {
+			unsupported = append(unsupported, "roller.max_close_time")
 		}
 	}
 

@@ -136,6 +136,25 @@ func (c *Client) SetRollerSettings(ctx context.Context, channel int, settings *R
 	return c.postForm(ctx, url, params)
 }
 
+// SetRollerSettingsForm writes exactly the given form parameters to POST /settings/roller/<channel>.
+// Unlike SetRollerSettings it adds no key of its own, so a setting that was not asked for is left
+// as the device holds it.
+func (c *Client) SetRollerSettingsForm(ctx context.Context, channel int, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/roller/%d", c.ip, channel)
+	return c.postForm(ctx, url, settings)
+}
+
+// GetRollerSettingsForm reads GET /settings/roller/<channel> as the raw key and value pairs the
+// device reports, so a read-back compares each written key by its own name.
+func (c *Client) GetRollerSettingsForm(ctx context.Context, channel int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/settings/roller/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // CalibrateRoller starts roller calibration
 func (c *Client) CalibrateRoller(ctx context.Context, channel int) error {
 	url := fmt.Sprintf("http://%s/roller/%d", c.ip, channel)
