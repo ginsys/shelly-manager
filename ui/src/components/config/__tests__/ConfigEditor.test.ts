@@ -84,6 +84,17 @@ describe('ConfigEditor', () => {
     expect(getConfigSchema).toHaveBeenCalledWith(undefined, 7, undefined)
   })
 
+  it('says in plain text that a section apply never writes is not applied', async () => {
+    const wrapper = mountEditor({})
+    await flushPromises()
+    await openSection(wrapper, 'relay')
+    await openSection(wrapper, 'power_metering')
+    expect(wrapper.find('[data-section="relay"] [data-testid="section-not-applied"]').text())
+      .toContain('Not applied to the device')
+    expect(wrapper.find('[data-section="power_metering"] [data-testid="section-not-applied"]').exists())
+      .toBe(false)
+  })
+
   it('reloads the schema when the template scope or model changes', async () => {
     const wrapper = mount(ConfigEditor, { props: { modelValue: {}, scope: 'global' } })
     await flushPromises()

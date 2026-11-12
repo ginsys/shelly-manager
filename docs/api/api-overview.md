@@ -126,15 +126,13 @@ Supported devices and settings:
 
 ---
 
-### 4. Capability-Specific Configuration (5 endpoints)
+### 4. Device Login (1 endpoint)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| PUT | `/api/v1/devices/{id}/config/relay` | Update relay settings |
-| PUT | `/api/v1/devices/{id}/config/dimming` | Update dimming settings |
-| PUT | `/api/v1/devices/{id}/config/roller` | Update roller/shutter settings |
-| PUT | `/api/v1/devices/{id}/config/power-metering` | Update power metering settings |
 | PUT | `/api/v1/devices/{id}/config/auth` | Update device authentication |
+
+The per-capability routes `PUT /devices/{id}/config/relay`, `/dimming`, `/roller` and `/power-metering` were removed. They wrote a legacy stored key that apply and the override editor never read. Use the override editor (`/devices/{id}/overrides/new`) and apply instead. `GET /devices/{id}/capabilities` reports what a device supports.
 
 ---
 

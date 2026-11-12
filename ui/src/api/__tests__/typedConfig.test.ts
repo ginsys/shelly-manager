@@ -106,43 +106,27 @@ describe('typedConfig API', () => {
   })
 
   describe('getDeviceCapabilities', () => {
-    it('returns device capabilities', async () => {
+    it('reads the bare body the server sends', async () => {
+      // GET /devices/{id}/capabilities answers with the object itself, no {success, data} envelope.
       const capabilities: DeviceCapabilities = {
-        deviceId: '123',
-        deviceType: 'shelly1',
-        capabilities: ['relay', 'wifi', 'mqtt'],
-        supportedFeatures: {
-          relay: true,
-          dimmer: false,
-          roller: false
-        },
-        firmwareVersion: '1.11.0'
+        device_id: 123,
+        device_model: 'SHSW-25',
+        generation: 1,
+        capabilities: ['wifi', 'relay', 'power_metering', 'roller']
       }
 
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: capabilities,
-          timestamp: new Date().toISOString()
-        }
-      })
+      ;(api.get as any).mockResolvedValue({ data: capabilities })
 
       const result = await getDeviceCapabilities(123)
       expect(result).toEqual(capabilities)
-      expect(result.capabilities).toContain('relay')
-      expect(result.supportedFeatures.relay).toBe(true)
-      expect(api.get).toHaveBeenCalledWith('/devices/123/capabilities')
+      expect(result.capabilities).toContain('roller')
+      expect(api.get).toHaveBeenCalledWith('/devices/123/capabilities', { signal: undefined })
     })
 
-    it('throws error when capabilities not available', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Capabilities not available' }
-        }
-      })
+    it('throws when the body carries no capability list', async () => {
+      ;(api.get as any).mockResolvedValue({ data: {} })
 
-      await expect(getDeviceCapabilities(123)).rejects.toThrow('Capabilities not available')
+      await expect(getDeviceCapabilities(123)).rejects.toThrow('Failed to get device capabilities')
     })
   })
 

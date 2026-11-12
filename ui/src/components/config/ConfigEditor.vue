@@ -61,6 +61,13 @@
               </div>
 
               <div v-if="expandedSections[sectionKey]" class="section-content">
+                <div
+                  v-if="schema['x-apply-supported'] !== false && !subtreeApplicable(sectionSchema)"
+                  class="apply-note"
+                  data-testid="section-not-applied"
+                >
+                  Not applied to the device: this section is stored here and apply never writes it.
+                </div>
                 <template v-if="sectionSchema.type === 'object' && sectionSchema.properties">
                   <ConfigSchemaField
                     v-for="(propSchema, propKey) in sectionSchema.properties"
@@ -116,6 +123,7 @@ import {
   hasAt,
   sameValue,
   setAt,
+  subtreeApplicable,
   validateOverrides,
   type ConfigBody,
   type ConfigPath,

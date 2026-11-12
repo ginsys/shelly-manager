@@ -69,11 +69,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/config/apply-template", admin(handler.ApplyConfigTemplate)).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/history", admin(handler.GetConfigHistory)).Methods("GET")
 
-	// Device capability-specific configuration routes
-	api.HandleFunc("/devices/{id}/config/relay", admin(handler.UpdateRelayConfig)).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/dimming", admin(handler.UpdateDimmingConfig)).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/roller", admin(handler.UpdateRollerConfig)).Methods("PUT")
-	api.HandleFunc("/devices/{id}/config/power-metering", admin(handler.UpdatePowerMeteringConfig)).Methods("PUT")
+	// Device login route (the device login card uses it)
 	api.HandleFunc("/devices/{id}/config/auth", admin(handler.UpdateDeviceAuth)).Methods("PUT")
 
 	// Configuration template routes

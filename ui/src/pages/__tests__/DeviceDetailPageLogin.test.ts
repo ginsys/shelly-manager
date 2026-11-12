@@ -13,9 +13,11 @@ vi.mock('../../api/devices', () => ({
   updateDeviceAuth: vi.fn(),
 }))
 vi.mock('../../api/deviceConfig', () => ({ detectConfigDrift: vi.fn() }))
+vi.mock('../../api/typedConfig', () => ({ getDeviceCapabilities: vi.fn() }))
 
 import { getDevice, getDeviceStatus, getDeviceEnergy, updateDeviceAuth } from '../../api/devices'
 import { detectConfigDrift } from '../../api/deviceConfig'
+import { getDeviceCapabilities } from '../../api/typedConfig'
 
 const device = {
   id: 7,
@@ -49,6 +51,7 @@ describe('DeviceDetailPage Device Login card', () => {
     vi.mocked(getDeviceStatus).mockRejectedValue(new Error('offline'))
     vi.mocked(getDeviceEnergy).mockRejectedValue(new Error('offline'))
     vi.mocked(detectConfigDrift).mockRejectedValue(new Error('none'))
+    vi.mocked(getDeviceCapabilities).mockRejectedValue(new Error('none'))
   })
 
   it('shows the stored login', async () => {

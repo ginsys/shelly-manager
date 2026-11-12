@@ -53,7 +53,7 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	if !supported || hasInputSettings(deviceType) {
 		sections["input"] = getInputSchema()
 	}
-	if !supported || hasRollerMode(deviceType) {
+	if !supported || HasRollerMode(deviceType) {
 		sections["roller"] = getRollerSchema()
 	}
 	if !supported {
@@ -94,8 +94,9 @@ func hasInputSettings(deviceType string) bool {
 	}
 }
 
-// hasRollerMode reports whether a Gen1 model can run as a roller (cover) controller.
-func hasRollerMode(deviceType string) bool {
+// HasRollerMode reports whether a Gen1 model can run as a roller (cover) controller. The device
+// schema and the capabilities route both read it, so one place decides.
+func HasRollerMode(deviceType string) bool {
 	return deviceType == "SHSW-25"
 }
 

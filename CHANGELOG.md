@@ -12,6 +12,17 @@ All notable changes to this project are documented here. The project follows Con
   device authentication off, and a username without a password is refused before
   anything is sent. (ginsys/shelly-manager#137)
 
+### Changed
+- The four legacy capability routes are removed: `PUT /devices/{id}/config/relay`,
+  `/dimming`, `/roller` and `/power-metering`. Each one wrote its section into the
+  stored configuration of the device and nothing applied it to the device, and no page
+  called them. A caller that used them must use the typed configuration routes. `PUT /devices/{id}/config/auth` stays. The device page now lists
+  the capabilities that `GET /devices/{id}/capabilities` returns, where it used to guess
+  them from the model name, and that route now lists `roller` for the model whose schema
+  has a roller section. The configuration editor says "not applied" on a section that
+  apply never writes, such as the roller section; roller apply is
+  ginsys/shelly-manager#504. (ginsys/shelly-manager#490)
+
 ### Fixed
 - A device save no longer restores an older login. A plain device `PUT`, the refresh
   after a discovery import and the settings backfill of a discovery each saved a whole
