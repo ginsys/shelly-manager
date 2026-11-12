@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import {
   countOverrides,
@@ -126,6 +128,34 @@ describe('config-form validation', () => {
     for (const good of ['', '0.0.0.0', '192.0.2.1', '255.255.255.255']) {
       expect(validateValue(ip, good), good).toBeNull()
     }
+  })
+
+  // The server holds the same rules (validTimeServer, isHostPort); both sides read one list.
+  it('checks the hostname and hostport formats on the list the server reads', () => {
+    const cases = JSON.parse(readFileSync(
+      resolve(process.cwd(), '../testdata/config/hosts.json'),
+      'utf8',
+    )) as Record<'hostname' | 'hostport' | 'endpoint', { valid: string[]; invalid: string[] }>
+    const hostname: SchemaProperty = { type: 'string', format: 'hostname' }
+    const hostport: SchemaProperty = { type: 'string', format: 'hostport' }
+    const endpoint: SchemaProperty = { type: 'string', format: 'endpoint' }
+    // An endpoint is a host, with or without a port, so every valid host is valid there too.
+    const endpointList = { valid: [...cases.endpoint.valid, ...cases.hostname.valid], invalid: cases.endpoint.invalid }
+    for (const [schema, list] of [
+      [hostname, cases.hostname],
+      [hostport, cases.hostport],
+      [endpoint, endpointList],
+    ] as const) {
+      expect(list.valid.length).toBeGreaterThan(0)
+      expect(list.invalid.length).toBeGreaterThan(0)
+      for (const good of [...list.valid, '']) {
+        expect(validateValue(schema, good), `${schema.format} ${good}`).toBeNull()
+      }
+      for (const bad of list.invalid) {
+        expect(validateValue(schema, bad), `${schema.format} ${bad}`).toEqual(expect.stringMatching(/^Must be /))
+      }
+    }
+    expect(validateValue(hostname, '192.168.1.300')).toBe('Must be a host name or an IPv4 address')
   })
 
   it('required fails only when the object is overridden and nothing gives a value', () => {

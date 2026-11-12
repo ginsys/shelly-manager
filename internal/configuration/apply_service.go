@@ -203,14 +203,19 @@ func unsupportedLogin(auth *AuthConfiguration) []string {
 // validTimeServer reports whether s is an IPv4 address or a DNS host name: labels of letters,
 // digits and hyphens, no label empty, over 63 bytes or starting or ending with a hyphen, and at
 // most 253 bytes in all. A dotted IPv4 address is such a name; an IPv6 literal has colons, so it is
-// refused (Gen1 devices are IPv4 only, so one could never be used as a time source).
+// refused (Gen1 devices are IPv4 only, so one could never be used as a time source). A name whose
+// last label is all digits is a mistyped address, never a name (RFC 3696: a top-level label is not
+// all-numeric), so it must be a valid IPv4 address: 192.168.1.300 is refused.
+// The config form (ui/src/utils/config-form.ts) holds the same rule; both read
+// testdata/config/hosts.json.
 func validTimeServer(s string) bool {
 	// The optional terminal dot is not part of the 253-byte limit.
 	name := strings.TrimSuffix(s, ".")
 	if len(name) > 253 {
 		return false
 	}
-	for _, label := range strings.Split(name, ".") {
+	labels := strings.Split(name, ".")
+	for _, label := range labels {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
 		}
@@ -221,6 +226,9 @@ func validTimeServer(s string) bool {
 				return false
 			}
 		}
+	}
+	if last := labels[len(labels)-1]; strings.Trim(last, "0123456789") == "" {
+		return isIPv4(name)
 	}
 	return true
 }
@@ -286,6 +294,13 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	}
 	if desired.MQTT != nil && desired.MQTT.UpdatePeriod != nil && *desired.MQTT.UpdatePeriod < 0 {
 		unsupported = append(unsupported, "mqtt.update_period")
+	}
+	// A Gen1 device stores the broker as one host:port string, which the write joins with a colon
+	// and the read-back splits at the first one. An IPv6 address (or any server with a second colon)
+	// would be stored as "fd00::1:1883" and read back as "fd00". The reference documents no
+	// bracketed form, so the value is refused and no form is guessed.
+	if m := desired.MQTT; m != nil && m.Server != nil && (strings.Count(*m.Server, ":") > 1 || strings.HasPrefix(*m.Server, "[")) {
+		unsupported = append(unsupported, "mqtt.server")
 	}
 
 	// The converted configuration holds no channel id: the list position is the channel that

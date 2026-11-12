@@ -119,9 +119,29 @@ func validateNode(schema map[string]interface{}, value interface{}, path string)
 			}
 		}
 		// An empty string reads as "not set": apply, not the schema, refuses a static address mode
-		// that has no address.
-		if schema["format"] == "ipv4" && s != "" && !isIPv4(s) {
-			return fail("Must be an IPv4 address")
+		// that has no address, and an empty peer means multicast.
+		if s != "" {
+			switch schema["format"] {
+			case "ipv4":
+				if !isIPv4(s) {
+					return fail("Must be an IPv4 address")
+				}
+			case "hostname":
+				if !validTimeServer(s) {
+					return fail("Must be a host name or an IPv4 address")
+				}
+			case "endpoint":
+				// A Gen1 device stores the MQTT broker as host:port, and apply accepts that form. A Gen2
+				// apply takes an IPv6 broker as a bare address with the port in its own field, and
+				// refuses the bracketed one-string form, so the bare address passes and [addr]:port does not.
+				if !validTimeServer(s) && !isHostPort(s) && !isIPv6Literal(s) {
+					return fail("Must be a host name or an IP address, optionally followed by :port (an IPv6 address takes its port in the Port field)")
+				}
+			case "hostport":
+				if !isHostPort(s) {
+					return fail("Must be host:port, with a host name or IPv4 address and a port from 1 to 65535")
+				}
+			}
 		}
 	}
 	if options := schemaEnum(schema["enum"]); options != nil {
@@ -144,6 +164,35 @@ func validateNode(schema map[string]interface{}, value interface{}, path string)
 func isIPv4(s string) bool {
 	addr, err := netip.ParseAddr(s)
 	return err == nil && addr.Is4()
+}
+
+// isIPv6Literal reports whether s is an IPv6 address in colon-hex form: no brackets, no zone, no
+// embedded IPv4 part and no port. The form's check (ui/src/utils/config-form.ts) holds the same
+// rule; both read testdata/config/hosts.json.
+func isIPv6Literal(s string) bool {
+	if strings.ContainsAny(s, ".%[]") {
+		return false
+	}
+	addr, err := netip.ParseAddr(s)
+	return err == nil && addr.Is6()
+}
+
+// isHostPort reports whether s is host:port: a host that validTimeServer accepts, one colon, and a
+// decimal port from 1 to 65535 with no sign and no leading zero. The form's check
+// (ui/src/utils/config-form.ts) holds the same rule; both read testdata/config/hosts.json.
+func isHostPort(s string) bool {
+	host, port, found := strings.Cut(s, ":")
+	if !found || !validTimeServer(host) || port == "" || port[0] == '0' || len(port) > 5 {
+		return false
+	}
+	n := 0
+	for _, r := range port {
+		if r < '0' || r > '9' {
+			return false
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n >= 1 && n <= 65535
 }
 
 // schemaNumber reads a schema bound, which the schema builders write as an int or a float64.

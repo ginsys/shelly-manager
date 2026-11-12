@@ -150,7 +150,7 @@ func TestSecretSlots_EverySecretNamedFieldIsRedactedMaskedAndRestored(t *testing
 
 // valid returns config with each constrained value moved inside its schema, so the override routes,
 // which check values against the schema, accept it. Every field stays set and every secret keeps its
-// sentinel: only an enum, an address, a time, a number outside its bounds or a string over its
+// sentinel: only an enum, an address, a host, a time, a number outside its bounds or a string over its
 // length changes, and a secret has none of those.
 func valid(t *testing.T, config *configuration.DeviceConfiguration) *configuration.DeviceConfiguration {
 	t.Helper()
@@ -193,6 +193,12 @@ func fitSchema(schema map[string]interface{}, value interface{}) interface{} {
 		}
 		if schema["format"] == "ipv4" {
 			return "192.0.2.1"
+		}
+		if schema["format"] == "hostname" || schema["format"] == "endpoint" {
+			return "ntp.example.net"
+		}
+		if schema["format"] == "hostport" {
+			return "192.0.2.1:5683"
 		}
 		if _, ok := schema["pattern"].(string); ok {
 			return "12:30" // the one pattern in the schema is a time of day
