@@ -79,7 +79,7 @@ func NewManagerWithLogger(config provider.DatabaseConfig, logger *logging.Logger
 		&configuration.ResolutionSchedule{},
 		&configuration.ResolutionMetrics{},
 		&ConfigTemplate{},
-		&DeviceTag{},
+		&configuration.DbDeviceTag{},
 	); err != nil {
 		if closeErr := dbProvider.Close(); closeErr != nil {
 			logger.WithFields(map[string]any{"closeError": closeErr}).Error("Failed to close database provider after migration error")

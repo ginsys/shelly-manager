@@ -672,3 +672,27 @@ func TestManagerClose(t *testing.T) {
 		// This is expected behavior
 	})
 }
+
+// A device added with no template fields reads back the empty defaults, so a row that existed
+// before the template columns did behaves like a fresh one.
+func TestMigration_ExistingDevices(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	device := &Device{
+		MAC:  "AA:BB:CC:DD:EE:08",
+		IP:   "192.168.1.8",
+		Name: "existing-device",
+	}
+
+	err := manager.AddDevice(device)
+	require.NoError(t, err)
+
+	retrieved, err := manager.GetDevice(device.ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, "[]", retrieved.TemplateIDs)
+	assert.Equal(t, "{}", retrieved.Overrides)
+	assert.Equal(t, "{}", retrieved.DesiredConfig)
+	assert.False(t, retrieved.ConfigApplied)
+}

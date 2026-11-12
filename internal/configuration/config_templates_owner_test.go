@@ -36,14 +36,15 @@ func TestNewService_DoesNotMigrateConfigTemplates(t *testing.T) {
 	assert.True(t, db.Migrator().HasTable("device_configs"), "the service still migrates its own tables")
 }
 
-func TestNewGormConfigRepository_DoesNotMigrateConfigTemplates(t *testing.T) {
+func TestNewGormConfigRepository_MigratesNothing(t *testing.T) {
 	db := bareDB(t)
 
 	NewGormConfigRepository(db, nil)
 
 	assert.False(t, db.Migrator().HasTable("config_templates"),
 		"the repository must not migrate config_templates; the database Manager owns that")
-	assert.True(t, db.Migrator().HasTable("device_tags"), "the repository still migrates device_tags")
+	assert.False(t, db.Migrator().HasTable("device_tags"),
+		"the repository must not migrate device_tags; the database Manager owns that")
 }
 
 // TestRepositoryUpdateKeepsTheExtraColumns: the repository sees only the eight
