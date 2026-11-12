@@ -148,6 +148,51 @@ func TestApplyDesiredConfig_Gen2KeepsThePasswordOutOfFailuresAndLogs(t *testing.
 	assert.Contains(t, paths, "cloud.enable")
 }
 
+// A device that echoes the request as JSON writes a quote in the password as \". The plain text of
+// the password is then not in the error, and the escaped form must go too.
+func TestApplyDesiredConfig_Gen2RedactsAnEscapedPasswordFromAnError(t *testing.T) {
+	desired := mqttDesired()
+	desired.MQTT.Password = StringPtr(`p"ass\word`)
+	svc, _ := newGen2Service(t, desired)
+	dev := newFakeGen2Device()
+	dev.refuse = errors.New(`invalid argument: {"pass":"p\"ass\\word"}`)
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	require.NotEmpty(t, result.ApplyResult.Failures)
+	for _, f := range result.ApplyResult.Failures {
+		assert.NotContains(t, f.Error, `p\"ass`, f.Path)
+		assert.NotContains(t, f.Error, `p"ass`, f.Path)
+		assert.NotContains(t, f.Value, "ass", f.Path)
+	}
+}
+
+// A server that already carries a port, with a separate port, would reach the device as
+// host:port:port.
+func TestApplyDesiredConfig_Gen2RefusesAServerThatAlreadyHasAPort(t *testing.T) {
+	desired := &DeviceConfiguration{MQTT: &MQTTConfiguration{Server: StringPtr("broker.example.net:1883"), Port: IntPtr(1883)}}
+	svc, _ := newGen2Service(t, desired)
+	dev := newFakeGen2Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+	assert.Contains(t, err.Error(), "mqtt.server")
+	assert.Empty(t, dev.calls)
+}
+
+func TestGen2Converter_WritesAnIPv6BrokerWithItsPortInBrackets(t *testing.T) {
+	desired := &DeviceConfiguration{MQTT: &MQTTConfiguration{Server: StringPtr("fd00::1"), Port: IntPtr(1883)}}
+
+	raw, err := NewGen2Converter(nil).ToAPIConfig(desired, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"mqtt":{"server":"[fd00::1]:1883"}}`, string(raw))
+}
+
 func TestVerifyDesiredConfig_Gen2IgnoresTheMQTTPassword(t *testing.T) {
 	desired := &DeviceConfiguration{MQTT: &MQTTConfiguration{User: StringPtr("iot"), Password: StringPtr("s3cret-pass")}}
 	svc, _ := newGen2Service(t, desired)
