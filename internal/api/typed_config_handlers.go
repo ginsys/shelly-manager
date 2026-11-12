@@ -918,10 +918,9 @@ func (h *Handler) extractGeneration(firmware string) int {
 func (h *Handler) getDeviceCapabilities(model string, generation int) []string {
 	capabilities := []string{"wifi"}
 
-	// All devices support basic capabilities
-	if generation >= 2 {
-		capabilities = append(capabilities, "mqtt", "cloud", "auth")
-	}
+	// Every generation has MQTT, cloud and login settings. Gen1 writes the first two through
+	// /settings/mqtt and /settings/cloud, and the device login through /settings/login.
+	capabilities = append(capabilities, "mqtt", "cloud", "auth")
 
 	// Model-specific capabilities
 	switch {
