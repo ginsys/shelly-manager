@@ -97,7 +97,7 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	// A setting with no key, or a value no Gen2 word names, is named on its own: left in, the round
 	// trip reports the whole section.
 	unsupported, mapped := unmappedMQTTSettings(desired.MQTT)
-	channelPaths, checkedChannels := unmappedChannelSettings(desired)
+	channelPaths, checkedChannels, keptChannels := unmappedChannelSettings(desired)
 	unsupported = append(unsupported, channelPaths...)
 	checked := *checkedChannels
 	checked.MQTT = mapped
@@ -139,7 +139,7 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	// Channels pair by id, as verify does: a desired list may skip an id or sit in any order.
 	for _, diff := range NewChannelIDConfigComparator().Compare(&checked, back).Differences {
 		if diff.Actual == nil {
-			unsupported = append(unsupported, diff.Path)
+			unsupported = append(unsupported, originalChannelPath(diff.Path, keptChannels))
 		}
 	}
 

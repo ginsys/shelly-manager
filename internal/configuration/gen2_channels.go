@@ -278,10 +278,12 @@ func unkeyedFields(v interface{}, prefix string, keep map[string]bool) []string 
 // unmappedChannelSettings returns the paths of the switch and input settings that no Gen2 key or
 // word carries, and a copy of the configuration without them. Each path is named on its own, so a
 // channel that sets nothing else still gets its own paths. A channel left with no setting is not in
-// the copy. The caller's configuration is never changed.
-func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceConfiguration) {
+// the copy. The caller's configuration is never changed. The third value maps the channel list of the
+// copy ("relay.relays", "input.inputs") to the original index of each channel it keeps.
+func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceConfiguration, map[string][]int) {
 	var paths []string
 	checked := *desired
+	kept := map[string][]int{}
 
 	if desired.Relay != nil {
 		relay := *desired.Relay
@@ -305,6 +307,7 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			}
 			if r.Name != nil || r.DefaultState != nil || r.AutoOn != nil || r.AutoOff != nil {
 				relay.Relays = append(relay.Relays, r)
+				kept["relay.relays"] = append(kept["relay.relays"], i)
 			}
 		}
 		checked.Relay = nil
@@ -331,6 +334,7 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			}
 			if in.Name != nil || in.Type != nil || in.Mode != nil || in.Inverted != nil {
 				input.Inputs = append(input.Inputs, in)
+				kept["input.inputs"] = append(kept["input.inputs"], i)
 			}
 		}
 		checked.Input = nil
@@ -338,5 +342,27 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			checked.Input = &input
 		}
 	}
-	return paths, &checked
+	return paths, &checked, kept
+}
+
+// originalChannelPath turns a path whose channel index counts the kept channels into the path of
+// the same channel in the desired list. Any other path is returned as it is.
+func originalChannelPath(path string, kept map[string][]int) string {
+	for list, original := range kept {
+		rest, ok := strings.CutPrefix(path, list+".")
+		if !ok {
+			continue
+		}
+		index, tail, _ := strings.Cut(rest, ".")
+		n, err := strconv.Atoi(index)
+		if err != nil || n < 0 || n >= len(original) {
+			return path
+		}
+		path = list + "." + strconv.Itoa(original[n])
+		if tail != "" {
+			path += "." + tail
+		}
+		return path
+	}
+	return path
 }
