@@ -43,23 +43,33 @@ type ConfigurationConversionInfo struct {
 	Warnings       []string `json:"warnings,omitempty"`
 }
 
+// badRequest answers 400 BAD_REQUEST with the message the web client shows.
+func (h *Handler) badRequest(w http.ResponseWriter, r *http.Request, message string) {
+	h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, message, nil)
+}
+
+// writeDeviceLookupError answers a failed device read: 404 for no such device, 500 otherwise.
+func (h *Handler) writeDeviceLookupError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		h.responseWriter().WriteNotFoundError(w, r, "Device")
+		return
+	}
+	h.responseWriter().WriteInternalError(w, r, err)
+}
+
 // GetTypedDeviceConfig handles GET /api/v1/devices/{id}/config/typed
 func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+		h.badRequest(w, r, "Invalid device ID")
 		return
 	}
 
 	// Get device info for validation context
 	device, err := h.DB.GetDevice(uint(id))
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			h.responseWriter().WriteNotFoundError(w, r, "Device")
-		} else {
-			h.responseWriter().WriteInternalError(w, r, err)
-		}
+		h.writeDeviceLookupError(w, r, err)
 		return
 	}
 
@@ -81,12 +91,7 @@ func (h *Handler) GetTypedDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to convert to typed config")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   fmt.Sprintf("Failed to convert configuration: %v", err),
-		})
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to convert configuration: %w", err))
 		return
 	}
 
@@ -121,32 +126,14 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid device ID",
-		})
+		h.badRequest(w, r, "Invalid device ID")
 		return
 	}
 
 	// Get device info for validation context
 	device, err := h.DB.GetDevice(uint(id))
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		if err == gorm.ErrRecordNotFound {
-			w.WriteHeader(http.StatusNotFound)
-			h.writeJSON(w, map[string]interface{}{
-				"success": false,
-				"error":   "Device not found",
-			})
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			h.writeJSON(w, map[string]interface{}{
-				"success": false,
-				"error":   err.Error(),
-			})
-		}
+		h.writeDeviceLookupError(w, r, err)
 		return
 	}
 
@@ -157,12 +144,7 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get device config for normalization")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   err.Error(),
-		})
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -173,12 +155,7 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to convert to typed config for normalization")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   fmt.Sprintf("Failed to convert configuration: %v", err),
-		})
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to convert configuration: %w", err))
 		return
 	}
 
@@ -187,11 +164,8 @@ func (h *Handler) GetTypedDeviceConfigNormalized(w http.ResponseWriter, r *http.
 	normalizer := NewConfigNormalizer()
 	normalized := normalizer.NormalizeTypedConfig(typedConfig)
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
-		"success":       true,
-		"configuration": normalized,
-	})
+	// The same answer shape as GET /devices/{id}/config/current/normalized.
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"configuration": normalized})
 }
 
 // UpdateTypedDeviceConfig handles PUT /api/v1/devices/{id}/config/typed
@@ -199,7 +173,7 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.badRequest(w, r, "Invalid device ID")
 		return
 	}
 
@@ -208,23 +182,19 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	raw, readErr := io.ReadAll(r.Body)
 	var req TypedConfigurationRequest
 	if readErr != nil || json.Unmarshal(raw, &req) != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.badRequest(w, r, "Invalid JSON")
 		return
 	}
 
 	if req.Configuration == nil {
-		http.Error(w, "Configuration is required", http.StatusBadRequest)
+		h.badRequest(w, r, "Configuration is required")
 		return
 	}
 
 	// Get device info for validation context
 	device, err := h.DB.GetDevice(uint(id))
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Device not found", http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		h.writeDeviceLookupError(w, r, err)
 		return
 	}
 
@@ -233,11 +203,11 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	// validated and stored.
 	removed, nullErr := wrappedNullSecretPaths(raw, "configuration")
 	if nullErr != nil {
-		http.Error(w, "Invalid JSON: "+nullErr.Error(), http.StatusBadRequest)
+		h.badRequest(w, r, "Invalid JSON: "+nullErr.Error())
 		return
 	}
 	if restoreErr := restoreTypedSecrets(req.Configuration, h.storedTypedConfig(uint(id), device), removed); restoreErr != nil {
-		http.Error(w, restoreErr.Error(), http.StatusBadRequest)
+		h.badRequest(w, r, restoreErr.Error())
 		return
 	}
 
@@ -250,19 +220,15 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 	validator := h.createValidator(validationLevel, device)
 	configJSON, err := req.Configuration.ToJSON()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to serialize configuration: %v", err), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to serialize configuration: %w", err))
 		return
 	}
 
 	validationResult := validator.ValidateConfiguration(configJSON)
 	scrubValidation(validationResult)
 	if !validationResult.Valid {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		h.writeJSON(w, map[string]interface{}{
-			"error":      "Configuration validation failed",
-			"validation": validationResult,
-		})
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeValidationFailed,
+			"Configuration validation failed", validationResult)
 		return
 	}
 
@@ -273,7 +239,7 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to update device config")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
@@ -284,20 +250,19 @@ func (h *Handler) UpdateTypedDeviceConfig(w http.ResponseWriter, r *http.Request
 		ValidationResult: validationResult,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
-// ValidateTypedConfig handles POST /api/v1/configuration/validate-typed
+// ValidateTypedConfig handles POST /api/v1/config/validate-typed
 func (h *Handler) ValidateTypedConfig(w http.ResponseWriter, r *http.Request) {
 	var req TypedConfigurationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.badRequest(w, r, "Invalid JSON")
 		return
 	}
 
 	if req.Configuration == nil {
-		http.Error(w, "Configuration is required", http.StatusBadRequest)
+		h.badRequest(w, r, "Configuration is required")
 		return
 	}
 
@@ -324,17 +289,14 @@ func (h *Handler) ValidateTypedConfig(w http.ResponseWriter, r *http.Request) {
 	// Validate the configuration
 	configJSON, err := req.Configuration.ToJSON()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to serialize configuration: %v", err), http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to serialize configuration: %w", err))
 		return
 	}
 
-	validationResult := validator.ValidateConfiguration(configJSON)
-
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, validationResult)
+	h.responseWriter().WriteSuccess(w, r, validator.ValidateConfiguration(configJSON))
 }
 
-// ConvertConfigToTyped handles POST /api/v1/configuration/convert-to-typed
+// ConvertConfigToTyped handles POST /api/v1/config/convert-to-typed
 func (h *Handler) ConvertConfigToTyped(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Configuration json.RawMessage `json:"configuration"`
@@ -343,7 +305,12 @@ func (h *Handler) ConvertConfigToTyped(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		h.badRequest(w, r, "Invalid JSON")
+		return
+	}
+
+	if len(req.Configuration) == 0 {
+		h.badRequest(w, r, "Configuration is required")
 		return
 	}
 
@@ -371,16 +338,16 @@ func (h *Handler) ConvertConfigToTyped(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, response)
 }
 
-// ConvertTypedToRaw handles POST /api/v1/configuration/convert-to-raw
+// ConvertTypedToRaw handles POST /api/v1/config/convert-to-raw
 func (h *Handler) ConvertTypedToRaw(w http.ResponseWriter, r *http.Request) {
 	var req TypedConfigurationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		h.badRequest(w, r, "Invalid JSON")
 		return
 	}
 
 	if req.Configuration == nil {
-		h.responseWriter().WriteValidationError(w, r, "Configuration is required")
+		h.badRequest(w, r, "Configuration is required")
 		return
 	}
 
@@ -480,7 +447,7 @@ func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request)
 	h.responseWriter().WriteSuccess(w, r, configuration.GetDeviceConfigurationSchema(deviceType))
 }
 
-// BulkValidateConfigs handles POST /api/v1/configuration/bulk-validate
+// BulkValidateConfigs handles POST /api/v1/config/bulk-validate
 func (h *Handler) BulkValidateConfigs(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Configurations  []TypedConfigurationRequest `json:"configurations"`
@@ -489,12 +456,12 @@ func (h *Handler) BulkValidateConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		h.badRequest(w, r, "Invalid JSON")
 		return
 	}
 
 	if len(req.Configurations) == 0 {
-		h.responseWriter().WriteValidationError(w, r, "No configurations provided")
+		h.badRequest(w, r, "No configurations provided")
 		return
 	}
 
@@ -591,34 +558,32 @@ func (h *Handler) BulkValidateConfigs(w http.ResponseWriter, r *http.Request) {
 		"results": results,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
-// GetDeviceCapabilities handles GET /api/v1/devices/{id}/capabilities
+// GetDeviceCapabilities handles GET /api/v1/devices/{id}/capabilities.
+//
+// The success body is bare, with no {success, data} envelope: the device page and the API docs
+// read it that way. The failures use the error envelope.
 func (h *Handler) GetDeviceCapabilities(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		http.Error(w, "Invalid device ID", http.StatusBadRequest)
+		h.badRequest(w, r, "Invalid device ID")
 		return
 	}
 
 	// Get device from database
 	device, err := h.DB.GetDevice(uint(id))
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			http.Error(w, "Device not found", http.StatusNotFound)
-		} else {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-		}
+		h.writeDeviceLookupError(w, r, err)
 		return
 	}
 
 	// Extract model and generation from device settings
 	var settings map[string]interface{}
 	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
-		http.Error(w, "Invalid device settings", http.StatusInternalServerError)
+		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("invalid device settings: %w", err))
 		return
 	}
 

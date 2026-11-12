@@ -72,7 +72,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | PUT | `/api/v1/devices/{id}/config` | Update stored config |
 | GET | `/api/v1/devices/{id}/config/current` | Get live config from device (stores nothing; drift keeps its baseline) |
 | GET | `/api/v1/devices/{id}/config/current/normalized` | Get normalized live config (stores nothing) |
-| GET | `/api/v1/devices/{id}/config/typed/normalized` | Get typed normalized config |
+| GET | `/api/v1/devices/{id}/config/typed/normalized` | Get typed normalized config. `data.configuration` holds the normalized configuration, as on `/config/current/normalized` |
 | POST | `/api/v1/devices/{id}/config/import` | Import config to device |
 | GET | `/api/v1/devices/{id}/config/status` | Get import status |
 | POST | `/api/v1/devices/{id}/config/export` | Export config from device |
@@ -187,15 +187,19 @@ A `device_type` template names a model from `GET /api/v1/config/device-types`. `
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/devices/{id}/config/typed` | Get typed config |
-| PUT | `/api/v1/devices/{id}/config/typed` | Update typed config |
+| GET | `/api/v1/devices/{id}/config/typed` | Get typed config. `data` holds `configuration`, `validation` and `conversion_info` |
+| PUT | `/api/v1/devices/{id}/config/typed` | Update typed config. The body is `{"configuration": {...}, "validation_level": "basic"}`; `validation_level` is optional (`basic`, `strict` or `production`). `data` holds `configuration` (secrets masked) and `validation`. A configuration that fails validation gets 400 `VALIDATION_FAILED` with the validation result in `error.details`, and nothing is saved |
 | GET | `/api/v1/devices/{id}/capabilities` | Get device capabilities (open without an admin key). The body is `{device_id, device_model, generation, capabilities}`, with `capabilities` a list of names. Every generation lists `wifi`, `mqtt`, `cloud` and `auth`, plus the names the model adds (`relay`, `power_metering`, `dimming`, `rgbw`, `roller`, ...); `ble` and `ethernet` are listed for generation 2 and later only. The list is guessed from the model name. The typed validation of a stored device, and of a request that names a `device_model`, reads the same list, so a Gen1 device with MQTT enabled gets no "may not support MQTT" warning. A validation request without `device_model` uses the `capabilities` it sends |
-| POST | `/api/v1/configuration/validate-typed` | Validate typed config |
-| POST | `/api/v1/configuration/convert-to-typed` | Convert raw to typed |
-| POST | `/api/v1/configuration/convert-to-raw` | Convert typed to raw |
+| POST | `/api/v1/config/validate-typed` | Validate typed config (admin key). The body is `{"configuration": {...}, "device_model": "SHPLG-S", "generation": 1, "capabilities": [...], "validation_level": "basic"}`; everything but `configuration` is optional. `data` is the validation result: `valid`, and `errors`, `warnings` and `info` when there are any |
+| POST | `/api/v1/config/convert-to-typed` | Convert raw to typed (admin key). The body is `{"configuration": {...}, "device_model": "SHPLG-S", "generation": 1}`. `data` holds `configuration` and `conversion_info` |
+| POST | `/api/v1/config/convert-to-raw` | Convert typed to raw (admin key). The body is `{"configuration": {...}}`. `data` holds `configuration` and `conversion_info` |
 | GET | `/api/v1/config/schema` | Get configuration schema (admin key). With `?device_type=<model>` or `?device_id=<id>`: the stored-configuration schema for that model, with each field marked `x-applicable` when apply can write it. With `?scope=global` or `?scope=group`: the schema of such a template, every stored section |
 | GET | `/api/v1/config/device-types` | List the models a `device_type` template can name. `data.device_types` holds `{device_type, name, generation}` for each of the six supported Gen1 models (`SHPLG-S`, `SHPLG-1`, `SHSW-1`, `SHSW-PM`, `SHSW-25`, `SHIX3-1`) (admin key) |
-| POST | `/api/v1/configuration/bulk-validate` | Bulk validate configs |
+| POST | `/api/v1/config/bulk-validate` | Bulk validate configs (admin key). The body is `{"configurations": [{"configuration": {...}, "device_model": "...", "generation": 1, "capabilities": [...]}], "validation_level": "basic", "stop_on_error": false}`. `data` holds `summary` (`total`, `valid`, `invalid`) and `results`, one `{index, validation, error}` per entry |
+
+Every typed-configuration route answers with the standard envelope, on success and on failure, except the success body of `GET /devices/{id}/capabilities`, which stays the bare object described in its row. A failure is `{"success": false, "error": {"code", "message", "details"}}`: a malformed body, a missing `configuration` or a non-numeric device id is 400 `BAD_REQUEST`, an unknown device is 404 `NOT_FOUND`, and an unexpected failure is 500 `INTERNAL_SERVER_ERROR` with no internal detail. The request keys are exactly the ones above: `config`, `deviceType` and `configs` are not read, so a body that uses them gets 400 "Configuration is required".
+
+**Changed answers.** Before this change `PUT /devices/{id}/config/typed`, `POST /config/validate-typed`, `POST /config/bulk-validate` and `GET /devices/{id}/config/typed/normalized` answered a bare object, and the error answers of these routes and of `GET /devices/{id}/capabilities` were plain text (`http.Error`). A client that read the bare success object now reads it from `data`. A refused `PUT` used to answer `{"error", "validation"}` and now answers `error.details`. The `convert-to-raw` and `bulk-validate` request failures answered 400 `VALIDATION_FAILED` and now answer 400 `BAD_REQUEST` with the specific message.
 
 ---
 
