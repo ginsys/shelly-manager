@@ -3,6 +3,8 @@ package service
 import (
 	"testing"
 	"time"
+
+	"github.com/ginsys/shelly-manager/internal/database"
 )
 
 // updated_at is the version of the device that a client edits (ginsys/shelly-manager#502). A write
@@ -38,6 +40,21 @@ func versionAfter(t *testing.T, status string, act func(s *ShellyService, id uin
 	}
 	if after.Status != "online" || !after.LastSeen.After(before.LastSeen) {
 		t.Errorf("the observation did not land: status %q, last seen %v (was %v)", after.Status, after.LastSeen, before.LastSeen)
+	}
+}
+
+// If the write fails, the caller's device must keep its old status and last seen time.
+func TestRecordDeviceOnline_AFailedWriteLeavesTheCallerObjectAlone(t *testing.T) {
+	gate := &gatedDevice{accept: map[string]bool{"old": true}}
+	service, _ := retryFixture(t, gate)
+	lastSeen := time.Now().Add(-time.Hour)
+	missing := &database.Device{ID: 4242, Status: "offline", LastSeen: lastSeen}
+
+	if err := service.recordDeviceOnline(missing); err == nil {
+		t.Fatal("recordDeviceOnline accepted a device that is not stored")
+	}
+	if missing.Status != "offline" || !missing.LastSeen.Equal(lastSeen) {
+		t.Errorf("a failed write changed the caller object: status %q, last seen %v", missing.Status, missing.LastSeen)
 	}
 }
 
