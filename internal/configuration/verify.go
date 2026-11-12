@@ -67,10 +67,14 @@ func NewConfigVerifier(converter ConfigConverter, logger *logging.Logger) *Confi
 	if logger == nil {
 		logger = logging.GetDefault()
 	}
+	comparator := NewConfigComparator()
+	if _, gen2 := converter.(*Gen2Converter); gen2 {
+		comparator = NewChannelIDConfigComparator()
+	}
 	return &ConfigVerifier{
 		applier:    NewConfigApplier(converter, logger),
 		converter:  converter,
-		comparator: NewConfigComparator(),
+		comparator: comparator,
 		logger:     logger,
 	}
 }

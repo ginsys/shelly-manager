@@ -64,15 +64,16 @@ var defaultCompareRules = []FieldCompareRule{
 type ConfigComparator struct {
 	rules []FieldCompareRule
 
-	// byPosition compares every list element with the one at the same position, even where the
-	// elements carry an id. The Gen1 refusal check wants that: it names an id that is not its
-	// position by itself.
-	byPosition bool
+	// byID pairs the elements of a list that carry a unique id with the element of the same id,
+	// not the one at the same position. Without it every list is compared by position, which is
+	// what Gen1 needs: a Gen1 channel's id is its position.
+	byID bool
 }
 
-// NewPositionalConfigComparator creates a comparator that pairs list elements by position only.
-func NewPositionalConfigComparator() *ConfigComparator {
-	return &ConfigComparator{rules: defaultCompareRules, byPosition: true}
+// NewChannelIDConfigComparator creates a comparator that pairs channels by id. A Gen2 device
+// reports the channels it has, so a desired channel 1 must meet channel 1 and not the first one.
+func NewChannelIDConfigComparator() *ConfigComparator {
+	return &ConfigComparator{rules: defaultCompareRules, byID: true}
 }
 
 // NewConfigComparator creates a new comparator with default rules
@@ -241,7 +242,7 @@ func (c *ConfigComparator) compareSlicesByID(expected, actual reflect.Value, exp
 }
 
 func (c *ConfigComparator) compareSlices(expected, actual reflect.Value, path string, rule *FieldCompareRule, result *CompareResult) {
-	if !c.byPosition {
+	if c.byID {
 		if expectedIDs, ok := elementIDs(expected); ok {
 			if actualIDs, ok := elementIDs(actual); ok {
 				c.compareSlicesByID(expected, actual, expectedIDs, actualIDs, path, rule, result)

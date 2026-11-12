@@ -229,14 +229,18 @@ func TestApplyDesiredConfig_Gen2ReportsAChannelTheDeviceDoesNotHave(t *testing.T
 	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 3, Name: StringPtr("ghost")}}}}
 	svc, _ := newGen2Service(t, desired)
 	dev := fakeGen2DeviceWithChannels()
-	dev.refuse = errors.New("no such component")
+	dev.strict = true
 
 	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
 
 	require.NoError(t, err)
 	assert.False(t, result.ConfigApplied)
+	require.Len(t, dev.calls, 1)
+	assert.Equal(t, "Switch.SetConfig", dev.calls[0].method)
+	assert.Equal(t, 3, dev.calls[0].id, "the write names switch 3, and the device holds only 0 and 1")
 	require.NotEmpty(t, result.ApplyResult.Failures)
 	assert.Equal(t, "switch:3.name", result.ApplyResult.Failures[0].Path)
+	assert.Contains(t, result.ApplyResult.Failures[0].Error, "no such component: switch:3")
 }
 
 // A desired channel is matched with the device's channel of the same id, never the one at the same
@@ -402,14 +406,72 @@ func TestApplyDesiredConfig_Gen2DoesNotReportAMatchForAnotherSelectedInput(t *te
 	assert.Equal(t, "input.inputs.0.mode", result.VerifyResult.Differences[0].Path)
 }
 
-func TestConfigComparator_PairsChannelsByIDAndPositionalOnRequest(t *testing.T) {
+func TestConfigComparator_PairsChannelsByIDOnlyOnRequest(t *testing.T) {
 	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, Name: StringPtr("b")}}}}
 	actual := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
 		{ID: 0, Name: StringPtr("a")}, {ID: 1, Name: StringPtr("b")},
 	}}}
 
-	assert.True(t, NewConfigComparator().Compare(desired, actual).Match, "id 1 is compared with id 1")
-	assert.False(t, NewPositionalConfigComparator().Compare(desired, actual).Match, "position 0 is compared with position 0")
+	assert.True(t, NewChannelIDConfigComparator().Compare(desired, actual).Match, "id 1 is compared with id 1")
+	assert.False(t, NewConfigComparator().Compare(desired, actual).Match, "position 0 is compared with position 0")
+}
+
+// A Gen1 channel's id is its position, so Gen1 verify stays positional: desired channel 1 is not
+// verified against the Gen1 device's channel 0 by id.
+func TestVerifyConfig_Gen1StaysPositional(t *testing.T) {
+	client := newVerifyTestClient()
+	client.currentRaw = json.RawMessage(`{"relays":[{"name":"a"},{"name":"b"}]}`)
+	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, Name: StringPtr("b")}}}}
+
+	result, err := NewConfigVerifier(NewGen1Converter(nil), nil).VerifyConfig(context.Background(), client, desired, "SHSW-25")
+
+	require.NoError(t, err)
+	assert.False(t, result.Match, "position 0 holds a, not b")
+	var paths []string
+	for _, difference := range result.Differences {
+		paths = append(paths, difference.Path)
+	}
+	assert.Contains(t, paths, "relay.relays.0.name")
+}
+
+func TestVerifyConfig_Gen2PairsChannelsByID(t *testing.T) {
+	dev := fakeGen2DeviceWithChannels()
+	dev.doc["switch:1"].(map[string]interface{})["name"] = "b"
+	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, Name: StringPtr("b")}}}}
+
+	result, err := NewConfigVerifier(NewGen2Converter(nil), nil).VerifyConfig(context.Background(), dev, desired, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.True(t, result.Match, result.Differences)
+}
+
+// A template or an override is checked when it is saved. The Gen2 words that apply writes must pass
+// that check, or they never reach the converter.
+func TestValidateConfigBody_AcceptsTheGen2SwitchAndInputWords(t *testing.T) {
+	for _, state := range []string{"on", "off", "last", "switch", "restore_last", "match_input"} {
+		body := map[string]interface{}{"relay": map[string]interface{}{"relays": []interface{}{
+			map[string]interface{}{"id": 0.0, "default_state": state},
+		}}}
+		assert.Empty(t, ValidateConfigBody("SNSW-001X16EU", body), "initial state %s", state)
+	}
+	for _, mode := range []string{"momentary", "follow", "flip", "detached", "cycle", "activate"} {
+		body := map[string]interface{}{"input": map[string]interface{}{"inputs": []interface{}{
+			map[string]interface{}{"id": 0.0, "mode": mode},
+		}}}
+		assert.Empty(t, ValidateConfigBody("SNSW-001X16EU", body), "mode %s", mode)
+	}
+}
+
+func TestValidateConfigBody_StillRefusesAWordNoDeviceHas(t *testing.T) {
+	state := map[string]interface{}{"relay": map[string]interface{}{"relays": []interface{}{
+		map[string]interface{}{"id": 0.0, "default_state": "restart"},
+	}}}
+	mode := map[string]interface{}{"input": map[string]interface{}{"inputs": []interface{}{
+		map[string]interface{}{"id": 0.0, "mode": "bogus"},
+	}}}
+
+	assert.Len(t, ValidateConfigBody("SNSW-001X16EU", state), 1)
+	assert.Len(t, ValidateConfigBody("SNSW-001X16EU", mode), 1)
 }
 
 func TestConfigComparator_ComparesByPositionWhereAnIDRepeats(t *testing.T) {
@@ -420,7 +482,7 @@ func TestConfigComparator_ComparesByPositionWhereAnIDRepeats(t *testing.T) {
 		{ID: 0, Name: StringPtr("a")}, {ID: 1, Name: StringPtr("b")},
 	}}}
 
-	result := NewConfigComparator().Compare(desired, actual)
+	result := NewChannelIDConfigComparator().Compare(desired, actual)
 
 	assert.False(t, result.Match, "the second desired element is compared with the second actual one")
 	require.NotEmpty(t, result.Differences)
