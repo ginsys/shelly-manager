@@ -39,7 +39,15 @@ var gen1ApplyKeys = map[string]bool{
 	"mqtt":               true,
 	"relays":             true,
 	"cloud":              true,
+	"coiot":              true,
 }
+
+// gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
+// Gen1 device accepts on POST /settings (coiot_update_period).
+const (
+	gen1CoIoTMinPeriod = 15
+	gen1CoIoTMaxPeriod = 65535
+)
 
 // gen1ApplicablePaths are the DeviceConfiguration field paths that reach gen1ApplyKeys through
 // the Gen1 converter and survive its round trip, so apply writes them and verify compares them.
@@ -69,6 +77,9 @@ var gen1ApplicablePaths = map[string]bool{
 	"mqtt.clean_session":         true,
 	"mqtt.keep_alive":            true,
 	"cloud.enable":               true,
+	"coiot.enable":               true,
+	"coiot.update_period":        true,
+	"coiot.peer":                 true,
 
 	// relays are written per channel with POST /settings/relay/<n> and read back from
 	// GET /settings/relay/<n>. The id is an item's position, not a setting.
@@ -114,6 +125,17 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	// none, so apply could neither write it nor read it back.
 	if desired.Cloud != nil && desired.Cloud.Server != nil {
 		unsupported = append(unsupported, "cloud.server")
+	}
+
+	// The device keeps a CoIoT update period of 15 to 65535 seconds only, and reports multicast
+	// as an empty peer, so the literal "mcast" could never read back as written.
+	if desired.CoIoT != nil {
+		if period := desired.CoIoT.UpdatePeriod; period != nil && (*period < gen1CoIoTMinPeriod || *period > gen1CoIoTMaxPeriod) {
+			unsupported = append(unsupported, "coiot.update_period")
+		}
+		if peer := desired.CoIoT.Peer; peer != nil && *peer == gen1CoIoTMulticast {
+			unsupported = append(unsupported, "coiot.peer")
+		}
 	}
 
 	// The converted configuration holds no channel id: the list position is the channel that

@@ -594,6 +594,49 @@ func TestApplyConfig_CoIoTSettings(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
+	// Gen1 only accepts flat coiot_* parameters on POST /settings; a nested map is ignored.
+	require.Len(t, client.configs, 1)
+	assert.Equal(t, map[string]interface{}{
+		"coiot_enable":        true,
+		"coiot_update_period": float64(60),
+	}, client.configs[0])
+	assert.Equal(t, 2, result.AppliedCount)
+}
+
+// An empty peer is how a device reports multicast, and the device takes "mcast" to switch to it.
+func TestApplyConfig_CoIoTPeerIsWrittenInTheShapeTheDeviceTakes(t *testing.T) {
+	for peer, want := range map[string]string{
+		"":                 "mcast",
+		"192.168.1.5:5683": "192.168.1.5:5683",
+	} {
+		client := newApplyTestClient()
+		applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+		result, err := applier.ApplyConfig(context.Background(), client,
+			&DeviceConfiguration{CoIoT: &CoIoTConfiguration{Peer: StringPtr(peer)}}, "SHPLG-S")
+
+		require.NoError(t, err)
+		assert.True(t, result.Success)
+		require.Len(t, client.configs, 1, "peer %q", peer)
+		assert.Equal(t, map[string]interface{}{"coiot_peer": want}, client.configs[0], "peer %q", peer)
+	}
+}
+
+func TestApplyConfig_CoIoTFailureIsReportedByPath(t *testing.T) {
+	client := newApplyTestClient()
+	client.setErr = errors.New("503 busy")
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client,
+		&DeviceConfiguration{CoIoT: &CoIoTConfiguration{Enable: BoolPtr(true), UpdatePeriod: IntPtr(60)}}, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "coiot", result.Failures[0].Path)
+	assert.Equal(t, "coiot_enable,coiot_update_period", result.Failures[0].Value)
+	assert.Equal(t, 2, result.FailedCount)
+	assert.Equal(t, 0, result.AppliedCount)
 }
 
 func TestApplyConfig_SystemSettings(t *testing.T) {

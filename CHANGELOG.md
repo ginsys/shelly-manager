@@ -100,10 +100,18 @@ All notable changes to this project are documented here. The project follows Con
   full database snapshot. (#443)
 
 ### Added
+- Apply to a Gen1 device now writes the CoIoT settings. It sends `coiot_enable`,
+  `coiot_update_period` and `coiot_peer` as flat parameters on `POST /settings`
+  (Gen1 has no `/settings/coiot` endpoint, and the nested document that
+  the old code sent was ignored) and checks them on the read-back. An empty peer is
+  written as `mcast`. An update period outside 15 to 65535 seconds, and the literal
+  peer `mcast`, are refused with 422 before anything is written. Wi-Fi, login and
+  inputs stay refused. Whether a CoIoT change needs a reboot is not documented
+  by Shelly and is not confirmed on hardware. (Refs ginsys/shelly-manager#381)
 - Apply to a Gen1 device now writes the cloud setting. It sends the `enabled` flag with
   `POST /settings/cloud` and checks it on the read-back, so a device that answers 200 and
   keeps the old flag stays pending. A cloud `server` in the desired configuration is
-  refused with 422, because Gen1 reports no cloud server and accepts none. Wi-Fi, CoIoT, login
+  refused with 422, because Gen1 reports no cloud server and accepts none. Wi-Fi, login
   and inputs stay refused. (Refs ginsys/shelly-manager#381)
 - An SMA archive now carries each template's scope. A template row has an optional
   `scope` key (`global`, `group` or `device_type`), the export always writes it, and an

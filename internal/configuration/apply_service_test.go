@@ -47,6 +47,23 @@ func (d *fakeGen1Device) SetConfig(_ context.Context, cfg map[string]interface{}
 		if d.dropKeys[k] {
 			continue
 		}
+		// Like a real Gen1 device: flat coiot_* parameters in, a nested "coiot" document out
+		// with enabled, update_period and peer ("mcast" is stored as an empty peer).
+		if sub, ok := strings.CutPrefix(k, "coiot_"); ok {
+			doc, _ := d.settings["coiot"].(map[string]interface{})
+			if doc == nil {
+				doc = map[string]interface{}{}
+			}
+			if sub == "enable" {
+				sub = "enabled"
+			}
+			if sub == "peer" && v == "mcast" {
+				v = ""
+			}
+			doc[sub] = v
+			d.settings["coiot"] = doc
+			continue
+		}
 		// Like a real Gen1 device: flat mqtt_* parameters in, a nested "mqtt" document out.
 		if sub, ok := strings.CutPrefix(k, "mqtt_"); ok {
 			doc, _ := d.settings["mqtt"].(map[string]interface{})
@@ -322,6 +339,87 @@ func TestApplyDesiredConfig_RefusesACloudServer(t *testing.T) {
 	assert.NotContains(t, err.Error(), "cloud.enable", "the flag itself is supported")
 	assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
 	assert.Empty(t, dev.cloudWrites)
+}
+
+func TestApplyDesiredConfig_AppliesCoIoTAndVerifiesIt(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}},
+		CoIoT:  &CoIoTConfiguration{Enable: BoolPtr(true), UpdatePeriod: IntPtr(30), Peer: StringPtr("")},
+	})
+	dev := newFakeGen1Device()
+	dev.settings["coiot"] = map[string]interface{}{"enabled": false, "update_period": float64(15), "peer": "10.0.0.9:5683"}
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied)
+	assert.Equal(t, map[string]interface{}{"enabled": true, "update_period": float64(30), "peer": ""}, dev.settings["coiot"])
+	assert.Equal(t, 0, result.ApplyResult.FailedCount)
+	assert.True(t, repo.devices[1].ConfigApplied)
+}
+
+// A device can answer 200 and keep the old CoIoT values. The read-back must catch it.
+func TestApplyDesiredConfig_CoIoTStaysPendingWhenDeviceKeepsTheOldValues(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		CoIoT: &CoIoTConfiguration{Enable: BoolPtr(true), UpdatePeriod: IntPtr(30)},
+	})
+	dev := newFakeGen1Device()
+	dev.ignoreWrites = true
+	dev.settings["coiot"] = map[string]interface{}{"enabled": false, "update_period": float64(15), "peer": ""}
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	require.NotNil(t, result.VerifyResult)
+	assert.False(t, result.VerifyResult.Match)
+	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+// The device accepts 15..65535 seconds. A value outside it is refused before anything is
+// written, and so is the literal peer "mcast", which the device reads back as an empty peer and
+// so could never verify.
+func TestApplyDesiredConfig_RefusesCoIoTValuesTheDeviceCannotKeep(t *testing.T) {
+	cases := map[string]struct {
+		coiot *CoIoTConfiguration
+		path  string
+	}{
+		"period below the range": {&CoIoTConfiguration{UpdatePeriod: IntPtr(14)}, "coiot.update_period"},
+		"period zero":            {&CoIoTConfiguration{UpdatePeriod: IntPtr(0)}, "coiot.update_period"},
+		"period above the range": {&CoIoTConfiguration{UpdatePeriod: IntPtr(65536)}, "coiot.update_period"},
+		"literal mcast peer":     {&CoIoTConfiguration{Peer: StringPtr("mcast")}, "coiot.peer"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, repo := newServiceWithDesiredName(t, "tv-office")
+			setDesired(t, repo, &DeviceConfiguration{
+				System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}},
+				CoIoT:  tc.coiot,
+			})
+			dev := newFakeGen1Device()
+
+			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			assert.Contains(t, err.Error(), tc.path)
+			assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
+		})
+	}
+}
+
+func TestApplyDesiredConfig_AcceptsCoIoTPeriodBounds(t *testing.T) {
+	for _, period := range []int{15, 65535} {
+		svc, repo := newServiceWithDesiredName(t, "tv-office")
+		setDesired(t, repo, &DeviceConfiguration{CoIoT: &CoIoTConfiguration{UpdatePeriod: IntPtr(period)}})
+
+		result, err := svc.ApplyDesiredConfig(context.Background(), 1, newFakeGen1Device(), "SHPLG-S")
+
+		require.NoError(t, err, "period %d", period)
+		assert.True(t, result.ConfigApplied, "period %d", period)
+	}
 }
 
 func TestApplyDesiredConfig_RefusesSettingsTheConverterDrops(t *testing.T) {
