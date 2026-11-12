@@ -19,6 +19,12 @@ func IntPtr(v int) *int {
 	return &v
 }
 
+// StringsPtr returns a pointer to a copy of the given list, so an empty list stays a list.
+func StringsPtr(v ...string) *[]string {
+	list := append([]string{}, v...)
+	return &list
+}
+
 // Float64Ptr returns a pointer to the given float64 value.
 func Float64Ptr(v float64) *float64 {
 	return &v
