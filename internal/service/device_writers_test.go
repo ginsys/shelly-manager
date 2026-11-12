@@ -26,6 +26,9 @@ func TestKeepStoredLogin(t *testing.T) {
 			`{` + noLogin + `,"note":"new"}`},
 		{"login was added meanwhile", `{` + noLogin + `,"note":"new"}`, `{` + noLogin + `}`, `{` + loginB + `,` + nested + `}`,
 			`{` + loginB + `,` + nested + `,"note":"new"}`},
+		{"request adds the auth_enabled default of the validation", `{"auth":{"username":"old","password":"oldpw"},"auth_enabled":false}`,
+			`{"auth":{"username":"old","password":"oldpw"}}`, `{` + loginB + `,` + nested + `}`,
+			`{` + loginB + `,` + nested + `}`},
 		{"stored settings do not parse", `{` + loginA + `}`, `{` + loginA + `}`, unparsed, ""},
 		{"basis does not parse", `{` + loginA + `}`, unparsed, `{` + loginB + `}`, ""},
 	}
