@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -723,7 +724,12 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			lastErr = err
+			// A transport error never replaces a DeviceError: an earlier attempt that got an HTTP
+			// answer proves the device was reachable, and callers read that from the error type.
+			var answered *shelly.DeviceError
+			if !errors.As(lastErr, &answered) {
+				lastErr = err
+			}
 			continue
 		}
 		defer func() {

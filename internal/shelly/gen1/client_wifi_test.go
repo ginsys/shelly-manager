@@ -2,11 +2,50 @@ package gen1
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
+
+// A device that answered once with an HTTP error has answered, even if the retries that follow get
+// no answer: the error handed back must still say so.
+func TestGen1Client_GetKeepsTheEvidenceOfAnAnsweredAttempt(t *testing.T) {
+	var requests int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&requests, 1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Errorf("Hijack: %v", err)
+			return
+		}
+		_ = conn.Close() // no answer
+	}))
+	defer server.Close()
+
+	client := NewClient(strings.TrimPrefix(server.URL, "http://"), WithRetry(2, time.Millisecond))
+	_, err := client.GetConfig(context.Background())
+
+	if err == nil {
+		t.Fatal("GetConfig: expected an error")
+	}
+	// The control: the retries ran. The HTTP transport may add one resend of its own.
+	if got := atomic.LoadInt32(&requests); got < 3 {
+		t.Fatalf("requests = %d, want at least 3", got)
+	}
+	var deviceErr *shelly.DeviceError
+	if !errors.As(err, &deviceErr) {
+		t.Fatalf("error %v (%T) lost the evidence that the device answered with HTTP 500", err, err)
+	}
+}
 
 // postedForm runs one write against a fake device and returns the method, the path and the form.
 func postedForm(t *testing.T, write func(c *Client) error) (string, string, map[string][]string) {

@@ -403,8 +403,9 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	if err != nil {
 		var refused *refusedBeforeWriteError
 		if errors.As(err, &refused) && device.ConfigApplied {
-			// Nothing was written, so the device still holds what the flag said.
-			if restoreErr := s.repo.SetDeviceConfigApplied(deviceID, true); restoreErr != nil {
+			// Nothing was written, so the device still holds what the flag said. Only the snapshot
+			// that was applied against is restored: an edit made meanwhile stays pending.
+			if _, restoreErr := s.repo.SetDeviceConfigAppliedIfDesired(deviceID, snapshot); restoreErr != nil {
 				s.logger.WithFields(map[string]any{"error": restoreErr.Error(), "device_id": deviceID}).
 					Warn("Could not restore config_applied after a refused apply")
 			}

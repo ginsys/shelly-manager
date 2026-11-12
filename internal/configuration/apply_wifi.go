@@ -24,6 +24,19 @@ var errNoWiFiClient = errors.New("client cannot write Wi-Fi settings")
 // that the device accepted and then stopped answering after.
 const wifiUnconfirmedWarning = "Applied, unconfirmed: the device may have changed network and has not answered since"
 
+// wifiLaterSectionsWarning says what an unconfirmed Wi-Fi write cost the sections after it.
+const wifiLaterSectionsWarning = "Settings after Wi-Fi were not written because the device may have changed network; apply again once it answers"
+
+// firstWiFiError keeps the first error, except that a rejected login outranks any other error: the
+// caller maps it to "the device rejected the stored credentials", and an ordinary error before it
+// must not hide that.
+func firstWiFiError(current, next error) error {
+	if current == nil || (shelly.IsAuthError(next) && !shelly.IsAuthError(current)) {
+		return next
+	}
+	return current
+}
+
 // gen1StationKeys maps the converted wifi_sta keys to the form parameters of POST /settings/sta.
 // GET /settings says mask and gw, where the write form says netmask and gateway.
 var gen1StationKeys = []struct{ api, form string }{
@@ -184,7 +197,7 @@ func (a *ConfigApplier) applyWiFiSettings(ctx context.Context, client ShellyClie
 			secret, _ := route.form["key"].(string)
 			err = redact(err, secret)
 			failWiFi(result, route.section, route.form, err.Error())
-			firstErr = firstError(firstErr, err)
+			firstErr = firstWiFiError(firstErr, err)
 			continue
 		}
 		written[route.section] = route.form
@@ -203,7 +216,7 @@ func (a *ConfigApplier) applyWiFiSettings(ctx context.Context, client ShellyClie
 		for section, form := range written {
 			failWiFi(result, section, form, "read-back failed: "+err.Error())
 		}
-		return firstError(firstErr, err)
+		return firstWiFiError(firstErr, err)
 	}
 	for _, section := range []string{"wifi_sta", "wifi_ap"} {
 		if form := written[section]; form != nil {
