@@ -390,13 +390,13 @@ func TestUnsupportedApplySettings_RelayKeys(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, unsupported)
 
-	// schedule is not a key apply writes, so it is still refused.
-	withSchedule := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
-		{ID: 0, Schedule: BoolPtr(true)},
+	// The schedule, its rules, the appliance type and the channel's max power are written too.
+	more := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0, Schedule: BoolPtr(true), ScheduleRules: []string{"0000-0123456-on"}, ApplianceType: StringPtr("heater"), MaxPower: IntPtr(1500)},
 	}}}
-	unsupported, err = unsupportedApplySettings(converter, withSchedule, "SHPLG-S", false)
+	unsupported, err = unsupportedApplySettings(converter, more, "SHSW-PM", false)
 	require.NoError(t, err)
-	assert.NotEmpty(t, unsupported)
+	assert.Empty(t, unsupported)
 }
 
 // The converted configuration carries no channel id: the list position is the channel. A

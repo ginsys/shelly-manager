@@ -424,6 +424,22 @@ func (c *Gen1Converter) convertRelay(gen1 map[string]interface{}, config *Device
 		if autoOff, ok := relayMap["auto_off"].(float64); ok {
 			singleRelay.AutoOff = IntPtr(int(autoOff))
 		}
+		if applianceType, ok := relayMap["appliance_type"].(string); ok {
+			singleRelay.ApplianceType = StringPtr(applianceType)
+		}
+		if schedule, ok := relayMap["schedule"].(bool); ok {
+			singleRelay.Schedule = BoolPtr(schedule)
+		}
+		if rules, ok := relayMap["schedule_rules"].([]interface{}); ok {
+			for _, rule := range rules {
+				if text, isString := rule.(string); isString {
+					singleRelay.ScheduleRules = append(singleRelay.ScheduleRules, text)
+				}
+			}
+		}
+		if maxPower, ok := relayMap["max_power"].(float64); ok {
+			singleRelay.MaxPower = IntPtr(int(maxPower))
+		}
 
 		relay.Relays = append(relay.Relays, singleRelay)
 	}
@@ -446,7 +462,41 @@ func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config
 		}
 	}
 
+	// A Shelly 2.5 in relay mode keeps no model-wide threshold: POST /settings max_power is "for
+	// roller mode only". The model-wide value is the one every channel carries, if they agree.
+	if gen1MaxPowerIsPerChannel(deviceType, gen1) {
+		config.PowerMetering = nil
+		if maxPower, agreed := commonChannelMaxPower(gen1); agreed {
+			config.PowerMetering = &PowerMeteringConfig{MaxPower: IntPtr(maxPower)}
+		}
+	}
+
 	return nil
+}
+
+// gen1MaxPowerIsPerChannel reports whether a device keeps its overpower threshold per channel: a
+// Shelly 2.5 whose reported mode is relay.
+func gen1MaxPowerIsPerChannel(deviceType string, gen1 map[string]interface{}) bool {
+	mode, _ := gen1["mode"].(string)
+	return deviceType == "SHSW-25" && mode == "relay"
+}
+
+// commonChannelMaxPower is the max_power that every relay channel reports, and false when a channel
+// reports none or the channels differ.
+func commonChannelMaxPower(gen1 map[string]interface{}) (int, bool) {
+	relays := relayMaps(gen1["relays"])
+	if len(relays) == 0 {
+		return 0, false
+	}
+	common := 0
+	for i, relay := range relays {
+		value, ok := relay["max_power"].(float64)
+		if !ok || (i > 0 && int(value) != common) {
+			return 0, false
+		}
+		common = int(value)
+	}
+	return common, true
 }
 
 func (c *Gen1Converter) convertLED(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
@@ -689,6 +739,18 @@ func (c *Gen1Converter) exportRelay(config *DeviceConfiguration, gen1 map[string
 		}
 		if relay.AutoOff != nil {
 			relayMap["auto_off"] = *relay.AutoOff
+		}
+		if relay.ApplianceType != nil {
+			relayMap["appliance_type"] = *relay.ApplianceType
+		}
+		if relay.Schedule != nil {
+			relayMap["schedule"] = *relay.Schedule
+		}
+		if relay.ScheduleRules != nil {
+			relayMap["schedule_rules"] = relay.ScheduleRules
+		}
+		if relay.MaxPower != nil {
+			relayMap["max_power"] = *relay.MaxPower
 		}
 
 		relays[i] = relayMap

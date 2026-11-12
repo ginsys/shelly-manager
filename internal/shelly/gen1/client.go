@@ -781,6 +781,16 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 			formData.Set(key, fmt.Sprintf("%d", v))
 		case float64:
 			formData.Set(key, fmt.Sprintf("%g", v))
+		case []string:
+			// A list goes out as one comma-separated parameter, the form schedule_rules takes.
+			formData.Set(key, strings.Join(v, ","))
+		case []interface{}:
+			// The same list as decoded JSON.
+			items := make([]string, len(v))
+			for i, item := range v {
+				items[i] = fmt.Sprint(item)
+			}
+			formData.Set(key, strings.Join(items, ","))
 		default:
 			formData.Set(key, fmt.Sprintf("%v", v))
 		}

@@ -132,15 +132,17 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 		return nil, fmt.Errorf("failed to parse API config: %w", err)
 	}
 
+	var liveRaw json.RawMessage
+	if currentConfig != nil {
+		liveRaw = currentConfig.Raw
+	}
+	routeGen1MaxPower(apiConfig, liveRaw, deviceType)
+
 	// Count settings
 	result.SettingsCount = a.countSettings(apiConfig)
 
 	// Refuse a Wi-Fi change that could take the device off its network, before the first write of
 	// any section.
-	var liveRaw json.RawMessage
-	if currentConfig != nil {
-		liveRaw = currentConfig.Raw
-	}
 	if err := checkWiFiBeforeWrite(liveRaw, currentConfig != nil, readErr, apiConfig); err != nil {
 		return nil, err
 	}
@@ -572,7 +574,7 @@ var errNoRelayClient = errors.New("client cannot write per-channel relay setting
 // gen1RelayKeys are the relay settings apply writes: the flat form parameters of
 // POST /settings/relay/<n>. Anything else in a relay document is refused before the device is
 // touched (see unsupportedApplySettings).
-var gen1RelayKeys = []string{"name", "default_state", "auto_on", "auto_off"}
+var gen1RelayKeys = []string{"name", "default_state", "auto_on", "auto_off", "appliance_type", "schedule", "schedule_rules", "max_power"}
 
 func (a *ConfigApplier) applyRelaySettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
 	relays := relayMaps(apiConfig["relays"])
