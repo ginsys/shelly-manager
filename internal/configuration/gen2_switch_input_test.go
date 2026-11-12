@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,14 +26,19 @@ func switchInputDesired() *DeviceConfiguration {
 	}
 }
 
+// fakeGen2DeviceWithChannels holds two channels. Input 0 is a button that drives switch 0 in
+// momentary mode, and input 1 is a switch that drives switch 1 in follow mode, so that a mode of
+// each kind has the input type it needs where the test changes only one of the two.
 func fakeGen2DeviceWithChannels() *fakeGen2Device {
 	d := newFakeGen2Device()
-	for id, key := range []string{"0", "1"} {
+	for id, kind := range []string{"button", "switch"} {
+		key := strconv.Itoa(id)
+		mode := map[string]string{"button": "momentary", "switch": "follow"}[kind]
 		d.doc["switch:"+key] = map[string]interface{}{
-			"id": float64(id), "name": nil, "in_mode": "momentary", "initial_state": "off",
+			"id": float64(id), "name": nil, "in_mode": mode, "initial_state": "off",
 			"auto_on": false, "auto_on_delay": 60.0, "auto_off": false, "auto_off_delay": 60.0,
 		}
-		d.doc["input:"+key] = map[string]interface{}{"id": float64(id), "name": nil, "type": "button", "enable": true, "invert": false}
+		d.doc["input:"+key] = map[string]interface{}{"id": float64(id), "name": nil, "type": kind, "enable": true, "invert": false}
 	}
 	return d
 }
@@ -231,4 +237,132 @@ func TestApplyDesiredConfig_Gen2ReportsAChannelTheDeviceDoesNotHave(t *testing.T
 	assert.False(t, result.ConfigApplied)
 	require.NotEmpty(t, result.ApplyResult.Failures)
 	assert.Equal(t, "switch:3.name", result.ApplyResult.Failures[0].Path)
+}
+
+// A desired channel is matched with the device's channel of the same id, never the one at the same
+// position in the list.
+func TestApplyDesiredConfig_Gen2VerifiesChannelsByID(t *testing.T) {
+	desired := &DeviceConfiguration{
+		Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, Name: StringPtr("pump")}}},
+		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 1, Name: StringPtr("wall"), Inverted: BoolPtr(true)}}},
+	}
+	svc, _ := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithChannels()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied, "channel 1 is compared with channel 1")
+	assert.Empty(t, result.VerifyResult.Differences)
+}
+
+func TestApplyDesiredConfig_Gen2ReportsADifferenceInTheChannelOfThatID(t *testing.T) {
+	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, Name: StringPtr("pump")}}}}
+	svc, _ := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithChannels()
+	dev.ignoreWrites = true
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	require.Len(t, result.VerifyResult.Differences, 1)
+	assert.Equal(t, "relay.relays.0.name", result.VerifyResult.Differences[0].Path)
+}
+
+// A delay that is not a whole number of seconds above 0 has no stored value, so a desired number
+// reports a difference and a disabled timer is never matched by an enabled one.
+func TestGen2Converter_ReadsNoTimerForADelayItCannotStore(t *testing.T) {
+	cases := map[string]float64{"fraction": 30.9, "half a second": 0.5, "zero": 0, "negative": -1}
+	for name, delay := range cases {
+		t.Run(name, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]interface{}{
+				"switch:0": map[string]interface{}{"id": 0, "auto_off": true, "auto_off_delay": delay},
+			})
+			require.NoError(t, err)
+
+			got, err := NewGen2Converter(nil).FromAPIConfig(raw, "SNSW-001X16EU")
+
+			require.NoError(t, err)
+			require.NotNil(t, got.Relay)
+			assert.Nil(t, got.Relay.Relays[0].AutoOff)
+			for _, seconds := range []int{0, 1, 30} {
+				desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, AutoOff: IntPtr(seconds)}}}}
+				assert.False(t, NewConfigComparator().Compare(desired, got).Match, "desired %d s", seconds)
+			}
+		})
+	}
+}
+
+// A channel that sets only what no Gen2 key carries is still refused, with a path for each setting.
+func TestApplyDesiredConfig_Gen2NamesEachSettingOfAChannelThatSetsNothingElse(t *testing.T) {
+	cases := map[string]struct {
+		desired *DeviceConfiguration
+		paths   []string
+	}{
+		"relay": {
+			&DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, Schedule: BoolPtr(true), MaxPower: IntPtr(100)}}}},
+			[]string{"relay.relays.0.schedule", "relay.relays.0.max_power"},
+		},
+		"input": {
+			&DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, SinglePushAction: StringPtr("toggle"), LongPushAction: StringPtr("toggle")}}}},
+			[]string{"input.inputs.0.single_push_action", "input.inputs.0.long_push_action"},
+		},
+		"top level relay": {
+			&DeviceConfiguration{Relay: &RelayConfig{AutoOn: IntPtr(30)}},
+			[]string{"relay.auto_on"},
+		},
+		"top level input": {
+			&DeviceConfiguration{Input: &InputConfig{DebounceTime: IntPtr(50)}},
+			[]string{"input.debounce_time"},
+		},
+		"unmapped value only": {
+			&DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("action")}}}},
+			[]string{"input.inputs.0.mode"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, _ := newGen2Service(t, tc.desired)
+			dev := fakeGen2DeviceWithChannels()
+
+			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			for _, path := range tc.paths {
+				assert.Contains(t, err.Error(), path)
+			}
+			assert.Empty(t, dev.calls)
+		})
+	}
+}
+
+// The fake device refuses a mode that the input type cannot drive, so a write of the mode before
+// the type fails here as it does on a device.
+func TestApplyDesiredConfig_Gen2WritesTheInputTypeBeforeTheModeThatNeedsIt(t *testing.T) {
+	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Type: StringPtr("switch"), Mode: StringPtr("flip")}}}}
+	svc, _ := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithChannels()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied)
+	require.Len(t, dev.calls, 2)
+	assert.Equal(t, "Input.SetConfig", dev.calls[0].method)
+	assert.Equal(t, "Switch.SetConfig", dev.calls[1].method)
+}
+
+func TestApplyDesiredConfig_Gen2FailsAModeThatTheInputTypeCannotDrive(t *testing.T) {
+	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("flip")}}}}
+	svc, _ := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithChannels()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	require.NotEmpty(t, result.ApplyResult.Failures)
+	assert.Contains(t, result.ApplyResult.Failures[0].Error, "needs a switch input")
 }

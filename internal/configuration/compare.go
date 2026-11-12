@@ -177,7 +177,67 @@ func (c *ConfigComparator) compareFields(expected, actual reflect.Value, path st
 	}
 }
 
+// elementIDs returns the ID field of each element of a slice of channels (relays, inputs), and
+// whether every element has one and no two share it. A slice that fails that test is compared by
+// position, as before.
+func elementIDs(slice reflect.Value) ([]int, bool) {
+	if slice.Type().Elem().Kind() != reflect.Struct {
+		return nil, false
+	}
+	if field, ok := slice.Type().Elem().FieldByName("ID"); !ok || field.Type.Kind() != reflect.Int {
+		return nil, false
+	}
+	ids := make([]int, slice.Len())
+	seen := map[int]bool{}
+	for i := range ids {
+		ids[i] = int(slice.Index(i).FieldByName("ID").Int())
+		if seen[ids[i]] {
+			return nil, false
+		}
+		seen[ids[i]] = true
+	}
+	return ids, true
+}
+
+// compareSlicesByID pairs each expected channel with the actual channel of the same id, so a device
+// that holds channels 0 and 1 is not read as desired channel 1 against actual channel 0.
+func (c *ConfigComparator) compareSlicesByID(expected, actual reflect.Value, expectedIDs, actualIDs []int, path string, rule *FieldCompareRule, result *CompareResult) {
+	actualByID := map[int]int{}
+	for j, id := range actualIDs {
+		actualByID[id] = j
+	}
+	matched := map[int]bool{}
+	for i, id := range expectedIDs {
+		elemPath := fmt.Sprintf("%s.%d", path, i)
+		j, ok := actualByID[id]
+		if !ok {
+			c.addDifference(result, elemPath, expected.Index(i).Interface(), nil, "removed", rule)
+			continue
+		}
+		matched[j] = true
+		elemRule := c.findRule(elemPath)
+		if elemRule == nil {
+			elemRule = rule
+		}
+		c.compareFields(expected.Index(i), actual.Index(j), elemPath, elemRule, result)
+	}
+	if rule != nil && rule.ExactList {
+		for j := 0; j < actual.Len(); j++ {
+			if !matched[j] {
+				c.addDifference(result, fmt.Sprintf("%s.%d", path, j), nil, actual.Index(j).Interface(), "added", rule)
+			}
+		}
+	}
+}
+
 func (c *ConfigComparator) compareSlices(expected, actual reflect.Value, path string, rule *FieldCompareRule, result *CompareResult) {
+	if expectedIDs, ok := elementIDs(expected); ok {
+		if actualIDs, ok := elementIDs(actual); ok {
+			c.compareSlicesByID(expected, actual, expectedIDs, actualIDs, path, rule, result)
+			return
+		}
+	}
+
 	expectedLen := expected.Len()
 	actualLen := actual.Len()
 

@@ -76,12 +76,35 @@ func (d *fakeGen2Device) CallConfigSetter(_ context.Context, method string, para
 		key = fmt.Sprintf("%s:%d", key, n)
 	}
 	d.calls = append(d.calls, gen2Call{method: method, id: id, config: config})
+	if method == "Switch.SetConfig" {
+		if err := d.checkInMode(id, config); err != nil {
+			return false, err
+		}
+	}
 	if section, ok := d.doc[key].(map[string]interface{}); ok && !d.ignoreWrites {
 		storeKeys(section, config)
 		// A device never returns the MQTT password.
 		delete(section, "pass")
 	}
 	return d.restart, nil
+}
+
+// checkInMode refuses an in_mode that the type of the switch's input cannot drive, as a device
+// does: follow and flip need a stateful input (switch), momentary and cycle a stateless one (button).
+func (d *fakeGen2Device) checkInMode(id int, config map[string]interface{}) error {
+	mode, ok := config["in_mode"].(string)
+	if !ok {
+		return nil
+	}
+	input, _ := d.doc[fmt.Sprintf("input:%d", id)].(map[string]interface{})
+	kind, _ := input["type"].(string)
+	switch {
+	case (mode == "follow" || mode == "flip") && kind != "switch":
+		return fmt.Errorf("in_mode %s needs a switch input, input %d is %q", mode, id, kind)
+	case (mode == "momentary" || mode == "cycle") && kind != "button":
+		return fmt.Errorf("in_mode %s needs a button input, input %d is %q", mode, id, kind)
+	}
+	return nil
 }
 
 // storeKeys writes the keys of src into dst, one level at a time, and leaves every other key of
