@@ -131,7 +131,7 @@ docker-compose up -d
 
 REST API with standardized `{success: true/false, data/error}` responses.
 
-To write a device's desired configuration to a Gen1 device, call `POST /api/v1/devices/{id}/config/new/apply`, with the admin key if the server has one configured. To compare without writing, call `POST /api/v1/devices/{id}/config/new/verify`. See [Apply and verify](docs/api/api-overview.md#apply-and-verify-the-desired-configuration) for the supported settings and errors.
+To write a device's desired configuration to a Gen1 device, or the system settings of a Gen2 or Gen3 device, call `POST /api/v1/devices/{id}/config/new/apply`, with the admin key if the server has one configured. To compare without writing, call `POST /api/v1/devices/{id}/config/new/verify`. See [Apply and verify](docs/api/api-overview.md#apply-and-verify-the-desired-configuration) for the supported settings and errors.
 
 See documentation:
 - [API overview](docs/api/api-overview.md)

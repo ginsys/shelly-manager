@@ -1330,13 +1330,16 @@ paths:
             motor_direction, swap_inputs and input_mode,
             an SNTP server that is not an IPv4 address or a host name, a negative MQTT update
             period, a section with no Gen1 mapping such as the debug settings, or a stored field the configuration
-            model does not know. The error names the sections.
+            model does not know. On a Gen2 or Gen3 device every section except the system settings,
+            and an SNTP server written as host:port, are refused the same way. The error names the sections.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
         '501':
-          description: Gen2 and Gen3 devices are not supported (NOT_IMPLEMENTED)
+          description: >-
+            The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
+            Gen2 and Gen3 for the system section only.
           content:
             application/json:
               schema:
@@ -1389,7 +1392,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
         '501':
-          description: Gen2 and Gen3 devices are not supported (NOT_IMPLEMENTED)
+          description: >-
+            The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
+            Gen2 and Gen3 for the system section only.
           content:
             application/json:
               schema:
