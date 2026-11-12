@@ -99,7 +99,7 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 
 	// The login password is write-only. Compare without it, so a missing read-back section never
 	// puts the whole desired auth object, password included, into a difference.
-	compareResult := v.comparator.Compare(comparableDesired(withoutLoginPassword(desired)), imported)
+	compareResult := v.comparator.Compare(comparableDesired(withoutWiFiPasswords(withoutLoginPassword(desired))), imported)
 	result.Match = compareResult.Match
 	result.Differences = compareResult.Differences
 	result.Duration = time.Since(startTime)
@@ -188,6 +188,13 @@ func (v *ConfigVerifier) ApplyAndVerify(ctx context.Context, client ShellyClient
 			result.Duration = time.Since(startTime)
 			return nil, err
 		}
+	}
+
+	// A station network change that the device stopped answering after is neither verified nor
+	// rebooted: it may be on another network. The reboot stays owed (a.owed) for the next apply.
+	if applyResult.Unconfirmed {
+		result.Duration = time.Since(startTime)
+		return result, nil
 	}
 
 	if applyResult.RequiresReboot {

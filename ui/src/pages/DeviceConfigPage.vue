@@ -352,7 +352,14 @@ async function handleApply() {
   const generation = routeGeneration
   try {
     const result = await store.apply(id)
-    if (result.success) {
+    if (result.unconfirmed) {
+      // A Wi-Fi network change that the device stopped answering after. Not a failure and not a
+      // success: the device stays pending until a later read confirms it.
+      alert(
+        'Applied, unconfirmed: the device may have changed network and has not answered since. ' +
+          'Find the device on its new network, then verify it.',
+      )
+    } else if (result.success) {
       alert(`Applied successfully. ${result.applied_count} field(s) updated.`)
     } else {
       alert(`Apply completed with errors. ${result.failed_count} field(s) failed.`)

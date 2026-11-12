@@ -182,20 +182,26 @@ func (c *Gen1Converter) convertWiFi(gen1 map[string]interface{}, config *DeviceC
 		wifi.IPv4Mode = StringPtr(ipv4Method)
 	}
 
-	// Static IP configuration
-	if ip, hasIP := wifiSTA["ip"].(string); hasIP && ip != "" {
-		staticIP := &StaticIPConfig{
-			IP: StringPtr(ip),
-		}
-		if netmask, ok := wifiSTA["netmask"].(string); ok {
-			staticIP.Netmask = StringPtr(netmask)
-		}
-		if gw, ok := wifiSTA["gw"].(string); ok {
-			staticIP.Gateway = StringPtr(gw)
-		}
-		if dns, ok := wifiSTA["dns"].(string); ok {
-			staticIP.Nameserver = StringPtr(dns)
-		}
+	// Static IP configuration: present as soon as the device reports any of its four addresses, so
+	// a desired gateway alone survives the round trip that decides what apply can write.
+	staticIP := &StaticIPConfig{}
+	if ip, ok := wifiSTA["ip"].(string); ok && ip != "" {
+		staticIP.IP = StringPtr(ip)
+	}
+	// The device reports the netmask as "mask"; "netmask" is the older invented key and is still
+	// read, but never wins over the real one.
+	if netmask, ok := wifiSTA["mask"].(string); ok {
+		staticIP.Netmask = StringPtr(netmask)
+	} else if netmask, ok := wifiSTA["netmask"].(string); ok {
+		staticIP.Netmask = StringPtr(netmask)
+	}
+	if gw, ok := wifiSTA["gw"].(string); ok {
+		staticIP.Gateway = StringPtr(gw)
+	}
+	if dns, ok := wifiSTA["dns"].(string); ok {
+		staticIP.Nameserver = StringPtr(dns)
+	}
+	if staticIP.IP != nil || staticIP.Netmask != nil || staticIP.Gateway != nil || staticIP.Nameserver != nil {
 		wifi.StaticIP = staticIP
 	}
 
@@ -494,7 +500,7 @@ func (c *Gen1Converter) exportWiFi(config *DeviceConfiguration, gen1 map[string]
 			wifiSTA["ip"] = *config.WiFi.StaticIP.IP
 		}
 		if config.WiFi.StaticIP.Netmask != nil {
-			wifiSTA["netmask"] = *config.WiFi.StaticIP.Netmask
+			wifiSTA["mask"] = *config.WiFi.StaticIP.Netmask
 		}
 		if config.WiFi.StaticIP.Gateway != nil {
 			wifiSTA["gw"] = *config.WiFi.StaticIP.Gateway

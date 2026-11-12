@@ -24,6 +24,11 @@ type ApplyResult struct {
 	Warnings       []string       `json:"warnings"`        // Non-fatal issues
 	Duration       time.Duration  `json:"duration"`        // Time taken to apply
 
+	// Unconfirmed is true when a write changed the station network (ssid, enabled, IP settings) and
+	// the device then stopped answering: it may now sit on another network. That is neither a
+	// failure nor a success, so verify does not run and the device stays pending.
+	Unconfirmed bool `json:"unconfirmed"`
+
 	// login is the login change the device accepted in this apply, or nil. It is unexported so
 	// the credentials never reach a response or a log.
 	login *LoginChange
@@ -126,6 +131,16 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	// Count settings
 	result.SettingsCount = a.countSettings(apiConfig)
 
+	// Refuse a Wi-Fi change that could take the device off its network, before the first write of
+	// any section.
+	var liveRaw json.RawMessage
+	if currentConfig != nil {
+		liveRaw = currentConfig.Raw
+	}
+	if err := checkWiFiBeforeWrite(liveRaw, currentConfig != nil, readErr, apiConfig); err != nil {
+		return nil, err
+	}
+
 	// Decide the reboot from the settings as they are before any write, and record it before the
 	// first one. A write that fails can still have landed (the answer may be lost), and a later
 	// failure returns before the reboot, so the obligation has to be stored first: a retry reads
@@ -158,7 +173,7 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 
 	// Apply configuration sections. A rejected login is an error, not a failed setting: the caller
 	// maps it to "the device rejected the stored credentials".
-	if err := a.applyConfigSections(ctx, client, apiConfig, deviceType, result); err != nil {
+	if err := a.applyConfigSections(ctx, client, apiConfig, liveRaw, deviceType, result); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
 	}
 
@@ -182,7 +197,7 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 // applyConfigSections applies each section of the configuration. A section the device refuses
 // is recorded in result and the next section is tried, except when the device rejects the login:
 // every later write would be rejected too, so that error stops the apply and is returned.
-func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, deviceType string, result *ApplyResult) error {
+func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, live json.RawMessage, deviceType string, result *ApplyResult) error {
 	// For Gen1 devices, we can send settings to /settings endpoint
 	// Different setting groups go to different endpoints
 	sections := []struct {
@@ -190,7 +205,9 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		apply func(context.Context, ShellyClient, map[string]interface{}, *ApplyResult) error
 	}{
 		{"main", a.applyMainSettings}, // name, timezone, location, etc.
-		{"WiFi", a.applyWiFiSettings},
+		{"WiFi", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+			return a.applyWiFiSettings(ctx, client, apiConfig, live, result)
+		}},
 		{"MQTT", a.applyMQTTSettings},
 		{"SNTP", a.applySNTPSettings},
 		{"Cloud", a.applyCloudSettings},
@@ -271,41 +288,6 @@ func (a *ConfigApplier) applyMainSettings(ctx context.Context, client ShellyClie
 	}
 
 	result.AppliedCount += len(mainSettings)
-	return nil
-}
-
-func (a *ConfigApplier) applyWiFiSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
-	wifiSTA, ok := apiConfig["wifi_sta"].(map[string]interface{})
-	if !ok || len(wifiSTA) == 0 {
-		return nil
-	}
-
-	if err := client.SetConfig(ctx, map[string]interface{}{"wifi_sta": wifiSTA}); err != nil {
-		result.Failures = append(result.Failures, ApplyFailure{
-			Path:  "wifi_sta",
-			Value: fmt.Sprintf("%v", wifiSTA),
-			Error: err.Error(),
-		})
-		result.FailedCount++
-		return err
-	}
-
-	result.AppliedCount++
-
-	// WiFi AP settings
-	if wifiAP, ok := apiConfig["wifi_ap"].(map[string]interface{}); ok && len(wifiAP) > 0 {
-		if err := client.SetConfig(ctx, map[string]interface{}{"wifi_ap": wifiAP}); err != nil {
-			result.Failures = append(result.Failures, ApplyFailure{
-				Path:  "wifi_ap",
-				Value: fmt.Sprintf("%v", wifiAP),
-				Error: err.Error(),
-			})
-			result.FailedCount++
-		} else {
-			result.AppliedCount++
-		}
-	}
-
 	return nil
 }
 
@@ -882,6 +864,9 @@ func (a *ConfigApplier) countSettings(config map[string]interface{}) int {
 			}
 			continue
 		}
+		if key == "wifi_sta" || key == "wifi_ap" {
+			continue // counted below, as the form keys apply writes
+		}
 		if key == "rollers" {
 			// One setting per roller key apply writes, as applyRollerSettings counts them.
 			for _, roller := range relayMaps(val) {
@@ -903,16 +888,17 @@ func (a *ConfigApplier) countSettings(config map[string]interface{}) int {
 		}
 		_ = key
 	}
-	return count
+	sta, ap := gen1WiFiForms(config)
+	return count + len(sta) + len(ap)
 }
 
 // detectRebootRequired determines if a reboot is needed
 func (a *ConfigApplier) detectRebootRequired(oldConfigJSON json.RawMessage, newConfigJSON json.RawMessage, newConfig *DeviceConfiguration) bool {
-	// Settings that require reboot
+	// Settings that require reboot. The Wi-Fi routes are not here: the reference says their
+	// parameters are applied immediately and names no reboot (unverified until the hardware
+	// readback), and a station change followed by a reboot of a device that may be on another
+	// network is the worse mistake.
 	rebootSettings := []string{
-		"wifi_sta.ssid",
-		"wifi_sta.key",
-		"wifi_sta.enabled",
 		"login.enabled",
 		"login.username",
 		"login.password",

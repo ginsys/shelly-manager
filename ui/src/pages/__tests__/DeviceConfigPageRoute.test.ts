@@ -102,6 +102,31 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
     expect(api.applyDeviceConfigNew.mock.calls[0][0]).toBe('8')
   })
 
+  it('shows an unconfirmed apply as its own state, neither success nor failure', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    api.getConfigStatusNew.mockImplementation(async () => ({ config_applied: false, pending_changes: true }) as any)
+    // A Wi-Fi network change that the device stopped answering after: the API says success=false
+    // because nothing was verified, and unconfirmed=true because nothing failed either.
+    api.applyDeviceConfigNew.mockResolvedValue({
+      success: false,
+      unconfirmed: true,
+      applied_count: 0,
+      failed_count: 0,
+    } as any)
+    const { wrapper } = await mountAt('/devices/7/config')
+
+    await buttonWithText(wrapper, 'Apply Config').trigger('click')
+    await flushPromises()
+
+    expect(alertSpy).toHaveBeenCalledTimes(1)
+    const message = String(alertSpy.mock.calls[0][0])
+    expect(message).toContain('unconfirmed')
+    expect(message).toContain('may have changed network')
+    expect(message).not.toContain('Applied successfully')
+    expect(message).not.toContain('errors')
+  })
+
   it('ignores a late answer for the device it left', async () => {
     let releaseOld: (value: any) => void = () => {}
     api.getDeviceOverridesNew.mockImplementation((id: any) => {

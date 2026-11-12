@@ -36,6 +36,9 @@ var defaultCompareRules = []FieldCompareRule{
 	{Path: "mqtt.pass", SkipCompare: true},
 	// Same for the login: Gen1 GET /settings returns enabled and username, never the password.
 	{Path: "auth.pass", SkipCompare: true},
+	// And for the Wi-Fi keys: GET /settings never returns the station or the access point key.
+	{Path: "wifi.password", SkipCompare: true},
+	{Path: "wifi.ap.pass", SkipCompare: true},
 
 	// Tolerance for coordinates (about 10 meters)
 	{Path: "location.latitude", Tolerance: 0.0001, Category: "system"},

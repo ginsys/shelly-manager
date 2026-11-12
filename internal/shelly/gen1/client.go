@@ -884,6 +884,13 @@ func (c *Client) SetWiFiConfig(ctx context.Context, config map[string]interface{
 	return c.postForm(ctx, url, config)
 }
 
+// SetAPConfig configures the access point: POST /settings/ap takes enabled and key only, because
+// the device does not let its access point SSID be changed.
+func (c *Client) SetAPConfig(ctx context.Context, config map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/ap", c.ip)
+	return c.postForm(ctx, url, config)
+}
+
 // SetCloudConfig configures cloud connectivity
 func (c *Client) SetCloudConfig(ctx context.Context, enabled bool, server string) error {
 	url := fmt.Sprintf("http://%s/settings/cloud", c.ip)
