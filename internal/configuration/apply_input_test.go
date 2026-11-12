@@ -133,6 +133,64 @@ func TestApplyConfig_InputReadBackMismatchFailsThePath(t *testing.T) {
 	assert.Equal(t, 1, result.FailedCount)
 }
 
+func TestApplyConfig_InputReadBackAcceptsABooleanReverseFlag(t *testing.T) {
+	for _, inverted := range []bool{true, false} {
+		client := newInputTestClient()
+		client.inputLive = map[int]map[string]interface{}{
+			0: {"btn_type": "toggle", "btn_reverse": inverted}, // the reference also shows a bool
+		}
+		applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+		result, err := applier.ApplyConfig(context.Background(), client, inputsDesired(
+			SingleInputConfig{ID: 0, Mode: StringPtr("follow"), Inverted: BoolPtr(inverted)},
+		), "SHIX3-1")
+
+		require.NoError(t, err)
+		assert.True(t, result.Success, "inverted=%v failures: %+v", inverted, result.Failures)
+	}
+}
+
+func TestApplyConfig_InputReadBackStillCatchesABooleanReverseMismatch(t *testing.T) {
+	client := newInputTestClient()
+	client.inputLive = map[int]map[string]interface{}{
+		0: {"btn_type": "toggle", "btn_reverse": false},
+	}
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	result, err := applier.ApplyConfig(context.Background(), client, inputsDesired(
+		SingleInputConfig{ID: 0, Mode: StringPtr("follow"), Inverted: BoolPtr(true)},
+	), "SHIX3-1")
+
+	require.NoError(t, err)
+	assert.False(t, result.Success)
+	require.Len(t, result.Failures, 1)
+	assert.Equal(t, "inputs[0].btn_reverse", result.Failures[0].Path)
+}
+
+func TestRelayValuesEqual_OnlyAFlagAgainstANumberChanged(t *testing.T) {
+	cases := []struct {
+		name          string
+		written, live interface{}
+		want          bool
+	}{
+		{"1 against true", 1, true, true},
+		{"0 against false", 0, false, true},
+		{"true against 1", true, float64(1), true},
+		{"1 against false", 1, false, false},
+		{"true against 0", true, float64(0), false},
+		{"2 against true", 2, true, false},
+		{"true against true", true, true, true},
+		{"true against false", true, false, false},
+		{"true against the text true", true, "true", true},
+		{"1 against the text 1", 1, "1", false},
+		{"text against a bool", "1", true, false},
+		{"1 against null", 1, nil, false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, relayValuesEqual(tc.written, tc.live), tc.name)
+	}
+}
+
 func TestApplyConfig_InputWriteFailureNamesEveryKeyOfTheChannel(t *testing.T) {
 	client := newInputTestClient()
 	client.inputSetErr = errors.New("503 busy")
