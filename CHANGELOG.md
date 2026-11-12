@@ -62,8 +62,13 @@ All notable changes to this project are documented here. The project follows Con
   delay that is not a whole number of seconds above 0 is read as unset, so verify reports a
   difference. Verify pairs a channel with the device channel of the same id; a list with a
   repeated id is compared by position, as before. The mode of input N is written as the
-  `in_mode` of switch N. Where a model lets a switch take another input (`input_id`), verify
-  reads the mode on that input and reports a difference, and the write is not redirected.
+  `in_mode` of switch N. Where a model lets a switch take another input (`input_id`), apply
+  reads the device first and refuses the mode with 422, because the write would change the
+  input that switch runs and not input N. A channel list that holds one id twice with settings
+  is refused too, at the second entry (for example `relay.relays.1.id`), because it cannot say
+  which channel the settings belong to. A template and an override that the configuration merge
+  pairs by position can still put a channel's settings under another id when the ids differ:
+  ginsys/shelly-manager#537 tracks it.
   Refused with 422 before anything is
   written, with one path for each setting: any other value (the Gen1 mode `action`, an input
   type `analog` or `count`, a negative timer), an input push action or timing, a relay

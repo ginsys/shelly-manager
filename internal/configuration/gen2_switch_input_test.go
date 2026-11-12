@@ -390,20 +390,69 @@ func TestGen2Converter_ReadsTheModeOnTheInputTheSwitchTakes(t *testing.T) {
 	assert.Equal(t, "flip", *got.Input.Inputs[1].Mode)
 }
 
-// Verify reports a difference, and does not report a match, when the mode written for input 0 runs
-// on the input that switch 0 takes instead.
-func TestApplyDesiredConfig_Gen2DoesNotReportAMatchForAnotherSelectedInput(t *testing.T) {
+// The mode of input 0 is written to switch 0, which runs the input named by its input_id. When that
+// is another input, the write would change the wrong input's behavior, and a later verify cannot
+// undo it. Apply refuses before the first write and leaves the applied flag as it was.
+func TestApplyDesiredConfig_Gen2RefusesAnInputModeForAnotherSelectedInput(t *testing.T) {
+	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{
+		{ID: 0, Type: StringPtr("switch"), Mode: StringPtr("flip")},
+		{ID: 1, Name: StringPtr("door")},
+	}}}
+	svc, repo := newGen2Service(t, desired)
+	repo.devices[1].ConfigApplied = true
+	dev := fakeGen2DeviceWithChannels()
+	dev.doc["switch:0"].(map[string]interface{})["input_id"] = 1.0
+
+	_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.ErrorIs(t, err, ErrUnsupportedSettings)
+	assert.Contains(t, err.Error(), "input.inputs.0.mode")
+	assert.Empty(t, dev.calls, "nothing is written")
+	assert.True(t, repo.devices[1].ConfigApplied, "the device still holds what the flag said")
+}
+
+// A switch that takes its own input, or names no input_id at all, is written as before.
+func TestApplyDesiredConfig_Gen2WritesAnInputModeWhenTheSwitchTakesItsOwnInput(t *testing.T) {
 	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Type: StringPtr("switch"), Mode: StringPtr("flip")}}}}
 	svc, _ := newGen2Service(t, desired)
 	dev := fakeGen2DeviceWithChannels()
-	dev.doc["switch:0"].(map[string]interface{})["input_id"] = 1.0
+	dev.doc["switch:0"].(map[string]interface{})["input_id"] = 0.0
 
 	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
 
 	require.NoError(t, err)
-	assert.False(t, result.ConfigApplied)
-	require.Len(t, result.VerifyResult.Differences, 1)
-	assert.Equal(t, "input.inputs.0.mode", result.VerifyResult.Differences[0].Path)
+	assert.True(t, result.ConfigApplied)
+}
+
+// The merge of a template and a sparse override pairs channels by position and keeps the id of the
+// override, so a channel that only the template sets can end up under another channel's id. A list
+// that holds one id twice cannot say which channel a setting belongs to, so apply refuses it.
+func TestApplyDesiredConfig_Gen2RefusesARepeatedChannelID(t *testing.T) {
+	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 1, AutoOn: IntPtr(30), Name: StringPtr("lamp")},
+		{ID: 1, AutoOff: IntPtr(60)},
+	}}}
+	svc, _ := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithChannels()
+
+	_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.ErrorIs(t, err, ErrUnsupportedSettings)
+	assert.Contains(t, err.Error(), "relay.relays.1.id")
+	assert.Empty(t, dev.calls, "nothing is written")
+}
+
+func TestUnsupportedGen2Settings_NamesARepeatedInputID(t *testing.T) {
+	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{
+		{ID: 0, Name: StringPtr("a")},
+		{ID: 1, Name: StringPtr("b")},
+		{ID: 0, Name: StringPtr("c")},
+	}}}
+
+	paths, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"input.inputs.2.id"}, paths)
 }
 
 func TestConfigComparator_PairsChannelsByIDOnlyOnRequest(t *testing.T) {
