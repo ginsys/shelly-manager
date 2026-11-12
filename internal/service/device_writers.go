@@ -120,14 +120,16 @@ func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Devic
 	if err = s.DB.UpdateDevice(incoming); err != nil {
 		return err
 	}
-	// The save stamps updated_at in memory with the clock's full precision, and a database can
-	// store less (PostgreSQL keeps microseconds). The caller returns this object, and the client
-	// sends its updated_at back, so it must be the stored value or the next PUT is a false 409.
+	// The caller returns this object, and the client sends its updated_at back. The save stamps
+	// updated_at in memory with the clock's full precision, and a database can store less
+	// (PostgreSQL keeps microseconds), so the next PUT would be a false 409. A writer that does
+	// not take clientMu can also save between the save and this read. So the whole row comes
+	// from this one read, and its fields and its version always belong together.
 	saved, err := s.DB.GetDevice(incoming.ID)
 	if err != nil {
 		return fmt.Errorf("device saved, but reading it back failed: %w", err)
 	}
-	incoming.UpdatedAt = saved.UpdatedAt
+	*incoming = *saved
 	return nil
 }
 
