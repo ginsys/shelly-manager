@@ -462,6 +462,39 @@ func TestValidateConfigBody_AcceptsTheGen2SwitchAndInputWords(t *testing.T) {
 	}
 }
 
+// The Gen1 words toggle and edge are read as follow and flip, so a Gen2 model or a template must
+// accept them when it is saved. A supported Gen1 model keeps its own stored words.
+func TestValidateConfigBody_AcceptsTheGen1InputAliasesForGen2AndTemplates(t *testing.T) {
+	for _, mode := range []string{"toggle", "edge"} {
+		body := map[string]interface{}{"input": map[string]interface{}{"inputs": []interface{}{
+			map[string]interface{}{"id": 0.0, "mode": mode},
+		}}}
+		assert.Empty(t, ValidateConfigBody("SNSW-001X16EU", body), "Gen2 model, mode %s", mode)
+		assert.Empty(t, ValidateConfigBody("", body), "template, mode %s", mode)
+		assert.Len(t, ValidateConfigBody("SHSW-25", body), 1, "Gen1 model, mode %s", mode)
+	}
+}
+
+// A desired list may skip a channel id or hold the channels in any order. The refusal check pairs
+// channels by id, so a channel that sets one field is not held against another channel's fields.
+func TestApplyDesiredConfig_Gen2AcceptsSparseAndReorderedChannels(t *testing.T) {
+	desired := &DeviceConfiguration{
+		Relay: &RelayConfig{Relays: []SingleRelayConfig{
+			{ID: 1, Name: StringPtr("pump")},
+			{ID: 0, DefaultState: StringPtr("off")},
+		}},
+		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("detached")}}},
+	}
+	svc, _ := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithChannels()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied)
+	assert.Len(t, dev.calls, 2, "switch 0 and switch 1, one call each")
+}
+
 func TestValidateConfigBody_StillRefusesAWordNoDeviceHas(t *testing.T) {
 	state := map[string]interface{}{"relay": map[string]interface{}{"relays": []interface{}{
 		map[string]interface{}{"id": 0.0, "default_state": "restart"},
