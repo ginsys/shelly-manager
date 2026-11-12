@@ -14,7 +14,7 @@ vi.mock('../../api/devices', () => ({
 }))
 vi.mock('../../api/deviceConfig', () => ({ detectConfigDrift: vi.fn() }))
 
-import { getDevice, getDeviceStatus, getDeviceEnergy } from '../../api/devices'
+import { getDevice, getDeviceStatus, getDeviceEnergy, updateDeviceAuth } from '../../api/devices'
 import { detectConfigDrift } from '../../api/deviceConfig'
 
 const device = {
@@ -68,5 +68,36 @@ describe('DeviceDetailPage Device Login card', () => {
     expect(vi.mocked(getDevice)).toHaveBeenCalledTimes(2)
     expect((wrapper.get('[data-testid="device-login-username"]').element as HTMLInputElement).value).toBe('typing')
     expect((wrapper.get('[data-testid="device-login-password"]').element as HTMLInputElement).value).toBe('half-typed')
+  })
+
+  it('ignores a read that started before a save and arrives after it', async () => {
+    const wrapper = await openPage()
+
+    // Refresh starts a read that stays pending and will carry the login from before the save.
+    let answerStale!: (value: typeof device) => void
+    vi.mocked(getDevice).mockImplementationOnce(
+      () => new Promise<typeof device>((resolve) => { answerStale = resolve }),
+    )
+    const refresh = wrapper.findAll('button').find((b) => b.text().trim() === 'Refresh')!
+    await refresh.trigger('click')
+    await flushPromises()
+
+    // The save succeeds and the read it triggers returns the new login.
+    vi.mocked(updateDeviceAuth).mockResolvedValue(undefined as never)
+    vi.mocked(getDevice).mockImplementation(async () => ({
+      ...device,
+      settings: JSON.stringify({ auth_user: 'newuser', auth_pass: '********' }),
+    }))
+    await wrapper.get('[data-testid="device-login-username"]').setValue('newuser')
+    await wrapper.get('[data-testid="device-login-password"]').setValue('secret')
+    await wrapper.get('[data-testid="device-login-save"]').trigger('click')
+    await flushPromises()
+    expect((wrapper.get('[data-testid="device-login-username"]').element as HTMLInputElement).value).toBe('newuser')
+
+    // The older read now arrives with the login from before the save.
+    answerStale({ ...device })
+    await flushPromises()
+
+    expect((wrapper.get('[data-testid="device-login-username"]').element as HTMLInputElement).value).toBe('newuser')
   })
 })
