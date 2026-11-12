@@ -145,6 +145,9 @@ func sampleValue(leaf map[string]interface{}) interface{} {
 	case "boolean":
 		return true
 	case "integer":
+		if step, ok := leaf["multipleOf"].(int); ok && step > 0 {
+			return step
+		}
 		if minimum, ok := leaf["minimum"].(int); ok && minimum > 1 {
 			return minimum
 		}

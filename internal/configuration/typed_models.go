@@ -1700,6 +1700,7 @@ func getRollerSchema() map[string]interface{} {
 				"description": "Milliseconds, 0 to 10000 in steps of 100",
 				"minimum":     0,
 				"maximum":     gen1RollerEndsDelayMax,
+				"multipleOf":  gen1RollerEndsDelayStep,
 			},
 			"tilt_enabled": map[string]interface{}{
 				"type":        "boolean",
