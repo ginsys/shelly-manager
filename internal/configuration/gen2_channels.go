@@ -119,7 +119,10 @@ func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig
 			if selected, ok := raw["input_id"].(float64); ok && selected >= 0 && selected == math.Trunc(selected) {
 				target = int(selected)
 			}
-			input(target).Mode = StringPtr(mode)
+			// The mode belongs to an input the device reports: in_mode alone does not make one.
+			if _, held := doc["input:"+strconv.Itoa(target)].(map[string]interface{}); held {
+				input(target).Mode = StringPtr(mode)
+			}
 		}
 		relays = append(relays, relay)
 	}
@@ -293,10 +296,11 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 					paths, r.DefaultState = append(paths, prefix+".default_state"), nil
 				}
 			}
-			if r.AutoOn != nil && *r.AutoOn < 0 {
+			// The reader takes a delay up to MaxInt32, so a larger one cannot round trip.
+			if r.AutoOn != nil && (*r.AutoOn < 0 || *r.AutoOn > math.MaxInt32) {
 				paths, r.AutoOn = append(paths, prefix+".auto_on"), nil
 			}
-			if r.AutoOff != nil && *r.AutoOff < 0 {
+			if r.AutoOff != nil && (*r.AutoOff < 0 || *r.AutoOff > math.MaxInt32) {
 				paths, r.AutoOff = append(paths, prefix+".auto_off"), nil
 			}
 			if r.Name != nil || r.DefaultState != nil || r.AutoOn != nil || r.AutoOff != nil {

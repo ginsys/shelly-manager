@@ -434,6 +434,53 @@ func TestVerifyConfig_Gen1StaysPositional(t *testing.T) {
 	assert.Contains(t, paths, "relay.relays.0.name")
 }
 
+// The mode lives on the input, so the read-back may only build an input the device reports. A
+// switch's in_mode alone does not make input 0 exist.
+func TestVerifyConfig_Gen2ReportsAnInputTheDeviceDoesNotHave(t *testing.T) {
+	dev := &fakeGen2Device{doc: map[string]interface{}{"switch:0": map[string]interface{}{"in_mode": "detached"}}}
+	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("detached")}}}}
+
+	result, err := NewConfigVerifier(NewGen2Converter(nil), nil).VerifyConfig(context.Background(), dev, desired, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.False(t, result.Match, "the device has no input 0")
+}
+
+// A template can store the Gen2 initial states, and a Gen1 device has no such words. Apply refuses
+// them before it writes anything.
+func TestApplyDesiredConfig_Gen1RefusesTheGen2InitialStates(t *testing.T) {
+	for _, state := range []string{"restore_last", "match_input"} {
+		t.Run(state, func(t *testing.T) {
+			svc, repo := newServiceWithDesiredName(t, "tv-office")
+			setDesired(t, repo, &DeviceConfiguration{
+				System: mergeName(nil),
+				Relay:  &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, DefaultState: StringPtr(state)}}},
+			})
+			dev := newFakeGen1Device()
+
+			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHSW-1")
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			assert.Contains(t, err.Error(), "relay.relays[0].default_state")
+			assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
+		})
+	}
+}
+
+// A refusal path names the channel's place in the desired list, even after a channel with nothing
+// to write is left out of the check.
+func TestUnsupportedGen2Settings_NamesAnOutOfRangeTimerAtItsOwnIndex(t *testing.T) {
+	desired := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
+		{ID: 0}, {ID: 1, AutoOn: IntPtr(2147483648)},
+	}}}
+
+	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"relay.relays.1.auto_on"}, unsupported)
+}
+
 func TestVerifyConfig_Gen2PairsChannelsByID(t *testing.T) {
 	dev := fakeGen2DeviceWithChannels()
 	dev.doc["switch:1"].(map[string]interface{})["name"] = "b"

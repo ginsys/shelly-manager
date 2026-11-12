@@ -117,7 +117,22 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 		}
 	}
 
-	back, err := converter.FromAPIConfig(apiJSON, "")
+	// A device reports the input that a mode belongs to, but a document that only writes the mode
+	// holds it in switch:N and no input:N. Give the round trip the input a device would have.
+	if checked.Input != nil {
+		for _, in := range checked.Input.Inputs {
+			key := "input:" + strconv.Itoa(in.ID)
+			if _, held := apiConfig[key]; !held && in.Mode != nil {
+				apiConfig[key] = map[string]interface{}{}
+			}
+		}
+	}
+	roundTrip, err := json.Marshal(apiConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check converted config: %w", err)
+	}
+
+	back, err := converter.FromAPIConfig(roundTrip, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to check converted config: %w", err)
 	}

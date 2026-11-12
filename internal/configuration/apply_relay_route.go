@@ -20,6 +20,11 @@ func unsupportedRelayValues(channel int, relay SingleRelayConfig) []string {
 	if relay.MaxPower != nil && *relay.MaxPower < 0 {
 		unsupported = append(unsupported, path+"max_power")
 	}
+	// restore_last and match_input are the Gen2 words for last and switch. A Gen1 device has no such
+	// words, and a template can store them.
+	if relay.DefaultState != nil && (*relay.DefaultState == "restore_last" || *relay.DefaultState == "match_input") {
+		unsupported = append(unsupported, path+"default_state")
+	}
 	bad := false
 	if relay.ScheduleRules != nil {
 		bad = len(*relay.ScheduleRules) > gen1MaxScheduleRules
