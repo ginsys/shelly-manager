@@ -253,6 +253,9 @@ func (c *Gen1Converter) convertMQTT(gen1 map[string]interface{}, config *DeviceC
 	if keepAlive, ok := mqttData["keep_alive"].(float64); ok {
 		mqtt.KeepAlive = IntPtr(int(keepAlive))
 	}
+	if updatePeriod, ok := mqttData["update_period"].(float64); ok {
+		mqtt.UpdatePeriod = IntPtr(int(updatePeriod))
+	}
 
 	config.MQTT = mqtt
 	return nil
@@ -339,6 +342,15 @@ func (c *Gen1Converter) convertSystem(gen1 map[string]interface{}, config *Devic
 	if device.Name != nil || device.EcoMode != nil || device.Discoverable != nil {
 		system.Device = device
 		config.System = system
+	}
+
+	// The device reports its time server as sntp.server. An empty server means no time server
+	// and cannot be told from an unset one in SNTPConfig, so it is left out.
+	if sntp, ok := gen1["sntp"].(map[string]interface{}); ok {
+		if server, ok := sntp["server"].(string); ok && server != "" {
+			system.SNTP = &SNTPConfig{Server: server}
+			config.System = system
+		}
 	}
 
 	return nil
@@ -539,6 +551,9 @@ func (c *Gen1Converter) exportMQTT(config *DeviceConfiguration, gen1 map[string]
 	if config.MQTT.KeepAlive != nil {
 		mqtt["keep_alive"] = *config.MQTT.KeepAlive
 	}
+	if config.MQTT.UpdatePeriod != nil {
+		mqtt["update_period"] = *config.MQTT.UpdatePeriod
+	}
 
 	gen1["mqtt"] = mqtt
 }
@@ -601,18 +616,23 @@ func (c *Gen1Converter) exportCoIoT(config *DeviceConfiguration, gen1 map[string
 }
 
 func (c *Gen1Converter) exportSystem(config *DeviceConfiguration, gen1 map[string]interface{}) {
-	if config.System == nil || config.System.Device == nil {
+	if config.System == nil {
 		return
 	}
 
-	if config.System.Device.Name != nil {
-		gen1["name"] = *config.System.Device.Name
+	if device := config.System.Device; device != nil {
+		if device.Name != nil {
+			gen1["name"] = *device.Name
+		}
+		if device.EcoMode != nil {
+			gen1["eco_mode_enabled"] = *device.EcoMode
+		}
+		if device.Discoverable != nil {
+			gen1["discoverable"] = *device.Discoverable
+		}
 	}
-	if config.System.Device.EcoMode != nil {
-		gen1["eco_mode_enabled"] = *config.System.Device.EcoMode
-	}
-	if config.System.Device.Discoverable != nil {
-		gen1["discoverable"] = *config.System.Device.Discoverable
+	if sntp := config.System.SNTP; sntp != nil && sntp.Server != "" {
+		gen1["sntp"] = map[string]interface{}{"server": sntp.Server}
 	}
 }
 

@@ -78,6 +78,17 @@ func (d *fakeGen1Device) setConfigAs(user, pass string, cfg map[string]interface
 			d.settings["coiot"] = doc
 			continue
 		}
+		// The flat sntp_server parameter in, a nested "sntp" document out (key names unverified
+		// until the hardware readback).
+		if k == "sntp_server" {
+			doc, _ := d.settings["sntp"].(map[string]interface{})
+			if doc == nil {
+				doc = map[string]interface{}{}
+			}
+			doc["server"] = v
+			d.settings["sntp"] = doc
+			continue
+		}
 		// Like a real Gen1 device: flat mqtt_* parameters in, a nested "mqtt" document out.
 		if sub, ok := strings.CutPrefix(k, "mqtt_"); ok {
 			doc, _ := d.settings["mqtt"].(map[string]interface{})
@@ -797,7 +808,7 @@ func TestApplyDesiredConfig_RefusesSettingsTheConverterDrops(t *testing.T) {
 	setDesired(t, repo, &DeviceConfiguration{
 		System: &SystemConfiguration{
 			Device: &TypedDeviceConfig{Name: StringPtr("tv-office")},
-			SNTP:   &SNTPConfig{Server: "ntp.example.net"},
+			Debug:  &DebugConfig{Level: 2},
 		},
 	})
 	dev := newFakeGen1Device()
@@ -806,7 +817,7 @@ func TestApplyDesiredConfig_RefusesSettingsTheConverterDrops(t *testing.T) {
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
-	assert.Contains(t, err.Error(), "sntp")
+	assert.Contains(t, err.Error(), "debug")
 	assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
 }
 
