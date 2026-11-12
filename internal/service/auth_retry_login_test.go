@@ -18,6 +18,7 @@ import (
 type gatedDevice struct {
 	mu       sync.Mutex
 	accept   map[string]bool
+	byPair   bool // accept and last() use "user:password" instead of the user alone
 	gateGET  bool
 	gatePOST bool
 	onReject func()
@@ -26,7 +27,10 @@ type gatedDevice struct {
 }
 
 func (g *gatedDevice) handler(w http.ResponseWriter, r *http.Request) {
-	user, _, _ := r.BasicAuth()
+	user, pass, _ := r.BasicAuth()
+	if g.byPair {
+		user = user + ":" + pass
+	}
 	gated := (r.Method == http.MethodGet && g.gateGET) || (r.Method == http.MethodPost && g.gatePOST)
 	g.mu.Lock()
 	allowed := g.accept[user]
@@ -114,6 +118,30 @@ func TestGetClient_401DoesNotEraseALoginSavedDuringTheRead(t *testing.T) {
 	}
 	if got := gate.last(); got != "new" {
 		t.Errorf("the retry sent login %q, want new", got)
+	}
+}
+
+// A password-only rotation: the user stays the same and the password changes while the request
+// is rejected. A compare of the user alone would clear the new password.
+func TestGetClient_401DoesNotEraseAPasswordRotatedDuringTheRead(t *testing.T) {
+	gate := &gatedDevice{accept: map[string]bool{"old:newpw": true}, byPair: true, gateGET: true}
+	service, device := retryFixture(t, gate)
+	gate.setReject(func() {
+		if err := service.UpdateDeviceAuth(device.ID, "old", "newpw"); err != nil {
+			t.Errorf("UpdateDeviceAuth failed: %v", err)
+		}
+	})
+
+	if _, err := service.getClientWithRetry(device, true); err != nil {
+		t.Fatalf("getClientWithRetry failed: %v", err)
+	}
+
+	_, settings := storedLogin(t, service, device.ID)
+	if settings["auth_pass"] != "newpw" {
+		t.Errorf("the stored password is %v after the 401 path ran, want newpw", settings["auth_pass"])
+	}
+	if got := gate.last(); got != "old:newpw" {
+		t.Errorf("the retry sent %q, want old:newpw", got)
 	}
 }
 
