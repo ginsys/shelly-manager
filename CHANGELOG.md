@@ -136,6 +136,18 @@ All notable changes to this project are documented here. The project follows Con
   cannot parse. A name whose last label is all digits must be a valid IPv4 address, so
   `192.168.1.300` is refused here and at apply, where it used to pass as a host name.
   (ginsys/shelly-manager#523)
+- The configuration form shows a default only on a field that apply writes, and only one that a
+  source states: `auth.enable` off, `mqtt.update_period` 30 seconds and `system.sntp.server`
+  `time.google.com` from the Shelly Gen1 API reference, and `mqtt.port` 1883 from OASIS MQTT 5.0
+  section 4.2, which registers TCP port 1883 with IANA for MQTT (paraphrase). A field apply never writes (the flat
+  `relay.default_state`, the network section, `led.enabled` and others) shows none, and so do the
+  applied fields no source gives a default for (`relay.relays[].default_state`, `cloud.enable`,
+  `coiot.enable`, `coiot.update_period`, `input.inputs[].mode`, `mqtt.clean_session`,
+  `mqtt.keep_alive`, `system.device.discoverable` and the rest). Three of those used to show an
+  unsourced default: true, 60 and true. A default is a hint only: a port left empty is still
+  written as the bare host. The defaults live in one table, `gen1FieldDefaults`, and a Go test
+  fails when an applied path has neither a default nor a place on the list of those without one.
+  (ginsys/shelly-manager#524)
 
 ### Removed
 - Dead frontend and backend code that nothing called: the `typed_config_handlers.go.backup`
