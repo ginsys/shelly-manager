@@ -424,3 +424,20 @@ func TestApplyDesiredConfig_RefusesAnInputNameBeforeTouchingTheDevice(t *testing
 	assert.Contains(t, err.Error(), "input.inputs.0.name")
 	assert.Zero(t, dev.setCalls)
 }
+
+func TestDeviceSchemaInputModesAreAllApplicable(t *testing.T) {
+	// The schema must offer only the modes apply accepts on that model: a schema-valid value that
+	// apply refuses sends the user to a 422. TestDeviceSchemaApplicableMatchesApply samples the
+	// first enum value only, so this walks every one.
+	for _, model := range []string{"SHSW-1", "SHSW-PM", "SHSW-25", "SHIX3-1"} {
+		leaves := map[string]map[string]interface{}{}
+		schemaLeaves("", GetDeviceConfigurationSchema(model), leaves)
+		modes, ok := leaves["input.inputs[].mode"]["enum"].([]string)
+		require.True(t, ok, "%s: no mode enum", model)
+		require.NotEmpty(t, modes)
+		for _, mode := range modes {
+			assert.Empty(t, unsupportedFor(t, model, inputsDesired(SingleInputConfig{ID: 0, Mode: StringPtr(mode)})),
+				"%s: the schema offers mode %q but apply refuses it", model, mode)
+		}
+	}
+}

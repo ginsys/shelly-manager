@@ -1264,7 +1264,10 @@ paths:
         relays (default_state, auto_on, auto_off and name per channel), for a model with roller mode
         (SHSW-25) rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
         input_mode, each read back), and input button types (mode as btn_type and inverted as
-        btn_reverse per input). Applies to one device are serialized inside one
+        btn_reverse per input; the parameter names, the toggle and edge mapping and the i3 mode set
+        are read from the Shelly reference and not confirmed on hardware, and a button type change
+        does not report requires_reboot because the reference documents no reboot for it). Applies
+        to one device are serialized inside one
         server process only, so run one manager replica when you use apply.
       operationId: applyDeviceNewConfig
       security:

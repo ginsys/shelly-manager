@@ -52,7 +52,7 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 		sections["led"] = getLEDSchema()
 	}
 	if !supported || hasInputSettings(deviceType) {
-		sections["input"] = getInputSchema()
+		sections["input"] = getInputModes(getInputSchema(), deviceType)
 	}
 	if !supported || HasRollerMode(deviceType) {
 		sections["roller"] = getRollerSchema()
@@ -82,6 +82,31 @@ func GetTemplateConfigurationSchema() map[string]interface{} {
 	schema := GetDeviceConfigurationSchema("")
 	schema[SchemaKeyApplySupported] = true
 	markApplicable(schema, "", true)
+	return schema
+}
+
+// getInputModes narrows the input mode enum of a supported model to the modes apply accepts for
+// it: a Shelly i3 has toggle and momentary inputs only, so it keeps momentary and follow. Another
+// model, and a template with no model, keep every mode.
+func getInputModes(schema map[string]interface{}, deviceType string) map[string]interface{} {
+	if !hasInputSettings(deviceType) || inputsLiveInRelays(deviceType) {
+		return schema
+	}
+	props, _ := schema["properties"].(map[string]interface{})
+	inputs, _ := props["inputs"].(map[string]interface{})
+	items, _ := inputs["items"].(map[string]interface{})
+	itemProps, _ := items["properties"].(map[string]interface{})
+	mode, _ := itemProps["mode"].(map[string]interface{})
+	if mode == nil {
+		return schema
+	}
+	var allowed []string
+	for _, name := range mode["enum"].([]string) {
+		if gen1ButtonTypesOfI3[name] {
+			allowed = append(allowed, name)
+		}
+	}
+	mode["enum"] = allowed
 	return schema
 }
 
