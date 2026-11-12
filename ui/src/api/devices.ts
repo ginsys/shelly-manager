@@ -53,6 +53,27 @@ export async function updateDevice(id: number | string, data: Partial<Device>): 
   return res.data.data
 }
 
+// The login the manager uses to reach the device. An empty username turns device auth off. A
+// password equal to the mask the device routes show keeps the stored one.
+export interface DeviceLogin {
+  username: string
+  password: string
+}
+
+export async function updateDeviceAuth(id: number | string, login: DeviceLogin): Promise<void> {
+  try {
+    const res = await api.put<APIResponse<{ status: string }>>(`/devices/${id}/config/auth`, login)
+    if (!res.data.success) {
+      throw new Error(res.data.error?.message || 'Failed to save the device login')
+    }
+  } catch (e: any) {
+    // A 400 or 404 carries the server's reason in the body; show it rather than the status line.
+    const message = e?.response?.data?.error?.message
+    if (message) throw new Error(message)
+    throw e
+  }
+}
+
 export async function deleteDevice(id: number | string): Promise<void> {
   const res = await api.delete<APIResponse<void>>(`/devices/${id}`)
   if (!res.data.success) {
