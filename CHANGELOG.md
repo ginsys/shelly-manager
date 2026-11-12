@@ -21,6 +21,17 @@ All notable changes to this project are documented here. The project follows Con
   compares the stored login with that one. Writers that take no `clientMu` can still
   overwrite a saved login, which ginsys/shelly-manager#496 tracks.
   (ginsys/shelly-manager#487)
+- A retried Gen1 apply no longer loses a reboot. If an apply wrote a setting that needs a
+  reboot (Wi-Fi, login, any MQTT key) and a later write failed, the apply returned before
+  the reboot, and the retry read the new value as already stored, reported no reboot and
+  could mark the configuration applied while the device still ran the old value. The reboot
+  is now recorded on the device (a `pending_reboot` column that only the apply writes)
+  before the first write, and stays owed until a reboot succeeds, also across a failed
+  reboot. If it cannot be recorded, or the device settings cannot be read first, nothing is
+  written. A write the device refused or never
+  answered counts too, because it may have landed, so a refused write can cost one reboot
+  too many. A device restarted by hand keeps the flag, so the next apply reboots it once
+  more. (ginsys/shelly-manager#495)
 - The SQL log no longer prints device logins. With `database.log_level` set to
   `info` and `logging.level` set to `debug`, every statement was logged with its
   values filled in, and `devices.settings` holds the clear-text login, so any

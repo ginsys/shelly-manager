@@ -102,7 +102,7 @@ The response `data` holds these fields:
 |-------|---------|
 | `success` | `true` if the read-back matched and `config_applied` is set |
 | `applied_count`, `failed_count` | Settings the device accepted and refused |
-| `requires_reboot` | The device needs a reboot for a change to take effect |
+| `requires_reboot` | The device needs a reboot for a change to take effect. A reboot owed by an earlier apply counts too: if a reboot-needing setting was written and the apply then failed, it stays owed until a later apply has rebooted the device. The reboot is recorded before the first write, so a write the device refused or never answered counts too: it may have landed |
 | `failures` | Each refused setting by path, and each read-back difference. Secret values are masked |
 | `warnings` | Problems that did not stop the apply |
 

@@ -21,6 +21,7 @@ type applyTestClient struct {
 	configErr   error
 	setErr      error
 	rebootErr   error
+	reboots     int // Reboot calls, failed ones included
 	testConnErr error
 	configs     []map[string]interface{}
 	currentRaw  json.RawMessage
@@ -152,6 +153,7 @@ func (m *applyTestClient) GetInfo(ctx context.Context) (*shelly.DeviceInfo, erro
 }
 
 func (m *applyTestClient) Reboot(ctx context.Context) error {
+	m.reboots++
 	return m.rebootErr
 }
 

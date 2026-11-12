@@ -297,6 +297,9 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	}
 
 	verifier := NewConfigVerifier(converter, s.logger)
+	verifier.WithPendingReboot(device.PendingReboot, func(pending bool) error {
+		return s.repo.SetDevicePendingReboot(deviceID, pending)
+	})
 	if hooks != nil {
 		// The client handed in may predate a login that an apply queued ahead of this one
 		// changed, so the lock holder builds its own from the stored login.

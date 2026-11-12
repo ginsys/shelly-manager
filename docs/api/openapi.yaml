@@ -1279,7 +1279,9 @@ paths:
           description: >-
             data holds success, applied_count, failed_count, requires_reboot, failures
             (refused settings by path and read-back differences, secret values masked) and
-            warnings.
+            warnings. requires_reboot is also true when an earlier apply wrote a setting that
+            needs a reboot and failed before the device rebooted; it stays owed until a later
+            apply reboots the device.
           content:
             application/json:
               schema:

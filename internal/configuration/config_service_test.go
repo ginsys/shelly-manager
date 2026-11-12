@@ -21,8 +21,10 @@ type mockRepository struct {
 	getErr         error
 	updateErr      error
 	deleteErr      error
-	getDeviceCalls int
-	afterGetDevice func(call int) // runs after each GetDevice, to simulate a concurrent edit
+
+	pendingRebootErr error // fails SetDevicePendingReboot
+	getDeviceCalls   int
+	afterGetDevice   func(call int) // runs after each GetDevice, to simulate a concurrent edit
 }
 
 func newMockRepository() *mockRepository {
@@ -178,6 +180,17 @@ func (m *mockRepository) SetDeviceConfigApplied(deviceID uint, applied bool) err
 		return ErrDeviceNotFound
 	}
 	m.devices[deviceID].ConfigApplied = applied
+	return nil
+}
+
+func (m *mockRepository) SetDevicePendingReboot(deviceID uint, pending bool) error {
+	if m.pendingRebootErr != nil {
+		return m.pendingRebootErr
+	}
+	if _, ok := m.devices[deviceID]; !ok {
+		return ErrDeviceNotFound
+	}
+	m.devices[deviceID].PendingReboot = pending
 	return nil
 }
 

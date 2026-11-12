@@ -34,6 +34,12 @@ type Device struct {
 	Overrides     string `json:"overrides" gorm:"type:text"`
 	DesiredConfig string `json:"desired_config" gorm:"type:text"`
 	ConfigApplied bool   `json:"config_applied" gorm:"default:false"`
+
+	// PendingReboot is set by an apply that wrote a setting the device only runs after a
+	// reboot. It is read-only here ("->"): the column is migrated and read with the row, but a
+	// Save of a row read before the flag was set cannot write false over it. Only the config
+	// repository's targeted UPDATE writes it. It is not part of the API or an export.
+	PendingReboot bool `json:"-" gorm:"default:false;->"`
 }
 
 // BeforeSave seeds the JSON text columns so an unset field is stored as an

@@ -40,6 +40,21 @@ type ConfigVerifier struct {
 	afterLogin func(ctx context.Context, client ShellyClient, change LoginChange) (ShellyClient, error)
 }
 
+// pendingReboot is the reboot an apply owes the device: a write the device only runs after one
+// may have landed, and the reboot has not happened yet. It has to outlive a failed apply, because
+// the retry reads the written value back as already stored and would see nothing to reboot for.
+type pendingReboot struct {
+	pending bool             // owed now, from an earlier apply or recorded by this one
+	store   func(bool) error // persists the flag
+}
+
+// WithPendingReboot makes apply keep a reboot owed across attempts. pending is the stored flag;
+// store persists a change to it. The applier records a new obligation before its first write and
+// ApplyAndVerify clears it after a reboot succeeded.
+func (v *ConfigVerifier) WithPendingReboot(pending bool, store func(bool) error) {
+	v.applier.owed = &pendingReboot{pending: pending, store: store}
+}
+
 // WithLogin lets apply write the login. afterLogin must store the new credentials and return a
 // client that uses them (none when the login is switched off). Without it a login stays unwritten.
 func (v *ConfigVerifier) WithLogin(afterLogin func(ctx context.Context, client ShellyClient, change LoginChange) (ShellyClient, error)) {
@@ -185,6 +200,13 @@ func (v *ConfigVerifier) ApplyAndVerify(ctx context.Context, client ShellyClient
 		if rebootErr := v.applier.RebootAndWait(ctx, client, 60*time.Second); rebootErr != nil {
 			result.Duration = time.Since(startTime)
 			return nil, fmt.Errorf("reboot failed: %w", rebootErr)
+		}
+		if owed := v.applier.owed; owed != nil {
+			if storeErr := owed.store(false); storeErr != nil {
+				// A flag left set costs one more reboot on the next apply, so this is not an error.
+				applyResult.Warnings = append(applyResult.Warnings,
+					"The device rebooted but the pending reboot could not be cleared; the next apply reboots it once more: "+storeErr.Error())
+			}
 		}
 	}
 

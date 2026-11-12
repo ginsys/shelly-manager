@@ -33,11 +33,14 @@ type ServiceConfigTemplate struct {
 }
 
 type ServiceDevice struct {
-	ID            uint      `json:"id"`
-	TemplateIDs   string    `json:"template_ids"`
-	Overrides     string    `json:"overrides"`
-	DesiredConfig string    `json:"desired_config"`
-	ConfigApplied bool      `json:"config_applied"`
+	ID            uint   `json:"id"`
+	TemplateIDs   string `json:"template_ids"`
+	Overrides     string `json:"overrides"`
+	DesiredConfig string `json:"desired_config"`
+	ConfigApplied bool   `json:"config_applied"`
+	// PendingReboot is set once an apply has written a setting the device only runs after a
+	// reboot, and cleared once that reboot happened.
+	PendingReboot bool      `json:"pending_reboot"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
@@ -59,6 +62,9 @@ type ConfigRepository interface {
 	// SetDeviceConfigAppliedIfDesired sets the applied flag only while the stored desired
 	// configuration still equals desiredConfig. It reports whether the flag was set.
 	SetDeviceConfigAppliedIfDesired(deviceID uint, desiredConfig string) (bool, error)
+	// SetDevicePendingReboot writes the pending-reboot flag with one targeted UPDATE of that
+	// column, so no whole-row device write can race it.
+	SetDevicePendingReboot(deviceID uint, pending bool) error
 
 	AddDeviceTag(deviceID uint, tag string) error
 	RemoveDeviceTag(deviceID uint, tag string) error
