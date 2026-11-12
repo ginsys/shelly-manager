@@ -115,6 +115,9 @@
             :inherited="store.inherited"
             :sources="store.inheritedSources"
           />
+          <ul v-if="saveErrors.length > 0" class="save-errors" data-testid="override-save-errors">
+            <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>
+          </ul>
         </div>
         <ConfigView v-else :config="store.overrides" />
       </div>
@@ -189,6 +192,7 @@ import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import { getCurrentDeviceConfig } from '@/api/deviceConfig'
 import { nullRemovedSecrets } from '@/utils/config-form'
+import { TemplateSaveError, type FieldError } from '@/api/templates'
 
 const route = useRoute()
 const store = useDeviceConfigNewStore()
@@ -200,6 +204,8 @@ const editOverrides = ref(false)
 const overridesEditor = ref<InstanceType<typeof ConfigEditor> | null>(null)
 const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
+// Fields the server refused on the last Save, as the template page lists them.
+const saveErrors = ref<FieldError[]>([])
 // The overrides as they were saved, which the editor's required-field guard reads. The editor is
 // removed and re-created while the page loads (Verify Device does it), so it lives here, beside the
 // body it describes. Only a load of the overrides sets it; no edit does.
@@ -225,6 +231,7 @@ watch(() => store.overrides, (newOverrides) => {
 // Cancel throws the edit away: the body and the memory go back to the saved overrides, so the next
 // Edit starts clean and a key reset in the abandoned edit blocks nothing.
 function toggleEditOverrides() {
+  saveErrors.value = []
   if (editOverrides.value) loadOverrides(store.overrides)
   editOverrides.value = !editOverrides.value
 }
@@ -321,12 +328,18 @@ async function handleSaveOverrides() {
   if (!overridesValid.value) return
   const id = deviceId.value
   const generation = routeGeneration
+  saveErrors.value = []
   try {
     await store.saveOverrides(id, nullRemovedSecrets(overridesData.value, overridesHeld.value, overridesEditor.value?.schema))
     if (routeGeneration !== generation) return
     editOverrides.value = false
     await handleRefresh()
   } catch (e: any) {
+    if (e instanceof TemplateSaveError) {
+      // The server refused values the form let through. Keep the edit open and list them.
+      if (routeGeneration === generation) saveErrors.value = e.fields
+      return
+    }
     alert('Failed to save overrides: ' + (e?.message || 'Unknown error'))
   }
 }
@@ -461,6 +474,7 @@ watch(deviceId, (next, previous) => {
 .btn-icon:hover { background: #fecaca; }
 
 .editor { margin-top: 12px; }
+.save-errors { margin: 8px 0 0; padding: 8px 12px 8px 28px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px; }
 .code-textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: ui-monospace, monospace; font-size: 13px; resize: vertical; }
 .code-view { background: #f8fafc; padding: 12px; border-radius: 6px; overflow-x: auto; font-family: ui-monospace, monospace; font-size: 13px; margin: 0; }
 

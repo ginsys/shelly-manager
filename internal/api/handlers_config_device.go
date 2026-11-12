@@ -9,9 +9,11 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"gorm.io/gorm"
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/service"
 )
 
 var (
@@ -276,6 +278,53 @@ func (h *Handler) GetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	rw.WriteSuccess(w, r, map[string]any{"overrides": overrides})
 }
 
+// writeOverrideFieldErrors checks the values of a device override body against the device schema
+// of the device's model, as the template routes do (writeConfigFieldErrors), and answers 400
+// VALIDATION_FAILED with the field list in error.details.fields. It reads the decoded body, not
+// the request bytes, so a key in another case, which the decoder matches, is checked as the field
+// it stores. A field sent as null is absent from the decoded body, and a section left empty is
+// not checked, so removing a stored bad value stays possible. A device that is not found is left to the service, which answers 404. It returns
+// true when it wrote a response.
+func (h *Handler) writeOverrideFieldErrors(rw *apiresp.ResponseWriter, w http.ResponseWriter, r *http.Request,
+	id uint, body *configuration.DeviceConfiguration) bool {
+	device, err := h.DB.GetDevice(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false
+		}
+		rw.WriteInternalError(w, r, err)
+		return true
+	}
+	model := service.DeviceModel(device)
+	if model == "" {
+		// As GetConfigurationSchema does: a device without a model gets the unsupported-model schema.
+		model = "unknown"
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		rw.WriteInternalError(w, r, err)
+		return true
+	}
+	var fields map[string]interface{}
+	if err = json.Unmarshal(encoded, &fields); err != nil {
+		rw.WriteInternalError(w, r, err)
+		return true
+	}
+	// A section left empty holds no value to check. A PATCH that only nulls the values of a section
+	// the model lacks decodes to one, and removing them must stay possible.
+	for name, section := range fields {
+		if obj, ok := section.(map[string]interface{}); ok && len(obj) == 0 {
+			delete(fields, name)
+		}
+	}
+	fieldErrs := configuration.ValidateConfigBody(model, fields)
+	if len(fieldErrs) == 0 {
+		return false
+	}
+	rw.WriteValidationError(w, r, map[string]any{"fields": fieldErrs})
+	return true
+}
+
 func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) {
 	rw := h.responseWriter()
 
@@ -303,6 +352,9 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	removed, nullErr := nullSecretPaths(raw)
 	if nullErr != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body: "+nullErr.Error())
+		return
+	}
+	if h.writeOverrideFieldErrors(rw, w, r, uint(id), &overrides) {
 		return
 	}
 	restoreMaskedSecrets(&overrides, stored)
@@ -354,6 +406,10 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 	removed, nullErr := configuration.NullPaths(raw)
 	if nullErr != nil {
 		rw.WriteValidationError(w, r, "Invalid JSON request body: "+nullErr.Error())
+		return
+	}
+
+	if h.writeOverrideFieldErrors(rw, w, r, uint(id), &patch) {
 		return
 	}
 

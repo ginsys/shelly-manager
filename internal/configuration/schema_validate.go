@@ -3,6 +3,7 @@ package configuration
 import (
 	"fmt"
 	"math"
+	"net/netip"
 	"regexp"
 	"sort"
 	"strings"
@@ -117,6 +118,11 @@ func validateNode(schema map[string]interface{}, value interface{}, path string)
 				return fail("Does not match the required format")
 			}
 		}
+		// An empty string reads as "not set": apply, not the schema, refuses a static address mode
+		// that has no address.
+		if schema["format"] == "ipv4" && s != "" && !isIPv4(s) {
+			return fail("Must be an IPv4 address")
+		}
 	}
 	if options := schemaEnum(schema["enum"]); options != nil {
 		for _, option := range options {
@@ -131,6 +137,13 @@ func validateNode(schema map[string]interface{}, value interface{}, path string)
 		return fail("Must be one of: " + strings.Join(parts, ", "))
 	}
 	return nil
+}
+
+// isIPv4 reports whether s is a dotted IPv4 address: four decimal parts, no sign, no leading
+// zero, no space, no IPv6 form. The form's check (ui/src/utils/config-form.ts) holds the same rule.
+func isIPv4(s string) bool {
+	addr, err := netip.ParseAddr(s)
+	return err == nil && addr.Is4()
 }
 
 // schemaNumber reads a schema bound, which the schema builders write as an int or a float64.

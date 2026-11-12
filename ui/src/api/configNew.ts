@@ -1,6 +1,6 @@
 import api from './client'
 import type { APIResponse } from './types'
-import type { ConfigTemplate } from './templates'
+import { toSaveError, type ConfigTemplate } from './templates'
 
 export interface DeviceConfiguration {
   [key: string]: any
@@ -104,7 +104,12 @@ export async function setDeviceOverridesNew(
   deviceId: number | string,
   overrides: DeviceConfiguration,
 ): Promise<SetDeviceOverridesNewResult> {
-  const res = await api.put<APIResponse<SetDeviceOverridesNewResult>>(`/devices/${deviceId}/overrides/new`, overrides)
+  let res
+  try {
+    res = await api.put<APIResponse<SetDeviceOverridesNewResult>>(`/devices/${deviceId}/overrides/new`, overrides)
+  } catch (e) {
+    throw toSaveError(e, 'Failed to save device overrides')
+  }
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to save device overrides'
     throw new Error(msg)
@@ -116,10 +121,15 @@ export async function patchDeviceOverridesNew(
   deviceId: number | string,
   patch: DeviceConfiguration,
 ): Promise<DeviceConfiguration | null> {
-  const res = await api.patch<APIResponse<{ overrides: DeviceConfiguration | null }>>(
-    `/devices/${deviceId}/overrides/new`,
-    patch,
-  )
+  let res
+  try {
+    res = await api.patch<APIResponse<{ overrides: DeviceConfiguration | null }>>(
+      `/devices/${deviceId}/overrides/new`,
+      patch,
+    )
+  } catch (e) {
+    throw toSaveError(e, 'Failed to patch device overrides')
+  }
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to patch device overrides'
     throw new Error(msg)
