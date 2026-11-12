@@ -20,11 +20,12 @@ var ErrUnsupportedSettings = errors.New("desired configuration contains settings
 
 // gen1ApplyKeys are the Gen1 settings keys that apply writes correctly today: flat parameters
 // on POST /settings, the mqtt section, which is flattened to mqtt_* parameters, and the
-// relays section, which is written per channel with POST /settings/relay/<n>. Every other
-// section (wifi_sta, wifi_ap, cloud, coiot, login, inputs) is refused before the device is
-// touched, because the applier would send it in a shape the device ignores. Wi-Fi in
-// particular is never written. A relay key outside name, default_state, auto_on and auto_off
-// is refused through the round-trip check below.
+// relays section, which is written per channel with POST /settings/relay/<n>, and the cloud
+// section, whose enabled flag is written with POST /settings/cloud. Every other section
+// (wifi_sta, wifi_ap, coiot, login, inputs) is refused before the device is touched, because the
+// applier would send it in a shape the device ignores. Wi-Fi in particular is never written. A
+// relay key outside name, default_state, auto_on and auto_off is refused through the round-trip
+// check below, and so is a cloud server, which Gen1 neither reports nor accepts.
 var gen1ApplyKeys = map[string]bool{
 	"name":               true,
 	"timezone":           true,
@@ -37,6 +38,7 @@ var gen1ApplyKeys = map[string]bool{
 	"led_status_disable": true,
 	"mqtt":               true,
 	"relays":             true,
+	"cloud":              true,
 }
 
 // gen1ApplicablePaths are the DeviceConfiguration field paths that reach gen1ApplyKeys through
@@ -66,6 +68,7 @@ var gen1ApplicablePaths = map[string]bool{
 	"mqtt.id":                    true,
 	"mqtt.clean_session":         true,
 	"mqtt.keep_alive":            true,
+	"cloud.enable":               true,
 
 	// relays are written per channel with POST /settings/relay/<n> and read back from
 	// GET /settings/relay/<n>. The id is an item's position, not a setting.
@@ -105,6 +108,12 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		if diff.Actual == nil {
 			unsupported = append(unsupported, diff.Path)
 		}
+	}
+
+	// The converter keeps a cloud server, but the device reports none and POST /settings/cloud takes
+	// none, so apply could neither write it nor read it back.
+	if desired.Cloud != nil && desired.Cloud.Server != nil {
+		unsupported = append(unsupported, "cloud.server")
 	}
 
 	// The converted configuration holds no channel id: the list position is the channel that

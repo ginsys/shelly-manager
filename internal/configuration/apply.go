@@ -312,18 +312,39 @@ func sortedKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+// CloudSettingsClient is the cloud surface of a Gen1 client: POST /settings/cloud. A client
+// without it cannot write the cloud flag, and apply reports that as a failure instead of falling
+// back to a nested "cloud" document on POST /settings, which Gen1 ignores.
+type CloudSettingsClient interface {
+	SetCloudConfig(ctx context.Context, enabled bool, server string) error
+}
+
+var errNoCloudClient = errors.New("client cannot write the cloud setting")
+
+// applyCloudSettings writes the cloud flag. Gen1 reports no cloud server and POST /settings/cloud
+// takes none, so only the flag is sent; a desired server is refused earlier (see
+// unsupportedApplySettings). The final read-back of the whole configuration confirms the flag.
 func (a *ConfigApplier) applyCloudSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
 	cloud, ok := apiConfig["cloud"].(map[string]interface{})
-	if !ok || len(cloud) == 0 {
+	if !ok {
+		return nil
+	}
+	enabled, ok := cloud["enabled"].(bool)
+	if !ok {
 		return nil
 	}
 
-	if err := client.SetConfig(ctx, map[string]interface{}{"cloud": cloud}); err != nil {
-		result.Failures = append(result.Failures, ApplyFailure{
-			Path:  "cloud",
-			Value: fmt.Sprintf("%v", cloud),
-			Error: err.Error(),
-		})
+	failure := ApplyFailure{Path: "cloud.enabled", Value: fmt.Sprintf("%t", enabled)}
+	cloudClient, ok := client.(CloudSettingsClient)
+	if !ok {
+		failure.Error = errNoCloudClient.Error()
+		result.Failures = append(result.Failures, failure)
+		result.FailedCount++
+		return errNoCloudClient
+	}
+	if err := cloudClient.SetCloudConfig(ctx, enabled, ""); err != nil {
+		failure.Error = err.Error()
+		result.Failures = append(result.Failures, failure)
 		result.FailedCount++
 		return err
 	}

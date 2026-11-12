@@ -65,6 +65,18 @@ func (d *fakeGen1Device) SetConfig(_ context.Context, cfg map[string]interface{}
 	return nil
 }
 
+// SetCloudConfig is POST /settings/cloud. Like a real Gen1 device it stores the flag and reports
+// the cloud section as {enabled, connected} on GET /settings, with no server.
+func (d *fakeGen1Device) SetCloudConfig(ctx context.Context, enabled bool, server string) error {
+	if err := d.applyTestClient.SetCloudConfig(ctx, enabled, server); err != nil {
+		return err
+	}
+	if !d.ignoreWrites {
+		d.settings["cloud"] = map[string]interface{}{"enabled": enabled, "connected": false}
+	}
+	return nil
+}
+
 // GetConfig returns the stored settings. Like a real Gen1 device it never returns the MQTT
 // password: GET /settings omits mqtt.pass even after a write.
 func (d *fakeGen1Device) GetConfig(_ context.Context) (*shelly.DeviceConfig, error) {
@@ -252,6 +264,64 @@ func TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting(t *testing.T
 	assert.Equal(t, 0, dev.setCalls, "nothing may be written, not even the supported name")
 	assert.Equal(t, "", dev.settings["name"])
 	assert.True(t, repo.devices[1].ConfigApplied, "a refused request leaves the flag alone")
+}
+
+func TestApplyDesiredConfig_AppliesCloudAndVerifiesIt(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}},
+		Cloud:  &CloudConfiguration{Enable: BoolPtr(false)},
+	})
+	dev := newFakeGen1Device()
+	dev.settings["cloud"] = map[string]interface{}{"enabled": true, "connected": true}
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied)
+	assert.Equal(t, []bool{false}, dev.cloudWrites)
+	assert.Equal(t, map[string]interface{}{"enabled": false, "connected": false}, dev.settings["cloud"])
+	assert.Equal(t, 0, result.ApplyResult.FailedCount)
+	assert.True(t, repo.devices[1].ConfigApplied)
+}
+
+// A device can answer 200 and keep the old cloud flag. The read-back must catch it.
+func TestApplyDesiredConfig_CloudStaysPendingWhenDeviceKeepsTheOldFlag(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		Cloud: &CloudConfiguration{Enable: BoolPtr(false)},
+	})
+	dev := newFakeGen1Device()
+	dev.ignoreWrites = true
+	dev.settings["cloud"] = map[string]interface{}{"enabled": true, "connected": true}
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.NoError(t, err)
+	assert.False(t, result.ConfigApplied)
+	require.NotNil(t, result.VerifyResult)
+	assert.False(t, result.VerifyResult.Match)
+	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+// Gen1 reports no cloud server and POST /settings/cloud takes none, so a desired server can be
+// neither written nor confirmed. It is refused before the device is touched.
+func TestApplyDesiredConfig_RefusesACloudServer(t *testing.T) {
+	svc, repo := newServiceWithDesiredName(t, "tv-office")
+	setDesired(t, repo, &DeviceConfiguration{
+		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("tv-office")}},
+		Cloud:  &CloudConfiguration{Enable: BoolPtr(true), Server: StringPtr("cloud.example.net:6012/jrpc")},
+	})
+	dev := newFakeGen1Device()
+
+	_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+	assert.Contains(t, err.Error(), "cloud.server")
+	assert.NotContains(t, err.Error(), "cloud.enable", "the flag itself is supported")
+	assert.Equal(t, 0, dev.setCalls, "the supported name must not be written either")
+	assert.Empty(t, dev.cloudWrites)
 }
 
 func TestApplyDesiredConfig_RefusesSettingsTheConverterDrops(t *testing.T) {
