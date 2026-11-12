@@ -442,6 +442,22 @@ func TestApplyDesiredConfig_Gen2RefusesARepeatedChannelID(t *testing.T) {
 	assert.Empty(t, dev.calls, "nothing is written")
 }
 
+// An entry that sets nothing still holds its id. Verify compares the desired list as it stands, so a
+// repeated id left in it makes verify fall back to positional compare, and a write that went through
+// would then read as a missing channel. The repeat is refused whether or not the first entry sets
+// something.
+func TestUnsupportedGen2Settings_NamesARepeatedIDWhereTheFirstEntrySetsNothing(t *testing.T) {
+	desired := &DeviceConfiguration{
+		Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0}, {ID: 0, Name: StringPtr("pump")}}},
+		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 2}, {ID: 2, Name: StringPtr("door")}}},
+	}
+
+	paths, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"input.inputs.1.id", "relay.relays.1.id"}, paths)
+}
+
 func TestUnsupportedGen2Settings_NamesARepeatedInputID(t *testing.T) {
 	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{
 		{ID: 0, Name: StringPtr("a")},
