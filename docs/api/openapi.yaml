@@ -1345,7 +1345,8 @@ paths:
             model does not know. On a Gen2 or Gen3 device every section except the system, MQTT
             and cloud settings, an MQTT setting with no Gen2 key (keep alive, clean session,
             update period, retained-message limits, certificate and SNI flags), an MQTT
-            password with no user, and an SNTP server written as host:port, are refused the
+            password with no user, an MQTT server that already carries a port beside a separate
+            port, and an SNTP server written as host:port, are refused the
             same way. The error names the sections.
           content:
             application/json:

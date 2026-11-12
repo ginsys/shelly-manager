@@ -44,7 +44,8 @@ All notable changes to this project are documented here. The project follows Con
   with a user, never when it is empty or the mask `********`, never compared, and never shown in
   a failure, a log line or an error. Other MQTT settings (keep alive, clean session, update
   period, retained-message limits, certificate and SNI flags) are refused with 422 before
-  anything is written, and so is a password with no user. Not confirmed on hardware: the
+  anything is written, and so is a password with no user, or a server that already carries a
+  port beside a separate port. Not confirmed on hardware: the
   read-back of each key, and whether a section whose write the device refused leaves the
   earlier sections written. Part of ginsys/shelly-manager#381.
 - Apply and verify now work on a Gen2 or Gen3 device, for the system section only: device

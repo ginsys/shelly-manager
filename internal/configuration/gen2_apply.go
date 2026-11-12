@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
@@ -101,6 +102,13 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 
 	if desired.MQTT != nil && gen2PasswordIsSet(desired.MQTT) && desired.MQTT.User == nil {
 		unsupported = append(unsupported, "mqtt.pass")
+	}
+	// The device stores one host:port string. A server that has a port and a separate port would be
+	// written as host:port:port.
+	if m := desired.MQTT; m != nil && m.Server != nil && m.Port != nil {
+		if _, _, splitErr := net.SplitHostPort(*m.Server); splitErr == nil {
+			unsupported = append(unsupported, "mqtt.server")
+		}
 	}
 
 	sort.Strings(unsupported)
@@ -220,7 +228,7 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 
 		restart, err := setter.CallConfigSetter(ctx, section.method, map[string]interface{}{"config": body})
 		if err != nil {
-			err = redact(err, secret)
+			err = redactGen2Secret(err, secret)
 			a.logger.WithFields(map[string]any{
 				"error":     err.Error(),
 				"method":    section.method,
@@ -246,6 +254,18 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 		}
 	}
 	return nil
+}
+
+// redactGen2Secret removes a secret from an error's text. A device that echoes the request as JSON
+// writes a quote or backslash of the secret escaped, so the escaped form goes too.
+func redactGen2Secret(err error, secret string) error {
+	err = redact(err, secret)
+	if encoded, marshalErr := json.Marshal(secret); marshalErr == nil {
+		if escaped := string(encoded[1 : len(encoded)-1]); escaped != secret {
+			err = redact(err, escaped)
+		}
+	}
+	return err
 }
 
 // markGen2RestartOwed records that the device asked for a restart.
