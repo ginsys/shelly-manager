@@ -27,8 +27,7 @@ All notable changes to this project are documented here. The project follows Con
   the capabilities that `GET /devices/{id}/capabilities` returns, where it used to guess
   them from the model name, and that route now lists `roller` for the model whose schema
   has a roller section. The configuration editor says "not applied" on a section that
-  apply never writes, such as the roller section; roller apply is
-  ginsys/shelly-manager#504. (ginsys/shelly-manager#490)
+  apply never writes, such as the network section. (ginsys/shelly-manager#490)
 
 ### Fixed
 - A device save no longer restores an older login. A plain device `PUT`, the refresh
