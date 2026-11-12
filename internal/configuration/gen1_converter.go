@@ -994,12 +994,10 @@ func (c *Gen1Converter) convertRoller(gen1 map[string]interface{}, config *Devic
 	roller := &RollerConfig{}
 	hasData := false
 
-	if openTime, ok := rollerMap["maxtime_open"].(float64); ok {
-		roller.MaxOpenTime = IntPtr(int(openTime))
+	if roller.MaxOpenTime = rollerNumber(rollerMap["maxtime_open"]); roller.MaxOpenTime != nil {
 		hasData = true
 	}
-	if closeTime, ok := rollerMap["maxtime_close"].(float64); ok {
-		roller.MaxCloseTime = IntPtr(int(closeTime))
+	if roller.MaxCloseTime = rollerNumber(rollerMap["maxtime_close"]); roller.MaxCloseTime != nil {
 		hasData = true
 	}
 	if swap, ok := rollerMap["swap"].(bool); ok {
