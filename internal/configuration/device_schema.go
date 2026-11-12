@@ -43,7 +43,7 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 		"network":  getDeviceNetworkSchema(),
 	}
 	if !supported || converter.hasRelay(deviceType) {
-		sections["relay"] = getRelaySchema()
+		sections["relay"] = getRelayStates(getRelaySchema(), supported)
 	}
 	if !supported || converter.hasPowerMetering(deviceType) {
 		sections["power_metering"] = getPowerMeteringSchema()
@@ -89,7 +89,7 @@ func GetTemplateConfigurationSchema() map[string]interface{} {
 // it: a Shelly i3 has toggle and momentary inputs only, so it keeps momentary and follow. Another
 // model, and a template with no model, keep every mode.
 func getInputModes(schema map[string]interface{}, deviceType string) map[string]interface{} {
-	if !hasInputSettings(deviceType) || inputsLiveInRelays(deviceType) {
+	if !hasInputSettings(deviceType) {
 		return schema
 	}
 	props, _ := schema["properties"].(map[string]interface{})
@@ -102,11 +102,42 @@ func getInputModes(schema map[string]interface{}, deviceType string) map[string]
 	}
 	var allowed []string
 	for _, name := range mode["enum"].([]string) {
-		if gen1ButtonTypesOfI3[name] {
+		if _, known := gen1ButtonTypes[name]; !known {
+			continue // a Gen2 word (cycle, activate): a Gen1 model has no such button type
+		}
+		if inputsLiveInRelays(deviceType) || gen1ButtonTypesOfI3[name] {
 			allowed = append(allowed, name)
 		}
 	}
 	mode["enum"] = allowed
+	return schema
+}
+
+// gen1InitialStates are the stored initial states a Gen1 model accepts. restore_last and
+// match_input are the Gen2 words for last and switch.
+var gen1InitialStates = map[string]bool{"off": true, "on": true, "last": true, "switch": true}
+
+// getRelayStates narrows the per-channel initial state enum of a supported Gen1 model to the
+// Gen1 words. Another model, and a template with no model, keep every word.
+func getRelayStates(schema map[string]interface{}, supported bool) map[string]interface{} {
+	if !supported {
+		return schema
+	}
+	props, _ := schema["properties"].(map[string]interface{})
+	relays, _ := props["relays"].(map[string]interface{})
+	items, _ := relays["items"].(map[string]interface{})
+	itemProps, _ := items["properties"].(map[string]interface{})
+	state, _ := itemProps["default_state"].(map[string]interface{})
+	if state == nil {
+		return schema
+	}
+	var allowed []string
+	for _, name := range state["enum"].([]string) {
+		if gen1InitialStates[name] {
+			allowed = append(allowed, name)
+		}
+	}
+	state["enum"] = allowed
 	return schema
 }
 

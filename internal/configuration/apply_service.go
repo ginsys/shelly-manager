@@ -262,7 +262,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	if err != nil {
 		return nil, fmt.Errorf("failed to check converted config: %w", err)
 	}
-	for _, diff := range NewPositionalConfigComparator().Compare(desired, back).Differences {
+	for _, diff := range NewConfigComparator().Compare(desired, back).Differences {
 		if diff.Actual == nil {
 			unsupported = append(unsupported, diff.Path)
 		}

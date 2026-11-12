@@ -68,7 +68,9 @@ All notable changes to this project are documented here. The project follows Con
   written, with one path for each setting: any other value (the Gen1 mode `action`, an input
   type `analog` or `count`, a negative timer), an input push action or timing, a relay
   schedule and the top-level relay and input settings. `cycle` and `activate` are left to the device, which answers with its
-  own error on a model that lacks them. Not confirmed on hardware (read from the Shelly
+  own error on a model that lacks them. Saving a configuration for a Gen2 model, or a template
+  with no model, now accepts the words `restore_last` and `match_input` (initial state) and
+  `cycle` and `activate` (input mode); a supported Gen1 model keeps its own words. Not confirmed on hardware (read from the Shelly
   Gen2 Switch and Input reference): every key, the read-back and whether a write needs a
   restart. Part of ginsys/shelly-manager#381.
 - Apply and verify on a Gen2 or Gen3 device now also write the MQTT and cloud settings. MQTT:

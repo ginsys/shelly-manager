@@ -1153,7 +1153,7 @@ func getRelaySchema() map[string]interface{} {
 						"default_state": map[string]interface{}{
 							"type":  "string",
 							"title": "Default State",
-							"enum":  []string{"off", "on", "last", "switch"},
+							"enum":  []string{"off", "on", "last", "switch", "restore_last", "match_input"},
 						},
 						"auto_on": map[string]interface{}{
 							"type":    "integer",
@@ -1417,7 +1417,7 @@ func getInputSchema() map[string]interface{} {
 						},
 						"mode": map[string]interface{}{
 							"type": "string",
-							"enum": []string{"momentary", "follow", "flip", "detached"},
+							"enum": []string{"momentary", "follow", "flip", "detached", "cycle", "activate"},
 						},
 						"inverted": map[string]interface{}{
 							"type": "boolean",

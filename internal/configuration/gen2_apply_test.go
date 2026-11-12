@@ -31,6 +31,7 @@ type fakeGen2Device struct {
 	restart      bool  // the answer's restart_required
 	refuse       error // the device refuses every write
 	ignoreWrites bool  // the device accepts a write but keeps its old document
+	strict       bool  // a write to a component the document does not hold is refused
 	legacyCalls  int   // calls to the Gen1-shaped SetConfig, which a Gen2 apply must never make
 }
 
@@ -76,6 +77,9 @@ func (d *fakeGen2Device) CallConfigSetter(_ context.Context, method string, para
 		key = fmt.Sprintf("%s:%d", key, n)
 	}
 	d.calls = append(d.calls, gen2Call{method: method, id: id, config: config})
+	if _, held := d.doc[key]; d.strict && !held {
+		return false, fmt.Errorf("no such component: %s", key)
+	}
 	if method == "Switch.SetConfig" {
 		if err := d.checkInMode(id, config); err != nil {
 			return false, err
