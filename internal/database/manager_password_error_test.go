@@ -47,19 +47,26 @@ func TestNewManagerFromConfig_ConnectFailureHoldsNoPassword(t *testing.T) {
 		assertTextHoldsNoPassword(t, err.Error(), testPassword)
 	})
 
-	t.Run("a DSN that cannot be parsed, with a password inline", func(t *testing.T) {
-		// The provider's own parse error quotes the DSN. Without the sanitising in
-		// Connect this text carries the password.
-		var cfg config.Config
-		cfg.Database.Provider = "postgresql"
-		cfg.Database.DSN = "postgresql://inline_user:inline_pw@127.0.0.1:badport/shelly"
+	// net/url quotes the whole DSN in its parse error. That text must not reach
+	// the startup error, whichever spelling the password sits in.
+	for name, dsn := range map[string]string{
+		"userinfo":     "postgresql://inline_user:inline_pw@127.0.0.1:badport/shelly",
+		"encoded key":  "postgresql://127.0.0.1:badport/shelly?pass%77ord=inline_pw",
+		"padded key":   "postgresql://127.0.0.1:badport/shelly? password =inline_pw",
+		"after a hash": "postgresql://127.0.0.1:badport/shelly?application_name=x#&password=inline_pw",
+	} {
+		t.Run("a DSN that cannot be parsed, password in "+name, func(t *testing.T) {
+			var cfg config.Config
+			cfg.Database.Provider = "postgresql"
+			cfg.Database.DSN = dsn
 
-		_, err := NewManagerFromConfig(&cfg)
-		if err == nil {
-			t.Fatal("expected a DSN with a bad port to fail")
-		}
-		if strings.Contains(err.Error(), "inline_pw") {
-			t.Errorf("error text holds the inline password: %s", err)
-		}
-	})
+			_, err := NewManagerFromConfig(&cfg)
+			if err == nil {
+				t.Fatal("expected a DSN with a bad port to fail")
+			}
+			if strings.Contains(err.Error(), "inline_pw") {
+				t.Errorf("error text holds the inline password: %s", err)
+			}
+		})
+	}
 }

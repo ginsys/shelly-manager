@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -86,35 +85,23 @@ func (c DatabaseConfig) String() string {
 	} else if strings.EqualFold(strings.TrimSpace(c.Provider), "mysql") {
 		c.DSN = mysqlUserinfo.ReplaceAllString(c.DSN, "***@")
 	}
-	c.DSN = maskQueryPasswords(c.DSN)
+	c.DSN = hideQuery(c.DSN)
 	if c.Password != "" {
 		c.Password = "***"
 	}
 	return fmt.Sprintf("%+v", plain(c))
 }
 
-// maskQueryPasswords masks the value of a password or sslpassword query
-// parameter. The key is compared after decoding, so "pass%77ord" is caught.
-func maskQueryPasswords(dsn string) string {
-	base, query, found := strings.Cut(dsn, "?")
+// hideQuery drops everything after the first "?" of a DSN. A driver reads
+// password-bearing parameters under spellings no matcher of ours agrees with
+// (padded or encoded keys, a '#' before the parameter), so none is picked out:
+// the whole query is hidden.
+func hideQuery(dsn string) string {
+	base, _, found := strings.Cut(dsn, "?")
 	if !found {
 		return dsn
 	}
-	pairs := strings.Split(query, "&")
-	for i, pair := range pairs {
-		rawKey, _, hasValue := strings.Cut(pair, "=")
-		if !hasValue {
-			continue
-		}
-		key := rawKey
-		if decoded, err := url.QueryUnescape(rawKey); err == nil {
-			key = decoded
-		}
-		if k := strings.ToLower(key); k == "password" || k == "sslpassword" {
-			pairs[i] = rawKey + "=***"
-		}
-	}
-	return base + "?" + strings.Join(pairs, "&")
+	return base + "?***"
 }
 
 // DatabaseStats provides performance and connection statistics

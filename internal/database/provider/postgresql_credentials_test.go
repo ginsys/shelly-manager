@@ -97,8 +97,22 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 		assert.Equal(t, base+"&connect_timeout=10", dsn)
 	})
 
-	// pgx applies the user and password query parameters after the userinfo, so a
-	// DSN that carries them would override the configured credentials.
+	t.Run("the keys a DSN may keep next to the two fields are accepted", func(t *testing.T) {
+		p := newCredentialProvider(DatabaseConfig{Username: "shelly", Password: trickyPassword})
+
+		dsn, err := p.buildDSN("postgresql://db.example/shelly?sslmode=disable&application_name=x&connect_timeout=5", nil)
+
+		require.NoError(t, err)
+		u, err := url.Parse(dsn)
+		require.NoError(t, err)
+		assert.Equal(t, "disable", u.Query().Get("sslmode"))
+		assert.Equal(t, "x", u.Query().Get("application_name"))
+	})
+
+	// pgx reads user, password, passfile and service from the query and lets them
+	// win over the userinfo, and its key parsing differs from net/url's (padding,
+	// encoding, a '#'). So only a list of literal keys passes; every other shape
+	// below is refused without printing any of it.
 	for name, dsn := range map[string]string{
 		"userinfo":                   "postgresql://inline_user:inline_pw@db.example/shelly",
 		"userinfo user only":         "postgresql://inline_user@db.example/shelly",
@@ -106,6 +120,12 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 		"password parameter":         "postgresql://db.example/shelly?sslmode=disable&password=inline_pw",
 		"encoded password parameter": "postgresql://db.example/shelly?pass%77ord=inline_pw",
 		"encoded user parameter":     "postgresql://db.example/shelly?us%65r=inline_user",
+		"padded password parameter":  "postgresql://db.example/shelly? password =inline_pw",
+		"password after a hash":      "postgresql://db.example/shelly?application_name=x#&password=inline_pw",
+		"sslpassword parameter":      "postgresql://db.example/shelly?sslpassword=inline_pw",
+		"passfile parameter":         "postgresql://db.example/shelly?passfile=/inline_pw",
+		"service parameter":          "postgresql://db.example/shelly?service=inline_pw",
+		"a key with no value":        "postgresql://db.example/shelly?inline_pw",
 	} {
 		t.Run("a DSN with "+name+" and the two fields is refused without printing either", func(t *testing.T) {
 			p := newCredentialProvider(DatabaseConfig{Username: "shelly", Password: trickyPassword})
@@ -157,19 +177,23 @@ func TestPostgreSQLCredentials_ErrorsAndLogsHoldNoPassword(t *testing.T) {
 
 	// Here the error comes from this package's own code and quotes the DSN with a
 	// password in it, so only the sanitising wrapper in Connect keeps it out.
-	t.Run("a DSN that cannot be built", func(t *testing.T) {
-		p := NewPostgreSQLProvider(logging.GetDefault())
+	for name, dsn := range map[string]string{
+		"userinfo":              "postgresql://inline_user:inline_pw@db.example:badport/shelly",
+		"password parameter":    "postgresql://db.example:badport/shelly?password=inline_pw",
+		"encoded key":           "postgresql://db.example:badport/shelly?pass%77ord=inline_pw",
+		"padded key":            "postgresql://db.example:badport/shelly? password =inline_pw",
+		"password after a hash": "postgresql://db.example:badport/shelly?application_name=x#&password=inline_pw",
+	} {
+		t.Run("a DSN that cannot be built, with "+name, func(t *testing.T) {
+			p := NewPostgreSQLProvider(logging.GetDefault())
 
-		err := p.Connect(DatabaseConfig{
-			Provider: "postgresql",
-			DSN:      "postgresql://inline_user:" + url.QueryEscape("in line") + "@db.example:badport/shelly",
+			err := p.Connect(DatabaseConfig{Provider: "postgresql", DSN: dsn})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "failed to build DSN")
+			assert.NotContains(t, err.Error(), "inline_pw")
 		})
-
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to build DSN")
-		assert.NotContains(t, err.Error(), "in+line")
-		assert.NotContains(t, err.Error(), "in%20line")
-	})
+	}
 }
 
 func TestPostgreSQLSanitizeError_Password(t *testing.T) {
@@ -241,6 +265,9 @@ func TestDatabaseConfig_StringMasksSecrets(t *testing.T) {
 		"password parameter":         "postgresql://db.example/shelly?user=app&password=inline_pw",
 		"encoded password parameter": "postgresql://db.example/shelly?pass%77ord=inline_pw&sslmode=disable",
 		"ssl password parameter":     "postgresql://db.example/shelly?sslpassword=inline_pw",
+		"padded password parameter":  "postgresql://db.example/shelly? password =inline_pw",
+		"padded sslpassword":         "postgresql://db.example/shelly? sslpassword =inline_pw",
+		"password after a hash":      "postgresql://db.example/shelly?application_name=x#&password=inline_pw",
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := DatabaseConfig{Provider: "postgresql", DSN: dsn, Username: "shelly", Password: trickyPassword}
@@ -259,9 +286,9 @@ func TestDatabaseConfig_StringMasksSecrets(t *testing.T) {
 		})
 	}
 
-	t.Run("a DSN without secrets prints as it is", func(t *testing.T) {
-		cfg := DatabaseConfig{Provider: "postgresql", DSN: "postgresql://db.example/shelly?sslmode=disable&connect_timeout=5"}
+	t.Run("a DSN without a query prints as it is", func(t *testing.T) {
+		cfg := DatabaseConfig{Provider: "postgresql", DSN: "postgresql://db.example/shelly"}
 
-		assert.Contains(t, cfg.String(), "postgresql://db.example/shelly?sslmode=disable&connect_timeout=5")
+		assert.Contains(t, cfg.String(), "postgresql://db.example/shelly")
 	})
 }

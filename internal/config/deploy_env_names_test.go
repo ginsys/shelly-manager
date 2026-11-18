@@ -160,20 +160,16 @@ func readableEnvNames(t *testing.T) map[string]bool {
 	return names
 }
 
-// urlCarriesCredentials reports userinfo, or a user/password/sslpassword query
-// parameter: pgx applies those after the userinfo, so they would override the
-// credentials the Secret supplies. Query keys are compared after decoding.
-func urlCarriesCredentials(u *url.URL) bool {
-	if u.User != nil {
+// urlCarriesCredentials reports userinfo, or any query or fragment. pgx reads
+// user, password, passfile and service from the query under spellings net/url
+// does not agree with (padded or encoded keys, a '#'), so a manifest URL carries
+// no query at all: connection options belong in the app's own settings.
+func urlCarriesCredentials(raw string) bool {
+	if strings.ContainsAny(raw, "?#") {
 		return true
 	}
-	for key := range u.Query() {
-		switch strings.ToLower(key) {
-		case "user", "password", "sslpassword":
-			return true
-		}
-	}
-	return false
+	u, err := url.Parse(raw)
+	return err == nil && u.User != nil
 }
 
 // problems lists what is wrong with a set of env entries; nil means none.
@@ -187,8 +183,8 @@ func problems(entries []envEntry, readable map[string]bool) []string {
 			out = append(out, e.Source+": "+e.Name+" is a credential and must come from a secretKeyRef")
 		}
 		if strings.Contains(e.Value, "://") {
-			if u, err := url.Parse(e.Value); err == nil && urlCarriesCredentials(u) {
-				out = append(out, e.Source+": "+e.Name+" carries credentials in its URL")
+			if urlCarriesCredentials(e.Value) {
+				out = append(out, e.Source+": "+e.Name+" carries credentials, or a query that could, in its URL")
 			}
 		}
 	}
@@ -231,9 +227,11 @@ func TestDeployEnvNames_CheckerFindsTheMistakes(t *testing.T) {
 		{Source: "e", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://shelly:hunter2@db/shelly"},
 		{Source: "i", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://db/shelly?user=app&password=hunter2"},
 		{Source: "j", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://db/shelly?pass%77ord=hunter2"},
+		{Source: "k", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://db/shelly? password =hunter2"},
+		{Source: "l", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://db/shelly?application_name=x#&password=hunter2"},
 	}
-	if got := problems(bad, readable); len(got) != 7 {
-		t.Errorf("found %d problems in 7 mistakes: %q", len(got), got)
+	if got := problems(bad, readable); len(got) != 9 {
+		t.Errorf("found %d problems in 9 mistakes: %q", len(got), got)
 	}
 
 	good := []envEntry{
