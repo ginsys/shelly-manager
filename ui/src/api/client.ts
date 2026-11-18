@@ -38,7 +38,7 @@ api.interceptors.response.use(
 
     if (config._adminKeyRetried) {
       // The key we just sent was refused: no loop, the next key is the operator's act.
-      rejectAdminKey()
+      rejectAdminKey(String((config.headers as any)?.Authorization ?? '').replace(/^Bearer /, ''))
       throw error
     }
 
