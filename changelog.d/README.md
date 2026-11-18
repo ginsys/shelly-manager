@@ -14,8 +14,8 @@ Fixed
 - A malformed database DSN no longer reaches the error text. Fixes ginsys/shelly-manager#587.
 ```
 
-- **A change that needs no entry** (CI, tests, docs only): label the PR `no-changelog`. Dependabot and
-  Renovate branches are skipped by themselves.
+- **A change that needs no entry** (CI, tests, docs only): label the PR `no-changelog`. The release PR
+  (see below) takes the same label. Dependabot and Renovate branches are skipped by themselves.
 - **Check a branch:** `make check-changelog-fragment` (against `origin/main`). **Preview a release:**
   `make changelog-assemble`. **Cut one:** `make changelog-assemble VERSION=X.Y.Z`; it keeps every line
   under `## [Unreleased]`, adds the fragment sections after them, heads the block `## [X.Y.Z] - <date>`,

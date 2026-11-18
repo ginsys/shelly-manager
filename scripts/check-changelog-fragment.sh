@@ -4,11 +4,10 @@
 # Compares HEAD with origin/<base> (three-dot, so only the PR's own changes) and
 # prints one verdict:
 #   SKIP  the head branch is a bot's (dependabot/, renovate/) or the PR carries
-#         the label no-changelog (CI, tests and docs-only changes)
+#         the label no-changelog (CI, tests and docs-only changes, and the release
+#         PR made by changelog-assemble.sh --write)
 #   PASS  the PR adds a valid changelog.d/<issue>-<slug>.md and adds no line to
-#         CHANGELOG.md; or it is a release commit made by changelog-assemble.sh
-#         (it deletes fragments, adds a full "## [X.Y.Z] - date" heading, and
-#         every deleted entry appears among the added CHANGELOG.md lines)
+#         CHANGELOG.md
 #   FAIL  anything else, with what to do
 #   ERROR the base ref is missing (a shallow checkout): never read as "no fragment"
 #
@@ -24,7 +23,6 @@ cd "$(git rev-parse --show-toplevel)"
 base="origin/${BASE_REF:-main}"
 head_ref=${HEAD_REF_NAME-}
 no_changelog=${PR_NO_CHANGELOG-}
-VERSION_HEADING='^## \[[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$'
 
 if ! git rev-parse --verify -q "$base^{commit}" >/dev/null; then
 	echo "ERROR $base not found: fetch it first (actions/checkout needs fetch-depth: 0)"
@@ -43,68 +41,22 @@ if [ "$no_changelog" = true ]; then
 	exit 0
 fi
 
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/check-changelog-fragment.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
-
 added=()
-deleted=()
 subdir=()
 while IFS=$'\t' read -r status path; do
 	case "$path" in
 	changelog.d/README.md) continue ;;
 	changelog.d/*/*.md) [ "$status" = A ] && subdir+=("$path") ;;
-	changelog.d/*.md)
-		case "$status" in
-		A) added+=("$path") ;;
-		D) deleted+=("$path") ;;
-		esac
-		;;
+	changelog.d/*.md) [ "$status" = A ] && added+=("$path") ;;
 	esac
 done < <(git diff --name-status --no-renames "$base...HEAD")
 
-# The lines this PR adds to CHANGELOG.md, without the diff markers.
-git diff --no-renames -U0 "$base...HEAD" -- CHANGELOG.md |
-	awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}' >"$tmp/added"
-changelog_lines=$(wc -l <"$tmp/added" | tr -d ' ')
-
-# A release commit: fragments deleted and a full version heading added. The
-# exception is granted only when every deleted fragment is valid and its entry
-# is among the added lines, so deleting entries cannot pass for a release.
-if [ "${#deleted[@]}" -gt 0 ] && grep -Eq "$VERSION_HEADING" "$tmp/added"; then
-	mb=$(git merge-base "$base" HEAD)
-	ok=1
-	for p in "${deleted[@]}"; do
-		git show "$mb:$p" >"$tmp/$(basename "$p")"
-		if ! msg=$("$here/changelog-assemble.sh" --validate "$tmp/$(basename "$p")" 2>&1); then
-			echo "FAIL release commit: the deleted fragment $p was not valid: $msg"
-			ok=0
-			continue
-		fi
-		# The entry must be among the added lines as one block, in order.
-		"$here/changelog-assemble.sh" --body "$tmp/$(basename "$p")" >"$tmp/entry"
-		if ! awk '
-			FNR == NR { e[++n] = $0; next }
-			{ a[++m] = $0 }
-			END {
-				for (i = 1; i + n - 1 <= m; i++) {
-					hit = 1
-					for (j = 1; j <= n; j++) if (a[i + j - 1] != e[j]) { hit = 0; break }
-					if (hit) exit 0
-				}
-				exit 1
-			}' "$tmp/entry" "$tmp/added"; then
-			echo "FAIL release commit: the entry of $p is not among the lines added to CHANGELOG.md as one block"
-			ok=0
-		fi
-	done
-	[ "$ok" -eq 1 ] || exit 1
-	echo "PASS release commit: ${#deleted[@]} fragment(s) assembled into CHANGELOG.md"
-	exit 0
-fi
+changelog_lines=$(git diff --no-renames -U0 "$base...HEAD" -- CHANGELOG.md |
+	awk '/^\+\+\+ /{next} /^\+/{n++} END{print n+0}')
 
 fail=0
 if [ "$changelog_lines" -gt 0 ]; then
-	echo "FAIL CHANGELOG.md has $changelog_lines added line(s): put the entry in changelog.d/<issue>-<slug>.md instead (a release is cut by scripts/changelog-assemble.sh)"
+	echo "FAIL CHANGELOG.md has $changelog_lines added line(s): put the entry in changelog.d/<issue>-<slug>.md instead (a release PR carries the label no-changelog)"
 	fail=1
 fi
 for p in ${subdir[@]+"${subdir[@]}"}; do
