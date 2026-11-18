@@ -243,7 +243,7 @@ All notable changes to this project are documented here. The project follows Con
   MySQL deployment that set only the provider and the DSN ran a pool of one. An unset or 0 value now
   means the provider's pool (SQLite 1; PostgreSQL and MySQL 25 open, 5 idle; the `postgres` and
   `sqlite3` aliases included, where `postgres` used to get 10 and 2), and a value you set is used as
-  is. With only `max_open_conns` set, the idle count never exceeds it. The example config no longer
+  is on PostgreSQL and MySQL (SQLite always runs with one connection, whatever is set). With only `max_open_conns` set, the idle count never exceeds it. The example config no longer
   sets either key. Visible cost: each PostgreSQL or MySQL replica now opens up to 25 server
   connections, so replicas times `max_open_conns` must stay below the server's `max_connections`; set
   the pool explicitly where that does not hold. The Kubernetes manifests still do not reach the app
