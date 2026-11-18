@@ -16,44 +16,37 @@
           <button class="operation-card" @click="operation = 'import'">
             <span class="operation-icon">📥</span>
             <h3>Bulk Import</h3>
-            <p>Import configurations to selected devices</p>
+            <p>Read the current configuration of the selected devices into the manager</p>
           </button>
 
           <button class="operation-card" @click="operation = 'export'">
             <span class="operation-icon">📤</span>
             <h3>Bulk Export</h3>
-            <p>Export configurations from selected devices</p>
+            <p>Send the stored import/export configuration to the selected devices</p>
           </button>
 
           <button class="operation-card" @click="operation = 'drift'">
             <span class="operation-icon">🔍</span>
             <h3>Drift Detection</h3>
-            <p>Detect configuration drift</p>
+            <p>Compare the stored and the live configuration</p>
           </button>
 
           <button class="operation-card" @click="operation = 'drift-enhanced'">
             <span class="operation-icon">🔬</span>
-            <h3>Enhanced Drift</h3>
-            <p>Advanced drift detection with options</p>
+            <h3>Drift Report</h3>
+            <p>The same comparison, with a comprehensive report</p>
           </button>
         </div>
       </div>
 
       <!-- Import Form -->
-      <div v-else-if="operation === 'import' && !isProcessing">
+      <div v-else-if="operation === 'import' && !isProcessing && !result">
         <h3>Bulk Import Configuration</h3>
         <form @submit.prevent="handleImport">
-          <div class="form-field">
-            <label for="import-config">Configuration (JSON)</label>
-            <textarea
-              id="import-config"
-              v-model="importConfig"
-              class="form-textarea"
-              rows="10"
-              placeholder='{"wifi": {"ssid": "Network"}}'
-              required
-            />
-          </div>
+          <p class="form-note">
+            Reads the current configuration of each selected device into the manager. Nothing is
+            written to the devices.
+          </p>
 
           <div class="form-field checkbox">
             <input
@@ -65,16 +58,6 @@
             <label for="stop-on-error">Stop on first error</label>
           </div>
 
-          <div class="form-field checkbox">
-            <input
-              id="validate-only"
-              v-model="validateOnly"
-              type="checkbox"
-              class="form-checkbox"
-            />
-            <label for="validate-only">Validate only (dry run)</label>
-          </div>
-
           <div class="form-actions">
             <button type="button" class="btn" @click="operation = null">Back</button>
             <button type="submit" class="btn primary">Import</button>
@@ -83,36 +66,24 @@
       </div>
 
       <!-- Export Form -->
-      <div v-else-if="operation === 'export' && !isProcessing">
+      <div v-else-if="operation === 'export' && !isProcessing && !result">
         <h3>Bulk Export Configuration</h3>
         <form @submit.prevent="handleExport">
-          <div class="form-field">
-            <label for="export-format">Export Format</label>
-            <select id="export-format" v-model="exportFormat" class="form-select">
-              <option value="json">JSON</option>
-              <option value="yaml">YAML</option>
-              <option value="sma">SMA</option>
-            </select>
-          </div>
+          <p class="form-note">
+            Writes the stored import/export configuration of each selected device to that device.
+            A device that answers with another MAC than the stored one gets nothing and is
+            reported as failed. This is not the desired configuration, and it does not change the
+            applied state.
+          </p>
 
           <div class="form-field checkbox">
             <input
-              id="include-secrets"
-              v-model="includeSecrets"
+              id="export-stop-on-error"
+              v-model="stopOnError"
               type="checkbox"
               class="form-checkbox"
             />
-            <label for="include-secrets">Include secrets</label>
-          </div>
-
-          <div class="form-field checkbox">
-            <input
-              id="include-metadata"
-              v-model="includeMetadata"
-              type="checkbox"
-              class="form-checkbox"
-            />
-            <label for="include-metadata">Include metadata</label>
+            <label for="export-stop-on-error">Stop on first error</label>
           </div>
 
           <div class="form-actions">
@@ -123,7 +94,7 @@
       </div>
 
       <!-- Drift Detection Form -->
-      <div v-else-if="operation === 'drift' && !isProcessing">
+      <div v-else-if="operation === 'drift' && !isProcessing && !result">
         <h3>Bulk Drift Detection</h3>
         <form @submit.prevent="handleDriftDetect">
           <div class="form-field checkbox">
@@ -136,16 +107,6 @@
             <label for="drift-stop-on-error">Stop on first error</label>
           </div>
 
-          <div class="form-field checkbox">
-            <input
-              id="detailed-report"
-              v-model="detailedReport"
-              type="checkbox"
-              class="form-checkbox"
-            />
-            <label for="detailed-report">Generate detailed report</label>
-          </div>
-
           <div class="form-actions">
             <button type="button" class="btn" @click="operation = null">Back</button>
             <button type="submit" class="btn primary">Detect Drift</button>
@@ -154,45 +115,23 @@
       </div>
 
       <!-- Enhanced Drift Detection Form -->
-      <div v-else-if="operation === 'drift-enhanced' && !isProcessing">
-        <h3>Enhanced Drift Detection</h3>
+      <div v-else-if="operation === 'drift-enhanced' && !isProcessing && !result">
+        <h3>Drift Report</h3>
         <form @submit.prevent="handleDriftDetectEnhanced">
-          <div class="form-field">
-            <label for="compare-with">Compare With</label>
-            <select id="compare-with" v-model="compareWith" class="form-select">
-              <option value="template">Template</option>
-              <option value="baseline">Baseline</option>
-              <option value="peer">Peer Devices</option>
-            </select>
-          </div>
-
-          <div class="form-field">
-            <label for="threshold">Detection Threshold</label>
-            <select id="threshold" v-model="threshold" class="form-select">
-              <option value="strict">Strict</option>
-              <option value="moderate">Moderate</option>
-              <option value="relaxed">Relaxed</option>
-            </select>
-          </div>
+          <p class="form-note">
+            The same comparison as drift detection, answered with the comprehensive report. With
+            "stop on first error" the devices after the first error are not contacted and are not
+            in the report.
+          </p>
 
           <div class="form-field checkbox">
             <input
-              id="include-history"
-              v-model="includeHistory"
+              id="enh-stop-on-error"
+              v-model="stopOnError"
               type="checkbox"
               class="form-checkbox"
             />
-            <label for="include-history">Include historical data</label>
-          </div>
-
-          <div class="form-field checkbox">
-            <input
-              id="enh-detailed-report"
-              v-model="detailedReport"
-              type="checkbox"
-              class="form-checkbox"
-            />
-            <label for="enh-detailed-report">Generate detailed report</label>
+            <label for="enh-stop-on-error">Stop on first error</label>
           </div>
 
           <div class="form-actions">
@@ -205,30 +144,20 @@
       <!-- Processing State -->
       <div v-else-if="isProcessing" class="processing">
         <h3>Processing...</h3>
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: progressPercent + '%' }" />
-        </div>
         <p class="progress-text">
-          {{ processedCount }} / {{ totalCount }} devices processed
+          Contacting {{ selectedDeviceIds.length }} device(s). The answer arrives when every
+          device has been tried.
         </p>
       </div>
 
       <!-- Results -->
-      <div v-if="result" class="results">
+      <div v-if="view" class="results">
         <div class="results-summary">
           <h3>Results</h3>
           <div class="summary-stats">
-            <div class="stat success">
-              <span class="stat-label">Success</span>
-              <span class="stat-value">{{ result.successCount }}</span>
-            </div>
-            <div class="stat failure">
-              <span class="stat-label">Failed</span>
-              <span class="stat-value">{{ result.failureCount }}</span>
-            </div>
-            <div class="stat skipped">
-              <span class="stat-label">Skipped</span>
-              <span class="stat-value">{{ result.skippedCount }}</span>
+            <div v-for="stat in view.stats" :key="stat.label" class="stat" :class="stat.tone">
+              <span class="stat-label">{{ stat.label }}</span>
+              <span class="stat-value">{{ stat.value }}</span>
             </div>
           </div>
         </div>
@@ -244,19 +173,15 @@
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="deviceResult in result.results"
-                :key="deviceResult.deviceId"
-                :class="deviceResult.status"
-              >
-                <td>{{ deviceResult.deviceName }}</td>
+              <tr v-for="row in view.rows" :key="row.deviceId" :class="row.tone">
+                <td>{{ row.deviceName || `Device ${row.deviceId}` }}</td>
                 <td>
-                  <span class="status-badge" :class="deviceResult.status">
-                    {{ deviceResult.status }}
+                  <span class="status-badge" :class="row.tone">
+                    {{ row.status }}
                   </span>
                 </td>
                 <td>
-                  {{ deviceResult.message || deviceResult.error || '-' }}
+                  {{ row.message || '-' }}
                 </td>
               </tr>
             </tbody>
@@ -265,9 +190,7 @@
 
         <div class="form-actions">
           <button class="btn" @click="close">Close</button>
-          <button v-if="result.operationId" class="btn" @click="downloadResults">
-            Download Results
-          </button>
+          <button class="btn" @click="downloadResults">Download Results</button>
         </div>
       </div>
     </div>
@@ -281,7 +204,9 @@ import {
   bulkExport,
   bulkDriftDetect,
   bulkDriftDetectEnhanced,
-  type BulkOperationResult
+  viewOf,
+  type BulkAnswer,
+  type BulkRequest
 } from '@/api/bulk'
 
 interface Props {
@@ -292,36 +217,18 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
-  complete: [result: BulkOperationResult]
+  complete: [result: BulkAnswer]
 }>()
 
-const operation = ref<'import' | 'export' | 'drift' | 'drift-enhanced' | null>(null)
+type Operation = 'import' | 'export' | 'drift' | 'drift-enhanced'
+
+const operation = ref<Operation | null>(null)
 const isProcessing = ref(false)
-const result = ref<BulkOperationResult | null>(null)
+const result = ref<BulkAnswer | null>(null)
+const view = computed(() => (result.value ? viewOf(result.value) : null))
 
-// Import fields
-const importConfig = ref('')
+// The one option the routes read: after the first failed device the rest are skipped.
 const stopOnError = ref(false)
-const validateOnly = ref(false)
-
-// Export fields
-const exportFormat = ref<'json' | 'yaml' | 'sma'>('json')
-const includeSecrets = ref(false)
-const includeMetadata = ref(true)
-
-// Drift fields
-const detailedReport = ref(true)
-const compareWith = ref<'template' | 'baseline' | 'peer'>('template')
-const threshold = ref<'strict' | 'moderate' | 'relaxed'>('moderate')
-const includeHistory = ref(false)
-
-// Progress tracking
-const processedCount = ref(0)
-const totalCount = computed(() => props.selectedDeviceIds.length)
-const progressPercent = computed(() => {
-  if (totalCount.value === 0) return 0
-  return Math.round((processedCount.value / totalCount.value) * 100)
-})
 
 function close() {
   operation.value = null
@@ -330,97 +237,25 @@ function close() {
   emit('close')
 }
 
-async function handleImport() {
+async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, failure: string) {
   try {
     isProcessing.value = true
-    processedCount.value = 0
-
-    let configs: any[]
-    try {
-      configs = [JSON.parse(importConfig.value)]
-    } catch (e) {
-      alert('Invalid JSON configuration')
-      isProcessing.value = false
-      return
-    }
-
-    result.value = await bulkImport({
-      deviceIds: props.selectedDeviceIds,
-      configurations: configs,
-      options: { stopOnError: stopOnError.value, validateOnly: validateOnly.value }
+    result.value = await call({
+      device_ids: props.selectedDeviceIds,
+      options: { stop_on_error: stopOnError.value }
     })
-
-    processedCount.value = totalCount.value
+    isProcessing.value = false
     emit('complete', result.value)
   } catch (e: any) {
-    alert(e?.message || 'Bulk import failed')
+    alert(e?.message || failure)
     isProcessing.value = false
   }
 }
 
-async function handleExport() {
-  try {
-    isProcessing.value = true
-    processedCount.value = 0
-
-    result.value = await bulkExport({
-      deviceIds: props.selectedDeviceIds,
-      options: {
-        format: exportFormat.value,
-        includeSecrets: includeSecrets.value,
-        includeMetadata: includeMetadata.value
-      }
-    })
-
-    processedCount.value = totalCount.value
-    emit('complete', result.value)
-  } catch (e: any) {
-    alert(e?.message || 'Bulk export failed')
-    isProcessing.value = false
-  }
-}
-
-async function handleDriftDetect() {
-  try {
-    isProcessing.value = true
-    processedCount.value = 0
-
-    result.value = await bulkDriftDetect({
-      deviceIds: props.selectedDeviceIds,
-      options: { stopOnError: stopOnError.value, detailedReport: detailedReport.value }
-    })
-
-    processedCount.value = totalCount.value
-    emit('complete', result.value)
-  } catch (e: any) {
-    alert(e?.message || 'Bulk drift detection failed')
-    isProcessing.value = false
-  }
-}
-
-async function handleDriftDetectEnhanced() {
-  try {
-    isProcessing.value = true
-    processedCount.value = 0
-
-    result.value = await bulkDriftDetectEnhanced({
-      deviceIds: props.selectedDeviceIds,
-      options: {
-        stopOnError: stopOnError.value,
-        detailedReport: detailedReport.value,
-        includeHistory: includeHistory.value,
-        compareWith: compareWith.value,
-        threshold: threshold.value
-      }
-    })
-
-    processedCount.value = totalCount.value
-    emit('complete', result.value)
-  } catch (e: any) {
-    alert(e?.message || 'Enhanced drift detection failed')
-    isProcessing.value = false
-  }
-}
+const handleImport = () => run(bulkImport, 'Bulk import failed')
+const handleExport = () => run(bulkExport, 'Bulk export failed')
+const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection failed')
+const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report failed')
 
 function downloadResults() {
   if (!result.value) return
@@ -430,7 +265,7 @@ function downloadResults() {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `bulk-operation-${result.value.operationId}.json`
+  a.download = `bulk-${operation.value ?? 'operation'}-result.json`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -553,18 +388,10 @@ function downloadResults() {
   color: #374151;
 }
 
-.form-textarea,
-.form-select {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-family: inherit;
+.form-note {
+  margin: 0 0 16px 0;
   font-size: 14px;
-}
-
-.form-textarea {
-  resize: vertical;
-  font-family: ui-monospace, monospace;
+  color: #4b5563;
 }
 
 .form-checkbox {
@@ -611,20 +438,6 @@ function downloadResults() {
   margin: 0 0 20px 0;
 }
 
-.progress-bar {
-  height: 24px;
-  background: #e5e7eb;
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 12px;
-}
-
-.progress-fill {
-  height: 100%;
-  background: #2563eb;
-  transition: width 0.3s;
-}
-
 .progress-text {
   font-size: 14px;
   color: #6b7280;
@@ -660,6 +473,10 @@ function downloadResults() {
 }
 
 .stat.skipped {
+  background: #f3f4f6;
+}
+
+.stat.warning {
   background: #fef3c7;
 }
 
@@ -714,8 +531,12 @@ function downloadResults() {
   background: #f0fdf4;
 }
 
-.results-table tbody tr.failed {
+.results-table tbody tr.failure {
   background: #fef2f2;
+}
+
+.results-table tbody tr.warning {
+  background: #fffbeb;
 }
 
 .status-badge {
@@ -731,12 +552,17 @@ function downloadResults() {
   color: #166534;
 }
 
-.status-badge.failed {
+.status-badge.failure {
   background: #fee2e2;
   color: #991b1b;
 }
 
 .status-badge.skipped {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.status-badge.warning {
   background: #fef3c7;
   color: #92400e;
 }

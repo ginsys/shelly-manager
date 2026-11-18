@@ -246,10 +246,14 @@ The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` compo
 #### Bulk Operations (4 endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/config/bulk-import` | POST | Bulk import configurations to multiple devices |
-| `/config/bulk-export` | POST | Bulk export configurations from multiple devices |
-| `/config/bulk-drift-detect` | POST | Basic bulk drift detection on multiple devices |
-| `/config/bulk-drift-detect-enhanced` | POST | Enhanced bulk drift detection with advanced options |
+| `/config/bulk-import` | POST | Read the live configuration of the named devices into the manager |
+| `/config/bulk-export` | POST | Write the stored import/export configuration to the named devices |
+| `/config/bulk-drift-detect` | POST | Compare stored and live configuration of the named devices |
+| `/config/bulk-drift-detect-enhanced` | POST | The same comparison, answered with the comprehensive report |
+
+All four take `{"device_ids": [...], "options": {"stop_on_error": false}}` and act on exactly those
+devices (`ui/src/api/bulk.ts` types the answers; the dialog that calls them is not mounted yet,
+ginsys/shelly-manager#136).
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |

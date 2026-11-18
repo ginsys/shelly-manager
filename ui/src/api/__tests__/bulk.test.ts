@@ -18,12 +18,122 @@ import {
   bulkExport,
   bulkDriftDetect,
   bulkDriftDetectEnhanced,
-  type BulkImportRequest,
-  type BulkExportRequest,
-  type BulkDriftDetectRequest,
-  type BulkDriftDetectEnhancedRequest,
-  type BulkOperationResult
+  viewOf,
+  type BulkRequest,
+  type BulkConfigResult,
+  type BulkDriftResult,
+  type BulkDriftReport
 } from '../bulk'
+
+// The answers below are copies of what the backend handlers return for a request naming one stored
+// device and one id that names no device (internal/api/bulk_contract_test.go in the backend, the
+// answer bodies as the handlers wrote them, with the volatile fields shortened). If a backend field
+// is renamed, these are the fixtures to refresh.
+
+const importAnswer: BulkConfigResult = {
+  total: 2,
+  success: 1,
+  failed: 1,
+  skipped: 0,
+  results: [
+    {
+      device_id: 1,
+      device_name: 'Test Device',
+      device_ip: '127.0.0.1:42185',
+      config_id: 1,
+      status: 'success'
+    },
+    {
+      device_id: 9999,
+      device_name: '',
+      device_ip: '',
+      status: 'failed',
+      error: 'device not found: record not found'
+    }
+  ]
+}
+
+const exportStopAnswer: BulkConfigResult = {
+  total: 2,
+  success: 0,
+  failed: 1,
+  skipped: 1,
+  results: [
+    {
+      device_id: 9999,
+      device_name: '',
+      device_ip: '',
+      status: 'failed',
+      error: 'device not found: record not found'
+    },
+    { device_id: 1, device_name: 'Test Device', device_ip: '127.0.0.1:37707', status: 'skipped' }
+  ]
+}
+
+const driftAnswer: BulkDriftResult = {
+  total: 2,
+  in_sync: 0,
+  drifted: 1,
+  errors: 1,
+  skipped: 0,
+  results: [
+    {
+      device_id: 1,
+      device_name: 'Test Device',
+      device_ip: '127.0.0.1:40987',
+      status: 'drift',
+      drift_summary: '1 configuration differences detected',
+      difference_count: 1,
+      drift: { device_id: 1, differences: [{ path: 'name', expected: 'exported', actual: null }] }
+    },
+    {
+      device_id: 9999,
+      device_name: '',
+      device_ip: '',
+      status: 'error',
+      error: 'Device not found: record not found'
+    }
+  ],
+  started_at: '2026-11-18T20:00:12.556576346+01:00',
+  completed_at: '2026-11-18T20:00:12.558350728+01:00',
+  duration: 1774384
+}
+
+const reportAnswer: BulkDriftReport = {
+  id: 1,
+  report_type: 'bulk',
+  summary: {
+    total_devices: 2,
+    devices_in_sync: 0,
+    devices_drifted: 1,
+    devices_errored: 1
+  },
+  devices: [
+    {
+      device_id: 1,
+      device_name: 'Test Device',
+      device_ip: '127.0.0.1:42589',
+      status: 'drift',
+      total_differences: 1
+    },
+    {
+      device_id: 9999,
+      device_name: '',
+      device_ip: '',
+      status: 'error',
+      total_differences: 0,
+      error: 'Device not found: record not found'
+    }
+  ]
+}
+
+function answer(data: unknown) {
+  ;(api.post as any).mockResolvedValue({
+    data: { success: true, data, timestamp: new Date().toISOString() }
+  })
+}
+
+const request: BulkRequest = { device_ids: [1, 9999], options: { stop_on_error: false } }
 
 describe('Bulk Operations API', () => {
   beforeEach(() => {
@@ -31,426 +141,179 @@ describe('Bulk Operations API', () => {
   })
 
   describe('bulkImport', () => {
-    it('executes bulk import successfully', async () => {
-      const request: BulkImportRequest = {
-        deviceIds: [1, 2, 3],
-        configurations: [
-          { wifi: { ssid: 'Network1' } },
-          { wifi: { ssid: 'Network2' } },
-          { wifi: { ssid: 'Network3' } }
-        ],
-        options: {
-          stopOnError: false,
-          validateOnly: false
-        }
-      }
-      const result: BulkOperationResult = {
-        operationId: 'op-123',
-        totalDevices: 3,
-        successCount: 3,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        completedAt: '2023-01-01T00:01:00Z',
-        results: [
-          { deviceId: 1, deviceName: 'Device 1', status: 'success' },
-          { deviceId: 2, deviceName: 'Device 2', status: 'success' },
-          { deviceId: 3, deviceName: 'Device 3', status: 'success' }
-        ]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
-      })
+    it('posts the wire request and returns the answer', async () => {
+      answer(importAnswer)
 
       const response = await bulkImport(request)
 
-      expect(response).toEqual(result)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-import', request)
-    })
-
-    it('handles partial success', async () => {
-      const request: BulkImportRequest = {
-        deviceIds: [1, 2, 3],
-        configurations: [{}, {}, {}]
-      }
-      const result: BulkOperationResult = {
-        operationId: 'op-456',
-        totalDevices: 3,
-        successCount: 2,
-        failureCount: 1,
-        skippedCount: 0,
-        status: 'partial',
-        startedAt: '2023-01-01T00:00:00Z',
-        completedAt: '2023-01-01T00:01:00Z',
-        results: [
-          { deviceId: 1, deviceName: 'Device 1', status: 'success' },
-          { deviceId: 2, deviceName: 'Device 2', status: 'failed', error: 'Connection timeout' },
-          { deviceId: 3, deviceName: 'Device 3', status: 'success' }
-        ]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
+      expect(response).toEqual(importAnswer)
+      expect(api.post).toHaveBeenCalledWith('/config/bulk-import', {
+        device_ids: [1, 9999],
+        options: { stop_on_error: false }
       })
-
-      const response = await bulkImport(request)
-
-      expect(response.status).toBe('partial')
-      expect(response.successCount).toBe(2)
-      expect(response.failureCount).toBe(1)
     })
 
-    it('throws error when import fails', async () => {
-      const request: BulkImportRequest = {
-        deviceIds: [1],
-        configurations: [{}]
-      }
+    it('throws the backend message when the answer is not a success', async () => {
       ;(api.post as any).mockResolvedValue({
         data: {
           success: false,
-          error: { message: 'Invalid configuration format', code: 'VALIDATION_ERROR' },
+          error: { message: 'Something failed', code: 'INTERNAL_SERVER_ERROR' },
           timestamp: new Date().toISOString()
         }
       })
 
-      await expect(bulkImport(request)).rejects.toThrow('Invalid configuration format')
+      await expect(bulkImport(request)).rejects.toThrow('Something failed')
     })
 
-    it('throws default error when no data returned', async () => {
+    it('throws the default message when no data returned', async () => {
       ;(api.post as any).mockResolvedValue({
         data: { success: true, timestamp: new Date().toISOString() }
       })
 
-      await expect(
-        bulkImport({ deviceIds: [1], configurations: [{}] })
-      ).rejects.toThrow('Failed to execute bulk import')
+      await expect(bulkImport(request)).rejects.toThrow('Failed to execute bulk import')
+    })
+
+    it('throws the reason of a refused request', async () => {
+      ;(api.post as any).mockRejectedValue({
+        message: 'Request failed with status code 400',
+        response: {
+          data: {
+            success: false,
+            error: {
+              code: 'VALIDATION_FAILED',
+              message: 'Validation failed',
+              details: 'device_ids must name at least one device'
+            }
+          }
+        }
+      })
+
+      await expect(bulkImport({ device_ids: [] })).rejects.toThrow(
+        'device_ids must name at least one device'
+      )
     })
   })
 
   describe('bulkExport', () => {
-    it('executes bulk export successfully', async () => {
-      const request: BulkExportRequest = {
-        deviceIds: [1, 2],
-        options: {
-          format: 'json',
-          includeSecrets: false,
-          includeMetadata: true
-        }
-      }
-      const result: BulkOperationResult = {
-        operationId: 'exp-789',
-        totalDevices: 2,
-        successCount: 2,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        completedAt: '2023-01-01T00:00:30Z',
-        results: [
-          {
-            deviceId: 1,
-            deviceName: 'Device 1',
-            status: 'success',
-            data: { wifi: { ssid: 'Network1' } }
-          },
-          {
-            deviceId: 2,
-            deviceName: 'Device 2',
-            status: 'success',
-            data: { wifi: { ssid: 'Network2' } }
-          }
-        ]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
+    it('posts to the export route and returns the answer', async () => {
+      answer(exportStopAnswer)
+
+      const response = await bulkExport({
+        device_ids: [9999, 1],
+        options: { stop_on_error: true }
       })
 
-      const response = await bulkExport(request)
-
-      expect(response).toEqual(result)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-export', request)
-    })
-
-    it('handles different export formats', async () => {
-      const yamlRequest: BulkExportRequest = {
-        deviceIds: [1],
-        options: { format: 'yaml' }
-      }
-      const result: BulkOperationResult = {
-        operationId: 'exp-yaml',
-        totalDevices: 1,
-        successCount: 1,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        results: [{ deviceId: 1, deviceName: 'Device 1', status: 'success' }]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
+      expect(response).toEqual(exportStopAnswer)
+      expect(api.post).toHaveBeenCalledWith('/config/bulk-export', {
+        device_ids: [9999, 1],
+        options: { stop_on_error: true }
       })
-
-      const response = await bulkExport(yamlRequest)
-
-      expect(response.successCount).toBe(1)
     })
 
-    it('throws error when export fails', async () => {
-      const request: BulkExportRequest = {
-        deviceIds: [999]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Device not found', code: 'NOT_FOUND' },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      await expect(bulkExport(request)).rejects.toThrow('Device not found')
-    })
-  })
-
-  describe('bulkDriftDetect', () => {
-    it('executes bulk drift detection successfully', async () => {
-      const request: BulkDriftDetectRequest = {
-        deviceIds: [1, 2, 3],
-        options: {
-          stopOnError: false,
-          detailedReport: true
-        }
-      }
-      const result: BulkOperationResult = {
-        operationId: 'drift-001',
-        totalDevices: 3,
-        successCount: 3,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        completedAt: '2023-01-01T00:02:00Z',
-        results: [
-          {
-            deviceId: 1,
-            deviceName: 'Device 1',
-            status: 'success',
-            data: { driftsFound: 0 }
-          },
-          {
-            deviceId: 2,
-            deviceName: 'Device 2',
-            status: 'success',
-            data: { driftsFound: 2 }
-          },
-          {
-            deviceId: 3,
-            deviceName: 'Device 3',
-            status: 'success',
-            data: { driftsFound: 1 }
-          }
-        ]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
-      })
-
-      const response = await bulkDriftDetect(request)
-
-      expect(response).toEqual(result)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect', request)
-    })
-
-    it('handles devices with drift detected', async () => {
-      const request: BulkDriftDetectRequest = {
-        deviceIds: [1, 2]
-      }
-      const result: BulkOperationResult = {
-        operationId: 'drift-002',
-        totalDevices: 2,
-        successCount: 2,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        results: [
-          {
-            deviceId: 1,
-            deviceName: 'Device 1',
-            status: 'success',
-            data: {
-              driftsFound: 3,
-              drifts: [
-                { field: 'wifi.ssid', expected: 'Network1', actual: 'Network2' },
-                { field: 'power.default', expected: 'off', actual: 'on' },
-                { field: 'mqtt.enabled', expected: true, actual: false }
-              ]
-            }
-          },
-          { deviceId: 2, deviceName: 'Device 2', status: 'success', data: { driftsFound: 0 } }
-        ]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
-      })
-
-      const response = await bulkDriftDetect(request)
-
-      expect(response.results[0].data?.driftsFound).toBe(3)
-    })
-
-    it('throws error when detection fails', async () => {
-      const request: BulkDriftDetectRequest = {
-        deviceIds: [1]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'No baseline configuration', code: 'MISSING_BASELINE' },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      await expect(bulkDriftDetect(request)).rejects.toThrow('No baseline configuration')
-    })
-  })
-
-  describe('bulkDriftDetectEnhanced', () => {
-    it('executes enhanced drift detection successfully', async () => {
-      const request: BulkDriftDetectEnhancedRequest = {
-        deviceIds: [1, 2],
-        options: {
-          stopOnError: false,
-          detailedReport: true,
-          includeHistory: true,
-          compareWith: 'template',
-          threshold: 'strict'
-        }
-      }
-      const result: BulkOperationResult = {
-        operationId: 'drift-enh-001',
-        totalDevices: 2,
-        successCount: 2,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        completedAt: '2023-01-01T00:03:00Z',
-        results: [
-          {
-            deviceId: 1,
-            deviceName: 'Device 1',
-            status: 'success',
-            data: {
-              driftsFound: 2,
-              history: [
-                { date: '2023-01-01', driftCount: 2 },
-                { date: '2022-12-31', driftCount: 1 }
-              ]
-            }
-          },
-          {
-            deviceId: 2,
-            deviceName: 'Device 2',
-            status: 'success',
-            data: { driftsFound: 0 }
-          }
-        ]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
-      })
-
-      const response = await bulkDriftDetectEnhanced(request)
-
-      expect(response).toEqual(result)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect-enhanced', request)
-    })
-
-    it('handles different comparison modes', async () => {
-      const baselineRequest: BulkDriftDetectEnhancedRequest = {
-        deviceIds: [1],
-        options: { compareWith: 'baseline', threshold: 'moderate' }
-      }
-      const result: BulkOperationResult = {
-        operationId: 'drift-baseline',
-        totalDevices: 1,
-        successCount: 1,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        results: [{ deviceId: 1, deviceName: 'Device 1', status: 'success' }]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
-      })
-
-      const response = await bulkDriftDetectEnhanced(baselineRequest)
-
-      expect(response.successCount).toBe(1)
-    })
-
-    it('handles peer comparison mode', async () => {
-      const peerRequest: BulkDriftDetectEnhancedRequest = {
-        deviceIds: [1, 2, 3],
-        options: { compareWith: 'peer', threshold: 'relaxed' }
-      }
-      const result: BulkOperationResult = {
-        operationId: 'drift-peer',
-        totalDevices: 3,
-        successCount: 3,
-        failureCount: 0,
-        skippedCount: 0,
-        status: 'completed',
-        startedAt: '2023-01-01T00:00:00Z',
-        results: [
-          {
-            deviceId: 1,
-            deviceName: 'Device 1',
-            status: 'success',
-            data: { driftsFound: 1, peerDeviation: 0.2 }
-          },
-          { deviceId: 2, deviceName: 'Device 2', status: 'success', data: { driftsFound: 0 } },
-          {
-            deviceId: 3,
-            deviceName: 'Device 3',
-            status: 'success',
-            data: { driftsFound: 2, peerDeviation: 0.5 }
-          }
-        ]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
-      })
-
-      const response = await bulkDriftDetectEnhanced(peerRequest)
-
-      expect(response.totalDevices).toBe(3)
-    })
-
-    it('throws error when enhanced detection fails', async () => {
-      const request: BulkDriftDetectEnhancedRequest = {
-        deviceIds: [1]
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: {
-          success: false,
-          error: { message: 'Invalid threshold value', code: 'VALIDATION_ERROR' },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      await expect(bulkDriftDetectEnhanced(request)).rejects.toThrow('Invalid threshold value')
-    })
-
-    it('throws default error when no data returned', async () => {
+    it('throws the default message when no data returned', async () => {
       ;(api.post as any).mockResolvedValue({
         data: { success: true, timestamp: new Date().toISOString() }
       })
 
-      await expect(bulkDriftDetectEnhanced({ deviceIds: [1] })).rejects.toThrow(
+      await expect(bulkExport(request)).rejects.toThrow('Failed to execute bulk export')
+    })
+  })
+
+  describe('bulkDriftDetect', () => {
+    it('posts to the drift route and returns the answer', async () => {
+      answer(driftAnswer)
+
+      const response = await bulkDriftDetect(request)
+
+      expect(response).toEqual(driftAnswer)
+      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect', request)
+    })
+
+    it('throws the default message when no data returned', async () => {
+      ;(api.post as any).mockResolvedValue({
+        data: { success: true, timestamp: new Date().toISOString() }
+      })
+
+      await expect(bulkDriftDetect(request)).rejects.toThrow(
+        'Failed to execute bulk drift detection'
+      )
+    })
+  })
+
+  describe('bulkDriftDetectEnhanced', () => {
+    it('posts to the enhanced route and returns the report', async () => {
+      answer(reportAnswer)
+
+      const response = await bulkDriftDetectEnhanced(request)
+
+      expect(response).toEqual(reportAnswer)
+      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect-enhanced', request)
+    })
+
+    it('throws the default message when no data returned', async () => {
+      ;(api.post as any).mockResolvedValue({
+        data: { success: true, timestamp: new Date().toISOString() }
+      })
+
+      await expect(bulkDriftDetectEnhanced(request)).rejects.toThrow(
         'Failed to execute enhanced bulk drift detection'
       )
+    })
+  })
+
+  describe('viewOf', () => {
+    it('shows an import or export answer with its failed and skipped counts', () => {
+      const view = viewOf(exportStopAnswer)
+
+      expect(view.stats).toEqual([
+        { label: 'Success', value: 0, tone: 'success' },
+        { label: 'Failed', value: 1, tone: 'failure' },
+        { label: 'Skipped', value: 1, tone: 'skipped' }
+      ])
+      expect(view.rows).toEqual([
+        {
+          deviceId: 9999,
+          deviceName: '',
+          status: 'failed',
+          tone: 'failure',
+          message: 'device not found: record not found'
+        },
+        { deviceId: 1, deviceName: 'Test Device', status: 'skipped', tone: 'skipped', message: '' }
+      ])
+    })
+
+    it('shows a drift answer', () => {
+      const view = viewOf(driftAnswer)
+
+      expect(view.stats.map((s) => [s.label, s.value])).toEqual([
+        ['In sync', 0],
+        ['Drifted', 1],
+        ['Errors', 1],
+        ['Skipped', 0]
+      ])
+      expect(view.rows[0]).toMatchObject({
+        deviceId: 1,
+        status: 'drift',
+        tone: 'warning',
+        message: '1 configuration differences detected'
+      })
+      expect(view.rows[1]).toMatchObject({
+        status: 'error',
+        tone: 'failure',
+        message: 'Device not found: record not found'
+      })
+    })
+
+    it('shows the comprehensive report', () => {
+      const view = viewOf(reportAnswer)
+
+      expect(view.stats.map((s) => [s.label, s.value])).toEqual([
+        ['In sync', 0],
+        ['Drifted', 1],
+        ['Errors', 1]
+      ])
+      expect(view.rows[0]).toMatchObject({ status: 'drift', tone: 'warning', message: '1 difference(s)' })
+      expect(view.rows[1]).toMatchObject({ status: 'error', tone: 'failure' })
     })
   })
 })
