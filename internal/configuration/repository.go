@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -15,6 +16,11 @@ import (
 type GormConfigRepository struct {
 	db     *gorm.DB
 	logger *logging.Logger
+
+	// The pinned apply-lock connections one process may hold at once (see takeLockSlot).
+	lockSlotsOnce sync.Once
+	lockSlots     chan struct{}
+	lockSlotsErr  error
 }
 
 // DbConfigTemplate is the repository's narrow view of the config_templates table: the
