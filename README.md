@@ -205,7 +205,7 @@ security:
 ```yaml
 api:
   url: http://shelly-api.default.svc.cluster.local:8080
-  key: "${API_KEY}"
+  key: "${ADMIN_API_KEY}"   # the manager's admin key: the agent routes refuse a request without it
 
 scanner:
   interval: 60s
