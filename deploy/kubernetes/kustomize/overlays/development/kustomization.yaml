@@ -21,10 +21,9 @@ configMapGenerator:
 - name: shelly-manager-config
   behavior: merge
   literals:
-  - LOG_LEVEL=debug
-  - GIN_MODE=debug
-  - DATABASE_PATH=/tmp/shelly.db
-  - METRICS_ENABLE_DETAILED_TIMING=true
+  - SHELLY_LOGGING_LEVEL=debug
+  - SHELLY_DATABASE_PATH=/tmp/shelly.db
+  - SHELLY_METRICS_ENABLE_DETAILED_TIMING=true
 
 images:
 - name: ghcr.io/ginsys/shelly-manager

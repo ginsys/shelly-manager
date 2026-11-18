@@ -23,6 +23,11 @@ database:
   provider: "sqlite"        # Database provider: "sqlite", "postgresql", "mysql"
   # Connection string; overrides path when set. Required for postgresql/mysql.
   # dsn: "data/shelly.db"
+  # PostgreSQL only: credentials kept out of the DSN (environment:
+  # SHELLY_DATABASE_USERNAME, SHELLY_DATABASE_PASSWORD). The app adds them to a
+  # DSN that has none, escaped; a DSN with credentials and these keys is refused.
+  # username: "app"
+  # password: ""
   # Connection pool. Leave both unset to get the provider's own pool: SQLite 1,
   # PostgreSQL and MySQL 25 open / 5 idle. A pool of 1 on PostgreSQL or MySQL
   # cannot take the cross-replica apply lock. Environment: SHELLY_DATABASE_MAX_OPEN_CONNS,

@@ -22,10 +22,14 @@ configMapGenerator:
 - name: shelly-manager-config
   behavior: merge
   literals:
-  - LOG_LEVEL=info
-  - GIN_MODE=release
-  - DATABASE_PROVIDER=postgresql
-  - DATABASE_DSN=postgresql://shelly:$(POSTGRES_PASSWORD)@postgresql:5432/shelly
+  - SHELLY_LOGGING_LEVEL=info
+  - SHELLY_DATABASE_PROVIDER=postgresql
+  # No credentials in the DSN: the app adds SHELLY_DATABASE_USERNAME and
+  # SHELLY_DATABASE_PASSWORD (the Secret) to it, with the escaping a password needs.
+  - SHELLY_DATABASE_DSN=postgresql://postgresql:5432/shelly
+  # Per replica: 24 connections at 2 replicas with maxSurge 1.
+  - SHELLY_DATABASE_MAX_OPEN_CONNS=8
+  - SHELLY_DATABASE_MAX_IDLE_CONNS=2
 
 images:
 - name: ghcr.io/ginsys/shelly-manager

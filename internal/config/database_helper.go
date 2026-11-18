@@ -16,6 +16,8 @@ func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
 		Provider: c.Database.Provider,
 		DSN:      c.Database.DSN,
 		Options:  c.Database.Options,
+		Username: c.Database.Username,
+		Password: c.Database.Password,
 	}
 
 	// Handle backward compatibility - if no provider specified, use legacy path

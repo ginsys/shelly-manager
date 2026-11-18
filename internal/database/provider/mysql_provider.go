@@ -64,6 +64,12 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 		return fmt.Errorf("already connected to database")
 	}
 
+	// The MySQL DSN has its own format and escaping, and nothing builds it from
+	// separate credentials yet: refuse rather than ignore them silently.
+	if config.Username != "" || config.Password != "" {
+		return fmt.Errorf("database.username and database.password are not supported by the MySQL provider; put the credentials in the DSN")
+	}
+
 	m.config = config
 
 	// Parse and validate DSN

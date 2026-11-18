@@ -151,19 +151,17 @@ spec:
         image: ghcr.io/ginsys/shelly-provisioner:latest
         imagePullPolicy: IfNotPresent
         env:
-        - name: API_URL
+        - name: SHELLY_API_URL
           value: "http://shelly-manager:8080"
-        - name: LOG_LEVEL
+        - name: SHELLY_LOGGING_LEVEL
           value: "info"
-        - name: LOG_FORMAT
+        - name: SHELLY_LOGGING_FORMAT
           value: "json"
-        - name: LOG_OUTPUT
+        - name: SHELLY_LOGGING_OUTPUT
           value: "stdout"
-        - name: GIN_MODE
-          value: "release"
-        - name: PROVISIONING_INTERVAL
+        - name: SHELLY_PROVISIONING_PROVISION_INTERVAL
           value: "600"
-        - name: PROVISIONING_AUTO
+        - name: SHELLY_PROVISIONING_AUTO_PROVISION
           value: "false"
         resources:
           requests:
