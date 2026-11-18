@@ -668,6 +668,59 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 	})
 
+	// The client module may re-send a request that already went through the client, by its config:
+	// <instance>.request(<ident>.config). The re-sent config was paired when it was first issued, so
+	// the closed-world rule keeps its meaning. Every other use of .request stays refused.
+	t.Run("client module retry", func(t *testing.T) {
+		const head = "import axios from 'axios'\n" +
+			"export const api = axios.create({ baseURL: '/api/v1' })\n"
+		for name, body := range map[string]string{
+			"handler":  "api.interceptors.response.use(r => r, error => api.request(error.config))",
+			"return":   "const f = (error) => { return api.request(error.config) }",
+			"spaced":   "const f = (e) => api . request ( e /* c */ . config )",
+			"optional": "const f = (e) => api?.request(e?.config)",
+		} {
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": head + body + "\n"}, nil)
+			if len(errs) != 0 || len(calls) != 0 {
+				t.Fatalf("%s: calls %+v errs: %s", name, calls, joinRouteContractErrs(errs))
+			}
+		}
+		for name, body := range map[string]string{
+			"object literal": "api.request({ url: '/missing' })",
+			"bare ident":     "api.request(config)",
+			"other member":   "api.request(error.response)",
+			"deeper member":  "api.request(error.config.url)",
+			"second arg":     "api.request(error.config, extra)",
+			"computed":       "api.request(error['config'])",
+			"call":           "api.request(build(error.config))",
+			"type args":      "api.request<T>(error.config)",
+			"other method":   "api.get(error.config)",
+			"longer method":  "api.requestAll(error.config)",
+			"no argument":    "api.request()",
+			"escaped member": "api.request(error.conf\\u0069g)",
+		} {
+			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": head + body + "\n"}, nil)
+			if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/client.ts:3:") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, calls, errs)
+			}
+		}
+		// Outside the client module the client binding has one supported shape, api.<method>(url, ...).
+		_, errs := extractRouteContractSources(map[string]string{
+			"ui/src/api/fixture.ts": "import api from './client'\nexport const f = (error) => api.request(error.config)\n",
+		}, nil)
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/fixture.ts:2:") {
+			t.Fatalf("outside the client module: errs: %+v", errs)
+		}
+		// Known limit, pinned so a tightening is a decision: the scanner does not track scopes, so it
+		// cannot tell that the identifier is an interceptor's error parameter. Any <ident>.config passes.
+		calls, errs := extractRouteContractSources(map[string]string{
+			"ui/src/api/client.ts": head + "const f = (anything) => api.request(anything.config)\n",
+		}, nil)
+		if len(errs) != 0 || len(calls) != 0 {
+			t.Fatalf("limit: calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		}
+	})
+
 	t.Run("re-export of the client", func(t *testing.T) {
 		for name, body := range map[string]string{
 			"named default": "export { default as api } from './client'",
