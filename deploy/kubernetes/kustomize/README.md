@@ -266,11 +266,17 @@ Every environment name in these manifests is checked by `internal/config/deploy_
 # Create secrets manually
 kubectl create secret generic shelly-manager-secrets \
   --from-literal=database-password="your-secure-password" \
-  --from-literal=api-key="your-api-key"
+  --from-literal=admin-api-key="your-admin-key"
 
 # Or use external secret management
 kubectl apply -f external-secrets.yaml
 ```
+
+The `admin-api-key` key is the manager's admin key. The provisioner DaemonSet reads the same key
+(`SHELLY_API_KEY`, `secretKeyRef` in `base/deployment.yaml`) and sends it to the manager on every
+agent route, because the manager refuses those routes without it when a key is set. Until the agent
+has its own key (ginsys/shelly-manager#610), rotating the admin key through the API breaks every
+agent until you update the Secret and restart the DaemonSet.
 
 ## 🔀 Customization Patterns
 

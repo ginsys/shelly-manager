@@ -162,6 +162,13 @@ spec:
             configMapKeyRef:
               name: shelly-manager-config
               key: SHELLY_API_URL
+        # The manager refuses the agent routes without its admin key, so the agent
+        # sends that key. It comes from the Secret, never from a literal here.
+        - name: SHELLY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: admin-api-key
         - name: SHELLY_LOGGING_LEVEL
           value: "info"
         - name: SHELLY_LOGGING_FORMAT
