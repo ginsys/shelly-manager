@@ -593,10 +593,7 @@ func (h *Handler) GetDeviceCapabilities(w http.ResponseWriter, r *http.Request) 
 		model = modelStr
 	}
 
-	generation := h.extractGeneration(device.Firmware)
-	if genFloat, ok := settings["gen"].(float64); ok {
-		generation = int(genFloat)
-	}
+	generation := generationFromSettings(settings, h.extractGeneration(device.Firmware))
 
 	capabilities := h.getDeviceCapabilities(model, generation)
 
@@ -731,9 +728,7 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 		if modelStr, ok := settings["model"].(string); ok && modelStr != "" {
 			model = modelStr
 		}
-		if genFloat, ok := settings["gen"].(float64); ok {
-			generation = int(genFloat)
-		}
+		generation = generationFromSettings(settings, generation)
 	}
 
 	// Convert capability-specific configurations based on device model
@@ -878,6 +873,15 @@ func (h *Handler) extractGeneration(firmware string) int {
 		return 1
 	}
 	return 2 // Default to Gen2+
+}
+
+// generationFromSettings reads a device's "gen" setting, or returns fallback where there is none or
+// it is not a whole number.
+func generationFromSettings(settings map[string]interface{}, fallback int) int {
+	if gen, ok := shelly.WholeNumber(settings["gen"]); ok {
+		return gen
+	}
+	return fallback
 }
 
 // getDeviceCapabilities returns device capabilities based on model and generation
@@ -1040,8 +1044,8 @@ func (h *Handler) convertMQTTConfig(data map[string]interface{}) (*configuration
 		mqtt.Server = configuration.StringPtr(server)
 	}
 
-	if port, ok := data["port"].(float64); ok {
-		mqtt.Port = configuration.IntPtr(int(port))
+	if port, ok := shelly.WholeNumber(data["port"]); ok {
+		mqtt.Port = configuration.IntPtr(port)
 	}
 
 	if user, ok := data["user"].(string); ok {
@@ -1056,8 +1060,8 @@ func (h *Handler) convertMQTTConfig(data map[string]interface{}) (*configuration
 		mqtt.ClientID = configuration.StringPtr(clientID)
 	}
 
-	if keepAlive, ok := data["keep_alive"].(float64); ok {
-		mqtt.KeepAlive = configuration.IntPtr(int(keepAlive))
+	if keepAlive, ok := shelly.WholeNumber(data["keep_alive"]); ok {
+		mqtt.KeepAlive = configuration.IntPtr(keepAlive)
 	}
 
 	return mqtt, warnings
@@ -1203,11 +1207,11 @@ func (h *Handler) convertCoIoTConfig(data map[string]interface{}) (*configuratio
 	if server, ok := data["server"].(string); ok {
 		coiot.Server = server
 	}
-	if port, ok := data["port"].(float64); ok {
-		coiot.Port = int(port)
+	if port, ok := shelly.WholeNumber(data["port"]); ok {
+		coiot.Port = port
 	}
-	if period, ok := data["period"].(float64); ok {
-		coiot.Period = int(period)
+	if period, ok := shelly.WholeNumber(data["period"]); ok {
+		coiot.Period = period
 	}
 
 	return coiot, warnings
@@ -1369,9 +1373,8 @@ func (h *Handler) convertPowerMeteringConfig(data map[string]interface{}) (*conf
 	if maxPower, ok := shelly.WholeNumber(data["max_power"]); ok && maxPower > 0 {
 		power.MaxPower = &maxPower
 	}
-	if maxVoltage, ok := data["max_voltage"].(float64); ok && maxVoltage > 0 {
-		maxVoltageInt := int(maxVoltage)
-		power.MaxVoltage = &maxVoltageInt
+	if maxVoltage, ok := shelly.WholeNumber(data["max_voltage"]); ok && maxVoltage > 0 {
+		power.MaxVoltage = &maxVoltage
 	}
 	if maxCurrent, ok := data["max_current"].(float64); ok && maxCurrent > 0 {
 		power.MaxCurrent = &maxCurrent
@@ -1384,8 +1387,8 @@ func (h *Handler) convertPowerMeteringConfig(data map[string]interface{}) (*conf
 	} else {
 		power.PowerCorrection = configuration.Float64Ptr(1.0) // Default multiplier
 	}
-	if period, ok := data["reporting_period"].(float64); ok {
-		power.ReportingPeriod = configuration.IntPtr(int(period))
+	if period, ok := shelly.WholeNumber(data["reporting_period"]); ok {
+		power.ReportingPeriod = configuration.IntPtr(period)
 	}
 	if costPerKWh, ok := data["cost_per_kwh"].(float64); ok && costPerKWh > 0 {
 		power.CostPerKWh = &costPerKWh
@@ -1408,29 +1411,29 @@ func (h *Handler) convertDimmingConfig(data map[string]interface{}) (*configurat
 		data = light0Data // Use first light channel
 	}
 
-	if minBrightness, ok := data["min_brightness"].(float64); ok {
-		dimming.MinBrightness = configuration.IntPtr(int(minBrightness))
+	if minBrightness, ok := shelly.WholeNumber(data["min_brightness"]); ok {
+		dimming.MinBrightness = configuration.IntPtr(minBrightness)
 	} else {
 		dimming.MinBrightness = configuration.IntPtr(1)
 	}
-	if maxBrightness, ok := data["max_brightness"].(float64); ok {
-		dimming.MaxBrightness = configuration.IntPtr(int(maxBrightness))
+	if maxBrightness, ok := shelly.WholeNumber(data["max_brightness"]); ok {
+		dimming.MaxBrightness = configuration.IntPtr(maxBrightness)
 	} else {
 		dimming.MaxBrightness = configuration.IntPtr(100)
 	}
-	if defaultBrightness, ok := data["default_brightness"].(float64); ok {
-		dimming.DefaultBrightness = configuration.IntPtr(int(defaultBrightness))
+	if defaultBrightness, ok := shelly.WholeNumber(data["default_brightness"]); ok {
+		dimming.DefaultBrightness = configuration.IntPtr(defaultBrightness)
 	} else {
 		dimming.DefaultBrightness = configuration.IntPtr(100)
 	}
 	if defaultState, ok := data["default_state"].(bool); ok {
 		dimming.DefaultState = configuration.BoolPtr(defaultState)
 	}
-	if fadeRate, ok := data["fade_rate"].(float64); ok {
-		dimming.FadeRate = configuration.IntPtr(int(fadeRate))
+	if fadeRate, ok := shelly.WholeNumber(data["fade_rate"]); ok {
+		dimming.FadeRate = configuration.IntPtr(fadeRate)
 	}
-	if transition, ok := data["transition"].(float64); ok {
-		dimming.TransitionTime = configuration.IntPtr(int(transition))
+	if transition, ok := shelly.WholeNumber(data["transition"]); ok {
+		dimming.TransitionTime = configuration.IntPtr(transition)
 	}
 	if leadingEdge, ok := data["leading_edge"].(bool); ok {
 		dimming.LeadingEdge = configuration.BoolPtr(leadingEdge)
@@ -1438,8 +1441,8 @@ func (h *Handler) convertDimmingConfig(data map[string]interface{}) (*configurat
 	if nightMode, ok := data["night_mode"].(bool); ok {
 		dimming.NightModeEnabled = configuration.BoolPtr(nightMode)
 	}
-	if nightBrightness, ok := data["night_mode_brightness"].(float64); ok {
-		dimming.NightModeBrightness = configuration.IntPtr(int(nightBrightness))
+	if nightBrightness, ok := shelly.WholeNumber(data["night_mode_brightness"]); ok {
+		dimming.NightModeBrightness = configuration.IntPtr(nightBrightness)
 	}
 	if nightStart, ok := data["night_mode_start"].(string); ok {
 		dimming.NightModeStart = configuration.StringPtr(nightStart)
@@ -1465,18 +1468,17 @@ func (h *Handler) convertRollerConfig(data map[string]interface{}) (*configurati
 	if motorDirection, ok := data["motor_direction"].(string); ok {
 		roller.MotorDirection = configuration.StringPtr(motorDirection)
 	}
-	if maxOpenTime, ok := data["max_open_time"].(float64); ok {
-		roller.MaxOpenTime = configuration.IntPtr(int(maxOpenTime))
+	if maxOpenTime, ok := shelly.WholeNumber(data["max_open_time"]); ok {
+		roller.MaxOpenTime = configuration.IntPtr(maxOpenTime)
 	}
-	if maxCloseTime, ok := data["max_close_time"].(float64); ok {
-		roller.MaxCloseTime = configuration.IntPtr(int(maxCloseTime))
+	if maxCloseTime, ok := shelly.WholeNumber(data["max_close_time"]); ok {
+		roller.MaxCloseTime = configuration.IntPtr(maxCloseTime)
 	}
-	if defaultPos, ok := data["default_position"].(float64); ok {
-		defaultPosInt := int(defaultPos)
-		roller.DefaultPosition = &defaultPosInt
+	if defaultPos, ok := shelly.WholeNumber(data["default_position"]); ok {
+		roller.DefaultPosition = &defaultPos
 	}
-	if currentPos, ok := data["current_position"].(float64); ok {
-		roller.CurrentPosition = configuration.IntPtr(int(currentPos))
+	if currentPos, ok := shelly.WholeNumber(data["current_position"]); ok {
+		roller.CurrentPosition = configuration.IntPtr(currentPos)
 	}
 	if positioning, ok := data["positioning"].(bool); ok {
 		roller.PositioningEnabled = configuration.BoolPtr(positioning)
@@ -1484,9 +1486,8 @@ func (h *Handler) convertRollerConfig(data map[string]interface{}) (*configurati
 	if obstacle, ok := data["obstacle_detection"].(bool); ok {
 		roller.ObstacleDetection = configuration.BoolPtr(obstacle)
 	}
-	if obstaclePower, ok := data["obstacle_power"].(float64); ok && obstaclePower > 0 {
-		obstaclePowerInt := int(obstaclePower)
-		roller.ObstaclePower = &obstaclePowerInt
+	if obstaclePower, ok := shelly.WholeNumber(data["obstacle_power"]); ok && obstaclePower > 0 {
+		roller.ObstaclePower = &obstaclePower
 	}
 	if safetySwitch, ok := data["safety_switch"].(bool); ok {
 		roller.SafetySwitch = configuration.BoolPtr(safetySwitch)
@@ -1497,8 +1498,8 @@ func (h *Handler) convertRollerConfig(data map[string]interface{}) (*configurati
 	if inputMode, ok := data["input_mode"].(string); ok {
 		roller.InputMode = configuration.StringPtr(inputMode)
 	}
-	if holdTime, ok := data["button_hold_time"].(float64); ok {
-		roller.ButtonHoldTime = configuration.IntPtr(int(holdTime))
+	if holdTime, ok := shelly.WholeNumber(data["button_hold_time"]); ok {
+		roller.ButtonHoldTime = configuration.IntPtr(holdTime)
 	}
 
 	return roller, warnings
@@ -1527,7 +1528,7 @@ func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuratio
 				}
 
 				if longPushDuration, ok := data["longpush_duration_ms"].(map[string]interface{}); ok {
-					if _, ok := longPushDuration["min"].(float64); ok {
+					if _, ok := shelly.WholeNumber(longPushDuration["min"]); ok {
 						singleInput.LongPushAction = configuration.StringPtr("long")
 					}
 				}
@@ -1538,13 +1539,13 @@ func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuratio
 
 		// Set global input properties from timing configurations
 		if longPushDuration, ok := data["longpush_duration_ms"].(map[string]interface{}); ok {
-			if minDuration, ok := longPushDuration["min"].(float64); ok {
-				input.LongPushTime = configuration.IntPtr(int(minDuration))
+			if minDuration, ok := shelly.WholeNumber(longPushDuration["min"]); ok {
+				input.LongPushTime = configuration.IntPtr(minDuration)
 			}
 		}
 		if multiPushTime, ok := data["multipush_time_between_pushes_ms"].(map[string]interface{}); ok {
-			if maxTime, ok := multiPushTime["max"].(float64); ok {
-				input.MultiPushTime = configuration.IntPtr(int(maxTime))
+			if maxTime, ok := shelly.WholeNumber(multiPushTime["max"]); ok {
+				input.MultiPushTime = configuration.IntPtr(maxTime)
 			}
 		}
 
@@ -1567,14 +1568,14 @@ func (h *Handler) convertInputConfig(data map[string]interface{}) (*configuratio
 	if inverted, ok := data["inverted"].(bool); ok {
 		input.Inverted = configuration.BoolPtr(inverted)
 	}
-	if debounce, ok := data["debounce_time"].(float64); ok {
-		input.DebounceTime = configuration.IntPtr(int(debounce))
+	if debounce, ok := shelly.WholeNumber(data["debounce_time"]); ok {
+		input.DebounceTime = configuration.IntPtr(debounce)
 	}
-	if longPush, ok := data["longpush_time"].(float64); ok {
-		input.LongPushTime = configuration.IntPtr(int(longPush))
+	if longPush, ok := shelly.WholeNumber(data["longpush_time"]); ok {
+		input.LongPushTime = configuration.IntPtr(longPush)
 	}
-	if multiPush, ok := data["multipush_time"].(float64); ok {
-		input.MultiPushTime = configuration.IntPtr(int(multiPush))
+	if multiPush, ok := shelly.WholeNumber(data["multipush_time"]); ok {
+		input.MultiPushTime = configuration.IntPtr(multiPush)
 	}
 	if singleAction, ok := data["single_push_action"].(string); ok {
 		input.SinglePushAction = configuration.StringPtr(singleAction)
@@ -1599,8 +1600,8 @@ func (h *Handler) convertLEDConfig(data map[string]interface{}) (*configuration.
 	if mode, ok := data["led_mode"].(string); ok {
 		led.Mode = configuration.StringPtr(mode)
 	}
-	if brightness, ok := data["led_brightness"].(float64); ok {
-		led.Brightness = configuration.IntPtr(int(brightness))
+	if brightness, ok := shelly.WholeNumber(data["led_brightness"]); ok {
+		led.Brightness = configuration.IntPtr(brightness)
 	}
 	if nightMode, ok := data["led_night_mode"].(bool); ok {
 		led.NightModeEnabled = configuration.BoolPtr(nightMode)
@@ -1629,12 +1630,11 @@ func (h *Handler) convertColorConfig(data map[string]interface{}) (*configuratio
 	if effectsEnabled, ok := data["effects_enabled"].(bool); ok {
 		color.EffectsEnabled = effectsEnabled
 	}
-	if activeEffect, ok := data["active_effect"].(float64); ok {
-		activeEffectInt := int(activeEffect)
-		color.ActiveEffect = &activeEffectInt
+	if activeEffect, ok := shelly.WholeNumber(data["active_effect"]); ok {
+		color.ActiveEffect = &activeEffect
 	}
-	if effectSpeed, ok := data["effect_speed"].(float64); ok {
-		color.EffectSpeed = int(effectSpeed)
+	if effectSpeed, ok := shelly.WholeNumber(data["effect_speed"]); ok {
+		color.EffectSpeed = effectSpeed
 	}
 	if redCal, ok := data["red_calibration"].(float64); ok {
 		color.RedCalibration = redCal
@@ -1659,13 +1659,13 @@ func (h *Handler) convertColorConfig(data map[string]interface{}) (*configuratio
 
 	// Default color if specified
 	if defaultColor, ok := data["default_color"].(map[string]interface{}); ok {
-		if r, rOk := defaultColor["r"].(float64); rOk {
-			if g, gOk := defaultColor["g"].(float64); gOk {
-				if b, bOk := defaultColor["b"].(float64); bOk {
+		if r, rOk := shelly.WholeNumber(defaultColor["r"]); rOk {
+			if g, gOk := shelly.WholeNumber(defaultColor["g"]); gOk {
+				if b, bOk := shelly.WholeNumber(defaultColor["b"]); bOk {
 					color.DefaultColor = &configuration.Color{
-						Red:   int(r),
-						Green: int(g),
-						Blue:  int(b),
+						Red:   r,
+						Green: g,
+						Blue:  b,
 					}
 				}
 			}

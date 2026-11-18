@@ -214,6 +214,18 @@ All notable changes to this project are documented here. The project follows Con
   `relay_auto_on` and `relay_auto_off`), so a comparison still sees it. One shared helper,
   `shelly.WholeNumber`, now holds the rule that the Gen1 roller read-back already used. Fixes
   ginsys/shelly-manager#532.
+- The same rule now holds for the other numeric configuration fields. A fraction, an infinity, a
+  number above 2^53-1 or a non-number is read as no value (a field that has a default keeps its
+  default) instead of being cut to its whole part, for the MQTT port, keep-alive and update
+  period, the CoIoT port and periods, the power-metering maximum voltage and reporting period, the
+  dimming, roller, input, LED and colour numbers, the timezone offset, and a device's `gen`
+  setting, in the typed import, the Gen1 converter, the raw conversion, the template context and
+  the normalized configuration. A fractional timezone offset stays in the raw remainder of the
+  typed normalization. Device status values and the clock keep their whole-part reading. The
+  `channel` of a device control action (`on`, `off`, `toggle`) must now be a whole number of 0 or
+  more: a fraction, a negative number or a non-number is refused with 400 before any device is
+  called, where a fraction switched a neighbouring relay and a negative channel crashed the
+  toggle. Fixes ginsys/shelly-manager#543.
 - Importing a device's typed configuration now keeps, for each Gen1 relay channel,
   `schedule_rules` and `max_power`, and reads `appliance_type` as the appliance type. Before, the
   import dropped the first two and stored `appliance_type` as the relay name when the entry had

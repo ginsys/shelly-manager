@@ -16,6 +16,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // TemplateEngine handles variable substitution in device configurations
@@ -313,8 +314,8 @@ func (te *TemplateEngine) CreateTemplateContext(device *Device, variables map[st
 				if model, ok := settings["model"].(string); ok {
 					context.Device.Model = model
 				}
-				if gen, ok := settings["gen"].(float64); ok {
-					context.Device.Generation = int(gen)
+				if gen, ok := shelly.WholeNumber(settings["gen"]); ok {
+					context.Device.Generation = gen
 				}
 				if firmware, ok := settings["fw_id"].(string); ok {
 					context.Device.Firmware = firmware

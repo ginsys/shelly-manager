@@ -659,6 +659,10 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 				"Device is offline. Set \"force\": true to attempt anyway.", nil)
 			return
 		}
+		if errors.Is(err, service.ErrInvalidChannel) {
+			h.responseWriter().WriteValidationError(w, r, map[string]string{"channel": err.Error()})
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"action":    req.Action,

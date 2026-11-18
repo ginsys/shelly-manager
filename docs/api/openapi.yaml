@@ -973,6 +973,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: Invalid device ID or JSON, or a `channel` parameter of an `on`, `off` or `toggle` action that is not a whole number of 0 or more (VALIDATION_FAILED); no device is called
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/devices/{id}/status:
     get:
