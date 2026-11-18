@@ -19,6 +19,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // The cross-replica apply lock is tested against real PostgreSQL and MySQL servers, two service
@@ -431,6 +433,63 @@ func TestApplyLockProviders_ALockLostDuringTheApplyLeavesTheDevicePending(t *tes
 			stored := f.stored(t)
 			assert.False(t, stored.ConfigApplied, "B's flag does not stay over a device that holds A's write")
 			assert.True(t, stored.PendingReboot, "the next apply reboots")
+		})
+	}
+}
+
+// readParkedDevice parks the first read of the device settings until release is closed, which holds
+// the apply that made it before its first write, as a replica that stalls after its snapshot does.
+// Writes go through at once.
+type readParkedDevice struct {
+	*parkedDevice
+	readFirst atomic.Bool
+}
+
+func newReadParkedDevice() *readParkedDevice {
+	p := newParkedDevice()
+	p.first.Store(true) // the write never parks: this device parks the read before it
+	return &readParkedDevice{parkedDevice: p}
+}
+
+func (p *readParkedDevice) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
+	if p.readFirst.CompareAndSwap(false, true) {
+		close(p.parked)
+		<-p.release
+	}
+	return p.parkedDevice.GetConfig(ctx)
+}
+
+// A replica that lost its lock before its first device write writes nothing. Replica A stalls after
+// its snapshot and loses its session; replica B applies the newer configuration and sets the flag; A
+// then resumes. The check before A's first write finds the lock gone, so the device keeps B's
+// configuration, A reports the lost lock, and B's flags stay as B left them (A forces none: it wrote
+// nothing, and its forced flags would only overwrite B's).
+func TestApplyLockProviders_ALockLostBeforeTheFirstWriteWritesNothing(t *testing.T) {
+	for _, server := range lockServers(t) {
+		t.Run(server.name, func(t *testing.T) {
+			shortLockWait(t, 5*time.Second)
+			f := newLockFixture(t, server)
+			svcA, _ := f.replica(t)
+			dev := newReadParkedDevice()
+
+			aDone := applyAsync(svcA, dev)
+			waitClosed(t, dev.parked, "replica A to park before its first write")
+			server.endSessions(t)
+			f.setDesired(t, desiredNameJSON(t, "new"))
+			svcB, _ := f.replica(t)
+			b := waitOutcome(t, applyAsync(svcB, dev), "replica B")
+			require.NoError(t, b.err)
+			require.True(t, f.stored(t).ConfigApplied, "B applied the newer configuration")
+			close(dev.release)
+
+			a := waitOutcome(t, aDone, "replica A")
+
+			require.ErrorIs(t, a.err, ErrApplyLockLost)
+			assert.Equal(t, []string{"new"}, dev.writtenNames(), "A wrote its older configuration over B's")
+			assert.Equal(t, "new", dev.currentName())
+			stored := f.stored(t)
+			assert.True(t, stored.ConfigApplied, "B's flag stays: A wrote nothing")
+			assert.False(t, stored.PendingReboot, "A forced no pending reboot over B's record")
 		})
 	}
 }

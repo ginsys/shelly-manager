@@ -448,6 +448,17 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 		}
 		return s.repo.SetDevicePendingReboot(deviceID, pending)
 	})
+	// A replica that lost its lock while it stalled must not write over the one that took over. The
+	// check runs once, right before the first write; where it fails nothing was written, so no flag
+	// is forced either.
+	lostBeforeWrite := false
+	verifier.WithWriteGuard(func(ctx context.Context) error {
+		if lockErr := stillHeld(ctx, lock); lockErr != nil {
+			lostBeforeWrite = true
+			return fmt.Errorf("%w: %v", ErrApplyLockLost, lockErr)
+		}
+		return nil
+	})
 	if hooks != nil {
 		// Order on success: the device accepted the write, then the new credentials are stored,
 		// then the client is rebuilt. A failed write reaches none of it.
@@ -463,6 +474,9 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 		})
 	}
 	result, err := verifier.ApplyAndVerify(ctx, client, desired, deviceType)
+	if lostBeforeWrite {
+		return nil, err
+	}
 	// A lock lost during the apply lets another replica write in between: the device writes cannot
 	// be undone, but the other replica's flags are not left standing over a device that may hold
 	// this apply's older writes. Whatever this apply returned, the device is pending and owes a reboot.

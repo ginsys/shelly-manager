@@ -86,6 +86,22 @@ type ConfigApplier struct {
 	// owed carries a reboot an earlier apply left owed and records a new one before any write
 	// (ConfigVerifier.WithPendingReboot). Nil keeps the old behaviour: nothing is persisted.
 	owed *pendingReboot
+
+	// beforeWrite runs once, right before the first effect of an apply on the device or on the
+	// stored reboot flag (ConfigVerifier.WithWriteGuard). An error stops the apply with nothing
+	// written. Nil runs no check.
+	beforeWrite func(ctx context.Context) error
+}
+
+// guardWrite runs the check made before the first write.
+func (a *ConfigApplier) guardWrite(ctx context.Context) error {
+	if a.beforeWrite == nil {
+		return nil
+	}
+	if err := a.beforeWrite(ctx); err != nil {
+		return fmt.Errorf("nothing was written: %w", err)
+	}
+	return nil
 }
 
 // NewConfigApplier creates a new configuration applier
@@ -159,6 +175,9 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	// refused for good costs one reboot too many, which is cheap.
 	if currentConfig != nil {
 		result.RequiresReboot = a.detectRebootRequired(currentConfig.Raw, apiJSON, config)
+	}
+	if err := a.guardWrite(ctx); err != nil {
+		return nil, err
 	}
 	if a.owed != nil {
 		if currentConfig == nil {
