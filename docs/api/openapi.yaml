@@ -915,7 +915,7 @@ paths:
       description: >-
         Saves the device's own fields. The save is versioned: a body with updated_at must carry the
         stored value (409 CONFLICT otherwise), and a body without it is saved against the row the
-        server read. template_ids, overrides, desired_config and config_applied are read-only here:
+        server reads when the save starts. template_ids, overrides, desired_config and config_applied are read-only here:
         a body that carries them changes none of them. Set template_ids with
         PUT /api/v1/devices/{id}/templates/new, overrides with PUT or PATCH
         /api/v1/devices/{id}/overrides/new, and config_applied with

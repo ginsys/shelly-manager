@@ -385,11 +385,32 @@ const deviceColumnsAttempts = 5
 // as UpdateDeviceIfVersion does, and reads again when another writer moved it first. A missing
 // device is the only error that is not the driver's.
 func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[string]any, moveVersion bool) error {
+	err := writeDeviceColumns(m.GetDB(), id, columns, moveVersion)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) && !errors.Is(err, ErrDeviceVersionChanged) {
+		m.logger.WithFields(map[string]any{
+			"device_id": id,
+			"error":     err.Error(),
+			"operation": operation,
+			"table":     "devices",
+			"component": "database",
+		}).Error("Database operation failed")
+	}
+	return err
+}
+
+// UpdateDeviceColumnsOn is the versioned column write of updateDeviceColumns, on a connection or a
+// transaction of the caller. A writer outside this package that owns a few columns of a device uses
+// it, so the version moves by the same rule (ginsys/shelly-manager#572).
+func UpdateDeviceColumnsOn(db *gorm.DB, id uint, columns map[string]any) error {
+	return writeDeviceColumns(db, id, columns, true)
+}
+
+func writeDeviceColumns(db *gorm.DB, id uint, columns map[string]any, moveVersion bool) error {
 	for attempt := 0; attempt < deviceColumnsAttempts; attempt++ {
-		query := m.GetDB().Model(&Device{}).Where("id = ?", id)
+		query := db.Model(&Device{}).Where("id = ?", id)
 		if moveVersion {
 			var stored Device
-			if err := m.GetDB().Select("updated_at").Where("id = ?", id).First(&stored).Error; err != nil {
+			if err := db.Select("updated_at").Where("id = ?", id).First(&stored).Error; err != nil {
 				return err
 			}
 			next := time.Now()
@@ -401,13 +422,6 @@ func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[str
 		}
 		result := query.UpdateColumns(columns)
 		if result.Error != nil {
-			m.logger.WithFields(map[string]any{
-				"device_id": id,
-				"error":     result.Error.Error(),
-				"operation": operation,
-				"table":     "devices",
-				"component": "database",
-			}).Error("Database operation failed")
 			return result.Error
 		}
 		if result.RowsAffected > 0 {
@@ -421,7 +435,7 @@ func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[str
 		// MySQL counts changed rows, not matched rows, so a write equal to the stored one
 		// affects none. Only a missing device is an error.
 		var found int64
-		if err := m.GetDB().Model(&Device{}).Where("id = ?", id).Count(&found).Error; err != nil {
+		if err := db.Model(&Device{}).Where("id = ?", id).Count(&found).Error; err != nil {
 			return err
 		}
 		if found == 0 {
@@ -431,7 +445,7 @@ func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[str
 	}
 	// Every attempt lost to another writer, or the row went after the last read: tell them apart.
 	var found int64
-	if err := m.GetDB().Model(&Device{}).Where("id = ?", id).Count(&found).Error; err != nil {
+	if err := db.Model(&Device{}).Where("id = ?", id).Count(&found).Error; err != nil {
 		return err
 	}
 	if found == 0 {

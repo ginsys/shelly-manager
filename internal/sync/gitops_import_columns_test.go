@@ -37,6 +37,7 @@ func TestGitOpsImport_SavesOnlyNameAndType(t *testing.T) {
 	// Right after the load of the devices, an apply commits its flags, an edit changes the settings.
 	const callback = "test:after-gitops-load"
 	fired := false
+	var raced time.Time
 	require.NoError(t, db.GetDB().Callback().Query().After("gorm:after_query").Register(callback, func(d *gorm.DB) {
 		if fired || d.Statement.Table != "devices" {
 			return
@@ -47,6 +48,11 @@ func TestGitOpsImport_SavesOnlyNameAndType(t *testing.T) {
 			"config_applied": false, "desired_config": `{"v":2}`, "settings": `{"a":2}`,
 		}).Error)
 		require.NoError(t, configuration.NewGormConfigRepository(tx, nil).SetDevicePendingReboot(stored.ID, true))
+		// The version a client reads after that write. It sits ahead of the clock, as a writer in the
+		// same millisecond as the importer would leave it: the import must move past it, and a
+		// version worked out from the row loaded before it would not.
+		raced = time.Now().Add(time.Hour).Truncate(time.Millisecond)
+		require.NoError(t, tx.Model(&database.Device{}).Where("id = ?", stored.ID).UpdateColumn("updated_at", raced).Error)
 	}))
 	defer func() { _ = db.GetDB().Callback().Query().Remove(callback) }() // runs before cleanup() closes db
 	time.Sleep(5 * time.Millisecond)
@@ -68,4 +74,5 @@ func TestGitOpsImport_SavesOnlyNameAndType(t *testing.T) {
 	assert.True(t, got.PendingReboot, "pending_reboot was written over")
 	assert.Equal(t, `{"a":2}`, got.Settings, "settings were written over")
 	assert.True(t, got.UpdatedAt.After(before.UpdatedAt), "updated_at did not move: a client that read the old name must meet a 409")
+	assert.True(t, got.UpdatedAt.After(raced), "updated_at %v is not past the version %v that the competing write left", got.UpdatedAt, raced)
 }
