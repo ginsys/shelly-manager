@@ -258,6 +258,17 @@ All notable changes to this project are documented here. The project follows Con
   default configuration value today) there is no cross-replica lock, only the in-process one, and
   the server logs a warning once. Set it to 2 or more to run several replicas; making that the
   default is ginsys/shelly-manager#570. Refs ginsys/shelly-manager#425.
+- A credential save no longer writes old values over another writer's columns. The login
+  fallback, the clear of a rejected login, a credential update, the discovery settings backfill
+  and a discovery refresh each saved the whole device row they had read earlier, so a save that
+  landed after an apply cleared `config_applied`, or after an edit replaced `desired_config`,
+  put the old values back. Each now writes only its own columns (the settings text, or the
+  address, status, last seen time and firmware) with one UPDATE, and still moves `updated_at`, so a
+  device `PUT` that read the older row gets a 409. The login fallback also built its text from
+  the model, the generation and the login alone, which dropped every other settings key; it now
+  keeps the stored document, built from a fresh read, and leaves a login that was stored
+  meanwhile. `pending_reboot` was never affected: a whole-row save cannot write it.
+  (ginsys/shelly-manager#565)
 - Device control, verify and the handling of stored logins no longer act on whatever device
   answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and
   `POST /devices/{id}/config/new/verify` read the MAC the device reports and answer `409`

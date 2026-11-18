@@ -10,9 +10,10 @@ import (
 	"github.com/ginsys/shelly-manager/internal/database"
 )
 
-// The writers in this file save a whole device row. Each one holds clientMu, reloads the row and
-// applies only its own change, so it cannot put an older login back over one that
-// UpdateDeviceAuth saved after the writer's first read (ginsys/shelly-manager#496).
+// The writers in this file hold clientMu, reload the row and apply only their own change, so they
+// cannot put an older login back over one that UpdateDeviceAuth saved after the writer's first read
+// (ginsys/shelly-manager#496). UpdateDeviceKeepingLogin saves the whole row on purpose, for the
+// device PUT. The others write only the columns they own (ginsys/shelly-manager#565).
 
 // deviceLoginKeys are the Settings keys that hold the login of a device.
 var deviceLoginKeys = []string{"auth_enabled", "auth_user", "auth_pass", "auth"}
@@ -150,18 +151,10 @@ func (s *ShellyService) RefreshDiscoveredDevice(id uint, ip, status string, last
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
 
-	record, err := s.DB.GetDevice(id)
-	if err != nil {
+	if err := s.DB.UpdateDeviceDiscovery(id, ip, status, lastSeen, firmware); err != nil {
 		return nil, err
 	}
-	record.IP = ip
-	record.Status = status
-	record.LastSeen = lastSeen
-	record.Firmware = firmware
-	if err := s.DB.UpdateDevice(record); err != nil {
-		return record, err
-	}
-	return record, nil
+	return s.DB.GetDevice(id)
 }
 
 // backfillDiscoverySettings stores the model, generation and auth flag that a discovery found in
@@ -193,10 +186,14 @@ func (s *ShellyService) backfillDiscoverySettings(device *database.Device, model
 	if err != nil {
 		return err
 	}
-	record.Settings = string(updated)
-	if err := s.DB.UpdateDevice(record); err != nil {
+	if err = s.DB.UpdateDeviceSettings(record.ID, string(updated)); err != nil {
 		return err
 	}
-	*device = *record
+	// The save stamps updated_at in the database, so the row comes back from one read.
+	saved, err := s.DB.GetDevice(record.ID)
+	if err != nil {
+		return err
+	}
+	*device = *saved
 	return nil
 }
