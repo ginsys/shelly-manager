@@ -3,29 +3,74 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2>Bulk Operations</h2>
-        <button class="btn-close" @click="close">×</button>
+        <button class="btn-close" data-testid="bulk-close" @click="close">×</button>
       </div>
+
+      <ErrorDisplay
+        :error="error"
+        data-testid="bulk-error"
+        @dismiss="clearError"
+      />
 
       <!-- Operation Selection -->
       <div v-if="!operation && !isProcessing" class="operation-selection">
         <p class="selection-info">
-          <strong>{{ selectedDeviceIds.length }}</strong> device(s) selected
+          <strong>{{ selectedDevices.length }}</strong> device(s) selected
+        </p>
+
+        <ul class="picked-devices" data-testid="bulk-picked-devices">
+          <li
+            v-for="d in selectedDevices"
+            :key="d.id"
+            class="picked-device"
+            data-testid="bulk-picked-device"
+          >
+            <span class="picked-name">{{ d.name || `Device ${d.id}` }}</span>
+            <span class="picked-ip">{{ d.ip }}</span>
+            <button
+              type="button"
+              class="picked-remove"
+              :aria-label="`Remove ${d.name || d.ip} from the selection`"
+              data-testid="bulk-remove-device"
+              @click="emit('remove', d.id)"
+            >
+              ×
+            </button>
+          </li>
+        </ul>
+        <p v-if="selectedDevices.length === 0" class="form-note" data-testid="bulk-empty">
+          No device is selected. Close this window and tick the devices to work on.
         </p>
 
         <div class="operation-cards">
-          <button class="operation-card" @click="operation = 'import'">
+          <button
+            class="operation-card"
+            :disabled="selectedDevices.length === 0"
+            data-testid="bulk-op-import"
+            @click="operation = 'import'"
+          >
             <span class="operation-icon">📥</span>
             <h3>Bulk Import</h3>
             <p>Read the current configuration of the selected devices into the manager</p>
           </button>
 
-          <button class="operation-card" @click="operation = 'drift'">
+          <button
+            class="operation-card"
+            :disabled="selectedDevices.length === 0"
+            data-testid="bulk-op-drift"
+            @click="operation = 'drift'"
+          >
             <span class="operation-icon">🔍</span>
             <h3>Drift Detection</h3>
             <p>Compare the stored and the live configuration</p>
           </button>
 
-          <button class="operation-card" @click="operation = 'drift-enhanced'">
+          <button
+            class="operation-card"
+            :disabled="selectedDevices.length === 0"
+            data-testid="bulk-op-drift-enhanced"
+            @click="operation = 'drift-enhanced'"
+          >
             <span class="operation-icon">🔬</span>
             <h3>Drift Report</h3>
             <p>The same comparison, with a comprehensive report</p>
@@ -49,13 +94,14 @@
               v-model="stopOnError"
               type="checkbox"
               class="form-checkbox"
+              data-testid="bulk-stop-on-error"
             />
             <label for="stop-on-error">Stop on first error</label>
           </div>
 
           <div class="form-actions">
             <button type="button" class="btn" @click="operation = null">Back</button>
-            <button type="submit" class="btn primary">Import</button>
+            <button type="submit" class="btn primary" data-testid="bulk-submit">Import</button>
           </div>
         </form>
       </div>
@@ -70,13 +116,14 @@
               v-model="stopOnError"
               type="checkbox"
               class="form-checkbox"
+              data-testid="bulk-stop-on-error"
             />
             <label for="drift-stop-on-error">Stop on first error</label>
           </div>
 
           <div class="form-actions">
             <button type="button" class="btn" @click="operation = null">Back</button>
-            <button type="submit" class="btn primary">Detect Drift</button>
+            <button type="submit" class="btn primary" data-testid="bulk-submit">Detect Drift</button>
           </div>
         </form>
       </div>
@@ -97,13 +144,14 @@
               v-model="stopOnError"
               type="checkbox"
               class="form-checkbox"
+              data-testid="bulk-stop-on-error"
             />
             <label for="enh-stop-on-error">Stop on first error</label>
           </div>
 
           <div class="form-actions">
             <button type="button" class="btn" @click="operation = null">Back</button>
-            <button type="submit" class="btn primary">Detect Drift</button>
+            <button type="submit" class="btn primary" data-testid="bulk-submit">Detect Drift</button>
           </div>
         </form>
       </div>
@@ -112,13 +160,13 @@
       <div v-else-if="isProcessing" class="processing">
         <h3>Processing...</h3>
         <p class="progress-text">
-          Contacting {{ selectedDeviceIds.length }} device(s). The answer arrives when every
+          Contacting {{ selectedDevices.length }} device(s). The answer arrives when every
           device has been tried.
         </p>
       </div>
 
       <!-- Results -->
-      <div v-if="view" class="results">
+      <div v-if="view" class="results" data-testid="bulk-results">
         <div class="results-summary">
           <h3>Results</h3>
           <div class="summary-stats">
@@ -156,7 +204,7 @@
         </div>
 
         <div class="form-actions">
-          <button class="btn" @click="close">Close</button>
+          <button class="btn" data-testid="bulk-results-close" @click="close">Close</button>
           <button class="btn" @click="downloadResults">Download Results</button>
         </div>
       </div>
@@ -174,17 +222,25 @@ import {
   type BulkAnswer,
   type BulkRequest
 } from '@/api/bulk'
+import { useError } from '@/composables/useError'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import type { SelectedDevice } from '@/stores/devices'
 
 interface Props {
   isOpen: boolean
-  selectedDeviceIds: number[]
+  // The devices the operation runs on. The request carries exactly these ids and never
+  // "every device": with none picked, nothing can be started.
+  selectedDevices: SelectedDevice[]
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
   complete: [result: BulkAnswer]
+  remove: [id: number]
 }>()
+
+const { error, setError, clearError } = useError()
 
 type Operation = 'import' | 'drift' | 'drift-enhanced'
 
@@ -200,27 +256,30 @@ function close() {
   operation.value = null
   isProcessing.value = false
   result.value = null
+  clearError()
   emit('close')
 }
 
-async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, failure: string) {
+async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, action: string) {
+  if (props.selectedDevices.length === 0) return
+  clearError()
   try {
     isProcessing.value = true
     result.value = await call({
-      device_ids: props.selectedDeviceIds,
+      device_ids: props.selectedDevices.map((d) => d.id),
       options: { stop_on_error: stopOnError.value }
     })
     isProcessing.value = false
     emit('complete', result.value)
-  } catch (e: any) {
-    alert(e?.message || failure)
+  } catch (e: unknown) {
     isProcessing.value = false
+    setError(e, { action, resource: 'Devices' })
   }
 }
 
-const handleImport = () => run(bulkImport, 'Bulk import failed')
-const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection failed')
-const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report failed')
+const handleImport = () => run(bulkImport, 'Bulk import')
+const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection')
+const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report')
 
 function downloadResults() {
   if (!result.value) return
@@ -290,6 +349,61 @@ function downloadResults() {
   margin-bottom: 20px;
   font-size: 14px;
   color: #6b7280;
+}
+
+.picked-devices {
+  list-style: none;
+  margin: 0 0 20px 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.picked-devices:empty {
+  display: none;
+}
+
+.picked-device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+}
+
+.picked-device:last-child {
+  border-bottom: none;
+}
+
+.picked-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.picked-ip {
+  color: #6b7280;
+  font-family: monospace;
+}
+
+.picked-remove {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: #6b7280;
+}
+
+.picked-remove:hover {
+  color: #991b1b;
+}
+
+.operation-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .operation-cards {
