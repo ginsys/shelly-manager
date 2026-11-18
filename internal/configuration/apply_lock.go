@@ -12,8 +12,9 @@ import (
 )
 
 // ErrApplyInProgress is returned when another manager replica holds the apply lock of the device
-// for longer than applyLockWait. Nothing was written to the device and no flag changed; the caller
-// may already have read the device's identity (the service builds the client before it applies).
+// for longer than applyLockWait. Nothing was written to the device and the refused call never
+// reaches the configuration service's flag updates; the caller may already have read the device's
+// identity (the service builds the client before it applies).
 var ErrApplyInProgress = errors.New("another apply to this device is running; retry in a moment")
 
 // ErrApplyLockLost is returned when the lock that keeps other replicas away from the device was lost
@@ -125,6 +126,15 @@ func (s *ConfigurationService) lockApplyAcrossReplicas(ctx context.Context, devi
 // It keeps this lock apart from any other advisory lock on the same database.
 const applyLockClass int32 = 0x53484d41 // "SHMA"
 
+// applyLockKey is the device id as the int4 second key of the PostgreSQL lock, and false when the id
+// does not fit.
+func applyLockKey(id uint) (int32, bool) {
+	if uint64(id) > math.MaxInt32 {
+		return 0, false
+	}
+	return int32(id), true
+}
+
 // LockDeviceApply is applyLocker for GORM. PostgreSQL and MySQL hold a session lock on one pinned
 // connection for the whole apply; the lock goes with the connection, so a replica that dies frees
 // it. SQLite has one process and returns no lock. The whole acquisition (a pool slot, the
@@ -139,7 +149,8 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 		// A handle inside a transaction has no pool to pin a connection from; apply never runs there.
 		return nil, nil
 	}
-	if dialect == "postgres" && uint64(deviceID) > math.MaxInt32 {
+	pgKey, fitsInt4 := applyLockKey(deviceID)
+	if dialect == "postgres" && !fitsInt4 {
 		return nil, fmt.Errorf("device id %d does not fit the apply lock key", deviceID)
 	}
 
@@ -176,7 +187,7 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 		// The two-int4 form: pg_try_advisory_lock(int4, int4), so the device id must fit int4 (checked above).
 		lock.try = "SELECT pg_try_advisory_lock($1::int4, $2::int4)"
 		lock.release = "SELECT pg_advisory_unlock($1::int4, $2::int4)"
-		lock.args = []any{applyLockClass, int32(deviceID)}
+		lock.args = []any{applyLockClass, pgKey}
 	default:
 		// MySQL lock names belong to the server, not to a database, so the name carries the database.
 		var database sql.NullString
