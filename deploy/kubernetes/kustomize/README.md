@@ -266,17 +266,26 @@ Every environment name in these manifests is checked by `internal/config/deploy_
 # Create secrets manually
 kubectl create secret generic shelly-manager-secrets \
   --from-literal=database-password="your-secure-password" \
-  --from-literal=admin-api-key="your-admin-key"
+  --from-literal=admin-api-key="your-admin-key" \
+  --from-literal=agent-api-key="a-different-random-key"
 
 # Or use external secret management
 kubectl apply -f external-secrets.yaml
 ```
 
-The `admin-api-key` key is the manager's admin key. The provisioner DaemonSet reads the same key
-(`SHELLY_API_KEY`, `secretKeyRef` in `base/deployment.yaml`) and sends it to the manager on every
-agent route, because the manager refuses those routes without it when a key is set. Until the agent
-has its own key (ginsys/shelly-manager#610), rotating the admin key through the API breaks every
-agent until you update the Secret and restart the DaemonSet.
+Two keys, two jobs. `admin-api-key` is the manager's admin key: it opens every guarded route.
+`agent-api-key` is the provisioner agents' key. The manager reads it as `SHELLY_SECURITY_AGENT_API_KEY`
+and accepts it on the five routes an agent calls (register, poll tasks, task status, report discovered
+devices, health) and on no other route; the DaemonSet reads it as `SHELLY_API_KEY`. Both are
+`secretKeyRef` entries in `base/deployment.yaml`. Use two different values: a compromised node then
+holds a key that cannot create tasks or read anything else, and rotating the admin key leaves the
+agents working.
+
+Set `agent-api-key` whenever you set `admin-api-key`. While it is empty and the manager has an admin
+key, the agents get 401. To rotate the agent key, change the Secret and restart the manager and the
+DaemonSet; there is no API call for it, because an API rotation changes only the manager's memory and
+would leave every agent with the old key. The agent key does nothing while the admin key is empty: with
+no admin key the guarded routes stay open.
 
 ## 🔀 Customization Patterns
 

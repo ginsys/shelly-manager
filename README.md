@@ -151,6 +151,7 @@ SHELLY_SERVER_PORT=9091
 SHELLY_DATABASE_PROVIDER=postgresql
 SHELLY_DATABASE_DSN="postgresql://app:secret@localhost:5432/shelly?sslmode=disable"
 SHELLY_SECURITY_ADMIN_API_KEY=your-secure-admin-key
+SHELLY_SECURITY_AGENT_API_KEY=a-different-key-for-the-provisioner-agent
 ```
 
 The PostgreSQL credentials can stay out of the DSN: set `SHELLY_DATABASE_USERNAME` and
@@ -193,6 +194,7 @@ discovery:
 
 security:
   admin_api_key: "${ADMIN_API_KEY}"
+  agent_api_key: "${AGENT_API_KEY}"   # opens only the five provisioner agent routes
   use_proxy_headers: true
   trusted_proxies:
     - 10.0.0.0/8
@@ -205,7 +207,7 @@ security:
 ```yaml
 api:
   url: http://shelly-api.default.svc.cluster.local:8080
-  key: "${ADMIN_API_KEY}"   # the manager's admin key: the agent routes refuse a request without it
+  key: "${AGENT_API_KEY}"   # the manager's agent key: the agent routes refuse a request without a key
 
 scanner:
   interval: 60s

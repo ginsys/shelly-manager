@@ -16,6 +16,7 @@ import (
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/security/apikey"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
@@ -63,17 +64,7 @@ func (eh *SyncHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) boo
 	if eh.adminAPIKey == "" {
 		return true
 	}
-	auth := r.Header.Get("Authorization")
-	xKey := r.Header.Get("X-API-Key")
-	keyOK := false
-	if strings.HasPrefix(auth, "Bearer ") {
-		token := strings.TrimPrefix(auth, "Bearer ")
-		keyOK = token == eh.adminAPIKey
-	}
-	if !keyOK && xKey != "" {
-		keyOK = xKey == eh.adminAPIKey
-	}
-	if !keyOK {
+	if !apikey.Authorized(r, eh.adminAPIKey) {
 		eh.logger.WithFields(map[string]any{
 			"path":      r.URL.Path,
 			"method":    r.Method,

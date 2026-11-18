@@ -81,12 +81,21 @@ var adminGuardedConfigRoutes = []struct{ method, path string }{
 // template family reads the shelly service that the small test handler leaves out.
 func configRoutesRouter(t *testing.T, adminKey string) *mux.Router {
 	t.Helper()
+	return configRoutesRouterKeys(t, adminKey, "")
+}
+
+// configRoutesRouterKeys is configRoutesRouter with the agent key set as well (empty leaves it unset).
+func configRoutesRouterKeys(t *testing.T, adminKey, agentKey string) *mux.Router {
+	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)
 	t.Cleanup(cleanup)
 	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
 	t.Cleanup(handler.WaitBackground) // a request to POST /discover starts work; it ends before the database closes
 	if adminKey != "" {
 		handler.SetAdminAPIKey(adminKey)
+	}
+	if agentKey != "" {
+		handler.SetAgentAPIKey(agentKey)
 	}
 	router := mux.NewRouter()
 	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), handler, logging.GetDefault(), nil)

@@ -117,7 +117,7 @@ func (r guardWalkRoute) key() string { return r.method + " " + r.template }
 
 // guardWalkRouter builds the production /api/v1 table with every optional handler set, on a plain
 // router: no middleware sits in front of the guards, so a 401 is the guard's own answer.
-func guardWalkRouter(t *testing.T, adminKey string) *mux.Router {
+func guardWalkRouter(t *testing.T, adminKey, agentKey string) *mux.Router {
 	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)
 	t.Cleanup(cleanup)
@@ -141,6 +141,10 @@ func guardWalkRouter(t *testing.T, adminKey string) *mux.Router {
 		h.ExportHandlers.SetAdminAPIKey(adminKey)
 		h.ImportHandlers.SetAdminAPIKey(adminKey)
 		mhandler.SetAdminAPIKey(adminKey)
+	}
+	// The agent key lives on the Handler alone: export, import and metrics have no agent routes.
+	if agentKey != "" {
+		h.SetAgentAPIKey(agentKey)
 	}
 
 	// The production router builds a security monitor, and GET /metrics/security exists only with one.
@@ -211,7 +215,7 @@ func isMutating(method string) bool {
 }
 
 func TestRouteTable_EveryRouteRequiresTheAdminKey(t *testing.T) {
-	router := guardWalkRouter(t, "admin-secret")
+	router := guardWalkRouter(t, "admin-secret", "")
 	routes := walkGuardRoutes(t, router)
 
 	seen := map[string]bool{}
@@ -264,4 +268,47 @@ func TestRouteTable_EveryRouteRequiresTheAdminKey(t *testing.T) {
 		}
 	}
 	t.Logf("walked %d route+method pairs: %d refused, %d listed open", len(routes), refused, listed)
+}
+
+// agentRouteKeys are the five routes the provisioner agent calls, the only routes the agent key opens.
+var agentRouteKeys = map[string]bool{
+	"POST /api/v1/provisioner/agents/register":    true,
+	"GET /api/v1/provisioner/agents/{id}/tasks":   true,
+	"PUT /api/v1/provisioner/tasks/{id}/status":   true,
+	"POST /api/v1/provisioner/discovered-devices": true,
+	"GET /api/v1/provisioner/health":              true,
+}
+
+// The agent key opens the five agent routes and nothing else: every other route of the table answers
+// 401 to a request that carries only the agent key, except the routes listed as open, which answer
+// anyone. Export, import and metrics keep their own copy of the admin key and never see the agent key.
+func TestRouteTable_AgentKeyOpensOnlyTheAgentRoutes(t *testing.T) {
+	router := guardWalkRouter(t, "admin-secret", "agent-secret")
+	routes := walkGuardRoutes(t, router)
+	agentHeader := http.Header{"Authorization": {"Bearer agent-secret"}}
+
+	opened, refused, listed := map[string]bool{}, 0, 0
+	for _, r := range routes {
+		code := serveGuardRoute(router, r.method, r.path, agentHeader)
+		_, openRead := openReads[r.key()]
+		_, openMutating := knownOpenMutating[r.key()]
+		switch {
+		case agentRouteKeys[r.key()]:
+			if code == http.StatusUnauthorized {
+				t.Errorf("%s refused the agent key", r.key())
+			}
+			opened[r.key()] = true
+		case openRead || openMutating:
+			listed++ // answers anyone, so it also answers the agent key
+		case code == http.StatusUnauthorized:
+			refused++
+		default:
+			t.Errorf("%s answers the agent key (status %d): the agent key may open only the agent routes", r.key(), code)
+		}
+	}
+	// Controls: every agent route was walked and opened, and the refusals are the rest of the table.
+	require.Len(t, opened, len(agentRouteKeys), "an agent route was not walked: %v", opened)
+	require.Equal(t, len(routes), len(opened)+refused+listed, "every walked route is classified once")
+	require.Greater(t, refused, 0, "no route refused the agent key: the walk proves nothing")
+	t.Logf("agent key: %d routes open, %d refused, %d listed open of %d", len(opened), refused, listed, len(routes))
 }

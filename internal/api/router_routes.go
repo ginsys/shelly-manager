@@ -21,6 +21,17 @@ func (h *Handler) adminOnly(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// agentOrAdmin is adminOnly for the five routes the provisioner agent calls: they also accept the
+// agent key. Every other route, the other provisioner routes included, takes the admin key alone.
+func (h *Handler) agentOrAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !h.requireAgentOrAdmin(w, r) {
+			return
+		}
+		next(w, r)
+	}
+}
+
 // registerAPIRoutes registers the production /api/v1 table on api.
 // securityMonitor nil omits GET /metrics/security, which closes over it.
 // handler must be non-nil. Optional notification, metrics, export, and import
@@ -218,16 +229,19 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/provisioning/agents", handler.ListProvisioningAgentsUI).Methods("GET")
 	api.HandleFunc("/provisioning/agents/{id}/status", handler.GetProvisioningAgentStatusUI).Methods("GET")
 
-	// Provisioner agent management routes. The agent sends the admin key as a bearer token.
-	api.HandleFunc("/provisioner/agents/register", admin(handler.RegisterAgent)).Methods("POST")
+	// Provisioner agent management routes. The agent calls five of them (register, poll, task status,
+	// report discovered devices, health) with its own key or the admin key; the rest create tasks and
+	// list what the agents reported, so they take the admin key alone.
+	agent := handler.agentOrAdmin
+	api.HandleFunc("/provisioner/agents/register", agent(handler.RegisterAgent)).Methods("POST")
 	api.HandleFunc("/provisioner/agents", admin(handler.GetProvisionerAgents)).Methods("GET")
-	api.HandleFunc("/provisioner/agents/{id}/tasks", admin(handler.PollTasks)).Methods("GET")
+	api.HandleFunc("/provisioner/agents/{id}/tasks", agent(handler.PollTasks)).Methods("GET")
 	api.HandleFunc("/provisioner/tasks", admin(handler.CreateProvisioningTask)).Methods("POST")
 	api.HandleFunc("/provisioner/tasks", admin(handler.GetProvisioningTasks)).Methods("GET")
-	api.HandleFunc("/provisioner/tasks/{id}/status", admin(handler.UpdateTaskStatus)).Methods("PUT")
-	api.HandleFunc("/provisioner/discovered-devices", admin(handler.ReportDiscoveredDevices)).Methods("POST")
+	api.HandleFunc("/provisioner/tasks/{id}/status", agent(handler.UpdateTaskStatus)).Methods("PUT")
+	api.HandleFunc("/provisioner/discovered-devices", agent(handler.ReportDiscoveredDevices)).Methods("POST")
 	api.HandleFunc("/provisioner/discovered-devices", admin(handler.GetDiscoveredDevices)).Methods("GET")
-	api.HandleFunc("/provisioner/health", admin(handler.ProvisionerHealthCheck)).Methods("GET")
+	api.HandleFunc("/provisioner/health", agent(handler.ProvisionerHealthCheck)).Methods("GET")
 
 	// DHCP routes
 	api.HandleFunc("/dhcp/reservations", handler.GetDHCPReservations).Methods("GET")

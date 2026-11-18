@@ -133,6 +133,9 @@ type Config struct {
 		} `mapstructure:"cors"`
 		// Simple admin API key for protecting sensitive endpoints until full auth is implemented
 		AdminAPIKey string `mapstructure:"admin_api_key"`
+		// AgentAPIKey is the key the provisioner agents send. It opens the agent routes only, so a
+		// compromised agent does not hold the admin key, and rotating the admin key leaves agents working.
+		AgentAPIKey string `mapstructure:"agent_api_key"`
 		// Test mode to bypass security validations (for E2E testing)
 		ValidationTestMode bool `mapstructure:"validation_test_mode"`
 	} `mapstructure:"security"`
@@ -325,6 +328,7 @@ func setDefaults() {
 	viper.SetDefault("security.cors.max_age", 86400)
 	// Admin API key disabled by default (empty)
 	viper.SetDefault("security.admin_api_key", "")
+	viper.SetDefault("security.agent_api_key", "")
 	// Validation test mode disabled by default (security validations enabled)
 	viper.SetDefault("security.validation_test_mode", false)
 

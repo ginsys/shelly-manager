@@ -19,6 +19,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/metrics"
 	"github.com/ginsys/shelly-manager/internal/notification"
+	"github.com/ginsys/shelly-manager/internal/security/apikey"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
@@ -36,6 +37,9 @@ type Handler struct {
 	securityMonitor     interface{} // Security monitor for metrics (using interface{} to avoid circular imports)
 	// AdminAPIKey provides simple guard for sensitive endpoints until full auth is implemented
 	AdminAPIKey string
+	// AgentAPIKey is the second key, accepted next to the admin key on the provisioner agent
+	// routes only. Empty means the agent routes accept the admin key alone.
+	AgentAPIKey string
 	// Version/banner support
 	serverStartedAt time.Time
 	// gitSHA is the revision this binary was built from, or "" when the build carries none.
@@ -74,19 +78,31 @@ func NewHandlerWithLogger(db database.DatabaseInterface, svc *service.ShellyServ
 // SetAdminAPIKey sets the in-memory admin key for guarding sensitive operations.
 func (h *Handler) SetAdminAPIKey(key string) { h.AdminAPIKey = key }
 
+// SetAgentAPIKey sets the in-memory key the provisioner agents send. It opens the agent routes and
+// nothing else.
+func (h *Handler) SetAgentAPIKey(key string) { h.AgentAPIKey = key }
+
 // requireAdmin checks Authorization or X-API-Key against AdminAPIKey.
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	if h.AdminAPIKey == "" {
 		return true
 	}
-	auth := r.Header.Get("Authorization")
-	xKey := r.Header.Get("X-API-Key")
-	ok := strings.HasPrefix(auth, "Bearer ") && strings.TrimPrefix(auth, "Bearer ") == h.AdminAPIKey
-	if !ok && xKey != "" && xKey == h.AdminAPIKey {
-		ok = true
-	}
-	if !ok {
+	if !apikey.Authorized(r, h.AdminAPIKey) {
 		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Admin authorization required", nil)
+		return false
+	}
+	return true
+}
+
+// requireAgentOrAdmin is requireAdmin for the routes the provisioner agent calls: it accepts the agent
+// key as well. With no admin key set the route stays open, as every guarded route does; an unset agent
+// key adds no credential.
+func (h *Handler) requireAgentOrAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if h.AdminAPIKey == "" {
+		return true
+	}
+	if !apikey.Authorized(r, h.AdminAPIKey, h.AgentAPIKey) {
+		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Authorization required", nil)
 		return false
 	}
 	return true
