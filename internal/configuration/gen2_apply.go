@@ -494,11 +494,16 @@ func unmappedLoginSettings(auth *AuthConfiguration, loginSupported bool) []strin
 // gen2LoginUser is the one user a Gen2 device allows.
 const gen2LoginUser = "admin"
 
+// gen2LoginUnansweredWarning is the warning of a login write that got no answer. A failure's text
+// never reaches the caller, so the warning carries the difference from a refusal.
+const gen2LoginUnansweredWarning = "The device gave no answer to the login write; it may have switched its login, so the stored login may now be stale. If the next request is refused, store the right login with PUT /devices/{id}/config/auth"
+
 // applyGen2Login writes the login last, with Shelly.SetAuth, and only when everything before it
 // went through, so the stored login and the cached client never fall behind the device. The device
-// never returns the password: the error has it removed, nothing is stored on a failure, and an
-// answer that never arrived says the stored login may now be stale. A device that rejects the
-// manager's own login stops the apply.
+// never returns the password, but the call carries ha1, which is enough to answer a digest
+// challenge: the text of a device error is never kept for this write, only whether the device
+// answered. Nothing is stored on a failure, and an answer that never arrived says the stored login
+// may now be stale. A device that rejects the manager's own login stops the apply.
 func (a *ConfigApplier) applyGen2Login(ctx context.Context, client ShellyClient, auth *AuthConfiguration, result *ApplyResult) error {
 	if !a.writeLogin || result.FailedCount > 0 || auth == nil || auth.Enable == nil {
 		return nil
@@ -526,13 +531,13 @@ func (a *ConfigApplier) applyGen2Login(ctx context.Context, client ShellyClient,
 		err = loginClient.ResetAuth(ctx)
 	}
 	if err != nil {
-		err = redact(err, password)
 		if shelly.IsAuthError(err) {
-			return fmt.Errorf("device rejected the login while applying: %w", err)
+			return fmt.Errorf("device rejected the login while applying: %w", shelly.ErrAuthRequired)
 		}
-		failure.Error = err.Error()
+		failure.Error = "the device refused the login write"
 		if !deviceAnswered(err) {
-			failure.Error += "; the device may have switched its login, so the stored login may now be stale"
+			failure.Error = "no answer to the login write; the stored login may now be stale"
+			result.Warnings = append(result.Warnings, gen2LoginUnansweredWarning)
 		}
 		result.Failures = append(result.Failures, failure)
 		result.FailedCount++

@@ -409,7 +409,7 @@ func (c *Client) SetAuth(ctx context.Context, username, password string) error {
 		return err
 	}
 	sum := sha256.Sum256([]byte(username + ":" + realm + ":" + password))
-	return c.rpcCall(ctx, "Shelly.SetAuth", map[string]interface{}{
+	return c.rpcCallRetrying(ctx, 0, "Shelly.SetAuth", map[string]interface{}{
 		"user":  username,
 		"realm": realm,
 		"ha1":   hex.EncodeToString(sum[:]),
@@ -422,7 +422,7 @@ func (c *Client) ResetAuth(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.rpcCall(ctx, "Shelly.SetAuth", map[string]interface{}{
+	return c.rpcCallRetrying(ctx, 0, "Shelly.SetAuth", map[string]interface{}{
 		"user":  authUser,
 		"realm": realm,
 		"ha1":   nil,
@@ -462,6 +462,13 @@ func (c *Client) CloseIdleConnections() {
 
 // rpcCall performs a JSON-RPC call to the device
 func (c *Client) rpcCall(ctx context.Context, method string, params interface{}, result interface{}) error {
+	return c.rpcCallRetrying(ctx, c.config.retryAttempts, method, params, result)
+}
+
+// rpcCallRetrying performs a JSON-RPC call and sends it again, up to retries times, when it got no
+// usable answer. A call that changes the login must not be sent again: the second request would go
+// out with the old login, and a first request whose answer was lost would read as a refusal.
+func (c *Client) rpcCallRetrying(ctx context.Context, retries int, method string, params interface{}, result interface{}) error {
 	url := fmt.Sprintf("http://%s/rpc", c.ip)
 
 	request := RPCRequest{
@@ -477,7 +484,7 @@ func (c *Client) rpcCall(ctx context.Context, method string, params interface{},
 
 	// Retry logic
 	var lastErr error
-	for attempt := 0; attempt <= c.config.retryAttempts; attempt++ {
+	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
 			time.Sleep(c.config.retryDelay)
 		}
