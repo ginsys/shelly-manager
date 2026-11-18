@@ -56,6 +56,12 @@ func (v *ConfigVerifier) WithPendingReboot(pending bool, store func(bool) error)
 	v.applier.owed = &pendingReboot{pending: pending, store: store}
 }
 
+// WithWriteGuard makes apply run check once, right before its first write to the device or to the
+// stored reboot flag. An error stops the apply with nothing written and is returned wrapped.
+func (v *ConfigVerifier) WithWriteGuard(check func(ctx context.Context) error) {
+	v.applier.beforeWrite = check
+}
+
 // WithLogin lets apply write the login. afterLogin must store the new credentials and return a
 // client that uses them (none when the login is switched off). Without it a login stays unwritten.
 func (v *ConfigVerifier) WithLogin(afterLogin func(ctx context.Context, client ShellyClient, change LoginChange) (ShellyClient, error)) {

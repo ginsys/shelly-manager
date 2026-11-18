@@ -260,6 +260,9 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 		result.Warnings = append(result.Warnings, "Device reboot still owed from an earlier apply")
 	}
 
+	if err = a.guardWrite(ctx); err != nil {
+		return nil, err
+	}
 	if err := a.applyGen2Sections(ctx, setter, apiConfig, result); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
 	}
