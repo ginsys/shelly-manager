@@ -48,7 +48,7 @@ test('the refresh button and the R key reload the device list', async ({ page })
   await refresh.click()
   await expect(refresh).toBeDisabled()
   await expect(refresh).toHaveText('Refreshing...')
-  expect(listRequests).toBe(2)
+  await expect.poll(() => listRequests).toBe(2)
   hold = null
   release()
   await expect(refresh).toBeEnabled()
