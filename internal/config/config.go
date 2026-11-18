@@ -229,8 +229,12 @@ func setDefaults() {
 	// when dsn is empty. The empty default still registers the key, so
 	// SHELLY_DATABASE_DSN is unmarshalled even when no config file sets dsn.
 	viper.SetDefault("database.dsn", "")
-	viper.SetDefault("database.max_open_conns", 1)
-	viper.SetDefault("database.max_idle_conns", 1)
+	// 0 means "the provider's own pool": GetDatabaseConfig fills it (SQLite 1,
+	// PostgreSQL and MySQL 25 open / 5 idle). A fixed 1 here hid those values
+	// from every deployment that only set provider and dsn. The keys stay
+	// registered so SHELLY_DATABASE_MAX_OPEN_CONNS and _MAX_IDLE_CONNS unmarshal.
+	viper.SetDefault("database.max_open_conns", 0)
+	viper.SetDefault("database.max_idle_conns", 0)
 	viper.SetDefault("database.conn_max_lifetime", 300)  // 5 minutes
 	viper.SetDefault("database.conn_max_idle_time", 600) // 10 minutes
 	viper.SetDefault("database.slow_query_time", 500)    // 500ms
