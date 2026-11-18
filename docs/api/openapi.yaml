@@ -1316,7 +1316,7 @@ paths:
         record, inside one server process and, on PostgreSQL and MySQL, across manager replicas
         (a lock held in the database, which needs database.max_open_conns of at least 2; with one
         connection only the in-process lock applies; SQLite runs in one process). A second apply
-        waits up to 30 seconds and is then refused with 409.
+        waits up to 15 seconds and is then refused with 409.
       operationId: applyDeviceNewConfig
       security:
         - BearerAuth: []
@@ -1364,7 +1364,7 @@ paths:
             (set it with PUT /api/v1/devices/{id}, field mac). A record with no MAC is refused
             because the device at its address cannot be identified. The same 409 is returned
             when another manager replica has been applying to this device for longer than the
-            30 second wait; nothing was written to the device, the refused call never reaches the
+            15 second wait; nothing was written to the device, the refused call never reaches the
             configuration service's flag updates, and the call can be repeated (the server may
             have read the device's identity before it waited).
           content:

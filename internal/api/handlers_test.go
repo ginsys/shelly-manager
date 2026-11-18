@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/discovery"
@@ -1171,6 +1172,14 @@ func TestWriteConfigDeviceError(t *testing.T) {
 			testutil.AssertEqual(t, tc.code, w.Code)
 		})
 	}
+}
+
+// A second apply that waits for another replica's lock is refused with 409 only if the wait ends
+// before the request deadline; otherwise the timeout middleware answers 408. The apply that got the
+// lock needs the rest of the budget, so the wait stays at or under half of it.
+func TestApplyLockWaitFitsInsideTheRequestTimeout(t *testing.T) {
+	timeout := middleware.DefaultSecurityConfig().RequestTimeout
+	testutil.AssertTrue(t, configuration.DefaultApplyLockWait*2 <= timeout)
 }
 
 func TestApplyDeviceNewConfig_RequiresAdminKey(t *testing.T) {

@@ -23,10 +23,15 @@ var ErrApplyInProgress = errors.New("another apply to this device is running; re
 var ErrApplyLockLost = errors.New("the lock that keeps other replicas from applying to this device was lost during the apply, " +
 	"so the device may hold a mix of two applies; the configuration stays pending, apply it again")
 
+// DefaultApplyLockWait is how long a second apply waits for the lock of another replica. It stays
+// well under the HTTP request timeout (30 s by default): a wait that outlasts the request is cut
+// off by the request deadline and answers 408, never the documented 409.
+const DefaultApplyLockWait = 15 * time.Second
+
 // How long a second apply waits for the lock of another replica, and how often it asks again.
 // Variables so a test can shorten them.
 var (
-	applyLockWait = 30 * time.Second
+	applyLockWait = DefaultApplyLockWait
 	applyLockPoll = 250 * time.Millisecond
 )
 

@@ -249,7 +249,7 @@ All notable changes to this project are documented here. The project follows Con
 - Apply to one device is now serialized across manager replicas, not only inside one process. On
   PostgreSQL and MySQL the apply holds a lock in the database for its whole span: snapshot,
   device writes, read-back, the pending-reboot record and clear, and the `config_applied` update.
-  A second replica's apply waits up to 30 seconds, then is refused with `409` `CONFLICT` and
+  A second replica's apply waits up to 15 seconds, then is refused with `409` `CONFLICT` and
   writes nothing. A lock lost during an apply fails the apply and leaves the device pending with
   a reboot owed (`config_applied` false, `pending_reboot` true), since the device may hold a mix
   of two applies. SQLite keeps the in-process lock. A connection pooler in transaction mode

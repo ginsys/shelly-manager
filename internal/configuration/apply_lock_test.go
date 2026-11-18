@@ -435,7 +435,29 @@ func TestApplyLockProviders_ALockLostDuringTheApplyLeavesTheDevicePending(t *tes
 	}
 }
 
-// A replica whose lock was lost does not clear the owed reboot of the replica that took over.
+// pendingRebootRecorder records every write of the pending-reboot flag the service makes, in order.
+type pendingRebootRecorder struct {
+	*GormConfigRepository
+	mu     sync.Mutex
+	writes []bool
+}
+
+func (r *pendingRebootRecorder) SetDevicePendingReboot(deviceID uint, pending bool) error {
+	r.mu.Lock()
+	r.writes = append(r.writes, pending)
+	r.mu.Unlock()
+	return r.GormConfigRepository.SetDevicePendingReboot(deviceID, pending)
+}
+
+func (r *pendingRebootRecorder) seen() []bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]bool(nil), r.writes...)
+}
+
+// A replica whose lock was lost never writes the pending-reboot flag false: that write could erase the
+// owed reboot of the replica that took over. The recorded writes are the proof, since the recovery
+// write afterwards sets the flag true again and the stored value alone would hide a stray clear.
 func TestApplyLockProviders_ALostLockDoesNotClearTheOwedReboot(t *testing.T) {
 	for _, server := range lockServers(t) {
 		t.Run(server.name, func(t *testing.T) {
@@ -443,7 +465,8 @@ func TestApplyLockProviders_ALostLockDoesNotClearTheOwedReboot(t *testing.T) {
 			raw, err := json.Marshal(mqttAndSNTP())
 			require.NoError(t, err)
 			f.setDesired(t, string(raw))
-			svcA, _ := f.replica(t)
+			repo := &pendingRebootRecorder{GormConfigRepository: NewGormConfigRepository(server.open(t), nil)}
+			svcA := NewConfigurationService(repo, nil, nil)
 			rebootParked, rebootRelease := make(chan struct{}), make(chan struct{})
 			var parkedOnce atomic.Bool
 			dev := &rebootingDevice{fakeGen1Device: newDeviceWithMQTT(), onReboot: func() {
@@ -461,6 +484,7 @@ func TestApplyLockProviders_ALostLockDoesNotClearTheOwedReboot(t *testing.T) {
 			a := waitOutcome(t, aDone, "replica A")
 
 			require.ErrorIs(t, a.err, ErrApplyLockLost)
+			assert.NotContains(t, repo.seen(), false, "a replica without the lock cleared the owed reboot: %v", repo.seen())
 			assert.True(t, f.stored(t).PendingReboot, "the reboot stays owed")
 		})
 	}
@@ -596,7 +620,10 @@ func TestApplyLockProviders_ACancelledRequestStillReleasesTheLock(t *testing.T) 
 
 // A try that is cancelled while it is in flight may have taken the lock on the server before the
 // client saw the answer. The session must not go back into the pool holding it: whatever the many
-// short deadlines do, a second replica gets the lock at once afterwards.
+// short deadlines do, a second replica gets the lock at once afterwards. This is a regression guard
+// and not a proof: it cannot show that a cancellation landed during the lock query (it also passes
+// without the discard, because the drivers appear to drop such a connection themselves, observed and
+// not read in their sources).
 func TestApplyLockProviders_AnAcquisitionCancelledInFlightLeavesNoLockHeld(t *testing.T) {
 	for _, server := range lockServers(t) {
 		t.Run(server.name, func(t *testing.T) {
