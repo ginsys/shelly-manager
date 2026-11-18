@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Added
+- The devices page now has a select column and a Bulk Operations button that opens the bulk
+  dialog (import, drift detection, drift report) for the ticked devices. The button stays off
+  while nothing is ticked, the select-all box covers the rows on the page, and the choice is kept
+  when you move to another page. The dialog lists the picked devices, lets you drop one, sends
+  exactly those and shows a failed request in the dialog instead of a browser alert. Part of
+  ginsys/shelly-manager#136.
 - Apply and verify on a Gen2 or Gen3 device now also write the login: `auth.enable`, `auth.user`
   and `auth.pass` go out last with `Shelly.SetAuth`, which takes the user (always `admin`), the
   `realm` (the device id) and `ha1`, the SHA-256 of `user:realm:password`, never the password.
