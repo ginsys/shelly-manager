@@ -57,7 +57,7 @@ func TestDeviceLoginSaveKeepsSecretsOutOfSQLLog(t *testing.T) {
 	require.NoError(t, manager.AddDevice(device))
 
 	device.Settings = strings.Replace(settings, userSecret, userSecret+"-2", 1)
-	require.NoError(t, manager.UpdateDevice(device))
+	require.NoError(t, manager.GetDB().Save(device).Error)
 
 	raw, err := os.ReadFile(logPath)
 	require.NoError(t, err)

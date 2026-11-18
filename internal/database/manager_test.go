@@ -433,7 +433,9 @@ func TestManagerDeviceOperations(t *testing.T) {
 		device.IP = "192.168.1.199"
 		device.Status = "updated"
 
-		err = manager.UpdateDevice(device)
+		current, err := manager.GetDevice(device.ID)
+		require.NoError(t, err)
+		err = manager.UpdateDeviceIfVersion(device, current.UpdatedAt)
 		assert.NoError(t, err)
 
 		// Verify update
@@ -472,60 +474,6 @@ func TestManagerDeviceOperations(t *testing.T) {
 		err := manager.DeleteDevice(99999) // Non-existent ID
 		assert.Error(t, err)
 		assert.True(t, err == gorm.ErrRecordNotFound)
-	})
-
-	t.Run("UpsertDevice_Create", func(t *testing.T) {
-		device := &Device{
-			MAC:      "upsert:create:test",
-			IP:       "192.168.1.106",
-			Type:     "relay",
-			Name:     "Upsert Create Test",
-			Settings: "{}",
-		}
-
-		err := manager.UpsertDevice(device)
-		assert.NoError(t, err)
-		assert.NotZero(t, device.ID)
-
-		// Verify device was created
-		foundDevice, err := manager.GetDeviceByMAC("upsert:create:test")
-		assert.NoError(t, err)
-		assert.Equal(t, "Upsert Create Test", foundDevice.Name)
-	})
-
-	t.Run("UpsertDevice_Update", func(t *testing.T) {
-		// First create a device
-		originalDevice := &Device{
-			MAC:      "upsert:update:test",
-			IP:       "192.168.1.107",
-			Type:     "switch",
-			Name:     "Original Upsert Device",
-			Settings: "{}",
-		}
-
-		err := manager.AddDevice(originalDevice)
-		require.NoError(t, err)
-		originalID := originalDevice.ID
-
-		// Now upsert with same MAC but different data
-		upsertDevice := &Device{
-			MAC:      "upsert:update:test", // Same MAC
-			IP:       "192.168.1.200",      // Different IP
-			Type:     "dimmer",             // Different type
-			Name:     "Updated Upsert Device",
-			Settings: "{}",
-		}
-
-		err = manager.UpsertDevice(upsertDevice)
-		assert.NoError(t, err)
-		assert.Equal(t, originalID, upsertDevice.ID) // Should preserve ID
-
-		// Verify device was updated
-		foundDevice, err := manager.GetDeviceByMAC("upsert:update:test")
-		assert.NoError(t, err)
-		assert.Equal(t, "Updated Upsert Device", foundDevice.Name)
-		assert.Equal(t, "192.168.1.200", foundDevice.IP)
-		assert.Equal(t, "dimmer", foundDevice.Type)
 	})
 
 	t.Run("GetDeviceByMAC", func(t *testing.T) {

@@ -211,7 +211,7 @@ func TestShellyService_DatabaseIntegration(t *testing.T) {
 	updateDevice.Status = "updated"
 	updateDevice.Firmware = "2.0.0"
 
-	err = db.UpdateDevice(&updateDevice)
+	err = saveDevice(db, &updateDevice)
 	if err != nil {
 		t.Fatalf("Failed to update device: %v", err)
 	}

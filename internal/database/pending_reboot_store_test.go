@@ -29,7 +29,7 @@ func TestPendingReboot_SurvivesAStaleWholeRowSave(t *testing.T) {
 
 	require.NoError(t, repo.SetDevicePendingReboot(device.ID, true))
 	stale.Status = "online"
-	require.NoError(t, manager.UpdateDevice(stale)) // the stale whole-row write
+	require.NoError(t, manager.GetDB().Save(stale).Error) // the stale whole-row write
 
 	reread, err := manager.GetDevice(device.ID)
 	require.NoError(t, err)

@@ -12,8 +12,8 @@ import (
 
 // The writers in this file hold clientMu, reload the row and apply only their own change, so they
 // cannot put an older login back over one that UpdateDeviceAuth saved after the writer's first read
-// (ginsys/shelly-manager#496). UpdateDeviceKeepingLogin saves the whole row on purpose, for the
-// device PUT. The others write only the columns they own (ginsys/shelly-manager#565).
+// (ginsys/shelly-manager#496). UpdateDeviceKeepingLogin saves the device's own fields, versioned,
+// for the device PUT. The others write only the columns they own (ginsys/shelly-manager#565).
 
 // deviceLoginKeys are the Settings keys that hold the login of a device.
 var deviceLoginKeys = []string{"auth_enabled", "auth_user", "auth_pass", "auth"}
@@ -96,10 +96,11 @@ var ErrDeviceChanged = errors.New("the device changed after it was read")
 // UpdateDeviceKeepingLogin saves the incoming device row for a plain device PUT. basis is the
 // stored record that the request was read against.
 //
-// A request that carries updated_at is a versioned save. If that time is not the stored one, the
-// write does nothing and returns ErrDeviceChanged. A request with no updated_at is an older client
-// or a script. Where it leaves the login as it was in basis, the row keeps the login that is
-// stored now. A request that changes the login saves it.
+// A request that carries updated_at is checked against the stored one. If that time is not the
+// stored one, the write does nothing and returns ErrDeviceChanged. A request with no updated_at is
+// an older client or a script: its save is versioned on the stored row. Where it leaves the login
+// as it was in basis, the row keeps the login that is stored now. A request that changes the login
+// saves it.
 func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Device) error {
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
@@ -118,16 +119,14 @@ func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Devic
 		}
 		incoming.Settings = merged
 	}
-	if incoming.UpdatedAt.IsZero() {
-		err = s.DB.UpdateDevice(incoming)
-	} else {
-		// The compare above is not enough: a writer that does not take clientMu can commit
-		// before this save. So the save repeats the compare in its own UPDATE, against the
-		// value that the database gave us (ginsys/shelly-manager#509).
-		err = s.DB.UpdateDeviceIfVersion(incoming, stored.UpdatedAt)
-		if errors.Is(err, database.ErrDeviceVersionChanged) {
-			return ErrDeviceChanged
-		}
+	// The compare above is not enough: a writer that does not take clientMu can commit before this
+	// save. So the save repeats the compare in its own UPDATE, against the value that the database
+	// gave us (ginsys/shelly-manager#509). A body with no updated_at is saved the same way, against
+	// the stored row (ginsys/shelly-manager#572). The save never writes template_ids, overrides,
+	// desired_config or config_applied: each has its own endpoint.
+	err = s.DB.UpdateDeviceIfVersion(incoming, stored.UpdatedAt)
+	if errors.Is(err, database.ErrDeviceVersionChanged) {
+		return ErrDeviceChanged
 	}
 	if err != nil {
 		return err
@@ -151,7 +150,8 @@ func (s *ShellyService) RefreshDiscoveredDevice(id uint, ip, status string, last
 	s.clientMu.Lock()
 	defer s.clientMu.Unlock()
 
-	if err := s.DB.UpdateDeviceDiscovery(id, ip, status, lastSeen, firmware); err != nil {
+	err := s.DB.UpdateDeviceDiscovery(id, database.DiscoveryUpdate{IP: ip, Firmware: firmware, Status: status, LastSeen: lastSeen})
+	if err != nil {
 		return nil, err
 	}
 	return s.DB.GetDevice(id)

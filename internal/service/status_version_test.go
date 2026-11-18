@@ -19,7 +19,7 @@ func versionAfter(t *testing.T, status string, act func(s *ShellyService, id uin
 	service, device := retryFixture(t, gate)
 	device.Status = status
 	device.LastSeen = time.Now().Add(-time.Minute)
-	if err := service.DB.UpdateDevice(device); err != nil {
+	if err := saveDevice(service.DB, device); err != nil {
 		t.Fatal(err)
 	}
 	before, err := service.DB.GetDevice(device.ID)

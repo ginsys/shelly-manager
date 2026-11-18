@@ -56,7 +56,7 @@ func TestUpdateDeviceKeepingLogin_RefusesAWriterThatCommitsBetweenCompareAndSave
 			return
 		}
 		other.Name = "renamed by the other writer"
-		if updateErr := real.UpdateDevice(other); updateErr != nil {
+		if updateErr := saveDevice(real, other); updateErr != nil {
 			t.Error(updateErr)
 		}
 	}

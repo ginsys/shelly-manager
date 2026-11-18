@@ -669,7 +669,7 @@ func TestDeviceJSONColumnDefaults(t *testing.T) {
 
 	// An explicit value is never overwritten.
 	stored.TemplateIDs = "[1,2]"
-	require.NoError(t, manager.UpdateDevice(stored))
+	require.NoError(t, manager.GetDB().Save(stored).Error)
 
 	reloaded, err := manager.GetDevice(device.ID)
 	require.NoError(t, err)

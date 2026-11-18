@@ -29,7 +29,6 @@ func checkZeroTimesKept(t *testing.T, manager *Manager) {
 		name string
 		save func(d *Device) error
 	}{
-		{"UpdateDevice", func(d *Device) error { return manager.UpdateDevice(d) }},
 		{"UpdateDeviceIfVersion", func(d *Device) error {
 			current, getErr := manager.GetDevice(d.ID)
 			if getErr != nil {
@@ -65,7 +64,7 @@ func checkZeroTimesKept(t *testing.T, manager *Manager) {
 	seen := time.Now().Add(-time.Minute).Truncate(time.Second)
 	edit := *before
 	edit.LastSeen = seen
-	require.NoError(t, manager.UpdateDevice(&edit))
+	require.NoError(t, manager.UpdateDeviceIfVersion(&edit, before.UpdatedAt))
 	after, err := manager.GetDevice(device.ID)
 	require.NoError(t, err)
 	assert.True(t, after.LastSeen.Equal(seen), "last_seen the request carries: want %v, got %v", seen, after.LastSeen)

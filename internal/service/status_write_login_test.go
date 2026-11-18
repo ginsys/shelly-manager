@@ -11,7 +11,7 @@ func TestGetDeviceStatus_OnlineWriteKeepsALoginSavedDuringTheRequest(t *testing.
 	gate := &gatedDevice{accept: map[string]bool{"old": true, "new": true}}
 	service, device := retryFixture(t, gate)
 	device.Status = "online"
-	if err := service.DB.UpdateDevice(device); err != nil {
+	if err := saveDevice(service.DB, device); err != nil {
 		t.Fatal(err)
 	}
 	gate.onServe = func() {
@@ -43,7 +43,7 @@ func TestGetDeviceStatus_OfflineRecoveryWriteKeepsALoginSavedDuringTheProbe(t *t
 	service, device := retryFixture(t, gate)
 	device.Status = "offline"
 	device.LastSeen = time.Now().Add(-time.Minute)
-	if err := service.DB.UpdateDevice(device); err != nil {
+	if err := saveDevice(service.DB, device); err != nil {
 		t.Fatal(err)
 	}
 	gate.onServe = func() {

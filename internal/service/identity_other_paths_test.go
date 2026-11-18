@@ -97,7 +97,7 @@ func serviceWithDeviceAt(t *testing.T, addr, storedMAC, settings string) (*Shell
 	device := createTestDevice(t, db, addr)
 	device.MAC = storedMAC
 	device.Settings = settings
-	if err := db.UpdateDevice(device); err != nil {
+	if err := saveDevice(db, device); err != nil {
 		t.Fatal(err)
 	}
 	return service, device

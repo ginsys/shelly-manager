@@ -912,6 +912,15 @@ paths:
     put:
       tags: [Devices]
       summary: Update a device
+      description: >-
+        Saves the device's own fields. The save is versioned: a body with updated_at must carry the
+        stored value (409 CONFLICT otherwise), and a body without it is saved against the row the
+        server read. template_ids, overrides, desired_config and config_applied are read-only here:
+        a body that carries them changes none of them. Set template_ids with
+        PUT /api/v1/devices/{id}/templates/new, overrides with PUT or PATCH
+        /api/v1/devices/{id}/overrides/new, and config_applied with
+        POST /api/v1/devices/{id}/config/new/apply. desired_config is derived from the templates and
+        overrides (read it with GET /api/v1/devices/{id}/desired-config).
       operationId: updateDevice
       security:
         - BearerAuth: []

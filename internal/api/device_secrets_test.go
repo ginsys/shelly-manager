@@ -170,17 +170,22 @@ func TestDeviceRoutes_UpdateWithTheMaskKeepsStoredSecrets(t *testing.T) {
 	require.NoError(t, json.Unmarshal(dataOf(t, put.Body.Bytes()), &saved))
 	read["updated_at"] = saved["updated_at"]
 
-	// A new value is a new secret: it is stored, and the answer masks it.
+	// A new value is a new secret: it is stored, and the answer masks it. Overrides are not written
+	// by the device PUT (ginsys/shelly-manager#572), so the secret that is new here is in settings,
+	// and the overrides that the body carries change nothing.
+	read["settings"] = strings.Replace(secretSettings, secFlat, "brand-new-flat", 1)
 	read["overrides"] = strings.Replace(secretOverrides, secMQTT, "brand-new-mqtt", 1)
 	fresh, err := json.Marshal(read)
 	require.NoError(t, err)
 	put = serve(handler.UpdateDevice, "PUT", "/api/v1/devices/1", id, string(fresh))
 	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
-	assert.NotContains(t, put.Body.String(), "brand-new-mqtt")
+	assert.NotContains(t, put.Body.String(), "brand-new-flat")
 	stored, err = handler.DB.GetDevice(device.ID)
 	require.NoError(t, err)
-	assert.Contains(t, stored.Overrides, "brand-new-mqtt")
-	assert.NotContains(t, stored.Overrides, secMQTT)
+	assert.Contains(t, stored.Settings, "brand-new-flat")
+	assert.NotContains(t, stored.Settings, secFlat)
+	assert.Contains(t, stored.Overrides, secMQTT, "the PUT wrote overrides")
+	assert.NotContains(t, stored.Overrides, "brand-new-mqtt", "the PUT wrote overrides")
 }
 
 // A mask in a new device has nothing to restore from: it is stored as no secret, never as the mask.

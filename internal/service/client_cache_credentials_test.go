@@ -49,7 +49,7 @@ func credentialCacheFixture(t *testing.T) (*ShellyService, *database.Device, *lo
 	service := NewService(db, createTestConfig())
 	device := createTestDevice(t, db, server.URL[len("http://"):])
 	device.Settings = `{"gen":1,"auth_enabled":true,"auth_user":"old","auth_pass":"oldpw"}`
-	if err := db.UpdateDevice(device); err != nil {
+	if err := saveDevice(db, device); err != nil {
 		t.Fatal(err)
 	}
 	return service, device, rec
