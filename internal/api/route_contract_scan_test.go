@@ -1036,6 +1036,39 @@ func (s *routeScanner) probe() *routeScanner {
 	}
 }
 
+// instanceRetry consumes .request(<ident>.config) after the axios instance in the
+// client module: the re-send of a request that already went through the client,
+// which was paired when it was first issued. Any other argument (an object
+// literal, a call, another member, a second argument) could name a route that
+// was never paired, so it reports false, unchanged, and the caller fails. The
+// scanner tracks no scopes, so it cannot tell that <ident> is an interceptor's
+// error parameter; any <ident>.config passes (pinned by a fixture).
+func (s *routeScanner) instanceRetry() bool {
+	mark := s.mark()
+	if s.consumeDot() {
+		s.skipSpaceComments()
+		if s.consumeWord("request") {
+			s.skipSpaceComments()
+			if s.peek('(') {
+				s.i++
+				s.skipSpaceComments()
+				if arg, _ := s.readIdent(); arg != "" && s.consumeDot() {
+					s.skipSpaceComments()
+					if s.consumeWord("config") {
+						s.skipSpaceComments()
+						if s.peek(')') {
+							s.i++
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	s.restore(mark)
+	return false
+}
+
 // peekMember reports whether the next tokens are .<name>, without moving.
 func (s *routeScanner) peekMember(name string) bool {
 	mark := s.mark()
@@ -1357,8 +1390,8 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	}
 	// Inside the client module the axios instance is bound as
 	// const <name> = axios.create(...). Its supported uses there are
-	// <name>.interceptors... and export default <name>; anything else could
-	// issue a request without yielding a pair.
+	// <name>.interceptors..., <name>.request(<ident>.config) and export default
+	// <name>; anything else could issue a request without yielding a pair.
 	if s.isClientFile && !member {
 		if (prev == "const" || prev == "let" || prev == "var") && s.bindsAxiosCreate() {
 			s.instance[ident] = true
@@ -1366,7 +1399,7 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			return
 		}
 		if s.instance[ident] {
-			if !s.peekMember("interceptors") {
+			if !s.peekMember("interceptors") && !s.instanceRetry() {
 				s.fail(line, "unsupported use of the axios instance %q in the api client module", ident)
 				return
 			}
