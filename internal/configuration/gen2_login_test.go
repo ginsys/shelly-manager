@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -370,5 +371,22 @@ func TestApplyDesiredConfig_Gen2KeepsAnEchoedHA1OutOfAFailure(t *testing.T) {
 	assert.NotContains(t, result.ApplyResult.Failures[0].Error, ha1)
 	assert.NotContains(t, result.ApplyResult.Failures[0].Error, "invalid")
 	assert.Empty(t, result.ApplyResult.Warnings, "the device answered: the login was refused, not unknown")
+	assert.Empty(t, hooks.stored)
+}
+
+// A reply that ends early, or whose body is not JSON, comes back as a device error that holds an
+// underlying error. The device has still got the request, so that is no answer to the login write.
+func TestApplyDesiredConfig_Gen2ATruncatedLoginAnswerIsAnUnknownOutcome(t *testing.T) {
+	desired := &DeviceConfiguration{Auth: loginOn("admin", "secret-pw")}
+	dev := newLoginGen2Device()
+	dev.loginErr = &shelly.DeviceError{IP: "192.168.1.60", Generation: 2, Operation: "Shelly.SetAuth", Err: io.ErrUnexpectedEOF}
+	svc, _, hooks := gen2LoginService(t, desired, dev)
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	require.Len(t, result.ApplyResult.Failures, 1)
+	require.Len(t, result.ApplyResult.Warnings, 1)
+	assert.Contains(t, result.ApplyResult.Warnings[0], "stored login may now be stale")
 	assert.Empty(t, hooks.stored)
 }

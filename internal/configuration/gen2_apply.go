@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -498,6 +499,14 @@ const gen2LoginUser = "admin"
 // never reaches the caller, so the warning carries the difference from a refusal.
 const gen2LoginUnansweredWarning = "The device gave no answer to the login write; it may have switched its login, so the stored login may now be stale. If the next request is refused, store the right login with PUT /devices/{id}/config/auth"
 
+// gen2LoginRefused reports whether the device wrote an answer to the login write: an error of its
+// own or a status. A reply that ends early or is not JSON holds an underlying error and proves
+// nothing about whether the device took the request, so it is not an answer.
+func gen2LoginRefused(err error) bool {
+	var deviceErr *shelly.DeviceError
+	return errors.As(err, &deviceErr) && deviceErr.Err == nil
+}
+
 // applyGen2Login writes the login last, with Shelly.SetAuth, and only when everything before it
 // went through, so the stored login and the cached client never fall behind the device. The device
 // never returns the password, but the call carries ha1, which is enough to answer a digest
@@ -535,7 +544,7 @@ func (a *ConfigApplier) applyGen2Login(ctx context.Context, client ShellyClient,
 			return fmt.Errorf("device rejected the login while applying: %w", shelly.ErrAuthRequired)
 		}
 		failure.Error = "the device refused the login write"
-		if !deviceAnswered(err) {
+		if !gen2LoginRefused(err) {
 			failure.Error = "no answer to the login write; the stored login may now be stale"
 			result.Warnings = append(result.Warnings, gen2LoginUnansweredWarning)
 		}
