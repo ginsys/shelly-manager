@@ -375,6 +375,34 @@ func TestUpdateDevice_IPConflict(t *testing.T) {
 	testutil.AssertEqual(t, http.StatusConflict, w.Code)
 }
 
+// A second device at an address that is taken is a conflict, read by the error's type:
+// the database seals driver text, so no handler can match on it (ginsys/shelly-manager#601).
+func TestAddDevice_DuplicateIsAConflict(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	svc := testShellyService(t, db)
+	notificationHandler := testNotificationHandler(t, db)
+	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
+
+	first := testutil.TestDevice()
+	testutil.AssertNoError(t, db.AddDevice(first))
+	second := *first
+	second.ID = 0
+	body, err := json.Marshal(second)
+	testutil.AssertNoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/v1/devices", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.AddDevice(w, req)
+
+	testutil.AssertEqual(t, http.StatusConflict, w.Code)
+	if !strings.Contains(w.Body.String(), "already exists") {
+		t.Fatalf("expected the conflict message, got %s", w.Body.String())
+	}
+}
+
 func TestUpdateDevice_NotFound(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
