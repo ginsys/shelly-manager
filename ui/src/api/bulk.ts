@@ -1,13 +1,14 @@
 import api from './client'
 import type { APIResponse } from './types'
 
-// The four bulk configuration routes act on exactly the devices named in `device_ids`, in the
-// direction of the per-device route of the same name, and answer synchronously with the shapes
-// below (ginsys/shelly-manager#248). The names are the wire names of the backend.
+// The bulk configuration routes act on exactly the devices named in `device_ids`, in the direction
+// of the per-device route of the same name, and answer synchronously with the shapes below
+// (ginsys/shelly-manager#248). The names are the wire names of the backend. None of them writes
+// a device; writing a configuration to a device is the per-device apply. The bulk-export route is
+// not used: it is being retired in favour of the apply (ginsys/shelly-manager#592).
 //
-//   bulk-import   reads each device's live configuration into the manager (never writes a device)
-//   bulk-export   writes each device's stored import/export configuration to the device
-//   bulk-drift-*  compares stored and live configuration (never writes a device)
+//   bulk-import   reads each device's live configuration into the manager
+//   bulk-drift-*  compares stored and live configuration
 
 export interface BulkRequest {
   device_ids: number[]
@@ -17,14 +18,14 @@ export interface BulkRequest {
   }
 }
 
-// bulk-import and bulk-export
+// bulk-import
 export type BulkConfigStatus = 'success' | 'failed' | 'skipped'
 
 export interface BulkConfigDeviceResult {
   device_id: number
   device_name: string
   device_ip: string
-  config_id?: number // import only
+  config_id?: number
   status: BulkConfigStatus
   error?: string
 }
@@ -120,14 +121,6 @@ export function bulkImport(request: BulkRequest): Promise<BulkConfigResult> {
   )
 }
 
-// Write each device's stored import/export configuration to the device.
-export function bulkExport(request: BulkRequest): Promise<BulkConfigResult> {
-  return unwrap(
-    api.post<APIResponse<BulkConfigResult>>('/config/bulk-export', request),
-    'Failed to execute bulk export'
-  )
-}
-
 // Compare stored and live configuration.
 export function bulkDriftDetect(request: BulkRequest): Promise<BulkDriftResult> {
   return unwrap(
@@ -162,7 +155,7 @@ const driftTone: Record<BulkDriftStatus, BulkTone> = {
   skipped: 'skipped'
 }
 
-// Turn an answer of any of the four routes into the counts and rows the dialog shows.
+// Turn an answer of any of the three routes into the counts and rows the dialog shows.
 export function viewOf(answer: BulkAnswer): BulkView {
   if ('summary' in answer) {
     return {

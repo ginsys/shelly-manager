@@ -15,7 +15,6 @@ vi.mock('../client', () => {
 import api from '../client'
 import {
   bulkImport,
-  bulkExport,
   bulkDriftDetect,
   bulkDriftDetectEnhanced,
   viewOf,
@@ -53,7 +52,8 @@ const importAnswer: BulkConfigResult = {
   ]
 }
 
-const exportStopAnswer: BulkConfigResult = {
+// The same import with stop_on_error: the first device fails and the rest are skipped.
+const importStopAnswer: BulkConfigResult = {
   total: 2,
   success: 0,
   failed: 1,
@@ -194,28 +194,18 @@ describe('Bulk Operations API', () => {
     })
   })
 
-  describe('bulkExport', () => {
-    it('posts to the export route and returns the answer', async () => {
-      answer(exportStopAnswer)
+  it('sends the stop-on-error option as given', async () => {
+    answer(importStopAnswer)
 
-      const response = await bulkExport({
-        device_ids: [9999, 1],
-        options: { stop_on_error: true }
-      })
-
-      expect(response).toEqual(exportStopAnswer)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-export', {
-        device_ids: [9999, 1],
-        options: { stop_on_error: true }
-      })
+    const response = await bulkImport({
+      device_ids: [9999, 1],
+      options: { stop_on_error: true }
     })
 
-    it('throws the default message when no data returned', async () => {
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, timestamp: new Date().toISOString() }
-      })
-
-      await expect(bulkExport(request)).rejects.toThrow('Failed to execute bulk export')
+    expect(response).toEqual(importStopAnswer)
+    expect(api.post).toHaveBeenCalledWith('/config/bulk-import', {
+      device_ids: [9999, 1],
+      options: { stop_on_error: true }
     })
   })
 
@@ -262,8 +252,8 @@ describe('Bulk Operations API', () => {
   })
 
   describe('viewOf', () => {
-    it('shows an import or export answer with its failed and skipped counts', () => {
-      const view = viewOf(exportStopAnswer)
+    it('shows an import answer with its failed and skipped counts', () => {
+      const view = viewOf(importStopAnswer)
 
       expect(view.stats).toEqual([
         { label: 'Success', value: 0, tone: 'success' },
