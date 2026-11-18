@@ -756,8 +756,39 @@ func TestApplyLockProviders_TheLockIsPerDevice(t *testing.T) {
 			require.NotNil(t, other)
 			other.Unlock()
 
-			_, err = repoB.LockDeviceApply(context.Background(), 1)
-			require.ErrorIs(t, err, ErrApplyInProgress)
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+			_, err = repoB.LockDeviceApply(ctx, 1)
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+		})
+	}
+}
+
+// The repository sets no wait budget of its own: the caller's context bounds the whole acquisition,
+// so a wait ends at the context's deadline and not at applyLockWait, and the error is the context's.
+// Refusing the apply (ErrApplyInProgress) is the caller's decision, made where the budget is set.
+func TestApplyLockProviders_TheContextBoundsTheWaitNotTheRepository(t *testing.T) {
+	for _, server := range lockServers(t) {
+		t.Run(server.name, func(t *testing.T) {
+			shortLockWait(t, 200*time.Millisecond)
+			f := newLockFixture(t, server)
+			_, repoA := f.replica(t)
+			_, repoB := f.replica(t)
+
+			held, err := repoA.LockDeviceApply(context.Background(), 1)
+			require.NoError(t, err)
+			require.NotNil(t, held)
+			defer held.Unlock()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+			defer cancel()
+			started := time.Now()
+			_, err = repoB.LockDeviceApply(ctx, 1)
+			elapsed := time.Since(started)
+
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			assert.NotErrorIs(t, err, ErrApplyInProgress)
+			assert.GreaterOrEqual(t, elapsed, 700*time.Millisecond, "the wait ended at the repository's own budget, not the context's")
 		})
 	}
 }

@@ -189,6 +189,12 @@ All notable changes to this project are documented here. The project follows Con
   starts, so a writer that saves between that read and the save makes it answer 409, as a
   versioned body already did.
   (ginsys/shelly-manager#572)
+- An apply waits for the device lock under one deadline: the database lock no longer sets a
+  second, inner one, and the caller's wait (15 seconds) is the only budget. The answers do not
+  change (409 after the wait, the request's own error when it ends first). The OpenAPI entry of
+  `POST /api/v1/devices/{id}/config/new/apply` now lists the 500 that answers an apply whose database
+  lock was lost while it ran (the device may hold a mix of two applies, and the apply is repeated),
+  and the 400 and 408 it already returned. ginsys/shelly-manager#582.
 - The typed-configuration routes answer with the standard `{success, data | error}` envelope on
   success and on failure. `PUT /devices/{id}/config/typed`, `POST /config/validate-typed`,
   `POST /config/bulk-validate` and `GET /devices/{id}/config/typed/normalized` used to answer
