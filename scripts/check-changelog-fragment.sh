@@ -80,14 +80,22 @@ if [ "${#deleted[@]}" -gt 0 ] && grep -Eq "$VERSION_HEADING" "$tmp/added"; then
 			ok=0
 			continue
 		fi
-		while IFS= read -r line; do
-			[ -n "$line" ] || continue
-			if ! grep -Fxq -- "$line" "$tmp/added"; then
-				echo "FAIL release commit: the entry of $p is not among the lines added to CHANGELOG.md: $line"
-				ok=0
-				break
-			fi
-		done < <(tail -n +2 "$tmp/$(basename "$p")" | awk 'NF')
+		# The entry must be among the added lines as one block, in order.
+		"$here/changelog-assemble.sh" --body "$tmp/$(basename "$p")" >"$tmp/entry"
+		if ! awk '
+			FNR == NR { e[++n] = $0; next }
+			{ a[++m] = $0 }
+			END {
+				for (i = 1; i + n - 1 <= m; i++) {
+					hit = 1
+					for (j = 1; j <= n; j++) if (a[i + j - 1] != e[j]) { hit = 0; break }
+					if (hit) exit 0
+				}
+				exit 1
+			}' "$tmp/entry" "$tmp/added"; then
+			echo "FAIL release commit: the entry of $p is not among the lines added to CHANGELOG.md as one block"
+			ok=0
+		fi
 	done
 	[ "$ok" -eq 1 ] || exit 1
 	echo "PASS release commit: ${#deleted[@]} fragment(s) assembled into CHANGELOG.md"
