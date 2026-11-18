@@ -15,9 +15,11 @@ import (
 // an open connection (a statement, a transaction, a migration) through one
 // function, (*DB).AddError, and when Config.TranslateError is set and the
 // dialector implements gorm.ErrorTranslator it passes each error through
-// Translate first. So one wrapped dialector seals every site: the error
-// returned to the caller, the one the providers log, and the one in GORM's own
-// trace line.
+// Translate first. So one wrapped dialector seals the sites that record through
+// AddError (a statement, a transaction); the logger wrapper below seals GORM's
+// own trace line. A query made with Row or Rows stores the driver's error on the
+// statement without AddError (the migrator reads columns that way), so the
+// providers also seal what Migrate returns.
 func openGORM(dialector gorm.Dialector, config *gorm.Config) (*gorm.DB, error) {
 	config.TranslateError = true
 	return gorm.Open(sealedDialector{Dialector: dialector}, config)

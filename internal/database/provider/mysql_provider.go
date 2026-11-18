@@ -200,7 +200,9 @@ func (m *MySQLProvider) Migrate(models ...interface{}) error {
 	}
 
 	start := time.Now()
-	err := m.db.AutoMigrate(models...)
+	// A query the migrator makes with Rows or Row stores the driver's error
+	// without passing the dialector, so it is sealed here, before it is logged.
+	err := sealOpenError(m.db.AutoMigrate(models...))
 	duration := time.Since(start)
 
 	if err != nil {

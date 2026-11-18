@@ -181,7 +181,9 @@ func (s *SQLiteProvider) Migrate(models ...interface{}) error {
 	}
 
 	start := time.Now()
-	err := s.db.AutoMigrate(models...)
+	// A query the migrator makes with Rows or Row stores the driver's error
+	// without passing the dialector, so it is sealed here, before it is logged.
+	err := sealOpenError(s.db.AutoMigrate(models...))
 	duration := time.Since(start)
 
 	if err != nil {
