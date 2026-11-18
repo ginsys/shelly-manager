@@ -372,20 +372,49 @@ func (m *Manager) UpdateDeviceIfVersion(device *Device, version time.Time) error
 // the device that a client edits (ginsys/shelly-manager#502), and an observation is not an edit.
 // It reports gorm.ErrRecordNotFound when no device has that id.
 func (m *Manager) RecordDeviceSeen(id uint, status string, lastSeen time.Time) error {
-	result := m.GetDB().Model(&Device{}).Where("id = ?", id).
-		UpdateColumns(map[string]any{"status": status, "last_seen": lastSeen})
+	return m.updateDeviceColumns(id, "record-seen", map[string]any{"status": status, "last_seen": lastSeen}, false)
+}
+
+// UpdateDeviceSettings stores the settings text of a device and no other column
+// (ginsys/shelly-manager#565). A whole-row save of a row read earlier writes old values over
+// config_applied and desired_config, which the apply and the import write with their own UPDATE.
+// It moves updated_at: the device PUT is versioned on it and writes the whole row, so a PUT that
+// read the old settings must meet a 409 and not write them back. It reports gorm.ErrRecordNotFound
+// when no device has that id.
+func (m *Manager) UpdateDeviceSettings(id uint, settings string) error {
+	return m.updateDeviceColumns(id, "update-settings", map[string]any{"settings": settings}, true)
+}
+
+// UpdateDeviceDiscovery stores what a discovery found again about a known device (address,
+// status, last seen time and firmware) and no other column. Like UpdateDeviceSettings it moves
+// updated_at, because the address and the firmware are fields a client edits. It reports
+// gorm.ErrRecordNotFound when no device has that id.
+func (m *Manager) UpdateDeviceDiscovery(id uint, ip, status string, lastSeen time.Time, firmware string) error {
+	return m.updateDeviceColumns(id, "update-discovery", map[string]any{
+		"ip": ip, "status": status, "last_seen": lastSeen, "firmware": firmware,
+	}, true)
+}
+
+// updateDeviceColumns is one UPDATE of the named columns of one device. UpdateColumns runs no
+// hooks, so BeforeSave cannot seed a column that this call does not name; updated_at is named
+// here when the write is an edit. A missing device is the only error that is not the driver's.
+func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[string]any, moveVersion bool) error {
+	if moveVersion {
+		columns["updated_at"] = time.Now()
+	}
+	result := m.GetDB().Model(&Device{}).Where("id = ?", id).UpdateColumns(columns)
 	if result.Error != nil {
 		m.logger.WithFields(map[string]any{
 			"device_id": id,
 			"error":     result.Error.Error(),
-			"operation": "record-seen",
+			"operation": operation,
 			"table":     "devices",
 			"component": "database",
 		}).Error("Database operation failed")
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		// MySQL counts changed rows, not matched rows, so an observation equal to the stored one
+		// MySQL counts changed rows, not matched rows, so a write equal to the stored one
 		// affects none. Only a missing device is an error.
 		var found int64
 		if err := m.GetDB().Model(&Device{}).Where("id = ?", id).Count(&found).Error; err != nil {

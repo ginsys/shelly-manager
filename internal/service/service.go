@@ -476,6 +476,40 @@ func parseClientSettings(raw string) (clientSettings, error) {
 	return settings, nil
 }
 
+// saveWorkingLoginLocked stores the login that just worked for device, and writes the settings
+// column only (ginsys/shelly-manager#565). The caller holds clientMu, which every settings writer
+// of this service takes, and the network check that ran under it can be slow, so the text is built
+// from a fresh read of the stored row: device is the caller's copy, read before that check. The
+// stored document keeps every key it holds. A login that is stored now stays: it was saved on
+// purpose by a writer that does not take clientMu, and the login found here only spares the user
+// from typing one. device.Settings follows the text that was written.
+func (s *ShellyService) saveWorkingLoginLocked(device *database.Device, user, pass string) error {
+	stored, err := s.DB.GetDevice(device.ID)
+	if err != nil {
+		return err
+	}
+	document, err := decodeSettings(stored.Settings)
+	if err != nil {
+		return err
+	}
+	if current, _ := parseClientSettings(stored.Settings); current.AuthUser != "" || current.AuthPass != "" {
+		device.Settings = stored.Settings
+		return nil
+	}
+	document["auth_enabled"] = true
+	document["auth_user"] = user
+	document["auth_pass"] = pass
+	text, err := json.Marshal(document)
+	if err != nil {
+		return err
+	}
+	if err := s.DB.UpdateDeviceSettings(device.ID, string(text)); err != nil {
+		return err
+	}
+	device.Settings = string(text)
+	return nil
+}
+
 // getClientWithRetry returns a cached client or creates a new one with retry logic
 func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry bool) (shelly.Client, error) {
 	s.clientMu.Lock()
@@ -627,11 +661,8 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 				settings.AuthUser = authUser
 				settings.AuthPass = authPass
 
-				updatedSettings, _ := json.Marshal(settings)
-				device.Settings = string(updatedSettings)
-
 				// Update database with working credentials
-				if updateErr := s.DB.UpdateDevice(device); updateErr != nil {
+				if updateErr := s.saveWorkingLoginLocked(device, authUser, authPass); updateErr != nil {
 					s.logger.WithFields(map[string]any{
 						"device_id": device.ID,
 						"device_ip": device.IP,
@@ -767,7 +798,7 @@ func (s *ShellyService) clearRejectedLogin(device *database.Device, rejectedUser
 		return false
 	}
 	record.Settings = string(updated)
-	if err := s.DB.UpdateDevice(record); err != nil {
+	if err := s.DB.UpdateDeviceSettings(record.ID, record.Settings); err != nil {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"error":     err.Error(),
@@ -1207,7 +1238,7 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 	}
 	device.Settings = string(settingsJSON)
 
-	if err := s.DB.UpdateDevice(device); err != nil {
+	if err := s.DB.UpdateDeviceSettings(device.ID, device.Settings); err != nil {
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"error":     err.Error(),

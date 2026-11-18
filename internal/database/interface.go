@@ -20,6 +20,8 @@ type DatabaseInterface interface {
 	UpdateDevice(device *Device) error
 	UpdateDeviceIfVersion(device *Device, version time.Time) error
 	RecordDeviceSeen(id uint, status string, lastSeen time.Time) error
+	UpdateDeviceSettings(id uint, settings string) error
+	UpdateDeviceDiscovery(id uint, ip, status string, lastSeen time.Time, firmware string) error
 	DeleteDevice(id uint) error
 	GetDeviceByMAC(mac string) (*Device, error)
 	UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, initialName string) (*Device, error)
