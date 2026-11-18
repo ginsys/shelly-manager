@@ -1,112 +1,205 @@
 import api from './client'
 import type { APIResponse } from './types'
 
-// Bulk operation interfaces
-export interface BulkImportRequest {
-  deviceIds: number[]
-  configurations: Record<string, any>[]
+// The four bulk configuration routes act on exactly the devices named in `device_ids`, in the
+// direction of the per-device route of the same name, and answer synchronously with the shapes
+// below (ginsys/shelly-manager#248). The names are the wire names of the backend.
+//
+//   bulk-import   reads each device's live configuration into the manager (never writes a device)
+//   bulk-export   writes each device's stored import/export configuration to the device
+//   bulk-drift-*  compares stored and live configuration (never writes a device)
+
+export interface BulkRequest {
+  device_ids: number[]
   options?: {
-    stopOnError?: boolean
-    validateOnly?: boolean
-    timeout?: number
+    // After the first failed device the rest are reported `skipped` and are not contacted.
+    stop_on_error?: boolean
   }
 }
 
-export interface BulkExportRequest {
-  deviceIds: number[]
-  options?: {
-    format?: 'json' | 'yaml' | 'sma'
-    includeSecrets?: boolean
-    includeMetadata?: boolean
-  }
-}
+// bulk-import and bulk-export
+export type BulkConfigStatus = 'success' | 'failed' | 'skipped'
 
-export interface BulkDriftDetectRequest {
-  deviceIds: number[]
-  options?: {
-    stopOnError?: boolean
-    detailedReport?: boolean
-  }
-}
-
-export interface BulkDriftDetectEnhancedRequest {
-  deviceIds: number[]
-  options?: {
-    stopOnError?: boolean
-    detailedReport?: boolean
-    includeHistory?: boolean
-    compareWith?: 'template' | 'baseline' | 'peer'
-    threshold?: 'strict' | 'moderate' | 'relaxed'
-  }
-}
-
-export interface BulkOperationResult {
-  operationId: string
-  totalDevices: number
-  successCount: number
-  failureCount: number
-  skippedCount: number
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'partial'
-  startedAt: string
-  completedAt?: string
-  results: DeviceOperationResult[]
-}
-
-export interface DeviceOperationResult {
-  deviceId: number
-  deviceName: string
-  status: 'success' | 'failed' | 'skipped'
-  message?: string
+export interface BulkConfigDeviceResult {
+  device_id: number
+  device_name: string
+  device_ip: string
+  config_id?: number // import only
+  status: BulkConfigStatus
   error?: string
-  data?: any
 }
 
-// Bulk import configurations to multiple devices
-export async function bulkImport(request: BulkImportRequest): Promise<BulkOperationResult> {
-  const res = await api.post<APIResponse<BulkOperationResult>>('/config/bulk-import', request)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to execute bulk import'
-    throw new Error(msg)
+export interface BulkConfigResult {
+  total: number
+  success: number
+  failed: number
+  skipped: number
+  results: BulkConfigDeviceResult[]
+}
+
+// bulk-drift-detect
+export type BulkDriftStatus = 'synced' | 'drift' | 'error' | 'skipped'
+
+export interface BulkDriftDeviceResult {
+  device_id: number
+  device_name: string
+  device_ip: string
+  status: BulkDriftStatus
+  error?: string
+  drift_summary?: string
+  difference_count?: number
+  drift?: unknown
+}
+
+export interface BulkDriftResult {
+  total: number
+  in_sync: number
+  drifted: number
+  errors: number
+  skipped: number
+  results: BulkDriftDeviceResult[]
+  started_at: string
+  completed_at: string
+  duration: number // nanoseconds
+}
+
+// bulk-drift-detect-enhanced: the comprehensive report of the devices that ran. Only the fields
+// the dialog reads are typed. If the report cannot be stored the route answers a BulkDriftResult.
+export interface BulkDriftReport {
+  id: number
+  report_type: string
+  summary: {
+    total_devices: number
+    devices_in_sync: number
+    devices_drifted: number
+    devices_errored: number
   }
-  return res.data.data
+  devices: {
+    device_id: number
+    device_name: string
+    device_ip: string
+    status: 'synced' | 'drift' | 'error'
+    total_differences: number
+    error?: string
+  }[]
 }
 
-// Bulk export configurations from multiple devices
-export async function bulkExport(request: BulkExportRequest): Promise<BulkOperationResult> {
-  const res = await api.post<APIResponse<BulkOperationResult>>('/config/bulk-export', request)
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to execute bulk export'
-    throw new Error(msg)
+// What the dialog shows for any of the answers.
+export type BulkTone = 'success' | 'failure' | 'skipped' | 'warning'
+
+export interface BulkView {
+  stats: { label: string; value: number; tone: BulkTone }[]
+  rows: { deviceId: number; deviceName: string; status: string; tone: BulkTone; message: string }[]
+}
+
+export type BulkAnswer = BulkConfigResult | BulkDriftResult | BulkDriftReport
+
+async function post<T>(path: string, request: BulkRequest, failure: string): Promise<T> {
+  let body: APIResponse<T>
+  try {
+    body = (await api.post<APIResponse<T>>(path, request)).data
+  } catch (e: any) {
+    // A refused request is a 400 whose `details` says why.
+    const error = e?.response?.data?.error
+    const details = typeof error?.details === 'string' ? error.details : undefined
+    throw new Error(details || error?.message || e?.message || failure)
   }
-  return res.data.data
+  if (!body.success || !body.data) {
+    throw new Error(body.error?.message || failure)
+  }
+  return body.data
 }
 
-// Bulk drift detection on multiple devices
-export async function bulkDriftDetect(
-  request: BulkDriftDetectRequest
-): Promise<BulkOperationResult> {
-  const res = await api.post<APIResponse<BulkOperationResult>>(
+// Read each device's live configuration into the manager.
+export function bulkImport(request: BulkRequest): Promise<BulkConfigResult> {
+  return post<BulkConfigResult>('/config/bulk-import', request, 'Failed to execute bulk import')
+}
+
+// Write each device's stored import/export configuration to the device.
+export function bulkExport(request: BulkRequest): Promise<BulkConfigResult> {
+  return post<BulkConfigResult>('/config/bulk-export', request, 'Failed to execute bulk export')
+}
+
+// Compare stored and live configuration.
+export function bulkDriftDetect(request: BulkRequest): Promise<BulkDriftResult> {
+  return post<BulkDriftResult>(
     '/config/bulk-drift-detect',
-    request
+    request,
+    'Failed to execute bulk drift detection'
   )
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to execute bulk drift detection'
-    throw new Error(msg)
-  }
-  return res.data.data
 }
 
-// Enhanced bulk drift detection with advanced options
-export async function bulkDriftDetectEnhanced(
-  request: BulkDriftDetectEnhancedRequest
-): Promise<BulkOperationResult> {
-  const res = await api.post<APIResponse<BulkOperationResult>>(
+// The same selection, answered with the comprehensive report.
+export function bulkDriftDetectEnhanced(
+  request: BulkRequest
+): Promise<BulkDriftReport | BulkDriftResult> {
+  return post<BulkDriftReport | BulkDriftResult>(
     '/config/bulk-drift-detect-enhanced',
-    request
+    request,
+    'Failed to execute enhanced bulk drift detection'
   )
-  if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to execute enhanced bulk drift detection'
-    throw new Error(msg)
+}
+
+const configTone: Record<BulkConfigStatus, BulkTone> = {
+  success: 'success',
+  failed: 'failure',
+  skipped: 'skipped'
+}
+
+const driftTone: Record<BulkDriftStatus, BulkTone> = {
+  synced: 'success',
+  drift: 'warning',
+  error: 'failure',
+  skipped: 'skipped'
+}
+
+// Turn an answer of any of the four routes into the counts and rows the dialog shows.
+export function viewOf(answer: BulkAnswer): BulkView {
+  if ('summary' in answer) {
+    return {
+      stats: [
+        { label: 'In sync', value: answer.summary.devices_in_sync, tone: 'success' },
+        { label: 'Drifted', value: answer.summary.devices_drifted, tone: 'warning' },
+        { label: 'Errors', value: answer.summary.devices_errored, tone: 'failure' }
+      ],
+      rows: answer.devices.map((d) => ({
+        deviceId: d.device_id,
+        deviceName: d.device_name,
+        status: d.status,
+        tone: driftTone[d.status] ?? 'warning',
+        message: d.error || (d.total_differences ? `${d.total_differences} difference(s)` : '')
+      }))
+    }
   }
-  return res.data.data
+  if ('in_sync' in answer) {
+    return {
+      stats: [
+        { label: 'In sync', value: answer.in_sync, tone: 'success' },
+        { label: 'Drifted', value: answer.drifted, tone: 'warning' },
+        { label: 'Errors', value: answer.errors, tone: 'failure' },
+        { label: 'Skipped', value: answer.skipped, tone: 'skipped' }
+      ],
+      rows: answer.results.map((d) => ({
+        deviceId: d.device_id,
+        deviceName: d.device_name,
+        status: d.status,
+        tone: driftTone[d.status] ?? 'warning',
+        message: d.error || d.drift_summary || ''
+      }))
+    }
+  }
+  return {
+    stats: [
+      { label: 'Success', value: answer.success, tone: 'success' },
+      { label: 'Failed', value: answer.failed, tone: 'failure' },
+      { label: 'Skipped', value: answer.skipped, tone: 'skipped' }
+    ],
+    rows: answer.results.map((d) => ({
+      deviceId: d.device_id,
+      deviceName: d.device_name,
+      status: d.status,
+      tone: configTone[d.status] ?? 'failure',
+      message: d.error || ''
+    }))
+  }
 }
