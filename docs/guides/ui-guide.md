@@ -762,12 +762,12 @@ The UI is designed to meet WCAG 2.1 AA accessibility standards:
 
 ##### Authentication Issues
 **Symptoms**: WebSocket connection denied, 401 errors
-**Causes**: Invalid or expired admin API key
+**Causes**: Missing, wrong or rotated admin API key
 **Solutions**:
-1. Verify admin API key is properly configured
-2. Check key has not expired
-3. Try logging out and back in
-4. Contact administrator for key verification
+1. Open the "Admin key" dialog from the header and enter the current key. The dialog also opens by itself on the first refused request.
+2. If the dialog says "That key was not accepted.", the server does not know that key; check it with the administrator, then enter it again and reload the page.
+3. Use "Forget key" in the header to clear a key kept for the tab. The key is kept in this browser tab only and is forgotten when the tab closes, so each new tab asks once.
+4. On the Metrics page, a socket the server refuses at the handshake shows no error; open the dialog from the header, then reload.
 
 ### Debug Information
 

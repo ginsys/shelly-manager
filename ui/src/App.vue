@@ -8,11 +8,13 @@
       <button class="banner-btn subtle" @click="dismiss">Dismiss</button>
     </div>
     <MainLayout />
+    <AdminKeyDialog />
   </div>
 </template>
 
 <script setup lang="ts">
 import MainLayout from './layouts/MainLayout.vue'
+import AdminKeyDialog from './components/AdminKeyDialog.vue'
 import api from './api/client'
 import { shouldShowVersionBanner } from './utils/version-banner'
 import { onMounted, ref } from 'vue'

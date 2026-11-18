@@ -1,0 +1,183 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// The global test setup replaces axios with a stub. This file needs the real one, so the 401 path is
+// exercised the way a browser meets it: axios builds the error (its own code, ERR_BAD_REQUEST) and
+// the server's envelope sits in response.data.
+vi.mock('axios', async () => await vi.importActual('axios'))
+
+import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+
+type Answer = { status: number; body: unknown }
+
+async function load() {
+  vi.resetModules()
+  const key = await import('../adminKey')
+  const { api } = await import('../client')
+  const calls: { auth: string | undefined; url: string | undefined }[] = []
+  let answer: (auth: string | undefined) => Answer = () => ({ status: 200, body: { success: true } })
+  api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
+    const auth = (config.headers as any)?.Authorization as string | undefined
+    calls.push({ auth, url: config.url })
+    const a = answer(auth)
+    const response = { data: a.body, status: a.status, statusText: '', headers: {}, config } as any
+    if (a.status >= 200 && a.status < 300) return response
+    throw new AxiosError(
+      `Request failed with status code ${a.status}`,
+      a.status >= 500 ? AxiosError.ERR_BAD_RESPONSE : AxiosError.ERR_BAD_REQUEST,
+      config,
+      null,
+      response,
+    )
+  }
+  return { key, api, calls, setAnswer: (f: typeof answer) => (answer = f) }
+}
+
+const unauthorized = { status: 401, body: { success: false, error: { code: 'UNAUTHORIZED', message: 'Admin authorization required' } } }
+const ok = { status: 200, body: { success: true, data: { ok: true } } }
+
+describe('client admin-key handling', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    delete (window as any).__ADMIN_KEY__
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('sends no Authorization header when no key is known', async () => {
+    const { api, calls } = await load()
+    await api.get('/devices')
+    expect(calls[0].auth).toBeUndefined()
+  })
+
+  it('sends the entered key as a bearer token', async () => {
+    const { api, key, calls } = await load()
+    key.setAdminKey('abc')
+    await api.get('/devices')
+    expect(calls[0].auth).toBe('Bearer abc')
+  })
+
+  it('opens the prompt on the first admin 401 and retries once with the entered key', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    setAnswer((auth) => (auth === 'Bearer good' ? ok : unauthorized))
+
+    const pending = api.get('/devices')
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.submitAdminKey('good')
+    const res = await pending
+
+    expect(res.data.data.ok).toBe(true)
+    expect(calls.map((c) => c.auth)).toEqual([undefined, 'Bearer good'])
+  })
+
+  it('retries a POST body unchanged', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    setAnswer((auth) => (auth === 'Bearer good' ? ok : unauthorized))
+    const pending = api.post('/devices', { name: 'x' })
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.submitAdminKey('good')
+    await pending
+    expect(calls).toHaveLength(2)
+    expect(calls[1].url).toBe('/devices')
+  })
+
+  it('a second 401 forgets the key, reopens the prompt with a message and rejects; no loop', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    setAnswer(() => unauthorized)
+
+    const pending = api.get('/devices')
+    const settled = pending.then(
+      () => 'resolved',
+      (e) => e,
+    )
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.submitAdminKey('wrong')
+    const err: any = await settled
+
+    expect(err.response.status).toBe(401)
+    expect(calls).toHaveLength(2) // the original and exactly one retry
+    expect(key.getAdminKey()).toBeUndefined()
+    expect(key.hasSessionKey.value).toBe(false)
+    expect(key.promptOpen.value).toBe(true)
+    expect(key.promptMessage.value).toBe('That key was not accepted.')
+  })
+
+  it('does not prompt for a 401 whose body is not the admin guard', async () => {
+    const { api, key, setAnswer } = await load()
+    setAnswer(() => ({ status: 401, body: { success: false, error: { code: 'DEVICE_AUTH', message: 'device said no' } } }))
+    await expect(api.get('/devices/1/status')).rejects.toMatchObject({ response: { status: 401 } })
+    expect(key.promptOpen.value).toBe(false)
+  })
+
+  it('does not prompt for a 401 with a plain-text body', async () => {
+    const { api, key, setAnswer } = await load()
+    setAnswer(() => ({ status: 401, body: 'Agent not registered' }))
+    await expect(api.get('/x')).rejects.toMatchObject({ response: { status: 401 } })
+    expect(key.promptOpen.value).toBe(false)
+  })
+
+  it('reads the code from the body, never from axios error.code', async () => {
+    const { api, key, setAnswer } = await load()
+    // A forged shape: error.code is the string UNAUTHORIZED, the body code is not the admin guard.
+    setAnswer(() => ({ status: 401, body: { success: false, error: { code: 'SOMETHING_ELSE' } } }))
+    const err: any = await api.get('/x').catch((e) => e)
+    expect(err.code).toBe('ERR_BAD_REQUEST')
+    err.code = 'UNAUTHORIZED'
+    // drive the response handler directly with that error
+    const handler = (api.interceptors.response as any).handlers.find((h: any) => h?.rejected)?.rejected
+    await expect(handler(err)).rejects.toBe(err)
+    expect(key.promptOpen.value).toBe(false)
+  })
+
+  it('does not prompt for a non-401 failure', async () => {
+    const { api, key, setAnswer } = await load()
+    setAnswer(() => ({ status: 500, body: { success: false, error: { code: 'UNAUTHORIZED' } } }))
+    await expect(api.get('/x')).rejects.toMatchObject({ response: { status: 500 } })
+    expect(key.promptOpen.value).toBe(false)
+  })
+
+  it('concurrent 401s share one prompt and all retry with the key', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    setAnswer((auth) => (auth === 'Bearer good' ? ok : unauthorized))
+    const all = Promise.all([api.get('/a'), api.get('/b'), api.get('/c')])
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.submitAdminKey('good')
+    await all
+    expect(calls).toHaveLength(6)
+    expect(calls.filter((c) => c.auth === 'Bearer good')).toHaveLength(3)
+  })
+
+  it('cancel rejects with the original 401', async () => {
+    const { api, key, setAnswer } = await load()
+    setAnswer(() => unauthorized)
+    const pending = api.get('/devices')
+    const settled = pending.catch((e) => e)
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.cancelAdminKeyPrompt()
+    const err: any = await settled
+    expect(err.response.status).toBe(401)
+  })
+
+  it('after cancel a further 401 rejects without reopening the prompt (a polling page stays quiet)', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    setAnswer(() => unauthorized)
+    const first = api.get('/devices/1/status').catch((e) => e)
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.cancelAdminKeyPrompt()
+    await first
+
+    const before = calls.length
+    await expect(api.get('/devices/1/status')).rejects.toMatchObject({ response: { status: 401 } })
+    expect(calls.length).toBe(before + 1) // one call, no retry
+    expect(key.promptOpen.value).toBe(false)
+
+    // the header button lifts the cancel
+    key.openAdminKeyPrompt()
+    key.cancelAdminKeyPrompt()
+    key.openAdminKeyPrompt()
+    const again = api.get('/devices/1/status').catch((e) => e)
+    expect(key.promptOpen.value).toBe(true)
+    key.cancelAdminKeyPrompt()
+    await again
+  })
+})
