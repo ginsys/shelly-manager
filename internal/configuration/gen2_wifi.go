@@ -76,13 +76,17 @@ func gen2WiFiFromDoc(section interface{}) *WiFiConfiguration {
 }
 
 // unmappedWiFiSettings returns the paths of the Wi-Fi settings that the Gen2 apply does not write,
-// and the rest of the section, or nil when nothing else is set.
+// and the rest of the section for the round trip (without the write-only password), or nil when
+// nothing else is set.
 func unmappedWiFiSettings(w *WiFiConfiguration) ([]string, *WiFiConfiguration) {
 	if w == nil {
 		return nil, nil
 	}
 	rest := *w
 	var paths []string
+	// The password is write-only: no read returns it, so the round trip cannot compare it, and a
+	// section that holds only a password is a station write like any other.
+	rest.Password = nil
 	if rest.Enable != nil && !*rest.Enable {
 		paths, rest.Enable = append(paths, "wifi.enable"), nil
 	}

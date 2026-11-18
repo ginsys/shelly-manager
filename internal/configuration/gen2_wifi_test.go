@@ -294,6 +294,22 @@ func TestApplyDesiredConfig_Gen2KeepsTheWiFiPasswordOutOfFailuresAndLogs(t *test
 	assert.Contains(t, paths, "wifi.sta.pass")
 }
 
+// A password alone changes the password of the network the device is on: the device wants a
+// password with an ssid, and nothing requires an ssid with a password. The password is
+// write-only, so it must not make the round trip report the whole section as unmapped.
+func TestApplyDesiredConfig_Gen2WritesAPasswordAlone(t *testing.T) {
+	desired := &DeviceConfiguration{WiFi: &WiFiConfiguration{Password: StringPtr("wifi-pass-2")}}
+	svc, _ := newGen2Service(t, desired)
+	dev := newFakeGen2Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied, "%v", result.VerifyResult)
+	require.Len(t, dev.calls, 1)
+	assert.Equal(t, map[string]interface{}{"sta": map[string]interface{}{"pass": "wifi-pass-2"}}, dev.calls[0].config)
+}
+
 func TestApplyDesiredConfig_Gen2AsksForARebootWhenTheWiFiAnswerDoes(t *testing.T) {
 	svc, _ := newGen2Service(t, gen2WiFiDesired())
 	dev := newFakeGen2Device()
