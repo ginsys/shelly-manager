@@ -194,7 +194,7 @@ jobs:
         MYSQL_TEST_USER: root
         MYSQL_TEST_PASSWORD: root
       run: |
-        go test ./internal/database -run '^(TestConfigTemplateScopeMigrationProviders|TestUpdateDeviceIfVersionProviders|TestUpdateDeviceZeroTimesKeptProviders)$' -v
+        go test ./internal/database -run '^(TestConfigTemplateScopeMigrationProviders|TestUpdateDeviceIfVersionProviders|TestUpdateDeviceZeroTimesKeptProviders|TestUpdateDeviceColumnsProviders)$' -v
         go test ./internal/sync -run '^TestImportZeroLastSeenProviders$' -v
         go test ./internal/configuration -run '^TestApplyLockProviders_' -v
         go test ./internal/database -run '^TestPoolDefaultProviders$' -v
