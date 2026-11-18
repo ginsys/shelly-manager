@@ -147,8 +147,8 @@ When `security.admin_api_key` is set, every `/api/v1` route requires the admin A
 - `/api/v1/import/*` - All import endpoints
 - `/api/v1/admin/*` - Admin operations
 
-The web UI sends the key only when it has one (`VITE_ADMIN_KEY` at build time, or the dev-only
-`/app-config.js`), so a UI without the key gets 401 from the device list.
+The web UI sends the key only when it has one (`VITE_ADMIN_KEY` at build time, as above), so a UI
+without the key gets 401 from the device list.
 
 ### Testing with curl
 ```bash
