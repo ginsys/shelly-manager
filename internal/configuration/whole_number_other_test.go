@@ -66,7 +66,12 @@ func TestGen1Converter_FromAPIConfig_MQTTAndCoIoTNumbersReadAsWholeNumbersOnly(t
 func TestConvertRawToTyped_MQTTPortReadsAsWholeNumberOnly(t *testing.T) {
 	service := createTestService(t)
 	read := func(entry map[string]interface{}) interface{} {
-		typed, _, err := service.ConvertRawToTyped(mustJSON(t, map[string]interface{}{"mqtt": entry}))
+		// The manual conversion runs only where the document does not parse as a typed one, so a wifi
+		// section with a flag that is no bool sits beside the MQTT one to send every shape through it.
+		typed, _, err := service.ConvertRawToTyped(mustJSON(t, map[string]interface{}{
+			"mqtt": entry,
+			"wifi": map[string]interface{}{"enable": "not a bool"},
+		}))
 		if err != nil {
 			t.Fatalf("ConvertRawToTyped: %v", err)
 		}
@@ -82,12 +87,7 @@ func TestConvertRawToTyped_MQTTPortReadsAsWholeNumberOnly(t *testing.T) {
 	if got := read(map[string]interface{}{"server": "broker"}); got != nil {
 		t.Errorf("absent: got %v, want unset", got)
 	}
-	// The manual conversion runs only where the document does not parse as a typed one. A whole
-	// number of 2^53 does parse (it is a valid int), so that shape never reaches the helper here.
 	for _, tc := range notWholeNumbers {
-		if tc.value == 9007199254740992 {
-			continue
-		}
 		if got := read(map[string]interface{}{"port": tc.value}); got != nil {
 			t.Errorf("%s: got %v, want unset", tc.name, got)
 		}
