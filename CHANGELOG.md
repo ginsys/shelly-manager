@@ -223,6 +223,12 @@ All notable changes to this project are documented here. The project follows Con
   Before, a stale address (for example a moved DHCP lease) sent one device's name, relays, MQTT,
   Wi-Fi and login to another device. Other device writes (control actions, credential writes, Wi-Fi
   provisioning) are unchanged. Fixes ginsys/shelly-manager#551.
+- The Gen2 and Gen3 apply now names a negative channel id on its own, at the entry's place in
+  the desired list, such as `relay.relays.1.id` or `input.inputs.1.id`, with the other 422
+  refusals. Before, the refusal named the whole section (`relay`, `input`) and a stray key
+  such as `switch:-1`, or, for an entry that sets nothing, did not refuse at all. A negative id
+  is now refused on every entry, also on one that sets nothing, because no channel with that id
+  can be written. Fixes ginsys/shelly-manager#535.
 - The configuration merge now pairs the channels of a template and an override by id, not by
   list position. Before, a sparse override such as `[{"id": 1, "name": "B"}]` over a template
   with channels 0 and 1 was merged into the first list entry and copied its id over it, so

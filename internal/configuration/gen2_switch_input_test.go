@@ -546,25 +546,76 @@ func TestUnsupportedGen2Settings_NamesAnOutOfRangeTimerAtItsOwnIndex(t *testing.
 	assert.Equal(t, []string{"relay.relays.1.auto_on"}, unsupported)
 }
 
+// A negative channel id can never be written, so the refusal names that entry's id at its place in
+// the desired list. It does not name the whole section, and no stray raw key such as switch:-1.
+func TestUnsupportedGen2Settings_NamesANegativeChannelIDAtItsOwnIndex(t *testing.T) {
+	relay := func(list ...SingleRelayConfig) *DeviceConfiguration {
+		return &DeviceConfiguration{Relay: &RelayConfig{Relays: list}}
+	}
+	input := func(list ...SingleInputConfig) *DeviceConfiguration {
+		return &DeviceConfiguration{Input: &InputConfig{Inputs: list}}
+	}
+	cases := []struct {
+		name    string
+		desired *DeviceConfiguration
+		want    []string
+	}{
+		{"relay after an empty entry", relay(SingleRelayConfig{ID: 0}, SingleRelayConfig{ID: -1, Name: StringPtr("bad")}), []string{"relay.relays.1.id"}},
+		{"input after an empty entry", input(SingleInputConfig{ID: 0}, SingleInputConfig{ID: -1, Name: StringPtr("bad")}), []string{"input.inputs.1.id"}},
+		{"relay after a valid entry", relay(SingleRelayConfig{ID: 0}, SingleRelayConfig{ID: 1, Name: StringPtr("good")}, SingleRelayConfig{ID: -1, Name: StringPtr("bad")}), []string{"relay.relays.2.id"}},
+		{"input after a valid entry", input(SingleInputConfig{ID: 0}, SingleInputConfig{ID: 1, Name: StringPtr("good")}, SingleInputConfig{ID: -1, Name: StringPtr("bad")}), []string{"input.inputs.2.id"}},
+		{"relay that sets nothing", relay(SingleRelayConfig{ID: 0, Name: StringPtr("good")}, SingleRelayConfig{ID: -1}), []string{"relay.relays.1.id"}},
+		{"input that sets nothing", input(SingleInputConfig{ID: 0, Name: StringPtr("good")}, SingleInputConfig{ID: -1}), []string{"input.inputs.1.id"}},
+		{"two negative relays", relay(SingleRelayConfig{ID: -2, Name: StringPtr("a")}, SingleRelayConfig{ID: 0, Name: StringPtr("good")}, SingleRelayConfig{ID: -1, Name: StringPtr("b")}), []string{"relay.relays.0.id", "relay.relays.2.id"}},
+		{"two negative inputs", input(SingleInputConfig{ID: -2, Name: StringPtr("a")}, SingleInputConfig{ID: 0, Name: StringPtr("good")}, SingleInputConfig{ID: -1, Name: StringPtr("b")}), []string{"input.inputs.0.id", "input.inputs.2.id"}},
+		{"the same negative id twice", relay(SingleRelayConfig{ID: -1, Name: StringPtr("a")}, SingleRelayConfig{ID: -1, Name: StringPtr("b")}), []string{"relay.relays.0.id", "relay.relays.1.id"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), c.desired)
+
+			require.NoError(t, err)
+			assert.Equal(t, c.want, unsupported)
+		})
+	}
+}
+
+// A valid list is not refused by the negative id check.
+func TestUnsupportedGen2Settings_AcceptsNonNegativeChannelIDs(t *testing.T) {
+	desired := &DeviceConfiguration{
+		Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0}, {ID: 1, Name: StringPtr("good")}}},
+		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0}, {ID: 1, Name: StringPtr("good")}}},
+	}
+
+	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+
+	require.NoError(t, err)
+	assert.Empty(t, unsupported)
+}
+
 // A channel with nothing to write is left out of the check, and a path that the round trip reports
 // still names the channel's place in the desired list.
+//
+// A negative id no longer reaches the round trip, since it is named on its own, so no desired value
+// is left that only the round trip refuses for a switch or an input. The test checks the two parts
+// that carry the index: the check records the desired index of each channel it keeps, and a path
+// that counts kept channels is turned back into the desired index.
 func TestUnsupportedGen2Settings_NamesARoundTripRefusalAtItsOwnIndex(t *testing.T) {
-	relays := &DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{
-		{ID: 0}, {ID: 1, Name: StringPtr("good")}, {ID: -1, Name: StringPtr("bad")},
-	}}}
-	inputs := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{
-		{ID: 0}, {ID: 1, Name: StringPtr("good")}, {ID: -1, Name: StringPtr("bad")},
-	}}}
+	desired := &DeviceConfiguration{
+		Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0}, {ID: 1, Name: StringPtr("good")}, {ID: 2, Name: StringPtr("other")}}},
+		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0}, {ID: 1, Name: StringPtr("good")}, {ID: 2, Name: StringPtr("other")}}},
+	}
 
-	relayPaths, err := unsupportedGen2Settings(NewGen2Converter(nil), relays)
-	require.NoError(t, err)
-	inputPaths, err := unsupportedGen2Settings(NewGen2Converter(nil), inputs)
-	require.NoError(t, err)
+	_, _, kept := unmappedChannelSettings(desired)
 
-	assert.Contains(t, relayPaths, "relay.relays.2")
-	assert.NotContains(t, relayPaths, "relay.relays.1", "the valid entry is not refused")
-	assert.Contains(t, inputPaths, "input.inputs.2")
-	assert.NotContains(t, inputPaths, "input.inputs.1", "the valid entry is not refused")
+	assert.Equal(t, []int{1, 2}, kept["relay.relays"], "the empty entry 0 is left out, the others keep their index")
+	assert.Equal(t, []int{1, 2}, kept["input.inputs"])
+	assert.Equal(t, "relay.relays.2", originalChannelPath("relay.relays.1", kept))
+	assert.Equal(t, "relay.relays.1.name", originalChannelPath("relay.relays.0.name", kept))
+	assert.Equal(t, "input.inputs.2", originalChannelPath("input.inputs.1", kept))
+	assert.Equal(t, "input.inputs.1", originalChannelPath("input.inputs.0", kept))
+	assert.Equal(t, "relay.relays.9", originalChannelPath("relay.relays.9", kept), "an index past the kept list is left as it is")
+	assert.Equal(t, "relay", originalChannelPath("relay", kept))
 }
 
 func TestVerifyConfig_Gen2PairsChannelsByID(t *testing.T) {
