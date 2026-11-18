@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -122,26 +123,47 @@ func containerEntries(t *testing.T, rel string) []envEntry {
 	return out
 }
 
+// generatorLiterals returns the literals of the configMapGenerator entries in one
+// kustomization, from the generator called only, or from every generator when only is "".
+func generatorLiterals(d *yaml.Decoder, rel, only string) ([]envEntry, error) {
+	var doc struct {
+		Generators []struct {
+			Name     string   `yaml:"name"`
+			Literals []string `yaml:"literals"`
+		} `yaml:"configMapGenerator"`
+	}
+	if err := d.Decode(&doc); err != nil {
+		return nil, err
+	}
+	var out []envEntry
+	for _, g := range doc.Generators {
+		if only != "" && g.Name != only {
+			continue
+		}
+		for _, lit := range g.Literals {
+			k, v, _ := strings.Cut(lit, "=")
+			out = append(out, envEntry{Source: rel + " literal", Name: k, Value: v})
+		}
+	}
+	return out, nil
+}
+
 // generatorEntries returns the configMapGenerator literals of an overlay.
 func generatorEntries(t *testing.T, rel string) []envEntry {
+	return readGenerator(t, rel, "")
+}
+
+// managerConfigEntries returns only the literals that land in the manager's ConfigMap.
+func managerConfigEntries(t *testing.T, rel string) []envEntry {
+	return readGenerator(t, rel, managerConfigMap)
+}
+
+func readGenerator(t *testing.T, rel, only string) []envEntry {
 	t.Helper()
 	var out []envEntry
-	readKustomizeYAML(t, rel, func(d *yaml.Decoder) error {
-		var doc struct {
-			Generators []struct {
-				Literals []string `yaml:"literals"`
-			} `yaml:"configMapGenerator"`
-		}
-		if err := d.Decode(&doc); err != nil {
-			return err
-		}
-		for _, g := range doc.Generators {
-			for _, lit := range g.Literals {
-				k, v, _ := strings.Cut(lit, "=")
-				out = append(out, envEntry{Source: rel + " literal", Name: k, Value: v})
-			}
-		}
-		return nil
+	readKustomizeYAML(t, rel, func(d *yaml.Decoder) (err error) {
+		out, err = generatorLiterals(d, rel, only)
+		return err
 	})
 	return out
 }
@@ -319,4 +341,231 @@ func TestDeployEnvNames_OverlayReachesTheApp(t *testing.T) {
 			t.Errorf("logging = %q / %q, want debug / text", cfg.Logging.Level, cfg.Logging.Format)
 		}
 	})
+}
+
+// The provisioner runs on the host network, so it reaches the manager only through a URL that
+// names the overlay's rendered Service and port, and only if cluster DNS applies to a host-network
+// pod (#591). The expected URL is derived from the files that render the Service: the overlay's
+// namePrefix, the base Service's name and its http port.
+
+const (
+	provisionerURLName = "SHELLY_API_URL"
+	managerConfigMap   = "shelly-manager-config"
+)
+
+// provisionerFacts is what the base DaemonSet says about how the provisioner finds the manager.
+type provisionerFacts struct {
+	HostNetwork bool
+	DNSPolicy   string
+	URLRef      string // "<configmap>/<key>" that SHELLY_API_URL is read from; empty when it is not
+}
+
+// provisionerDaemonSet reads the DaemonSet of the base manifests.
+func provisionerDaemonSet(t *testing.T) provisionerFacts {
+	t.Helper()
+	var out provisionerFacts
+	found := false
+	readKustomizeYAML(t, "base/deployment.yaml", func(d *yaml.Decoder) error {
+		for {
+			var doc struct {
+				Kind string `yaml:"kind"`
+				Spec struct {
+					Template struct {
+						Spec struct {
+							HostNetwork bool   `yaml:"hostNetwork"`
+							DNSPolicy   string `yaml:"dnsPolicy"`
+							Containers  []struct {
+								Name string `yaml:"name"`
+								Env  []struct {
+									Name      string `yaml:"name"`
+									ValueFrom struct {
+										ConfigMapKeyRef struct {
+											Name string `yaml:"name"`
+											Key  string `yaml:"key"`
+										} `yaml:"configMapKeyRef"`
+									} `yaml:"valueFrom"`
+								} `yaml:"env"`
+							} `yaml:"containers"`
+						} `yaml:"spec"`
+					} `yaml:"template"`
+				} `yaml:"spec"`
+			}
+			if err := d.Decode(&doc); errors.Is(err, io.EOF) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+			if doc.Kind != "DaemonSet" {
+				continue
+			}
+			spec := doc.Spec.Template.Spec
+			for _, c := range spec.Containers {
+				if c.Name != "provisioner" {
+					continue
+				}
+				found = true
+				out = provisionerFacts{HostNetwork: spec.HostNetwork, DNSPolicy: spec.DNSPolicy}
+				for _, e := range c.Env {
+					if ref := e.ValueFrom.ConfigMapKeyRef; e.Name == provisionerURLName && ref.Name != "" {
+						out.URLRef = ref.Name + "/" + ref.Key
+					}
+				}
+			}
+		}
+	})
+	if !found {
+		t.Fatal("base/deployment.yaml has no DaemonSet container named provisioner; the reader is broken")
+	}
+	return out
+}
+
+// managerService returns the name and the http port of the base manager Service.
+func managerService(t *testing.T) (string, int) {
+	t.Helper()
+	const name = "shelly-manager"
+	port := 0
+	readKustomizeYAML(t, "base/service.yaml", func(d *yaml.Decoder) error {
+		for {
+			var doc struct {
+				Kind     string `yaml:"kind"`
+				Metadata struct {
+					Name string `yaml:"name"`
+				} `yaml:"metadata"`
+				Spec struct {
+					Ports []struct {
+						Name string `yaml:"name"`
+						Port int    `yaml:"port"`
+					} `yaml:"ports"`
+				} `yaml:"spec"`
+			}
+			if err := d.Decode(&doc); errors.Is(err, io.EOF) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+			if doc.Kind != "Service" || doc.Metadata.Name != name {
+				continue
+			}
+			for _, p := range doc.Spec.Ports {
+				if p.Name == "http" {
+					port = p.Port
+				}
+			}
+		}
+	})
+	if port == 0 {
+		t.Fatalf("base/service.yaml has no Service %s with a port named http; the reader is broken", name)
+	}
+	return name, port
+}
+
+// overlayPrefix returns the namePrefix of an overlay's kustomization.
+func overlayPrefix(t *testing.T, rel string) string {
+	t.Helper()
+	var doc struct {
+		NamePrefix string `yaml:"namePrefix"`
+	}
+	readKustomizeYAML(t, rel, func(d *yaml.Decoder) error { return d.Decode(&doc) })
+	return doc.NamePrefix
+}
+
+// overlayNames lists the directories under overlays/, so a new overlay is checked without an edit here.
+func overlayNames(t *testing.T) []string {
+	t.Helper()
+	dirs, err := os.ReadDir(filepath.Join(kustomizeDir, "overlays"))
+	if err != nil {
+		t.Fatalf("read overlays: %v", err)
+	}
+	var out []string
+	for _, d := range dirs {
+		if d.IsDir() {
+			out = append(out, d.Name())
+		}
+	}
+	return out
+}
+
+// provisionerURLProblems lists what keeps the provisioner of one overlay from reaching the manager.
+func provisionerURLProblems(source, prefix, service string, port int, literals []envEntry, ds provisionerFacts) []string {
+	var out []string
+	want := fmt.Sprintf("http://%s%s:%d", prefix, service, port)
+	got, set := "", false
+	for _, e := range literals {
+		if e.Name == provisionerURLName {
+			got, set = e.Value, true
+		}
+	}
+	switch {
+	case !set:
+		out = append(out, source+": sets no "+provisionerURLName+" in "+managerConfigMap+", so the provisioner's configMapKeyRef has no key to read and the pod does not start")
+	case got != want:
+		out = append(out, fmt.Sprintf("%s: %s = %q, want %q (the rendered Service and its port)", source, provisionerURLName, got, want))
+	}
+	if wantRef := managerConfigMap + "/" + provisionerURLName; ds.URLRef != wantRef {
+		out = append(out, fmt.Sprintf("base/deployment.yaml: the provisioner reads %s from %q, want a configMapKeyRef %q", provisionerURLName, ds.URLRef, wantRef))
+	}
+	if ds.HostNetwork && ds.DNSPolicy != "ClusterFirstWithHostNet" {
+		out = append(out, fmt.Sprintf("base/deployment.yaml: the provisioner is on the host network with dnsPolicy %q, so a Service name does not resolve; want ClusterFirstWithHostNet", ds.DNSPolicy))
+	}
+	return out
+}
+
+func TestDeployEnvNames_ProvisionerReachesTheManager(t *testing.T) {
+	ds := provisionerDaemonSet(t)
+	service, port := managerService(t)
+	overlays := overlayNames(t)
+	if len(overlays) < 3 {
+		t.Fatalf("read %d overlays, want development, staging and production; the reader is broken", len(overlays))
+	}
+	for _, overlay := range overlays {
+		rel := "overlays/" + overlay + "/kustomization.yaml"
+		for _, p := range provisionerURLProblems(rel, overlayPrefix(t, rel), service, port, managerConfigEntries(t, rel), ds) {
+			t.Error(p)
+		}
+	}
+}
+
+// The checker is only worth running if it fails on the mistakes it is for.
+func TestDeployEnvNames_ProvisionerCheckerFindsTheMistakes(t *testing.T) {
+	good := provisionerFacts{HostNetwork: true, DNSPolicy: "ClusterFirstWithHostNet", URLRef: managerConfigMap + "/" + provisionerURLName}
+	url := func(v string) []envEntry { return []envEntry{{Name: provisionerURLName, Value: v}} }
+
+	if got := provisionerURLProblems("o", "dev-", "shelly-manager", 80, url("http://dev-shelly-manager:80"), good); got != nil {
+		t.Errorf("flagged a correct overlay: %q", got)
+	}
+
+	// The URL in some other generator never reaches the ConfigMap the pod reads.
+	const otherGenerator = "configMapGenerator:\n" +
+		"- name: " + managerConfigMap + "\n  literals:\n  - A=b\n" +
+		"- name: unrelated-config\n  literals:\n  - " + provisionerURLName + "=http://dev-shelly-manager:80\n"
+	elsewhere, err := generatorLiterals(yaml.NewDecoder(strings.NewReader(otherGenerator)), "o", managerConfigMap)
+	if err != nil {
+		t.Fatalf("parse the fixture: %v", err)
+	}
+	// Control: the unfiltered read does see the URL, so the filter is what hides it.
+	if all, _ := generatorLiterals(yaml.NewDecoder(strings.NewReader(otherGenerator)), "o", ""); len(all) != 2 {
+		t.Fatalf("the unfiltered read found %d literals, want 2; the fixture is broken", len(all))
+	}
+
+	cases := []struct {
+		name     string
+		literals []envEntry
+		ds       provisionerFacts
+	}{
+		{"no literal", nil, good},
+		{"url in another generator", elsewhere, good},
+		{"url key of another ConfigMap", url("http://dev-shelly-manager:80"), provisionerFacts{HostNetwork: true, DNSPolicy: good.DNSPolicy, URLRef: "other-config/" + provisionerURLName}},
+		{"url key of another name", url("http://dev-shelly-manager:80"), provisionerFacts{HostNetwork: true, DNSPolicy: good.DNSPolicy, URLRef: managerConfigMap + "/SHELLY_LOGGING_LEVEL"}},
+		{"another dnsPolicy", url("http://dev-shelly-manager:80"), provisionerFacts{HostNetwork: true, DNSPolicy: "ClusterFirst", URLRef: good.URLRef}},
+		{"prefix of another overlay", url("http://prod-shelly-manager:80"), good},
+		{"container port instead of the Service port", url("http://dev-shelly-manager:8080"), good},
+		{"no prefix", url("http://shelly-manager:80"), good},
+		{"no dnsPolicy on the host network", url("http://dev-shelly-manager:80"), provisionerFacts{HostNetwork: true, URLRef: good.URLRef}},
+		{"url not read from the ConfigMap", url("http://dev-shelly-manager:80"), provisionerFacts{HostNetwork: true, DNSPolicy: good.DNSPolicy}},
+	}
+	for _, c := range cases {
+		if got := provisionerURLProblems("o", "dev-", "shelly-manager", 80, c.literals, c.ds); len(got) != 1 {
+			t.Errorf("%s: found %d problems, want 1: %q", c.name, len(got), got)
+		}
+	}
 }

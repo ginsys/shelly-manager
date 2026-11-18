@@ -12,7 +12,7 @@ namespace: shelly-staging
 
 commonLabels:
   environment: staging
-  
+
 patchesStrategicMerge:
 - replica-patch.yaml
 - resources-patch.yaml
@@ -30,6 +30,8 @@ configMapGenerator:
   # Per replica: 24 connections at 2 replicas with maxSurge 1.
   - SHELLY_DATABASE_MAX_OPEN_CONNS=8
   - SHELLY_DATABASE_MAX_IDLE_CONNS=2
+  # The provisioner's URL for the manager: this overlay's prefix, the Service's port 80.
+  - SHELLY_API_URL=http://staging-shelly-manager:80
 
 images:
 - name: ghcr.io/ginsys/shelly-manager
