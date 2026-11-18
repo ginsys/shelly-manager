@@ -278,6 +278,10 @@ All notable changes to this project are documented here. The project follows Con
   request that ends while it waits stops waiting at once. A second apply that arrives while an
   apply runs longer than 15 seconds (one that waits for a reboot, for example) now gets `409`
   where it used to queue. Fixes ginsys/shelly-manager#573.
+  dead client. The lock needs `database.max_open_conns` of at least 2: with one connection
+  there is no cross-replica lock, only the in-process one, and the server logs a warning once. The
+  PostgreSQL and MySQL default pool is 25 (ginsys/shelly-manager#570), so only a pool set to 1 on
+  purpose, or kept from an older example config, loses the lock. Refs ginsys/shelly-manager#425.
 - Device control, verify and the handling of stored logins no longer act on whatever device
   answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and
   `POST /devices/{id}/config/new/verify` read the MAC the device reports and answer `409`
