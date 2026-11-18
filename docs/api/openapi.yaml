@@ -1354,6 +1354,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: The device id in the path is not a number (BAD_REQUEST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
         '401':
           description: An admin key is configured and the request has none or a wrong one (UNAUTHORIZED)
           content:
@@ -1362,6 +1368,14 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '404':
           description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '408':
+          description: >-
+            The request did not finish within the server's request timeout (REQUEST_TIMEOUT).
+            The apply may still have run on the device; read the device state before repeating it.
           content:
             application/json:
               schema:
@@ -1412,6 +1426,18 @@ paths:
             port, an IPv6 MQTT endpoint in one string, and an SNTP server written as host:port,
             are refused the
             same way. The error names the sections.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '500':
+          description: >-
+            Server error (INTERNAL_SERVER_ERROR). The body is generic and the cause is in the
+            server log. It includes an apply whose database lock was lost while it ran: the
+            device may hold a mix of two applies, so the apply leaves config_applied false and
+            pending_reboot true, and the next apply writes the configuration again and reboots
+            once more. An apply that found the lock already lost, before its first write,
+            writes nothing and forces no flag. The call can be repeated.
           content:
             application/json:
               schema:

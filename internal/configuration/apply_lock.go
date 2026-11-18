@@ -47,6 +47,8 @@ type applyLock interface {
 // repository without it serializes applies inside this process only.
 type applyLocker interface {
 	// LockDeviceApply returns a nil lock when the database needs none (SQLite runs in one process).
+	// It waits for a lock another replica holds until ctx ends, so the caller bounds the wait: a
+	// context with no deadline waits for ever.
 	LockDeviceApply(ctx context.Context, deviceID uint) (applyLock, error)
 }
 
@@ -159,9 +161,10 @@ func applyLockKey(id uint) (int32, bool) {
 
 // LockDeviceApply is applyLocker for GORM. PostgreSQL and MySQL hold a session lock on one pinned
 // connection for the whole apply; the lock goes with the connection, so a replica that dies frees
-// it. SQLite has one process and returns no lock. The whole acquisition (a pool slot, the
-// connection, the polling) shares one deadline of applyLockWait; past it the apply is refused.
-func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID uint) (applyLock, error) {
+// it. SQLite has one process and returns no lock. The context bounds the whole acquisition (a pool
+// slot, the connection, the polling) and the error of a wait that ends is the context's: the caller
+// sets the budget and decides what its end means (lockApplyAcrossReplicas refuses the apply).
+func (r *GormConfigRepository) LockDeviceApply(ctx context.Context, deviceID uint) (applyLock, error) {
 	dialect := r.db.Name()
 	if dialect != "postgres" && dialect != "mysql" {
 		return nil, nil
@@ -176,18 +179,9 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 		return nil, fmt.Errorf("device id %d does not fit the apply lock key", deviceID)
 	}
 
-	ctx, cancel := context.WithTimeout(parent, applyLockWait)
-	defer cancel()
-	refused := func(err error) error {
-		if parent.Err() == nil && ctx.Err() != nil {
-			return ErrApplyInProgress
-		}
-		return fmt.Errorf("could not take the apply lock: %w", err)
-	}
-
 	releaseSlot, ok, err := r.takeLockSlot(ctx, sqlDB)
 	if err != nil {
-		return nil, refused(err)
+		return nil, fmt.Errorf("could not take the apply lock: %w", err)
 	}
 	if !ok {
 		return nil, nil
@@ -195,7 +189,7 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 	conn, err := sqlDB.Conn(ctx)
 	if err != nil {
 		releaseSlot()
-		return nil, refused(err)
+		return nil, fmt.Errorf("could not take the apply lock: %w", err)
 	}
 	lock := &sessionLock{conn: conn, releaseSlot: releaseSlot}
 	fail := func(err error) (applyLock, error) {
@@ -204,7 +198,7 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		_ = conn.Close()
 		releaseSlot()
-		return nil, refused(err)
+		return nil, fmt.Errorf("could not take the apply lock: %w", err)
 	}
 
 	switch dialect {

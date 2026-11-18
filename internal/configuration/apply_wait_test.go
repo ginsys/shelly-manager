@@ -68,18 +68,13 @@ func TestApplyLock_ASecondApplyOnTheSameReplicaIsRefusedAfterTheWait(t *testing.
 }
 
 // waitingLockRepo offers a cross-replica lock that another replica holds for good: every apply waits
-// for the wait to pass and is refused, as the GORM repository does.
+// until its context ends, as the GORM repository does. The caller's deadline is the only budget.
 type waitingLockRepo struct {
 	*mockRepository
 }
 
-func (r *waitingLockRepo) LockDeviceApply(parent context.Context, _ uint) (applyLock, error) {
-	ctx, cancel := context.WithTimeout(parent, applyLockWait)
-	defer cancel()
+func (r *waitingLockRepo) LockDeviceApply(ctx context.Context, _ uint) (applyLock, error) {
 	<-ctx.Done()
-	if parent.Err() == nil {
-		return nil, ErrApplyInProgress
-	}
 	return nil, fmt.Errorf("could not take the apply lock: %w", ctx.Err())
 }
 
