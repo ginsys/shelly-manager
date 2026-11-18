@@ -306,6 +306,12 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			if r.AutoOff != nil && (*r.AutoOff < 0 || *r.AutoOff > math.MaxInt32) {
 				paths, r.AutoOff = append(paths, prefix+".auto_off"), nil
 			}
+			// A negative id can never be written, so it is named here, at its place in the desired list,
+			// and the converter never sees it.
+			if r.ID < 0 {
+				paths = append(paths, prefix+".id")
+				continue
+			}
 			// A second channel with the same id cannot say which channel its settings belong to. An entry
 			// that sets nothing holds its id too: verify compares the desired list as it stands.
 			if seenRelays[r.ID] {
@@ -340,6 +346,10 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			}
 			if in.Type != nil && !gen2InputTypes[*in.Type] {
 				paths, in.Type = append(paths, prefix+".type"), nil
+			}
+			if in.ID < 0 {
+				paths = append(paths, prefix+".id")
+				continue
 			}
 			if seenInputs[in.ID] {
 				paths = append(paths, prefix+".id")
