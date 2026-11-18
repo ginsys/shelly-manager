@@ -68,8 +68,9 @@ func TestMergeConfigurations_SparseInputOverrideKeepsEachSettingOnItsChannel(t *
 }
 
 // With no repeated id nothing refuses the old pairing: ids 0 and 2 plus an override for id 1 put
-// channel 0's settings under id 1 and left no sign of it.
-func TestMergeConfigurations_OverrideForAnIdTheTemplateLacksIsAppended(t *testing.T) {
+// channel 0's settings under id 1 and left no sign of it. The channel the template lacks goes in
+// its id order, so the list still reads id 0, 1, 2.
+func TestMergeConfigurations_OverrideForAnIdTheTemplateLacksIsInsertedInIdOrder(t *testing.T) {
 	_, relays := mergeRelays(t,
 		relayLayer("template", SingleRelayConfig{ID: 0, AutoOn: IntPtr(30)}, SingleRelayConfig{ID: 2, AutoOff: IntPtr(60)}),
 		relayLayer("override", SingleRelayConfig{ID: 1, Name: StringPtr("B")}),
@@ -79,12 +80,100 @@ func TestMergeConfigurations_OverrideForAnIdTheTemplateLacksIsAppended(t *testin
 	assert.Equal(t, 0, relays[0].ID)
 	assert.Equal(t, IntPtr(30), relays[0].AutoOn)
 	assert.Nil(t, relays[0].Name)
-	assert.Equal(t, 2, relays[1].ID)
-	assert.Equal(t, IntPtr(60), relays[1].AutoOff)
-	assert.Nil(t, relays[1].Name)
-	assert.Equal(t, 1, relays[2].ID)
-	assert.Equal(t, StringPtr("B"), relays[2].Name)
-	assert.Nil(t, relays[2].AutoOn)
+	assert.Equal(t, 1, relays[1].ID)
+	assert.Equal(t, StringPtr("B"), relays[1].Name)
+	assert.Nil(t, relays[1].AutoOn)
+	assert.Equal(t, 2, relays[2].ID)
+	assert.Equal(t, IntPtr(60), relays[2].AutoOff)
+	assert.Nil(t, relays[2].Name)
+}
+
+// A lower layer that holds only channel 1, under a layer with channels 0 and 1, must give the list
+// 0, 1: the Gen1 apply requires each channel's id to equal its position. Channel 0 takes nothing from
+// channel 1's lower-layer settings.
+func TestMergeConfigurations_ChannelFromALowerLayerKeepsIdOrder(t *testing.T) {
+	result, relays := mergeRelays(t,
+		relayLayer("lower", SingleRelayConfig{ID: 1, AutoOn: IntPtr(30)}),
+		relayLayer("higher", SingleRelayConfig{ID: 0, Name: StringPtr("A")}, SingleRelayConfig{ID: 1, Name: StringPtr("B")}),
+	)
+
+	require.Len(t, relays, 2)
+	assert.Equal(t, 0, relays[0].ID)
+	assert.Equal(t, StringPtr("A"), relays[0].Name)
+	assert.Nil(t, relays[0].AutoOn)
+	assert.Equal(t, 1, relays[1].ID)
+	assert.Equal(t, StringPtr("B"), relays[1].Name)
+	assert.Equal(t, IntPtr(30), relays[1].AutoOn)
+
+	assert.Equal(t, "higher", result.Sources["relay.relays.0.name"])
+	assert.Equal(t, "higher", result.Sources["relay.relays.1.name"])
+	assert.Equal(t, "lower", result.Sources["relay.relays.1.auto_on"])
+}
+
+// A channel put in front of earlier ones moves their sources with them, including the sources an
+// earlier layer wrote, and the keys the later layer writes stay where its channels are.
+func TestMergeConfigurations_InsertedChannelMovesTheSourcesOfEarlierLayers(t *testing.T) {
+	result, relays := mergeRelays(t,
+		relayLayer("first", SingleRelayConfig{ID: 0, Name: StringPtr("A0")}, SingleRelayConfig{ID: 2, Name: StringPtr("C2")}),
+		relayLayer("second", SingleRelayConfig{ID: 0, AutoOff: IntPtr(9)}),
+		relayLayer("third", SingleRelayConfig{ID: 1, Name: StringPtr("B1")}),
+	)
+
+	require.Len(t, relays, 3)
+	assert.Equal(t, []int{0, 1, 2}, []int{relays[0].ID, relays[1].ID, relays[2].ID})
+	assert.Equal(t, StringPtr("C2"), relays[2].Name)
+
+	assert.Equal(t, "first", result.Sources["relay.relays.0.name"])
+	assert.Equal(t, "second", result.Sources["relay.relays.0.auto_off"])
+	assert.Equal(t, "third", result.Sources["relay.relays.1.name"])
+	assert.Equal(t, "first", result.Sources["relay.relays.2.name"])
+	assert.NotContains(t, result.Sources, "relay.relays.3.name")
+}
+
+func TestMergeConfigurations_InsertedChannelsKeepIdOrderWhateverTheirOrder(t *testing.T) {
+	_, relays := mergeRelays(t,
+		relayLayer("template", SingleRelayConfig{ID: 0}, SingleRelayConfig{ID: 4}),
+		relayLayer("override", SingleRelayConfig{ID: 3, Name: StringPtr("D")}, SingleRelayConfig{ID: 1, Name: StringPtr("B")}, SingleRelayConfig{ID: 5, Name: StringPtr("F")}),
+	)
+
+	require.Len(t, relays, 5)
+	assert.Equal(t, []int{0, 1, 3, 4, 5}, []int{relays[0].ID, relays[1].ID, relays[2].ID, relays[3].ID, relays[4].ID})
+	assert.Equal(t, StringPtr("B"), relays[1].Name)
+	assert.Equal(t, StringPtr("D"), relays[2].Name)
+	assert.Equal(t, StringPtr("F"), relays[4].Name)
+}
+
+// Guards, which pass with or without the insert rule: an id above every existing one is appended,
+// and an element that is already in the list is never moved. A first layer is copied as it is.
+func TestMergeConfigurations_InsertRuleNeverMovesAnExistingChannel(t *testing.T) {
+	t.Run("a higher id is appended", func(t *testing.T) {
+		_, relays := mergeRelays(t,
+			relayLayer("template", SingleRelayConfig{ID: 0}, SingleRelayConfig{ID: 1}),
+			relayLayer("override", SingleRelayConfig{ID: 2, Name: StringPtr("C")}),
+		)
+		require.Len(t, relays, 3)
+		assert.Equal(t, []int{0, 1, 2}, []int{relays[0].ID, relays[1].ID, relays[2].ID})
+		assert.Equal(t, StringPtr("C"), relays[2].Name)
+	})
+
+	t.Run("a stored list out of order stays out of order", func(t *testing.T) {
+		_, relays := mergeRelays(t,
+			relayLayer("template", SingleRelayConfig{ID: 1, AutoOn: IntPtr(30)}, SingleRelayConfig{ID: 0, AutoOff: IntPtr(60)}),
+			relayLayer("override", SingleRelayConfig{ID: 0, Name: StringPtr("A")}),
+		)
+		require.Len(t, relays, 2)
+		assert.Equal(t, 1, relays[0].ID)
+		assert.Equal(t, IntPtr(30), relays[0].AutoOn)
+		assert.Equal(t, 0, relays[1].ID)
+		assert.Equal(t, StringPtr("A"), relays[1].Name)
+		assert.Equal(t, IntPtr(60), relays[1].AutoOff)
+	})
+
+	t.Run("a first layer is copied in its own order", func(t *testing.T) {
+		_, relays := mergeRelays(t, relayLayer("only", SingleRelayConfig{ID: 1}, SingleRelayConfig{ID: 0}))
+		require.Len(t, relays, 2)
+		assert.Equal(t, []int{1, 0}, []int{relays[0].ID, relays[1].ID})
+	})
 }
 
 func TestMergeConfigurations_OverrideOrderDoesNotChangeThePairing(t *testing.T) {
@@ -190,10 +279,21 @@ func TestMergeConfigurations_MergedChannelsDoNotAliasTheOverride(t *testing.T) {
 	}
 }
 
-// Merging the result again with the same override changes nothing.
+// Merging the result again with the same override changes nothing, with ids 1 and 3 after the
+// template's 0 and 1, and with ids that go in front of an existing one.
 func TestMergeConfigurations_ChannelMergeIsIdempotent(t *testing.T) {
 	template := relayLayer("template", SingleRelayConfig{ID: 0, AutoOn: IntPtr(30)}, SingleRelayConfig{ID: 1, AutoOff: IntPtr(60)})
 	override := relayLayer("override", SingleRelayConfig{ID: 1, Name: StringPtr("B")}, SingleRelayConfig{ID: 3, Name: StringPtr("D")})
+	assertIdempotent(t, template, override)
+
+	assertIdempotent(t,
+		relayLayer("template", SingleRelayConfig{ID: 0, AutoOn: IntPtr(30)}, SingleRelayConfig{ID: 2, AutoOff: IntPtr(60)}),
+		relayLayer("override", SingleRelayConfig{ID: 1, Name: StringPtr("B")}),
+	)
+}
+
+func assertIdempotent(t *testing.T, template, override ConfigLayer) {
+	t.Helper()
 
 	first, err := MergeConfigurations([]ConfigLayer{template, override})
 	require.NoError(t, err)
