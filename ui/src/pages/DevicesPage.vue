@@ -10,6 +10,14 @@
         @selectAll="handleSelectAllColumns"
         @selectNone="handleSelectNoneColumns"
       />
+      <button
+        class="btn"
+        :disabled="store.selectedCount === 0"
+        @click="showBulkDialog = true"
+        data-testid="bulk-ops-btn"
+      >
+        {{ bulkButtonLabel }}
+      </button>
       <button class="primary-button" @click="showCreateDialog = true" data-testid="add-device-btn">
         + Add Device
       </button>
@@ -55,6 +63,16 @@
       <table v-else class="table" data-testid="devices-table">
         <thead>
           <tr>
+            <th v-if="store.visibleColumns.select" class="select-col">
+              <input
+                type="checkbox"
+                :checked="allVisibleSelected"
+                :indeterminate="someVisibleSelected && !allVisibleSelected"
+                aria-label="Select all devices on this page"
+                data-testid="select-all-devices"
+                @change="handleToggleVisible"
+              />
+            </th>
             <th v-if="store.visibleColumns.name" @click="store.toggleSort('name')">
               Name <SortIcon :field="'name'" :sort="store.sort" />
             </th>
@@ -79,6 +97,15 @@
         </thead>
         <tbody>
           <tr v-for="d in store.sortedItems" :key="d.id" data-testid="device-row">
+            <td v-if="store.visibleColumns.select" class="select-col">
+              <input
+                type="checkbox"
+                :checked="store.isSelected(d.id)"
+                :aria-label="`Select ${d.name || d.ip}`"
+                data-testid="select-device"
+                @change="store.toggleSelect(d)"
+              />
+            </td>
             <td v-if="store.visibleColumns.name">
               <router-link :to="`/devices/${d.id}`" class="rowlink" data-testid="device-link">{{ d.name || '-' }}</router-link>
             </td>
@@ -122,11 +149,19 @@
         />
       </div>
     </div>
+
+    <BulkOperationsDialog
+      :isOpen="showBulkDialog"
+      :selectedDevices="store.selectedDevices"
+      @close="showBulkDialog = false"
+      @complete="store.fetchDevices()"
+      @remove="store.deselect([$event])"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { createDevice, updateDevice, deleteDevice, controlDevice, isAbortError } from '../api/devices'
 import type { Device } from '../api/types'
 import { useDevicesStore } from '../stores/devices'
@@ -134,8 +169,10 @@ import DeviceForm from '../components/devices/DeviceForm.vue'
 import ErrorState from '../components/shared/ErrorState.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ColumnToggle from '../components/shared/ColumnToggle.vue'
+import BulkOperationsDialog from '../components/bulk/BulkOperationsDialog.vue'
 
 const store = useDevicesStore()
+const showBulkDialog = ref(false)
 const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
 const editingDevice = ref<Device | null>(null)
@@ -143,6 +180,7 @@ const deviceFormRef = ref<InstanceType<typeof DeviceForm> | null>(null)
 
 // Column configuration
 const columnOptions = [
+  { key: 'select', label: 'Select' },
   { key: 'name', label: 'Name' },
   { key: 'ip', label: 'IP Address' },
   { key: 'mac', label: 'MAC Address' },
@@ -164,6 +202,24 @@ watch(() => store.pageSize, () => {
   store.setPageSize(store.pageSize)
   store.fetchDevices()
 })
+
+// Selection covers the devices ticked so far, also those on other pages. The header checkbox
+// acts on the rows shown, never on the whole fleet.
+const bulkButtonLabel = computed(() =>
+  store.selectedCount > 0 ? `Bulk Operations (${store.selectedCount})` : 'Bulk Operations'
+)
+const allVisibleSelected = computed(
+  () => store.sortedItems.length > 0 && store.sortedItems.every((d) => store.isSelected(d.id))
+)
+const someVisibleSelected = computed(() => store.sortedItems.some((d) => store.isSelected(d.id)))
+
+function handleToggleVisible(event: Event) {
+  if ((event.target as HTMLInputElement).checked) {
+    store.selectAll(store.sortedItems)
+  } else {
+    store.deselect(store.sortedItems.map((d) => d.id))
+  }
+}
 
 function formatDate(iso?: string) {
   if (!iso) return '-'
@@ -225,6 +281,7 @@ async function handleDelete(id: number) {
   if (!confirm('Are you sure you want to delete this device?')) return
   try {
     await deleteDevice(id)
+    store.deselect([id])
     await store.fetchDevices()
   } catch (e: any) {
     if (isAbortError(e)) return
@@ -269,6 +326,7 @@ export default {
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
 .table th { background: #f8fafc; cursor: pointer; user-select: none; white-space: nowrap; }
+.table th.select-col, .table td.select-col { width: 32px; cursor: default; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .small { font-size: 12px; color: #475569; }
 .chip { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #e2e8f0; color: #334155; }
