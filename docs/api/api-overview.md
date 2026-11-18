@@ -66,7 +66,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 ---
 
-### 3. Device Configuration (13 endpoints)
+### 3. Device Configuration (14 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

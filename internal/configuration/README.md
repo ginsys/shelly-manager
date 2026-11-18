@@ -23,12 +23,11 @@ Device Level (Physical Device)
 ### Key Features
 
 - **Import**: Pull configuration from physical devices to database
-- **Export**: Push configuration from database to physical devices
-- **Sync**: Bidirectional synchronization with conflict resolution
+- **Apply**: Write a device's desired configuration (templates and overrides) to the device, one device at a time (`POST /api/v1/devices/{id}/config/new/apply`)
 - **Drift Detection**: Monitor configuration changes
 - **History**: Track configuration changes over time
 - **Templates**: Reusable configuration profiles
-- **Bulk Operations**: Apply configurations to multiple devices
+- **Bulk Operations**: Import and drift detection for several devices; there is no bulk apply yet
 
 ## Configuration Model
 
