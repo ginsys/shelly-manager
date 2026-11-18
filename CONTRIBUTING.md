@@ -107,6 +107,16 @@ Common scopes
 - Pass `make test-ci` locally
 - Keep changes focused; unrelated refactors go into separate PRs
 
+### Changelog entries and rebases
+
+`CHANGELOG.md` merges as a union (`.gitattributes`): when two PRs add an entry at the same place, a
+rebase keeps both and no longer stops on a conflict. A union merge never warns, so:
+
+- End your entry with its own `Fixes owner/repo#N.` (or `Refs`) line. That unique last line is what keeps
+  two entries apart. Two entries that share a line can be merged into one.
+- After a rebase, the PR's `CHANGELOG.md` diff against `main` must show only your own entry. A line of
+  another entry that the diff shows was lost or duplicated by the merge: fix it before you push.
+
 ## Security & Secrets
 
 - Never commit secrets. Use `.env` and `configs/*.yaml`; see `.env.example`.
