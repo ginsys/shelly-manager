@@ -76,11 +76,12 @@ func TestPatchDeviceOverrides_NullOnAnInputFollowsItsId(t *testing.T) {
 	assert.Nil(t, got.Input.Inputs[1].Name)
 }
 
-// A stored list that repeats an id is merged by position, so a null keeps the position it had.
+// A stored list that repeats an id (here 1 twice; ids 0 and 0 would read as 0 and 1) is merged by
+// position, so a null keeps the position it had.
 func TestPatchDeviceOverrides_NullKeepsItsPositionWhenTheMergeFallsBackToPosition(t *testing.T) {
 	got := patchOverrides(t,
-		storedRelays(SingleRelayConfig{ID: 0, Name: StringPtr("A")}, SingleRelayConfig{ID: 0, Name: StringPtr("B")}),
-		`{"relay":{"relays":[{"id":0,"name":null}]}}`)
+		storedRelays(SingleRelayConfig{ID: 1, Name: StringPtr("A")}, SingleRelayConfig{ID: 1, Name: StringPtr("B")}),
+		`{"relay":{"relays":[{"id":1,"name":null}]}}`)
 
 	require.Len(t, got.Relay.Relays, 2)
 	assert.Nil(t, got.Relay.Relays[0].Name)
