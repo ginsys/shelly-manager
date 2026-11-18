@@ -3,6 +3,7 @@ package provisioning
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,9 +31,19 @@ type AgentRegistrationRequest struct {
 	Metadata     map[string]string `json:"metadata,omitempty"`
 }
 
-// AgentRegistrationResponse represents the API response for agent registration
+// HTTPError is a non-2xx answer from the API server. Callers read StatusCode to tell a lost registration (401, 404)
+// from any other failure.
+type HTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("API request failed with status %d: %s", e.StatusCode, e.Body)
+}
+
+// AgentRegistrationResponse is the `data` of the API response for agent registration
 type AgentRegistrationResponse struct {
-	Success      bool      `json:"success"`
 	AgentID      string    `json:"agent_id"`
 	RegisteredAt time.Time `json:"registered_at"`
 	Status       string    `json:"status"`
@@ -98,9 +109,8 @@ type DeviceDiscoveryRequest struct {
 	Timestamp time.Time           `json:"timestamp"`
 }
 
-// DeviceDiscoveryResponse represents the API response for device discovery reporting
+// DeviceDiscoveryResponse is the `data` of the API response for device discovery reporting
 type DeviceDiscoveryResponse struct {
-	Success          bool      `json:"success"`
 	DevicesReceived  int       `json:"devices_received"`
 	DevicesProcessed int       `json:"devices_processed"`
 	Timestamp        time.Time `json:"timestamp"`
@@ -141,10 +151,6 @@ func (c *APIClient) RegisterAgent(hostname string, capabilities []string, metada
 		return fmt.Errorf("failed to register agent: %w", err)
 	}
 
-	if !response.Success {
-		return fmt.Errorf("agent registration failed: %s", response.Message)
-	}
-
 	c.registered = true
 	c.logger.WithFields(map[string]any{
 		"agent_id":      response.AgentID,
@@ -153,6 +159,34 @@ func (c *APIClient) RegisterAgent(hostname string, capabilities []string, metada
 	}).Info("Agent successfully registered with API server")
 
 	return nil
+}
+
+// EnsureRegistered registers the agent unless it already is. The poll loop calls it before every poll, so a
+// registration that failed at start-up, or that the manager lost (a restart empties its registry), is retried.
+func (c *APIClient) EnsureRegistered(hostname string, capabilities []string, metadata map[string]string) error {
+	if c.registered {
+		return nil
+	}
+	return c.RegisterAgent(hostname, capabilities, metadata)
+}
+
+// dropRegistration marks the agent unregistered when err is an HTTP answer with one of the given statuses, so the
+// next EnsureRegistered registers again.
+func (c *APIClient) dropRegistration(err error, statuses ...int) {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) {
+		return
+	}
+	for _, s := range statuses {
+		if httpErr.StatusCode == s {
+			c.registered = false
+			c.logger.WithFields(map[string]any{
+				"agent_id":    c.agentID,
+				"status_code": s,
+			}).Warn("Manager no longer knows this agent, registering again on the next poll")
+			return
+		}
+	}
 }
 
 // PollTasks polls the API server for available provisioning tasks
@@ -165,6 +199,7 @@ func (c *APIClient) PollTasks() ([]*ProvisioningTask, error) {
 
 	var response TaskPollResponse
 	if err := c.makeRequest("GET", endpoint, nil, &response); err != nil {
+		c.dropRegistration(err, http.StatusUnauthorized, http.StatusNotFound)
 		c.logger.WithFields(map[string]any{
 			"agent_id": c.agentID,
 			"error":    err.Error(),
@@ -197,6 +232,7 @@ func (c *APIClient) UpdateTaskStatus(taskID, status string, result map[string]in
 
 	var response map[string]interface{}
 	if err := c.makeRequest("PUT", endpoint, req, &response); err != nil {
+		c.dropRegistration(err, http.StatusUnauthorized)
 		c.logger.WithFields(map[string]any{
 			"task_id":  taskID,
 			"agent_id": c.agentID,
@@ -268,6 +304,7 @@ func (c *APIClient) ReportDiscoveredDevices(taskID string, devices []*Discovered
 	var resp DeviceDiscoveryResponse
 	err := c.makeRequest("POST", "/api/v1/provisioner/discovered-devices", req, &resp)
 	if err != nil {
+		c.dropRegistration(err, http.StatusUnauthorized)
 		c.logger.WithFields(map[string]any{
 			"error":        err.Error(),
 			"agent_id":     c.agentID,
@@ -284,13 +321,8 @@ func (c *APIClient) ReportDiscoveredDevices(taskID string, devices []*Discovered
 		"devices_sent":      len(devices),
 		"devices_received":  resp.DevicesReceived,
 		"devices_processed": resp.DevicesProcessed,
-		"success":           resp.Success,
 		"component":         "api_client",
 	}).Info("Successfully reported discovered devices")
-
-	if !resp.Success {
-		return fmt.Errorf("API server failed to process discovered devices: %s", resp.Message)
-	}
 
 	return nil
 }
@@ -359,12 +391,31 @@ func (c *APIClient) makeRequest(method, endpoint string, requestBody interface{}
 			"response_body": string(respBody),
 			"agent_id":      c.agentID,
 		}).Error("API request failed with HTTP error")
-		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(respBody))
+		return &HTTPError{StatusCode: resp.StatusCode, Body: string(respBody)}
 	}
 
-	// Parse response if responseBody is provided
+	// Parse response if responseBody is provided. Every manager route answers in the {success, data} envelope; the
+	// caller's struct is the `data` of it, and the envelope's `success` is the only success flag.
 	if responseBody != nil {
-		if err := json.Unmarshal(respBody, responseBody); err != nil {
+		var envelope struct {
+			Success bool            `json:"success"`
+			Data    json.RawMessage `json:"data"`
+			Error   *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		err := json.Unmarshal(respBody, &envelope)
+		if err == nil && !envelope.Success {
+			msg := "no reason given"
+			if envelope.Error != nil {
+				msg = envelope.Error.Message
+			}
+			return fmt.Errorf("API server reported failure: %s", msg)
+		}
+		if err == nil && len(envelope.Data) > 0 {
+			err = json.Unmarshal(envelope.Data, responseBody)
+		}
+		if err != nil {
 			c.logger.WithFields(map[string]any{
 				"component":     "api_client",
 				"method":        method,
