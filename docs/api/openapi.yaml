@@ -1277,7 +1277,7 @@ paths:
         configuration. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
         change during the apply. A Gen2 or Gen3 device takes the system, MQTT, cloud, switch
-        and input settings and the Wi-Fi (station, access point, roam threshold) only: name, eco mode, discoverable, timezone, latitude, longitude and
+        and input settings and the Wi-Fi (station, access point, roam threshold) and the login only: name, eco mode, discoverable, timezone, latitude, longitude and
         SNTP server with Sys.SetConfig, MQTT enable, server, port, user, password, client ID,
         topic prefix and the notification flags with MQTT.SetConfig, cloud enable and server
         with Cloud.SetConfig, each input name, type (switch or button) and invert with
@@ -1384,7 +1384,9 @@ paths:
             access point key (wifi.ap.key), switching the access point off while the station is not
             steady, switching an access point on that is off with no password (unless the device
             reports it closed), switching the station off (wifi.enable false), a new
-            Wi-Fi network with no password, a switch or input value that no Gen2 word names
+            Wi-Fi network with no password, a login user other than admin, a login switched on
+            with no password that can be sent or switched off with a user or password, a login
+            realm, a login change in the same apply as a change of the Wi-Fi network, a switch or input value that no Gen2 word names
             (an input type other than switch or button, the Gen1 mode action, a negative timer),
             an input push action or timing, a relay schedule,
             an MQTT setting with no Gen2 key (keep alive, clean session,
@@ -1400,7 +1402,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station, access point and roam threshold only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections, the Wi-Fi station, access point and roam threshold, and the login only.
           content:
             application/json:
               schema:
@@ -1467,7 +1469,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station, access point and roam threshold only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections, the Wi-Fi station, access point and roam threshold, and the login only.
           content:
             application/json:
               schema:

@@ -1,8 +1,9 @@
 package gen2
 
 import (
-	"crypto/md5"
+	"crypto/md5" // #nosec G501 -- older firmware still asks for MD5 digest (RFC 2617)
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -11,7 +12,8 @@ import (
 	"time"
 )
 
-// digestAuth implements HTTP Digest Authentication (RFC 2617)
+// digestAuth implements HTTP Digest Authentication: MD5 (RFC 2617) and SHA-256 (RFC 7616), which
+// is what Shelly Gen2 devices ask for ("algorithm=SHA-256").
 type digestAuth struct {
 	username string
 	password string
@@ -19,8 +21,10 @@ type digestAuth struct {
 	nonce    string
 	qop      string
 	opaque   string
-	nc       int
-	cnonce   string
+	// algorithm is the challenge's algorithm as sent: "" or "MD5" hash with MD5, "SHA-256" with SHA-256.
+	algorithm string
+	nc        int
+	cnonce    string
 }
 
 // newDigestAuth creates a new digest auth handler
@@ -59,11 +63,19 @@ func (d *digestAuth) parseChallenge(challenge string) error {
 			d.qop = value
 		case "opaque":
 			d.opaque = value
+		case "algorithm":
+			d.algorithm = value
 		}
 	}
 
 	if d.realm == "" || d.nonce == "" {
 		return fmt.Errorf("incomplete digest challenge")
+	}
+
+	switch strings.ToUpper(d.algorithm) {
+	case "", "MD5", "SHA-256":
+	default:
+		return fmt.Errorf("unsupported digest algorithm %q", d.algorithm)
 	}
 
 	return nil
@@ -79,11 +91,14 @@ func (d *digestAuth) generateCnonce() string {
 	return hex.EncodeToString(b)
 }
 
-// hash computes MD5 hash
+// hash computes the hash of the challenge's algorithm as lowercase hex.
 func (d *digestAuth) hash(data string) string {
-	h := md5.New()
-	h.Write([]byte(data))
-	return hex.EncodeToString(h.Sum(nil))
+	if strings.EqualFold(d.algorithm, "SHA-256") {
+		sum := sha256.Sum256([]byte(data))
+		return hex.EncodeToString(sum[:])
+	}
+	sum := md5.Sum([]byte(data)) // #nosec G401 -- see the import
+	return hex.EncodeToString(sum[:])
 }
 
 // computeResponse computes the digest response
@@ -91,21 +106,21 @@ func (d *digestAuth) computeResponse(method, uri string) string {
 	d.nc++
 	d.cnonce = d.generateCnonce()
 
-	// HA1 = MD5(username:realm:password)
+	// HA1 = H(username:realm:password)
 	ha1 := d.hash(fmt.Sprintf("%s:%s:%s", d.username, d.realm, d.password))
 
-	// HA2 = MD5(method:uri)
+	// HA2 = H(method:uri)
 	ha2 := d.hash(fmt.Sprintf("%s:%s", method, uri))
 
 	// Response calculation depends on qop
 	var response string
 	if d.qop != "" {
-		// response = MD5(HA1:nonce:nc:cnonce:qop:HA2)
+		// response = H(HA1:nonce:nc:cnonce:qop:HA2)
 		ncStr := fmt.Sprintf("%08x", d.nc)
 		response = d.hash(fmt.Sprintf("%s:%s:%s:%s:%s:%s",
 			ha1, d.nonce, ncStr, d.cnonce, d.qop, ha2))
 	} else {
-		// response = MD5(HA1:nonce:HA2)
+		// response = H(HA1:nonce:HA2)
 		response = d.hash(fmt.Sprintf("%s:%s:%s", ha1, d.nonce, ha2))
 	}
 
@@ -134,11 +149,21 @@ func (d *digestAuth) setAuthHeader(req *http.Request) {
 		auth += fmt.Sprintf(`, opaque="%s"`, d.opaque)
 	}
 
+	if d.algorithm != "" {
+		auth += ", algorithm=" + d.algorithm
+	}
+
 	req.Header.Set("Authorization", auth)
 }
 
 // doRequestWithDigestAuth performs an HTTP request with digest authentication
 func doRequestWithDigestAuth(client *http.Client, req *http.Request, username, password string) (*http.Response, error) {
+	// The first request reads the body, so the retry needs a way to get it again: sending the
+	// retry with the drained reader would reach the device with an empty body.
+	if req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
+		return nil, fmt.Errorf("digest authentication needs a request body that can be replayed")
+	}
+
 	// First request without auth
 	resp, err := client.Do(req)
 	if err != nil {
@@ -165,7 +190,15 @@ func doRequestWithDigestAuth(client *http.Client, req *http.Request, username, p
 	}
 
 	// Clone the request for retry
-	req2, err := http.NewRequest(req.Method, req.URL.String(), req.Body)
+	var body io.Reader
+	if req.GetBody != nil {
+		replay, bodyErr := req.GetBody()
+		if bodyErr != nil {
+			return nil, bodyErr
+		}
+		body = replay
+	}
+	req2, err := http.NewRequestWithContext(req.Context(), req.Method, req.URL.String(), body)
 	if err != nil {
 		return nil, err
 	}

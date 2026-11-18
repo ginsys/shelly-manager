@@ -452,7 +452,7 @@ func TestUnsupportedGen2Settings_NamesARepeatedIDWhereTheFirstEntrySetsNothing(t
 		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 2}, {ID: 2, Name: StringPtr("door")}}},
 	}
 
-	paths, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+	paths, err := unsupportedGen2Settings(NewGen2Converter(nil), desired, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"input.inputs.1.id", "relay.relays.1.id"}, paths)
@@ -465,7 +465,7 @@ func TestUnsupportedGen2Settings_NamesARepeatedInputID(t *testing.T) {
 		{ID: 0, Name: StringPtr("c")},
 	}}}
 
-	paths, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+	paths, err := unsupportedGen2Settings(NewGen2Converter(nil), desired, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"input.inputs.2.id"}, paths)
@@ -540,7 +540,7 @@ func TestUnsupportedGen2Settings_NamesAnOutOfRangeTimerAtItsOwnIndex(t *testing.
 		{ID: 0}, {ID: 1, AutoOn: IntPtr(2147483648)},
 	}}}
 
-	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), desired, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"relay.relays.1.auto_on"}, unsupported)
@@ -572,7 +572,7 @@ func TestUnsupportedGen2Settings_NamesANegativeChannelIDAtItsOwnIndex(t *testing
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), c.desired)
+			unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), c.desired, false)
 
 			require.NoError(t, err)
 			assert.Equal(t, c.want, unsupported)
@@ -587,7 +587,7 @@ func TestUnsupportedGen2Settings_AcceptsNonNegativeChannelIDs(t *testing.T) {
 		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0}, {ID: 1, Name: StringPtr("good")}}},
 	}
 
-	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), desired)
+	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), desired, false)
 
 	require.NoError(t, err)
 	assert.Empty(t, unsupported)

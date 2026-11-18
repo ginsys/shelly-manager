@@ -88,7 +88,7 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 		if _, ok := client.(Gen2ConfigClient); ok {
 			converter := NewGen2Converter(s.logger)
 			return converter, func(desired *DeviceConfiguration, _ string) ([]string, error) {
-				return unsupportedGen2Settings(converter, desired)
+				return unsupportedGen2Settings(converter, desired, loginSupported)
 			}, nil
 		}
 	}
@@ -96,11 +96,12 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 }
 
 // unsupportedGen2Settings returns the sorted paths of desired that the Gen2 apply cannot write
-// and read back. Only the sys, mqtt, cloud, switch and input sections and the Wi-Fi station have a
+// and read back. Only the sys, mqtt, cloud, switch and input sections, the Wi-Fi and the login have a
 // mapping so far, so every other populated setting is reported through the round trip: the
-// converter drops it, and it is missing on the way back. An MQTT password with no user is refused
+// converter drops it, and it is missing on the way back. loginSupported says whether the caller can
+// store a new login (LoginHooks): without it every login setting is refused. An MQTT password with no user is refused
 // too: the device takes the password only together with the user.
-func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfiguration) ([]string, error) {
+func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfiguration, loginSupported bool) ([]string, error) {
 	// A setting with no key, or a value no Gen2 word names, is named on its own: left in, the round
 	// trip reports the whole section.
 	unsupported, mapped := unmappedMQTTSettings(desired.MQTT)
@@ -108,9 +109,11 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	unsupported = append(unsupported, channelPaths...)
 	wifiPaths, wifiRest := unmappedWiFiSettings(desired.WiFi)
 	unsupported = append(unsupported, wifiPaths...)
+	unsupported = append(unsupported, unmappedLoginSettings(desired.Auth, loginSupported)...)
 	checked := *checkedChannels
 	checked.MQTT = mapped
 	checked.WiFi = wifiRest
+	checked.Auth = nil // the login is written with Shelly.SetAuth and read from the device info, not from the document
 
 	apiJSON, err := converter.ToAPIConfig(&checked, "")
 	if err != nil {
@@ -237,6 +240,11 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	if err != nil {
 		return nil, err
 	}
+	if result.stationMoves && config.Auth != nil && config.Auth.Enable != nil {
+		// Where the answer of either change is lost, the other cannot be told apart, and the stored
+		// login could no longer be trusted. Nothing has been written yet.
+		return nil, &refusedBeforeWriteError{fmt.Errorf("%w: auth.enable: a login change cannot be applied together with a change of the Wi-Fi network; apply them one at a time", ErrUnsupportedSettings)}
+	}
 	for _, write := range gen2WritesOf(apiConfig) {
 		result.SettingsCount += len(gen2Leaves(write.key, write.body))
 	}
@@ -253,6 +261,9 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 
 	if err := a.applyGen2Sections(ctx, setter, apiConfig, result); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
+	}
+	if err := a.applyGen2Login(ctx, client, config.Auth, result); err != nil {
+		return nil, err
 	}
 
 	result.Duration = time.Since(startTime)
@@ -439,4 +450,99 @@ func gen2Leaves(prefix string, body map[string]interface{}) []gen2Leaf {
 	}
 	sort.Slice(leaves, func(i, j int) bool { return leaves[i].path < leaves[j].path })
 	return leaves
+}
+
+// unmappedLoginSettings returns the paths of a desired login that the Gen2 apply refuses, before
+// anything is written. A Gen2 device has one user, admin; the password is write-only. Every rule
+// keeps the manager from holding a login the device does not accept: it is stored after the device
+// took it, and only the one it took.
+func unmappedLoginSettings(auth *AuthConfiguration, loginSupported bool) []string {
+	if auth == nil {
+		return nil
+	}
+	if auth.Enable == nil && auth.Username == nil && auth.Password == nil && auth.Realm == nil {
+		return nil
+	}
+	if !loginSupported {
+		return []string{"auth.enable"}
+	}
+	var paths []string
+	if auth.Realm != nil {
+		paths = append(paths, "auth.realm")
+	}
+	switch {
+	case auth.Enable == nil:
+		paths = append(paths, "auth.enable")
+	case *auth.Enable:
+		if auth.Username == nil || *auth.Username != gen2LoginUser {
+			paths = append(paths, "auth.user")
+		}
+		if auth.Password == nil || !gen2WiFiPasswordUsable(*auth.Password) {
+			paths = append(paths, "auth.pass")
+		}
+	default:
+		if auth.Username != nil {
+			paths = append(paths, "auth.user")
+		}
+		if auth.Password != nil {
+			paths = append(paths, "auth.pass")
+		}
+	}
+	return paths
+}
+
+// gen2LoginUser is the one user a Gen2 device allows.
+const gen2LoginUser = "admin"
+
+// applyGen2Login writes the login last, with Shelly.SetAuth, and only when everything before it
+// went through, so the stored login and the cached client never fall behind the device. The device
+// never returns the password: the error has it removed, nothing is stored on a failure, and an
+// answer that never arrived says the stored login may now be stale. A device that rejects the
+// manager's own login stops the apply.
+func (a *ConfigApplier) applyGen2Login(ctx context.Context, client ShellyClient, auth *AuthConfiguration, result *ApplyResult) error {
+	if !a.writeLogin || result.FailedCount > 0 || auth == nil || auth.Enable == nil {
+		return nil
+	}
+	enabled := *auth.Enable
+	username, password := "", ""
+	if enabled && auth.Username != nil && auth.Password != nil {
+		username, password = *auth.Username, *auth.Password
+	}
+	result.SettingsCount++
+	failure := ApplyFailure{Path: "auth", Value: "enable"}
+
+	loginClient, ok := client.(LoginSettingsClient)
+	if !ok {
+		failure.Error = errNoLoginClient.Error()
+		result.Failures = append(result.Failures, failure)
+		result.FailedCount++
+		return nil
+	}
+
+	var err error
+	if enabled {
+		err = loginClient.SetAuth(ctx, username, password)
+	} else {
+		err = loginClient.ResetAuth(ctx)
+	}
+	if err != nil {
+		err = redact(err, password)
+		if shelly.IsAuthError(err) {
+			return fmt.Errorf("device rejected the login while applying: %w", err)
+		}
+		failure.Error = err.Error()
+		if !deviceAnswered(err) {
+			failure.Error += "; the device may have switched its login, so the stored login may now be stale"
+		}
+		result.Failures = append(result.Failures, failure)
+		result.FailedCount++
+		return nil
+	}
+
+	result.AppliedCount++
+	result.login = &LoginChange{Enabled: enabled}
+	if enabled {
+		result.login.Username, result.login.Password = username, password
+	}
+	return nil
 }
