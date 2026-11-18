@@ -614,7 +614,7 @@ func TestApplyLockProviders_APoolOfOneConnectionAppliesWithoutADatabaseLock(t *t
 			repo := NewGormConfigRepository(server.openSized(t, 1), nil)
 
 			for i := 0; i < 2; i++ {
-				lock, err := repo.LockDeviceApply(context.Background(), 1)
+				lock, err := repo.LockDeviceApply(lockProbeContext(t), 1)
 				require.NoError(t, err)
 				assert.Nil(t, lock, "a pool of one takes no database lock")
 			}
@@ -637,7 +637,7 @@ func TestApplyLockProviders_TheLockIsReleasedOnTheConnectionThatTookIt(t *testin
 			_, repoA := f.replica(t)
 			_, repoB := f.replica(t)
 
-			lock, err := repoA.LockDeviceApply(context.Background(), 1)
+			lock, err := repoA.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err)
 			require.NotNil(t, lock)
 			var wg sync.WaitGroup
@@ -728,7 +728,7 @@ func TestApplyLockProviders_ACleanDisconnectReleasesTheLock(t *testing.T) {
 			_, repoA := f.replica(t)
 			_, repoB := f.replica(t)
 
-			lock, err := repoA.LockDeviceApply(context.Background(), 1)
+			lock, err := repoA.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err)
 			require.NotNil(t, lock)
 			// Close the physical connection, as a replica that exits does; Raw with ErrBadConn
@@ -755,12 +755,12 @@ func TestApplyLockProviders_TheLockIsPerDevice(t *testing.T) {
 			_, repoA := f.replica(t)
 			_, repoB := f.replica(t)
 
-			one, err := repoA.LockDeviceApply(context.Background(), 1)
+			one, err := repoA.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err)
 			require.NotNil(t, one)
 			defer one.Unlock()
 
-			other, err := repoB.LockDeviceApply(context.Background(), 2)
+			other, err := repoB.LockDeviceApply(lockProbeContext(t), 2)
 			require.NoError(t, err)
 			require.NotNil(t, other)
 			other.Unlock()
@@ -784,7 +784,7 @@ func TestApplyLockProviders_TheContextBoundsTheWaitNotTheRepository(t *testing.T
 			_, repoA := f.replica(t)
 			_, repoB := f.replica(t)
 
-			held, err := repoA.LockDeviceApply(context.Background(), 1)
+			held, err := repoA.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err)
 			require.NotNil(t, held)
 			defer held.Unlock()
@@ -797,7 +797,7 @@ func TestApplyLockProviders_TheContextBoundsTheWaitNotTheRepository(t *testing.T
 
 			require.ErrorIs(t, err, context.DeadlineExceeded)
 			assert.NotErrorIs(t, err, ErrApplyInProgress)
-			assert.GreaterOrEqual(t, elapsed, 700*time.Millisecond, "the wait ended at the repository's own budget, not the context's")
+			assert.GreaterOrEqual(t, elapsed, 700*time.Millisecond, "the wait ended at the context's deadline, not at an earlier budget of the repository")
 		})
 	}
 }
@@ -808,7 +808,7 @@ func TestApplyLock_SQLiteNeedsNoDatabaseLock(t *testing.T) {
 	require.NoError(t, err)
 	repo := NewGormConfigRepository(db, nil)
 
-	lock, err := repo.LockDeviceApply(context.Background(), 1)
+	lock, err := repo.LockDeviceApply(lockProbeContext(t), 1)
 
 	require.NoError(t, err)
 	assert.Nil(t, lock)
@@ -848,7 +848,7 @@ func TestApplyLockProviders_ADeviceIDBeyondInt4IsRefused(t *testing.T) {
 			f := newLockFixture(t, server)
 			_, repo := f.replica(t)
 
-			_, err := repo.LockDeviceApply(context.Background(), 1<<31)
+			_, err := repo.LockDeviceApply(lockProbeContext(t), 1<<31)
 
 			require.Error(t, err)
 			assert.False(t, strings.Contains(err.Error(), "in progress"))

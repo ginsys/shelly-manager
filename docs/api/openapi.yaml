@@ -1438,9 +1438,11 @@ paths:
             pending_reboot true as a best effort (the two updates are tried twice each and
             then only logged, so a database that stays unreachable leaves the flags as another
             replica set them). Read the device state, or verify it, before relying on the
-            flags; the next apply writes the configuration again and reboots once more. An
-            apply that found the lock already lost, before its first write, writes nothing and
-            forces no flag. The call can be repeated.
+            flags. Where pending_reboot was recorded, the next apply writes the configuration
+            again and reboots once more; where it was not, an apply whose stored settings
+            already match the device does not reboot it, so verify the device and reboot it by
+            hand if needed. An apply that found the lock already lost, before its first write,
+            writes nothing and forces no flag. The call can be repeated.
           content:
             application/json:
               schema:
