@@ -238,6 +238,17 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- The database pool now follows the provider. The built-in default of `database.max_open_conns` and
+  `max_idle_conns` was 1 for every provider, and the example config set 1 too, so a PostgreSQL or
+  MySQL deployment that set only the provider and the DSN ran a pool of one. An unset or 0 value now
+  means the provider's pool (SQLite 1; PostgreSQL and MySQL 25 open, 5 idle; the `postgres` and
+  `sqlite3` aliases included, where `postgres` used to get 10 and 2), and a value you set is used as
+  is. With only `max_open_conns` set, the idle count never exceeds it. The example config no longer
+  sets either key. Visible cost: each PostgreSQL or MySQL replica now opens up to 25 server
+  connections, so replicas times `max_open_conns` must stay below the server's `max_connections`; set
+  the pool explicitly where that does not hold. The Kubernetes manifests still do not reach the app
+  (their `DATABASE_*` names lack the `SHELLY_` prefix): ginsys/shelly-manager#571. Fixes
+  ginsys/shelly-manager#570.
 - A configured `power_metering.energy_reset` now survives the configuration merge. The merge walked
   into the time field by field, found no field it can set, and left the zero time in the merged
   configuration with no source, so the desired configuration of a device (and what the API returns

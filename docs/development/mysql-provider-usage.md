@@ -143,7 +143,7 @@ database:
   dsn: "connection_string"             # Required: MySQL connection string
   
   # Connection Pool Settings
-  max_open_conns: 20                   # Maximum open connections (default: 20)
+  max_open_conns: 25                   # Maximum open connections (unset: 25 through the config file; a provider created directly falls back to 20)
   max_idle_conns: 5                    # Maximum idle connections (default: 5)
   conn_max_lifetime: "30m"             # Connection lifetime (default: 30m)
   conn_max_idle_time: "5m"             # Idle connection timeout (default: 5m)

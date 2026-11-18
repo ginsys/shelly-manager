@@ -23,8 +23,13 @@ database:
   provider: "sqlite"        # Database provider: "sqlite", "postgresql", "mysql"
   # Connection string; overrides path when set. Required for postgresql/mysql.
   # dsn: "data/shelly.db"
-  max_open_conns: 1         # Maximum open connections
-  max_idle_conns: 1         # Maximum idle connections  
+  # Connection pool. Leave both unset to get the provider's own pool: SQLite 1,
+  # PostgreSQL and MySQL 25 open / 5 idle. A pool of 1 on PostgreSQL or MySQL
+  # cannot take the cross-replica apply lock. Environment: SHELLY_DATABASE_MAX_OPEN_CONNS,
+  # SHELLY_DATABASE_MAX_IDLE_CONNS. Keep replicas x max_open_conns below the
+  # server's max_connections.
+  # max_open_conns: 25      # Maximum open connections
+  # max_idle_conns: 5       # Maximum idle connections
   conn_max_lifetime: 300    # Connection max lifetime (seconds)
   conn_max_idle_time: 600   # Connection max idle time (seconds) 
   slow_query_time: 500      # Slow query threshold (milliseconds)
