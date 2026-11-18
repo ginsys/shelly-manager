@@ -43,3 +43,19 @@ func TestConfigApplyResponse_AVerifiedApplyIsNotUnconfirmed(t *testing.T) {
 	assert.True(t, resp.Success)
 	assert.Equal(t, 3, resp.AppliedCount)
 }
+
+// A login write whose answer never arrived is told apart from a refusal by a warning, because a
+// failure reaches the caller as a fixed text that names the setting only.
+func TestConfigApplyResponse_ALostLoginAnswerIsAWarningNotAFailureText(t *testing.T) {
+	const warning = "The device gave no answer to the login write; it may have switched its login, so the stored login may now be stale"
+	resp := configApplyResponse(&configuration.ApplyVerifyResult{
+		ApplyResult: &configuration.ApplyResult{
+			FailedCount: 1,
+			Failures:    []configuration.ApplyFailure{{Path: "auth", Value: "enable", Error: "no answer; the stored login may now be stale"}},
+			Warnings:    []string{warning},
+		},
+	})
+
+	assert.Equal(t, []string{"auth: the device refused the write"}, resp.Failures)
+	assert.Equal(t, []string{warning}, resp.Warnings)
+}

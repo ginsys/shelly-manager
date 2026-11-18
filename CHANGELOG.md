@@ -11,9 +11,10 @@ All notable changes to this project are documented here. The project follows Con
   The password is write-only, and the new login is stored once the device accepted it. The
   read-back is `auth_en` from the device info. Refused with 422 before anything is written: a user
   other than `admin`, a login on with no password that can be sent, a login off with a user or
-  password, `auth.realm`, and a login change in the same apply as a Wi-Fi network change. An
-  answer to `SetAuth` that never arrives is a failure that stores nothing and says the stored
-  login may now be stale. Not confirmed on hardware (read from the Shelly Gen2 documentation):
+  password, `auth.realm`, and a login change in the same apply as a Wi-Fi network change. `SetAuth`
+  is never sent twice, and a failure never carries the device's text (it can echo `ha1`). An
+  answer to `SetAuth` that never arrives is a failure that stores nothing, and the response
+  warns that the stored login may now be stale. Not confirmed on hardware (read from the Shelly Gen2 documentation):
   whether `SetAuth` restarts the device, and what an absent `ha1` does. Part of
   ginsys/shelly-manager#381.
 - Apply and verify on a Gen2 or Gen3 device now also write the Wi-Fi station: enable, ssid,

@@ -295,3 +295,50 @@ func TestSetAuth_RefusesAUserOtherThanAdmin(t *testing.T) {
 		t.Fatalf("Shelly.SetAuth was called %d times", len(*calls))
 	}
 }
+
+// A retry of Shelly.SetAuth would go out with the old login. If the first attempt changed the
+// login and only its answer was lost, the retry gets 401 and the lost answer reads as a refusal.
+// Neither a lost answer nor a 5xx is retried.
+func TestSetAuth_IsSentOnceWhateverTheClientRetries(t *testing.T) {
+	skipWithoutSockets(t)
+	for _, tc := range []struct {
+		name   string
+		answer func(w http.ResponseWriter)
+	}{
+		{"a lost answer", func(w http.ResponseWriter) {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+		}},
+		{"a 503", func(w http.ResponseWriter) { w.WriteHeader(http.StatusServiceUnavailable) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			setAuthCalls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				if strings.Contains(string(body), "Shelly.GetDeviceInfo") {
+					_, _ = fmt.Fprintf(w, `{"id":1,"result":{"id":%q}}`, testDeviceID)
+					return
+				}
+				mu.Lock()
+				setAuthCalls++
+				mu.Unlock()
+				tc.answer(w)
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL[len("http://"):], WithRetry(3, time.Millisecond))
+			if err := client.SetAuth(context.Background(), "admin", "secret"); err == nil {
+				t.Fatal("expected an error")
+			}
+			if err := client.ResetAuth(context.Background()); err == nil {
+				t.Fatal("expected an error")
+			}
+			if setAuthCalls != 2 {
+				t.Fatalf("Shelly.SetAuth requests = %d, want 2 (one SetAuth and one ResetAuth, no retry)", setAuthCalls)
+			}
+		})
+	}
+}

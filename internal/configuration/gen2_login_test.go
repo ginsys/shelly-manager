@@ -263,6 +263,9 @@ func TestApplyDesiredConfig_Gen2ALostLoginAnswerIsAFailureThatStoresNothing(t *t
 	require.Len(t, result.ApplyResult.Failures, 1)
 	assert.Equal(t, "auth", result.ApplyResult.Failures[0].Path)
 	assert.Contains(t, result.ApplyResult.Failures[0].Error, "stored login may")
+	require.Len(t, result.ApplyResult.Warnings, 1, "the caller sees only the warnings, never a failure's text")
+	assert.Contains(t, result.ApplyResult.Warnings[0], "stored login may now be stale")
+	assert.NotContains(t, result.ApplyResult.Warnings[0], "secret-pw")
 	assert.Empty(t, hooks.stored)
 	assert.False(t, result.ConfigApplied)
 	assert.False(t, repo.devices[1].ConfigApplied)
@@ -348,4 +351,24 @@ func TestApplyDesiredConfig_Gen2RefusesTheLoginWhereNothingCanStoreIt(t *testing
 	assert.Contains(t, err.Error(), "auth")
 	assert.Empty(t, dev.sequence)
 	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
+// Shelly.SetAuth carries ha1, which is enough to answer a digest challenge without the password. A
+// device error that echoes it is replaced by a fixed text for this write, and an answered refusal
+// adds no stale-login warning.
+func TestApplyDesiredConfig_Gen2KeepsAnEchoedHA1OutOfAFailure(t *testing.T) {
+	const ha1 = "897c98c0aae196728d3a78eae02705c9fef67f9948e42b185f93b5c1974df346"
+	desired := &DeviceConfiguration{Auth: loginOn("admin", "secret-pw")}
+	dev := newLoginGen2Device()
+	dev.loginErr = &shelly.DeviceError{IP: "192.168.1.60", Generation: 2, Operation: "Shelly.SetAuth", StatusCode: 400, Message: "invalid ha1 " + ha1}
+	svc, _, hooks := gen2LoginService(t, desired, dev)
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	require.Len(t, result.ApplyResult.Failures, 1)
+	assert.NotContains(t, result.ApplyResult.Failures[0].Error, ha1)
+	assert.NotContains(t, result.ApplyResult.Failures[0].Error, "invalid")
+	assert.Empty(t, result.ApplyResult.Warnings, "the device answered: the login was refused, not unknown")
+	assert.Empty(t, hooks.stored)
 }
