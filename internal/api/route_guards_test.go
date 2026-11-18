@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/metrics"
 	"github.com/ginsys/shelly-manager/internal/sync"
@@ -76,6 +77,7 @@ var guardWalkRequired = []string{
 	"POST /api/v1/admin/rotate-admin-key",
 	"POST /api/v1/provisioner/agents/register",
 	"POST /api/v1/devices",
+	"GET /api/v1/metrics/security", // present only with a security monitor
 }
 
 type guardWalkRoute struct {
@@ -141,8 +143,12 @@ func guardWalkRouter(t *testing.T, adminKey string) *mux.Router {
 		mhandler.SetAdminAPIKey(adminKey)
 	}
 
+	// The production router builds a security monitor, and GET /metrics/security exists only with one.
+	monitor := middleware.NewSecurityMonitor(middleware.DefaultSecurityConfig(), logger)
+	t.Cleanup(monitor.Close)
+
 	router := mux.NewRouter()
-	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), h, logger, nil)
+	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), h, logger, monitor)
 	return router
 }
 
@@ -154,7 +160,13 @@ func walkGuardRoutes(t *testing.T, router *mux.Router) []guardWalkRoute {
 	err := router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
 		methods, err := route.GetMethods()
 		if err != nil {
-			return nil // a path prefix with no method of its own
+			// A subrouter entry has no handler and no method of its own. A handler with no method
+			// answers every method, so it cannot be walked and must not pass unseen.
+			if route.GetHandler() != nil {
+				tmpl, _ := route.GetPathTemplate()
+				t.Errorf("%s is registered without .Methods(): give it methods so the walk can test it", tmpl)
+			}
+			return nil
 		}
 		tmpl, err := route.GetPathTemplate()
 		if err != nil {
