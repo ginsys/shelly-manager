@@ -700,6 +700,12 @@ func (c *Client) GetIP() string {
 	return c.ip
 }
 
+// CloseIdleConnections closes the keep-alive connections of this client. A client that lives for
+// one request calls it when it is done, because its transport is private and has no idle timeout.
+func (c *Client) CloseIdleConnections() {
+	c.httpClient.CloseIdleConnections()
+}
+
 // Helper methods for HTTP operations
 
 func (c *Client) getJSON(ctx context.Context, url string, result interface{}) error {
