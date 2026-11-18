@@ -12,7 +12,8 @@ import (
 )
 
 // ErrApplyInProgress is returned when another manager replica holds the apply lock of the device
-// for longer than applyLockWait. Nothing was read from or written to the device.
+// for longer than applyLockWait. Nothing was written to the device and no flag changed; the caller
+// may already have read the device's identity (the service builds the client before it applies).
 var ErrApplyInProgress = errors.New("another apply to this device is running; retry in a moment")
 
 // ErrApplyLockLost is returned when the lock that keeps other replicas away from the device was lost

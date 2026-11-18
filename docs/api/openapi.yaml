@@ -1363,8 +1363,8 @@ paths:
             (set it with PUT /api/v1/devices/{id}, field mac). A record with no MAC is refused
             because the device at its address cannot be identified. The same 409 is returned
             when another manager replica has been applying to this device for longer than the
-            30 second wait; nothing was read from or written to the device, and the call can be
-            repeated.
+            30 second wait; nothing was written to the device and no flag changed (the server
+            may have read the device's identity before it waited), and the call can be repeated.
           content:
             application/json:
               schema:
