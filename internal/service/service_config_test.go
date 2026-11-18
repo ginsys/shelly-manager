@@ -682,48 +682,6 @@ func TestShellyService_evictClient_KeepsReplacement(t *testing.T) {
 	}
 }
 
-func TestShellyService_ExportDeviceConfig(t *testing.T) {
-	server := createMockShellyConfigServer()
-	defer server.Close()
-
-	db := createTestDB(t)
-	cfg := createTestConfig()
-	service := NewService(db, cfg)
-
-	serverIP := server.URL[len("http://"):]
-	device := createTestDevice(t, db, serverIP)
-
-	// First import a config so we have something to export
-	_, err := service.ImportDeviceConfig(device.ID)
-	if err != nil {
-		t.Fatalf("Failed to import config: %v", err)
-	}
-
-	// Test export
-	err = service.ExportDeviceConfig(device.ID)
-	if err != nil {
-		t.Fatalf("ExportDeviceConfig failed: %v", err)
-	}
-}
-
-func TestShellyService_ExportDeviceConfig_NoConfig(t *testing.T) {
-	server := createMockShellyConfigServer()
-	defer server.Close()
-
-	db := createTestDB(t)
-	cfg := createTestConfig()
-	service := NewService(db, cfg)
-
-	serverIP := server.URL[len("http://"):]
-	device := createTestDevice(t, db, serverIP)
-
-	// Try to export without importing first
-	err := service.ExportDeviceConfig(device.ID)
-	if err == nil {
-		t.Error("Expected error when exporting without config")
-	}
-}
-
 func TestShellyService_ConfigurationWorkflow(t *testing.T) {
 	server := createMockShellyConfigServer()
 	defer server.Close()
@@ -773,14 +731,7 @@ func TestShellyService_ConfigurationWorkflow(t *testing.T) {
 		}
 	})
 
-	t.Run("5. Export config", func(t *testing.T) {
-		err := service.ExportDeviceConfig(device.ID)
-		if err != nil {
-			t.Fatalf("Export failed: %v", err)
-		}
-	})
-
-	t.Run("6. Check import status", func(t *testing.T) {
+	t.Run("5. Check import status", func(t *testing.T) {
 		status, err := service.GetImportStatus(device.ID)
 		if err != nil {
 			t.Fatalf("Import status failed: %v", err)

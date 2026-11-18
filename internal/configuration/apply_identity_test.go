@@ -7,9 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
@@ -216,76 +214,6 @@ func TestGormConfigRepository_ReadsTheStoredMAC(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, "AA:BB:CC:DD:EE:FF", all[0].MAC)
-}
-
-// exportFixture stores a device with the given MAC and a configuration to export to it.
-func exportFixture(t *testing.T, storedMAC string) (*Service, *gorm.DB) {
-	t.Helper()
-	service, db := setupTestService(t)
-	require.NoError(t, db.Create(&Device{ID: 1, Name: "plug", Type: "SHSW-1", IP: "192.168.1.100", MAC: storedMAC}).Error)
-	require.NoError(t, db.Create(&DeviceConfig{DeviceID: 1, Config: []byte(`{"name": "TestDevice"}`), SyncStatus: "pending"}).Error)
-	return service, db
-}
-
-// Export writes the stored configuration with no apply behind it, so it owes the same check: a
-// device that answers with another MAC, or that cannot be identified, gets no SetConfig, and the
-// stored sync status and history stay as they were.
-func TestExportToDevice_RefusesADeviceItCannotIdentify(t *testing.T) {
-	cases := []struct {
-		name     string
-		stored   string
-		info     *shelly.DeviceInfo
-		contains string
-	}{
-		{"another MAC, Gen1", "AA:BB:CC:DD:EE:FF", &shelly.DeviceInfo{MAC: "112233445566", Generation: 1}, "POST /api/v1/discover"},
-		{"another MAC, Gen2", "AA:BB:CC:DD:EE:FF", &shelly.DeviceInfo{MAC: "112233445566", Generation: 2}, "POST /api/v1/discover"},
-		{"no stored MAC", "", &shelly.DeviceInfo{MAC: testDeviceMAC, Generation: 1}, "PUT /api/v1/devices/{id}"},
-		{"the device reports no MAC", "AA:BB:CC:DD:EE:FF", &shelly.DeviceInfo{Generation: 1}, "did not report"},
-		{"GetInfo answers nothing", "AA:BB:CC:DD:EE:FF", nil, "did not report"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			service, db := exportFixture(t, tc.stored)
-			client := new(mockShellyClient)
-			// A device that is written to accepts the write; the assertion below is what refuses it.
-			client.On("SetConfig", mock.Anything, mock.Anything).Return(nil).Maybe()
-			if tc.info == nil {
-				client.On("GetInfo", mock.Anything).Return(nil, nil)
-			} else {
-				client.On("GetInfo", mock.Anything).Return(tc.info, nil)
-			}
-
-			err := service.ExportToDevice(1, client)
-
-			require.Error(t, err)
-			assert.ErrorIs(t, err, ErrDeviceIdentity)
-			assert.Contains(t, err.Error(), tc.contains)
-			client.AssertNotCalled(t, "SetConfig", mock.Anything, mock.Anything)
-
-			var stored DeviceConfig
-			require.NoError(t, db.Where("device_id = ?", 1).First(&stored).Error)
-			assert.Equal(t, "pending", stored.SyncStatus)
-			assert.Nil(t, stored.LastSynced)
-			var history []ConfigHistory
-			require.NoError(t, db.Where("device_id = ?", 1).Find(&history).Error)
-			assert.Empty(t, history)
-		})
-	}
-}
-
-// A GetInfo failure is the device's own error, not an identity refusal.
-func TestExportToDevice_AGetInfoFailureIsNotAnIdentityRefusal(t *testing.T) {
-	service, _ := exportFixture(t, "AA:BB:CC:DD:EE:FF")
-	client := new(mockShellyClient)
-	client.On("SetConfig", mock.Anything, mock.Anything).Return(nil).Maybe()
-	client.On("GetInfo", mock.Anything).Return(nil, fmt.Errorf("401: %w", shelly.ErrAuthFailed))
-
-	err := service.ExportToDevice(1, client)
-
-	require.Error(t, err)
-	assert.False(t, errors.Is(err, ErrDeviceIdentity))
-	assert.True(t, shelly.IsAuthError(err))
-	client.AssertNotCalled(t, "SetConfig", mock.Anything, mock.Anything)
 }
 
 func (r identityRig) verify(t *testing.T) (*VerifyResult, error) {

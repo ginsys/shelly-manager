@@ -64,10 +64,9 @@ restored.
 
 The `backup` plugin is not covered: it writes a database snapshot, which holds
 every secret by design, so protect that file as you protect the database. The
-push routes `POST /api/v1/devices/{id}/config/export` and
-`POST /api/v1/config/bulk-export` send the stored configuration to the device
-and return no configuration. The bulk route sends it only to the devices named
-in its `device_ids`; see the bulk operations section of the API overview.
+manager has no route that writes a stored import/export record to a device: the
+only device write is the apply, `POST /api/v1/devices/{id}/config/new/apply`,
+which sends the desired configuration.
 
 ### Preview export
 

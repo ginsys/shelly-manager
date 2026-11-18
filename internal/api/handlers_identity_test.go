@@ -48,7 +48,7 @@ func gen1Device(t *testing.T, mac string, status int) (addr string, writes *atom
 	return strings.TrimPrefix(server.URL, "http://"), writes
 }
 
-// deviceAt stores a device record at addr, with a configuration waiting to be exported to it.
+// deviceAt stores a device record at addr, with a stored configuration.
 func deviceAt(t *testing.T, db *database.Manager, addr, mac string) *database.Device {
 	t.Helper()
 	device := testutil.TestDevice()
@@ -64,107 +64,6 @@ func deviceAt(t *testing.T, db *database.Manager, addr, mac string) *database.De
 func exportHandler(t *testing.T, db *database.Manager) *Handler {
 	t.Helper()
 	return NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
-}
-
-func postExport(handler *Handler, id uint) *httptest.ResponseRecorder {
-	req := httptest.NewRequest("POST", "/api/v1/devices/"+strconv.Itoa(int(id))+"/config/export", nil)
-	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(id))})
-	w := httptest.NewRecorder()
-	handler.ExportDeviceConfig(w, req)
-	return w
-}
-
-// A device that answers at the stored address with another MAC gets nothing, and the caller is told
-// why: 409, with the message, not a hidden 500.
-func TestExportDeviceConfig_RefusesADeviceWithAnotherMAC(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	handler := exportHandler(t, db) // its service creates the device_configs table
-	addr, writes := gen1Device(t, otherDeviceID, http.StatusOK)
-	device := deviceAt(t, db, addr, storedMAC)
-
-	w := postExport(handler, device.ID)
-
-	testutil.AssertEqual(t, http.StatusConflict, w.Code)
-	if !strings.Contains(w.Body.String(), "stored MAC") {
-		t.Errorf("the 409 should say what differs, got %s", w.Body.String())
-	}
-	testutil.AssertEqual(t, int32(0), writes.Load())
-}
-
-func TestExportDeviceConfig_ExportsToTheStoredDevice(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	handler := exportHandler(t, db)
-	addr, writes := gen1Device(t, reportedMAC, http.StatusOK)
-	device := deviceAt(t, db, addr, storedMAC)
-
-	w := postExport(handler, device.ID)
-
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	if writes.Load() == 0 {
-		t.Error("the matching device should have received the configuration")
-	}
-}
-
-// A device that rejects the stored login on the identity read is an auth problem to fix (502), the
-// same answer apply gives, and not an identity refusal.
-func TestExportDeviceConfig_ADeviceThatRejectsTheLoginAnswers502(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	handler := exportHandler(t, db)
-	addr, writes := gen1Device(t, reportedMAC, http.StatusUnauthorized)
-	device := deviceAt(t, db, addr, storedMAC)
-
-	w := postExport(handler, device.ID)
-
-	testutil.AssertEqual(t, http.StatusBadGateway, w.Code)
-	testutil.AssertEqual(t, int32(0), writes.Load())
-}
-
-// Bulk export goes through the same export per device: the device with another MAC is reported as
-// that device's error and gets nothing, the matching one is exported.
-func TestBulkExportConfigs_ReportsAMismatchPerDevice(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	handler := exportHandler(t, db)
-	wrongAddr, wrongWrites := gen1Device(t, otherDeviceID, http.StatusOK)
-	rightAddr, rightWrites := gen1Device(t, reportedMAC, http.StatusOK)
-	wrong := deviceAt(t, db, wrongAddr, "B4:CF:12:34:56:78")
-	right := deviceAt(t, db, rightAddr, storedMAC)
-
-	w := postBulk(handler, (*Handler).BulkExportConfigs, "/api/v1/config/bulk-export", idsBody(wrong.ID, right.ID))
-
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	var body struct {
-		Data struct {
-			Success int `json:"success"`
-			Failed  int `json:"failed"`
-			Results []struct {
-				DeviceID uint   `json:"device_id"`
-				Status   string `json:"status"`
-				Error    string `json:"error"`
-			} `json:"results"`
-		} `json:"data"`
-	}
-	testutil.AssertNoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	testutil.AssertEqual(t, 1, body.Data.Success)
-	testutil.AssertEqual(t, 1, body.Data.Failed)
-	for _, r := range body.Data.Results {
-		switch r.DeviceID {
-		case wrong.ID:
-			testutil.AssertEqual(t, "failed", r.Status)
-			if !strings.Contains(r.Error, "stored MAC") {
-				t.Errorf("the mismatching device's error should say what differs, got %q", r.Error)
-			}
-		case right.ID:
-			testutil.AssertEqual(t, "success", r.Status)
-		}
-	}
-	testutil.AssertEqual(t, int32(0), wrongWrites.Load())
-	if rightWrites.Load() == 0 {
-		t.Error("the matching device should have received the configuration")
-	}
 }
 
 func postControl(handler *Handler, id uint, action string) *httptest.ResponseRecorder {

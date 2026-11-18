@@ -899,35 +899,6 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, status)
 }
 
-// ExportDeviceConfig handles POST /api/v1/devices/{id}/config/export
-func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id, err := strconv.ParseUint(vars["id"], 10, 32)
-	if err != nil {
-		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
-		return
-	}
-
-	// Export configuration to device
-	if err := h.Service.ExportDeviceConfig(uint(id)); err != nil {
-		h.logger.WithFields(map[string]any{
-			"device_id": id,
-			"error":     err.Error(),
-		}).Error("Failed to export device config")
-		// An identity refusal answers 409 and a rejected login 502; every other error stays 500.
-		h.writeConfigDeviceError(w, r, err)
-		return
-	}
-
-	response := map[string]interface{}{
-		"status":    "success",
-		"device_id": id,
-		"message":   "Configuration exported to device",
-	}
-
-	h.responseWriter().WriteSuccess(w, r, response)
-}
-
 // BulkImportConfigs handles POST /api/v1/config/bulk-import. It reads the live configuration of
 // each named device into the manager, as POST /devices/{id}/config/import does for one device.
 func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
@@ -946,26 +917,6 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 			return 0, err
 		}
 		return config.ID, nil
-	})
-	h.responseWriter().WriteSuccess(w, r, result)
-}
-
-// BulkExportConfigs handles POST /api/v1/config/bulk-export. It writes the stored import/export
-// configuration of each named device to the device, as POST /devices/{id}/config/export does for
-// one device, with the same MAC check. It does not touch the desired configuration, the apply
-// lock or the applied and pending-reboot state.
-func (h *Handler) BulkExportConfigs(w http.ResponseWriter, r *http.Request) {
-	// Admin before any parsing or device contact.
-	if !h.requireAdmin(w, r) {
-		return
-	}
-	selection, ok := h.decodeBulkRequest(w, r)
-	if !ok {
-		return
-	}
-
-	result := h.runBulkConfig(selection, "export", func(id uint) (uint, error) {
-		return 0, h.Service.ExportDeviceConfig(id)
 	})
 	h.responseWriter().WriteSuccess(w, r, result)
 }
