@@ -162,6 +162,9 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 	}
 	lock := &sessionLock{conn: conn, releaseSlot: releaseSlot}
 	fail := func(err error) (applyLock, error) {
+		// A cancelled try may have taken the lock on the server before the client saw the answer, so
+		// the session is discarded, never returned to the pool: its end frees whatever it holds.
+		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		_ = conn.Close()
 		releaseSlot()
 		return nil, refused(err)
