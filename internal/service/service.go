@@ -1300,33 +1300,10 @@ func (s *ShellyService) DetectConfigDrift(deviceID uint) (*configuration.ConfigD
 	return s.ConfigSvc.DetectDrift(deviceID, client)
 }
 
-// BulkDetectConfigDrift checks for configuration drift across all devices
-func (s *ShellyService) BulkDetectConfigDrift() (*configuration.BulkDriftResult, error) {
-	// Get all devices
-	devices, err := s.DB.GetDevices()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get devices: %w", err)
-	}
-
-	if len(devices) == 0 {
-		return &configuration.BulkDriftResult{
-			Total:       0,
-			InSync:      0,
-			Drifted:     0,
-			Errors:      0,
-			Results:     []configuration.DriftResult{},
-			StartedAt:   time.Now(),
-			CompletedAt: time.Now(),
-			Duration:    0,
-		}, nil
-	}
-
-	// Extract device IDs
-	deviceIDs := make([]uint, len(devices))
-	for i, device := range devices {
-		deviceIDs[i] = device.ID
-	}
-
+// BulkDetectConfigDrift checks for configuration drift on the given devices only, in the order
+// given. An id that names no device is reported as that device's error. With stopOnError, the
+// devices after the first error are reported skipped and not contacted.
+func (s *ShellyService) BulkDetectConfigDrift(deviceIDs []uint, stopOnError bool) (*configuration.BulkDriftResult, error) {
 	// Create client getter function that uses our auth retry logic
 	clientGetter := func(deviceID uint) (shelly.Client, error) {
 		device, err := s.DB.GetDevice(deviceID)
@@ -1338,7 +1315,7 @@ func (s *ShellyService) BulkDetectConfigDrift() (*configuration.BulkDriftResult,
 	}
 
 	// Perform bulk drift detection
-	return s.ConfigSvc.BulkDetectDrift(deviceIDs, clientGetter)
+	return s.ConfigSvc.BulkDetectDrift(deviceIDs, clientGetter, stopOnError)
 }
 
 // ApplyConfigTemplate applies a configuration template to a device

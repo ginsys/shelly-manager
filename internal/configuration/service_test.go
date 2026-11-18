@@ -1796,7 +1796,7 @@ func TestBulkDetectDrift(t *testing.T) {
 	}
 
 	// Test bulk drift detection
-	result, err := service.BulkDetectDrift([]uint{1, 2}, clientGetter)
+	result, err := service.BulkDetectDrift([]uint{1, 2}, clientGetter, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -1879,7 +1879,7 @@ func TestBulkDetectDrift_WithErrors(t *testing.T) {
 	}
 
 	// Test with mixed success/error scenarios
-	result, err := service.BulkDetectDrift([]uint{1, 2, 999}, clientGetter)
+	result, err := service.BulkDetectDrift([]uint{1, 2, 999}, clientGetter, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -1909,6 +1909,44 @@ func TestBulkDetectDrift_WithErrors(t *testing.T) {
 	assert.Contains(t, notFoundResult.Error, "Device not found")
 }
 
+// With stopOnError, the devices after the first error are skipped and their client is never asked for.
+func TestBulkDetectDrift_StopOnErrorSkipsTheRest(t *testing.T) {
+	service, db := setupTestService(t)
+	for _, id := range []uint{1, 2} {
+		require.NoError(t, db.Create(&Device{
+			ID:   id,
+			Name: fmt.Sprintf("Device%d", id),
+			Type: "SHSW-1",
+			IP:   fmt.Sprintf("192.168.1.%d", 110+id),
+			MAC:  fmt.Sprintf("AA:BB:CC:DD:EE:%02d", 10+id),
+		}).Error)
+	}
+
+	var asked []uint
+	clientGetter := func(deviceID uint) (shelly.Client, error) {
+		asked = append(asked, deviceID)
+		return nil, fmt.Errorf("client creation failed")
+	}
+
+	result, err := service.BulkDetectDrift([]uint{1, 2}, clientGetter, true)
+	require.NoError(t, err)
+
+	assert.Equal(t, []uint{1}, asked, "the device after the first error must not be contacted")
+	assert.Equal(t, 2, result.Total)
+	assert.Equal(t, 1, result.Errors)
+	assert.Equal(t, 1, result.Skipped)
+	require.Len(t, result.Results, 2)
+	assert.Equal(t, "error", result.Results[0].Status)
+	assert.Equal(t, BulkStatusSkipped, result.Results[1].Status)
+
+	asked = nil
+	result, err = service.BulkDetectDrift([]uint{1, 2}, clientGetter, false)
+	require.NoError(t, err)
+	assert.Equal(t, []uint{1, 2}, asked, "without stopOnError every device is tried")
+	assert.Equal(t, 2, result.Errors)
+	assert.Equal(t, 0, result.Skipped)
+}
+
 func TestBulkDetectDrift_EmptyDeviceList(t *testing.T) {
 	service, _ := setupTestService(t)
 
@@ -1917,7 +1955,7 @@ func TestBulkDetectDrift_EmptyDeviceList(t *testing.T) {
 	}
 
 	// Test with empty device list
-	result, err := service.BulkDetectDrift([]uint{}, clientGetter)
+	result, err := service.BulkDetectDrift([]uint{}, clientGetter, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 

@@ -247,6 +247,21 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- The four bulk configuration routes (`bulk-import`, `bulk-export`, `bulk-drift-detect` and
+  `bulk-drift-detect-enhanced`) now act on the devices named in `device_ids` and on no others.
+  They ignored the body and acted on every device, so a request for two devices wrote to or read
+  the whole fleet. **Behaviour change:** a request with no body, invalid JSON, a missing or empty
+  `device_ids`, or an id that is not a positive integer is now 400 `VALIDATION_FAILED` and
+  contacts nothing; an empty or missing `device_ids` used to mean "all devices". A field or option
+  the server does not read (`deviceIds`, `configurations`, `validate_only`) is refused with 400
+  naming it. The one option is `options.stop_on_error`, which reports the devices after the first
+  failure as `skipped` without contacting them. Import and export now answer
+  `{total, success, failed, skipped, results[{device_id, device_name, device_ip, status, error}]}`
+  where they answered `errors`, `ip` and the status `error`; drift keeps its shape and gains
+  `skipped`. Bulk export writes the stored import/export record, takes no apply lock and never
+  changes `config_applied` or `pending_reboot`, as the per-device export does
+  (ginsys/shelly-manager#592 tracks moving it onto apply). The web UI types for these routes
+  follow in a separate change. Fixes ginsys/shelly-manager#248.
 - A device writer saves only the columns it owns, and a whole-row save exists only where it is
   versioned. The discovery upsert, the GitOps import and the CLI discover command saved the whole
   row they had read, so a flag, a setting or a desired configuration that another writer committed

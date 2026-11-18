@@ -293,53 +293,6 @@ func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 	return status, nil
 }
 
-// BulkImportFromDevices imports configuration from multiple devices
-func (s *Service) BulkImportFromDevices(deviceIDs []uint, clientGetter func(uint) (shelly.Client, error)) (*BulkImportResult, error) {
-	result := &BulkImportResult{
-		Total:   len(deviceIDs),
-		Success: 0,
-		Failed:  0,
-		Results: make([]ImportResult, 0, len(deviceIDs)),
-	}
-
-	for _, deviceID := range deviceIDs {
-		importResult := ImportResult{
-			DeviceID: deviceID,
-		}
-
-		// Get client for this device
-		client, err := clientGetter(deviceID)
-		if err != nil {
-			importResult.Status = "error"
-			importResult.Error = fmt.Sprintf("Failed to create client: %v", err)
-			result.Failed++
-		} else {
-			// Import configuration
-			config, err := s.ImportFromDevice(deviceID, client)
-			if err != nil {
-				importResult.Status = "error"
-				importResult.Error = err.Error()
-				result.Failed++
-			} else {
-				importResult.Status = "success"
-				importResult.ConfigID = config.ID
-				result.Success++
-			}
-		}
-
-		result.Results = append(result.Results, importResult)
-	}
-
-	s.logger.WithFields(map[string]any{
-		"total_devices": result.Total,
-		"successful":    result.Success,
-		"failed":        result.Failed,
-		"component":     "configuration",
-	}).Info("Bulk configuration import completed")
-
-	return result, nil
-}
-
 // ExportToDevice exports configuration to a physical device
 func (s *Service) ExportToDevice(deviceID uint, client shelly.Client) error {
 	// Get configuration from database
@@ -520,8 +473,9 @@ func (s *Service) markSyncStatus(stored *DeviceConfig, status string) {
 	}
 }
 
-// BulkDetectDrift checks for configuration drift across multiple devices
-func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (shelly.Client, error)) (*BulkDriftResult, error) {
+// BulkDetectDrift checks for configuration drift across the given devices, in order. With
+// stopOnError, the devices after the first one that errors are reported skipped and not contacted.
+func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (shelly.Client, error), stopOnError bool) (*BulkDriftResult, error) {
 	result := &BulkDriftResult{
 		Total:     len(deviceIDs),
 		InSync:    0,
@@ -539,6 +493,13 @@ func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (she
 	for _, deviceID := range deviceIDs {
 		driftResult := DriftResult{
 			DeviceID: deviceID,
+		}
+
+		if stopOnError && result.Errors > 0 {
+			driftResult.Status = BulkStatusSkipped
+			result.Skipped++
+			result.Results = append(result.Results, driftResult)
+			continue
 		}
 
 		// Get device info for result
@@ -607,6 +568,7 @@ func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (she
 		"devices_in_sync": result.InSync,
 		"devices_drifted": result.Drifted,
 		"devices_errors":  result.Errors,
+		"devices_skipped": result.Skipped,
 		"duration_ms":     result.Duration.Milliseconds(),
 		"component":       "configuration",
 	}).Info("Bulk drift detection completed")

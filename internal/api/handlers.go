@@ -928,139 +928,46 @@ func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, response)
 }
 
-// BulkImportConfigs handles POST /api/v1/config/bulk-import
+// BulkImportConfigs handles POST /api/v1/config/bulk-import. It reads the live configuration of
+// each named device into the manager, as POST /devices/{id}/config/import does for one device.
 func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
-	// Bulk operations mutate every device; require admin before touching hardware.
+	// Admin before any parsing or device contact.
 	if !h.requireAdmin(w, r) {
 		return
 	}
-	// Get all devices
-	devices, err := h.Service.DB.GetDevices()
-	if err != nil {
-		h.logger.WithFields(map[string]any{
-			"error": err.Error(),
-		}).Error("Failed to get devices")
-		h.responseWriter().WriteInternalError(w, r, err)
+	selection, ok := h.decodeBulkRequest(w, r)
+	if !ok {
 		return
 	}
 
-	type ImportResult struct {
-		DeviceID uint   `json:"device_id"`
-		IP       string `json:"ip"`
-		Status   string `json:"status"`
-		Error    string `json:"error,omitempty"`
-	}
-
-	results := make([]ImportResult, 0, len(devices))
-	successCount := 0
-	errorCount := 0
-
-	// Import configuration for each device
-	for _, device := range devices {
-		result := ImportResult{
-			DeviceID: device.ID,
-			IP:       device.IP,
-		}
-
-		// Attempt to import configuration
-		config, err := h.Service.ImportDeviceConfig(device.ID)
+	result := h.runBulkConfig(selection, "import", func(id uint) (uint, error) {
+		config, err := h.Service.ImportDeviceConfig(id)
 		if err != nil {
-			result.Status = "error"
-			result.Error = err.Error()
-			errorCount++
-			h.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"device_ip": device.IP,
-				"error":     err.Error(),
-			}).Warn("Failed to import device config during bulk import")
-		} else {
-			result.Status = "success"
-			successCount++
-			h.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"device_ip": device.IP,
-				"config_id": config.ID,
-			}).Info("Successfully imported device config during bulk import")
+			return 0, err
 		}
-
-		results = append(results, result)
-	}
-
-	response := map[string]interface{}{
-		"total":   len(devices),
-		"success": successCount,
-		"errors":  errorCount,
-		"results": results,
-	}
-
-	h.responseWriter().WriteSuccess(w, r, response)
+		return config.ID, nil
+	})
+	h.responseWriter().WriteSuccess(w, r, result)
 }
 
-// BulkExportConfigs handles POST /api/v1/config/bulk-export
+// BulkExportConfigs handles POST /api/v1/config/bulk-export. It writes the stored import/export
+// configuration of each named device to the device, as POST /devices/{id}/config/export does for
+// one device, with the same MAC check. It does not touch the desired configuration, the apply
+// lock or the applied and pending-reboot state.
 func (h *Handler) BulkExportConfigs(w http.ResponseWriter, r *http.Request) {
-	// Bulk export pushes stored config to every physical device; require admin.
+	// Admin before any parsing or device contact.
 	if !h.requireAdmin(w, r) {
 		return
 	}
-	// Get all devices
-	devices, err := h.Service.DB.GetDevices()
-	if err != nil {
-		h.logger.WithFields(map[string]any{
-			"error": err.Error(),
-		}).Error("Failed to get devices")
-		h.responseWriter().WriteInternalError(w, r, err)
+	selection, ok := h.decodeBulkRequest(w, r)
+	if !ok {
 		return
 	}
 
-	type ExportResult struct {
-		DeviceID uint   `json:"device_id"`
-		IP       string `json:"ip"`
-		Status   string `json:"status"`
-		Error    string `json:"error,omitempty"`
-	}
-
-	results := make([]ExportResult, 0, len(devices))
-	successCount := 0
-	errorCount := 0
-
-	// Export configuration to each device
-	for _, device := range devices {
-		result := ExportResult{
-			DeviceID: device.ID,
-			IP:       device.IP,
-		}
-
-		// Attempt to export configuration
-		err := h.Service.ExportDeviceConfig(device.ID)
-		if err != nil {
-			result.Status = "error"
-			result.Error = err.Error()
-			errorCount++
-			h.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"device_ip": device.IP,
-				"error":     err.Error(),
-			}).Warn("Failed to export device config during bulk export")
-		} else {
-			result.Status = "success"
-			successCount++
-			h.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"device_ip": device.IP,
-			}).Info("Successfully exported device config during bulk export")
-		}
-
-		results = append(results, result)
-	}
-
-	response := map[string]interface{}{
-		"total":   len(devices),
-		"success": successCount,
-		"errors":  errorCount,
-		"results": results,
-	}
-
-	h.responseWriter().WriteSuccess(w, r, response)
+	result := h.runBulkConfig(selection, "export", func(id uint) (uint, error) {
+		return 0, h.Service.ExportDeviceConfig(id)
+	})
+	h.responseWriter().WriteSuccess(w, r, result)
 }
 
 // DetectConfigDrift handles GET /api/v1/devices/{id}/config/drift
@@ -1107,14 +1014,17 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, drift)
 }
 
-// BulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect
+// BulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect for the named devices.
 func (h *Handler) BulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) {
-	// Bulk drift detection contacts every device; require admin.
+	// Admin before any parsing or device contact.
 	if !h.requireAdmin(w, r) {
 		return
 	}
-	// Perform bulk drift detection across all devices
-	result, err := h.Service.BulkDetectConfigDrift()
+	selection, ok := h.decodeBulkRequest(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.Service.BulkDetectConfigDrift(selection.IDs, selection.StopOnError)
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
@@ -1625,15 +1535,20 @@ func (h *Handler) MarkTrendResolved(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, map[string]string{"status": "resolved"})
 }
 
-// EnhancedBulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect-enhanced
+// EnhancedBulkDetectConfigDrift handles POST /api/v1/config/bulk-drift-detect-enhanced for the
+// named devices, and answers with the comprehensive report.
 func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) {
-	// Enhanced bulk drift detection contacts every device; require admin.
+	// Admin before any parsing or device contact.
 	if !h.requireAdmin(w, r) {
+		return
+	}
+	selection, ok := h.decodeBulkRequest(w, r)
+	if !ok {
 		return
 	}
 	h.logger.Info("Starting enhanced bulk drift detection with comprehensive reporting")
 
-	result, err := h.Service.BulkDetectConfigDrift()
+	result, err := h.Service.BulkDetectConfigDrift(selection.IDs, selection.StopOnError)
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
