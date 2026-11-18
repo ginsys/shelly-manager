@@ -268,11 +268,16 @@ All notable changes to this project are documented here. The project follows Con
   keys, `database.username` and `database.password` (`SHELLY_DATABASE_USERNAME` and
   `SHELLY_DATABASE_PASSWORD`, which the Secret already carried and nothing read): the app puts them into
   a PostgreSQL DSN that has none, escaped, so a password may hold `@`, `/`, `:`, `%` or `;`. A DSN that
-  carries credentials and these keys together is refused, MySQL refuses the two keys, and SQLite ignores
-  them. A password never appears in an error, a health status or a printed database config; the keyed
-  patterns of the PostgreSQL error sanitizer also missed a value that starts with `s` or holds `=`, now fixed.
-  A test reads the manifests and fails on any name the app does not read or a credential outside a
-  Secret. Not changed: the Dockerfiles and compose files still set the unused `GIN_MODE`.
+  carries credentials and these keys together is refused, and so is a DSN query other than `sslmode`,
+  `connect_timeout`, `application_name`, `search_path`, `sslcert`, `sslkey` and `sslrootcert` (the driver
+  reads `user`, `password`, `passfile` and `service` from the query and lets them win). MySQL refuses the
+  two keys, and SQLite ignores them. A password never appears in an error, a health status or a printed
+  database config (which now shows no DSN query at all); the keyed patterns of the PostgreSQL error
+  sanitizer also missed a value that starts with `s` or holds `=`, now fixed. A test reads the manifests
+  and fails on any name the app does not read, a credential outside a Secret, or a URL with a query.
+  The provisioner's `SHELLY_API_URL` is no longer set (it named a Service that does not exist under the
+  overlays' name prefix, and on port 8080 instead of 80); it stays unset until a per-overlay value is
+  added. Not changed: the Dockerfiles and compose files still set the unused `GIN_MODE`.
   (ginsys/shelly-manager#571)
 - The database pool now follows the provider. The built-in default of `database.max_open_conns` and
   `max_idle_conns` was 1 for every provider, and the example config set 1 too, so a PostgreSQL or

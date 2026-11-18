@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -352,6 +353,23 @@ func (p *PostgreSQLProvider) validateDSNInput(dsn string) error {
 	return nil
 }
 
+// credentialSafeQueryKeys are the DSN query keys accepted when
+// database.username or database.password is set.
+var credentialSafeQueryKeys = map[string]bool{
+	"sslmode": true, "connect_timeout": true, "application_name": true, "search_path": true,
+	"sslcert": true, "sslkey": true, "sslrootcert": true,
+}
+
+// parseErrorWithoutDSN returns what is wrong with a DSN that url.Parse refused,
+// without the DSN: url.Error quotes it, and the quoted text may hold a password.
+func parseErrorWithoutDSN(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err
+	}
+	return err
+}
+
 // buildDSN constructs a PostgreSQL DSN with SSL/TLS settings and security validation
 func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string) (string, error) {
 	// Validate DSN format
@@ -367,7 +385,7 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	// Parse the base DSN to validate format
 	parsedURL, err := url.Parse(baseDSN)
 	if err != nil {
-		return "", fmt.Errorf("invalid DSN format: %w", err)
+		return "", fmt.Errorf("invalid DSN format: %w", parseErrorWithoutDSN(err))
 	}
 
 	// Ensure it has a scheme that looks like a valid database URL
@@ -383,13 +401,21 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 		if p.config.Username == "" {
 			return "", fmt.Errorf("database.password is set without database.username")
 		}
-		// pgx applies the user and password query parameters after the userinfo,
-		// so they would override the configured credentials: refuse them too.
-		// Query() decodes the keys, so an encoded name is caught as well.
-		_, hasUserParam := parsedURL.Query()["user"]
-		_, hasPasswordParam := parsedURL.Query()["password"]
-		if parsedURL.User != nil || hasUserParam || hasPasswordParam {
+		if parsedURL.User != nil {
 			return "", fmt.Errorf("the DSN carries credentials and database.username is set as well: use one of them")
+		}
+		// pgx reads the user, password, passfile and service parameters from the
+		// query and lets them win over the userinfo. Its key parsing (trimmed,
+		// decoded, a '#' that net/url treats as a fragment) differs from net/url's,
+		// so inspecting keys would never agree with it. Accept only the literal
+		// keys below; anything else is refused without printing it.
+		if baseQuery := strings.SplitN(baseDSN, "?", 2); len(baseQuery) == 2 {
+			for _, pair := range strings.Split(baseQuery[1], "&") {
+				key, _, _ := strings.Cut(pair, "=")
+				if !credentialSafeQueryKeys[key] {
+					return "", fmt.Errorf("the DSN query holds a parameter that is not allowed together with database.username (allowed: sslmode, connect_timeout, application_name, search_path, sslcert, sslkey, sslrootcert)")
+				}
+			}
 		}
 	}
 
@@ -448,7 +474,7 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	if hasCredentials {
 		withCredentials, err := url.Parse(dsn)
 		if err != nil {
-			return "", fmt.Errorf("invalid DSN format: %w", p.sanitizeError(err))
+			return "", fmt.Errorf("invalid DSN format: %w", parseErrorWithoutDSN(err))
 		}
 		if p.config.Password == "" {
 			withCredentials.User = url.User(p.config.Username)

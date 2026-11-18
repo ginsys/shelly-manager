@@ -151,8 +151,8 @@ spec:
         image: ghcr.io/ginsys/shelly-provisioner:latest
         imagePullPolicy: IfNotPresent
         env:
-        - name: SHELLY_API_URL
-          value: "http://shelly-manager:8080"
+        # SHELLY_API_URL is not set here: the Service is named with the overlay's
+        # prefix and listens on port 80, so no value fits every overlay.
         - name: SHELLY_LOGGING_LEVEL
           value: "info"
         - name: SHELLY_LOGGING_FORMAT
