@@ -31,6 +31,21 @@ var adminGuardedOpenRoutes = []struct{ method, path string }{
 	{"GET", "/api/v1/notifications/channels"},
 	{"GET", "/api/v1/notifications/rules"},
 	{"GET", "/api/v1/notifications/history"},
+
+	// The other reads: the device inventory and readings, tags, export plugins, and two stubs.
+	{"GET", "/api/v1/devices"},
+	{"GET", "/api/v1/devices/1"},
+	{"GET", "/api/v1/devices/1/capabilities"},
+	{"GET", "/api/v1/devices/1/energy"},
+	{"GET", "/api/v1/devices/1/status"},
+	{"GET", "/api/v1/devices/1/tags/new"},
+	{"GET", "/api/v1/tags/new"},
+	{"GET", "/api/v1/tags/new/kitchen/devices"},
+	{"GET", "/api/v1/export/plugins"},
+	{"GET", "/api/v1/export/plugins/json"},
+	{"GET", "/api/v1/export/plugins/json/schema"},
+	{"GET", "/api/v1/provisioning/status"},
+	{"GET", "/api/v1/dhcp/reservations"},
 }
 
 // The routes of the two groups that stay open by design, whatever the key.
