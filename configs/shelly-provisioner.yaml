@@ -17,7 +17,7 @@ provisioning:
 # API client configuration (for agent mode)
 api:
   url: "http://0.0.0.0:8080"   # main API server base URL (API client adds /api/v1/... paths automatically)
-  key: ""                      # the manager's admin key (flag --api-key, or SHELLY_API_KEY); required when the manager has one set
+  key: ""                      # the manager's agent key, security.agent_api_key (flag --api-key, or SHELLY_API_KEY); required when the manager has an admin key set
   timeout: 30                  # HTTP request timeout in seconds
   retry_attempts: 3            # number of retry attempts for failed requests
   retry_delay: 5               # delay between retry attempts in seconds

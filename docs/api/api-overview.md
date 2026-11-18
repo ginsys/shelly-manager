@@ -418,19 +418,19 @@ Every typed-configuration route answers with the standard envelope, on success a
 
 ### 16. Provisioner Agent Management (9 endpoints)
 
-Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/provisioning/provision` above, requires the admin key (`Authorization: Bearer <key>` or `X-API-Key`) when the manager has one configured, and answers `401` without it. The provisioner agent sends the manager's admin key as its `api.key` (`SHELLY_API_KEY`). With no admin key configured these routes stay open.
+Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/provisioning/provision` above, requires a key (`Authorization: Bearer <key>` or `X-API-Key`) when the manager has an admin key configured, and answers `401` without it. The admin key opens every route. The agent key (`security.agent_api_key`, `SHELLY_SECURITY_AGENT_API_KEY`) opens only the five routes the agent itself calls: register, poll tasks, update task status, report discovered devices and health. Creating a task and listing agents, tasks or discovered devices need the admin key, and so does everything else; the agent key opens nothing else in the API. The provisioner agent sends the agent key as its `api.key` (`SHELLY_API_KEY`). The `Bearer ` prefix is case-sensitive. With no admin key configured these routes stay open, and the agent key then has no effect. Rotating the admin key (`POST /api/v1/admin/rotate-admin-key`) does not affect the agent key.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/provisioner/agents/register` | Register provisioner agent |
-| GET | `/api/v1/provisioner/agents` | List registered agents |
-| GET | `/api/v1/provisioner/agents/{id}/tasks` | Poll tasks for agent |
-| POST | `/api/v1/provisioner/tasks` | Create provisioning task |
-| GET | `/api/v1/provisioner/tasks` | List tasks |
-| PUT | `/api/v1/provisioner/tasks/{id}/status` | Update task status |
-| POST | `/api/v1/provisioner/discovered-devices` | Report discovered devices |
-| GET | `/api/v1/provisioner/discovered-devices` | Get discovered devices |
-| GET | `/api/v1/provisioner/health` | Provisioner health check |
+| POST | `/api/v1/provisioner/agents/register` | Register provisioner agent (agent or admin key) |
+| GET | `/api/v1/provisioner/agents` | List registered agents (admin key) |
+| GET | `/api/v1/provisioner/agents/{id}/tasks` | Poll tasks for agent (agent or admin key) |
+| POST | `/api/v1/provisioner/tasks` | Create provisioning task (admin key) |
+| GET | `/api/v1/provisioner/tasks` | List tasks (admin key) |
+| PUT | `/api/v1/provisioner/tasks/{id}/status` | Update task status (agent or admin key) |
+| POST | `/api/v1/provisioner/discovered-devices` | Report discovered devices (agent or admin key) |
+| GET | `/api/v1/provisioner/discovered-devices` | Get discovered devices (admin key) |
+| GET | `/api/v1/provisioner/health` | Provisioner health check (agent or admin key) |
 
 ---
 

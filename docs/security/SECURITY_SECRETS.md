@@ -11,7 +11,11 @@ Supported secret keys (value or `_FILE`):
 - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD
 - SHELLY_OPNSENSE_API_KEY
 - SHELLY_OPNSENSE_API_SECRET
-- SHELLY_API_KEY (provisioner agent)
+- SHELLY_API_KEY (provisioner agent: send it the agent key, never the admin key)
+
+`SHELLY_SECURITY_AGENT_API_KEY` (the manager's agent key) is read from the environment only; it has no `_FILE` form yet. Kubernetes gets it through `secretKeyRef`.
+
+Two keys, two jobs. The admin key opens every guarded route. The agent key opens only the five routes the provisioner agent calls (register, poll tasks, update task status, report discovered devices, health), so a leaked agent key cannot read config or create tasks. Use two different values. The agent key has no effect while the admin key is empty.
 
 Other relevant config keys:
 - SHELLY_EXPORT_OUTPUT_DIRECTORY (safe download base directory)
@@ -20,6 +24,7 @@ Example (Docker Compose `.env`):
 
 ```
 ADMIN_API_KEY=use-a-strong-long-random-secret
+AGENT_API_KEY=use-a-different-strong-random-secret
 EXPORT_OUTPUT_DIR=/data/exports
 ```
 
@@ -28,14 +33,15 @@ Compose files pass these through as:
 ```
 environment:
   - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY}
+  - SHELLY_SECURITY_AGENT_API_KEY=${AGENT_API_KEY:-}
   - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR}
   # SMTP (prefer using *_FILE mounted from Docker secrets)
   - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD=${SMTP_PASSWORD:-}
   # OPNSense
   - SHELLY_OPNSENSE_API_KEY=${OPNSENSE_API_KEY:-}
   - SHELLY_OPNSENSE_API_SECRET=${OPNSENSE_API_SECRET:-}
-  # Provisioner agent: sends the manager's admin key, which the manager requires on the agent routes
-  - SHELLY_API_KEY=${ADMIN_API_KEY:-}
+  # Provisioner agent: sends the agent key (the admin key if AGENT_API_KEY is unset)
+  - SHELLY_API_KEY=${AGENT_API_KEY:-${ADMIN_API_KEY:-}}
 ```
 
 ### Docker secrets / mounted files (`*_FILE`)
@@ -58,7 +64,8 @@ Create a Secret:
 
 ```
 kubectl create secret generic shelly-manager-secrets \
-  --from-literal=ADMIN_API_KEY="use-a-strong-long-random-secret"
+  --from-literal=ADMIN_API_KEY="use-a-strong-long-random-secret" \
+  --from-literal=AGENT_API_KEY="use-a-different-strong-random-secret"
 ```
 
 Reference it in a Deployment (Kustomize/Helm overlays):
@@ -70,6 +77,11 @@ env:
       secretKeyRef:
         name: shelly-manager-secrets
         key: ADMIN_API_KEY
+  - name: SHELLY_SECURITY_AGENT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: shelly-manager-secrets
+        key: AGENT_API_KEY
   - name: SHELLY_EXPORT_OUTPUT_DIRECTORY
     value: /data/exports
   - name: SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD
@@ -98,6 +110,7 @@ Relevant keys for reference (can be overridden by env):
 ```
 security:
   admin_api_key: ""
+  agent_api_key: ""
 export:
   output_directory: ""
 
@@ -131,3 +144,4 @@ Notes:
 - Requires current admin key via `Authorization: Bearer ...` or `X-API-Key`.
 - Rotates key for protected HTTP routes and the metrics WebSocket.
 - For persistence across restarts, update your secret source (K8s Secret, Docker secret, `.env`).
+- The agent key is not touched by this call, so agents keep working. There is no API to rotate it: change the secret source and restart the manager and the agents.

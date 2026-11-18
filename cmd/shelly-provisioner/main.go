@@ -730,6 +730,12 @@ func initApp() {
 			"agent_id":  generateAgentID(),
 			"component": "app",
 		}).Info("API client initialized")
+		if apiKey == "" {
+			logger.WithFields(map[string]any{
+				"api_url":   apiURL,
+				"component": "app",
+			}).Warn("No API key set (--api-key, api.key or SHELLY_API_KEY): a manager with an admin key refuses the agent routes with 401")
+		}
 	}
 
 	logger.WithFields(map[string]any{

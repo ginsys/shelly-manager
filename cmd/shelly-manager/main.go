@@ -319,6 +319,11 @@ func startServer() {
 	if cfg != nil && cfg.Security.AdminAPIKey != "" {
 		apiHandler.SetAdminAPIKey(cfg.Security.AdminAPIKey)
 	}
+	// The agent key opens the provisioner agent routes next to the admin key. Only the API handler
+	// takes it: export, import and metrics have no agent routes.
+	if cfg != nil && cfg.Security.AgentAPIKey != "" {
+		apiHandler.SetAgentAPIKey(cfg.Security.AgentAPIKey)
+	}
 
 	// Wire integration (7.2.d): emit notifications from configuration drift detection
 	if notificationHandler != nil && apiHandler.ConfigService != nil {

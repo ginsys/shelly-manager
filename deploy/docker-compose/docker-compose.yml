@@ -35,6 +35,8 @@ services:
       
       # Security & Export (secrets and safe downloads)
       - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      # The key the provisioner agent sends. It opens the five agent routes only.
+      - SHELLY_SECURITY_AGENT_API_KEY=${AGENT_API_KEY:-}
       - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR:-}
       # SMTP / OPNSense secrets (prefer *_FILE mounted from Docker secrets)
       # - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD=${SMTP_PASSWORD:-}
@@ -70,9 +72,10 @@ services:
     environment:
       # API Configuration (connect to manager)
       - SHELLY_API_URL=${API_URL:-http://localhost:8080}
-      # The manager refuses the agent routes without its admin key when one is set, so the agent
-      # sends the same key.
-      - SHELLY_API_KEY=${ADMIN_API_KEY:-}
+      # The manager refuses the agent routes without a key when it has an admin key. The agent sends
+      # AGENT_API_KEY, which opens those routes only. With AGENT_API_KEY unset it falls back to the
+      # admin key, so an older .env keeps working.
+      - SHELLY_API_KEY=${AGENT_API_KEY:-${ADMIN_API_KEY:-}}
       # Or read from file: SHELLY_API_KEY_FILE=/run/secrets/api_key
       - SHELLY_API_TIMEOUT=${API_TIMEOUT:-30}
       

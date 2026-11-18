@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -13,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/security/apikey"
 )
 
 // Handler handles HTTP requests for metrics operations
@@ -48,13 +50,7 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	if h.adminAPIKey == "" {
 		return true
 	}
-	auth := r.Header.Get("Authorization")
-	xKey := r.Header.Get("X-API-Key")
-	ok := len(auth) > 7 && auth[:7] == "Bearer " && auth[7:] == h.adminAPIKey
-	if !ok && xKey != "" && xKey == h.adminAPIKey {
-		ok = true
-	}
-	if !ok {
+	if !apikey.Authorized(r, h.adminAPIKey) {
 		response := map[string]any{
 			"success": false,
 			"error": map[string]string{
@@ -273,14 +269,11 @@ func (h *Handler) GetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Optional admin key enforcement
 	if h.adminAPIKey != "" {
-		token := r.URL.Query().Get("token")
+		// A browser cannot set headers on a WebSocket, so the key may also come as ?token=.
 		auth := r.Header.Get("Authorization")
-		ok := false
-		if token != "" && token == h.adminAPIKey {
-			ok = true
-		}
-		if !ok && len(auth) > 7 && auth[:7] == "Bearer " && auth[7:] == h.adminAPIKey {
-			ok = true
+		ok := apikey.Equal(r.URL.Query().Get("token"), h.adminAPIKey)
+		if !ok && strings.HasPrefix(auth, "Bearer ") {
+			ok = apikey.Equal(strings.TrimPrefix(auth, "Bearer "), h.adminAPIKey)
 		}
 		if !ok {
 			response := map[string]any{

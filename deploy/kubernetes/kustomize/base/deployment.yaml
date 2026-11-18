@@ -65,6 +65,11 @@ spec:
             secretKeyRef:
               name: shelly-manager-secrets
               key: admin-api-key
+        - name: SHELLY_SECURITY_AGENT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: shelly-manager-secrets
+              key: agent-api-key
         - name: SHELLY_DATABASE_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -162,13 +167,13 @@ spec:
             configMapKeyRef:
               name: shelly-manager-config
               key: SHELLY_API_URL
-        # The manager refuses the agent routes without its admin key, so the agent
-        # sends that key. It comes from the Secret, never from a literal here.
+        # The manager refuses the agent routes without a key when it has an admin key. The agent sends
+        # its own key, which opens those routes only. It comes from the Secret, never from a literal here.
         - name: SHELLY_API_KEY
           valueFrom:
             secretKeyRef:
               name: shelly-manager-secrets
-              key: admin-api-key
+              key: agent-api-key
         - name: SHELLY_LOGGING_LEVEL
           value: "info"
         - name: SHELLY_LOGGING_FORMAT
