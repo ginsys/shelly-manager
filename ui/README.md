@@ -26,7 +26,7 @@ Dev runtime config (automatic with make run)
 - `make run` now sets `SHELLY_DEV_EXPOSE_ADMIN_KEY=1` and the Go server serves `/app-config.js` that injects:
   - `window.__API_BASE__ = '/api/v1'`
   - `window.__ADMIN_KEY__ = '<security.admin_api_key from config>'` when set
-- `ui/index.html` loads `/app-config.js` before the app, so the Axios client picks it up automatically.
+- `ui/index.html` does not load `/app-config.js` today, so the Axios client does not pick it up: set `VITE_ADMIN_KEY` in `ui/.env.local` (see "Admin key in a production build" below).
 - Safety: the admin key is only exposed when `SHELLY_DEV_EXPOSE_ADMIN_KEY` is set (dev only). Do not enable this in production.
 
 How to run the SPA (development)
@@ -42,10 +42,12 @@ Manual fallback (if not using the provided proxy)
 Admin key in a production build
 - When the server has `security.admin_api_key` set, every `/api/v1` route except `GET /api/v1/version` and
   `GET /api/v1/metrics/prometheus` answers 401 without the key (ginsys/shelly-manager#611). The UI sends the key
-  only when it has one: `VITE_ADMIN_KEY` at build time (the key then sits in the public bundle) or
-  `window.__ADMIN_KEY__` from the dev-only `/app-config.js`. A build with neither gets 401 on the device list and on
-  every configuration page. There is no supported production way to give the UI its key yet
-  (ginsys/shelly-manager#619). With no admin key on the server, nothing changes.
+  only when it has one: `VITE_ADMIN_KEY` at build time (in `ui/.env.local` for `make ui-dev`; in a production build
+  the key then sits in the public bundle) or a `window.__ADMIN_KEY__` set by hand in the browser. The Go server's
+  dev-only `/app-config.js` exposes the key, but `ui/index.html` does not load that script, so it does not reach the
+  UI by itself. A build with no key gets 401 on the device list and on every configuration page. There is no
+  supported production way to give the UI its key yet (ginsys/shelly-manager#619). With no admin key on the
+  server, nothing changes.
 
 Production-like run
 - Build the SPA: `make ui-build` (writes to `ui/dist`).

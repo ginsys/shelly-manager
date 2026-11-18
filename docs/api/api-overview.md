@@ -20,9 +20,9 @@ Two routes stay open by design: `GET /api/v1/version` and `GET /api/v1/metrics/p
 endpoint). The device and tag routes, the notification routes, the export plugin reads,
 `GET /api/v1/provisioning/status` and `GET /api/v1/dhcp/reservations` need the key too
 (ginsys/shelly-manager#611); they were open before. If no admin key is configured, every route is open.
-**The web UI sends the key only when it holds one** (a build-time `VITE_ADMIN_KEY`, or the dev-only
-`/app-config.js`): with a key set on the server and none in the UI, the device list answers 401. A
-production way to give the UI its key is tracked in ginsys/shelly-manager#619.
+**The web UI sends the key only when it holds one** (a build-time `VITE_ADMIN_KEY`, or a
+`window.__ADMIN_KEY__` set by hand): with a key set on the server and none in the UI, the device list answers
+401. A production way to give the UI its key is tracked in ginsys/shelly-manager#619.
 
 ---
 
