@@ -34,5 +34,7 @@ jobs:
       env:
         BASE_REF: ${{ github.base_ref }}
         HEAD_REF_NAME: ${{ github.head_ref }}
-        PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        # contains() over the label list is an exact match; a joined list would let a
+        # label such as "docs,no-changelog" pass for the label no-changelog.
+        PR_NO_CHANGELOG: ${{ contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
       run: bash scripts/check-changelog-fragment.sh

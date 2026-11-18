@@ -51,7 +51,7 @@ help:
 	@echo ""
 	@echo "$(CYAN)CHANGELOG$(NC)"
 	@echo "  $(WHITE)changelog-assemble$(NC)  Preview the fragments in changelog.d/ (cut a release: make changelog-assemble VERSION=X.Y.Z)"
-	@echo "  $(WHITE)check-changelog-fragment$(NC) Check this branch adds a fragment against origin/main (BASE_REF, HEAD_REF_NAME, PR_LABELS)"
+	@echo "  $(WHITE)check-changelog-fragment$(NC) Check this branch adds a fragment against origin/main (BASE_REF, HEAD_REF_NAME, PR_NO_CHANGELOG)"
 	@echo "  $(WHITE)test-changelog-fragments$(NC) Fixture tests for the two scripts above"
 	@echo ""
 	@echo "$(CYAN)TESTING$(NC)"
