@@ -48,24 +48,25 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	// GET /version stays for health tooling.
 	api.HandleFunc("/version", handler.Version).Methods("GET")
 
+	// admin guards a route with the admin key when one is set. A route that does not use it is open
+	// by design or checks the key in its own handler; route_guards_test.go walks the table and
+	// fails on any other.
+	admin := handler.adminOnly
+
 	// Admin routes (guarded by simple admin key if configured)
 	api.HandleFunc("/admin/rotate-admin-key", handler.RotateAdminKey).Methods("POST")
 
 	// Device routes
 	api.HandleFunc("/devices", handler.GetDevices).Methods("GET")
-	api.HandleFunc("/devices", handler.AddDevice).Methods("POST")
+	api.HandleFunc("/devices", admin(handler.AddDevice)).Methods("POST")
 	api.HandleFunc("/devices/{id}", handler.GetDevice).Methods("GET")
-	api.HandleFunc("/devices/{id}", handler.UpdateDevice).Methods("PUT")
-	api.HandleFunc("/devices/{id}", handler.DeleteDevice).Methods("DELETE")
+	api.HandleFunc("/devices/{id}", admin(handler.UpdateDevice)).Methods("PUT")
+	api.HandleFunc("/devices/{id}", admin(handler.DeleteDevice)).Methods("DELETE")
 
 	// Device control routes
-	api.HandleFunc("/devices/{id}/control", handler.ControlDevice).Methods("POST")
+	api.HandleFunc("/devices/{id}/control", admin(handler.ControlDevice)).Methods("POST")
 	api.HandleFunc("/devices/{id}/status", handler.GetDeviceStatus).Methods("GET")
 	api.HandleFunc("/devices/{id}/energy", handler.GetDeviceEnergy).Methods("GET")
-
-	// admin guards a route with the admin key. Every configuration route uses it, except the
-	// bulk import and drift routes, whose handlers call requireAdmin themselves.
-	admin := handler.adminOnly
 
 	// Device configuration routes
 	api.HandleFunc("/devices/{id}/config", admin(handler.GetDeviceConfig)).Methods("GET")
@@ -136,8 +137,8 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 
 	// Device tag routes
 	api.HandleFunc("/devices/{id}/tags/new", handler.GetDeviceNewTags).Methods("GET")
-	api.HandleFunc("/devices/{id}/tags/new", handler.AddDeviceNewTag).Methods("POST")
-	api.HandleFunc("/devices/{id}/tags/new/{tag}", handler.RemoveDeviceNewTag).Methods("DELETE")
+	api.HandleFunc("/devices/{id}/tags/new", admin(handler.AddDeviceNewTag)).Methods("POST")
+	api.HandleFunc("/devices/{id}/tags/new/{tag}", admin(handler.RemoveDeviceNewTag)).Methods("DELETE")
 	api.HandleFunc("/tags/new", handler.ListAllNewTags).Methods("GET")
 	api.HandleFunc("/tags/new/{tag}/devices", handler.GetDevicesByNewTag).Methods("GET")
 
@@ -155,14 +156,16 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 
 	// Notification routes
 	if handler != nil && handler.NotificationHandler != nil {
-		api.HandleFunc("/notifications/channels", handler.NotificationHandler.CreateChannel).Methods("POST")
-		api.HandleFunc("/notifications/channels", handler.NotificationHandler.GetChannels).Methods("GET")
-		api.HandleFunc("/notifications/channels/{id}", handler.NotificationHandler.UpdateChannel).Methods("PUT")
-		api.HandleFunc("/notifications/channels/{id}", handler.NotificationHandler.DeleteChannel).Methods("DELETE")
-		api.HandleFunc("/notifications/channels/{id}/test", handler.NotificationHandler.TestChannel).Methods("POST")
-		api.HandleFunc("/notifications/rules", handler.NotificationHandler.CreateRule).Methods("POST")
-		api.HandleFunc("/notifications/rules", handler.NotificationHandler.GetRules).Methods("GET")
-		api.HandleFunc("/notifications/history", handler.NotificationHandler.GetHistory).Methods("GET")
+		// The reads return each channel's stored configuration (webhook URLs, headers, secrets),
+		// so every notification route needs the key.
+		api.HandleFunc("/notifications/channels", admin(handler.NotificationHandler.CreateChannel)).Methods("POST")
+		api.HandleFunc("/notifications/channels", admin(handler.NotificationHandler.GetChannels)).Methods("GET")
+		api.HandleFunc("/notifications/channels/{id}", admin(handler.NotificationHandler.UpdateChannel)).Methods("PUT")
+		api.HandleFunc("/notifications/channels/{id}", admin(handler.NotificationHandler.DeleteChannel)).Methods("DELETE")
+		api.HandleFunc("/notifications/channels/{id}/test", admin(handler.NotificationHandler.TestChannel)).Methods("POST")
+		api.HandleFunc("/notifications/rules", admin(handler.NotificationHandler.CreateRule)).Methods("POST")
+		api.HandleFunc("/notifications/rules", admin(handler.NotificationHandler.GetRules)).Methods("GET")
+		api.HandleFunc("/notifications/history", admin(handler.NotificationHandler.GetHistory)).Methods("GET")
 	}
 
 	// Metrics routes (non-WebSocket) — under /api/v1 so the frontend's axios baseURL works
