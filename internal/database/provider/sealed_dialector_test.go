@@ -6,9 +6,11 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -235,17 +237,85 @@ func TestSealedDialector_KeepsWhatTheInnerDialectorConfigures(t *testing.T) {
 		err := db.Transaction(func(tx *gorm.DB) error {
 			require.NoError(t, tx.Create(&siteProbeRow{Name: "a"}).Error)
 			nestedErr = tx.Transaction(func(inner *gorm.DB) error {
-				return inner.Create(&siteProbeRow{Name: "a"}).Error
+				// A row that does insert, then an error: only a real rollback to the
+				// savepoint removes "b" (a duplicate insert changes nothing either way).
+				require.NoError(t, inner.Create(&siteProbeRow{Name: "b"}).Error)
+				return errors.New("abort the nested transaction")
 			})
 			return nil
 		})
 
 		require.NoError(t, err)
-		require.ErrorIs(t, nestedErr, gorm.ErrDuplicatedKey)
-		var rows int64
-		require.NoError(t, db.Model(&siteProbeRow{}).Count(&rows).Error)
-		assert.EqualValues(t, 1, rows, "the outer insert survived the nested rollback")
+		require.Error(t, nestedErr)
+		var names []string
+		require.NoError(t, db.Model(&siteProbeRow{}).Order("name").Pluck("name", &names).Error)
+		assert.Equal(t, []string{"a"}, names, "the nested insert was rolled back, the outer one kept")
 	})
+}
+
+// A pool whose first statement answers one row (the migrator's "table exists"
+// count) and whose later statements fail: the migrator then reads the table's
+// columns with Rows, which stores the driver's error without passing the
+// dialector.
+type countThenFail struct {
+	calls *atomic.Int32
+	err   error
+}
+
+func (c countThenFail) Connect(context.Context) (driver.Conn, error) {
+	return countThenFailConn{c}, nil
+}
+func (c countThenFail) Driver() driver.Driver { return poolFailureDriver{} }
+
+type countThenFailConn struct{ c countThenFail }
+
+func (f countThenFailConn) Prepare(string) (driver.Stmt, error) { return countThenFailStmt(f), nil }
+func (f countThenFailConn) Close() error                        { return nil }
+func (f countThenFailConn) Begin() (driver.Tx, error)           { return nil, f.c.err }
+
+type countThenFailStmt struct{ c countThenFail }
+
+func (s countThenFailStmt) Close() error  { return nil }
+func (s countThenFailStmt) NumInput() int { return -1 }
+func (s countThenFailStmt) Exec([]driver.Value) (driver.Result, error) {
+	return nil, s.c.err
+}
+func (s countThenFailStmt) Query([]driver.Value) (driver.Rows, error) {
+	if s.c.calls.Add(1) == 1 {
+		return &oneRow{}, nil
+	}
+	return nil, s.c.err
+}
+
+type oneRow struct{ done bool }
+
+func (r *oneRow) Columns() []string { return []string{"count"} }
+func (r *oneRow) Close() error      { return nil }
+func (r *oneRow) Next(dest []driver.Value) error {
+	if r.done {
+		return io.EOF
+	}
+	r.done = true
+	dest[0] = int64(1)
+	return nil
+}
+
+func TestSealedDialector_MigrateSealsAnErrorTheDialectorNeverSees(t *testing.T) {
+	driverErr := fmt.Errorf("read tcp 10.9.8.7:5432: %s: %w", leakWord, syscall.ECONNRESET)
+	logger, readLog := fileLogger(t)
+	pool := sql.OpenDB(countThenFail{calls: &atomic.Int32{}, err: driverErr})
+	t.Cleanup(func() { _ = pool.Close() })
+	db, err := openGORM(postgres.New(postgres.Config{Conn: pool}), fakeConfig())
+	require.NoError(t, err)
+	p := NewPostgreSQLProvider(logger)
+	p.db, p.connected = db, true
+
+	err = p.Migrate(&siteProbeRow{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "migration failed: database operation failed: connection reset")
+	assert.NotContains(t, err.Error(), leakWord)
+	assert.NotContains(t, readLog(), leakWord, "the Migrate log line")
 }
 
 // Mutants: the checks above must fail on a wrapper that is wrong in the way each
