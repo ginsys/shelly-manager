@@ -52,7 +52,8 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backe
 - When you modify APIs or behaviors, update in the same commit/PR:
   - API docs in `docs/` (and `docs/README.md` index),
   - Root `README.md` usage notes where relevant,
-  - `CHANGELOG.md` entry under Unreleased,
+  - a changelog fragment, `changelog.d/<issue>-<slug>.md` (format: `changelog.d/README.md`; never
+    edit `CHANGELOG.md`),
   - Any config examples in `configs/*.yaml`.
 - Avoid follow‑up “forgot docs/tests” commits. If necessary during review, squash before merge.
 - Keep unrelated refactors out of feature commits. Submit them separately with clear scope.
@@ -82,7 +83,7 @@ machine — everything below is checkable by anyone with a clone of this reposit
     the output, not just "tests pass"
   - coverage ≥ 27.5% (`make test-coverage-check`)
   - screenshot or GIF attached for any `ui/` change
-  - docs, root `README.md`, `CHANGELOG.md` (Unreleased) and `configs/*.yaml` updated in
+  - docs, root `README.md`, a changelog fragment (`changelog.d/`) and `configs/*.yaml` updated in
     the same commit
   - PR links its issue; branch is `<type>/<issue>-<short-description>`
 - **A5 — Re-read your own diff before claiming done.** Classes that have actually

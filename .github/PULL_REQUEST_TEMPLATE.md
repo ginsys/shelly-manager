@@ -9,7 +9,7 @@ Describe what this PR changes and why. Link related GitHub Issues.
 - [ ] API/docs updated:
   - [ ] `docs/` pages (and `docs/README.md` index)
   - [ ] Root `README.md` usage notes
-  - [ ] `CHANGELOG.md` “Unreleased” updated
+  - [ ] Changelog fragment `changelog.d/<issue>-<slug>.md` added (or the PR labelled `no-changelog`)
   - [ ] Config examples in `configs/*.yaml` updated (if applicable)
 - [ ] Security considerations addressed (middleware, RBAC, rate limits)
 - [ ] Follows Conventional Commits for title

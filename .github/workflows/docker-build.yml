@@ -55,6 +55,7 @@ jobs:
                 - 'AGENTS.md'
                 - 'README.md'
                 - 'CHANGELOG.md'
+                - 'changelog.d/**'
                 - 'TASKS.md'
                 - 'CONTRIBUTING.md'
                 - 'LICENSE'

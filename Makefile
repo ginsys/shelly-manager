@@ -3,6 +3,7 @@
 	test test-unit test-integration test-race test-security test-all test-extra test-vitest \
 	test-coverage test-coverage-ci test-coverage-check \
 	test-ci check-go-version upgrade-go-version check-action-pins \
+	changelog-assemble check-changelog-fragment test-changelog-fragments \
 	ui-deps ui-deps-check typecheck-check \
 	ui-dev ui-build ui-preview test-e2e test-e2e-dev test-e2e-dev-ui test-smoke validate-integration \
 	benchmark example-list example-discover example-provision example-provisioner-status example-provisioner-scan example-provisioner-provision
@@ -47,6 +48,11 @@ help:
 	@echo "$(CYAN)GO VERSION MANAGEMENT$(NC)"
 	@echo "  $(WHITE)check-go-version$(NC)    Validate Go version consistency across project"
 	@echo "  $(WHITE)upgrade-go-version$(NC)  Upgrade Go version (usage: make upgrade-go-version VERSION=X.Y.Z)"
+	@echo ""
+	@echo "$(CYAN)CHANGELOG$(NC)"
+	@echo "  $(WHITE)changelog-assemble$(NC)  Preview the fragments in changelog.d/ (cut a release: make changelog-assemble VERSION=X.Y.Z)"
+	@echo "  $(WHITE)check-changelog-fragment$(NC) Check this branch adds a fragment against origin/main (BASE_REF, HEAD_REF_NAME, PR_LABELS)"
+	@echo "  $(WHITE)test-changelog-fragments$(NC) Fixture tests for the two scripts above"
 	@echo ""
 	@echo "$(CYAN)TESTING$(NC)"
 	@echo "  $(WHITE)test$(NC)                Run basic tests (fast mode, skips network tests)"
@@ -195,6 +201,19 @@ check-go-version:
 # regression fails `make test-ci` locally, not only in the GitHub job.
 check-action-pins:
 	@bash ./scripts/check-action-pins.sh .
+
+# Changelog fragments: one file per change in changelog.d/ (see changelog.d/README.md).
+# Without VERSION this prints the assembled sections and changes nothing; with
+# VERSION it cuts the release section in CHANGELOG.md and removes the fragments.
+changelog-assemble:
+	@bash ./scripts/changelog-assemble.sh $(if $(VERSION),--write $(VERSION))
+
+# What the changelog-fragment CI job runs, against origin/main.
+check-changelog-fragment:
+	@bash ./scripts/check-changelog-fragment.sh
+
+test-changelog-fragments:
+	@bash ./scripts/test-changelog-fragments.sh
 
 # Upgrade Go version in all project files (usage: make upgrade-go-version VERSION=1.24.0)
 upgrade-go-version:
