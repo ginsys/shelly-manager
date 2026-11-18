@@ -113,7 +113,7 @@ func (s *SQLiteProvider) Connect(config DatabaseConfig) error {
 	}
 
 	// Open database connection
-	db, err := gorm.Open(sqlite.Open(config.DSN), gormConfig)
+	db, err := openGORM(sqlite.Open(config.DSN), gormConfig)
 	if err != nil {
 		return fmt.Errorf("failed to connect to SQLite database: %w", err)
 	}
@@ -153,7 +153,7 @@ func (s *SQLiteProvider) Close() error {
 	s.connected = false
 
 	if err != nil {
-		return fmt.Errorf("failed to close database: %w", err)
+		return fmt.Errorf("failed to close database: %w", sealOpenError(err))
 	}
 
 	s.logger.Info("Closed SQLite database connection")
@@ -725,7 +725,7 @@ func (s *SQLiteProvider) createGormLogger() logger.Interface {
 		logLevel = logger.Warn
 	}
 
-	return logger.New(
+	return sealLogger(logger.New(
 		log.New(&gormLogWriter{logger: s.logger}, "", 0),
 		logger.Config{
 			SlowThreshold:             s.config.SlowQueryThreshold,
@@ -734,7 +734,7 @@ func (s *SQLiteProvider) createGormLogger() logger.Interface {
 			ParameterizedQueries:      true, // keep bound values, such as device logins, out of the SQL log
 			Colorful:                  false,
 		},
-	)
+	))
 }
 
 // updateStats updates runtime database statistics

@@ -45,8 +45,8 @@ func TestClassifyConnectError(t *testing.T) {
 		},
 		{
 			name: "a MySQL error with no name for its number",
-			err:  &mysql.MySQLError{Number: 1146, Message: "Table '" + leakWord + "' doesn't exist"},
-			want: "database connection failed: the server rejected the connection (MySQL error 1146)",
+			err:  &mysql.MySQLError{Number: 1064, Message: "You have an error near '" + leakWord + "'"},
+			want: "database connection failed: the server rejected the connection (MySQL error 1064)",
 		},
 		{
 			name: "a DNS error that names the host",

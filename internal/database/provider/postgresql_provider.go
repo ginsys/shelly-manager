@@ -94,7 +94,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	}
 
 	// Open database connection with PostgreSQL driver
-	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), gormConfig)
+	db, err := openGORM(postgres.New(postgres.Config{Conn: sqlDB}), gormConfig)
 	if err != nil {
 		_ = sqlDB.Close()
 		sealed := sealError(err)
@@ -163,7 +163,7 @@ func (p *PostgreSQLProvider) Close() error {
 	p.connected = false
 
 	if err != nil {
-		return fmt.Errorf("failed to close database: %w", err)
+		return fmt.Errorf("failed to close database: %w", sealOpenError(err))
 	}
 
 	p.logger.Info("Closed PostgreSQL database connection")
@@ -547,7 +547,7 @@ func (p *PostgreSQLProvider) createGormLogger() logger.Interface {
 		logLevel = logger.Warn
 	}
 
-	return logger.New(
+	return sealLogger(logger.New(
 		log.New(&gormLogWriter{logger: p.logger}, "", 0),
 		logger.Config{
 			SlowThreshold:             p.config.SlowQueryThreshold,
@@ -556,7 +556,7 @@ func (p *PostgreSQLProvider) createGormLogger() logger.Interface {
 			ParameterizedQueries:      true, // keep bound values, such as device logins, out of the SQL log
 			Colorful:                  false,
 		},
-	)
+	))
 }
 
 // updateStats updates runtime database statistics

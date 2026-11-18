@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/ginsys/shelly-manager/internal/database/provider"
 )
 
 // ErrApplyInProgress is returned when another apply to the device, in this process or on another
@@ -189,7 +191,7 @@ func (r *GormConfigRepository) LockDeviceApply(ctx context.Context, deviceID uin
 	conn, err := sqlDB.Conn(ctx)
 	if err != nil {
 		releaseSlot()
-		return nil, fmt.Errorf("could not take the apply lock: %w", err)
+		return nil, fmt.Errorf("could not take the apply lock: %w", provider.SealOperationError(err))
 	}
 	lock := &sessionLock{conn: conn, releaseSlot: releaseSlot}
 	fail := func(err error) (applyLock, error) {
@@ -198,7 +200,7 @@ func (r *GormConfigRepository) LockDeviceApply(ctx context.Context, deviceID uin
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		_ = conn.Close()
 		releaseSlot()
-		return nil, fmt.Errorf("could not take the apply lock: %w", err)
+		return nil, fmt.Errorf("could not take the apply lock: %w", provider.SealOperationError(err))
 	}
 
 	switch dialect {
@@ -284,7 +286,7 @@ type sessionLock struct {
 // connection that broke, fails here; database/sql never silently reconnects a pinned connection.
 func (l *sessionLock) StillHeld(ctx context.Context) error {
 	var one int
-	return l.conn.QueryRowContext(ctx, "SELECT 1").Scan(&one)
+	return provider.SealOperationError(l.conn.QueryRowContext(ctx, "SELECT 1").Scan(&one))
 }
 
 // Unlock releases the lock on its own connection and returns the connection to the pool. When the

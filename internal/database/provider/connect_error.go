@@ -21,17 +21,29 @@ import (
 // them. So no driver text is carried: the failure is classified from its type
 // and reported as a fixed phrase, with the server's error code where there is
 // one. There is deliberately no Unwrap, so the driver's error is unreachable.
+//
+// The same rule holds after Connect has returned: an error of an open
+// connection (a statement the server rejected, a connection that dropped, a
+// transaction that could not begin) quotes the address, the socket path, the
+// SQL or a stored value just as a connect error does. Those go through
+// sealOpenError (sealed_dialector.go), which reports an operation failure
+// classified by this same function.
 type connectFailure struct {
-	kind   string
-	detail string
-	cause  error // kept only to answer Is and Timeout, never printed
+	kind      string
+	detail    string
+	operation bool  // an error of an open connection, not of a connect
+	cause     error // kept only to answer Is and Timeout, never printed
 }
 
 func (f *connectFailure) Error() string {
-	if f.detail == "" {
-		return "database connection failed: " + f.kind
+	prefix := "database connection failed: "
+	if f.operation {
+		prefix = "database operation failed: "
 	}
-	return "database connection failed: " + f.kind + " (" + f.detail + ")"
+	if f.detail == "" {
+		return prefix + f.kind
+	}
+	return prefix + f.kind + " (" + f.detail + ")"
 }
 
 // Timeout lets a caller that tests for a timeout (net.Error) keep working.
@@ -53,6 +65,12 @@ const (
 	kindTLSHandshke = "TLS handshake failed"
 	kindServer      = "the server rejected the connection"
 	kindOther       = "connection failed"
+
+	// kindStatement and kindUnclassified are the two kinds only an open
+	// connection has: the database answered and refused the statement, or the
+	// error is of a type nobody listed.
+	kindStatement    = "the database rejected the statement"
+	kindUnclassified = "unclassified error"
 )
 
 // postgresStates names the SQLSTATE codes an operator meets most when a
@@ -64,6 +82,12 @@ var postgresStates = map[string]string{
 	"3D000": "database does not exist",
 	"57P03": "server not accepting connections",
 	"53300": "too many connections",
+	// The ones a statement meets (the same appendix).
+	"42P01": "undefined table",
+	"42703": "undefined column",
+	"40001": "serialization failure",
+	"40P01": "deadlock detected",
+	"57014": "query canceled",
 }
 
 // mysqlErrors names the server error numbers an operator meets most when a
@@ -72,6 +96,11 @@ var mysqlErrors = map[uint16]string{
 	1045: "access denied",
 	1049: "unknown database",
 	1040: "too many connections",
+	// The ones a statement meets.
+	1146: "table does not exist",
+	1054: "unknown column",
+	1205: "lock wait timeout",
+	1213: "deadlock",
 }
 
 // classifyConnectError reads the type of err and never its text: the text is
@@ -91,6 +120,7 @@ func classifyConnectError(err error) *connectFailure {
 	var invalidCert x509.CertificateInvalidError
 	var alertErr tls.AlertError
 	var recordErr tls.RecordHeaderError
+	var coded interface{ Code() int }
 
 	switch {
 	case errors.As(err, &pgErr):
@@ -125,6 +155,26 @@ func classifyConnectError(err error) *connectFailure {
 		failure.kind = kindTLSVerify
 	case errors.As(err, &alertErr), errors.As(err, &recordErr):
 		failure.kind = kindTLSHandshke
+	case errors.As(err, &coded):
+		// The SQLite driver's error: its result code is a number, its text
+		// quotes the SQL's identifiers.
+		failure.kind = kindServer
+		failure.detail = fmt.Sprintf("SQLite error %d", coded.Code())
+	}
+	return failure
+}
+
+// classifyOperationError classifies an error of an open connection by the same
+// rule, and words the result for a statement: the server's answer is a refused
+// statement, and a type nobody listed is unclassified.
+func classifyOperationError(err error) *connectFailure {
+	failure := classifyConnectError(err)
+	failure.operation = true
+	switch failure.kind {
+	case kindServer:
+		failure.kind = kindStatement
+	case kindOther:
+		failure.kind = kindUnclassified
 	}
 	return failure
 }
