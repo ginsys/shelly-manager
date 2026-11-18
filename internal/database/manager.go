@@ -395,25 +395,51 @@ func (m *Manager) UpdateDeviceDiscovery(id uint, ip, status string, lastSeen tim
 	}, true)
 }
 
+// deviceColumnsAttempts bounds the retries of a versioned column write that keeps meeting another
+// writer that moved updated_at between its read and its write.
+const deviceColumnsAttempts = 5
+
 // updateDeviceColumns is one UPDATE of the named columns of one device. UpdateColumns runs no
-// hooks, so BeforeSave cannot seed a column that this call does not name; updated_at is named
-// here when the write is an edit. A missing device is the only error that is not the driver's.
+// hooks, so BeforeSave cannot seed a column that this call does not name. An edit also moves
+// updated_at, the version of the device PUT, to a value past the stored one: MySQL keeps
+// milliseconds, so the clock alone can land on the stored value inside one millisecond and leave
+// a PUT that read the older row passing its version check. The write names the version it read,
+// as UpdateDeviceIfVersion does, and reads again when another writer moved it first. A missing
+// device is the only error that is not the driver's.
 func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[string]any, moveVersion bool) error {
-	if moveVersion {
-		columns["updated_at"] = time.Now()
-	}
-	result := m.GetDB().Model(&Device{}).Where("id = ?", id).UpdateColumns(columns)
-	if result.Error != nil {
-		m.logger.WithFields(map[string]any{
-			"device_id": id,
-			"error":     result.Error.Error(),
-			"operation": operation,
-			"table":     "devices",
-			"component": "database",
-		}).Error("Database operation failed")
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
+	for attempt := 0; attempt < deviceColumnsAttempts; attempt++ {
+		query := m.GetDB().Model(&Device{}).Where("id = ?", id)
+		if moveVersion {
+			var stored Device
+			if err := m.GetDB().Select("updated_at").Where("id = ?", id).First(&stored).Error; err != nil {
+				return err
+			}
+			next := time.Now()
+			if min := stored.UpdatedAt.Add(time.Millisecond); next.Before(min) {
+				next = min
+			}
+			columns["updated_at"] = next
+			query = query.Where("updated_at = ?", stored.UpdatedAt)
+		}
+		result := query.UpdateColumns(columns)
+		if result.Error != nil {
+			m.logger.WithFields(map[string]any{
+				"device_id": id,
+				"error":     result.Error.Error(),
+				"operation": operation,
+				"table":     "devices",
+				"component": "database",
+			}).Error("Database operation failed")
+			return result.Error
+		}
+		if result.RowsAffected > 0 {
+			return nil
+		}
+		if moveVersion {
+			// The new updated_at differs from the stored one, so zero rows means the version moved
+			// or the row is gone: the next read tells which.
+			continue
+		}
 		// MySQL counts changed rows, not matched rows, so a write equal to the stored one
 		// affects none. Only a missing device is an error.
 		var found int64
@@ -423,8 +449,9 @@ func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[str
 		if found == 0 {
 			return gorm.ErrRecordNotFound
 		}
+		return nil
 	}
-	return nil
+	return ErrDeviceVersionChanged
 }
 
 // DeleteDevice deletes a device (legacy compatibility)
