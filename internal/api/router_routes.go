@@ -57,16 +57,16 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/admin/rotate-admin-key", handler.RotateAdminKey).Methods("POST")
 
 	// Device routes
-	api.HandleFunc("/devices", handler.GetDevices).Methods("GET")
+	api.HandleFunc("/devices", admin(handler.GetDevices)).Methods("GET")
 	api.HandleFunc("/devices", admin(handler.AddDevice)).Methods("POST")
-	api.HandleFunc("/devices/{id}", handler.GetDevice).Methods("GET")
+	api.HandleFunc("/devices/{id}", admin(handler.GetDevice)).Methods("GET")
 	api.HandleFunc("/devices/{id}", admin(handler.UpdateDevice)).Methods("PUT")
 	api.HandleFunc("/devices/{id}", admin(handler.DeleteDevice)).Methods("DELETE")
 
 	// Device control routes
 	api.HandleFunc("/devices/{id}/control", admin(handler.ControlDevice)).Methods("POST")
-	api.HandleFunc("/devices/{id}/status", handler.GetDeviceStatus).Methods("GET")
-	api.HandleFunc("/devices/{id}/energy", handler.GetDeviceEnergy).Methods("GET")
+	api.HandleFunc("/devices/{id}/status", admin(handler.GetDeviceStatus)).Methods("GET")
+	api.HandleFunc("/devices/{id}/energy", admin(handler.GetDeviceEnergy)).Methods("GET")
 
 	// Device configuration routes
 	api.HandleFunc("/devices/{id}/config", admin(handler.GetDeviceConfig)).Methods("GET")
@@ -92,7 +92,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	// Typed configuration routes
 	api.HandleFunc("/devices/{id}/config/typed", admin(handler.GetTypedDeviceConfig)).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/typed", admin(handler.UpdateTypedDeviceConfig)).Methods("PUT")
-	api.HandleFunc("/devices/{id}/capabilities", handler.GetDeviceCapabilities).Methods("GET")
+	api.HandleFunc("/devices/{id}/capabilities", admin(handler.GetDeviceCapabilities)).Methods("GET")
 	api.HandleFunc("/config/validate-typed", admin(handler.ValidateTypedConfig)).Methods("POST")
 	api.HandleFunc("/config/convert-to-typed", admin(handler.ConvertConfigToTyped)).Methods("POST")
 	api.HandleFunc("/config/convert-to-raw", admin(handler.ConvertTypedToRaw)).Methods("POST")
@@ -136,11 +136,11 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/templates/new/{templateId}", admin(handler.RemoveDeviceNewTemplate)).Methods("DELETE")
 
 	// Device tag routes
-	api.HandleFunc("/devices/{id}/tags/new", handler.GetDeviceNewTags).Methods("GET")
+	api.HandleFunc("/devices/{id}/tags/new", admin(handler.GetDeviceNewTags)).Methods("GET")
 	api.HandleFunc("/devices/{id}/tags/new", admin(handler.AddDeviceNewTag)).Methods("POST")
 	api.HandleFunc("/devices/{id}/tags/new/{tag}", admin(handler.RemoveDeviceNewTag)).Methods("DELETE")
-	api.HandleFunc("/tags/new", handler.ListAllNewTags).Methods("GET")
-	api.HandleFunc("/tags/new/{tag}/devices", handler.GetDevicesByNewTag).Methods("GET")
+	api.HandleFunc("/tags/new", admin(handler.ListAllNewTags)).Methods("GET")
+	api.HandleFunc("/tags/new/{tag}/devices", admin(handler.GetDevicesByNewTag)).Methods("GET")
 
 	// Device override routes
 	api.HandleFunc("/devices/{id}/overrides/new", admin(handler.GetDeviceNewOverrides)).Methods("GET")
@@ -220,7 +220,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/discover", admin(handler.DiscoverHandler)).Methods("POST")
 
 	// Provisioning routes
-	api.HandleFunc("/provisioning/status", handler.GetProvisioningStatus).Methods("GET")
+	api.HandleFunc("/provisioning/status", admin(handler.GetProvisioningStatus)).Methods("GET")
 	api.HandleFunc("/provisioning/provision", admin(handler.ProvisionDevices)).Methods("POST")
 
 	// UI-facing provisioning task/agent routes (admin-key auth)
@@ -247,7 +247,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/provisioner/health", agent(handler.ProvisionerHealthCheck)).Methods("GET")
 
 	// DHCP routes
-	api.HandleFunc("/dhcp/reservations", handler.GetDHCPReservations).Methods("GET")
+	api.HandleFunc("/dhcp/reservations", admin(handler.GetDHCPReservations)).Methods("GET")
 
 	// Export/Import routes (if handlers are configured)
 	if handler.ExportHandlers != nil {

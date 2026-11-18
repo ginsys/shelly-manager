@@ -23,37 +23,20 @@ import (
 // every method, so a new route with no guard fails the test, and a GET counts like a POST (the
 // task poll returns device credentials).
 //
-// The two lists are debt, written down. Each entry names its reason or its follow-up. A stale
-// entry fails the test, so the lists only shrink: a route that is listed but answers 401, or that
-// no longer exists, has to leave the list.
+// The two lists name the routes that may answer without the key, each with its reason. A stale
+// entry fails the test: a route that is listed but answers 401, or that no longer exists, has to
+// leave the list. A new open route is added here with a reason, in the same change.
 
-// knownOpenMutating lists mutating routes that answer without the admin key today.
-// Key: "METHOD /api/v1/path/{template}". Value: the follow-up that guards or closes it.
+// knownOpenMutating lists mutating routes that answer without the admin key. It is empty: every
+// mutating route needs the key when one is set.
+// Key: "METHOD /api/v1/path/{template}". Value: why it is open.
 var knownOpenMutating = map[string]string{}
 
-// openReads lists non-mutating routes that answer without the admin key: "by design", or the
-// follow-up that guards them.
+// openReads lists non-mutating routes that answer without the admin key, each by design.
 var openReads = map[string]string{
-	"GET /api/v1/version":                      "by design: version info for the web UI and health tooling",
-	"GET /api/v1/metrics/prometheus":           "by design: the Prometheus scrape endpoint",
-	"GET /api/v1/devices":                      followUpOpenRoutes,
-	"GET /api/v1/devices/{id}":                 followUpOpenRoutes,
-	"GET /api/v1/devices/{id}/capabilities":    followUpOpenRoutes,
-	"GET /api/v1/devices/{id}/energy":          followUpOpenRoutes,
-	"GET /api/v1/devices/{id}/status":          followUpOpenRoutes,
-	"GET /api/v1/devices/{id}/tags/new":        followUpOpenRoutes,
-	"GET /api/v1/tags/new":                     followUpOpenRoutes,
-	"GET /api/v1/tags/new/{tag}/devices":       followUpOpenRoutes,
-	"GET /api/v1/dhcp/reservations":            followUpOpenRoutes,
-	"GET /api/v1/provisioning/status":          followUpOpenRoutes,
-	"GET /api/v1/export/plugins":               followUpOpenRoutes,
-	"GET /api/v1/export/plugins/{name}":        followUpOpenRoutes,
-	"GET /api/v1/export/plugins/{name}/schema": followUpOpenRoutes,
+	"GET /api/v1/version":            "by design: version info for the web UI and health tooling",
+	"GET /api/v1/metrics/prometheus": "by design: the Prometheus scrape endpoint",
 }
-
-// followUpOpenRoutes is the issue that decides, route by route, whether each listed route is guarded
-// or stays open with a reason.
-const followUpOpenRoutes = "ginsys/shelly-manager#611"
 
 // guardWalkRequired are routes the walk must have visited: one guarded in the table, one guarded in
 // its handler, one provisioner route, one listed route. An empty or partial walk cannot pass.
@@ -61,7 +44,7 @@ var guardWalkRequired = []string{
 	"GET /api/v1/config/templates",
 	"POST /api/v1/admin/rotate-admin-key",
 	"POST /api/v1/provisioner/agents/register",
-	"POST /api/v1/devices",
+	"GET /api/v1/version",          // a listed route
 	"GET /api/v1/metrics/security", // present only with a security monitor
 }
 
