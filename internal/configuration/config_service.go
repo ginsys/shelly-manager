@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -85,8 +86,9 @@ type ConfigurationService struct {
 	merger Merger
 	logger *logging.Logger
 
-	// applyLocks holds one *sync.Mutex per device ID. It serializes applies to the same
-	// device so a slow apply cannot overwrite a newer one and leave the flag claiming applied.
+	// applyLocks holds one lock per device ID, a channel of capacity one: a full channel is a held
+	// lock. It serializes applies to the same device so a slow apply cannot overwrite a newer one and
+	// leave the flag claiming applied. A waiter stops waiting when its context ends.
 	applyLocks sync.Map
 
 	// noApplyLockOnce logs once that the repository offers no cross-replica apply lock.
@@ -102,12 +104,24 @@ func (s *ConfigurationService) SetLoginHooks(hooks LoginHooks) {
 	s.loginHooks = hooks
 }
 
-// lockApply serializes applies to one device and returns the unlock function.
-func (s *ConfigurationService) lockApply(deviceID uint) func() {
-	m, _ := s.applyLocks.LoadOrStore(deviceID, &sync.Mutex{})
-	mu := m.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
+// lockApply serializes applies to one device and returns the unlock function, which is safe to call
+// more than once. It waits until the lock is free or ctx ends and then returns the context's error;
+// a waiter that gives up leaves nothing behind, because it never took the lock. A free lock is taken
+// even when ctx has already ended.
+func (s *ConfigurationService) lockApply(ctx context.Context, deviceID uint) (func(), error) {
+	l, _ := s.applyLocks.LoadOrStore(deviceID, make(chan struct{}, 1))
+	lock := l.(chan struct{})
+	select {
+	case lock <- struct{}{}:
+	default:
+		select {
+		case lock <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	var once sync.Once
+	return func() { once.Do(func() { <-lock }) }, nil
 }
 
 type ConfigStatus struct {

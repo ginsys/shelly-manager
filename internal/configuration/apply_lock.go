@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-// ErrApplyInProgress is returned when another manager replica holds the apply lock of the device
-// for longer than applyLockWait. Nothing was written to the device and the refused call never
-// reaches the configuration service's flag updates; the caller may already have read the device's
-// identity (the service builds the client before it applies).
+// ErrApplyInProgress is returned when another apply to the device, in this process or on another
+// manager replica, holds the apply lock for longer than applyLockWait. Nothing was written to the
+// device and the refused call never reaches the configuration service's flag updates; the caller may
+// already have read the device's identity (the service builds the client before it applies).
 var ErrApplyInProgress = errors.New("another apply to this device is running; retry in a moment")
 
 // ErrApplyLockLost is returned when the lock that keeps other replicas away from the device was lost
@@ -23,13 +23,14 @@ var ErrApplyInProgress = errors.New("another apply to this device is running; re
 var ErrApplyLockLost = errors.New("the lock that keeps other replicas from applying to this device was lost during the apply, " +
 	"so the device may hold a mix of two applies; the configuration stays pending, apply it again")
 
-// DefaultApplyLockWait is how long a second apply waits for the lock of another replica. It stays
-// well under the HTTP request timeout (30 s by default): a wait that outlasts the request is cut
-// off by the request deadline and answers 408, never the documented 409.
+// DefaultApplyLockWait is how long a second apply waits for the apply before it, in this process
+// and on another replica together. It stays well under the HTTP request timeout (30 s by default): a
+// wait that outlasts the request is cut off by the request deadline and answers 408, never the
+// documented 409.
 const DefaultApplyLockWait = 15 * time.Second
 
-// How long a second apply waits for the lock of another replica, and how often it asks again.
-// Variables so a test can shorten them.
+// How long a second apply waits for the apply before it, and how often it asks the database lock
+// again. Variables so a test can shorten them.
 var (
 	applyLockWait = DefaultApplyLockWait
 	applyLockPoll = 250 * time.Millisecond
@@ -106,10 +107,26 @@ func (s *ConfigurationService) markPendingAfterLockLoss(deviceID uint) {
 	}
 }
 
-// lockApplyAcrossReplicas serializes applies to one device in this process (the mutex, waited for
-// without a bound) and then against the other manager replicas that share the database.
-func (s *ConfigurationService) lockApplyAcrossReplicas(ctx context.Context, deviceID uint) (*heldApply, error) {
-	held := &heldApply{local: s.lockApply(deviceID)}
+// lockApplyAcrossReplicas serializes applies to one device in this process and then against the other
+// manager replicas that share the database. One wait of applyLockWait covers both locks: the time
+// spent on the in-process lock is not left over for the database lock. Past it the apply is refused
+// with ErrApplyInProgress. A request that ends first gets its own context error instead.
+func (s *ConfigurationService) lockApplyAcrossReplicas(parent context.Context, deviceID uint) (*heldApply, error) {
+	ctx, cancel := context.WithTimeout(parent, applyLockWait)
+	defer cancel()
+	// refused tells the end of the wait from the end of the request: only the first is a refusal.
+	refused := func(err error) error {
+		if parent.Err() == nil && ctx.Err() != nil {
+			return ErrApplyInProgress
+		}
+		return err
+	}
+
+	local, err := s.lockApply(ctx, deviceID)
+	if err != nil {
+		return nil, refused(err)
+	}
+	held := &heldApply{local: local}
 	locker, ok := s.repo.(applyLocker)
 	if !ok {
 		s.noApplyLockOnce.Do(func() {
@@ -121,7 +138,7 @@ func (s *ConfigurationService) lockApplyAcrossReplicas(ctx context.Context, devi
 	lock, err := locker.LockDeviceApply(ctx, deviceID)
 	if err != nil {
 		held.local()
-		return nil, err
+		return nil, refused(err)
 	}
 	held.db = lock
 	return held, nil

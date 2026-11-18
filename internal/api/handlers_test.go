@@ -1161,7 +1161,7 @@ func TestWriteConfigDeviceError(t *testing.T) {
 		{"unsupported settings", fmt.Errorf("x: %w", configuration.ErrUnsupportedSettings), http.StatusUnprocessableEntity},
 		{"auth failed", fmt.Errorf("apply: %w", shelly.ErrAuthFailed), http.StatusBadGateway},
 		{"another device at the address", fmt.Errorf("x: %w", configuration.ErrDeviceIdentity), http.StatusConflict},
-		{"another replica is applying", fmt.Errorf("x: %w", configuration.ErrApplyInProgress), http.StatusConflict},
+		{"another apply is running", fmt.Errorf("x: %w", configuration.ErrApplyInProgress), http.StatusConflict},
 		{"the apply lock was lost", fmt.Errorf("x: %w", configuration.ErrApplyLockLost), http.StatusInternalServerError},
 		{"other error", errors.New("boom"), http.StatusInternalServerError},
 	}
@@ -1174,9 +1174,10 @@ func TestWriteConfigDeviceError(t *testing.T) {
 	}
 }
 
-// A second apply that waits for another replica's lock is refused with 409 only if the wait ends
-// before the request deadline; otherwise the timeout middleware answers 408. The apply that got the
-// lock needs the rest of the budget, so the wait stays at or under half of it.
+// A second apply that waits for the apply before it (in this process or on another replica) is
+// refused with 409 only if the wait ends before the request deadline; otherwise the timeout
+// middleware answers 408. The apply that got the lock needs the rest of the budget, so the wait stays
+// at or under half of it.
 func TestApplyLockWaitFitsInsideTheRequestTimeout(t *testing.T) {
 	timeout := middleware.DefaultSecurityConfig().RequestTimeout
 	testutil.AssertTrue(t, configuration.DefaultApplyLockWait*2 <= timeout)
