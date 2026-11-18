@@ -1449,32 +1449,6 @@ func TestGetImportStatus(t *testing.T) {
 	testutil.AssertEqual(t, "not_imported", status) // Device has no config yet, so "not_imported" is correct
 }
 
-func TestExportDeviceConfig(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
-	}
-
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	svc := testShellyService(t, db)
-	notificationHandler := testNotificationHandler(t, db)
-	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
-
-	// Add a test device
-	device := testutil.TestDevice()
-	err := db.AddDevice(device)
-	testutil.AssertNoError(t, err)
-
-	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/config/export", device.ID), nil)
-	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
-
-	w := httptest.NewRecorder()
-	handler.ExportDeviceConfig(w, req)
-
-	// Should get an error since we're not actually connecting to a device
-	testutil.AssertEqual(t, http.StatusInternalServerError, w.Code)
-}
-
 func TestBulkImportConfigs(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
@@ -1491,7 +1465,7 @@ func TestBulkImportConfigs(t *testing.T) {
 	assertBulkNotFoundAnswer(t, w)
 }
 
-// assertBulkNotFoundAnswer checks the answer to a bulk import or export that named one device
+// assertBulkNotFoundAnswer checks the answer to a bulk import that named one device
 // that does not exist: the request succeeds and that device is the one failure.
 func assertBulkNotFoundAnswer(t *testing.T, w *httptest.ResponseRecorder) {
 	t.Helper()
@@ -1515,22 +1489,6 @@ func assertBulkNotFoundAnswer(t *testing.T, w *httptest.ResponseRecorder) {
 	testutil.AssertEqual(t, 1, len(response.Data.Results))
 	testutil.AssertEqual(t, uint(4242), response.Data.Results[0].DeviceID)
 	testutil.AssertEqual(t, "failed", response.Data.Results[0].Status)
-}
-
-func TestBulkExportConfigs(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	svc := testShellyService(t, db)
-	notificationHandler := testNotificationHandler(t, db)
-	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
-
-	req := httptest.NewRequest("POST", "/api/v1/config/export/bulk", strings.NewReader(`{"device_ids":[4242]}`))
-	w := httptest.NewRecorder()
-
-	handler.BulkExportConfigs(w, req)
-
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	assertBulkNotFoundAnswer(t, w)
 }
 
 func TestDetectConfigDrift_InvalidID(t *testing.T) {

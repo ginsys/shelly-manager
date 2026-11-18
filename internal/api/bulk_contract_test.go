@@ -20,7 +20,7 @@ import (
 // the same name, and refuse a request that names none (ginsys/shelly-manager#248). Every device here
 // is a fake server that counts the requests it gets: a device that must not be touched gets none.
 
-// bulkRoutes are the four routes. The enhanced drift route answers a report, so its device list is
+// bulkRoutes are the three routes. The enhanced drift route answers a report, so its device list is
 // not compared; every route is held to "touches only the named devices".
 var bulkRoutes = []struct {
 	name    string
@@ -29,7 +29,6 @@ var bulkRoutes = []struct {
 	results bool // the answer lists one result per named device
 }{
 	{"import", "/api/v1/config/bulk-import", (*Handler).BulkImportConfigs, true},
-	{"export", "/api/v1/config/bulk-export", (*Handler).BulkExportConfigs, true},
 	{"drift", "/api/v1/config/bulk-drift-detect", (*Handler).BulkDetectConfigDrift, true},
 	{"drift-enhanced", "/api/v1/config/bulk-drift-detect-enhanced", (*Handler).EnhancedBulkDetectConfigDrift, false},
 }
@@ -197,7 +196,7 @@ func TestBulkRoutes_RefuseAFieldTheServerDoesNotRead(t *testing.T) {
 // An id that names no device is a failed device. Without the option the later devices still run.
 func TestBulkRoutes_StopOnErrorSkipsTheRest(t *testing.T) {
 	const unknownID = 9999
-	failed := map[string]string{"import": "failed", "export": "failed", "drift": "error"}
+	failed := map[string]string{"import": "failed", "drift": "error"}
 	for _, route := range bulkRoutes {
 		if !route.results {
 			continue
@@ -274,9 +273,9 @@ func TestBulkRoutes_ADuplicateIDRunsOnce(t *testing.T) {
 	}
 }
 
-// The wire shape of the import and export answer: the names are the contract the UI reads.
-func TestBulkImportExport_AnswerShape(t *testing.T) {
-	for _, route := range bulkRoutes[:2] {
+// The wire shape of the import answer: the names are the contract the UI reads.
+func TestBulkImport_AnswerShape(t *testing.T) {
+	for _, route := range bulkRoutes[:1] {
 		t.Run(route.name, func(t *testing.T) {
 			db, cleanup := testutil.TestDatabase(t)
 			defer cleanup()

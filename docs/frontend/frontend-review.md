@@ -243,11 +243,10 @@ The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` compo
 | `/config/drift-trends/{id}/resolve` | POST | Resolve a drift report |
 | `/devices/{id}/drift-report` | POST | Generate drift report for a device |
 
-#### Bulk Operations (4 endpoints)
+#### Bulk Operations (3 endpoints)
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/config/bulk-import` | POST | Bulk import configurations to multiple devices |
-| `/config/bulk-export` | POST | Bulk export configurations from multiple devices |
 | `/config/bulk-drift-detect` | POST | Basic bulk drift detection on multiple devices |
 | `/config/bulk-drift-detect-enhanced` | POST | Enhanced bulk drift detection with advanced options |
 
@@ -381,7 +380,7 @@ The remaining "View schema" action opens a read-only viewer:
 - `GET /api/v1/devices/{id}/status` - Get device status
 - `GET /api/v1/devices/{id}/energy` - Get energy metrics
 
-#### Device Configuration (11 used - Task 342 ✓)
+#### Device Configuration (10 used - Task 342 ✓)
 - `GET /api/v1/devices/{id}/config` - Get stored config
 - `PUT /api/v1/devices/{id}/config` - Update stored config
 - `GET /api/v1/devices/{id}/config/current` - Get live config
@@ -389,7 +388,6 @@ The remaining "View schema" action opens a read-only viewer:
 - `GET /api/v1/devices/{id}/config/typed/normalized` - Get typed normalized config
 - `POST /api/v1/devices/{id}/config/import` - Import config to device
 - `GET /api/v1/devices/{id}/config/status` - Get import status
-- `POST /api/v1/devices/{id}/config/export` - Export config from device
 - `GET /api/v1/devices/{id}/config/drift` - Detect configuration drift
 - `POST /api/v1/devices/{id}/config/apply-template` - Apply template
 - `GET /api/v1/devices/{id}/config/history` - Get config history
@@ -420,9 +418,8 @@ legacy stored key that apply and the override editor never read.
 - `GET /api/v1/configuration/schema` - Get config schema
 - `POST /api/v1/configuration/bulk-validate` - Bulk validate
 
-#### Bulk Operations (4 unused)
+#### Bulk Operations (3 unused)
 - `POST /api/v1/config/bulk-import` - Bulk import configs
-- `POST /api/v1/config/bulk-export` - Bulk export configs
 - `POST /api/v1/config/bulk-drift-detect` - Bulk drift detect
 - `POST /api/v1/config/bulk-drift-detect-enhanced` - Enhanced bulk drift
 

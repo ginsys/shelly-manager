@@ -180,6 +180,13 @@ All notable changes to this project are documented here. The project follows Con
   device in relay mode refuses the endpoint. (ginsys/shelly-manager#504)
 
 ### Changed
+- **Behaviour change:** `POST /devices/{id}/config/export` and `POST /config/bulk-export` are
+  removed and answer 404. They wrote the stored import/export record (`device_configs`) to a
+  device beside the apply: no apply lock, no `config_applied` or `pending_reboot` update, and not
+  the desired configuration. A client that wrote a device through them uses the apply,
+  `POST /devices/{id}/config/new/apply`, which sends the desired configuration (templates and
+  overrides). A bulk apply does not exist yet (ginsys/shelly-manager#594). The unused
+  `ResolutionService` in `internal/configuration` went with them. ginsys/shelly-manager#592.
 - **Behaviour change:** `PUT /devices/{id}` no longer writes `template_ids`, `overrides`,
   `desired_config` or `config_applied`. A body that carries them changes none of them, and the
   answer shows the stored values. A client that set them through the device `PUT` uses the owning

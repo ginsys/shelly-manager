@@ -42,7 +42,6 @@ var adminGuardedConfigRoutes = []struct{ method, path string }{
 	{"GET", "/api/v1/devices/1/config/typed/normalized"},
 	{"POST", "/api/v1/devices/1/config/import"},
 	{"GET", "/api/v1/devices/1/config/status"},
-	{"POST", "/api/v1/devices/1/config/export"},
 	{"GET", "/api/v1/devices/1/config/drift"},
 	{"POST", "/api/v1/devices/1/config/apply-template"},
 	{"GET", "/api/v1/devices/1/config/history"},
@@ -57,14 +56,13 @@ var adminGuardedConfigRoutes = []struct{ method, path string }{
 	{"POST", "/api/v1/devices/1/config/new/verify"},
 	{"POST", "/api/v1/devices/1/drift-report"},
 
-	// Typed conversion, bulk operations, drift schedules and drift reports. The four bulk
+	// Typed conversion, bulk operations, drift schedules and drift reports. The three bulk
 	// routes check the key in their handlers already.
 	{"POST", "/api/v1/config/validate-typed"},
 	{"POST", "/api/v1/config/convert-to-typed"},
 	{"POST", "/api/v1/config/convert-to-raw"},
 	{"POST", "/api/v1/config/bulk-validate"},
 	{"POST", "/api/v1/config/bulk-import"},
-	{"POST", "/api/v1/config/bulk-export"},
 	{"POST", "/api/v1/config/bulk-drift-detect"},
 	{"POST", "/api/v1/config/bulk-drift-detect-enhanced"},
 	{"GET", "/api/v1/config/drift-schedules"},

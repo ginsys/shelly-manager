@@ -511,14 +511,13 @@ func (r *Reporter) generateRecommendations(devices []DeviceDriftAnalysis, summar
 			Priority:        "medium",
 			Category:        "maintenance",
 			Title:           "Bulk Configuration Synchronization",
-			Description:     fmt.Sprintf("Multiple devices (%d) have configuration drift. Consider bulk synchronization.", summary.DevicesDrifted),
+			Description:     fmt.Sprintf("Multiple devices (%d) have configuration drift. Consider applying their desired configuration.", summary.DevicesDrifted),
 			AffectedDevices: r.getAllDriftedDevices(devices),
 			Actions: []RecommendedAction{
 				{
-					Type:        "auto-fix",
-					Description: "Perform bulk configuration export to synchronize devices",
-					Command:     "bulk-export",
-					Automated:   true,
+					Type:        "manual-action",
+					Description: "Apply each device's desired configuration (POST /api/v1/devices/{id}/config/new/apply)",
+					Automated:   false,
 				},
 			},
 			Impact: "Medium - Improves overall configuration consistency",
