@@ -94,10 +94,12 @@ export interface BulkView {
 
 export type BulkAnswer = BulkConfigResult | BulkDriftResult | BulkDriftReport
 
-async function post<T>(path: string, request: BulkRequest, failure: string): Promise<T> {
+// Unwrap the envelope of a bulk call. Each route below keeps its own literal `api.post` URL, which
+// the route contract test reads.
+async function unwrap<T>(call: Promise<{ data: APIResponse<T> }>, failure: string): Promise<T> {
   let body: APIResponse<T>
   try {
-    body = (await api.post<APIResponse<T>>(path, request)).data
+    body = (await call).data
   } catch (e: any) {
     // A refused request is a 400 whose `details` says why.
     const error = e?.response?.data?.error
@@ -112,19 +114,24 @@ async function post<T>(path: string, request: BulkRequest, failure: string): Pro
 
 // Read each device's live configuration into the manager.
 export function bulkImport(request: BulkRequest): Promise<BulkConfigResult> {
-  return post<BulkConfigResult>('/config/bulk-import', request, 'Failed to execute bulk import')
+  return unwrap(
+    api.post<APIResponse<BulkConfigResult>>('/config/bulk-import', request),
+    'Failed to execute bulk import'
+  )
 }
 
 // Write each device's stored import/export configuration to the device.
 export function bulkExport(request: BulkRequest): Promise<BulkConfigResult> {
-  return post<BulkConfigResult>('/config/bulk-export', request, 'Failed to execute bulk export')
+  return unwrap(
+    api.post<APIResponse<BulkConfigResult>>('/config/bulk-export', request),
+    'Failed to execute bulk export'
+  )
 }
 
 // Compare stored and live configuration.
 export function bulkDriftDetect(request: BulkRequest): Promise<BulkDriftResult> {
-  return post<BulkDriftResult>(
-    '/config/bulk-drift-detect',
-    request,
+  return unwrap(
+    api.post<APIResponse<BulkDriftResult>>('/config/bulk-drift-detect', request),
     'Failed to execute bulk drift detection'
   )
 }
@@ -133,9 +140,11 @@ export function bulkDriftDetect(request: BulkRequest): Promise<BulkDriftResult> 
 export function bulkDriftDetectEnhanced(
   request: BulkRequest
 ): Promise<BulkDriftReport | BulkDriftResult> {
-  return post<BulkDriftReport | BulkDriftResult>(
-    '/config/bulk-drift-detect-enhanced',
-    request,
+  return unwrap(
+    api.post<APIResponse<BulkDriftReport | BulkDriftResult>>(
+      '/config/bulk-drift-detect-enhanced',
+      request
+    ),
     'Failed to execute enhanced bulk drift detection'
   )
 }
