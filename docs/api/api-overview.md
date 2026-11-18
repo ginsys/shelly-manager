@@ -14,6 +14,16 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | `/api/v1/*` | All protected API endpoints |
 | `/metrics/*` | Metrics and monitoring endpoints |
 
+**Admin key.** If the server has an admin key configured (`security.admin_api_key`), every `/api/v1` route
+needs it, as `Authorization: Bearer <key>` or `X-API-Key: <key>`, and answers 401 `UNAUTHORIZED` without it.
+Two routes stay open by design: `GET /api/v1/version` and `GET /api/v1/metrics/prometheus` (the scrape
+endpoint). The device and tag routes, the notification routes, the export plugin reads,
+`GET /api/v1/provisioning/status` and `GET /api/v1/dhcp/reservations` need the key too
+(ginsys/shelly-manager#611); they were open before. If no admin key is configured, every route is open.
+**The web UI sends the key only when it holds one** (a build-time `VITE_ADMIN_KEY`, or the dev-only
+`/app-config.js`): with a key set on the server and none in the UI, the device list answers 401. A
+production way to give the UI its key is tracked in ginsys/shelly-manager#619.
+
 ---
 
 ## Endpoint Categories
@@ -201,7 +211,7 @@ A `device_type` template names a model from `GET /api/v1/config/device-types`. `
 |--------|----------|-------------|
 | GET | `/api/v1/devices/{id}/config/typed` | Get typed config. `data` holds `configuration`, `validation` and `conversion_info` |
 | PUT | `/api/v1/devices/{id}/config/typed` | Update typed config. The body is `{"configuration": {...}, "validation_level": "basic"}`; `validation_level` is optional (`basic`, `strict` or `production`). `data` holds `configuration` (secrets masked) and `validation`. A configuration that fails validation gets 400 `VALIDATION_FAILED` with the validation result in `error.details`, and nothing is saved |
-| GET | `/api/v1/devices/{id}/capabilities` | Get device capabilities (open without an admin key). The body is `{device_id, device_model, generation, capabilities}`, with `capabilities` a list of names. Every generation lists `wifi`, `mqtt`, `cloud` and `auth`, plus the names the model adds (`relay`, `power_metering`, `dimming`, `rgbw`, `roller`, ...); `ble` and `ethernet` are listed for generation 2 and later only. The list is guessed from the model name. The typed validation of a stored device, and of a request that names a `device_model`, reads the same list, so a Gen1 device with MQTT enabled gets no "may not support MQTT" warning. A validation request without `device_model` uses the `capabilities` it sends |
+| GET | `/api/v1/devices/{id}/capabilities` | Get device capabilities. The body is `{device_id, device_model, generation, capabilities}`, with `capabilities` a list of names. Every generation lists `wifi`, `mqtt`, `cloud` and `auth`, plus the names the model adds (`relay`, `power_metering`, `dimming`, `rgbw`, `roller`, ...); `ble` and `ethernet` are listed for generation 2 and later only. The list is guessed from the model name. The typed validation of a stored device, and of a request that names a `device_model`, reads the same list, so a Gen1 device with MQTT enabled gets no "may not support MQTT" warning. A validation request without `device_model` uses the `capabilities` it sends |
 | POST | `/api/v1/config/validate-typed` | Validate typed config (admin key). The body is `{"configuration": {...}, "device_model": "SHPLG-S", "generation": 1, "capabilities": [...], "validation_level": "basic"}`; everything but `configuration` is optional. `data` is the validation result: `valid`, and `errors`, `warnings` and `info` when there are any |
 | POST | `/api/v1/config/convert-to-typed` | Convert raw to typed (admin key). The body is `{"configuration": {...}, "device_model": "SHPLG-S", "generation": 1}`. `data` holds `configuration` and `conversion_info` |
 | POST | `/api/v1/config/convert-to-raw` | Convert typed to raw (admin key). The body is `{"configuration": {...}}`. `data` holds `configuration` and `conversion_info` |
@@ -550,7 +560,7 @@ All API responses follow this envelope:
 - Header: `Authorization: Bearer {api_key}`
 - Header: `X-API-Key: {api_key}`
 
-**Admin key.** If the server has an admin key configured, these configuration routes need it and return 401 `UNAUTHORIZED` without it: every route under `/api/v1/devices/{id}/config` (the stored, live, typed, import, drift, history, apply-template, capability and apply routes), `/api/v1/devices/{id}/overrides/new`, `/api/v1/devices/{id}/desired-config` and `/api/v1/devices/{id}/drift-report`. The typed conversion and validation routes (`/api/v1/config/validate-typed`, `convert-to-typed`, `convert-to-raw`, `bulk-validate`) and the drift schedule and drift report routes under `/api/v1/config` need it too, as do the bulk import and drift routes, which check it in their handlers. The template routes under `/api/v1/config/templates`, the template assignment routes and `GET /api/v1/config/schema` need it too. If no admin key is configured, the routes are open. The web UI sends the key it holds on every call. `GET /api/v1/devices/{id}/capabilities` stays open.
+**Admin key.** If the server has an admin key configured, these configuration routes need it and return 401 `UNAUTHORIZED` without it: every route under `/api/v1/devices/{id}/config` (the stored, live, typed, import, drift, history, apply-template, capability and apply routes), `/api/v1/devices/{id}/overrides/new`, `/api/v1/devices/{id}/desired-config` and `/api/v1/devices/{id}/drift-report`. The typed conversion and validation routes (`/api/v1/config/validate-typed`, `convert-to-typed`, `convert-to-raw`, `bulk-validate`) and the drift schedule and drift report routes under `/api/v1/config` need it too, as do the bulk import and drift routes, which check it in their handlers. The template routes under `/api/v1/config/templates`, the template assignment routes and `GET /api/v1/config/schema` need it too. If no admin key is configured, the routes are open. The web UI sends the key it holds on every call. `GET /api/v1/devices/{id}/capabilities` needs it too.
 
 ---
 
