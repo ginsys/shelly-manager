@@ -162,7 +162,7 @@ Leave `database.max_open_conns` and `database.max_idle_conns` unset (or `0`) to 
 | SQLite | 1 | 1 |
 | PostgreSQL, MySQL | 25 | 5 |
 
-A value you set is used as is. The environment names are `SHELLY_DATABASE_MAX_OPEN_CONNS` and
+A value you set is used as is on PostgreSQL and MySQL; SQLite always runs with one connection, whatever is set. The environment names are `SHELLY_DATABASE_MAX_OPEN_CONNS` and
 `SHELLY_DATABASE_MAX_IDLE_CONNS`. Each replica opens its own pool, so keep replicas × `max_open_conns`
 below the database server's `max_connections` (PostgreSQL's default is 100), counting the extra replica of a
 rolling update and the most the autoscaler can add. A pool of 1 on PostgreSQL or MySQL cannot take the
