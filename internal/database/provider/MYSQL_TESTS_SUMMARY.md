@@ -21,8 +21,9 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 **Credential Protection Tests**
 - `TestMySQLSecurityCredentialProtection`: Ensures credentials never leak in error messages
   - Tests with various MySQL DSN formats
-  - Validates helper methods (getHostFromDSN, getDatabaseFromDSN)
   - Covers 5 different credential scenarios
+- `TestMySQLConnectError_HoldsNoDSNText` (`mysql_connect_error_test.go`): a password typed into
+  the tls name, a bool value, the user or the host is absent from the returned error and the log
 
 **DSN Injection Protection Tests**
 - `TestMySQLSecurityDSNInjection`: Protection against SQL injection in DSN strings
@@ -46,9 +47,8 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 - `TestMySQLSecurityErrorHandling`: Secure error handling when not connected
   - Tests all interface methods with proper error responses
   - Validates no system information leakage
-- `TestMySQLSecurityErrorSanitization`: Error message sanitization
-  - Tests credential removal from various error formats
-  - Password, user, database name sanitization
+- `TestClassifyConnectError` (`connect_error_test.go`): connect errors reduced to a fixed
+  classification (server error code only, never driver text)
 
 **Health Check Security Tests**
 - `TestMySQLSecurityHealthCheck`: Health check information security
@@ -106,8 +106,6 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 
 **DSN and Configuration**
 - `TestMySQLProviderBuildDSN`: DSN construction with various options
-- `TestMySQLProviderGetHostFromDSN`: Host extraction from DSN
-- `TestMySQLProviderGetDatabaseFromDSN`: Database name extraction
 - `TestMySQLProviderCreateGormLogger`: GORM logger creation
 - `TestMySQLProviderValidateSSLConfig`: SSL configuration validation
 
@@ -122,8 +120,7 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 
 **Benchmark Tests**
 - `BenchmarkMySQLProviderGetStats`: ~20 ns/op
-- `BenchmarkMySQLProviderBuildDSN`: ~2768 ns/op  
-- `BenchmarkMySQLProviderGetHostFromDSN`: ~15 ns/op
+- `BenchmarkMySQLProviderBuildDSN`: ~2768 ns/op
 
 ## Test Coverage Summary
 
@@ -132,7 +129,7 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 ✅ **Credential Protection**: No leakage in errors, logging, health checks
 ✅ **Injection Protection**: SQL, XSS, command injection prevention
 ✅ **Input Validation**: Comprehensive DSN and option validation
-✅ **Error Sanitization**: Credential removal from all error messages
+✅ **Connect Error Text**: No driver text in connect errors or logs
 ✅ **Concurrency Safety**: Thread-safe operations validated
 ✅ **Timeout Security**: Connection timeout enforcement
 ✅ **Resource Limits**: Connection pool security

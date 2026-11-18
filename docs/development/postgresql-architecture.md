@@ -65,10 +65,10 @@ The provider implements multiple interfaces for comprehensive functionality:
 
 **Default SSL Enforcement**: All connections default to `sslmode=require` unless explicitly configured otherwise. This ensures encryption in transit by default.
 
-**Credential Protection**: The provider implements comprehensive credential sanitization:
-- DSN passwords are masked in logs
-- Error messages never expose credentials
-- Connection details are logged safely with credential redaction
+**Credential Protection**: The provider carries no driver text:
+- Connect errors are a fixed classification (and the server's error code), never the driver's wording
+- The connect log names the host and database from the parsed configuration
+- A DSN is printed only through `DatabaseConfig.Target()`: the provider name, or a SQLite path without its query
 
 **Certificate Validation**: Full support for SSL certificate validation including:
 - Client certificates for mutual TLS authentication
@@ -199,8 +199,8 @@ The provider integrates with Shelly Manager's structured logging system:
 ```go
 p.logger.WithFields(map[string]any{
     "provider": "postgresql",
-    "host":     p.getHostFromDSN(dsn),
-    "database": p.getDatabaseFromDSN(dsn),
+    "host":     connConfig.Host,     // from the parsed pgx config, never the raw DSN
+    "database": connConfig.Database,
 }).Info("Connected to PostgreSQL database")
 ```
 
@@ -261,16 +261,19 @@ The provider implements graceful error handling for connection issues:
 
 ### Security Error Handling
 
-All error messages are sanitized to prevent information disclosure:
+A connect error never carries driver text, because pgx prints what it parsed
+from a malformed DSN (database, host, user). The DSN is parsed once with
+`pgx.ParseConfig` (a refusal reports a fixed message), and the pool opens on a
+sealed `driver.Connector` (`sealConnector`), so each attempt of the pool, first
+connect or reconnect, fails with a classification built from the error's type:
 
-```go
-func (p *PostgreSQLProvider) getHostFromDSN(dsn string) string {
-    if parsedURL, err := url.Parse(dsn); err == nil && parsedURL.Host != "" {
-        return parsedURL.Host  // Only host, no credentials
-    }
-    return "unknown"
-}
 ```
+database connection failed: connection refused
+database connection failed: the server rejected the connection (SQLSTATE 28P01, invalid password)
+```
+
+Diagnostics lost: the driver's own wording (host, user and database in a dial or
+server error). The classification and the server's SQLSTATE code remain.
 
 ## Performance Characteristics
 

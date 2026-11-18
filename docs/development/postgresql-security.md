@@ -235,37 +235,34 @@ func maskPassword(dsn string) string {
 
 #### Safe Error Handling
 
-Errors never expose credentials:
+A connect error never carries driver text. pgx and `net/url` read a malformed
+DSN differently, and pgx prints what it parsed (the database name, the host, the
+user), so a password typed in the wrong place reaches its error text. The
+provider therefore parses the DSN once with `pgx.ParseConfig` (a refusal reports
+a fixed message) and opens the pool on a sealed `driver.Connector`: every
+connection attempt (the first, each growth of the pool, each reconnect) fails
+with a classification built from the error's type, never from its text.
 
 ```go
-func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
-    // Log connection attempt without credentials
-    p.logger.WithFields(map[string]any{
-        "provider": "postgresql",
-        "host":     p.getHostFromDSN(dsn), // Only host, no credentials
-        "database": p.getDatabaseFromDSN(dsn),
-    }).Info("Connecting to PostgreSQL database")
-    
-    if err := p.db.Ping(); err != nil {
-        // Generic error, no credential exposure
-        return fmt.Errorf("failed to connect to database: connection refused")
-    }
-}
+connConfig, err := pgx.ParseConfig(dsn) // a refusal reports a fixed message
+sqlDB := sql.OpenDB(sealConnector(stdlib.GetConnector(*connConfig)))
+db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), gormConfig)
+// ...
+// database connection failed: connection refused
+// database connection failed: the server rejected the connection (SQLSTATE 28P01, invalid password)
 ```
+
+A server error is reported as its SQLSTATE code only, because the server echoes
+the database and user it was sent in its message. The classifier is in
+`internal/database/provider/connect_error.go`.
 
 #### Logging Security
 
-All logging is sanitized to prevent credential leakage:
-
-```go
-// Safe host extraction without credentials
-func (p *PostgreSQLProvider) getHostFromDSN(dsn string) string {
-    if parsedURL, err := url.Parse(dsn); err == nil && parsedURL.Host != "" {
-        return parsedURL.Host  // Host only, excludes userinfo
-    }
-    return "unknown"
-}
-```
+The connect log line names the host and database from the parsed pgx
+configuration, never from the raw DSN. The GORM log writer receives the same
+sealed errors as the returned error. `DatabaseConfig.Target()` is the one form
+of a DSN that is printed: the provider name for a network provider, the path
+without its query for SQLite.
 
 ## Access Control
 
@@ -414,7 +411,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
         p.logger.WithFields(map[string]any{
             "event": "connection_failure",
             "duration": time.Since(start),
-            "host": p.getHostFromDSN(dsn),
+            "host": connConfig.Host,
             "error_type": "connection_refused",
         }).Warn("Database connection failed")
         

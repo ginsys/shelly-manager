@@ -96,17 +96,9 @@ func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
 }
 
 // DatabaseTarget describes the database GetDatabaseConfig connects to, for
-// logs. Network provider DSNs can carry credentials, so for those only the
-// provider is named. Provider names are matched the way the provider factory
-// matches them.
+// logs: the one form of the DSN that is printed (see provider.DatabaseConfig.Target).
 func (c *Config) DatabaseTarget() string {
-	dbConfig := c.GetDatabaseConfig()
-	providerName := strings.ToLower(strings.TrimSpace(dbConfig.Provider))
-	switch providerName {
-	case "sqlite", "sqlite3":
-		return dbConfig.DSN
-	}
-	return providerName + " (DSN redacted)"
+	return c.GetDatabaseConfig().Target()
 }
 
 // ValidateDatabaseConfig validates the database configuration

@@ -71,12 +71,13 @@ type DatabaseConfig struct {
 // what makes a pointer print the same way. The DSN of a network provider is not
 // printed at all: no matcher of ours agrees with every driver on where the
 // credentials in a DSN begin and end, so none is attempted. A SQLite DSN is a
-// file path and stays.
+// file path and stays, without its query.
 func (c DatabaseConfig) String() string {
 	type plain DatabaseConfig // a type without this method, so Sprintf does not recurse
 
 	switch strings.ToLower(strings.TrimSpace(c.Provider)) {
 	case "sqlite", "sqlite3":
+		c.DSN = c.Target()
 	default:
 		c.DSN = "***"
 	}
@@ -84,6 +85,21 @@ func (c DatabaseConfig) String() string {
 		c.Password = "***"
 	}
 	return fmt.Sprintf("%+v", plain(c))
+}
+
+// Target names the database for a log or a message, and is the only form of
+// the DSN that is printed. A SQLite DSN is a file path, so its path stays; the
+// query after the first "?" is dropped, because it can hold a key (SQLCipher) or
+// any driver parameter. The DSN of a network provider is not printed at all.
+// Provider names are matched the way the provider factory matches them.
+func (c DatabaseConfig) Target() string {
+	name := strings.ToLower(strings.TrimSpace(c.Provider))
+	switch name {
+	case "sqlite", "sqlite3":
+		path, _, _ := strings.Cut(c.DSN, "?")
+		return path
+	}
+	return name + " (DSN redacted)"
 }
 
 // DatabaseStats provides performance and connection statistics

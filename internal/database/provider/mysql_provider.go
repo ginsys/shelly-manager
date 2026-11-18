@@ -7,13 +7,13 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"gorm.io/driver/mysql"
+	mysqldriver "github.com/go-sql-driver/mysql"
+	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
@@ -83,10 +83,24 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 		Logger: m.createGormLogger(),
 	}
 
-	// Open database connection with MySQL driver
-	db, err := gorm.Open(mysql.Open(dsn), gormConfig)
+	// Parse the DSN with the driver's own parser, and open the pool on a sealed
+	// connector, so no connect error of the pool carries driver text (the parser
+	// and the dial both quote operator input).
+	driverConfig, err := mysqldriver.ParseDSN(dsn)
 	if err != nil {
-		return fmt.Errorf("failed to connect to MySQL database: %w", m.sanitizeError(err))
+		return fmt.Errorf("failed to parse DSN: %w", errDSNNotParsed)
+	}
+	connector, err := mysqldriver.NewConnector(driverConfig)
+	if err != nil {
+		return fmt.Errorf("failed to parse DSN: %w", errDSNNotParsed)
+	}
+	sqlDB := sql.OpenDB(sealConnector(connector))
+
+	// Open database connection with the GORM MySQL dialector on that pool
+	db, err := gorm.Open(gormmysql.New(gormmysql.Config{Conn: sqlDB, DSNConfig: driverConfig}), gormConfig)
+	if err != nil {
+		_ = sqlDB.Close()
+		return fmt.Errorf("failed to connect to MySQL database: %w", err)
 	}
 
 	m.db = db
@@ -94,7 +108,8 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 	// Configure connection pool settings
 	if err := m.configureConnectionPool(); err != nil {
 		m.db = nil
-		return fmt.Errorf("failed to configure connection pool: %w", m.sanitizeError(err))
+		_ = sqlDB.Close()
+		return fmt.Errorf("failed to configure connection pool: %w", err)
 	}
 
 	// Mark the handle live before probing it: Ping (and updateProviderVersion)
@@ -107,7 +122,8 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 	if err := m.Ping(); err != nil {
 		m.connected = false
 		m.db = nil
-		return fmt.Errorf("failed to ping database: %w", m.sanitizeError(err))
+		_ = sqlDB.Close()
+		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	// Get MySQL version
@@ -119,8 +135,8 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 
 	m.logger.WithFields(map[string]any{
 		"provider": "mysql",
-		"host":     m.getHostFromDSN(dsn),
-		"database": m.getDatabaseFromDSN(dsn),
+		"host":     driverConfig.Addr,
+		"database": driverConfig.DBName,
 	}).Info("Connected to MySQL database")
 
 	return nil
@@ -144,7 +160,7 @@ func (m *MySQLProvider) Close() error {
 	m.connected = false
 
 	if err != nil {
-		return fmt.Errorf("failed to close database: %w", m.sanitizeError(err))
+		return fmt.Errorf("failed to close database: %w", err)
 	}
 
 	m.logger.Info("Closed MySQL database connection")
@@ -159,7 +175,7 @@ func (m *MySQLProvider) Ping() error {
 
 	sqlDB, err := m.db.DB()
 	if err != nil {
-		return fmt.Errorf("failed to get underlying SQL DB: %w", m.sanitizeError(err))
+		return fmt.Errorf("failed to get underlying SQL DB: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -215,7 +231,7 @@ func (m *MySQLProvider) BeginTransaction() (Transaction, error) {
 		Isolation: sql.LevelReadCommitted, // MySQL default
 	})
 	if tx.Error != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", m.sanitizeError(tx.Error))
+		return nil, fmt.Errorf("failed to begin transaction: %w", tx.Error)
 	}
 
 	return &mysqlTransaction{tx: tx}, nil
@@ -288,46 +304,6 @@ func (m *MySQLProvider) HealthCheck(ctx context.Context) HealthStatus {
 	status.Details["version"] = m.Version()
 
 	return status
-}
-
-// sanitizeError removes sensitive information from error messages
-func (m *MySQLProvider) sanitizeError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	errorMsg := err.Error()
-
-	// Patterns to match and remove credentials from MySQL DSN-like strings
-	credentialPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`:[^:@/]+@`),        // Remove password in user:password@host format
-		regexp.MustCompile(`user=\w+`),         // Remove user parameter
-		regexp.MustCompile(`password=[^\s&]+`), // Remove password parameter
-		regexp.MustCompile(`dbname=\w+`),       // Remove database name
-	}
-
-	// Replace credentials with safe placeholders
-	sanitizedMsg := errorMsg
-	for _, pattern := range credentialPatterns {
-		switch pattern.String() {
-		case `:[^:@/]+@`:
-			sanitizedMsg = pattern.ReplaceAllString(sanitizedMsg, ":***@")
-		default:
-			matches := pattern.FindAllString(sanitizedMsg, -1)
-			for _, match := range matches {
-				parts := strings.Split(match, "=")
-				if len(parts) == 2 {
-					sanitizedMsg = strings.ReplaceAll(sanitizedMsg, match, parts[0]+"=***")
-				}
-			}
-		}
-	}
-
-	// Remove any remaining potential credential information in URLs
-	urlPattern := regexp.MustCompile(`://[^:]+:[^@]+@`)
-	sanitizedMsg = urlPattern.ReplaceAllString(sanitizedMsg, "://***:***@")
-
-	return fmt.Errorf("%s", sanitizedMsg)
 }
 
 // validateDSNInput validates and sanitizes DSN components for security
@@ -474,7 +450,7 @@ func (m *MySQLProvider) buildDSN(baseDSN string, options map[string]string) (str
 func (m *MySQLProvider) configureConnectionPool() error {
 	sqlDB, err := m.db.DB()
 	if err != nil {
-		return fmt.Errorf("failed to get underlying SQL DB: %w", m.sanitizeError(err))
+		return fmt.Errorf("failed to get underlying SQL DB: %w", err)
 	}
 
 	// Set connection pool parameters with MySQL-appropriate defaults
@@ -583,44 +559,6 @@ func (m *MySQLProvider) updateStats() {
 	if err := m.db.Raw("SELECT SUM(data_length + index_length) AS size FROM information_schema.tables WHERE table_schema = DATABASE()").Scan(&dbSize).Error; err == nil {
 		m.stats.DatabaseSize = dbSize
 	}
-}
-
-// getHostFromDSN extracts host from MySQL DSN for logging
-func (m *MySQLProvider) getHostFromDSN(dsn string) string {
-	// MySQL DSN format: [user[:password]@][tcp[(addr)]]/dbname
-	if strings.Contains(dsn, "tcp(") {
-		start := strings.Index(dsn, "tcp(") + 4
-		end := strings.Index(dsn[start:], ")")
-		if end > 0 {
-			return dsn[start : start+end]
-		}
-	}
-	// Extract from simple user@host format
-	if strings.Contains(dsn, "@") && strings.Contains(dsn, "/") {
-		start := strings.LastIndex(dsn, "@") + 1
-		end := strings.Index(dsn[start:], "/")
-		if end > 0 {
-			return dsn[start : start+end]
-		}
-	}
-	return "unknown"
-}
-
-// getDatabaseFromDSN extracts database name from MySQL DSN for logging
-func (m *MySQLProvider) getDatabaseFromDSN(dsn string) string {
-	// Find the last / and extract database name
-	lastSlash := strings.LastIndex(dsn, "/")
-	if lastSlash >= 0 {
-		dbPart := dsn[lastSlash+1:]
-		// Remove query parameters if present
-		if questionMark := strings.Index(dbPart, "?"); questionMark >= 0 {
-			dbPart = dbPart[:questionMark]
-		}
-		if dbPart != "" {
-			return dbPart
-		}
-	}
-	return "unknown"
 }
 
 // validateSSLConfig validates SSL certificate configuration for MySQL

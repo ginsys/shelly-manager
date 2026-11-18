@@ -210,15 +210,6 @@ func TestMySQLSecurityCredentialProtection(t *testing.T) {
 				assert.NotContains(t, errorMsg, strings.ToLower(credential),
 					"Error message should not contain credential: %s", credential)
 			}
-
-			// Test helper methods don't leak credentials
-			host := provider.getHostFromDSN(dsn)
-			assert.NotContains(t, host, sensitiveCredentials[i%len(sensitiveCredentials)],
-				"Host extraction should not contain credentials")
-
-			db := provider.getDatabaseFromDSN(dsn)
-			assert.NotContains(t, db, sensitiveCredentials[i%len(sensitiveCredentials)],
-				"Database extraction should not contain credentials")
 		})
 	}
 }
@@ -524,8 +515,6 @@ func TestMySQLSecurityConcurrentAccess(t *testing.T) {
 
 			// Test concurrent DSN operations
 			_, _ = provider.buildDSN("user:pass@tcp(localhost:3306)/test", map[string]string{"tls": "false"})
-			_ = provider.getHostFromDSN("user:pass@tcp(localhost:3306)/test")
-			_ = provider.getDatabaseFromDSN("user:pass@tcp(localhost:3306)/test")
 		}()
 	}
 
@@ -705,76 +694,6 @@ func TestMySQLSecurityTimeoutValidation(t *testing.T) {
 			assert.Contains(t, builtDSN, tc.expectedTimeout)
 			assert.Contains(t, builtDSN, tc.expectedRead)
 			assert.Contains(t, builtDSN, tc.expectedWrite)
-		})
-	}
-}
-
-// TestMySQLSecurityErrorSanitization tests error message sanitization
-func TestMySQLSecurityErrorSanitization(t *testing.T) {
-	logger := logging.GetDefault()
-	provider := NewMySQLProvider(logger)
-
-	testErrors := []struct {
-		name             string
-		inputError       string
-		shouldNotContain []string
-		shouldContain    []string
-	}{
-		{
-			name:             "Password in connection string",
-			inputError:       "failed to connect to user:supersecret@tcp(localhost:3306)/db",
-			shouldNotContain: []string{"supersecret"},
-			shouldContain:    []string{"tcp(localhost:3306)", ":***@"},
-		},
-		{
-			name:             "User credentials in error",
-			inputError:       "authentication failed for user=admin password=secret123 dbname=production",
-			shouldNotContain: []string{"admin", "secret123", "production"},
-			shouldContain:    []string{"authentication", "user=***", "password=***", "dbname=***"},
-		},
-		{
-			name:             "URL format credentials",
-			inputError:       "connection error mysql://root:adminpass@localhost:3306/secure_db",
-			shouldNotContain: []string{"root", "adminpass"},
-			shouldContain:    []string{"mysql://", "://***:***@"},
-		},
-		{
-			name:             "Complex DSN with credentials",
-			inputError:       "failed: service:mypassword123@tcp(db.internal:3306)/app?charset=utf8mb4",
-			shouldNotContain: []string{"mypassword123"},
-			shouldContain:    []string{":***@", "tcp(db.internal:3306)"},
-		},
-		{
-			name:             "Multiple credential patterns",
-			inputError:       "error: user:secret123@tcp(host:3306)/db and also user=test password=secret dbname=app",
-			shouldNotContain: []string{"secret123", "test", "secret"},
-			shouldContain:    []string{":***@", "user=***", "password=***", "dbname=***"},
-		},
-	}
-
-	for _, tc := range testErrors {
-		t.Run(tc.name, func(t *testing.T) {
-			originalErr := fmt.Errorf("%s", tc.inputError)
-			sanitizedErr := provider.sanitizeError(originalErr)
-
-			assert.NotNil(t, sanitizedErr)
-			sanitizedMsg := sanitizedErr.Error()
-
-			// Debug output to understand sanitization
-			t.Logf("Original: %s", tc.inputError)
-			t.Logf("Sanitized: %s", sanitizedMsg)
-
-			// Check that sensitive information is removed
-			for _, sensitive := range tc.shouldNotContain {
-				assert.NotContains(t, sanitizedMsg, sensitive,
-					"Sanitized error should not contain: %s", sensitive)
-			}
-
-			// Check that expected patterns are present
-			for _, preserve := range tc.shouldContain {
-				assert.Contains(t, sanitizedMsg, preserve,
-					"Sanitized error should contain: %s", preserve)
-			}
 		})
 	}
 }
