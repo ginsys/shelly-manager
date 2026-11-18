@@ -268,6 +268,22 @@ All notable changes to this project are documented here. The project follows Con
   changes `config_applied` or `pending_reboot`, as the per-device export does
   (ginsys/shelly-manager#592 tracks moving it onto apply). The web UI types for these routes
   follow in a separate change. Fixes ginsys/shelly-manager#248.
+- A malformed PostgreSQL or MySQL DSN no longer puts a password into an error or a log line. The
+  drivers print what they parsed (the database name, host and user of pgx, the value a MySQL parse
+  refused, the address of a dial), and the old sanitizer could not know where a credential began.
+  The DSN is now parsed once with the driver's own parser, a DSN it refuses reports a fixed
+  message, and the pool opens on a connector whose every attempt (first connect, pool growth,
+  reconnect) fails with a classification built from the error's type, such as `database connection
+  failed: connection refused`, plus the server's SQLSTATE or MySQL error number where there is one.
+  The GORM log writer gets the same text. The sanitizers and the host and database helpers are
+  removed. A SQLite DSN is printed without its query (`DatabaseConfig.String()`, the connect log
+  and the config's database target). Diagnostics lost: the driver's own wording of a connect
+  failure (host, user and database in it) and a server's message. Behaviour notes: the GORM
+  PostgreSQL dialector no longer reads a `TimeZone=` DSN key (pgx still sends it as the session
+  `timezone`, and no repository DSN sets it); a SQLite DSN with a query now takes its directory
+  from the path part only, so a stray directory is no longer made from a query value. Not covered
+  here: the text of a server message on an already established connection, and the value a SQLite
+  driver quotes when it refuses an invalid `_` parameter. (ginsys/shelly-manager#587)
 - A device writer saves only the columns it owns, and a whole-row save exists only where it is
   versioned. The discovery upsert, the GitOps import and the CLI discover command saved the whole
   row they had read, so a flag, a setting or a desired configuration that another writer committed

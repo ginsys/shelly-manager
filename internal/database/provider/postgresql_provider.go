@@ -8,12 +8,13 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -70,8 +71,20 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	// Parse and validate DSN
 	dsn, err := p.buildDSN(config.DSN, config.Options)
 	if err != nil {
-		return fmt.Errorf("failed to build DSN: %w", p.sanitizeError(err))
+		return fmt.Errorf("failed to build DSN: %w", err)
 	}
+
+	// The driver's own parser reads the DSN once, here, and what it refuses is
+	// reported without a word of its error: it quotes the DSN (#587).
+	connConfig, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return fmt.Errorf("failed to parse DSN: %w", errDSNNotParsed)
+	}
+
+	// Every connection the pool makes goes through the sealed connector, so a
+	// failure carries a classification and never the driver's text, whether it
+	// is the first connect or a reconnect long after.
+	sqlDB := sql.OpenDB(sealConnector(stdlib.GetConnector(*connConfig)))
 
 	// Configure GORM logger based on config
 	gormConfig := &gorm.Config{
@@ -79,9 +92,10 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	}
 
 	// Open database connection with PostgreSQL driver
-	db, err := gorm.Open(postgres.Open(dsn), gormConfig)
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), gormConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to PostgreSQL database: %w", p.sanitizeError(err))
+		_ = sqlDB.Close()
+		return fmt.Errorf("failed to connect to PostgreSQL database: %w", err)
 	}
 
 	p.db = db
@@ -89,7 +103,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	// Configure connection pool settings
 	if err := p.configureConnectionPool(); err != nil {
 		p.db = nil
-		return fmt.Errorf("failed to configure connection pool: %w", p.sanitizeError(err))
+		return fmt.Errorf("failed to configure connection pool: %w", err)
 	}
 
 	// Mark the handle live before probing it: Ping (and updateProviderVersion)
@@ -102,7 +116,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	if err := p.Ping(); err != nil {
 		p.connected = false
 		p.db = nil
-		return fmt.Errorf("failed to ping database: %w", p.sanitizeError(err))
+		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	// Get PostgreSQL version
@@ -112,10 +126,11 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 		}).Warn("Failed to get PostgreSQL version")
 	}
 
+	// The host and database come from the config the driver connected with.
 	p.logger.WithFields(map[string]any{
 		"provider": "postgresql",
-		"host":     p.getHostFromDSN(dsn),
-		"database": p.getDatabaseFromDSN(dsn),
+		"host":     connConfig.Host,
+		"database": connConfig.Database,
 	}).Info("Connected to PostgreSQL database")
 
 	return nil
@@ -139,7 +154,7 @@ func (p *PostgreSQLProvider) Close() error {
 	p.connected = false
 
 	if err != nil {
-		return fmt.Errorf("failed to close database: %w", p.sanitizeError(err))
+		return fmt.Errorf("failed to close database: %w", err)
 	}
 
 	p.logger.Info("Closed PostgreSQL database connection")
@@ -154,7 +169,7 @@ func (p *PostgreSQLProvider) Ping() error {
 
 	sqlDB, err := p.db.DB()
 	if err != nil {
-		return fmt.Errorf("failed to get underlying SQL DB: %w", p.sanitizeError(err))
+		return fmt.Errorf("failed to get underlying SQL DB: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -210,7 +225,7 @@ func (p *PostgreSQLProvider) BeginTransaction() (Transaction, error) {
 		Isolation: sql.LevelReadCommitted, // PostgreSQL default
 	})
 	if tx.Error != nil {
-		return nil, fmt.Errorf("failed to begin transaction: %w", p.sanitizeError(tx.Error))
+		return nil, fmt.Errorf("failed to begin transaction: %w", tx.Error)
 	}
 
 	return &postgresTransaction{tx: tx}, nil
@@ -267,7 +282,7 @@ func (p *PostgreSQLProvider) HealthCheck(ctx context.Context) HealthStatus {
 
 	if err := p.Ping(); err != nil {
 		status.Healthy = false
-		status.Error = p.sanitizeError(err).Error()
+		status.Error = err.Error()
 		status.ResponseTime = time.Since(start)
 		return status
 	}
@@ -283,75 +298,6 @@ func (p *PostgreSQLProvider) HealthCheck(ctx context.Context) HealthStatus {
 	status.Details["version"] = p.Version()
 
 	return status
-}
-
-// sanitizeError removes sensitive information from error messages
-func (p *PostgreSQLProvider) sanitizeError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	sanitizedMsg := err.Error()
-
-	// The passwords this provider was given are known, so remove them by value
-	// (exact match, no pattern), in every spelling a driver or the URL package
-	// may print them in, wherever in the text they land. The patterns below only
-	// catch what looks like a credential.
-	for _, password := range p.knownPasswords() {
-		for _, form := range []string{
-			password,
-			url.QueryEscape(password),
-			url.PathEscape(password),
-			strings.TrimPrefix(url.UserPassword("", password).String(), ":"),
-		} {
-			sanitizedMsg = strings.ReplaceAll(sanitizedMsg, form, "***")
-		}
-	}
-
-	// Patterns to match and remove credentials from DSN-like strings
-	// Match user=username patterns
-	credentialPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`user=\w+`),
-		regexp.MustCompile(`password=\S+`),
-		regexp.MustCompile(`dbname=\w+`),
-		regexp.MustCompile(`application_name=\S+`),
-	}
-
-	// Replace credentials with safe placeholders
-	for _, pattern := range credentialPatterns {
-		matches := pattern.FindAllString(sanitizedMsg, -1)
-		for _, match := range matches {
-			parts := strings.SplitN(match, "=", 2)
-			sanitizedMsg = strings.ReplaceAll(sanitizedMsg, match, parts[0]+"=***")
-		}
-	}
-
-	// Remove any remaining potential credential information in URLs
-	urlPattern := regexp.MustCompile(`://[^:]+:[^@]+@`)
-	sanitizedMsg = urlPattern.ReplaceAllString(sanitizedMsg, "://***:***@")
-
-	return fmt.Errorf("%s", sanitizedMsg)
-}
-
-// knownPasswords lists the password values the provider holds: the
-// database.password field, and the userinfo password and password query values
-// of the DSN where it parses.
-func (p *PostgreSQLProvider) knownPasswords() []string {
-	var out []string
-	if p.config.Password != "" {
-		out = append(out, p.config.Password)
-	}
-	if u, err := url.Parse(p.config.DSN); err == nil {
-		if password, ok := u.User.Password(); ok && password != "" {
-			out = append(out, password)
-		}
-		for _, value := range u.Query()["password"] {
-			if value != "" {
-				out = append(out, value)
-			}
-		}
-	}
-	return out
 }
 
 // validateDSNInput validates and sanitizes DSN components for security
@@ -516,7 +462,7 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 func (p *PostgreSQLProvider) configureConnectionPool() error {
 	sqlDB, err := p.db.DB()
 	if err != nil {
-		return fmt.Errorf("failed to get underlying SQL DB: %w", p.sanitizeError(err))
+		return fmt.Errorf("failed to get underlying SQL DB: %w", err)
 	}
 
 	// Set connection pool parameters with PostgreSQL-appropriate defaults
@@ -625,22 +571,6 @@ func (p *PostgreSQLProvider) updateStats() {
 	if err := p.db.Raw("SELECT pg_database_size(current_database())").Scan(&dbSize).Error; err == nil {
 		p.stats.DatabaseSize = dbSize
 	}
-}
-
-// getHostFromDSN extracts host from DSN for logging
-func (p *PostgreSQLProvider) getHostFromDSN(dsn string) string {
-	if parsedURL, err := url.Parse(dsn); err == nil && parsedURL.Host != "" {
-		return parsedURL.Host
-	}
-	return "unknown"
-}
-
-// getDatabaseFromDSN extracts database name from DSN for logging
-func (p *PostgreSQLProvider) getDatabaseFromDSN(dsn string) string {
-	if parsedURL, err := url.Parse(dsn); err == nil && parsedURL.Path != "" {
-		return strings.TrimPrefix(parsedURL.Path, "/")
-	}
-	return "unknown"
 }
 
 // validateSSLConfig validates SSL certificate configuration

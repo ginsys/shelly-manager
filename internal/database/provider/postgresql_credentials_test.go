@@ -199,8 +199,8 @@ func TestPostgreSQLCredentials_ErrorsAndLogsHoldNoPassword(t *testing.T) {
 		assertNoPassword(t, logged, trickyPassword)
 	})
 
-	// Here the error comes from this package's own code and quotes the DSN with a
-	// password in it, so only the sanitising wrapper in Connect keeps it out.
+	// Here the error comes from this package's own DSN check, which must never
+	// quote the DSN it refused.
 	for name, dsn := range map[string]string{
 		"userinfo":                "postgresql://inline_user:inline_pw@db.example:badport/shelly",
 		"password parameter":      "postgresql://db.example:badport/shelly?password=inline_pw",
@@ -219,62 +219,6 @@ func TestPostgreSQLCredentials_ErrorsAndLogsHoldNoPassword(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "failed to build DSN")
 			assert.NotContains(t, err.Error(), "inline_pw")
-		})
-	}
-}
-
-func TestPostgreSQLSanitizeError_Password(t *testing.T) {
-	cases := []struct {
-		name string
-		msg  string
-		cfg  DatabaseConfig
-		gone []string
-	}{
-		{
-			name: "the known password in an unkeyed position, in every spelling",
-			msg:  "dial failed near " + strings.Join(passwordForms(trickyPassword), " then "),
-			cfg:  DatabaseConfig{Username: "shelly", Password: trickyPassword},
-			gone: passwordForms(trickyPassword),
-		},
-		{
-			name: "the password of the DSN userinfo, in an unkeyed position",
-			msg:  "dial failed near hunterTwo99 and elsewhere",
-			cfg:  DatabaseConfig{DSN: "postgresql://app:hunterTwo99@db.example/shelly"},
-			gone: []string{"hunterTwo99"},
-		},
-		{
-			name: "the password of a DSN query parameter, in an unkeyed position",
-			msg:  "dial failed near hunterThree77 and elsewhere",
-			cfg:  DatabaseConfig{DSN: "postgresql://db.example/shelly?password=hunterThree77"},
-			gone: []string{"hunterThree77"},
-		},
-		{
-			name: "a keyed value starting with s",
-			msg:  "cannot parse `host=h password=secret user=u`",
-			gone: []string{"secret"},
-		},
-		{
-			name: "a keyed value holding an equals sign",
-			msg:  "cannot parse `host=h password=a=b user=u`",
-			gone: []string{"a=b"},
-		},
-		{
-			name: "URL userinfo",
-			msg:  "failed to connect to postgresql://shelly:hunter2@db.example/shelly",
-			gone: []string{"hunter2"},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			p := newCredentialProvider(tc.cfg)
-
-			got := p.sanitizeError(fmt.Errorf("%s", tc.msg))
-
-			require.Error(t, got)
-			for _, secret := range tc.gone {
-				assert.NotContains(t, got.Error(), secret)
-			}
 		})
 	}
 }
@@ -336,5 +280,23 @@ func TestDatabaseConfig_StringMasksSecrets(t *testing.T) {
 		cfg := DatabaseConfig{Provider: "sqlite", DSN: "data/shelly.db"}
 
 		assert.Contains(t, cfg.String(), "data/shelly.db")
+		assert.Equal(t, "data/shelly.db", cfg.Target())
+	})
+
+	t.Run("Target names the provider for a network DSN and the path for SQLite", func(t *testing.T) {
+		for name, tc := range map[string]struct{ cfg, want string }{
+			"postgresql":          {"postgresql", "postgresql (DSN redacted)"},
+			"mysql with blanks":   {" MySQL ", "mysql (DSN redacted)"},
+			"sqlite3":             {"sqlite3", "data/shelly.db"},
+			"an unknown provider": {"other", "other (DSN redacted)"},
+			"no provider":         {"", " (DSN redacted)"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				cfg := DatabaseConfig{Provider: tc.cfg, DSN: "data/shelly.db?_pragma_key=" + leakWord}
+
+				assert.Equal(t, tc.want, cfg.Target())
+				assert.NotContains(t, cfg.Target(), leakWord)
+			})
+		}
 	})
 }

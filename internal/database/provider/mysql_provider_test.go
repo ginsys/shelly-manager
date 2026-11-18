@@ -338,96 +338,6 @@ func TestMySQLProviderBuildDSN(t *testing.T) {
 	}
 }
 
-// TestMySQLProviderGetHostFromDSN tests host extraction
-func TestMySQLProviderGetHostFromDSN(t *testing.T) {
-	logger := logging.GetDefault()
-	provider := NewMySQLProvider(logger)
-
-	testCases := []struct {
-		name     string
-		dsn      string
-		expected string
-	}{
-		{
-			name:     "TCP format with port",
-			dsn:      "user:pass@tcp(localhost:3306)/database",
-			expected: "localhost:3306",
-		},
-		{
-			name:     "TCP format with IP",
-			dsn:      "user:pass@tcp(192.168.1.100:3306)/database",
-			expected: "192.168.1.100:3306",
-		},
-		{
-			name:     "Simple format",
-			dsn:      "user:pass@localhost/database",
-			expected: "localhost",
-		},
-		{
-			name:     "Invalid format",
-			dsn:      "invalid-dsn",
-			expected: "unknown",
-		},
-		{
-			name:     "No @ symbol",
-			dsn:      "tcp(localhost:3306)/database",
-			expected: "localhost:3306", // Should still extract from tcp() format
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := provider.getHostFromDSN(tc.dsn)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
-// TestMySQLProviderGetDatabaseFromDSN tests database name extraction
-func TestMySQLProviderGetDatabaseFromDSN(t *testing.T) {
-	logger := logging.GetDefault()
-	provider := NewMySQLProvider(logger)
-
-	testCases := []struct {
-		name     string
-		dsn      string
-		expected string
-	}{
-		{
-			name:     "TCP format",
-			dsn:      "user:pass@tcp(localhost:3306)/testdb",
-			expected: "testdb",
-		},
-		{
-			name:     "TCP format with parameters",
-			dsn:      "user:pass@tcp(localhost:3306)/testdb?charset=utf8mb4",
-			expected: "testdb",
-		},
-		{
-			name:     "Simple format",
-			dsn:      "user:pass@localhost/database_name",
-			expected: "database_name",
-		},
-		{
-			name:     "No database name",
-			dsn:      "user:pass@tcp(localhost:3306)/",
-			expected: "unknown", // Should return "unknown" for empty database name
-		},
-		{
-			name:     "Invalid format",
-			dsn:      "invalid-dsn",
-			expected: "unknown",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := provider.getDatabaseFromDSN(tc.dsn)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 // TestMySQLProviderCreateGormLogger tests GORM logger creation
 func TestMySQLProviderCreateGormLogger(t *testing.T) {
 	logger := logging.GetDefault()
@@ -606,8 +516,6 @@ func TestMySQLProviderConcurrentSafety(t *testing.T) {
 
 			// DSN operations should be thread-safe
 			_, _ = provider.buildDSN("user:pass@tcp(localhost:3306)/test", map[string]string{"tls": "false"})
-			_ = provider.getHostFromDSN("user:pass@tcp(localhost:3306)/test")
-			_ = provider.getDatabaseFromDSN("user:pass@tcp(localhost:3306)/test")
 		}()
 	}
 
@@ -641,17 +549,5 @@ func BenchmarkMySQLProviderBuildDSN(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = provider.buildDSN(baseDSN, options)
-	}
-}
-
-func BenchmarkMySQLProviderGetHostFromDSN(b *testing.B) {
-	logger := logging.GetDefault()
-	provider := NewMySQLProvider(logger)
-
-	dsn := "user:pass@tcp(localhost:3306)/testdb"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = provider.getHostFromDSN(dsn)
 	}
 }

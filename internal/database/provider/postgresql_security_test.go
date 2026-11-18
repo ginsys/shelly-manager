@@ -182,15 +182,6 @@ func TestPostgreSQLSecurityCredentialProtection(t *testing.T) {
 				assert.NotContains(t, errorMsg, strings.ToLower(credential),
 					"Error message should not contain credential: %s", credential)
 			}
-
-			// Test helper methods don't leak credentials
-			host := provider.getHostFromDSN(dsn)
-			assert.NotContains(t, host, sensitiveCredentials[i%len(sensitiveCredentials)],
-				"Host extraction should not contain credentials")
-
-			db := provider.getDatabaseFromDSN(dsn)
-			assert.NotContains(t, db, sensitiveCredentials[i%len(sensitiveCredentials)],
-				"Database extraction should not contain credentials")
 		})
 	}
 }

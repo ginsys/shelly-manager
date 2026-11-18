@@ -997,17 +997,6 @@ func TestPostgreSQLCredentialSecurity(t *testing.T) {
 	errorMsg := err.Error()
 	assert.NotContains(t, errorMsg, "secret_user", "Error message should not contain username")
 	assert.NotContains(t, errorMsg, "super_secret_password", "Error message should not contain password")
-
-	// Test DSN helper methods don't leak credentials
-	host := provider.getHostFromDSN(sensitiveConfig.DSN)
-	assert.Contains(t, host, "nonexistent.host") // Host should be present
-	assert.NotContains(t, host, "secret_user", "Host extraction should not contain username")
-	assert.NotContains(t, host, "super_secret_password", "Host extraction should not contain password")
-
-	db := provider.getDatabaseFromDSN(sensitiveConfig.DSN)
-	assert.Equal(t, "testdb", db)
-	assert.NotContains(t, db, "secret_user", "Database extraction should not contain username")
-	assert.NotContains(t, db, "super_secret_password", "Database extraction should not contain password")
 }
 
 // Test error handling for operations on disconnected provider

@@ -166,35 +166,6 @@ func TestMySQLProviderBuildDSN(t *testing.T) {
 - Parameter precedence and overrides
 - URL encoding and escaping
 
-#### Host and Database Extraction
-```go
-func TestMySQLProviderGetHostFromDSN(t *testing.T) {
-    testCases := []struct {
-        name     string
-        dsn      string
-        expected string
-    }{
-        {
-            name:     "TCP format with port",
-            dsn:      "user:pass@tcp(localhost:3306)/database",
-            expected: "localhost:3306",
-        },
-        {
-            name:     "TCP format with IP",
-            dsn:      "user:pass@tcp(192.168.1.100:3306)/database",
-            expected: "192.168.1.100:3306",
-        },
-        // ... more parsing scenarios
-    }
-}
-```
-
-**Tests Covered:**
-- TCP format parsing
-- IP address and hostname extraction
-- Port handling
-- Error case handling
-
 ### Error Handling Tests
 
 #### State Validation Tests
@@ -380,60 +351,31 @@ func TestMySQLSecurityCredentialProtection(t *testing.T) {
 }
 ```
 
-#### Error Sanitization Testing
+#### Connect Error Text Testing
 ```go
-func TestMySQLSecurityErrorSanitization(t *testing.T) {
-    provider := NewMySQLProvider(logging.GetDefault())
-    
-    testErrors := []struct {
-        name             string
-        inputError       string
-        shouldNotContain []string
-        shouldContain    []string
-    }{
-        {
-            name:             "Password in connection string",
-            inputError:       "failed to connect to user:supersecret@tcp(localhost:3306)/db",
-            shouldNotContain: []string{"supersecret"},
-            shouldContain:    []string{"tcp(localhost:3306)", ":***@"},
-        },
-        {
-            name:             "User credentials in error",
-            inputError:       "authentication failed for user=admin password=secret123 dbname=production",
-            shouldNotContain: []string{"admin", "secret123", "production"},
-            shouldContain:    []string{"user=***", "password=***", "dbname=***"},
-        },
-        // ... more sanitization scenarios
-    }
-    
-    for _, tc := range testErrors {
-        t.Run(tc.name, func(t *testing.T) {
-            originalErr := fmt.Errorf("%s", tc.inputError)
-            sanitizedErr := provider.sanitizeError(originalErr)
-            
-            sanitizedMsg := sanitizedErr.Error()
-            
-            // Check that sensitive information is removed
-            for _, sensitive := range tc.shouldNotContain {
-                assert.NotContains(t, sanitizedMsg, sensitive,
-                    "Sanitized error should not contain: %s", sensitive)
-            }
-            
-            // Check that expected patterns are present
-            for _, preserve := range tc.shouldContain {
-                assert.Contains(t, sanitizedMsg, preserve,
-                    "Sanitized error should contain: %s", preserve)
-            }
+func TestMySQLConnectError_HoldsNoDSNText(t *testing.T) {
+    for name, dsn := range mysqlReproDSNs { // a password typed into the tls name, a bool value, the user, the host
+        t.Run(name, func(t *testing.T) {
+            logger, readLog := fileLogger(t)
+            err := NewMySQLProvider(logger).Connect(DatabaseConfig{Provider: "mysql", DSN: dsn, LogLevel: "info"})
+
+            require.Error(t, err)
+            assert.NotContains(t, err.Error(), leakWord)
+            assert.NotContains(t, readLog(), leakWord)
         })
     }
 }
 ```
 
+`TestClassifyConnectError` builds each driver error shape by hand (server error
+with the secret in its message, DNS, refused, deadline, TLS) and asserts the
+sealed text; `TestSealedConnector_*` checks that every attempt of the pool fails
+sealed.
+
 **Security Features Tested:**
-- Complete credential sanitization in error messages
-- Multiple credential pattern detection
-- Safe placeholder replacement
-- URL format credential protection
+- No driver text in the returned error, its `%+v` form or the captured log
+- Server errors reduced to their number
+- The retry sentinel `driver.ErrBadConn` passes through unchanged
 
 ### Injection Prevention Tests
 
@@ -584,23 +526,9 @@ func BenchmarkMySQLProviderGetStats(b *testing.B) {
 }
 ```
 
-#### Host Extraction Performance
-```go
-func BenchmarkMySQLProviderGetHostFromDSN(b *testing.B) {
-    provider := NewMySQLProvider(logging.GetDefault())
-    dsn := "user:pass@tcp(localhost:3306)/testdb"
-    
-    b.ResetTimer()
-    for i := 0; i < b.N; i++ {
-        _ = provider.getHostFromDSN(dsn)
-    }
-}
-```
-
 **Performance Metrics Tracked:**
 - DSN building performance
 - Statistics collection overhead
-- Host/database extraction speed
 - Memory allocation patterns
 
 ### Concurrent Safety Tests

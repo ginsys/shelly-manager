@@ -129,7 +129,7 @@ func (s *SQLiteProvider) Connect(config DatabaseConfig) error {
 	s.connected = true
 	s.logger.WithFields(map[string]any{
 		"provider": "sqlite",
-		"dsn":      config.DSN,
+		"dsn":      config.Target(),
 	}).Info("Connected to SQLite database")
 
 	return nil
@@ -602,7 +602,10 @@ func (s *SQLiteProvider) prepareDatabasePath(dsn string) error {
 		return nil
 	}
 
-	dir := filepath.Dir(dsn)
+	// The directory is the directory of the path part: a "/" in a query value
+	// must not make a directory.
+	path, _, _ := strings.Cut(dsn, "?")
+	dir := filepath.Dir(path)
 	if dir != "" && dir != "." {
 		// Create directory if it doesn't exist
 		if err := os.MkdirAll(dir, 0755); err != nil {

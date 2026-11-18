@@ -140,23 +140,20 @@ func (m *MySQLProvider) validateDSNInput(dsn string) error {
 - Protects against XSS attempts in configuration
 - Validates all user input before connection attempts
 
-**Credential Sanitization**
+**No Driver Text In Connect Errors**
 ```go
-func (m *MySQLProvider) sanitizeError(err error) error {
-    credentialPatterns := []*regexp.Regexp{
-        regexp.MustCompile(`:[^:@/]+@`),        // Remove password in user:password@host format
-        regexp.MustCompile(`user=\w+`),         // Remove user parameter
-        regexp.MustCompile(`password=[^\s&]+`), // Remove password parameter
-        regexp.MustCompile(`dbname=\w+`),       // Remove database name
-    }
-    // ... sanitization logic
-}
+driverConfig, err := mysqldriver.ParseDSN(dsn) // a refusal reports a fixed message
+connector, _ := mysqldriver.NewConnector(driverConfig)
+sqlDB := sql.OpenDB(sealConnector(connector)) // every connect fails with a classification
 ```
 
 **Decision Rationale:**
-- Prevents credential leakage in error messages and logs
-- Maintains debugging information while ensuring security
-- Covers multiple DSN formats and credential patterns
+- Drivers quote the operator's DSN in their errors, in shapes nobody can list,
+  so the connector reports a fixed classification built from the error's type
+- A server error is reported as its number only
+- The GORM log writer receives the same sealed errors
+- Diagnostics lost: the driver's own wording (address and user in a dial error,
+  the quoted value in a parse error); the classification and the server's code remain
 
 ### 2. Performance Optimization Strategy
 
@@ -372,14 +369,14 @@ func (m *MySQLProvider) updateStats() {
 func (m *MySQLProvider) Connect(config DatabaseConfig) error {
     if err := db.Ping(); err != nil {
         m.db = nil
-        return fmt.Errorf("failed to ping database: %w", m.sanitizeError(err))
+        return fmt.Errorf("failed to ping database: %w", err)
     }
 }
 ```
 
 **Error Handling Principles:**
 - Clean resource cleanup on failure
-- Sanitized error messages
+- Connect errors carry a fixed classification, never driver text
 - Proper error wrapping
 - Detailed logging for debugging
 

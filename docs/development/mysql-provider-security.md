@@ -220,66 +220,33 @@ err := provider.validateDSNInput(cmdDSN)
 
 ## Credential Protection
 
-### Error Message Sanitization
+### Connect Error Text
 
-The provider implements comprehensive credential sanitization to prevent information leakage:
+The MySQL driver quotes operator input in its own errors: the DSN parser names
+the value it refused, and the dial error names the address it tried. No matcher
+agrees with every driver on where a credential in that text begins and ends, so
+the provider carries no driver text at all.
 
-```go
-func (m *MySQLProvider) sanitizeError(err error) error {
-    if err == nil {
-        return nil
-    }
+- The DSN is parsed once, by the driver's own parser. A DSN it refuses reports
+  a fixed message ("the DSN could not be parsed by the database driver").
+- The pool is opened on a sealed `driver.Connector`. Every connection attempt
+  (the first, each growth of the pool, each reconnect) fails with a fixed
+  classification built from the error's type (`errors.As`/`errors.Is`), never
+  from its text.
+- A server error is reported as its number only, because the server echoes the
+  user and database it was sent.
+- The GORM log writer receives the same sealed errors, so the log holds nothing
+  more than the returned error.
 
-    errorMsg := err.Error()
-    
-    // Credential sanitization patterns
-    credentialPatterns := []*regexp.Regexp{
-        regexp.MustCompile(`:[^:@/]+@`),        // Remove password in user:password@host format
-        regexp.MustCompile(`user=\w+`),         // Remove user parameter
-        regexp.MustCompile(`password=[^\s&]+`), // Remove password parameter  
-        regexp.MustCompile(`dbname=\w+`),       // Remove database name
-    }
-    
-    // Apply sanitization
-    sanitizedMsg := errorMsg
-    for _, pattern := range credentialPatterns {
-        switch pattern.String() {
-        case `:[^:@/]+@`:
-            sanitizedMsg = pattern.ReplaceAllString(sanitizedMsg, ":***@")
-        default:
-            matches := pattern.FindAllString(sanitizedMsg, -1)
-            for _, match := range matches {
-                parts := strings.Split(match, "=")
-                if len(parts) == 2 {
-                    sanitizedMsg = strings.ReplaceAll(sanitizedMsg, match, parts[0]+"=***")
-                }
-            }
-        }
-    }
-    
-    // Additional URL pattern sanitization
-    urlPattern := regexp.MustCompile(`://[^:]+:[^@]+@`)
-    sanitizedMsg = urlPattern.ReplaceAllString(sanitizedMsg, "://***:***@")
-    
-    return fmt.Errorf("%s", sanitizedMsg)
-}
+```
+database connection failed: host name did not resolve
+database connection failed: connection refused
+database connection failed: the server rejected the connection (MySQL error 1049, unknown database)
 ```
 
-### Credential Sanitization Examples
-
-#### Before Sanitization (Dangerous):
-```
-failed to connect to user:supersecret@tcp(mysql.internal:3306)/production
-authentication failed for user=admin password=secret123 dbname=sensitive_db
-connection error mysql://root:adminpass@mysql.internal:3306/secure_db
-```
-
-#### After Sanitization (Safe):
-```
-failed to connect to user:***@tcp(mysql.internal:3306)/production  
-authentication failed for user=*** password=*** dbname=***
-connection error mysql://***:***@mysql.internal:3306/secure_db
-```
+The classifier is in `internal/database/provider/connect_error.go`. Its tests
+build each error shape by hand, and one test per malformed DSN asserts that a
+password placed in the DSN is absent from the returned error and the captured log.
 
 ## Connection Security
 
@@ -357,7 +324,7 @@ func (m *MySQLProvider) HealthCheck(ctx context.Context) HealthStatus {
     start := time.Now()
     if err := m.Ping(); err != nil {
         status.Healthy = false
-        status.Error = err.Error() // Sanitized error message
+        status.Error = err.Error() // a connect error carries no driver text
         status.ResponseTime = time.Since(start)
         return status
     }
@@ -384,13 +351,13 @@ Structured security logging without credential exposure:
 // Connection success logging (safe)
 m.logger.WithFields(map[string]any{
     "provider": "mysql",
-    "host":     m.getHostFromDSN(dsn), // Host only, no credentials
-    "database": m.getDatabaseFromDSN(dsn), // Database name only
+    "host":     driverConfig.Addr,   // from the driver's parsed DSN; host only, no credentials
+    "database": driverConfig.DBName, // Database name only
 }).Info("Connected to MySQL database")
 
-// Migration failure logging (secure)
+// Migration failure logging
 m.logger.WithFields(map[string]any{
-    "error":    err.Error(), // Sanitized error
+    "error":    err.Error(),
     "duration": duration,
     "models":   len(models),
 }).Error("Database migration failed")
