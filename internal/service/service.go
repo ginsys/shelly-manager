@@ -480,9 +480,9 @@ func parseClientSettings(raw string) (clientSettings, error) {
 // column only (ginsys/shelly-manager#565). The caller holds clientMu, which every settings writer
 // of this service takes, and the network check that ran under it can be slow, so the text is built
 // from a fresh read of the stored row: device is the caller's copy, read before that check. The
-// stored document keeps every key it holds. A login that is stored now stays: it was saved on
-// purpose by a writer that does not take clientMu, and the login found here only spares the user
-// from typing one. device.Settings follows the text that was written.
+// stored document keeps every key it holds. A login that changed since the caller's read stays: it
+// was saved on purpose by a writer that does not take clientMu, and the login found here only
+// spares the user from typing one. device.Settings follows the text that was written.
 func (s *ShellyService) saveWorkingLoginLocked(device *database.Device, user, pass string) error {
 	stored, err := s.DB.GetDevice(device.ID)
 	if err != nil {
@@ -492,7 +492,11 @@ func (s *ShellyService) saveWorkingLoginLocked(device *database.Device, user, pa
 	if err != nil {
 		return err
 	}
-	if current, _ := parseClientSettings(stored.Settings); current.AuthUser != "" || current.AuthPass != "" {
+	// Only a login that changed since the caller's read is kept. An unchanged pair, complete or
+	// not, is what made the caller fall back to the config login, so the working login replaces it.
+	before, _ := parseClientSettings(device.Settings)
+	current, _ := parseClientSettings(stored.Settings)
+	if current.AuthUser != before.AuthUser || current.AuthPass != before.AuthPass {
 		device.Settings = stored.Settings
 		return nil
 	}
