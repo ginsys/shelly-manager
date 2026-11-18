@@ -129,6 +129,22 @@ func classifyConnectError(err error) *connectFailure {
 	return failure
 }
 
+// sealError returns err unchanged when it is already a connectFailure, and its
+// classification otherwise. It is for the errors of an operation on an open
+// connection that the provider itself reports, such as the ping and the version
+// probe of Connect: those do not pass through the connector, and a transport
+// error there quotes the socket path or the address.
+func sealError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var failure *connectFailure
+	if errors.As(err, &failure) {
+		return err
+	}
+	return classifyConnectError(err)
+}
+
 // sealedConnector wraps a driver.Connector so that every connection attempt of
 // the pool (the first, each growth of the pool, each reconnect after a dropped
 // connection) fails with a connectFailure and never with the driver's error.

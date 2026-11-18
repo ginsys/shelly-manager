@@ -78,9 +78,11 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 		return fmt.Errorf("failed to build DSN: %w", err)
 	}
 
-	// Configure GORM logger based on config
+	// GORM logs nothing until the probes below are done: an error of an open
+	// connection (a reset on a unix socket, a refused write) quotes the socket
+	// path or the address, and the provider reports those errors sealed itself.
 	gormConfig := &gorm.Config{
-		Logger: m.createGormLogger(),
+		Logger: logger.Discard,
 	}
 
 	// Parse the DSN with the driver's own parser, and open the pool on a sealed
@@ -103,7 +105,9 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 	db, err := gorm.Open(gormmysql.New(gormmysql.Config{Conn: sqlDB, DSNConfig: driverConfig}), gormConfig)
 	if err != nil {
 		_ = sqlDB.Close()
-		return fmt.Errorf("failed to connect to MySQL database: %w", err)
+		sealed := sealError(err)
+		m.logger.WithFields(map[string]any{"error": sealed.Error()}).Error("Failed to connect to MySQL database")
+		return fmt.Errorf("failed to connect to MySQL database: %w", sealed)
 	}
 
 	m.db = db
@@ -132,9 +136,12 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 	// Get MySQL version
 	if err := m.updateProviderVersion(); err != nil {
 		m.logger.WithFields(map[string]any{
-			"error": err.Error(),
+			"error": sealError(err).Error(),
 		}).Warn("Failed to get MySQL version")
 	}
+
+	// From here on GORM logs as configured.
+	db.Logger = m.createGormLogger()
 
 	m.logger.WithFields(map[string]any{
 		"provider": "mysql",
@@ -183,7 +190,7 @@ func (m *MySQLProvider) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return sqlDB.PingContext(ctx)
+	return sealError(sqlDB.PingContext(ctx))
 }
 
 // Migrate performs database migration

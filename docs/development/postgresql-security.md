@@ -263,7 +263,11 @@ from the DSN: a misplaced password can land in the host, a fallback host or the
 database name, and pgx keeps what it parsed. The GORM log writer receives the
 same sealed errors as the returned error. `Target()` is the one form of a DSN
 that is printed: the provider name for a network provider, the path without its
-query for SQLite. The MySQL driver's own package logger, which writes a failed
+query for SQLite. An error of a connection that is already open (a reset on a
+unix socket quotes the socket path) does not pass through the connector, so
+`Connect` seals the errors of its own ping and version probe (`sealError`), `Ping`
+returns its error sealed, and GORM logs nothing until `Connect` has finished
+probing. Query errors after `Connect` returns are not sealed. The MySQL driver's own package logger, which writes a failed
 read with its socket or address to stderr, is silenced for the provider's
 connector.
 
