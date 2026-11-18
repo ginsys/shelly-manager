@@ -5,6 +5,14 @@ import type { Device } from '@/api/types'
 type SortField = keyof Device | 'last_seen'
 type SortDir = 'asc' | 'desc'
 
+// What the bulk dialog shows about a picked device. It is taken from the row at the moment of
+// the tick, so a device on another page or filtered out of the list is still named.
+export interface SelectedDevice {
+  id: number
+  name: string
+  ip: string
+}
+
 interface DevicesState {
   items: Device[]
   page: number
@@ -15,8 +23,12 @@ interface DevicesState {
   error: string | null
   search: string
   sort: { field: SortField; dir: SortDir } | null
+  // Devices picked for a bulk operation, by id, in the order they were ticked. The paging is
+  // server-side, so the selection outlives a page change.
+  selected: Map<number, { name: string; ip: string }>
   // Column visibility preferences
   visibleColumns: {
+    select: boolean
     name: boolean
     ip: boolean
     mac: boolean
@@ -39,8 +51,10 @@ export const useDevicesStore = defineStore('devices', {
     error: null,
     search: '',
     sort: null,
+    selected: new Map(),
     // All columns visible by default
     visibleColumns: {
+      select: true,
       name: true,
       ip: true,
       mac: true,
@@ -53,6 +67,18 @@ export const useDevicesStore = defineStore('devices', {
   }),
 
   getters: {
+    selectedIds(state): number[] {
+      return [...state.selected.keys()]
+    },
+
+    selectedCount(state): number {
+      return state.selected.size
+    },
+
+    selectedDevices(state): SelectedDevice[] {
+      return [...state.selected].map(([id, d]) => ({ id, name: d.name, ip: d.ip }))
+    },
+
     filteredItems(state): Device[] {
       if (!state.search) return state.items
       const s = state.search.toLowerCase()
@@ -154,8 +180,39 @@ export const useDevicesStore = defineStore('devices', {
       }
     },
 
+    isSelected(id: number): boolean {
+      return this.selected.has(id)
+    },
+
+    toggleSelect(device: Device) {
+      if (this.selected.has(device.id)) {
+        this.selected.delete(device.id)
+      } else {
+        this.selected.set(device.id, { name: device.name || '', ip: device.ip || '' })
+      }
+    },
+
+    // Adds the given devices to the selection; the others stay as they were.
+    selectAll(devices: Device[]) {
+      for (const d of devices) {
+        if (!this.selected.has(d.id)) {
+          this.selected.set(d.id, { name: d.name || '', ip: d.ip || '' })
+        }
+      }
+    },
+
+    deselect(ids: number[]) {
+      for (const id of ids) this.selected.delete(id)
+    },
+
+    clearSelection() {
+      this.selected.clear()
+    },
+
     toggleColumn(column: keyof DevicesState['visibleColumns']) {
       this.visibleColumns[column] = !this.visibleColumns[column]
+      // A selection nobody can see must not stay armed for a bulk operation.
+      if (column === 'select' && !this.visibleColumns.select) this.clearSelection()
       // Persist to localStorage
       localStorage.setItem('devices.visibleColumns', JSON.stringify(this.visibleColumns))
     },
