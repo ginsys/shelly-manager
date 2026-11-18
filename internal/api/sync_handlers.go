@@ -79,10 +79,18 @@ func (eh *SyncHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) boo
 
 // AddExportRoutes adds export routes to the router
 func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
-	// Plugin management endpoints
-	api.HandleFunc("/export/plugins", eh.ListPlugins).Methods("GET")
-	api.HandleFunc("/export/plugins/{name}", eh.GetPlugin).Methods("GET")
-	api.HandleFunc("/export/plugins/{name}/schema", eh.GetPluginSchema).Methods("GET")
+	// Plugin management endpoints: guarded here, at registration, with the admin key when one is set.
+	guard := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if !eh.requireAdmin(w, r) {
+				return
+			}
+			next(w, r)
+		}
+	}
+	api.HandleFunc("/export/plugins", guard(eh.ListPlugins)).Methods("GET")
+	api.HandleFunc("/export/plugins/{name}", guard(eh.GetPlugin)).Methods("GET")
+	api.HandleFunc("/export/plugins/{name}/schema", guard(eh.GetPluginSchema)).Methods("GET")
 
 	// Export endpoints
 	api.HandleFunc("/export/backup", eh.CreateBackup).Methods("POST")
