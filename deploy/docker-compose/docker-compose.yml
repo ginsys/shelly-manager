@@ -70,7 +70,9 @@ services:
     environment:
       # API Configuration (connect to manager)
       - SHELLY_API_URL=${API_URL:-http://localhost:8080}
-      - SHELLY_API_KEY=${API_KEY:-}
+      # The manager refuses the agent routes without its admin key when one is set, so the agent
+      # sends the same key.
+      - SHELLY_API_KEY=${ADMIN_API_KEY:-}
       # Or read from file: SHELLY_API_KEY_FILE=/run/secrets/api_key
       - SHELLY_API_TIMEOUT=${API_TIMEOUT:-30}
       

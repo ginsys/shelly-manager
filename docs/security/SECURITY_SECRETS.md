@@ -34,8 +34,8 @@ environment:
   # OPNSense
   - SHELLY_OPNSENSE_API_KEY=${OPNSENSE_API_KEY:-}
   - SHELLY_OPNSENSE_API_SECRET=${OPNSENSE_API_SECRET:-}
-  # Provisioner agent
-  - SHELLY_API_KEY=${API_KEY:-}
+  # Provisioner agent: sends the manager's admin key, which the manager requires on the agent routes
+  - SHELLY_API_KEY=${ADMIN_API_KEY:-}
 ```
 
 ### Docker secrets / mounted files (`*_FILE`)

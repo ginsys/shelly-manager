@@ -418,6 +418,8 @@ Every typed-configuration route answers with the standard envelope, on success a
 
 ### 16. Provisioner Agent Management (9 endpoints)
 
+Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/provisioning/provision` above, requires the admin key (`Authorization: Bearer <key>` or `X-API-Key`) when the manager has one configured, and answers `401` without it. The provisioner agent sends the manager's admin key as its `api.key` (`SHELLY_API_KEY`). With no admin key configured these routes stay open.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/provisioner/agents/register` | Register provisioner agent |
