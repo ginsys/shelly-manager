@@ -5,10 +5,8 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
-	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // openGORM is the only place a provider opens GORM. GORM records every error of
@@ -16,10 +14,12 @@ import (
 // function, (*DB).AddError, and when Config.TranslateError is set and the
 // dialector implements gorm.ErrorTranslator it passes each error through
 // Translate first. So one wrapped dialector seals the sites that record through
-// AddError (a statement, a transaction); the logger wrapper below seals GORM's
-// own trace line. A query made with Row or Rows stores the driver's error on the
-// statement without AddError (the migrator reads columns that way), so the
-// providers also seal what Migrate returns.
+// AddError (a statement, a transaction), and the callback below re-records the
+// Row callbacks' errors through it. GORM's trace line is logged after every
+// callback, with the error already sealed, so the logger needs no wrapper.
+// What still bypasses both is what the migrator reads from database/sql
+// directly (Row().Scan, rows.ColumnTypes, rows.Close), so each provider also
+// seals what Migrate returns.
 func openGORM(dialector gorm.Dialector, config *gorm.Config) (*gorm.DB, error) {
 	config.TranslateError = true
 	db, err := gorm.Open(sealedDialector{Dialector: dialector}, config)
@@ -92,40 +92,6 @@ func (d sealedDialector) Translate(err error) error {
 		err = translator.Translate(err)
 	}
 	return sealOpenError(err)
-}
-
-// sealedLogger seals the error GORM's trace line prints. Translate covers the
-// errors GORM records through AddError, but a query made with Row or Rows
-// stores the driver's error on the statement directly, and the trace line then
-// quotes it (the socket path, the address, the failing identifiers).
-type sealedLogger struct {
-	logger.Interface
-}
-
-// sealLogger wraps a GORM logger so that no trace line carries a driver error.
-func sealLogger(inner logger.Interface) logger.Interface {
-	return sealedLogger{Interface: inner}
-}
-
-// LogMode keeps the wrapper when GORM derives a logger at another level.
-func (l sealedLogger) LogMode(level logger.LogLevel) logger.Interface {
-	return sealedLogger{Interface: l.Interface.LogMode(level)}
-}
-
-// ParamsFilter delegates to the wrapped logger. GORM finds it by type assertion
-// on its logger, and the embedded interface hides it: without this method the
-// bound values (a device login) come back into the SQL trace
-// (ginsys/shelly-manager#489).
-func (l sealedLogger) ParamsFilter(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
-	if filter, ok := l.Interface.(gorm.ParamsFilter); ok {
-		return filter.ParamsFilter(ctx, sql, params...)
-	}
-	return sql, params
-}
-
-// Trace seals err before the wrapped logger prints it.
-func (l sealedLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
-	l.Interface.Trace(ctx, begin, fc, sealOpenError(err))
 }
 
 // passThrough lists the errors of fixed text that carry nothing of the

@@ -271,8 +271,9 @@ probing. The errors of an open connection are sealed too: a statement the
 server rejected, a transaction that could not begin, a migration, a `Close`.
 GORM is opened only through `openGORM` (`sealed_dialector.go`), whose wrapped
 dialector classifies every error GORM records by type and reports it as
-`database operation failed: <kind>` with the SQLSTATE where there is one, and
-whose wrapped logger does the same for the SQL trace line. The constraint
+`database operation failed: <kind>` with the SQLSTATE where there is one; a
+callback re-records the errors of `Scan` and `Rows` through it, and GORM's SQL
+trace line prints the sealed error. The constraint
 errors callers test for (`gorm.ErrDuplicatedKey`, `gorm.ErrForeignKeyViolated`,
 `gorm.ErrRecordNotFound`) and the context errors keep their identity. The
 statement text of the trace is the application's own and is still logged at

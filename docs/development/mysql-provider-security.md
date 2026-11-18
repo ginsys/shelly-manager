@@ -240,7 +240,8 @@ the provider carries no driver text at all.
 - After `Connect` returns, the errors of the open connection (a rejected
   statement, a dropped connection, a migration, a `Close`) are sealed the same
   way, as `database operation failed: <kind>`: GORM is opened only through
-  `openGORM`, whose wrapped dialector and logger classify the error by type.
+  `openGORM`, whose wrapped dialector and row callback classify the error by
+  type; GORM's trace line prints the sealed error.
   The constraint, record-not-found and context errors keep their identity.
 
 ```
