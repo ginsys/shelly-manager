@@ -138,10 +138,13 @@ spec:
         component: provisioner
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9090" 
+        prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
       hostNetwork: true  # Required for WiFi interface access
+      # Without this a host-network pod uses the node's resolver and cannot resolve the
+      # manager Service name.
+      dnsPolicy: ClusterFirstWithHostNet
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -151,8 +154,14 @@ spec:
         image: ghcr.io/ginsys/shelly-provisioner:latest
         imagePullPolicy: IfNotPresent
         env:
-        # SHELLY_API_URL is not set here: the Service is named with the overlay's
-        # prefix and listens on port 80, so no value fits every overlay.
+        # The manager Service is named with the overlay's prefix and listens on port 80, so
+        # each overlay sets SHELLY_API_URL in its configMapGenerator and no value fits here.
+        # An overlay that sets none leaves the pod unable to start, not dialling a default.
+        - name: SHELLY_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: shelly-manager-config
+              key: SHELLY_API_URL
         - name: SHELLY_LOGGING_LEVEL
           value: "info"
         - name: SHELLY_LOGGING_FORMAT

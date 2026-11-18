@@ -12,7 +12,7 @@ namespace: shelly-dev
 
 commonLabels:
   environment: development
-  
+
 patchesStrategicMerge:
 - configmap-dev.yaml
 - ingress-dev.yaml
@@ -24,6 +24,8 @@ configMapGenerator:
   - SHELLY_LOGGING_LEVEL=debug
   - SHELLY_DATABASE_PATH=/tmp/shelly.db
   - SHELLY_METRICS_ENABLE_DETAILED_TIMING=true
+  # The provisioner's URL for the manager: this overlay's prefix, the Service's port 80.
+  - SHELLY_API_URL=http://dev-shelly-manager:80
 
 images:
 - name: ghcr.io/ginsys/shelly-manager
