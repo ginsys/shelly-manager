@@ -1269,7 +1269,7 @@ paths:
         configuration. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
         change during the apply. A Gen2 or Gen3 device takes the system, MQTT, cloud, switch
-        and input settings and the Wi-Fi station only: name, eco mode, discoverable, timezone, latitude, longitude and
+        and input settings and the Wi-Fi (station, access point, roam threshold) only: name, eco mode, discoverable, timezone, latitude, longitude and
         SNTP server with Sys.SetConfig, MQTT enable, server, port, user, password, client ID,
         topic prefix and the notification flags with MQTT.SetConfig, cloud enable and server
         with Cloud.SetConfig, each input name, type (switch or button) and invert with
@@ -1392,7 +1392,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station, access point and roam threshold only.
           content:
             application/json:
               schema:
@@ -1449,7 +1449,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station, access point and roam threshold only.
           content:
             application/json:
               schema:
