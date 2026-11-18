@@ -367,6 +367,29 @@ commit_all discards
 check HEAD_REF_NAME=chore/release2
 eq "check: a full heading but a discarded entry is not a release (exit 1)" 1 "$RC"
 
+# The entry must arrive as one block, in order: its lines matched one by one would
+# let another bullet split a bullet from its continuation.
+newfx check-release-split-entry
+printf 'Fixed\n- Enable retry handling.\n  Only for idempotent requests. Fixes owner/repo#3.\n' >"$FX/changelog.d/3-a.md"
+commit_all frags
+(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
+prbranch chore/release5
+(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1.2.3] - 2026-01-02\n\n### Fixed\n- Enable retry handling.\n- Another bullet.\n  Only for idempotent requests. Fixes owner\/repo#3./' CHANGELOG.md)
+commit_all split
+check HEAD_REF_NAME=chore/release5
+eq "check: an entry split by another bullet is not a release (exit 1)" 1 "$RC"
+
+newfx check-release-multiline
+printf 'Fixed\n- Enable retry handling.\n  Only for idempotent requests. Fixes owner/repo#3.\n' >"$FX/changelog.d/3-a.md"
+printf 'Added\n- Second entry. Refs owner/repo#4.\n' >"$FX/changelog.d/4-b.md"
+commit_all frags
+(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
+prbranch chore/release6
+(cd "$FX" && CHANGELOG_DATE=2026-01-02 bash scripts/changelog-assemble.sh --write 1.2.3 >/dev/null 2>&1)
+commit_all release
+check HEAD_REF_NAME=chore/release6
+eq "check: a real release of multi-line entries passes (exit 0)" 0 "$RC"
+
 newfx check-release-short-heading
 frag 3-a.md Added '- Add a. Refs owner/repo#3.'
 commit_all frags

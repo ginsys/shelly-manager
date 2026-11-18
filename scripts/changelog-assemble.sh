@@ -6,6 +6,7 @@
 #
 #   changelog-assemble.sh                   print the assembled sections, change nothing
 #   changelog-assemble.sh --validate FILE…  check fragment files, change nothing
+#   changelog-assemble.sh --body FILE       print a fragment's entry (used by the PR check)
 #   changelog-assemble.sh --write VERSION   cut a release: keep every line under
 #                                           "## [Unreleased]", add the fragment sections
 #                                           after them, give the block the heading
@@ -100,6 +101,11 @@ case "${1-}" in
 		validate_file "$f" || rc=2
 	done
 	exit "$rc"
+	;;
+--body)
+	[ "$#" -eq 2 ] || usage
+	body "$2"
+	exit 0
 	;;
 --write)
 	[ "$#" -eq 2 ] || usage
