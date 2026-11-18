@@ -291,10 +291,13 @@ All notable changes to this project are documented here. The project follows Con
   (ginsys/shelly-manager#565)
 - An apply whose database lock was lost while it stalled now writes nothing. Right before its first
   write (to the device or to the stored reboot flag) the apply checks that it still holds the lock;
-  if the session is gone it fails with the lost-lock error, changes no flag, and leaves the result
-  of the replica that took over in place. Two cases stay open and are accepted: an apply that stalls
-  after the check, and an unreachable database (the forcing flag writes fail too). The cost of each
-  is at most one extra reboot, or one stale flag until the next apply or verify. A per-device epoch
+  if the session is gone it fails with the lost-lock error, writes nothing to the device, forces
+  no `pending_reboot` and makes no later flag change, and leaves the result of the replica that
+  took over in place. The `config_applied` flag the apply cleared at its start stays cleared, so
+  the device shows pending until the next apply. Cases that stay open and are accepted: an apply
+  that stalls after the check, an apply that stalls before it and clears `config_applied` after the
+  replica that took over set it, and an unreachable database (the forcing flag writes fail too).
+  The cost of each is at most one extra reboot, or one stale flag until the next apply or verify. A per-device epoch
   on the flag writes was weighed and not built: a Shelly device checks no fencing token, so the
   epoch would only reorder the flag writes with the same outcome. Fixes ginsys/shelly-manager#564.
 - Device control, verify and the handling of stored logins no longer act on whatever device
