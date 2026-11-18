@@ -318,6 +318,52 @@ func TestSealedDialector_MigrateSealsAnErrorTheDialectorNeverSees(t *testing.T) 
 	assert.NotContains(t, readLog(), leakWord, "the Migrate log line")
 }
 
+// Scan, Rows and the migrator's column read store the driver's error on the
+// statement without AddError, so the dialector never sees it. Each is a path the
+// application uses (the metrics service scans, the start-up fixups read columns).
+func TestSealedDialector_RowPathErrorsAreSealed(t *testing.T) {
+	driverErr := fmt.Errorf("read tcp 10.9.8.7:5432: %s: %w", leakWord, syscall.ECONNRESET)
+	sites := map[string]func(db *gorm.DB) error{
+		"Scan": func(db *gorm.DB) error {
+			var n int
+			return db.Raw("SELECT 1").Scan(&n).Error
+		},
+		"Rows": func(db *gorm.DB) error {
+			rows, err := db.Raw("SELECT 1").Rows()
+			if rows != nil {
+				_ = rows.Close()
+			}
+			return err
+		},
+		"Migrator.ColumnTypes": func(db *gorm.DB) error {
+			_, err := db.Migrator().ColumnTypes(&siteProbeRow{})
+			return err
+		},
+	}
+	for _, d := range fakeDialects {
+		for name, site := range sites {
+			t.Run(d.name+"/"+name, func(t *testing.T) {
+				open := func(o opener) error {
+					pool := poolFailing(t, poolFailure{stmtErr: driverErr})
+					db, err := o(d.new(pool), fakeConfig())
+					require.NoError(t, err)
+					return site(db)
+				}
+
+				raw := open(plainOpen)
+				require.Error(t, raw)
+				assert.Contains(t, raw.Error(), leakWord, "control: the site shows the leak without the seal")
+
+				sealed := open(openGORM)
+				require.Error(t, sealed)
+				assert.NotContains(t, sealed.Error(), leakWord)
+				assert.NotContains(t, sealed.Error(), "10.9.8.7")
+				assert.Contains(t, sealed.Error(), "database operation failed: connection reset")
+			})
+		}
+	}
+}
+
 // Mutants: the checks above must fail on a wrapper that is wrong in the way each
 // one guards against, or they prove nothing.
 type withoutApply struct{ gorm.Dialector }

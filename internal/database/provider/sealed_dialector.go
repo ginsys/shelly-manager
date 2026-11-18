@@ -22,7 +22,28 @@ import (
 // providers also seal what Migrate returns.
 func openGORM(dialector gorm.Dialector, config *gorm.Config) (*gorm.DB, error) {
 	config.TranslateError = true
-	return gorm.Open(sealedDialector{Dialector: dialector}, config)
+	db, err := gorm.Open(sealedDialector{Dialector: dialector}, config)
+	if db == nil {
+		return db, err
+	}
+	// Rows, Scan and the migrator's column reads run the Row callbacks, which
+	// store the driver's error on the statement without calling AddError. Record
+	// it again after "gorm:row", through AddError, so it is translated and sealed
+	// like every other.
+	if regErr := db.Callback().Row().After("gorm:row").Register("shelly:seal_row_error", sealRowError); regErr != nil {
+		return nil, regErr
+	}
+	return db, err
+}
+
+// sealRowError records a Row callback's error again through AddError.
+func sealRowError(db *gorm.DB) {
+	if db.Error == nil {
+		return
+	}
+	err := db.Error
+	db.Error = nil
+	_ = db.AddError(err)
 }
 
 // sealedDialector wraps a GORM dialector and seals the errors it translates.
