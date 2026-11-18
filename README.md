@@ -149,9 +149,15 @@ All settings can be overridden with `SHELLY_` prefix:
 ```bash
 SHELLY_SERVER_PORT=9091
 SHELLY_DATABASE_PROVIDER=postgresql
-SHELLY_DATABASE_DSN="host=localhost user=app dbname=shelly sslmode=disable"
+SHELLY_DATABASE_DSN="postgresql://app:secret@localhost:5432/shelly?sslmode=disable"
 SHELLY_SECURITY_ADMIN_API_KEY=your-secure-admin-key
 ```
+
+The PostgreSQL credentials can stay out of the DSN: set `SHELLY_DATABASE_USERNAME` and
+`SHELLY_DATABASE_PASSWORD` (`database.username` and `database.password`) and give a DSN without them,
+for example `postgresql://db.example:5432/shelly`. The app puts them into the URL with the escaping a
+password needs. A DSN that carries credentials as well is refused, the MySQL provider refuses the two
+settings, and SQLite ignores them.
 
 ### Database connection pool
 

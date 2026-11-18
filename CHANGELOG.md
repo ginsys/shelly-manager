@@ -257,6 +257,23 @@ All notable changes to this project are documented here. The project follows Con
   `UpsertDevice` are removed. Not covered here: a discovery pass moves `updated_at` even when
   nothing changed, so a person's next save can meet a 409 (ginsys/shelly-manager#583).
   (ginsys/shelly-manager#572)
+- The Kubernetes kustomize manifests now configure the app. They set unprefixed names (`DATABASE_PROVIDER`,
+  `LOG_LEVEL`, `API_URL` and so on) that the app never reads, because it reads only `SHELLY_` plus the
+  config key, so every deploy from them ran the SQLite config baked into the image whatever the overlay
+  said. Every name in the base ConfigMap, the provisioner DaemonSet and the three overlays is now the name
+  the app reads (`SHELLY_LOGGING_LEVEL`, `SHELLY_PROVISIONING_AUTO_PROVISION`, ...); the dead `GIN_MODE`
+  entries are gone. **A deploy from the staging or production overlay now runs on PostgreSQL**, with a
+  pool of 8 open and 2 idle connections per replica (80 at the production autoscaler's maximum of 10
+  replicas), and the pod logs in JSON as the base ConfigMap says. The database credentials are new config
+  keys, `database.username` and `database.password` (`SHELLY_DATABASE_USERNAME` and
+  `SHELLY_DATABASE_PASSWORD`, which the Secret already carried and nothing read): the app puts them into
+  a PostgreSQL DSN that has none, escaped, so a password may hold `@`, `/`, `:`, `%` or `;`. A DSN that
+  carries credentials and these keys together is refused, MySQL refuses the two keys, and SQLite ignores
+  them. A password never appears in an error, a health status or a printed database config; the keyed
+  patterns of the PostgreSQL error sanitizer also missed a value that starts with `s` or holds `=`, now fixed.
+  A test reads the manifests and fails on any name the app does not read or a credential outside a
+  Secret. Not changed: the Dockerfiles and compose files still set the unused `GIN_MODE`.
+  (ginsys/shelly-manager#571)
 - The database pool now follows the provider. The built-in default of `database.max_open_conns` and
   `max_idle_conns` was 1 for every provider, and the example config set 1 too, so a PostgreSQL or
   MySQL deployment that set only the provider and the DSN ran a pool of one. An unset or 0 value now

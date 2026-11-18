@@ -26,8 +26,11 @@ type Config struct {
 		Path string `mapstructure:"path"`
 
 		// New provider-based configuration
-		Provider        string            `mapstructure:"provider"` // "sqlite", "postgresql", "mysql"
-		DSN             string            `mapstructure:"dsn"`      // Data Source Name
+		Provider string `mapstructure:"provider"` // "sqlite", "postgresql", "mysql"
+		DSN      string `mapstructure:"dsn"`      // Data Source Name
+		// Credentials kept out of the DSN (PostgreSQL only; see DatabaseConfig).
+		Username        string            `mapstructure:"username"`
+		Password        string            `mapstructure:"password"`
 		MaxOpenConns    int               `mapstructure:"max_open_conns"`
 		MaxIdleConns    int               `mapstructure:"max_idle_conns"`
 		ConnMaxLifetime int               `mapstructure:"conn_max_lifetime"`  // seconds
@@ -229,6 +232,10 @@ func setDefaults() {
 	// when dsn is empty. The empty default still registers the key, so
 	// SHELLY_DATABASE_DSN is unmarshalled even when no config file sets dsn.
 	viper.SetDefault("database.dsn", "")
+	// Registered for the same reason, so SHELLY_DATABASE_USERNAME and
+	// SHELLY_DATABASE_PASSWORD (the Kubernetes Secret's names) unmarshal.
+	viper.SetDefault("database.username", "")
+	viper.SetDefault("database.password", "")
 	// 0 means "the provider's own pool": GetDatabaseConfig fills it (SQLite 1,
 	// PostgreSQL and MySQL 25 open / 5 idle). A fixed 1 here hid those values
 	// from every deployment that only set provider and dsn. The keys stay

@@ -69,7 +69,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	// Parse and validate DSN
 	dsn, err := p.buildDSN(config.DSN, config.Options)
 	if err != nil {
-		return fmt.Errorf("failed to build DSN: %w", err)
+		return fmt.Errorf("failed to build DSN: %w", p.sanitizeError(err))
 	}
 
 	// Configure GORM logger based on config
@@ -266,7 +266,7 @@ func (p *PostgreSQLProvider) HealthCheck(ctx context.Context) HealthStatus {
 
 	if err := p.Ping(); err != nil {
 		status.Healthy = false
-		status.Error = err.Error()
+		status.Error = p.sanitizeError(err).Error()
 		status.ResponseTime = time.Since(start)
 		return status
 	}
@@ -290,26 +290,37 @@ func (p *PostgreSQLProvider) sanitizeError(err error) error {
 		return nil
 	}
 
-	errorMsg := err.Error()
+	sanitizedMsg := err.Error()
+
+	// The password this provider was given is known, so remove it by value, in
+	// every spelling a driver or the URL package may print it in. The patterns
+	// below only catch what looks like a credential.
+	if password := p.config.Password; password != "" {
+		for _, form := range []string{
+			password,
+			url.QueryEscape(password),
+			url.PathEscape(password),
+			strings.TrimPrefix(url.UserPassword("", password).String(), ":"),
+		} {
+			sanitizedMsg = strings.ReplaceAll(sanitizedMsg, form, "***")
+		}
+	}
 
 	// Patterns to match and remove credentials from DSN-like strings
 	// Match user=username patterns
 	credentialPatterns := []*regexp.Regexp{
 		regexp.MustCompile(`user=\w+`),
-		regexp.MustCompile(`password=[^\\s\t]+`),
+		regexp.MustCompile(`password=\S+`),
 		regexp.MustCompile(`dbname=\w+`),
-		regexp.MustCompile(`application_name=[^\\s\t]+`),
+		regexp.MustCompile(`application_name=\S+`),
 	}
 
 	// Replace credentials with safe placeholders
-	sanitizedMsg := errorMsg
 	for _, pattern := range credentialPatterns {
 		matches := pattern.FindAllString(sanitizedMsg, -1)
 		for _, match := range matches {
-			parts := strings.Split(match, "=")
-			if len(parts) == 2 {
-				sanitizedMsg = strings.ReplaceAll(sanitizedMsg, match, parts[0]+"=***")
-			}
+			parts := strings.SplitN(match, "=", 2)
+			sanitizedMsg = strings.ReplaceAll(sanitizedMsg, match, parts[0]+"=***")
 		}
 	}
 
@@ -364,6 +375,19 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 		return "", fmt.Errorf("invalid PostgreSQL DSN scheme, expected postgres:// or postgresql://")
 	}
 
+	// database.username and database.password are the credentials kept out of
+	// the DSN. Refuse the cases that have no single meaning; the messages name
+	// the keys and never a value.
+	hasCredentials := p.config.Username != "" || p.config.Password != ""
+	if hasCredentials {
+		if p.config.Username == "" {
+			return "", fmt.Errorf("database.password is set without database.username")
+		}
+		if parsedURL.User != nil {
+			return "", fmt.Errorf("the DSN carries credentials and database.username is set as well: use one of them")
+		}
+	}
+
 	// Start with the base DSN
 	dsn := baseDSN
 
@@ -412,6 +436,21 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 				}
 			}
 		}
+	}
+
+	// The credentials go in last: a password holding "sslmode=" or "=" must not
+	// change which defaults the checks above add to the DSN.
+	if hasCredentials {
+		withCredentials, err := url.Parse(dsn)
+		if err != nil {
+			return "", fmt.Errorf("invalid DSN format: %w", p.sanitizeError(err))
+		}
+		if p.config.Password == "" {
+			withCredentials.User = url.User(p.config.Username)
+		} else {
+			withCredentials.User = url.UserPassword(p.config.Username, p.config.Password)
+		}
+		dsn = withCredentials.String()
 	}
 
 	return dsn, nil

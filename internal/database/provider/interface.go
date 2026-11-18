@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -48,6 +51,11 @@ type DatabaseConfig struct {
 	DSN      string            `mapstructure:"dsn"`      // Data Source Name
 	Options  map[string]string `mapstructure:"options"`  // Provider-specific options
 
+	// Credentials kept out of the DSN. PostgreSQL puts them into the URL with
+	// the escaping a password needs; MySQL refuses them; SQLite ignores them.
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+
 	// Connection Pool Settings
 	MaxOpenConns    int           `mapstructure:"max_open_conns"`
 	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
@@ -57,6 +65,30 @@ type DatabaseConfig struct {
 	// Performance Settings
 	SlowQueryThreshold time.Duration `mapstructure:"slow_query_threshold"`
 	LogLevel           string        `mapstructure:"log_level"` // "silent", "error", "warn", "info"
+}
+
+var (
+	// urlUserinfo matches the credentials of a URL DSN: "://user:password@".
+	urlUserinfo = regexp.MustCompile(`://[^/@]*@`)
+	// mysqlUserinfo matches the credentials of a MySQL DSN: "user:password@tcp(".
+	mysqlUserinfo = regexp.MustCompile(`^[^(]*@`)
+)
+
+// String prints the configuration with the password and any credentials in the
+// DSN masked, so a %v or %+v of the struct, or of a pointer to it, never prints
+// a secret. The value receiver is what makes a pointer print the same way.
+func (c DatabaseConfig) String() string {
+	type plain DatabaseConfig // a type without this method, so Sprintf does not recurse
+
+	if strings.Contains(c.DSN, "://") {
+		c.DSN = urlUserinfo.ReplaceAllString(c.DSN, "://***@")
+	} else if strings.EqualFold(strings.TrimSpace(c.Provider), "mysql") {
+		c.DSN = mysqlUserinfo.ReplaceAllString(c.DSN, "***@")
+	}
+	if c.Password != "" {
+		c.Password = "***"
+	}
+	return fmt.Sprintf("%+v", plain(c))
 }
 
 // DatabaseStats provides performance and connection statistics

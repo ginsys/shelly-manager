@@ -71,13 +71,14 @@ kind: ConfigMap
 metadata:
   name: shelly-manager-config
 data:
-  # Default configuration values
-  SERVER_PORT: "8080"
-  SERVER_HOST: "0.0.0.0"
-  LOG_LEVEL: "info"
-  LOG_FORMAT: "json"
-  DATABASE_PROVIDER: "sqlite"
-  DISCOVERY_ENABLED: "true"
+  # Default configuration values. The app reads only SHELLY_ + the config key,
+  # with "." as "_": a name without the prefix has no effect.
+  SHELLY_SERVER_PORT: "8080"
+  SHELLY_SERVER_HOST: "0.0.0.0"
+  SHELLY_LOGGING_LEVEL: "info"
+  SHELLY_LOGGING_FORMAT: "json"
+  SHELLY_DATABASE_PROVIDER: "sqlite"
+  SHELLY_DISCOVERY_ENABLED: "true"
   # ... additional config
 ```
 
@@ -148,8 +149,7 @@ configMapGenerator:
 - name: shelly-manager-config
   behavior: merge
   literals:
-  - LOG_LEVEL=debug
-  - GIN_MODE=debug
+  - SHELLY_LOGGING_LEVEL=debug
 
 images:
 - name: ghcr.io/ginsys/shelly-manager
@@ -206,9 +206,11 @@ configMapGenerator:
 - name: shelly-manager-config
   behavior: merge
   literals:
-  - LOG_LEVEL=info
-  - GIN_MODE=release
-  - DATABASE_PROVIDER=postgresql
+  - SHELLY_LOGGING_LEVEL=info
+  - SHELLY_DATABASE_PROVIDER=postgresql
+  - SHELLY_DATABASE_DSN=postgresql://postgresql:5432/shelly
+  - SHELLY_DATABASE_MAX_OPEN_CONNS=8
+  - SHELLY_DATABASE_MAX_IDLE_CONNS=2
 
 images:
 - name: ghcr.io/ginsys/shelly-manager
@@ -231,15 +233,33 @@ Configuration priority (highest to lowest):
 
 **Development**: SQLite (ephemeral)
 ```yaml
-DATABASE_PROVIDER: "sqlite"
-DATABASE_PATH: "/tmp/shelly.db"
+SHELLY_DATABASE_PROVIDER: "sqlite"
+SHELLY_DATABASE_PATH: "/tmp/shelly.db"
 ```
 
-**Production**: PostgreSQL (persistent)
+**Staging and production**: PostgreSQL (persistent)
 ```yaml
-DATABASE_PROVIDER: "postgresql"
-DATABASE_DSN: "postgresql://user:pass@postgres:5432/shelly?sslmode=require"
+SHELLY_DATABASE_PROVIDER: "postgresql"
+SHELLY_DATABASE_DSN: "postgresql://postgresql:5432/shelly"   # no credentials
+SHELLY_DATABASE_MAX_OPEN_CONNS: "8"                          # per replica
+SHELLY_DATABASE_MAX_IDLE_CONNS: "2"
 ```
+
+The credentials stay out of the DSN and out of every ConfigMap: `SHELLY_DATABASE_USERNAME` and
+`SHELLY_DATABASE_PASSWORD` come from the `database-username` and `database-password` keys of the
+`shelly-manager-secrets` Secret (`base/deployment.yaml`), and the app puts them into the DSN with the
+escaping a password needs. Fill the Secret before you deploy a staging or production overlay: its keys
+are empty in `base/secrets.yaml`. A DSN that carries credentials as well is refused at start.
+The overlays switch the pod from the SQLite config baked into the image to PostgreSQL; the
+database must exist and be reachable at `postgresql:5432` in the namespace.
+
+Each replica opens its own pool, so replicas × `SHELLY_DATABASE_MAX_OPEN_CONNS` must stay below the
+server's `max_connections` (PostgreSQL's default is 100, 97 usable; an assumption, this repository
+holds no server manifest). Production: the autoscaler runs 3 to 10 replicas and a rolling update adds
+one, so 8 per replica is 24 connections at rest, 80 at 10 replicas and 88 during a roll at 10.
+Staging: 2 replicas and one more during a roll, 24.
+
+Every environment name in these manifests is checked by `internal/config/deploy_env_names_test.go`.
 
 ### Secrets Management
 ```bash

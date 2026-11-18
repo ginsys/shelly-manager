@@ -35,6 +35,8 @@ func TestConfig() *config.Config {
 			Path            string            `mapstructure:"path"`
 			Provider        string            `mapstructure:"provider"`
 			DSN             string            `mapstructure:"dsn"`
+			Username        string            `mapstructure:"username"`
+			Password        string            `mapstructure:"password"`
 			MaxOpenConns    int               `mapstructure:"max_open_conns"`
 			MaxIdleConns    int               `mapstructure:"max_idle_conns"`
 			ConnMaxLifetime int               `mapstructure:"conn_max_lifetime"`
