@@ -1539,8 +1539,8 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 		if server, ok := mqttData["server"].(string); ok {
 			mqtt.Server = StringPtr(server)
 		}
-		if port, ok := mqttData["port"].(float64); ok {
-			mqtt.Port = IntPtr(int(port))
+		if port, ok := shelly.WholeNumber(mqttData["port"]); ok {
+			mqtt.Port = IntPtr(port)
 		}
 		if user, ok := mqttData["user"].(string); ok {
 			mqtt.User = StringPtr(user)

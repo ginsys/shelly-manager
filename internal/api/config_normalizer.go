@@ -181,8 +181,8 @@ func (n *ConfigNormalizer) NormalizeRawConfig(rawConfig map[string]interface{}) 
 		if user, ok := mqtt["user"].(string); ok {
 			normalized.MQTT.User = user
 		}
-		if keepAlive, ok := mqtt["keep_alive"].(float64); ok {
-			normalized.MQTT.KeepAlive = int(keepAlive)
+		if keepAlive, ok := shelly.WholeNumber(mqtt["keep_alive"]); ok {
+			normalized.MQTT.KeepAlive = keepAlive
 		}
 	}
 
@@ -346,9 +346,8 @@ func (n *ConfigNormalizer) NormalizeRawConfig(rawConfig map[string]interface{}) 
 	if tzDstAuto, ok := rawConfig["tz_dst_auto"].(bool); ok {
 		normalized.Time.TZDstAuto = &tzDstAuto
 	}
-	if tzUtcOffset, ok := rawConfig["tz_utc_offset"].(float64); ok {
-		tzUtcOffsetInt := int(tzUtcOffset)
-		normalized.Time.TZUtcOffset = &tzUtcOffsetInt
+	if tzUtcOffset, ok := shelly.WholeNumber(rawConfig["tz_utc_offset"]); ok {
+		normalized.Time.TZUtcOffset = &tzUtcOffset
 	}
 	if tzAutoDetect, ok := rawConfig["tzautodetect"].(bool); ok {
 		normalized.Time.TZAutoDetect = &tzAutoDetect
@@ -516,9 +515,8 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 				normalized.Time.TZDstAuto = &tzDstAuto
 				handledFields["tz_dst_auto"] = true
 			}
-			if tzUtcOffset, ok := rawData["tz_utc_offset"].(float64); ok {
-				tzUtcOffsetInt := int(tzUtcOffset)
-				normalized.Time.TZUtcOffset = &tzUtcOffsetInt
+			if tzUtcOffset, ok := shelly.WholeNumber(rawData["tz_utc_offset"]); ok {
+				normalized.Time.TZUtcOffset = &tzUtcOffset
 				handledFields["tz_utc_offset"] = true
 			}
 			if tzAutoDetect, ok := rawData["tzautodetect"].(bool); ok {

@@ -263,11 +263,11 @@ func (c *Gen1Converter) convertMQTT(gen1 map[string]interface{}, config *DeviceC
 	if cleanSession, ok := mqttData["clean_session"].(bool); ok {
 		mqtt.CleanSession = BoolPtr(cleanSession)
 	}
-	if keepAlive, ok := mqttData["keep_alive"].(float64); ok {
-		mqtt.KeepAlive = IntPtr(int(keepAlive))
+	if keepAlive, ok := shelly.WholeNumber(mqttData["keep_alive"]); ok {
+		mqtt.KeepAlive = IntPtr(keepAlive)
 	}
-	if updatePeriod, ok := mqttData["update_period"].(float64); ok {
-		mqtt.UpdatePeriod = IntPtr(int(updatePeriod))
+	if updatePeriod, ok := shelly.WholeNumber(mqttData["update_period"]); ok {
+		mqtt.UpdatePeriod = IntPtr(updatePeriod)
 	}
 
 	config.MQTT = mqtt
@@ -326,8 +326,8 @@ func (c *Gen1Converter) convertCoIoT(gen1 map[string]interface{}, config *Device
 	if enabled, ok := coiotData["enabled"].(bool); ok {
 		coiot.Enable = BoolPtr(enabled)
 	}
-	if updatePeriod, ok := coiotData["update_period"].(float64); ok {
-		coiot.UpdatePeriod = IntPtr(int(updatePeriod))
+	if updatePeriod, ok := shelly.WholeNumber(coiotData["update_period"]); ok {
+		coiot.UpdatePeriod = IntPtr(updatePeriod)
 	}
 	if peer, ok := coiotData["peer"].(string); ok {
 		coiot.Peer = StringPtr(peer)

@@ -24,6 +24,32 @@ import (
 // ErrDeviceOffline is returned when a device is known to be offline and communication is skipped.
 var ErrDeviceOffline = errors.New("device is offline")
 
+// ErrInvalidChannel is returned when an action's channel parameter is not a whole number of 0 or more.
+var ErrInvalidChannel = errors.New("invalid channel: must be a whole number of 0 or more")
+
+// actionChannel reads the channel parameter of an on, off or toggle action: 0 where it is absent or
+// null, a Go int as it is, a JSON number through shelly.WholeNumber. Any other value, or one below 0,
+// is ErrInvalidChannel, because the channel picks the relay that switches.
+func actionChannel(params map[string]interface{}) (int, error) {
+	var channel int
+	switch v := params["channel"].(type) {
+	case nil:
+		return 0, nil
+	case int:
+		channel = v
+	default:
+		whole, ok := shelly.WholeNumber(v)
+		if !ok {
+			return 0, ErrInvalidChannel
+		}
+		channel = whole
+	}
+	if channel < 0 {
+		return 0, ErrInvalidChannel
+	}
+	return channel, nil
+}
+
 // ShellyService handles the core business logic
 type ShellyService struct {
 	DB        database.DatabaseInterface
@@ -750,6 +776,14 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 		return ErrDeviceOffline
 	}
 
+	// Read the channel once, before any device call: it picks the relay that switches.
+	channel := 0
+	if action == "on" || action == "off" || action == "toggle" {
+		if channel, err = actionChannel(params); err != nil {
+			return err
+		}
+	}
+
 	// Get or create client
 	client, err := s.getClient(device)
 	if err != nil {
@@ -763,24 +797,12 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 	var actionErr error
 	switch action {
 	case "on":
-		channel := 0
-		if ch, ok := params["channel"].(float64); ok {
-			channel = int(ch)
-		}
 		err = client.SetSwitch(ctx, channel, true)
 
 	case "off":
-		channel := 0
-		if ch, ok := params["channel"].(float64); ok {
-			channel = int(ch)
-		}
 		err = client.SetSwitch(ctx, channel, false)
 
 	case "toggle":
-		channel := 0
-		if ch, ok := params["channel"].(float64); ok {
-			channel = int(ch)
-		}
 		// Get current status
 		status, statusErr := client.GetStatus(ctx)
 		if statusErr != nil {
@@ -823,24 +845,12 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 				// Retry the action
 				switch action {
 				case "on":
-					channel := 0
-					if ch, ok := params["channel"].(float64); ok {
-						channel = int(ch)
-					}
 					actionErr = client.SetSwitch(ctx, channel, true)
 
 				case "off":
-					channel := 0
-					if ch, ok := params["channel"].(float64); ok {
-						channel = int(ch)
-					}
 					actionErr = client.SetSwitch(ctx, channel, false)
 
 				case "toggle":
-					channel := 0
-					if ch, ok := params["channel"].(float64); ok {
-						channel = int(ch)
-					}
 					status, err := client.GetStatus(ctx)
 					if err == nil && len(status.Switches) > channel {
 						newState := !status.Switches[channel].Output
