@@ -39,6 +39,14 @@ Manual fallback (if not using the provided proxy)
   - `window.__ADMIN_KEY__ = 'your_key'`
   - `window.__API_BASE__ = 'http://localhost:8080/api/v1'`
 
+Admin key in a production build
+- When the server has `security.admin_api_key` set, every `/api/v1` route except `GET /api/v1/version` and
+  `GET /api/v1/metrics/prometheus` answers 401 without the key (ginsys/shelly-manager#611). The UI sends the key
+  only when it has one: `VITE_ADMIN_KEY` at build time (the key then sits in the public bundle) or
+  `window.__ADMIN_KEY__` from the dev-only `/app-config.js`. A build with neither gets 401 on the device list and on
+  every configuration page. There is no supported production way to give the UI its key yet
+  (ginsys/shelly-manager#619). With no admin key on the server, nothing changes.
+
 Production-like run
 - Build the SPA: `make ui-build` (writes to `ui/dist`).
 - The Go server will auto-serve `ui/dist` at `/` if it exists (no separate web server needed). Use `make run` and open `http://localhost:8080`.

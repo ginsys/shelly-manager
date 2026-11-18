@@ -139,18 +139,27 @@ VITE_ADMIN_KEY=dev-admin-key-12345  # Must match backend!
 ## API Authentication
 
 ### Protected Endpoints
-The following endpoints require the admin API key:
+When `security.admin_api_key` is set, every `/api/v1` route requires the admin API key, except
+`GET /api/v1/version` and `GET /api/v1/metrics/prometheus`. That includes:
+- `/api/v1/devices/*` and `/api/v1/tags/*` - Devices and tags
+- `/api/v1/notifications/*` - Notification channels, rules and history
 - `/api/v1/export/*` - All export endpoints
 - `/api/v1/import/*` - All import endpoints
 - `/api/v1/admin/*` - Admin operations
 
+The web UI sends the key only when it has one (`VITE_ADMIN_KEY` at build time, or the dev-only
+`/app-config.js`), so a UI without the key gets 401 from the device list.
+
 ### Testing with curl
 ```bash
-# Without auth (public endpoints)
-curl http://localhost:8080/api/v1/devices
+# Without auth (only when no admin key is configured, and for /api/v1/version)
+curl http://localhost:8080/api/v1/version
 
-# With auth (protected endpoints)
-curl -H "Authorization: Bearer dev-admin-key-12345" \
+# With auth (every other /api/v1 route when an admin key is configured;
+# ADMIN_KEY holds the value of security.admin_api_key)
+curl -H "Authorization: Bearer $ADMIN_KEY" \
+  http://localhost:8080/api/v1/devices
+curl -H "Authorization: Bearer $ADMIN_KEY" \
   http://localhost:8080/api/v1/export/plugins
 ```
 
