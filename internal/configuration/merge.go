@@ -91,7 +91,7 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 			}
 
 			if isPointerToBasicType(srcField.Type()) {
-				dstField.Set(srcField)
+				dstField.Set(cloneValue(srcField))
 				sources[fieldPath] = sourceName
 			} else if srcField.Elem().Kind() == reflect.Struct {
 				if dstField.IsNil() {
@@ -100,7 +100,7 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 				mergeInto(dstField.Interface(), srcField.Interface(), sources, sourceName, fieldPath)
 			} else if srcField.Elem().Kind() == reflect.Slice {
 				// A pointer to a list replaces the list whole, an empty one included: nil leaves it alone.
-				dstField.Set(srcField)
+				dstField.Set(cloneValue(srcField))
 				sources[fieldPath] = sourceName
 			}
 		} else if srcField.Kind() == reflect.Slice {
@@ -144,13 +144,13 @@ func mergeSlices(dstField, srcField reflect.Value, sources map[string]string, so
 					}
 					mergeStructs(dstElem.Elem(), srcElem.Elem(), sources, sourceName, elemPath)
 				} else {
-					dstElem.Set(srcElem)
+					dstElem.Set(cloneValue(srcElem))
 					sources[elemPath] = sourceName
 				}
 			}
 		} else {
 			if dstElem.CanSet() {
-				dstElem.Set(srcElem)
+				dstElem.Set(cloneValue(srcElem))
 				sources[elemPath] = sourceName
 			}
 		}
@@ -410,7 +410,7 @@ func mergeStructs(dstVal, srcVal reflect.Value, sources map[string]string, sourc
 			}
 
 			if isPointerToBasicType(srcField.Type()) {
-				dstField.Set(srcField)
+				dstField.Set(cloneValue(srcField))
 				sources[fieldPath] = sourceName
 			} else if srcField.Elem().Kind() == reflect.Struct {
 				if dstField.IsNil() {
@@ -419,14 +419,14 @@ func mergeStructs(dstVal, srcVal reflect.Value, sources map[string]string, sourc
 				mergeStructs(dstField.Elem(), srcField.Elem(), sources, sourceName, fieldPath)
 			} else if srcField.Elem().Kind() == reflect.Slice {
 				// A pointer to a list replaces the list whole, an empty one included: nil leaves it alone.
-				dstField.Set(srcField)
+				dstField.Set(cloneValue(srcField))
 				sources[fieldPath] = sourceName
 			}
 		} else if srcField.Kind() == reflect.Struct {
 			mergeStructs(dstField, srcField, sources, sourceName, fieldPath)
 		} else {
 			if dstField.CanSet() {
-				dstField.Set(srcField)
+				dstField.Set(cloneValue(srcField))
 				sources[fieldPath] = sourceName
 			}
 		}
