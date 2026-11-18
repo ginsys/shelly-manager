@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -71,6 +72,25 @@ func checkColumnScopedWrites(t *testing.T, manager *Manager) {
 		assert.Equal(t, `{"a":2}`, got.Settings, "settings were written over")
 		assertOthersKept(t, got)
 		assert.True(t, got.UpdatedAt.After(before.UpdatedAt), "updated_at did not move from %v to %v", before.UpdatedAt, got.UpdatedAt)
+	})
+
+	// Writes that follow each other at once must each move the version past the one before, and a PUT
+	// that read the row between two of them must meet a conflict. MySQL keeps milliseconds, so the
+	// clock alone can repeat a stored value: no sleep here.
+	t.Run("rapid writes move the version each time", func(t *testing.T) {
+		for i := 0; i < 5; i++ {
+			before, getErr := manager.GetDevice(device.ID)
+			require.NoError(t, getErr)
+			require.NoError(t, manager.UpdateDeviceSettings(device.ID, fmt.Sprintf(`{"a":%d}`, 10+i)))
+			after, getErr := manager.GetDevice(device.ID)
+			require.NoError(t, getErr)
+			assert.True(t, after.UpdatedAt.After(before.UpdatedAt), "write %d: updated_at stayed at %v", i, before.UpdatedAt)
+
+			// A PUT that read the row before this write now holds an old version.
+			before.Name = "put from the old row"
+			assert.ErrorIs(t, manager.UpdateDeviceIfVersion(before, before.UpdatedAt), ErrDeviceVersionChanged,
+				"write %d: a PUT with the version read before the write was accepted", i)
+		}
 	})
 
 	t.Run("missing device", func(t *testing.T) {
