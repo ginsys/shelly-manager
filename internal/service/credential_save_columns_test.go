@@ -189,6 +189,34 @@ func TestLoginFallbackSave_KeepsTheOtherWritersColumnsAndTheSettingsKeys(t *test
 	}
 }
 
+// The fallback runs because the stored pair is incomplete: a user and no password. A working
+// provisioning login completes the pair, as the whole-row save did. Only a login that changed
+// since the caller's read is left alone.
+func TestLoginFallbackSave_CompletesAnIncompleteStoredPair(t *testing.T) {
+	service, device, _ := raceFixture(t)
+	service.Config.Provisioning.AuthEnabled = true
+	service.Config.Provisioning.AuthUser = "prov"
+	service.Config.Provisioning.AuthPassword = "provpw"
+	start := `{"gen":1,"auth_enabled":true,"auth_user":"admin","note":"keep"}`
+	if err := service.DB.GetDB().Model(&database.Device{}).Where("id = ?", device.ID).
+		UpdateColumn("settings", start).Error; err != nil {
+		t.Fatal(err)
+	}
+	device.Settings = start
+
+	if _, err := service.getClientWithRetry(device, true); err != nil {
+		t.Fatalf("getClientWithRetry failed: %v", err)
+	}
+
+	user, settings := storedLogin(t, service, device.ID)
+	if user != "prov" {
+		t.Errorf("the incomplete pair was not completed: stored user %q, want prov", user)
+	}
+	if settings["auth_pass"] != "provpw" || settings["note"] != "keep" {
+		t.Errorf("stored password %v, note %v: want provpw and the note kept", settings["auth_pass"], settings["note"])
+	}
+}
+
 // A second settings writer stores a login after the fallback's read and before its save. The
 // fallback builds its text from a fresh read at write time and leaves a login that is stored now:
 // the login that someone stored on purpose is never put back to the one the fallback found.
