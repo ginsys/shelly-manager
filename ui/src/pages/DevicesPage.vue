@@ -138,7 +138,7 @@
 
     <!-- Create/Edit Dialog -->
     <div v-if="showCreateDialog || showEditDialog" class="modal-overlay" @click.self="closeDialogs">
-      <div class="modal">
+      <div class="dialog-card">
         <h2>{{ showEditDialog ? 'Edit Device' : 'Add New Device' }}</h2>
         <DeviceForm
           ref="deviceFormRef"
@@ -344,6 +344,7 @@ export default {
 .action-btn.danger { background: #fee2e2; color: #991b1b; }
 .action-btn:hover { opacity: 0.8; }
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal { background: white; padding: 24px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
-.modal h2 { margin-top: 0; }
+/* Not `.modal`: a scoped rule reaches the root element of a child component, and the bulk dialog's backdrop is `.modal`. */
+.dialog-card { background: white; padding: 24px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
+.dialog-card h2 { margin-top: 0; }
 </style>

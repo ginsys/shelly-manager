@@ -148,6 +148,36 @@ describe('BulkOperationsDialog', () => {
     expect(bulkImport).not.toHaveBeenCalled()
   })
 
+  it('sends nothing when the selection empties after the form was opened', async () => {
+    const wrapper = open()
+    await byId(wrapper, 'bulk-op-import').trigger('click')
+
+    await wrapper.setProps({ selectedDevices: [] })
+    await byId(wrapper, 'bulk-submit').trigger('submit')
+    await flushPromises()
+
+    expect(bulkImport).not.toHaveBeenCalled()
+  })
+
+  it('ignores the answer of a request sent before the dialog was closed and reopened', async () => {
+    let answer!: (value: unknown) => void
+    vi.mocked(bulkImport).mockReturnValue(new Promise((resolve) => (answer = resolve)) as any)
+    const wrapper = open([picked[0]])
+    await byId(wrapper, 'bulk-op-import').trigger('click')
+    await byId(wrapper, 'bulk-submit').trigger('submit')
+
+    await byId(wrapper, 'bulk-close').trigger('click')
+    await wrapper.setProps({ selectedDevices: [picked[1]] })
+    await byId(wrapper, 'bulk-op-drift').trigger('click')
+    answer(importAnswer)
+    await flushPromises()
+
+    expect(byId(wrapper, 'bulk-results').exists()).toBe(false)
+    expect(byId(wrapper, 'bulk-submit').exists()).toBe(true)
+    // The devices were contacted, so the page is still told to refresh its list.
+    expect(wrapper.emitted('complete')).toHaveLength(1)
+  })
+
   it('emits close from the header button', async () => {
     const wrapper = open()
 
