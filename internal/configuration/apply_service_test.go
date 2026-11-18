@@ -962,7 +962,8 @@ func TestApplyDesiredConfig_CustomLocationDisablesAutoDetect(t *testing.T) {
 
 func TestApplyDesiredConfig_SerializesPerDevice(t *testing.T) {
 	svc, _ := newServiceWithDesiredName(t, "tv-office")
-	release := svc.lockApply(1)
+	release, err := svc.lockApply(context.Background(), 1)
+	require.NoError(t, err)
 
 	done := make(chan struct{})
 	go func() {

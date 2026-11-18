@@ -258,6 +258,15 @@ All notable changes to this project are documented here. The project follows Con
   default configuration value today) there is no cross-replica lock, only the in-process one, and
   the server logs a warning once. Set it to 2 or more to run several replicas; making that the
   default is ginsys/shelly-manager#570. Refs ginsys/shelly-manager#425.
+- A second apply to a device now waits a bounded time even when the apply before it runs on the
+  same server. The in-process lock used to be waited for without a bound, so the documented 15
+  second wait and `409` `CONFLICT` held only for a lock held by another replica; on the same server,
+  or with a pool of one connection, the second apply queued until the request timed out (`408`) or,
+  below the HTTP layer, forever. One 15 second wait now covers the in-process lock and the database
+  lock together, and an apply that cannot get either is refused with `409` and writes nothing. A
+  request that ends while it waits stops waiting at once. A second apply that arrives while an
+  apply runs longer than 15 seconds (one that waits for a reboot, for example) now gets `409`
+  where it used to queue. Fixes ginsys/shelly-manager#573.
 - Device control, verify and the handling of stored logins no longer act on whatever device
   answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and
   `POST /devices/{id}/config/new/verify` read the MAC the device reports and answer `409`
