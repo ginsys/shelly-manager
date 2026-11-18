@@ -236,6 +236,12 @@ All notable changes to this project are documented here. The project follows Con
   device's answer changes no stored login. A stored login that such a device rejects is kept and
   the caller gets the identity error. Status reads send the extra request only on those two
   paths. Fixes ginsys/shelly-manager#556.
+- The merged configuration no longer shares memory with the layers it was built from. The merge
+  copied a pointer to a value (`*bool`, `*int`, `*string`, `*float64`), a pointer to a list
+  (`schedule_rules`) and the elements of a position-merged list by assignment, so a change to the
+  merged result reached the stored layer, and a later change to a layer reached a configuration
+  that was already merged. Every such value is now a deep copy. The merged values and their
+  sources do not change. Fixes ginsys/shelly-manager#547.
 - Apply, export and bulk export no longer write to whatever device answers at the stored address.
   Before the first write they read the MAC the device reports and compare it with the stored MAC
   (case and the separators colon, dash and dot are ignored). A different MAC, a device that reports
