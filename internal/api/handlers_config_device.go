@@ -609,6 +609,11 @@ func (h *Handler) writeConfigDeviceError(w http.ResponseWriter, r *http.Request,
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), nil)
 		return
 	}
+	// Another replica is applying to this device. The wait ended, nothing was written, retry.
+	if errors.Is(err, configuration.ErrApplyInProgress) {
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), nil)
+		return
+	}
 	h.writeDeviceReadError(w, r, err)
 }
 

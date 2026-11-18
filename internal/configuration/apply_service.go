@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 // ErrUnsupportedGeneration is returned when the device generation has no
@@ -381,9 +382,14 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 		return nil, err
 	}
 
-	// One apply per device at a time, from the snapshot to the flag update: the compare-and-set
-	// below guards the stored configuration, this lock guards the order of writes to hardware.
-	defer s.lockApply(deviceID)()
+	// One apply per device at a time, from the snapshot to the flag update, across every manager
+	// replica on the database: the compare-and-set below guards the stored configuration, this lock
+	// guards the order of writes to hardware and the pending-reboot flag.
+	lock, err := s.lockApplyAcrossReplicas(ctx, deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Unlock()
 
 	hooks := s.loginHooks
 
@@ -464,6 +470,14 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	}
 
 	if result.ConfigApplied {
+		// A lock lost during the apply lets another replica write in between. The writes cannot be
+		// undone, but success is not claimed: the flag stays false, as it was set before the first write.
+		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		lockErr := lock.StillHeld(checkCtx)
+		cancel()
+		if lockErr != nil {
+			return nil, fmt.Errorf("%w: %v", ErrApplyLockLost, lockErr)
+		}
 		set, err := s.repo.SetDeviceConfigAppliedIfDesired(deviceID, snapshot)
 		if err != nil {
 			return nil, fmt.Errorf("configuration applied but could not record it: %w", err)

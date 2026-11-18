@@ -196,6 +196,7 @@ jobs:
       run: |
         go test ./internal/database -run '^(TestConfigTemplateScopeMigrationProviders|TestUpdateDeviceIfVersionProviders|TestUpdateDeviceZeroTimesKeptProviders)$' -v
         go test ./internal/sync -run '^TestImportZeroLastSeenProviders$' -v
+        go test ./internal/configuration -run '^TestApplyLockProviders_' -v
 
   vitest:
     name: Frontend Unit Tests
