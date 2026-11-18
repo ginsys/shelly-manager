@@ -54,6 +54,8 @@ func TestNewManagerFromConfig_ConnectFailureHoldsNoPassword(t *testing.T) {
 		"encoded key":  "postgresql://127.0.0.1:badport/shelly?pass%77ord=inline_pw",
 		"padded key":   "postgresql://127.0.0.1:badport/shelly? password =inline_pw",
 		"slash":        "postgresql://app:inline_pw/tail@127.0.0.1/shelly",
+		"numeric":      "postgresql://127.0.0.1:1/inline_pw@127.0.0.1/shelly?sslmode=disable",
+		"newline":      "postgresql://app:inline_pw\ntail@127.0.0.1/shelly",
 		"after a hash": "postgresql://127.0.0.1:badport/shelly?application_name=x#&password=inline_pw",
 	} {
 		t.Run("a DSN that cannot be parsed, password in "+name, func(t *testing.T) {

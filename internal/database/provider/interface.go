@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -67,43 +66,24 @@ type DatabaseConfig struct {
 	LogLevel           string        `mapstructure:"log_level"` // "silent", "error", "warn", "info"
 }
 
-var (
-	// urlUserinfo matches the credentials of a URL DSN: "://user:password@",
-	// greedy up to the last "@", because a password holding "/" or "?" has no
-	// boundary a parser and this expression would agree on.
-	urlUserinfo = regexp.MustCompile(`://.*@`)
-	// mysqlUserinfo matches the credentials of a MySQL DSN: "user:password@tcp(".
-	mysqlUserinfo = regexp.MustCompile(`^.*@`)
-)
-
-// String prints the configuration with the password and any credentials in the
-// DSN masked, so a %v or %+v of the struct, or of a pointer to it, never prints
-// a secret. The value receiver is what makes a pointer print the same way.
+// String prints the configuration for a log or a %v, so a %v or %+v of the
+// struct, or of a pointer to it, never prints a secret. The value receiver is
+// what makes a pointer print the same way. The DSN of a network provider is not
+// printed at all: no matcher of ours agrees with every driver on where the
+// credentials in a DSN begin and end, so none is attempted. A SQLite DSN is a
+// file path and stays.
 func (c DatabaseConfig) String() string {
 	type plain DatabaseConfig // a type without this method, so Sprintf does not recurse
 
-	if strings.Contains(c.DSN, "://") {
-		c.DSN = urlUserinfo.ReplaceAllString(c.DSN, "://***@")
-	} else if strings.EqualFold(strings.TrimSpace(c.Provider), "mysql") {
-		c.DSN = mysqlUserinfo.ReplaceAllString(c.DSN, "***@")
+	switch strings.ToLower(strings.TrimSpace(c.Provider)) {
+	case "sqlite", "sqlite3":
+	default:
+		c.DSN = "***"
 	}
-	c.DSN = hideQuery(c.DSN)
 	if c.Password != "" {
 		c.Password = "***"
 	}
 	return fmt.Sprintf("%+v", plain(c))
-}
-
-// hideQuery drops everything after the first "?" of a DSN. A driver reads
-// password-bearing parameters under spellings no matcher of ours agrees with
-// (padded or encoded keys, a '#' before the parameter), so none is picked out:
-// the whole query is hidden.
-func hideQuery(dsn string) string {
-	base, _, found := strings.Cut(dsn, "?")
-	if !found {
-		return dsn
-	}
-	return base + "?***"
 }
 
 // DatabaseStats provides performance and connection statistics

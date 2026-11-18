@@ -141,6 +141,30 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 		})
 	}
 
+	// "postgresql://127.0.0.1:1/inline_pw@127.0.0.1/shelly" parses with a numeric
+	// port and "inline_pw@127.0.0.1/shelly" as the database name, which the driver
+	// prints in its connect error. A database name is one segment without '@'.
+	for name, cfg := range map[string]DatabaseConfig{
+		"both keys unset": {},
+		"both keys set":   {Username: "shelly", Password: trickyPassword},
+	} {
+		for dsnName, dsn := range map[string]string{
+			"numeric prefix":  "postgresql://127.0.0.1:1/inline_pw@127.0.0.1/shelly",
+			"two segments":    "postgresql://db.example/shelly/inline_pw",
+			"blank in a name": "postgresql://db.example/shelly inline_pw",
+		} {
+			t.Run("a DSN with a "+dsnName+" is refused, "+name, func(t *testing.T) {
+				p := newCredentialProvider(cfg)
+
+				_, err := p.buildDSN(dsn, nil)
+
+				require.Error(t, err)
+				assert.NotContains(t, err.Error(), "inline_pw")
+				assert.Contains(t, err.Error(), "database name")
+			})
+		}
+	}
+
 	t.Run("a password without a username is refused", func(t *testing.T) {
 		p := newCredentialProvider(DatabaseConfig{Password: trickyPassword})
 
@@ -183,6 +207,8 @@ func TestPostgreSQLCredentials_ErrorsAndLogsHoldNoPassword(t *testing.T) {
 		"encoded key":             "postgresql://db.example:badport/shelly?pass%77ord=inline_pw",
 		"padded key":              "postgresql://db.example:badport/shelly? password =inline_pw",
 		"a slash in the password": "postgresql://app:inline_pw/tail@db.example/shelly",
+		"numeric prefix":          "postgresql://127.0.0.1:1/inline_pw@127.0.0.1/shelly",
+		"a newline in userinfo":   "postgresql://app:inline_pw\ntail@db.example/shelly",
 		"password after a hash":   "postgresql://db.example:badport/shelly?application_name=x#&password=inline_pw",
 	} {
 		t.Run("a DSN that cannot be built, with "+name, func(t *testing.T) {
@@ -209,6 +235,18 @@ func TestPostgreSQLSanitizeError_Password(t *testing.T) {
 			msg:  "dial failed near " + strings.Join(passwordForms(trickyPassword), " then "),
 			cfg:  DatabaseConfig{Username: "shelly", Password: trickyPassword},
 			gone: passwordForms(trickyPassword),
+		},
+		{
+			name: "the password of the DSN userinfo, in an unkeyed position",
+			msg:  "dial failed near hunterTwo99 and elsewhere",
+			cfg:  DatabaseConfig{DSN: "postgresql://app:hunterTwo99@db.example/shelly"},
+			gone: []string{"hunterTwo99"},
+		},
+		{
+			name: "the password of a DSN query parameter, in an unkeyed position",
+			msg:  "dial failed near hunterThree77 and elsewhere",
+			cfg:  DatabaseConfig{DSN: "postgresql://db.example/shelly?password=hunterThree77"},
+			gone: []string{"hunterThree77"},
 		},
 		{
 			name: "a keyed value starting with s",
@@ -270,27 +308,33 @@ func TestDatabaseConfig_StringMasksSecrets(t *testing.T) {
 		"padded password parameter":  "postgresql://db.example/shelly? password =inline_pw",
 		"padded sslpassword":         "postgresql://db.example/shelly? sslpassword =inline_pw",
 		"password after a hash":      "postgresql://db.example/shelly?application_name=x#&password=inline_pw",
+		"query password holding @":   "postgresql://db.example/shelly?password=prefix@inline_pw",
+		"newline in the userinfo":    "postgresql://app:inline_pw\ntail@db.example/shelly",
+		"numeric prefix":             "postgresql://127.0.0.1:1/inline_pw@127.0.0.1/shelly",
+		"mysql form":                 "app:inline_pw@tcp(db.example:3306)/shelly",
 	} {
-		t.Run(name, func(t *testing.T) {
-			cfg := DatabaseConfig{Provider: "postgresql", DSN: dsn, Username: "shelly", Password: trickyPassword}
+		for _, provider := range []string{"postgresql", "mysql", ""} {
+			t.Run(name+" as "+provider, func(t *testing.T) {
+				cfg := DatabaseConfig{Provider: provider, DSN: dsn, Username: "shelly", Password: trickyPassword}
 
-			for how, got := range map[string]string{
-				"%v value":    fmt.Sprintf("%v", cfg),
-				"%+v value":   fmt.Sprintf("%+v", cfg),
-				"%v pointer":  fmt.Sprintf("%v", &cfg),
-				"%+v pointer": fmt.Sprintf("%+v", &cfg),
-				"String()":    cfg.String(),
-			} {
-				assertNoPassword(t, got, trickyPassword)
-				assert.NotContains(t, got, "inline_pw", how)
-				assert.Contains(t, got, "db.example", "the host stays readable: "+how)
-			}
-		})
+				for how, got := range map[string]string{
+					"%v value":    fmt.Sprintf("%v", cfg),
+					"%+v value":   fmt.Sprintf("%+v", cfg),
+					"%v pointer":  fmt.Sprintf("%v", &cfg),
+					"%+v pointer": fmt.Sprintf("%+v", &cfg),
+					"String()":    cfg.String(),
+				} {
+					assertNoPassword(t, got, trickyPassword)
+					assert.NotContains(t, got, "inline_pw", how)
+					assert.NotContains(t, got, "db.example", "no part of a network DSN is printed: "+how)
+				}
+			})
+		}
 	}
 
-	t.Run("a DSN without a query prints as it is", func(t *testing.T) {
-		cfg := DatabaseConfig{Provider: "postgresql", DSN: "postgresql://db.example/shelly"}
+	t.Run("a SQLite DSN is a path and prints as it is", func(t *testing.T) {
+		cfg := DatabaseConfig{Provider: "sqlite", DSN: "data/shelly.db"}
 
-		assert.Contains(t, cfg.String(), "postgresql://db.example/shelly")
+		assert.Contains(t, cfg.String(), "data/shelly.db")
 	})
 }
