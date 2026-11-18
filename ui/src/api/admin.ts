@@ -1,4 +1,5 @@
 import api from './client'
+import { setAdminKey } from './adminKey'
 import type { APIResponse } from './types'
 
 export async function rotateAdminKey(newKey: string): Promise<boolean> {
@@ -6,8 +7,8 @@ export async function rotateAdminKey(newKey: string): Promise<boolean> {
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.error?.message || 'Failed to rotate admin key')
   }
-  // Update runtime key for subsequent calls
-  ;(window as any).__ADMIN_KEY__ = newKey
+  // The new key is what the next request and the metrics socket send
+  setAdminKey(newKey)
   return !!res.data.data.rotated
 }
 
