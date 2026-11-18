@@ -15,7 +15,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | `/metrics/*` | Metrics and monitoring endpoints |
 
 **Admin key.** If the server has an admin key configured (`security.admin_api_key`), every `/api/v1` route
-needs it, as `Authorization: Bearer <key>` or `X-API-Key: <key>`, and answers 401 `UNAUTHORIZED` without it.
+(the CORS `OPTIONS` preflight answer aside) needs it, as `Authorization: Bearer <key>` or `X-API-Key: <key>`, and answers 401 `UNAUTHORIZED` without it.
 Two routes stay open by design: `GET /api/v1/version` and `GET /api/v1/metrics/prometheus` (the scrape
 endpoint). The device and tag routes, the notification routes, the export plugin reads,
 `GET /api/v1/provisioning/status` and `GET /api/v1/dhcp/reservations` need the key too
