@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -85,10 +86,35 @@ func (c DatabaseConfig) String() string {
 	} else if strings.EqualFold(strings.TrimSpace(c.Provider), "mysql") {
 		c.DSN = mysqlUserinfo.ReplaceAllString(c.DSN, "***@")
 	}
+	c.DSN = maskQueryPasswords(c.DSN)
 	if c.Password != "" {
 		c.Password = "***"
 	}
 	return fmt.Sprintf("%+v", plain(c))
+}
+
+// maskQueryPasswords masks the value of a password or sslpassword query
+// parameter. The key is compared after decoding, so "pass%77ord" is caught.
+func maskQueryPasswords(dsn string) string {
+	base, query, found := strings.Cut(dsn, "?")
+	if !found {
+		return dsn
+	}
+	pairs := strings.Split(query, "&")
+	for i, pair := range pairs {
+		rawKey, _, hasValue := strings.Cut(pair, "=")
+		if !hasValue {
+			continue
+		}
+		key := rawKey
+		if decoded, err := url.QueryUnescape(rawKey); err == nil {
+			key = decoded
+		}
+		if k := strings.ToLower(key); k == "password" || k == "sslpassword" {
+			pairs[i] = rawKey + "=***"
+		}
+	}
+	return base + "?" + strings.Join(pairs, "&")
 }
 
 // DatabaseStats provides performance and connection statistics
