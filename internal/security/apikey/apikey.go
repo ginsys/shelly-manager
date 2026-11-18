@@ -3,22 +3,39 @@
 package apikey
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 	"strings"
 )
 
-// Equal reports whether presented is the configured key. It compares SHA-256 digests in constant time,
-// so neither the position of the first wrong byte nor a length difference shows in the timing. An unset
-// key (empty) never matches, so an empty credential cannot pass a guard whose key is unset.
+// macKey is random for each process. Both sides of a compare are MACed with it, so the two values that
+// reach subtle.ConstantTimeCompare always have the same length.
+var macKey = func() []byte {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic("apikey: no random bytes: " + err.Error())
+	}
+	return b
+}()
+
+func mac(s string) []byte {
+	m := hmac.New(sha256.New, macKey)
+	m.Write([]byte(s))
+	return m.Sum(nil)
+}
+
+// Equal reports whether presented is the configured key. It compares fixed-length HMACs in constant time,
+// so neither the position of the first wrong byte nor a length difference shows in the timing. The HMAC
+// is a length equalizer, not password storage. An unset key (empty) never matches, so an empty
+// credential cannot pass a guard whose key is unset.
 func Equal(presented, key string) bool {
 	if key == "" {
 		return false
 	}
-	p := sha256.Sum256([]byte(presented))
-	k := sha256.Sum256([]byte(key))
-	return subtle.ConstantTimeCompare(p[:], k[:]) == 1
+	return subtle.ConstantTimeCompare(mac(presented), mac(key)) == 1
 }
 
 // Authorized reports whether the request carries one of keys, as `Authorization: Bearer <key>` or
