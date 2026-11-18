@@ -3,6 +3,7 @@ package configuration
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -191,56 +192,116 @@ func channelIDs(list reflect.Value) ([]int, bool) {
 	return ids, true
 }
 
-// pairChannels returns, for each channel of src, its position in the list that merging src into dst
-// gives: the position of the channel with the same id in dst, or the next position after the end of
-// dst for a channel dst lacks. It reports false for a list that cannot be paired by id.
-func pairChannels(dst, src reflect.Value) ([]int, bool) {
+// channelLayout is where the channels stand in the list that merging src into dst gives: the final
+// position of each channel of dst and of src, and the final length. The merge and the removal paths
+// of a PATCH both read it, so they cannot disagree on where a channel went.
+type channelLayout struct {
+	dst, src []int
+	size     int
+}
+
+// pairChannels lays out the list that merging src into dst gives. A channel pairs with the channel of
+// the same id in dst. A channel dst lacks goes in front of the first channel of dst with a higher id,
+// or at the end when there is none, so a list in id order stays in id order, which the Gen1 apply
+// requires (id equals position). A channel that is already in dst never moves. An empty dst takes src
+// as it is. It reports false for a list that cannot be paired by id.
+func pairChannels(dst, src reflect.Value) (channelLayout, bool) {
 	dstIDs, ok := channelIDs(dst)
 	if !ok {
-		return nil, false
+		return channelLayout{}, false
 	}
 	srcIDs, ok := channelIDs(src)
 	if !ok {
-		return nil, false
+		return channelLayout{}, false
 	}
 
-	at := make(map[int]int, len(dstIDs)+len(srcIDs))
-	for i, id := range dstIDs {
-		at[id] = i
+	order := slices.Clone(dstIDs)
+	if len(order) == 0 {
+		order = slices.Clone(srcIDs)
 	}
-
-	positions := make([]int, len(srcIDs))
-	for i, id := range srcIDs {
-		pos, found := at[id]
-		if !found {
-			pos = len(at)
-			at[id] = pos
+	for _, id := range srcIDs {
+		if slices.Contains(order, id) {
+			continue
 		}
-		positions[i] = pos
+		at := slices.IndexFunc(order, func(other int) bool { return other > id })
+		if at < 0 {
+			at = len(order)
+		}
+		order = slices.Insert(order, at, id)
 	}
-	return positions, true
+
+	position := make(map[int]int, len(order))
+	for i, id := range order {
+		position[id] = i
+	}
+	layout := channelLayout{dst: make([]int, len(dstIDs)), src: make([]int, len(srcIDs)), size: len(order)}
+	for i, id := range dstIDs {
+		layout.dst[i] = position[id]
+	}
+	for i, id := range srcIDs {
+		layout.src[i] = position[id]
+	}
+	return layout, true
 }
 
 // mergeChannelsByID merges a list of channels by id, so that a sparse layer that names channel 1
-// changes channel 1 and never the first channel of the list. A channel the destination lacks is
-// appended as a copy. It reports false, and changes nothing, for a list it cannot pair by id; the
-// caller then merges by position.
+// changes channel 1 and never the first channel of the list. A channel the destination lacks is added
+// as a copy, in id order (pairChannels). It reports false, and changes nothing, for a list it cannot
+// pair by id; the caller then merges by position.
 func mergeChannelsByID(dstField, srcField reflect.Value, sources map[string]string, sourceName, fieldPath string) bool {
-	positions, ok := pairChannels(dstField, srcField)
+	layout, ok := pairChannels(dstField, srcField)
 	if !ok {
 		return false
 	}
 	srcIDs, _ := channelIDs(srcField)
 
-	for i, pos := range positions {
-		if pos == dstField.Len() {
-			dstField.Set(reflect.Append(dstField, reflect.Zero(dstField.Type().Elem())))
-		}
+	placed := reflect.MakeSlice(dstField.Type(), layout.size, layout.size)
+	for i, pos := range layout.dst {
+		placed.Index(pos).Set(dstField.Index(i))
+	}
+	dstField.Set(placed)
+	// The sources already recorded move with their channels first, so that the keys this layer writes
+	// below are not moved a second time.
+	moveChannelSources(sources, fieldPath, layout.dst)
+
+	for i, pos := range layout.src {
 		elemPath := fieldPath + "." + strconv.Itoa(pos)
 		mergeStructs(dstField.Index(pos), cloneValue(srcField.Index(i)), sources, sourceName, elemPath)
 		dstField.Index(pos).FieldByName("ID").SetInt(int64(srcIDs[i]))
 	}
 	return true
+}
+
+// moveChannelSources renames the source keys of the channels of the list at listPath, whose channel i
+// now stands at moved[i], including the keys an earlier layer wrote. Every move is collected before
+// any key is deleted or set, so that a channel moving from 1 to 2 and one from 2 to 3 do not overwrite
+// each other. A key matches only on the whole index: channel 1 never matches channel 10.
+func moveChannelSources(sources map[string]string, listPath string, moved []int) {
+	type move struct{ from, to, source string }
+	var moves []move
+	prefix := listPath + "."
+	for key, source := range sources {
+		rest, ok := strings.CutPrefix(key, prefix)
+		if !ok {
+			continue
+		}
+		index, tail, _ := strings.Cut(rest, ".")
+		n, err := strconv.Atoi(index)
+		if err != nil || n < 0 || n >= len(moved) || moved[n] == n {
+			continue
+		}
+		to := prefix + strconv.Itoa(moved[n])
+		if tail != "" {
+			to += "." + tail
+		}
+		moves = append(moves, move{key, to, source})
+	}
+	for _, m := range moves {
+		delete(sources, m.from)
+	}
+	for _, m := range moves {
+		sources[m.to] = m.source
+	}
 }
 
 // remapChannelPaths turns the paths of a patch body into paths of the configuration that merging
@@ -264,8 +325,8 @@ func remapChannelPaths(paths [][]string, existing, patch *DeviceConfiguration) [
 		patchInputs = patch.Input.Inputs
 	}
 
-	relayAt, _ := pairChannels(reflect.ValueOf(existingRelays), reflect.ValueOf(patchRelays))
-	inputAt, _ := pairChannels(reflect.ValueOf(existingInputs), reflect.ValueOf(patchInputs))
+	relayLayout, _ := pairChannels(reflect.ValueOf(existingRelays), reflect.ValueOf(patchRelays))
+	inputLayout, _ := pairChannels(reflect.ValueOf(existingInputs), reflect.ValueOf(patchInputs))
 
 	remapped := make([][]string, len(paths))
 	for i, path := range paths {
@@ -276,9 +337,9 @@ func remapChannelPaths(paths [][]string, existing, patch *DeviceConfiguration) [
 		var positions []int
 		switch {
 		case strings.EqualFold(path[0], "relay") && strings.EqualFold(path[1], "relays"):
-			positions = relayAt
+			positions = relayLayout.src
 		case strings.EqualFold(path[0], "input") && strings.EqualFold(path[1], "inputs"):
-			positions = inputAt
+			positions = inputLayout.src
 		}
 		index, err := strconv.Atoi(path[2])
 		if err != nil || index < 0 || index >= len(positions) {

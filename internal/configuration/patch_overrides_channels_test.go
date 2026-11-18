@@ -76,6 +76,19 @@ func TestPatchDeviceOverrides_NullOnAnInputFollowsItsId(t *testing.T) {
 	assert.Nil(t, got.Input.Inputs[1].Name)
 }
 
+// A channel the patch adds in front of a stored one moves the stored one, and the null follows the
+// stored channel to its new place: it removes the name of channel 2 and leaves channel 1's.
+func TestPatchDeviceOverrides_NullFollowsTheChannelThatAnInsertMoved(t *testing.T) {
+	got := patchOverrides(t, storedRelays(SingleRelayConfig{ID: 2, Name: StringPtr("C")}),
+		`{"relay":{"relays":[{"id":2,"name":null},{"id":1,"name":"A"}]}}`)
+
+	require.Len(t, got.Relay.Relays, 2)
+	assert.Equal(t, 1, got.Relay.Relays[0].ID)
+	assert.Equal(t, StringPtr("A"), got.Relay.Relays[0].Name)
+	assert.Equal(t, 2, got.Relay.Relays[1].ID)
+	assert.Nil(t, got.Relay.Relays[1].Name)
+}
+
 // A stored list that repeats an id (here 1 twice; ids 0 and 0 would read as 0 and 1) is merged by
 // position, so a null keeps the position it had.
 func TestPatchDeviceOverrides_NullKeepsItsPositionWhenTheMergeFallsBackToPosition(t *testing.T) {
