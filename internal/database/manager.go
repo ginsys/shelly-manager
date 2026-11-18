@@ -451,6 +451,14 @@ func (m *Manager) updateDeviceColumns(id uint, operation string, columns map[str
 		}
 		return nil
 	}
+	// Every attempt lost to another writer, or the row went after the last read: tell them apart.
+	var found int64
+	if err := m.GetDB().Model(&Device{}).Where("id = ?", id).Count(&found).Error; err != nil {
+		return err
+	}
+	if found == 0 {
+		return gorm.ErrRecordNotFound
+	}
 	return ErrDeviceVersionChanged
 }
 

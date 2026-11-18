@@ -74,10 +74,14 @@ func checkColumnScopedWrites(t *testing.T, manager *Manager) {
 		assert.True(t, got.UpdatedAt.After(before.UpdatedAt), "updated_at did not move from %v to %v", before.UpdatedAt, got.UpdatedAt)
 	})
 
-	// Writes that follow each other at once must each move the version past the one before, and a PUT
-	// that read the row between two of them must meet a conflict. MySQL keeps milliseconds, so the
-	// clock alone can repeat a stored value: no sleep here.
-	t.Run("rapid writes move the version each time", func(t *testing.T) {
+	// Each write must move the version past the one stored, and a PUT that read the row before a write
+	// must meet a conflict. The clock alone can repeat a stored value inside one millisecond on MySQL,
+	// and a test cannot force that, so the stored version is put ahead of the clock: a write that sets
+	// updated_at from the clock then lands before it.
+	t.Run("a write moves the version past the stored one", func(t *testing.T) {
+		ahead := time.Now().Add(time.Hour).Truncate(time.Millisecond)
+		require.NoError(t, manager.GetDB().Model(&Device{}).Where("id = ?", device.ID).
+			UpdateColumn("updated_at", ahead).Error)
 		for i := 0; i < 5; i++ {
 			before, getErr := manager.GetDevice(device.ID)
 			require.NoError(t, getErr)
