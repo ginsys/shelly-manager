@@ -344,6 +344,10 @@ commit_all c
 check BASE_REF=develop HEAD_REF_NAME=fix/9-a
 eq "check: BASE_REF selects another base (exit 0)" 0 "$RC"
 
+# A release PR (made by changelog-assemble.sh --write) has no fragment and adds
+# lines to CHANGELOG.md, so the check fails it; it carries the no-changelog label.
+# The check has no release exception of its own: it is advisory, releases are rare
+# and made by hand, and every exception it tried to verify had a hole.
 newfx check-release
 frag 3-a.md Added '- Add a.'
 commit_all frags
@@ -352,73 +356,9 @@ prbranch chore/release
 (cd "$FX" && CHANGELOG_DATE=2026-01-02 bash scripts/changelog-assemble.sh --write 1.2.3 >/dev/null 2>&1)
 commit_all release
 check HEAD_REF_NAME=chore/release
-eq "check: the assemble commit passes (exit 0)" 0 "$RC"
-has "check: it says it is a release commit" "release commit" "$OUT"
-
-# A release commit must show each deleted fragment's entry in CHANGELOG.md, under
-# a full version heading. A heading alone, or an incomplete one, is no release.
-newfx check-release-discards
-frag 3-a.md Added '- Add a. Refs owner/repo#3.'
-commit_all frags
-(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
-prbranch chore/release2
-(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1.2.3] - 2026-01-02/' CHANGELOG.md)
-commit_all discards
-check HEAD_REF_NAME=chore/release2
-eq "check: a full heading but a discarded entry is not a release (exit 1)" 1 "$RC"
-
-# The entry must arrive as one block, in order: its lines matched one by one would
-# let another bullet split a bullet from its continuation.
-newfx check-release-split-entry
-printf 'Fixed\n- Enable retry handling.\n  Only for idempotent requests. Fixes owner/repo#3.\n' >"$FX/changelog.d/3-a.md"
-commit_all frags
-(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
-prbranch chore/release5
-(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1.2.3] - 2026-01-02\n\n### Fixed\n- Enable retry handling.\n- Another bullet.\n  Only for idempotent requests. Fixes owner\/repo#3./' CHANGELOG.md)
-commit_all split
-check HEAD_REF_NAME=chore/release5
-eq "check: an entry split by another bullet is not a release (exit 1)" 1 "$RC"
-
-newfx check-release-multiline
-printf 'Fixed\n- Enable retry handling.\n  Only for idempotent requests. Fixes owner/repo#3.\n' >"$FX/changelog.d/3-a.md"
-printf 'Added\n- Second entry. Refs owner/repo#4.\n' >"$FX/changelog.d/4-b.md"
-commit_all frags
-(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
-prbranch chore/release6
-(cd "$FX" && CHANGELOG_DATE=2026-01-02 bash scripts/changelog-assemble.sh --write 1.2.3 >/dev/null 2>&1)
-commit_all release
-check HEAD_REF_NAME=chore/release6
-eq "check: a real release of multi-line entries passes (exit 0)" 0 "$RC"
-
-newfx check-release-short-heading
-frag 3-a.md Added '- Add a. Refs owner/repo#3.'
-commit_all frags
-(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
-prbranch chore/release3
-(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1\n- Add a. Refs owner\/repo#3./' CHANGELOG.md)
-commit_all short
-check HEAD_REF_NAME=chore/release3
-eq "check: an incomplete heading is not a release (exit 1)" 1 "$RC"
-
-newfx check-release-invalid-deleted
-printf 'Feature\n- Odd. Refs owner/repo#3.\n' >"$FX/changelog.d/3-a.md"
-commit_all frags
-(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
-prbranch chore/release4
-(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1.2.3] - 2026-01-02\n- Odd. Refs owner\/repo#3./' CHANGELOG.md)
-commit_all odd
-check HEAD_REF_NAME=chore/release4
-eq "check: a deleted fragment that was invalid is not a release (exit 1)" 1 "$RC"
-
-newfx check-fake-release
-frag 3-a.md Added '- Add a.'
-commit_all frags
-(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
-prbranch fix/10-a
-(cd "$FX" && git rm -q changelog.d/3-a.md)
-commit_all removal
-check HEAD_REF_NAME=fix/10-a
-eq "check: deleting a fragment without a version heading is not a release (exit 1)" 1 "$RC"
+eq "check: a release PR without the label fails (exit 1)" 1 "$RC"
+check HEAD_REF_NAME=chore/release PR_NO_CHANGELOG=true
+eq "check: a release PR with the label no-changelog skips (exit 0)" 0 "$RC"
 
 # ------------------------------------------------- the acceptance: two PRs
 
