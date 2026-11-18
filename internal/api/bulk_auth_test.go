@@ -15,7 +15,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
-// TestBulkConfigEndpoints_RequireAdmin verifies that the four bulk-config
+// TestBulkConfigEndpoints_RequireAdmin verifies that the three bulk-config
 // endpoints reject unauthenticated callers when an admin key is configured, and
 // crucially that a rejected request contacts no device (#245: these routes push
 // stored config to every physical device, so the gate must run before any I/O).
@@ -61,13 +61,11 @@ func TestBulkConfigEndpoints_RequireAdmin(t *testing.T) {
 	r := mux.NewRouter()
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.HandleFunc("/config/bulk-import", h.BulkImportConfigs).Methods("POST")
-	api.HandleFunc("/config/bulk-export", h.BulkExportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect", h.BulkDetectConfigDrift).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect-enhanced", h.EnhancedBulkDetectConfigDrift).Methods("POST")
 
 	routes := []string{
 		"/api/v1/config/bulk-import",
-		"/api/v1/config/bulk-export",
 		"/api/v1/config/bulk-drift-detect",
 		"/api/v1/config/bulk-drift-detect-enhanced",
 	}

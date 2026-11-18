@@ -1260,24 +1260,6 @@ func (s *ShellyService) UpdateDeviceAuth(deviceID uint, username, password strin
 	return nil
 }
 
-// ExportDeviceConfig exports configuration to a physical device
-func (s *ShellyService) ExportDeviceConfig(deviceID uint) error {
-	// Get device from database
-	device, err := s.DB.GetDevice(deviceID)
-	if err != nil {
-		return fmt.Errorf("device not found: %w", err)
-	}
-
-	// Get or create client with auth retry
-	client, err := s.getClientWithAuthRetry(device)
-	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
-	}
-
-	// Export configuration
-	return s.ConfigSvc.ExportToDevice(deviceID, client)
-}
-
 // DetectConfigDrift checks for configuration drift on a device
 func (s *ShellyService) DetectConfigDrift(deviceID uint) (*configuration.ConfigDrift, error) {
 	// Get device from database

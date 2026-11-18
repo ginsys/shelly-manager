@@ -10,7 +10,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/configuration"
 )
 
-// The four bulk config routes (bulk-import, bulk-export, bulk-drift-detect and
+// The three bulk config routes (bulk-import, bulk-drift-detect and
 // bulk-drift-detect-enhanced) act on the devices the request names and on no others. The body is
 //
 //	{"device_ids": [1, 2, 3], "options": {"stop_on_error": false}}

@@ -61,12 +61,6 @@ Device Level (Physical Device)
 config, err := configService.ImportFromDevice(deviceID)
 ```
 
-### Export Configuration
-```go
-// Export configuration from database to device
-err := configService.ExportToDevice(deviceID, configID)
-```
-
 ### Detect Drift
 ```go
 // Check if device configuration matches database

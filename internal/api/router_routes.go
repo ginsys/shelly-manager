@@ -53,7 +53,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/energy", handler.GetDeviceEnergy).Methods("GET")
 
 	// admin guards a route with the admin key. Every configuration route uses it, except the
-	// bulk import, export and drift routes, whose handlers call requireAdmin themselves.
+	// bulk import and drift routes, whose handlers call requireAdmin themselves.
 	admin := handler.adminOnly
 
 	// Device configuration routes
@@ -64,7 +64,6 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/devices/{id}/config/typed/normalized", admin(handler.GetTypedDeviceConfigNormalized)).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/import", admin(handler.ImportDeviceConfig)).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/status", admin(handler.GetImportStatus)).Methods("GET")
-	api.HandleFunc("/devices/{id}/config/export", admin(handler.ExportDeviceConfig)).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/drift", admin(handler.DetectConfigDrift)).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/apply-template", admin(handler.ApplyConfigTemplate)).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/history", admin(handler.GetConfigHistory)).Methods("GET")
@@ -91,7 +90,6 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 
 	// Bulk configuration operations
 	api.HandleFunc("/config/bulk-import", handler.BulkImportConfigs).Methods("POST")
-	api.HandleFunc("/config/bulk-export", handler.BulkExportConfigs).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect", handler.BulkDetectConfigDrift).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect-enhanced", handler.EnhancedBulkDetectConfigDrift).Methods("POST")
 

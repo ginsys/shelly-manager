@@ -76,7 +76,7 @@ components:
         request_id:
           type: string
 
-    # Bulk configuration routes (bulk-import, bulk-export, bulk-drift-detect,
+    # Bulk configuration routes (bulk-import, bulk-drift-detect,
     # bulk-drift-detect-enhanced) act on the named devices only.
     BulkDeviceRequest:
       type: object
@@ -105,7 +105,7 @@ components:
 
     BulkConfigResult:
       type: object
-      description: Answer of bulk-import and bulk-export, in the `data` member.
+      description: Answer of bulk-import, in the `data` member.
       properties:
         total:
           type: integer
@@ -2086,41 +2086,6 @@ paths:
       responses:
         '200':
           description: Bulk import result; `data` is a BulkConfigResult
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIResponse'
-        '400':
-          description: No body, invalid JSON, no `device_ids`, a non-positive id, or a field or option the server does not read (VALIDATION_FAILED); no device is contacted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIResponse'
-
-  /api/v1/config/bulk-export:
-    post:
-      tags: [Configuration]
-      summary: Bulk export configurations
-      description: >-
-        Writes each named device's stored import/export configuration to the device, with the
-        same export as POST /api/v1/devices/{id}/config/export. It is not the desired
-        configuration: it takes no apply lock and never changes `config_applied` or
-        `pending_reboot`. A device whose answering MAC differs from its stored MAC, or that cannot
-        be identified (no stored MAC, no reported MAC), gets nothing and is `failed` in its own
-        result entry; the other devices are still exported.
-      operationId: bulkExportConfigs
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BulkDeviceRequest'
-      responses:
-        '200':
-          description: Bulk export result; `data` is a BulkConfigResult
           content:
             application/json:
               schema:
