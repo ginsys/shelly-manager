@@ -30,7 +30,7 @@ All notable changes to this project are documented here. The project follows Con
   apply changes neither its network nor its password), so the device keeps a way back; and switching an access point on
   needs a `wifi.ap.pass` in the same configuration, or a device that reports it closed, because a
   Shelly access point is open until it has a password. An access point that already runs open
-  is left open. A station network change on a device whose access point is off is not checked
+  needs no password to stay enabled, and is left open (a password in the configuration is still sent). A station network change on a device whose access point is off is not checked
   (the documented risk of a wrong static address). `roam.interval` is not written. Not confirmed
   on hardware (read from the Shelly Gen2 WiFi reference): every key, what `ap.enable` false
   does, and whether the access point shuts itself when the station connects. Fixes
