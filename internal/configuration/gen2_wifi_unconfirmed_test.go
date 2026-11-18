@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -298,4 +299,31 @@ func TestApplyDesiredConfig_Gen2ALostWriteAnswerWithNoNetworkChangeStaysAFailure
 	require.NoError(t, err)
 	assert.False(t, result.ApplyResult.Unconfirmed)
 	assert.NotEmpty(t, result.ApplyResult.Failures)
+}
+
+// RebootAndWait polls until the device answers. A device that keeps answering with errors is on
+// its network: the timeout must carry that answer, so a station change is not called unconfirmed.
+func TestRebootAndWait_KeepsTheAnswerOfADeviceThatNeverGetsReady(t *testing.T) {
+	client := newApplyTestClient()
+	client.testConnErr = deviceAnswer()
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	err := applier.RebootAndWait(context.Background(), client, 100*time.Millisecond)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "did not come back")
+	assert.True(t, deviceAnswered(err), "the last probe was answered by the device")
+	assert.False(t, stationUnanswered(&ApplyResult{stationMoves: true}, err, true))
+}
+
+func TestRebootAndWait_ASilentDeviceStaysUnanswered(t *testing.T) {
+	client := newApplyTestClient()
+	client.testConnErr = errNoRoute
+	applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+	err := applier.RebootAndWait(context.Background(), client, 100*time.Millisecond)
+
+	require.Error(t, err)
+	assert.False(t, deviceAnswered(err))
+	assert.True(t, stationUnanswered(&ApplyResult{stationMoves: true}, err, true))
 }
