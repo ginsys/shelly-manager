@@ -237,6 +237,11 @@ the provider carries no driver text at all.
   user and database it was sent.
 - The GORM log writer receives the same sealed errors, so the log holds nothing
   more than the returned error.
+- After `Connect` returns, the errors of the open connection (a rejected
+  statement, a dropped connection, a migration, a `Close`) are sealed the same
+  way, as `database operation failed: <kind>`: GORM is opened only through
+  `openGORM`, whose wrapped dialector and logger classify the error by type.
+  The constraint, record-not-found and context errors keep their identity.
 
 ```
 database connection failed: host name did not resolve

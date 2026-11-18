@@ -246,7 +246,7 @@ with a classification built from the error's type, never from its text.
 ```go
 connConfig, err := pgx.ParseConfig(dsn) // a refusal reports a fixed message
 sqlDB := sql.OpenDB(sealConnector(stdlib.GetConnector(*connConfig)))
-db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), gormConfig)
+db, err := openGORM(postgres.New(postgres.Config{Conn: sqlDB}), gormConfig)
 // ...
 // database connection failed: connection refused
 // database connection failed: the server rejected the connection (SQLSTATE 28P01, invalid password)
@@ -267,7 +267,16 @@ query for SQLite. An error of a connection that is already open (a reset on a
 unix socket quotes the socket path) does not pass through the connector, so
 `Connect` seals the errors of its own ping and version probe (`sealError`), `Ping`
 returns its error sealed, and GORM logs nothing until `Connect` has finished
-probing. Query errors after `Connect` returns are not sealed. The MySQL driver's own package logger, which writes a failed
+probing. The errors of an open connection are sealed too: a statement the
+server rejected, a transaction that could not begin, a migration, a `Close`.
+GORM is opened only through `openGORM` (`sealed_dialector.go`), whose wrapped
+dialector classifies every error GORM records by type and reports it as
+`database operation failed: <kind>` with the SQLSTATE where there is one, and
+whose wrapped logger does the same for the SQL trace line. The constraint
+errors callers test for (`gorm.ErrDuplicatedKey`, `gorm.ErrForeignKeyViolated`,
+`gorm.ErrRecordNotFound`) and the context errors keep their identity. The
+statement text of the trace is the application's own and is still logged at
+debug level, with its bound values filtered. The MySQL driver's own package logger, which writes a failed
 read with its socket or address to stderr, is silenced for the provider's
 connector.
 

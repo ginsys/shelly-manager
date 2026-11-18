@@ -102,7 +102,7 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 	sqlDB := sql.OpenDB(sealConnector(connector))
 
 	// Open database connection with the GORM MySQL dialector on that pool
-	db, err := gorm.Open(gormmysql.New(gormmysql.Config{Conn: sqlDB, DSNConfig: driverConfig}), gormConfig)
+	db, err := openGORM(gormmysql.New(gormmysql.Config{Conn: sqlDB, DSNConfig: driverConfig}), gormConfig)
 	if err != nil {
 		_ = sqlDB.Close()
 		sealed := sealError(err)
@@ -169,7 +169,7 @@ func (m *MySQLProvider) Close() error {
 	m.connected = false
 
 	if err != nil {
-		return fmt.Errorf("failed to close database: %w", err)
+		return fmt.Errorf("failed to close database: %w", sealOpenError(err))
 	}
 
 	m.logger.Info("Closed MySQL database connection")
@@ -535,7 +535,7 @@ func (m *MySQLProvider) createGormLogger() logger.Interface {
 		logLevel = logger.Warn
 	}
 
-	return logger.New(
+	return sealLogger(logger.New(
 		log.New(&gormLogWriter{logger: m.logger}, "", 0),
 		logger.Config{
 			SlowThreshold:             m.config.SlowQueryThreshold,
@@ -544,7 +544,7 @@ func (m *MySQLProvider) createGormLogger() logger.Interface {
 			ParameterizedQueries:      true, // keep bound values, such as device logins, out of the SQL log
 			Colorful:                  false,
 		},
-	)
+	))
 }
 
 // updateStats updates runtime database statistics
