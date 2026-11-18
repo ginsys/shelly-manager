@@ -2134,7 +2134,12 @@ paths:
     post:
       tags: [Drift]
       summary: Bulk drift detection with comprehensive reporting
-      description: The same selection and `stop_on_error` as bulk-drift-detect; the answer is the comprehensive drift report.
+      description: >-
+        The same selection and `stop_on_error` as bulk-drift-detect; the answer is the
+        comprehensive drift report, which covers the devices that ran. With `stop_on_error` the
+        devices after the first error are not contacted and are not in the report, so its totals
+        add up. If the report cannot be generated or stored, the call still answers 200 with the
+        BulkDriftResult of bulk-drift-detect (`data.total`, `data.results`) in its place.
       operationId: bulkDetectDriftEnhanced
       security:
         - BearerAuth: []
