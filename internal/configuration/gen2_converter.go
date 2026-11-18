@@ -255,8 +255,8 @@ func (c *Gen2Converter) ToAPIConfig(config *DeviceConfiguration, _ string) (json
 	}
 	gen2ChannelsToDoc(config, doc)
 	if config.WiFi != nil {
-		if sta := gen2WiFiToDoc(config.WiFi); len(sta) > 0 {
-			doc["wifi"] = map[string]interface{}{"sta": sta}
+		if wifi := gen2WiFiToDoc(config.WiFi); len(wifi) > 0 {
+			doc["wifi"] = wifi
 		}
 	}
 	return json.Marshal(doc)

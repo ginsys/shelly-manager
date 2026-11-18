@@ -44,9 +44,10 @@ type gen2Write struct {
 }
 
 // gen2WritesOf lists the calls an apply makes, in order: the fixed sections, then each input, then
-// each switch, by id, then the Wi-Fi station. An input comes before the switch it drives, because
-// the type of the input must be set before the in_mode of the switch (follow and flip need an
-// input that has a state). The station comes last: the device reconnects about a second after it.
+// each switch, by id, then the Wi-Fi access point, roaming and station. An input comes before the
+// switch it drives, because the type of the input must be set before the in_mode of the switch
+// (follow and flip need an input that has a state). The station comes last: the device reconnects
+// about a second after it, and an access point switched on is on before the station moves.
 func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
 	var writes []gen2Write
 	for _, section := range gen2Sections {
@@ -62,8 +63,10 @@ func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
 			}
 		}
 	}
-	if sta := gen2WiFiStation(apiConfig); len(sta) > 0 {
-		writes = append(writes, gen2Write{key: "wifi.sta", method: "WiFi.SetConfig", params: map[string]interface{}{"config": map[string]interface{}{"sta": sta}}, body: sta})
+	for _, part := range []string{"ap", "roam", "sta"} {
+		if keys := gen2WiFiPart(apiConfig, part); len(keys) > 0 {
+			writes = append(writes, gen2Write{key: "wifi." + part, method: "WiFi.SetConfig", params: map[string]interface{}{"config": map[string]interface{}{part: keys}}, body: keys})
+		}
 	}
 	return writes
 }
@@ -334,6 +337,9 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 	}
 	if secret == "" {
 		secret, _ = gen2WiFiStation(apiConfig)["pass"].(string)
+	}
+	if secret == "" {
+		secret, _ = gen2WiFiPart(apiConfig, "ap")["pass"].(string)
 	}
 	for _, section := range gen2WritesOf(apiConfig) {
 		leaves := gen2Leaves(section.key, section.body)

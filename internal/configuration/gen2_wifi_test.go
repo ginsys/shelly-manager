@@ -58,8 +58,12 @@ func TestGen2Converter_ReadsTheWiFiStation(t *testing.T) {
 	assert.Equal(t, "192.168.1.1", *got.WiFi.StaticIP.Gateway)
 	assert.Equal(t, "192.168.1.2", *got.WiFi.StaticIP.Nameserver)
 	assert.Nil(t, got.WiFi.Password, "the device never returns the password")
-	assert.Nil(t, got.WiFi.AccessPoint, "the access point is not read")
-	assert.Nil(t, got.WiFi.RoamThreshold, "roaming is not read")
+	require.NotNil(t, got.WiFi.AccessPoint)
+	assert.True(t, *got.WiFi.AccessPoint.Enable)
+	assert.Equal(t, "ShellyPlus2PM-A8032AB636EC", *got.WiFi.AccessPoint.SSID)
+	assert.Nil(t, got.WiFi.AccessPoint.Password, "the device never returns the access point password")
+	require.NotNil(t, got.WiFi.RoamThreshold)
+	assert.Equal(t, -80, *got.WiFi.RoamThreshold)
 }
 
 // A null address is an unset one, so a DHCP station has no static address.
@@ -245,10 +249,9 @@ func TestApplyDesiredConfig_Gen2RefusesWiFiSettingsItCannotWrite(t *testing.T) {
 		wifi *WiFiConfiguration
 		path string
 	}{
-		"access point enable": {&WiFiConfiguration{AccessPoint: &AccessPointConfig{Enable: BoolPtr(true)}}, "wifi.ap.enable"},
-		"access point ssid":   {&WiFiConfiguration{AccessPoint: &AccessPointConfig{SSID: StringPtr("lamp-ap")}}, "wifi.ap.ssid"},
-		"access point pass":   {&WiFiConfiguration{AccessPoint: &AccessPointConfig{Password: StringPtr("ap-pass-1234")}}, "wifi.ap.pass"},
-		"roam threshold":      {&WiFiConfiguration{RoamThreshold: IntPtr(-70)}, "wifi.roam_threshold"},
+		// The Gen2 access point has one secret, pass. The key field has no Gen2 meaning.
+		"access point key":       {&WiFiConfiguration{AccessPoint: &AccessPointConfig{Key: StringPtr("ap-pass-1234")}}, "wifi.ap.key"},
+		"access point key, ssid": {&WiFiConfiguration{AccessPoint: &AccessPointConfig{Key: StringPtr("ap-pass-1234"), SSID: StringPtr("lamp-ap")}}, "wifi.ap.key"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
