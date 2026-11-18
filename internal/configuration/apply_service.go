@@ -373,7 +373,8 @@ func unsupportedInputs(desired *DeviceConfiguration, deviceType string) []string
 // meanwhile, so a partial, failed or outdated apply stays pending.
 //
 // The applied flag is cleared before the first write, so a failed re-apply of a previously
-// applied device reports pending, not applied.
+// applied device reports pending, not applied. Before that, the device's MAC is read and compared
+// with the stored one (ErrDeviceIdentity): a refusal writes nothing and changes no flag.
 func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID uint, client ShellyClient, deviceType string) (*ApplyVerifyResult, error) {
 	converter, check, err := s.applyPathFor(client, s.loginHooks != nil)
 	if err != nil {
@@ -410,6 +411,22 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedSettings, strings.Join(unsupported, ", "))
 	}
 
+	if hooks != nil {
+		// The client handed in may predate a login that an apply queued ahead of this one
+		// changed, so the lock holder builds its own from the stored login.
+		fresh, clientErr := hooks.Client(ctx, deviceID)
+		if clientErr != nil {
+			return nil, fmt.Errorf("could not build a client for the device: %w", clientErr)
+		}
+		client = fresh
+	}
+
+	// Before anything is marked or written, read who answers through the client that writes: a
+	// stale address can lead to another device, and a refusal here leaves every stored flag as it was.
+	if err = checkDeviceIdentity(ctx, client, device.MAC); err != nil {
+		return nil, err
+	}
+
 	if err = s.repo.SetDeviceConfigApplied(deviceID, false); err != nil {
 		return nil, fmt.Errorf("could not mark configuration pending before applying: %w", err)
 	}
@@ -419,14 +436,6 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 		return s.repo.SetDevicePendingReboot(deviceID, pending)
 	})
 	if hooks != nil {
-		// The client handed in may predate a login that an apply queued ahead of this one
-		// changed, so the lock holder builds its own from the stored login.
-		fresh, clientErr := hooks.Client(ctx, deviceID)
-		if clientErr != nil {
-			return nil, fmt.Errorf("could not build a client for the device: %w", clientErr)
-		}
-		client = fresh
-
 		// Order on success: the device accepted the write, then the new credentials are stored,
 		// then the client is rebuilt. A failed write reaches none of it.
 		verifier.WithLogin(func(ctx context.Context, client ShellyClient, change LoginChange) (ShellyClient, error) {

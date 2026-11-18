@@ -26,6 +26,11 @@ type applyTestClient struct {
 	configs     []map[string]interface{}
 	currentRaw  json.RawMessage
 
+	// Identity surface: what GetInfo reports. infoErr fails the read, infoNil answers (nil, nil).
+	mac     string
+	infoErr error
+	infoNil bool
+
 	// Login surface (LoginSettingsClient): POST /settings/login. order records "config" and
 	// "login" writes in the sequence they arrive.
 	loginWrites []loginWrite
@@ -96,9 +101,14 @@ func (m *applyTestClient) GetRelaySettings(ctx context.Context, channel int) (ma
 	return echo, nil
 }
 
+// testDeviceMAC is the MAC every fake device reports and every test record stores, so a test that
+// does not care about identity applies as before. The identity tests change one side.
+const testDeviceMAC = "AABBCCDDEEFF"
+
 func newApplyTestClient() *applyTestClient {
 	return &applyTestClient{
 		ip:         "192.168.1.100",
+		mac:        testDeviceMAC,
 		generation: 1,
 		configs:    []map[string]interface{}{},
 		currentRaw: json.RawMessage(`{"name":"test"}`),
@@ -151,8 +161,15 @@ func (m *applyTestClient) GetConfig(ctx context.Context) (*shelly.DeviceConfig, 
 }
 
 func (m *applyTestClient) GetInfo(ctx context.Context) (*shelly.DeviceInfo, error) {
+	if m.infoErr != nil {
+		return nil, m.infoErr
+	}
+	if m.infoNil {
+		return nil, nil
+	}
 	return &shelly.DeviceInfo{
 		ID:         "test-device",
+		MAC:        m.mac,
 		Generation: m.generation,
 	}, nil
 }

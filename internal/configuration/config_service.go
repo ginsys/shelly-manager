@@ -33,7 +33,10 @@ type ServiceConfigTemplate struct {
 }
 
 type ServiceDevice struct {
-	ID            uint   `json:"id"`
+	ID uint `json:"id"`
+	// MAC is the stored hardware address, in whatever spelling it was entered. Apply compares it
+	// with the MAC the device reports before it writes anything.
+	MAC           string `json:"mac"`
 	TemplateIDs   string `json:"template_ids"`
 	Overrides     string `json:"overrides"`
 	DesiredConfig string `json:"desired_config"`

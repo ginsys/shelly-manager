@@ -910,7 +910,8 @@ func (h *Handler) ExportDeviceConfig(w http.ResponseWriter, r *http.Request) {
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to export device config")
-		h.responseWriter().WriteInternalError(w, r, err)
+		// An identity refusal answers 409 and a rejected login 502; every other error stays 500.
+		h.writeConfigDeviceError(w, r, err)
 		return
 	}
 

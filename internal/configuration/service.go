@@ -357,6 +357,15 @@ func (s *Service) ExportToDevice(deviceID uint, client shelly.Client) error {
 		return fmt.Errorf("failed to get device info: %w", err)
 	}
 
+	// Write only to the device the record describes: a stale address can lead to another one.
+	var device Device
+	if err := s.db.First(&device, deviceID).Error; err != nil {
+		return fmt.Errorf("device not found: %w", err)
+	}
+	if err := checkReportedMAC(device.MAC, reportedMAC(info)); err != nil {
+		return err
+	}
+
 	// Parse stored configuration data
 	var configData map[string]interface{}
 	if err := json.Unmarshal(config.Config, &configData); err != nil {

@@ -39,6 +39,7 @@ func newFakeGen2Device() *fakeGen2Device {
 	d := &fakeGen2Device{}
 	d.ip = "192.168.1.60"
 	d.generation = 2
+	d.mac = testDeviceMAC
 	d.doc = map[string]interface{}{
 		"sys": map[string]interface{}{
 			"device":   map[string]interface{}{"name": nil, "mac": "AABBCCDDEEFF", "eco_mode": false, "discoverable": true},
@@ -138,7 +139,7 @@ func storeKeys(dst, src map[string]interface{}) {
 func newGen2Service(t *testing.T, desired *DeviceConfiguration) (*ConfigurationService, *mockRepository) {
 	t.Helper()
 	repo := newMockRepository()
-	repo.devices[1] = &ServiceDevice{ID: 1}
+	repo.devices[1] = &ServiceDevice{ID: 1, MAC: testDeviceMAC}
 	setDesired(t, repo, desired)
 	return NewConfigurationService(repo, nil, nil), repo
 }

@@ -75,7 +75,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | GET | `/api/v1/devices/{id}/config/typed/normalized` | Get typed normalized config. `data.configuration` holds the normalized configuration, as on `/config/current/normalized` |
 | POST | `/api/v1/devices/{id}/config/import` | Import config to device |
 | GET | `/api/v1/devices/{id}/config/status` | Get import status |
-| POST | `/api/v1/devices/{id}/config/export` | Export config from device |
+| POST | `/api/v1/devices/{id}/config/export` | Write the stored config to the device; 409 when the device's MAC is not the stored one |
 | GET | `/api/v1/devices/{id}/config/drift` | Detect configuration drift |
 | POST | `/api/v1/devices/{id}/config/apply-template` | Apply template to device |
 | GET | `/api/v1/devices/{id}/config/history` | Get config change history |
@@ -100,7 +100,7 @@ The device routes show a saved secret as the mask `********` and never return it
 
 The desired configuration is the composed result of the device's templates and overrides. Neither route takes a request body.
 
-`POST /devices/{id}/config/new/apply` writes the desired configuration to the device. Then it reads the configuration back and compares it. If the server has an admin key configured, the route needs that key, as `Authorization: Bearer <key>` or `X-API-Key: <key>`. Without the key it then returns 401 `UNAUTHORIZED`. If no admin key is configured, the route is open, like the other admin routes. Apply clears `config_applied` before the write. It sets the flag again only if the read-back matches and the desired configuration did not change during the apply. Applies to one device run one at a time in one server process. Run one manager replica if you use apply, because applies on different replicas are not serialized (ginsys/shelly-manager#425).
+`POST /devices/{id}/config/new/apply` writes the desired configuration to the device. Then it reads the configuration back and compares it. If the server has an admin key configured, the route needs that key, as `Authorization: Bearer <key>` or `X-API-Key: <key>`. Without the key it then returns 401 `UNAUTHORIZED`. If no admin key is configured, the route is open, like the other admin routes. Before it marks or writes anything, apply reads the MAC the device at the stored address reports and compares it with the stored MAC (case, colons, dashes and dots are ignored). A different MAC, a device that reports none, or a record with no MAC is refused with 409 `CONFLICT`, nothing is written and no flag changes: set a missing MAC with `PUT /api/v1/devices/{id}`, and run discovery (`POST /api/v1/discover`) when the address now leads to another device. Export and bulk export check the same way. Apply clears `config_applied` before the write. It sets the flag again only if the read-back matches and the desired configuration did not change during the apply. Applies to one device run one at a time in one server process. Run one manager replica if you use apply, because applies on different replicas are not serialized (ginsys/shelly-manager#425).
 
 The response `data` holds these fields:
 
@@ -217,7 +217,7 @@ Every typed-configuration route answers with the standard envelope, on success a
 | Method | Endpoint | Description | Input |
 |--------|----------|-------------|-------|
 | POST | `/api/v1/config/bulk-import` | Import configs to multiple devices | Device IDs + config |
-| POST | `/api/v1/config/bulk-export` | Export configs from multiple devices | Device IDs |
+| POST | `/api/v1/config/bulk-export` | Export configs from multiple devices; a device whose MAC is not the stored one is reported as an error and gets nothing | Device IDs |
 | POST | `/api/v1/config/bulk-drift-detect` | Detect drift on multiple devices | Device IDs |
 | POST | `/api/v1/config/bulk-drift-detect-enhanced` | Enhanced drift detection | Device IDs + options |
 

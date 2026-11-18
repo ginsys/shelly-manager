@@ -603,6 +603,12 @@ func (h *Handler) writeConfigDeviceError(w http.ResponseWriter, r *http.Request,
 		h.responseWriter().WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeValidationFailed, err.Error(), nil)
 		return
 	}
+	// The device record and the device at its address disagree. The message names the fix and
+	// holds no secret: two MACs.
+	if errors.Is(err, configuration.ErrDeviceIdentity) {
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), nil)
+		return
+	}
 	h.writeDeviceReadError(w, r, err)
 }
 

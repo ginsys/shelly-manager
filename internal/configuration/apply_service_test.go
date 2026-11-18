@@ -37,6 +37,7 @@ func newFakeGen1Device() *fakeGen1Device {
 	d := &fakeGen1Device{settings: map[string]interface{}{"name": ""}}
 	d.ip = "192.168.1.50"
 	d.generation = 1
+	d.mac = testDeviceMAC
 	return d
 }
 
@@ -229,7 +230,7 @@ func newServiceWithDesiredName(t *testing.T, name string) (*ConfigurationService
 		System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr(name)}},
 	})
 	require.NoError(t, err)
-	repo.devices[1] = &ServiceDevice{ID: 1, DesiredConfig: string(desired)}
+	repo.devices[1] = &ServiceDevice{ID: 1, MAC: testDeviceMAC, DesiredConfig: string(desired)}
 	return NewConfigurationService(repo, nil, nil), repo
 }
 

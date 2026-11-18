@@ -201,6 +201,17 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- Apply, export and bulk export no longer write to whatever device answers at the stored address.
+  Before the first write they read the MAC the device reports and compare it with the stored MAC
+  (case and the separators colon, dash and dot are ignored). A different MAC, a device that reports
+  none, or a device record with no MAC is refused with 409 `CONFLICT` (in bulk export, as that
+  device's own error), nothing is written, and apply changes no flag. The error says what to do: run
+  discovery when the address now leads to another device, or set the missing MAC with
+  `PUT /api/v1/devices/{id}`. A record with no MAC is refused because the device at its address
+  cannot be identified. A failed client build in apply now also leaves `config_applied` as it was.
+  Before, a stale address (for example a moved DHCP lease) sent one device's name, relays, MQTT,
+  Wi-Fi and login to another device. Other device writes (control actions, credential writes, Wi-Fi
+  provisioning) are unchanged. Fixes ginsys/shelly-manager#551.
 - The configuration merge now pairs the channels of a template and an override by id, not by
   list position. Before, a sparse override such as `[{"id": 1, "name": "B"}]` over a template
   with channels 0 and 1 was merged into the first list entry and copied its id over it, so
