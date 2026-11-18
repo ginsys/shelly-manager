@@ -19,16 +19,19 @@ const (
 	storedBefore = `{"set":"before"}`
 )
 
-// afterEveryReadDB runs hook right after every GetDevice returns, so a row read by the service is
-// already out of date when the service holds it.
-type afterEveryReadDB struct {
+// afterFirstReadDB runs hook once, right after the first GetDevice returns, so the row the service
+// read is already out of date when it saves. The hook runs before the save and never after it: a
+// hook that also ran on a read after the save would repair the stored row and hide a stale write.
+type afterFirstReadDB struct {
 	database.DatabaseInterface
-	hook func()
+	hook  func()
+	fired bool
 }
 
-func (r *afterEveryReadDB) GetDevice(id uint) (*database.Device, error) {
+func (r *afterFirstReadDB) GetDevice(id uint) (*database.Device, error) {
 	device, err := r.DatabaseInterface.GetDevice(id)
-	if r.hook != nil {
+	if !r.fired && r.hook != nil {
+		r.fired = true
 		r.hook()
 	}
 	return device, err
@@ -90,7 +93,7 @@ func raceFixture(t *testing.T) (*ShellyService, *database.Device, *gatedDevice) 
 func TestUpdateDeviceAuth_KeepsTheOtherWritersColumns(t *testing.T) {
 	service, device, _ := raceFixture(t)
 	real := service.DB
-	service.DB = &afterEveryReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
+	service.DB = &afterFirstReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
 
 	if err := service.UpdateDeviceAuth(device.ID, "new", "newpw"); err != nil {
 		t.Fatalf("UpdateDeviceAuth failed: %v", err)
@@ -105,7 +108,7 @@ func TestUpdateDeviceAuth_KeepsTheOtherWritersColumns(t *testing.T) {
 func TestClearRejectedLogin_KeepsTheOtherWritersColumns(t *testing.T) {
 	service, device, _ := raceFixture(t)
 	real := service.DB
-	service.DB = &afterEveryReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
+	service.DB = &afterFirstReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
 
 	snapshot := *device
 	if !service.clearRejectedLogin(&snapshot, "old", "oldpw") {
@@ -121,31 +124,40 @@ func TestClearRejectedLogin_KeepsTheOtherWritersColumns(t *testing.T) {
 func TestBackfillDiscoverySettings_KeepsTheOtherWritersColumns(t *testing.T) {
 	service, device, _ := raceFixture(t)
 	real := service.DB
-	service.DB = &afterEveryReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
+	service.DB = &afterFirstReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
 
 	if err := service.backfillDiscoverySettings(device, "SHPLG-S", 1, true); err != nil {
 		t.Fatalf("backfillDiscoverySettings failed: %v", err)
 	}
 
 	assertOtherWriterKept(t, real, device.ID)
-	if user, settings := storedLogin(t, service, device.ID); user != "old" || settings["note"] != "keep" {
-		t.Errorf("stored login %q, note %v: want the login and the note kept", user, settings["note"])
+	if user, settings := storedLogin(t, service, device.ID); user != "old" || settings["note"] != "keep" || settings["model"] != "SHPLG-S" {
+		t.Errorf("stored login %q, note %v, model %v: want the login and the note kept and the model stored", user, settings["note"], settings["model"])
+	}
+	if device.ConfigApplied || device.DesiredConfig != racerDesired {
+		t.Errorf("the updated row is not the stored one: applied %v, desired %q", device.ConfigApplied, device.DesiredConfig)
 	}
 }
 
 func TestRefreshDiscoveredDevice_KeepsTheOtherWritersColumns(t *testing.T) {
 	service, device, _ := raceFixture(t)
 	real := service.DB
-	service.DB = &afterEveryReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
+	service.DB = &afterFirstReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
 
 	seen := time.Now().Truncate(time.Second)
-	if _, err := service.RefreshDiscoveredDevice(device.ID, "192.0.2.50", "online", seen, "2.0"); err != nil {
+	returned, err := service.RefreshDiscoveredDevice(device.ID, "192.0.2.50", "online", seen, "2.0")
+	if err != nil {
 		t.Fatalf("RefreshDiscoveredDevice failed: %v", err)
 	}
 
 	got := assertOtherWriterKept(t, real, device.ID)
 	if got.IP != "192.0.2.50" || got.Status != "online" || got.Firmware != "2.0" {
 		t.Errorf("the discovery fields were not stored: ip %q, status %q, firmware %q", got.IP, got.Status, got.Firmware)
+	}
+	// The returned row is read right after the save, so it carries the discovery fields. The other
+	// writer runs after that read, so its columns are checked on the stored row above.
+	if returned.IP != "192.0.2.50" || returned.Status != "online" || returned.Firmware != "2.0" {
+		t.Errorf("the returned row lacks the discovery fields: ip %q, status %q, firmware %q", returned.IP, returned.Status, returned.Firmware)
 	}
 }
 
