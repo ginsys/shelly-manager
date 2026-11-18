@@ -32,8 +32,8 @@ var gen2Sections = []struct {
 }
 
 // gen2ApplyKeys are the fixed top-level keys of a Gen2 config document that apply writes. The
-// channel sections switch:N and input:N are written too (gen2KeyApplies).
-var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true}
+// channel sections switch:N and input:N are written too (gen2KeyApplies), and wifi is written last.
+var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true, "wifi": true}
 
 // gen2Write is one SetConfig call of an apply: the section key, the method and its parameters.
 type gen2Write struct {
@@ -44,8 +44,9 @@ type gen2Write struct {
 }
 
 // gen2WritesOf lists the calls an apply makes, in order: the fixed sections, then each input, then
-// each switch, by id. An input comes before the switch it drives, because the type of the input
-// must be set before the in_mode of the switch (follow and flip need an input that has a state).
+// each switch, by id, then the Wi-Fi station. An input comes before the switch it drives, because
+// the type of the input must be set before the in_mode of the switch (follow and flip need an
+// input that has a state). The station comes last: the device reconnects about a second after it.
 func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
 	var writes []gen2Write
 	for _, section := range gen2Sections {
@@ -60,6 +61,9 @@ func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
 				writes = append(writes, gen2Write{key: key, method: channel.method, params: map[string]interface{}{"id": id, "config": body}, body: body})
 			}
 		}
+	}
+	if sta := gen2WiFiStation(apiConfig); len(sta) > 0 {
+		writes = append(writes, gen2Write{key: "wifi.sta", method: "WiFi.SetConfig", params: map[string]interface{}{"config": map[string]interface{}{"sta": sta}}, body: sta})
 	}
 	return writes
 }
@@ -89,18 +93,21 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 }
 
 // unsupportedGen2Settings returns the sorted paths of desired that the Gen2 apply cannot write
-// and read back. Only the sys, mqtt, cloud, switch and input sections have a mapping so far, so
-// every other populated setting is reported through the round trip: the converter drops it, and it
-// is missing on the way back. An MQTT password with no user is refused too: the device takes the
-// password only together with the user.
+// and read back. Only the sys, mqtt, cloud, switch and input sections and the Wi-Fi station have a
+// mapping so far, so every other populated setting is reported through the round trip: the
+// converter drops it, and it is missing on the way back. An MQTT password with no user is refused
+// too: the device takes the password only together with the user.
 func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfiguration) ([]string, error) {
 	// A setting with no key, or a value no Gen2 word names, is named on its own: left in, the round
 	// trip reports the whole section.
 	unsupported, mapped := unmappedMQTTSettings(desired.MQTT)
 	channelPaths, checkedChannels, keptChannels := unmappedChannelSettings(desired)
 	unsupported = append(unsupported, channelPaths...)
+	wifiPaths, wifiRest := unmappedWiFiSettings(desired.WiFi)
+	unsupported = append(unsupported, wifiPaths...)
 	checked := *checkedChannels
 	checked.MQTT = mapped
+	checked.WiFi = wifiRest
 
 	apiJSON, err := converter.ToAPIConfig(&checked, "")
 	if err != nil {
@@ -223,6 +230,9 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	if err := json.Unmarshal(apiJSON, &apiConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse API config: %w", err)
 	}
+	if err := refuseUnsafeWiFi(ctx, client, apiConfig); err != nil {
+		return nil, err
+	}
 	for _, write := range gen2WritesOf(apiConfig) {
 		result.SettingsCount += len(gen2Leaves(write.key, write.body))
 	}
@@ -316,10 +326,13 @@ func refuseRemappedInputs(ctx context.Context, client ShellyClient, config *Devi
 // persisted. Unlike the Gen1 flow, a write whose answer was lost is not recorded beforehand,
 // because the device, not the manager, decides whether it needs a restart.
 func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2ConfigClient, apiConfig map[string]interface{}, result *ApplyResult) error {
-	// The MQTT password stays out of every error, log line and failure, whichever section fails.
+	// The MQTT and Wi-Fi passwords stay out of every error, log line and failure, whichever section fails.
 	var secret string
 	if mqtt, ok := apiConfig["mqtt"].(map[string]interface{}); ok {
 		secret, _ = mqtt["pass"].(string)
+	}
+	if secret == "" {
+		secret, _ = gen2WiFiStation(apiConfig)["pass"].(string)
 	}
 	for _, section := range gen2WritesOf(apiConfig) {
 		leaves := gen2Leaves(section.key, section.body)

@@ -87,8 +87,11 @@ func (d *fakeGen2Device) CallConfigSetter(_ context.Context, method string, para
 	}
 	if section, ok := d.doc[key].(map[string]interface{}); ok && !d.ignoreWrites {
 		storeKeys(section, config)
-		// A device never returns the MQTT password.
+		// A device never returns the MQTT password or the Wi-Fi password.
 		delete(section, "pass")
+		if sta, ok := section["sta"].(map[string]interface{}); ok {
+			delete(sta, "pass")
+		}
 	}
 	return d.restart, nil
 }
@@ -320,12 +323,12 @@ func TestApplyDesiredConfig_Gen2RefusesSectionsItCannotWriteYet(t *testing.T) {
 		desired *DeviceConfiguration
 		path    string
 	}{
-		"wifi":   {&DeviceConfiguration{WiFi: &WiFiConfiguration{SSID: StringPtr("home")}}, "wifi"},
+		"wifi":   {&DeviceConfiguration{WiFi: &WiFiConfiguration{RoamThreshold: IntPtr(-70)}}, "wifi"},
 		"login":  {&DeviceConfiguration{Auth: &AuthConfiguration{Enable: BoolPtr(true), Username: StringPtr("a"), Password: StringPtr("b")}}, "auth"},
 		"roller": {&DeviceConfiguration{Roller: &RollerConfig{MotorSpeed: IntPtr(50)}}, "roller"},
 		"mixed": {&DeviceConfiguration{
 			System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("lamp")}},
-			WiFi:   &WiFiConfiguration{SSID: StringPtr("home")},
+			WiFi:   &WiFiConfiguration{RoamThreshold: IntPtr(-70)},
 		}, "wifi"},
 	}
 	for name, tc := range cases {

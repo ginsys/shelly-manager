@@ -5,6 +5,22 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Added
+- Apply and verify on a Gen2 or Gen3 device now also write the Wi-Fi station: enable, ssid,
+  password, IPv4 mode and the static address (`ip`, `netmask`, `gw`, `nameserver`) go out in one
+  `WiFi.SetConfig` call, after the system, MQTT, cloud, switch and input sections, and are read
+  back from `wifi.sta` in `Shelly.GetConfig`. The password is write-only: the device never
+  returns it, and while an apply holds one the text of every device error is replaced by a fixed
+  message. A `ssid` is written only with a password; where the configuration names the network
+  the device is already on and sets no password, the `ssid` is left out of the write. Refused with
+  422 before anything is written: a new `ssid` with no password that can be sent, switching the
+  station off (`wifi.enable` false, because the access point is not written and the manager
+  would have no way back to the device), and any Wi-Fi setting beyond the station (`wifi.ap.*`
+  and `wifi.roam_threshold`). A device that cannot be read before a Wi-Fi `ssid` write is
+  refused too, with the error of a failed device read. A wrong static
+  address strands the device. After a change of network the read-back can fail, and the apply
+  then reports an error with `config_applied` unchanged, where Gen1 reports `unconfirmed`. Not
+  confirmed on hardware (read from the Shelly Gen2 WiFi reference): every key, the read-back and
+  what `restart_required` means for these keys. Part of ginsys/shelly-manager#381.
 - Apply to a Shelly 2.5 in roller mode now writes the roller keys beyond the travel times,
   direction and inputs, with `POST /settings/roller/0`, and reads them back: `default_state`,
   the button type (`button_type`, sent as `btn_type`, read back as `button_type`),
