@@ -103,21 +103,20 @@ Common scopes
 
 - Describe the change and the rationale (what/why)
 - Include tests for new behavior
-- Update docs when touching APIs/architecture (docs/ and CHANGELOG)
+- Update docs when touching APIs/architecture (docs/), and add a changelog fragment
 - Pass `make test-ci` locally
 - Keep changes focused; unrelated refactors go into separate PRs
 
-### Changelog entries and rebases
+### Changelog fragments
 
-`CHANGELOG.md` merges as a union (`.gitattributes`): when two PRs add an entry at the same place, a
-rebase keeps both and no longer stops on a conflict. A union merge never warns, so:
+Do not edit `CHANGELOG.md`. Add one file, `changelog.d/<issue>-<slug>.md`, holding your entry, so two PRs
+never conflict on it. The format is in `changelog.d/README.md`. A release assembles the fragments into
+`CHANGELOG.md` (`make changelog-assemble`).
 
-- End your entry with its own `Fixes owner/repo#N.` (or `Refs`) line. That unique last line is what keeps
-  two entries apart. Two entries that share a line can be merged into one.
-- After a rebase, run `git fetch origin main` and read `git diff origin/main...HEAD -- CHANGELOG.md` (a
-  local `main` that is behind would show other PRs' entries as yours): it must show your complete entry
-  as added lines and nothing else. A removed line, or an added line that is not yours, was lost or duplicated
-  by the merge: fix it before you push.
+- The `changelog-fragment` CI check fails a PR that adds no fragment, or that adds a line to `CHANGELOG.md`.
+  Run it locally with `make check-changelog-fragment`.
+- A change that needs no entry (CI, tests, docs only) takes the PR label `no-changelog`. Dependabot and
+  Renovate branches are skipped by themselves.
 
 ## Security & Secrets
 
