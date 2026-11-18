@@ -1301,8 +1301,17 @@ func (s *Service) EnhanceBulkDriftResult(result *BulkDriftResult, scheduleID *ui
 		reportType = "scheduled"
 	}
 
+	// The report describes the devices that ran: a skipped device was never checked, so it has no
+	// place in the totals (total = in sync + drifted + errored).
+	ran := make([]DriftResult, 0, len(result.Results))
+	for _, driftResult := range result.Results {
+		if driftResult.Status != BulkStatusSkipped {
+			ran = append(ran, driftResult)
+		}
+	}
+
 	// Generate comprehensive report
-	return s.reporter.GenerateComprehensiveReport(reportType, nil, scheduleID, result.Results)
+	return s.reporter.GenerateComprehensiveReport(reportType, nil, scheduleID, ran)
 }
 
 // Typed Configuration Management Methods

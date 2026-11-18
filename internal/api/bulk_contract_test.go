@@ -230,6 +230,28 @@ func TestBulkRoutes_StopOnErrorSkipsTheRest(t *testing.T) {
 	}
 }
 
+// The enhanced route answers a report of the devices that ran. With stop_on_error the devices after
+// the first error are not contacted and are not in the report, so its totals add up.
+func TestBulkDriftEnhanced_StopOnErrorReportsOnlyTheDevicesThatRan(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	fleet := bulkFleet(t, db, 1)
+
+	body := fmt.Sprintf(`{"device_ids":[9999,%d],"options":{"stop_on_error":true}}`, fleet[0].device.ID)
+	w := postBulk(handler, (*Handler).EnhancedBulkDetectConfigDrift, "/api/v1/config/bulk-drift-detect-enhanced", body)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	data := decodeData(t, w)
+	summary, ok := data["summary"].(map[string]any)
+	require.True(t, ok, "the answer is not the comprehensive report: %v", data)
+	assert.EqualValues(t, 1, summary["total_devices"])
+	assert.EqualValues(t, 1, summary["devices_errored"])
+	assert.EqualValues(t, 0, summary["devices_in_sync"])
+	assert.EqualValues(t, 0, summary["devices_drifted"])
+	assert.Zero(t, fleet[0].hits.Load(), "a skipped device was contacted")
+}
+
 func TestBulkRoutes_ADuplicateIDRunsOnce(t *testing.T) {
 	for _, route := range bulkRoutes {
 		if !route.results {
