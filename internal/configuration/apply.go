@@ -1001,16 +1001,24 @@ func (a *ConfigApplier) RebootAndWait(ctx context.Context, client ShellyClient, 
 	deadline := time.Now().Add(timeout)
 	pollInterval := 3 * time.Second
 
+	var lastErr error
 	for time.Now().Before(deadline) {
-		if err := client.TestConnection(ctx); err == nil {
+		err := client.TestConnection(ctx)
+		if err == nil {
 			a.logger.WithFields(map[string]any{
 				"device_ip": client.GetIP(),
 				"component": "config_applier",
 			}).Info("Device back online after reboot")
 			return nil
 		}
+		lastErr = err
 		time.Sleep(pollInterval)
 	}
 
+	// The last probe stays in the error: a device that kept answering with errors is on its
+	// network, and a caller tells that from one that stayed silent (deviceAnswered).
+	if lastErr != nil {
+		return fmt.Errorf("device did not come back online within %s: %w", timeout, lastErr)
+	}
 	return fmt.Errorf("device did not come back online within %s", timeout)
 }
