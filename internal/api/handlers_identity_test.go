@@ -167,3 +167,47 @@ func TestBulkExportConfigs_ReportsAMismatchPerDevice(t *testing.T) {
 		t.Error("the matching device should have received the configuration")
 	}
 }
+
+func postControl(handler *Handler, id uint, action string) *httptest.ResponseRecorder {
+	body := strings.NewReader(`{"action":"` + action + `","force":true}`)
+	req := httptest.NewRequest("POST", "/api/v1/devices/"+strconv.Itoa(int(id))+"/control", body)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(id))})
+	w := httptest.NewRecorder()
+	handler.ControlDevice(w, req)
+	return w
+}
+
+// A switch or reboot for the device at a stale address does not reach the device that answers
+// there: 409 with the reason, not a 200 and not a hidden 500.
+func TestControlDevice_RefusesADeviceWithAnotherMAC(t *testing.T) {
+	for _, action := range []string{"on", "off", "reboot"} {
+		t.Run(action, func(t *testing.T) {
+			db, cleanup := testutil.TestDatabase(t)
+			defer cleanup()
+			handler := exportHandler(t, db)
+			addr, writes := gen1Device(t, otherDeviceID, http.StatusOK)
+			device := deviceAt(t, db, addr, storedMAC)
+
+			w := postControl(handler, device.ID, action)
+
+			testutil.AssertEqual(t, http.StatusConflict, w.Code)
+			if !strings.Contains(w.Body.String(), "stored MAC") {
+				t.Errorf("the 409 should say what differs, got %s", w.Body.String())
+			}
+			testutil.AssertEqual(t, int32(0), writes.Load())
+		})
+	}
+}
+
+func TestControlDevice_ControlsTheStoredDevice(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	addr, writes := gen1Device(t, reportedMAC, http.StatusOK)
+	device := deviceAt(t, db, addr, storedMAC)
+
+	w := postControl(handler, device.ID, "on")
+
+	testutil.AssertEqual(t, http.StatusOK, w.Code)
+	testutil.AssertEqual(t, int32(1), writes.Load())
+}

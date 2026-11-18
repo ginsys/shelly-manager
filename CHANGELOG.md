@@ -226,6 +226,16 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- Device control, verify and the handling of stored logins no longer act on whatever device
+  answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and
+  `POST /devices/{id}/config/new/verify` read the MAC the device reports and answer `409`
+  `CONFLICT` when it is not the stored MAC, when the device reports none or when the record has
+  none; nothing is sent, and verify no longer reports another device as in sync or as drifted.
+  The service also reads the identity, without a login, before it clears a stored login that a
+  device rejected and before it saves the global login after a device accepted it: another
+  device's answer changes no stored login. A stored login that such a device rejects is kept and
+  the caller gets the identity error. Status reads send the extra request only on those two
+  paths. Fixes ginsys/shelly-manager#556.
 - Apply, export and bulk export no longer write to whatever device answers at the stored address.
   Before the first write they read the MAC the device reports and compare it with the stored MAC
   (case and the separators colon, dash and dot are ignored). A different MAC, a device that reports

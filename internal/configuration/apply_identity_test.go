@@ -287,3 +287,64 @@ func TestExportToDevice_AGetInfoFailureIsNotAnIdentityRefusal(t *testing.T) {
 	assert.True(t, shelly.IsAuthError(err))
 	client.AssertNotCalled(t, "SetConfig", mock.Anything, mock.Anything)
 }
+
+func (r identityRig) verify(t *testing.T) (*VerifyResult, error) {
+	t.Helper()
+	return r.svc.VerifyDesiredConfig(context.Background(), 1, r.client, r.deviceType)
+}
+
+// Verify writes nothing, but a comparison with another device is a wrong answer: it would report
+// that device in sync or drifted. On another MAC it reports the identity refusal instead, and no
+// result at all.
+func TestVerifyDesiredConfig_RefusesADeviceWithAnotherMAC(t *testing.T) {
+	forEachGeneration(t, func(t *testing.T, rig identityRig) {
+		rig.repo.devices[1].MAC = anotherMAC
+
+		result, err := rig.verify(t)
+
+		require.Error(t, err)
+		assert.Nil(t, result, "no drift list and no match for another device")
+		assert.ErrorIs(t, err, ErrDeviceIdentity)
+		assert.Contains(t, err.Error(), "POST /api/v1/discover")
+	})
+}
+
+// The same cases apply gives as unidentifiable are refused by verify, and a read error stays the
+// device's own error.
+func TestVerifyDesiredConfig_RefusesADeviceItCannotIdentify(t *testing.T) {
+	cases := []struct {
+		name     string
+		set      func(r identityRig)
+		identity bool
+	}{
+		{"no stored MAC", func(r identityRig) { r.repo.devices[1].MAC = "" }, true},
+		{"the device reports no MAC", func(r identityRig) { r.device.mac = "" }, true},
+		{"GetInfo answers nothing", func(r identityRig) { r.device.infoNil = true }, true},
+		{"GetInfo fails", func(r identityRig) { r.device.infoErr = errors.New("connection refused") }, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			forEachGeneration(t, func(t *testing.T, rig identityRig) {
+				tc.set(rig)
+
+				result, err := rig.verify(t)
+
+				require.Error(t, err)
+				assert.Nil(t, result)
+				assert.Equal(t, tc.identity, errors.Is(err, ErrDeviceIdentity))
+			})
+		})
+	}
+}
+
+// The stored device is verified, in any spelling of its MAC.
+func TestVerifyDesiredConfig_VerifiesTheStoredDevice(t *testing.T) {
+	forEachGeneration(t, func(t *testing.T, rig identityRig) {
+		rig.repo.devices[1].MAC = "aa-bb-cc-dd-ee-ff"
+
+		result, err := rig.verify(t)
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+	})
+}

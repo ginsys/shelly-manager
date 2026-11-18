@@ -37,7 +37,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | GET | `/api/v1/devices/{id}` | Get single device | Path: `id` | Device object |
 | PUT | `/api/v1/devices/{id}` | Update device | Path: `id`, Body: device fields | Updated device |
 | DELETE | `/api/v1/devices/{id}` | Delete device | Path: `id` | Success confirmation |
-| POST | `/api/v1/devices/{id}/control` | Control device | `{action, params}` | Action result |
+| POST | `/api/v1/devices/{id}/control` | Control device; 409 when the device's MAC is not the stored one | `{action, params}` | Action result |
 | GET | `/api/v1/devices/{id}/status` | Get device status | Path: `id` | Status object |
 | GET | `/api/v1/devices/{id}/energy` | Get energy metrics | Path: `id` | Energy data |
 
@@ -82,7 +82,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 | GET | `/api/v1/devices/{id}/desired-config` | Get the desired configuration and what the device inherits from its templates |
 | GET | `/api/v1/devices/{id}/config/new/status` | Get whether the desired configuration is applied |
 | POST | `/api/v1/devices/{id}/config/new/apply` | Write the desired configuration to the device (admin key) |
-| POST | `/api/v1/devices/{id}/config/new/verify` | Compare the desired configuration with the device |
+| POST | `/api/v1/devices/{id}/config/new/verify` | Compare the desired configuration with the device; 409 when the device's MAC is not the stored one |
 
 #### The desired configuration and its inherited part
 
@@ -113,7 +113,7 @@ The response `data` holds these fields:
 | `failures` | Each refused setting by path, and each read-back difference. Secret values are masked |
 | `warnings` | Problems that did not stop the apply |
 
-`POST /devices/{id}/config/new/verify` reads the device and compares it with the desired configuration. It writes nothing. The response `data` holds `match` and `differences`. Each difference has `path`, `expected` and `actual`. Secret values (passwords, keys, tokens) are masked.
+`POST /devices/{id}/config/new/verify` reads the device and compares it with the desired configuration. It writes nothing. Before it compares, it reads the MAC the device reports, as apply does, and answers `409` `CONFLICT` when that is not the stored MAC, when the device reports none or when the record has none: another device at the stored address is never reported as in sync or as drifted. The same check guards `POST /devices/{id}/control` (on, off, toggle and reboot): a device that is not the stored one gets no command, and the service neither clears nor saves a stored login on its word. The identity is read without a login, because a Gen1 `/shelly` and a Gen2 `Shelly.GetDeviceInfo` are served without one (Shelly Gen1 reference, `/shelly`; Gen2 reference, Authentication). A status read sends the extra request only when it is about to save or clear a stored login. The response `data` holds `match` and `differences`. Each difference has `path`, `expected` and `actual`. Secret values (passwords, keys, tokens) are masked.
 
 Supported devices and settings:
 

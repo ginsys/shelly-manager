@@ -26,7 +26,8 @@ func (l *loginRecorder) handler(w http.ResponseWriter, r *http.Request) {
 	l.users = append(l.users, user)
 	l.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"DCAA2E000000","auth":true,"fw":"1.14.0"}`)
+	// The MAC of the record that createTestDevice stores: the device is the stored device.
+	_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"68C63A123456","auth":true,"fw":"1.14.0"}`)
 }
 
 func (l *loginRecorder) last() string {

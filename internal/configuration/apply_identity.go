@@ -14,8 +14,8 @@ import (
 // record has none. Nothing is sent to the device in that case.
 var ErrDeviceIdentity = errors.New("the device at the stored address is not the stored device")
 
-// identityReader is the part of a device client that tells which device answers.
-type identityReader interface {
+// IdentityReader is the part of a device client that tells which device answers.
+type IdentityReader interface {
 	GetInfo(ctx context.Context) (*shelly.DeviceInfo, error)
 }
 
@@ -25,15 +25,16 @@ func normalizeMAC(mac string) string {
 	return strings.ToUpper(strings.NewReplacer(":", "", "-", "", ".", "", " ", "", "\t", "").Replace(mac))
 }
 
-// checkDeviceIdentity reads the device's identity through client and refuses unless it is the
-// stored device. A record with no MAC is refused without a device call.
-func checkDeviceIdentity(ctx context.Context, client identityReader, storedMAC string) error {
+// CheckDeviceIdentity reads the device's identity through client and refuses unless it is the
+// stored device. A record with no MAC is refused without a device call. Apply, export and verify
+// call it here; the service layer calls it before it clears or saves a login or sends a command.
+func CheckDeviceIdentity(ctx context.Context, client IdentityReader, storedMAC string) error {
 	if normalizeMAC(storedMAC) == "" {
 		return checkReportedMAC(storedMAC, "")
 	}
 	info, err := client.GetInfo(ctx)
 	if err != nil {
-		return fmt.Errorf("could not read the device's identity before writing: %w", err)
+		return fmt.Errorf("could not read the device's identity: %w", err)
 	}
 	return checkReportedMAC(storedMAC, reportedMAC(info))
 }
