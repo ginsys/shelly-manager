@@ -203,9 +203,10 @@ func gen2WiFiPart(apiConfig map[string]interface{}, part string) map[string]inte
 
 // refuseStrandingAccessPoint stops an apply that switches the access point off while the station
 // is not certain to stay: the device would be left with no way back. The station is steady when
-// the device reports it enabled with a network and the apply does not change it. An access point
+// the device reports it enabled with a network and the apply does not touch it: neither its network
+// nor its password, because a wrong password leaves the device unable to join. An access point
 // that is already off is not switched off by this apply.
-func refuseStrandingAccessPoint(ap, liveAP, liveStation map[string]interface{}, stationChanged bool) error {
+func refuseStrandingAccessPoint(ap, liveAP, liveStation map[string]interface{}, stationTouched bool) error {
 	if enable, set := ap["enable"].(bool); !set || enable {
 		return nil
 	}
@@ -213,10 +214,10 @@ func refuseStrandingAccessPoint(ap, liveAP, liveStation map[string]interface{}, 
 		return nil
 	}
 	ssid, _ := liveStation["ssid"].(string)
-	if on, _ := liveStation["enable"].(bool); on && ssid != "" && !stationChanged {
+	if on, _ := liveStation["enable"].(bool); on && ssid != "" && !stationTouched {
 		return nil
 	}
-	return &refusedBeforeWriteError{fmt.Errorf("%w: wifi.ap.enable: switching the access point off needs a steady station: the device's station must be enabled with a network, and this apply must not change it", ErrUnsupportedSettings)}
+	return &refusedBeforeWriteError{fmt.Errorf("%w: wifi.ap.enable: switching the access point off needs a steady station: the device's station must be enabled with a network, and this apply must not change its network or its password", ErrUnsupportedSettings)}
 }
 
 // refuseOpenAccessPoint stops an apply that switches an access point on without a password: a
@@ -270,7 +271,8 @@ func prepareWiFiStation(ctx context.Context, client ShellyClient, apiConfig map[
 	liveStation := gen2WiFiStation(doc)
 	changed := gen2StationNetworkChanged(sta, liveStation)
 	liveAP := gen2WiFiPart(doc, "ap")
-	if err = refuseStrandingAccessPoint(ap, liveAP, liveStation, changed); err != nil {
+	_, sendsPassword := sta["pass"]
+	if err = refuseStrandingAccessPoint(ap, liveAP, liveStation, changed || sendsPassword); err != nil {
 		return false, err
 	}
 	if err = refuseOpenAccessPoint(ap, liveAP); err != nil {

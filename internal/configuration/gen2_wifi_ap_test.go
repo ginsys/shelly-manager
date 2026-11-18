@@ -226,6 +226,33 @@ func TestApplyDesiredConfig_Gen2RefusesSwitchingTheAccessPointOffWhenTheStationM
 	}
 }
 
+// A station password is no network change, but a wrong one leaves the device unable to join:
+// the station is not steady in an apply that sends one.
+func TestApplyDesiredConfig_Gen2RefusesSwitchingTheAccessPointOffWhileTheStationPasswordChanges(t *testing.T) {
+	wifi := &WiFiConfiguration{AccessPoint: &AccessPointConfig{Enable: BoolPtr(false)}, Password: StringPtr("wrong-password")}
+	svc, repo := newGen2Service(t, &DeviceConfiguration{WiFi: wifi})
+	dev := newFakeGen2Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	assertRefusedBeforeWrite(t, result, err, dev, repo)
+	assert.ErrorIs(t, err, ErrUnsupportedSettings)
+	assert.Contains(t, err.Error(), "needs a steady station")
+}
+
+// A name server is no way to lose the device: it stays allowed beside an access point switched off.
+func TestApplyDesiredConfig_Gen2SwitchesTheAccessPointOffBesideANameServerChange(t *testing.T) {
+	wifi := &WiFiConfiguration{AccessPoint: &AccessPointConfig{Enable: BoolPtr(false)}, StaticIP: &StaticIPConfig{Nameserver: StringPtr("192.168.1.9")}}
+	svc, _ := newGen2Service(t, &DeviceConfiguration{WiFi: wifi})
+	dev := newFakeGen2Device()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ap", "sta"}, writtenKeys(dev))
+	assert.True(t, result.ConfigApplied, "%v", result.VerifyResult)
+}
+
 func TestApplyDesiredConfig_Gen2RefusesSwitchingTheAccessPointOffWithoutASteadyStation(t *testing.T) {
 	cases := map[string]func(*fakeGen2Device){
 		"station disabled":  func(d *fakeGen2Device) { liveWiFi(d, "sta", "enable", false) },
