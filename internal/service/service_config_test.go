@@ -490,7 +490,8 @@ func TestShellyService_getClient_RejectedSavedLoginDoesNotDeadlock(t *testing.T)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"DCAA2E000000","auth":true,"fw":"1.14.0"}`)
+		// The MAC of the record that createTestDevice stores: the device is the stored device.
+		_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"68C63A123456","auth":true,"fw":"1.14.0"}`)
 	}))
 	defer server.Close()
 
@@ -540,6 +541,14 @@ func TestShellyService_getClientWithAuthRetry_RejectedLegacyOnlyLogin(t *testing
 			var mu sync.Mutex
 			var users []string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				// The service's identity read sends no login and is served, as a real device
+				// serves /shelly; it is not one of the requests this test counts. The MAC is the
+				// one of the record that createTestDevice stores.
+				if r.URL.Path == "/shelly" && r.UserAgent() == identityProbeUserAgent {
+					_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"68C63A123456","auth":true,"fw":"1.14.0"}`)
+					return
+				}
 				user, _, _ := r.BasicAuth()
 				mu.Lock()
 				users = append(users, user)
@@ -548,8 +557,7 @@ func TestShellyService_getClientWithAuthRetry_RejectedLegacyOnlyLogin(t *testing
 					w.WriteHeader(http.StatusUnauthorized)
 					return
 				}
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"DCAA2E000000","auth":true,"fw":"1.14.0"}`)
+				_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"68C63A123456","auth":true,"fw":"1.14.0"}`)
 			}))
 			defer server.Close()
 
