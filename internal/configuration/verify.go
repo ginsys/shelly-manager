@@ -116,6 +116,12 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 
 	result.Imported = imported
 
+	if desired.Auth != nil {
+		if err = v.readGen2Login(ctx, client, imported); err != nil {
+			return nil, err
+		}
+	}
+
 	// The login password is write-only. Compare without it, so a missing read-back section never
 	// puts the whole desired auth object, password included, into a difference.
 	wanted := comparableChannelMaxPower(comparableDesired(withoutWiFiPasswords(withoutLoginPassword(desired))), deviceConfig.Raw, deviceType)
@@ -359,4 +365,26 @@ func (v *ConfigVerifier) GetApplyVerifyReport(result *ApplyVerifyResult) string 
 	report += fmt.Sprintf("Total Duration: %v\n", result.Duration)
 
 	return report
+}
+
+// readGen2Login fills the login of a Gen2 read-back. The device config document holds no login:
+// the device reports only whether it is on, in its device info (auth_en). The user is always
+// admin and the password is never returned.
+func (v *ConfigVerifier) readGen2Login(ctx context.Context, client ShellyClient, imported *DeviceConfiguration) error {
+	if _, gen2 := v.converter.(*Gen2Converter); !gen2 {
+		return nil
+	}
+	info, err := client.GetInfo(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to read the device login state: %w", err)
+	}
+	if info == nil {
+		return errors.New("failed to read the device login state: the device reported nothing")
+	}
+	imported.Auth = &AuthConfiguration{Enable: &info.AuthEn}
+	if info.AuthEn {
+		user := gen2LoginUser
+		imported.Auth.Username = &user
+	}
+	return nil
 }

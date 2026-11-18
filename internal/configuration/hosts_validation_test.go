@@ -135,7 +135,7 @@ func TestMQTTServerFieldAgreesWithTheGen2Apply(t *testing.T) {
 	refused := 0
 	values := append(append([]string{}, cases.Endpoint.Valid...), cases.Endpoint.Invalid...)
 	for _, s := range values {
-		unsupported, err := unsupportedGen2Settings(converter, &DeviceConfiguration{MQTT: &MQTTConfiguration{Server: StringPtr(s)}})
+		unsupported, err := unsupportedGen2Settings(converter, &DeviceConfiguration{MQTT: &MQTTConfiguration{Server: StringPtr(s)}}, false)
 		if err != nil {
 			continue // a value the Gen2 converter cannot even convert is not accepted by apply
 		}

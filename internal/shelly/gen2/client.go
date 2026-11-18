@@ -3,7 +3,9 @@ package gen2
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -380,18 +382,50 @@ func (c *Client) SetConfig(ctx context.Context, config map[string]interface{}) e
 	}, nil)
 }
 
-// SetAuth sets authentication credentials
+// authUser is the one user a Gen2 device allows ("Only one user is supported").
+const authUser = "admin"
+
+// authRealm returns the realm of the device's login, which is the device id (Shelly.GetDeviceInfo
+// is not protected, so it is readable before and after a login change).
+func (c *Client) authRealm(ctx context.Context) (string, error) {
+	info, err := c.GetInfo(ctx)
+	if err != nil {
+		return "", fmt.Errorf("could not read the device id to use as the login realm: %w", err)
+	}
+	if info.ID == "" {
+		return "", fmt.Errorf("the device reported no id to use as the login realm")
+	}
+	return info.ID, nil
+}
+
+// SetAuth switches the login on: Shelly.SetAuth takes the user (always admin), the realm (the
+// device id) and ha1, the lowercase hex SHA-256 of "user:realm:password", never the password.
 func (c *Client) SetAuth(ctx context.Context, username, password string) error {
+	if username != authUser {
+		return fmt.Errorf("a Gen2 device allows one login user, %q", authUser)
+	}
+	realm, err := c.authRealm(ctx)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256([]byte(username + ":" + realm + ":" + password))
 	return c.rpcCall(ctx, "Shelly.SetAuth", map[string]interface{}{
-		"user": username,
-		"pass": password,
+		"user":  username,
+		"realm": realm,
+		"ha1":   hex.EncodeToString(sum[:]),
 	}, nil)
 }
 
-// ResetAuth disables authentication
+// ResetAuth switches the login off: ha1 null.
 func (c *Client) ResetAuth(ctx context.Context) error {
+	realm, err := c.authRealm(ctx)
+	if err != nil {
+		return err
+	}
 	return c.rpcCall(ctx, "Shelly.SetAuth", map[string]interface{}{
-		"user": "",
+		"user":  authUser,
+		"realm": realm,
+		"ha1":   nil,
 	}, nil)
 }
 

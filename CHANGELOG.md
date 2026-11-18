@@ -5,6 +5,17 @@ All notable changes to this project are documented here. The project follows Con
 ## [Unreleased]
 
 ### Added
+- Apply and verify on a Gen2 or Gen3 device now also write the login: `auth.enable`, `auth.user`
+  and `auth.pass` go out last with `Shelly.SetAuth`, which takes the user (always `admin`), the
+  `realm` (the device id) and `ha1`, the SHA-256 of `user:realm:password`, never the password.
+  The password is write-only, and the new login is stored once the device accepted it. The
+  read-back is `auth_en` from the device info. Refused with 422 before anything is written: a user
+  other than `admin`, a login on with no password that can be sent, a login off with a user or
+  password, `auth.realm`, and a login change in the same apply as a Wi-Fi network change. An
+  answer to `SetAuth` that never arrives is a failure that stores nothing and says the stored
+  login may now be stale. Not confirmed on hardware (read from the Shelly Gen2 documentation):
+  whether `SetAuth` restarts the device, and what an absent `ha1` does. Part of
+  ginsys/shelly-manager#381.
 - Apply and verify on a Gen2 or Gen3 device now also write the Wi-Fi station: enable, ssid,
   password, IPv4 mode and the static address (`ip`, `netmask`, `gw`, `nameserver`) go out in one
   `WiFi.SetConfig` call, after the system, MQTT, cloud, switch and input sections, and are read
@@ -242,6 +253,11 @@ All notable changes to this project are documented here. The project follows Con
   merged result reached the stored layer, and a later change to a layer reached a configuration
   that was already merged. Every such value is now a deep copy. The merged values and their
   sources do not change. Fixes ginsys/shelly-manager#547.
+- A Gen2 or Gen3 device with a login on could never be reached through the manager: the digest
+  client answered with MD5 where the device asks for SHA-256 (`algorithm=SHA-256`), and its
+  authenticated retry carried no request body. Both are fixed for every authenticated Gen2 call
+  (reads and writes), and `Shelly.SetAuth` now sends `user`, `realm` and `ha1` instead of `user`
+  and `pass`, which the device does not take.
 - Apply, export and bulk export no longer write to whatever device answers at the stored address.
   Before the first write they read the MAC the device reports and compare it with the stored MAC
   (case and the separators colon, dash and dot are ignored). A different MAC, a device that reports

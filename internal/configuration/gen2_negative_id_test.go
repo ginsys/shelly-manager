@@ -21,7 +21,7 @@ func TestUnsupportedGen2Settings_NamesANegativeIDAtItsIndexInTheMergedList(t *te
 	require.Len(t, merged.Config.Relay.Relays, 3)
 	assert.Equal(t, -1, merged.Config.Relay.Relays[0].ID, "the entry the override added sits in id order")
 
-	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), merged.Config)
+	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), merged.Config, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"relay.relays.0.id"}, unsupported)
@@ -35,7 +35,7 @@ func TestUnsupportedGen2Settings_NamesANegativeIDThatBothLayersCarryOnce(t *test
 	require.NoError(t, err)
 	require.Len(t, merged.Config.Input.Inputs, 2, "the override pairs with the template's channel -1")
 
-	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), merged.Config)
+	unsupported, err := unsupportedGen2Settings(NewGen2Converter(nil), merged.Config, false)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"input.inputs.1.id"}, unsupported)
