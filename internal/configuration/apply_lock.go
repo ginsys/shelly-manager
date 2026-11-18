@@ -129,7 +129,7 @@ const applyLockClass int32 = 0x53484d41 // "SHMA"
 // applyLockKey is the device id as the int4 second key of the PostgreSQL lock, and false when the id
 // does not fit.
 func applyLockKey(id uint) (int32, bool) {
-	if uint64(id) > math.MaxInt32 {
+	if id > math.MaxInt32 {
 		return 0, false
 	}
 	return int32(id), true
