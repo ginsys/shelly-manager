@@ -351,8 +351,7 @@ Structured security logging without credential exposure:
 // Connection success logging (safe)
 m.logger.WithFields(map[string]any{
     "provider": "mysql",
-    "host":     driverConfig.Addr,   // from the driver's parsed DSN; host only, no credentials
-    "database": driverConfig.DBName, // Database name only
+    "target":   config.Target(), // "mysql (DSN redacted)": a parsed field is not safe to print either
 }).Info("Connected to MySQL database")
 
 // Migration failure logging

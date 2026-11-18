@@ -90,6 +90,9 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse DSN: %w", errDSNNotParsed)
 	}
+	// The driver logs a failed read, with the socket or address in it, to stderr
+	// before the sealed connector sees the error: silence it for this connector.
+	driverConfig.Logger = &mysqldriver.NopLogger{}
 	connector, err := mysqldriver.NewConnector(driverConfig)
 	if err != nil {
 		return fmt.Errorf("failed to parse DSN: %w", errDSNNotParsed)
@@ -135,8 +138,7 @@ func (m *MySQLProvider) Connect(config DatabaseConfig) error {
 
 	m.logger.WithFields(map[string]any{
 		"provider": "mysql",
-		"host":     driverConfig.Addr,
-		"database": driverConfig.DBName,
+		"target":   config.Target(),
 	}).Info("Connected to MySQL database")
 
 	return nil

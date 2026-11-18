@@ -67,7 +67,7 @@ The provider implements multiple interfaces for comprehensive functionality:
 
 **Credential Protection**: The provider carries no driver text:
 - Connect errors are a fixed classification (and the server's error code), never the driver's wording
-- The connect log names the host and database from the parsed configuration
+- The connect log names only the target, never a field parsed from the DSN (a misplaced password can land in the host or the database name)
 - A DSN is printed only through `DatabaseConfig.Target()`: the provider name, or a SQLite path without its query
 
 **Certificate Validation**: Full support for SSL certificate validation including:
@@ -199,8 +199,7 @@ The provider integrates with Shelly Manager's structured logging system:
 ```go
 p.logger.WithFields(map[string]any{
     "provider": "postgresql",
-    "host":     connConfig.Host,     // from the parsed pgx config, never the raw DSN
-    "database": connConfig.Database,
+    "target":   config.Target(), // "postgresql (DSN redacted)", never a parsed field
 }).Info("Connected to PostgreSQL database")
 ```
 

@@ -275,8 +275,10 @@ All notable changes to this project are documented here. The project follows Con
   message, and the pool opens on a connector whose every attempt (first connect, pool growth,
   reconnect) fails with a classification built from the error's type, such as `database connection
   failed: connection refused`, plus the server's SQLSTATE or MySQL error number where there is one.
-  The GORM log writer gets the same text. The sanitizers and the host and database helpers are
-  removed. A SQLite DSN is printed without its query (`DatabaseConfig.String()`, the connect log
+  The GORM log writer gets the same text, the MySQL driver's own stderr logger is silenced for
+  the provider's connector, and the connect log line names only the target (`postgresql (DSN
+  redacted)`), no longer a host and a database. The sanitizers and the host and database helpers
+  are removed. A SQLite DSN is printed without its query (`DatabaseConfig.String()`, the connect log
   and the config's database target). Diagnostics lost: the driver's own wording of a connect
   failure (host, user and database in it) and a server's message. Behaviour notes: the GORM
   PostgreSQL dialector no longer reads a `TimeZone=` DSN key (pgx still sends it as the session
