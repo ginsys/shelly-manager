@@ -250,9 +250,10 @@ All notable changes to this project are documented here. The project follows Con
 - A device writer saves only the columns it owns, and a whole-row save exists only where it is
   versioned. The discovery upsert, the GitOps import and the CLI discover command saved the whole
   row they had read, so a flag, a setting or a desired configuration that another writer committed
-  in between was written back as it was read. They now write the discovery columns (address,
-  firmware, status, last seen, and the type only when the discovery found one) or the name and the
-  type, and move `updated_at`. The unversioned whole-row `UpdateDevice` and the unused
+  in between was written back as it was read. The first two now write the discovery columns
+  (address, firmware, status, last seen, and the type only when the discovery found one) or the
+  name and the type, and move `updated_at`. The CLI discover command writes nothing of its own
+  after the discovery has stored the device. The unversioned whole-row `UpdateDevice` and the unused
   `UpsertDevice` are removed. Not covered here: a discovery pass moves `updated_at` even when
   nothing changed, so a person's next save can meet a 409 (ginsys/shelly-manager#583).
   (ginsys/shelly-manager#572)

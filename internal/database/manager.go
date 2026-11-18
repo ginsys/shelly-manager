@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 
 	"github.com/ginsys/shelly-manager/internal/config"
@@ -410,7 +411,10 @@ func writeDeviceColumns(db *gorm.DB, id uint, columns map[string]any, moveVersio
 		query := db.Model(&Device{}).Where("id = ?", id)
 		if moveVersion {
 			var stored Device
-			if err := db.Select("updated_at").Where("id = ?", id).First(&stored).Error; err != nil {
+			// FOR UPDATE reads the latest committed row. Inside a REPEATABLE READ transaction (the
+			// MySQL default) a plain read keeps the snapshot of the first read, so every retry
+			// would see the old version. SQLite has no row locks and ignores the clause.
+			if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Select("updated_at").Where("id = ?", id).First(&stored).Error; err != nil {
 				return err
 			}
 			next := time.Now()

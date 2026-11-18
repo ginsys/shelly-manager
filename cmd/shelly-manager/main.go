@@ -136,20 +136,9 @@ var discoverCmd = &cobra.Command{
 					fmt.Printf("✓ Added to database\n")
 				}
 			} else if err == nil {
-				// Update existing device with new IP if changed
-				existingDevice, _ := dbManager.GetDeviceByMAC(device.MAC)
-				if existingDevice.IP != device.IP {
-					// Only the discovery columns are written (ginsys/shelly-manager#572).
-					if err := dbManager.UpdateDeviceDiscovery(existingDevice.ID, database.DiscoveryUpdate{
-						IP: device.IP, Type: device.Type, Firmware: device.Firmware, Status: device.Status, LastSeen: time.Now(),
-					}); err != nil {
-						fmt.Printf("✗ Failed to update device: %v\n", err)
-					} else {
-						fmt.Printf("✓ Updated IP address in database\n")
-					}
-				} else {
-					fmt.Printf("• Already in database\n")
-				}
+				// DiscoverDevices already stored what the discovery found about a known device, its
+				// address included, so this command writes nothing more (ginsys/shelly-manager#572).
+				fmt.Printf("• Already in database\n")
 			}
 			fmt.Println(strings.Repeat("-", 80))
 		}
