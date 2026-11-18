@@ -103,6 +103,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	// Configure connection pool settings
 	if err := p.configureConnectionPool(); err != nil {
 		p.db = nil
+		_ = sqlDB.Close()
 		return fmt.Errorf("failed to configure connection pool: %w", err)
 	}
 
@@ -116,6 +117,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	if err := p.Ping(); err != nil {
 		p.connected = false
 		p.db = nil
+		_ = sqlDB.Close()
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -126,11 +128,11 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 		}).Warn("Failed to get PostgreSQL version")
 	}
 
-	// The host and database come from the config the driver connected with.
+	// Parsing does not make a field safe: a misplaced password can land in the
+	// host or the database name, so only the target is printed.
 	p.logger.WithFields(map[string]any{
 		"provider": "postgresql",
-		"host":     connConfig.Host,
-		"database": connConfig.Database,
+		"target":   config.Target(),
 	}).Info("Connected to PostgreSQL database")
 
 	return nil

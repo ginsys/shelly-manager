@@ -258,11 +258,14 @@ the database and user it was sent in its message. The classifier is in
 
 #### Logging Security
 
-The connect log line names the host and database from the parsed pgx
-configuration, never from the raw DSN. The GORM log writer receives the same
-sealed errors as the returned error. `DatabaseConfig.Target()` is the one form
-of a DSN that is printed: the provider name for a network provider, the path
-without its query for SQLite.
+The connect log line names only `DatabaseConfig.Target()`, never a field parsed
+from the DSN: a misplaced password can land in the host, a fallback host or the
+database name, and pgx keeps what it parsed. The GORM log writer receives the
+same sealed errors as the returned error. `Target()` is the one form of a DSN
+that is printed: the provider name for a network provider, the path without its
+query for SQLite. The MySQL driver's own package logger, which writes a failed
+read with its socket or address to stderr, is silenced for the provider's
+connector.
 
 ## Access Control
 
@@ -411,7 +414,7 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
         p.logger.WithFields(map[string]any{
             "event": "connection_failure",
             "duration": time.Since(start),
-            "host": connConfig.Host,
+            "target": config.Target(),
             "error_type": "connection_refused",
         }).Warn("Database connection failed")
         
