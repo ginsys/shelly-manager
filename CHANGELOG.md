@@ -290,8 +290,8 @@ All notable changes to this project are documented here. The project follows Con
   (ginsys/shelly-manager#587)
 - The bulk operations types and dialog in the web UI now match the bulk routes. The request is
   `{device_ids, options: {stop_on_error}}` and the answers are typed as the backend sends them
-  (`failed` and `skipped` counts, `device_name` and `device_ip`, no operation id, status or
-  timestamps). The dialog no longer offers what the routes never did: the JSON to apply, "validate
+  (`failed` and `skipped` counts, `device_name` and `device_ip`; no operation id or overall status,
+  and no timestamps on an import or export answer). The dialog no longer offers what the routes never did: the JSON to apply, "validate
   only", the export format, secrets and metadata, and the comparison, threshold and history options.
   Import reads the devices into the manager, export sends the stored import/export configuration to
   them, and the dialog says so. The dialog is still not mounted (ginsys/shelly-manager#136); applying
