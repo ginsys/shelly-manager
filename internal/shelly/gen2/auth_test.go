@@ -339,8 +339,11 @@ func TestSetAuth_IsSentOnceWhateverTheClientRetries(t *testing.T) {
 			if err := client.ResetAuth(context.Background()); err == nil {
 				t.Fatal("expected an error")
 			}
-			if setAuthCalls != 2 {
-				t.Fatalf("Shelly.SetAuth requests = %d, want 2 (one SetAuth and one ResetAuth, no retry)", setAuthCalls)
+			mu.Lock()
+			calls := setAuthCalls
+			mu.Unlock()
+			if calls != 2 {
+				t.Fatalf("Shelly.SetAuth requests = %d, want 2 (one SetAuth and one ResetAuth, no retry)", calls)
 			}
 		})
 	}
