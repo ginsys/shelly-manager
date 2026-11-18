@@ -11,9 +11,10 @@ import (
 
 // Gen2Converter converts between the stored configuration and the document that a Gen2 or later
 // device returns from Shelly.GetConfig, which is keyed by component (sys, wifi, mqtt, switch:0 and
-// so on). It reads and writes the sys, mqtt, cloud, switch and input sections so far: a setting of
-// any other section has no mapping, so the round-trip check in unsupportedGen2Settings refuses it
-// before the device is touched. Each later section is added together with the code that writes it.
+// so on). It reads and writes the sys, mqtt, cloud, switch and input sections and the Wi-Fi station
+// so far: a setting of any other section has no mapping, so the round-trip check in
+// unsupportedGen2Settings refuses it before the device is touched. Each later section is added
+// together with the code that writes it.
 type Gen2Converter struct {
 	logger *logging.Logger
 }
@@ -98,6 +99,7 @@ func (c *Gen2Converter) FromAPIConfig(apiJSON json.RawMessage, _ string) (*Devic
 		}
 	}
 	config.Relay, config.Input = gen2ChannelsFromDoc(doc)
+	config.WiFi = gen2WiFiFromDoc(doc["wifi"])
 	return config, nil
 }
 
@@ -252,6 +254,11 @@ func (c *Gen2Converter) ToAPIConfig(config *DeviceConfiguration, _ string) (json
 		}
 	}
 	gen2ChannelsToDoc(config, doc)
+	if config.WiFi != nil {
+		if sta := gen2WiFiToDoc(config.WiFi); len(sta) > 0 {
+			doc["wifi"] = map[string]interface{}{"sta": sta}
+		}
+	}
 	return json.Marshal(doc)
 }
 

@@ -1258,15 +1258,18 @@ paths:
         the route is open. Takes no request body. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
         change during the apply. A Gen2 or Gen3 device takes the system, MQTT, cloud, switch
-        and input settings only: name, eco mode, discoverable, timezone, latitude, longitude and
+        and input settings and the Wi-Fi station only: name, eco mode, discoverable, timezone, latitude, longitude and
         SNTP server with Sys.SetConfig, MQTT enable, server, port, user, password, client ID,
         topic prefix and the notification flags with MQTT.SetConfig, cloud enable and server
         with Cloud.SetConfig, each input name, type (switch or button) and invert with
         Input.SetConfig, and each relay name, initial state, auto on and auto off, with the
-        in_mode of its input, with Switch.SetConfig. A Gen1 word of the same meaning is read
-        as the Gen2 word (last, switch, toggle, edge). They are read back from
-        Shelly.GetConfig, except the MQTT password, which is write-only and is sent only with
-        a user. Only the keys the desired
+        in_mode of its input, with Switch.SetConfig, and last of all the Wi-Fi station (enable,
+        ssid, password, IPv4 mode and static address) with WiFi.SetConfig. A Gen1 word of the
+        same meaning is read as the Gen2 word (last, switch, toggle, edge). They are read back
+        from Shelly.GetConfig, except the MQTT and Wi-Fi passwords, which are write-only (the
+        MQTT password is sent only with a user). A Wi-Fi ssid is written only with a password,
+        or when the device is already on that network, in which case the ssid is left out. A
+        wrong static address strands the device. Only the keys the desired
         configuration sets are sent, because the Shelly documentation does not say that
         SetConfig merges. The device decides about a reboot: the apply reboots only when an
         answer says restart_required. It records that reboot as owed when it reads the answer,
@@ -1347,7 +1350,9 @@ paths:
             an SNTP server that is not an IPv4 address or a host name, a negative MQTT update
             period, a section with no Gen1 mapping such as the debug settings, or a stored field the configuration
             model does not know. On a Gen2 or Gen3 device every section except the system, MQTT,
-            cloud, switch and input settings, a switch or input value that no Gen2 word names
+            cloud, switch and input settings and the Wi-Fi station, any Wi-Fi setting beyond the
+            station (access point, roaming), switching the station off (wifi.enable false), a new
+            Wi-Fi network with no password, a switch or input value that no Gen2 word names
             (an input type other than switch or button, the Gen1 mode action, a negative timer),
             an input push action or timing, a relay schedule,
             an MQTT setting with no Gen2 key (keep alive, clean session,
@@ -1363,7 +1368,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station only.
           content:
             application/json:
               schema:
@@ -1383,8 +1388,9 @@ paths:
       summary: Compare the desired configuration with a Gen1, Gen2 or Gen3 device
       description: >-
         Reads the device and writes nothing. Takes no request body. The MQTT password is
-        write-only, so it is not compared. On a Gen2 or Gen3 device the system, MQTT, cloud,
-        switch and input settings are read back, from Shelly.GetConfig.
+        write-only, so it is not compared, and neither is the Wi-Fi password. On a Gen2 or Gen3
+        device the system, MQTT, cloud, switch and input settings and the Wi-Fi station are read
+        back, from Shelly.GetConfig.
       operationId: verifyDeviceNewConfig
       parameters:
         - name: id
@@ -1419,7 +1425,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections and the Wi-Fi station only.
           content:
             application/json:
               schema:
