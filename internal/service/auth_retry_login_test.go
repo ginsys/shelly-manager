@@ -30,6 +30,16 @@ type gatedDevice struct {
 }
 
 func (g *gatedDevice) handler(w http.ResponseWriter, r *http.Request) {
+	// A device serves /shelly to the service's identity read, which sends no login: the service
+	// reads who answers before it clears or saves a login. The read is neither gated nor counted,
+	// so it changes nothing in the order of requests these tests observe. Every other request
+	// to /shelly, a wrong login included, is still gated: that is where these tests make the
+	// device reject.
+	if r.URL.Path == "/shelly" && r.UserAgent() == identityProbeUserAgent {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"68C63A123456","auth":true,"fw":"1.14.0"}`)
+		return
+	}
 	user, pass, _ := r.BasicAuth()
 	if g.byPair {
 		user = user + ":" + pass
@@ -59,7 +69,8 @@ func (g *gatedDevice) handler(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `{"ison":true}`)
 		return
 	}
-	_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"DCAA2E000000","auth":true,"fw":"1.14.0"}`)
+	// The MAC of the record that createTestDevice stores: the device is the stored device.
+	_, _ = fmt.Fprint(w, `{"type":"SHPLG-S","mac":"68C63A123456","auth":true,"fw":"1.14.0"}`)
 }
 
 func (g *gatedDevice) setReject(f func()) {

@@ -423,7 +423,7 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 
 	// Before anything is marked or written, read who answers through the client that writes: a
 	// stale address can lead to another device, and a refusal here leaves every stored flag as it was.
-	if err = checkDeviceIdentity(ctx, client, device.MAC); err != nil {
+	if err = CheckDeviceIdentity(ctx, client, device.MAC); err != nil {
 		return nil, err
 	}
 
@@ -494,6 +494,12 @@ func (s *ConfigurationService) VerifyDesiredConfig(ctx context.Context, deviceID
 	}
 	desired, err := parseApplicableDesiredConfig(device.DesiredConfig)
 	if err != nil {
+		return nil, err
+	}
+
+	// A comparison with another device's configuration reports it in sync or drifted for the
+	// wrong device, so the identity is read first and a refusal is the whole answer.
+	if err = CheckDeviceIdentity(ctx, client, device.MAC); err != nil {
 		return nil, err
 	}
 

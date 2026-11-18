@@ -663,6 +663,10 @@ func (h *Handler) ControlDevice(w http.ResponseWriter, r *http.Request) {
 			h.responseWriter().WriteValidationError(w, r, map[string]string{"channel": err.Error()})
 			return
 		}
+		if errors.Is(err, configuration.ErrDeviceIdentity) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), nil)
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"action":    req.Action,

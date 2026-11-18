@@ -395,6 +395,11 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 	// in the caller's record. A client built without a login can meet a login that a writer
 	// without clientMu stored later, and the clear below keeps that one.
 	if !known || rejectedUser != "" || rejectedPass != "" || settings.AuthUser != "" || settings.AuthPass != "" {
+		// A device that is not the stored one says nothing about the stored login: leave it.
+		if idErr := s.checkStoredIdentity(device); idErr != nil {
+			return nil, fmt.Errorf("the login was rejected and is left as it is: %w", idErr)
+		}
+
 		s.logger.WithFields(map[string]any{
 			"device_id": device.ID,
 			"device_ip": device.IP,
@@ -597,27 +602,38 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		// Try to get status to really verify credentials work
 		_, err := client.GetStatus(ctx)
 		if err == nil {
-			// Credentials work, save them to device settings
-			settings.AuthUser = authUser
-			settings.AuthPass = authPass
-
-			updatedSettings, _ := json.Marshal(settings)
-			device.Settings = string(updatedSettings)
-
-			// Update database with working credentials
-			if updateErr := s.DB.UpdateDevice(device); updateErr != nil {
+			// The login works on whatever answers at this address. It is saved only for the stored
+			// device: another device accepting it proves nothing about this record.
+			if idErr := s.checkStoredIdentity(device); idErr != nil {
 				s.logger.WithFields(map[string]any{
 					"device_id": device.ID,
 					"device_ip": device.IP,
-					"error":     updateErr.Error(),
+					"error":     idErr.Error(),
 					"component": "service",
-				}).Warn("Failed to save device credentials")
+				}).Warn("Not saving the config login: the device at this address is not the stored device")
 			} else {
-				s.logger.WithFields(map[string]any{
-					"device_id": device.ID,
-					"device_ip": device.IP,
-					"component": "service",
-				}).Info("Saved working credentials to device")
+				// Credentials work, save them to device settings
+				settings.AuthUser = authUser
+				settings.AuthPass = authPass
+
+				updatedSettings, _ := json.Marshal(settings)
+				device.Settings = string(updatedSettings)
+
+				// Update database with working credentials
+				if updateErr := s.DB.UpdateDevice(device); updateErr != nil {
+					s.logger.WithFields(map[string]any{
+						"device_id": device.ID,
+						"device_ip": device.IP,
+						"error":     updateErr.Error(),
+						"component": "service",
+					}).Warn("Failed to save device credentials")
+				} else {
+					s.logger.WithFields(map[string]any{
+						"device_id": device.ID,
+						"device_ip": device.IP,
+						"component": "service",
+					}).Info("Saved working credentials to device")
+				}
 			}
 		} else if shelly.IsAuthError(err) {
 			s.logger.WithFields(map[string]any{
@@ -648,6 +664,11 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 				"device_ip": device.IP,
 				"component": "service",
 			}).Info("Saved credentials failed, retrying with config credentials")
+
+			// A device that is not the stored one says nothing about the stored login: leave it.
+			if idErr := s.checkStoredIdentity(device); idErr != nil {
+				return nil, fmt.Errorf("the login was rejected and is left as it is: %w", idErr)
+			}
 
 			// Clear the saved login the device rejected, unless a newer one replaced it.
 			s.clearRejectedLogin(device, settings.AuthUser, settings.AuthPass)
@@ -788,6 +809,12 @@ func (s *ShellyService) ControlDevice(deviceID uint, action string, params map[s
 	client, err := s.getClient(device)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	// A stale address leads to another device: a switch or a reboot is sent only to the stored
+	// one. The auth retry below runs after this check, so its login clear is guarded too.
+	if err = s.checkStoredIdentity(device); err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
