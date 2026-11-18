@@ -306,11 +306,11 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 				if name, ok := relayData["name"].(string); ok {
 					sw.Name = name
 				}
-				if autoOn, ok := relayData["auto_on"].(float64); ok {
-					sw.AutoOn = int(autoOn)
+				if autoOn, ok := shelly.WholeNumber(relayData["auto_on"]); ok {
+					sw.AutoOn = autoOn
 				}
-				if autoOff, ok := relayData["auto_off"].(float64); ok {
-					sw.AutoOff = int(autoOff)
+				if autoOff, ok := shelly.WholeNumber(relayData["auto_off"]); ok {
+					sw.AutoOff = autoOff
 				}
 				config.Switches = append(config.Switches, sw)
 			}
