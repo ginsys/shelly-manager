@@ -20,7 +20,7 @@ type GormConfigRepository struct {
 	// The pinned apply-lock connections one process may hold at once (see takeLockSlot).
 	lockSlotsOnce sync.Once
 	lockSlots     chan struct{}
-	lockSlotsErr  error
+	lockPoolOfOne bool
 }
 
 // DbConfigTemplate is the repository's narrow view of the config_templates table: the

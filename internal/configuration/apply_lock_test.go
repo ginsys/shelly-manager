@@ -512,20 +512,25 @@ func TestApplyLockProviders_PinnedLocksNeverTakeTheWholePool(t *testing.T) {
 	}
 }
 
-// A pool of one connection cannot hold a lock and run the apply's queries: the error says so.
-func TestApplyLockProviders_APoolOfOneConnectionIsRefusedWithAnExplanation(t *testing.T) {
+// A pool of one connection cannot hold a lock and run the apply's queries. The default configuration
+// gives PostgreSQL and MySQL such a pool, and apply must keep working there: no database lock, no
+// refusal, the in-process mutex as before.
+func TestApplyLockProviders_APoolOfOneConnectionAppliesWithoutADatabaseLock(t *testing.T) {
 	for _, server := range lockServers(t) {
 		t.Run(server.name, func(t *testing.T) {
 			f := newLockFixture(t, server)
 			repo := NewGormConfigRepository(server.openSized(t, 1), nil)
-			_ = f
 
-			lock, err := repo.LockDeviceApply(context.Background(), 1)
+			for i := 0; i < 2; i++ {
+				lock, err := repo.LockDeviceApply(context.Background(), 1)
+				require.NoError(t, err)
+				assert.Nil(t, lock, "a pool of one takes no database lock")
+			}
 
-			require.Error(t, err)
-			assert.Nil(t, lock)
-			assert.NotErrorIs(t, err, ErrApplyInProgress)
-			assert.Contains(t, err.Error(), "max_open_conns")
+			svc := NewConfigurationService(repo, nil, nil)
+			out := waitOutcome(t, applyAsync(svc, newFakeGen1Device()), "the apply on a pool of one")
+			require.NoError(t, out.err)
+			assert.True(t, f.stored(t).ConfigApplied)
 		})
 	}
 }
