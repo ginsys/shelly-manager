@@ -40,6 +40,9 @@ interface DevicesState {
   }
 }
 
+// The load whose answer may still be applied (see `fetchDevices`). Not state: nothing renders it.
+let latestLoad = 0
+
 export const useDevicesStore = defineStore('devices', {
   state: (): DevicesState => ({
     items: [],
@@ -122,6 +125,9 @@ export const useDevicesStore = defineStore('devices', {
 
   actions: {
     async fetchDevices() {
+      // Only the newest load may land: a page change or a refresh while an older load is still
+      // running must not be overwritten by the older answer.
+      const mine = ++latestLoad
       this.loading = true
       this.error = null
       try {
@@ -129,14 +135,16 @@ export const useDevicesStore = defineStore('devices', {
           page: this.page,
           pageSize: this.pageSize
         })
+        if (mine !== latestLoad) return
         this.items = items
         const p = meta?.pagination
         this.totalPages = p?.total_pages ?? null
         this.hasNext = !!p?.has_next
       } catch (e: any) {
+        if (mine !== latestLoad) return
         this.error = e?.message || 'Failed to load devices'
       } finally {
-        this.loading = false
+        if (mine === latestLoad) this.loading = false
       }
     },
 
