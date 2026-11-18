@@ -4,6 +4,11 @@ This document describes the Notification endpoints, standardized responses, and 
 
 All endpoints return the standard API wrapper with `success|error`, `data`, optional `meta`, `timestamp`, and `request_id`.
 
+**Admin key.** If the server has an admin key configured, every notification route needs it
+(`Authorization: Bearer <key>` or `X-API-Key: <key>`) and answers 401 `UNAUTHORIZED` without it. The reads
+return each channel's stored configuration (webhook URLs, headers, secret), which is why they are guarded
+too. With no admin key configured the routes are open.
+
 ## Endpoints
 
 - Channels
