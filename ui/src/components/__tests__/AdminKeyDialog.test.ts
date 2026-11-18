@@ -111,13 +111,23 @@ describe('AdminKeyDialog', () => {
     input()!.dispatchEvent(new Event('input'))
     click('admin-key-submit')
     await p
-    rejectAdminKey()
+    rejectAdminKey('wrong-key')
     await nextTick()
     const msg = document.body.querySelector('[data-testid="admin-key-message"]') as HTMLElement
     expect(msg.textContent).toContain('That key was not accepted.')
     expect(msg.getAttribute('aria-live')).toBe('polite')
     expect(input()!.value).toBe('')
     cancelAdminKeyPrompt()
+  })
+
+  it('unmounting while a request waits settles it with null', async () => {
+    const w = mountDialog()
+    const p = requestAdminKey()
+    await nextTick()
+    w.unmount()
+    wrapper = null
+    await expect(p).resolves.toBeNull()
+    expect(promptOpen.value).toBe(false)
   })
 
   it('opens by hand from the header route and never prints the key as text', async () => {

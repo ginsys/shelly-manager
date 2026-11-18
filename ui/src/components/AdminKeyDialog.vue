@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { promptOpen, promptMessage, submitAdminKey, cancelAdminKeyPrompt } from '@/api/adminKey'
 
 const key = ref('')
@@ -51,6 +51,10 @@ watch(promptOpen, (open) => {
 })
 onMounted(() => {
   if (promptOpen.value) focusField()
+})
+// A dialog that goes away must not leave a request waiting for a key nobody can enter.
+onBeforeUnmount(() => {
+  if (promptOpen.value) cancelAdminKeyPrompt()
 })
 
 function submit() {
