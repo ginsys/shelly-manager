@@ -204,6 +204,36 @@ func TestNormalizeRawConfig_RelayAutoOnOffAndMaxPowerReadAsWholeNumbersOnly(t *t
 	})
 }
 
+// A relay timer that is not a whole number cannot be shown in NormalizedRelay (its zero means "disabled"),
+// so it stays visible in the raw remainder under relay_<key>: a live 7.5 never compares equal to a stored 0.
+func TestNormalizeRawConfig_RelayTimerNotWholeStaysVisible(t *testing.T) {
+	n := NewConfigNormalizer()
+
+	for _, key := range []string{"auto_on", "auto_off"} {
+		t.Run(key, func(t *testing.T) {
+			extraKey := "relay_" + key
+			read := func(entry map[string]interface{}) (map[string]interface{}, bool) {
+				got := n.NormalizeRawConfig(map[string]interface{}{"relays": []interface{}{entry}})
+				v, present := got.Raw.Additional[extraKey]
+				return map[string]interface{}{extraKey: v}, present
+			}
+
+			for _, tc := range notWhole {
+				got, present := read(map[string]interface{}{key: tc.value})
+				assert.True(t, present, tc.name+": the value is kept in the raw remainder")
+				assert.Equal(t, tc.value, got[extraKey], tc.name)
+			}
+
+			_, present := read(map[string]interface{}{key: float64(300)})
+			assert.False(t, present, "a whole number is shown in the relay only")
+			_, present = read(map[string]interface{}{key: float64(0)})
+			assert.False(t, present, "a whole zero is shown in the relay only")
+			_, present = read(map[string]interface{}{"ison": true})
+			assert.False(t, present, "an absent key adds nothing")
+		})
+	}
+}
+
 // The same holds for the normalized form of a stored typed configuration's raw document.
 func TestNormalizeTypedConfig_RawMaxPowerReadsAsWholeNumberOnly(t *testing.T) {
 	n := NewConfigNormalizer()

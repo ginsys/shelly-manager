@@ -244,6 +244,7 @@ func (n *ConfigNormalizer) NormalizeRawConfig(rawConfig map[string]interface{}) 
 	}
 
 	// Relay Configuration (for switches/plugs)
+	relayTimerNotWhole := map[string]interface{}{}
 	if relays, ok := rawConfig["relays"].([]interface{}); ok && len(relays) > 0 {
 		if relay, ok := relays[0].(map[string]interface{}); ok {
 			normalized.Relay = &NormalizedRelay{}
@@ -254,11 +255,17 @@ func (n *ConfigNormalizer) NormalizeRawConfig(rawConfig map[string]interface{}) 
 					normalized.Relay.State = "off"
 				}
 			}
+			// A timer that is not a whole number has no place in these int fields (their zero means
+			// "disabled"), so it is kept in the raw remainder and a comparison still sees it.
 			if autoOff, ok := shelly.WholeNumber(relay["auto_off"]); ok {
 				normalized.Relay.AutoOff = autoOff
+			} else if v, present := relay["auto_off"]; present {
+				relayTimerNotWhole["relay_auto_off"] = v
 			}
 			if autoOn, ok := shelly.WholeNumber(relay["auto_on"]); ok {
 				normalized.Relay.AutoOn = autoOn
+			} else if v, present := relay["auto_on"]; present {
+				relayTimerNotWhole["relay_auto_on"] = v
 			}
 			if defaultState, ok := relay["default_state"].(string); ok {
 				normalized.Relay.DefaultState = defaultState
@@ -320,6 +327,9 @@ func (n *ConfigNormalizer) NormalizeRawConfig(rawConfig map[string]interface{}) 
 		if !rawHandledFields[key] {
 			normalized.Raw.Additional[key] = value
 		}
+	}
+	for key, value := range relayTimerNotWhole {
+		normalized.Raw.Additional[key] = value
 	}
 
 	// Time fields

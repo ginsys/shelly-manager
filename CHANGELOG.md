@@ -193,7 +193,8 @@ All notable changes to this project are documented here. The project follows Con
   configuration. Before, a live 7.5 was stored as 7 and verify reported no drift. A number no int
   holds exactly (above 2^53-1, or an infinity) is read as no value too, and a whole number or a
   missing key behaves as before. A fractional `max_power` stays in the raw remainder of the
-  normalized configuration, so a comparison still sees it. One shared helper,
+  normalized configuration, and so does a fractional relay `auto_on` or `auto_off` (as
+  `relay_auto_on` and `relay_auto_off`), so a comparison still sees it. One shared helper,
   `shelly.WholeNumber`, now holds the rule that the Gen1 roller read-back already used. Fixes
   ginsys/shelly-manager#532.
 - Importing a device's typed configuration now keeps, for each Gen1 relay channel,
