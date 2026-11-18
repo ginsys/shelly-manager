@@ -114,8 +114,9 @@ rebase keeps both and no longer stops on a conflict. A union merge never warns, 
 
 - End your entry with its own `Fixes owner/repo#N.` (or `Refs`) line. That unique last line is what keeps
   two entries apart. Two entries that share a line can be merged into one.
-- After a rebase, read `git diff main...HEAD -- CHANGELOG.md`: it must show your complete entry as added
-  lines and nothing else. A removed line, or an added line that is not yours, was lost or duplicated
+- After a rebase, run `git fetch origin main` and read `git diff origin/main...HEAD -- CHANGELOG.md` (a
+  local `main` that is behind would show other PRs' entries as yours): it must show your complete entry
+  as added lines and nothing else. A removed line, or an added line that is not yours, was lost or duplicated
   by the merge: fix it before you push.
 
 ## Security & Secrets
