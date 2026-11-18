@@ -200,8 +200,9 @@ func (m *MySQLProvider) Migrate(models ...interface{}) error {
 	}
 
 	start := time.Now()
-	// A query the migrator makes with Rows or Row stores the driver's error
-	// without passing the dialector, so it is sealed here, before it is logged.
+	// The migrator reads some things from database/sql directly (Row().Scan,
+	// rows.ColumnTypes, rows.Close), which neither the dialector nor the row
+	// callback sees, so what it returns is sealed here, before it is logged.
 	err := sealOpenError(m.db.AutoMigrate(models...))
 	duration := time.Since(start)
 
@@ -537,7 +538,7 @@ func (m *MySQLProvider) createGormLogger() logger.Interface {
 		logLevel = logger.Warn
 	}
 
-	return sealLogger(logger.New(
+	return logger.New(
 		log.New(&gormLogWriter{logger: m.logger}, "", 0),
 		logger.Config{
 			SlowThreshold:             m.config.SlowQueryThreshold,
@@ -546,7 +547,7 @@ func (m *MySQLProvider) createGormLogger() logger.Interface {
 			ParameterizedQueries:      true, // keep bound values, such as device logins, out of the SQL log
 			Colorful:                  false,
 		},
-	))
+	)
 }
 
 // updateStats updates runtime database statistics

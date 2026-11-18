@@ -469,27 +469,41 @@ func TestSealedDialector_CloseErrorsHoldNoDriverText(t *testing.T) {
 	assert.NotContains(t, readLog(), "10.9.8.7")
 }
 
-// The wrapped logger must still be a ParamsFilter that filters: GORM asserts the
-// interface, and a wrapper that hides it prints bound values into the SQL log.
-func TestSealedLogger_KeepsTheParamsFilterAndSealsTheTrace(t *testing.T) {
-	var out []string
-	inner := logger.New(
-		testLogWriter(func(line string) { out = append(out, line) }),
-		logger.Config{LogLevel: logger.Info, ParameterizedQueries: true},
-	)
-	sealed := sealLogger(inner)
+// GORM prints its trace line after every callback, so the error it prints is the
+// sealed one, on each path: a statement, Scan and Rows.
+func TestSealedDialector_TraceLineHoldsNoDriverText(t *testing.T) {
+	driverErr := fmt.Errorf("read tcp 10.9.8.7:5432: %s: %w", leakWord, syscall.ECONNRESET)
+	sites := map[string]func(db *gorm.DB){
+		"Exec": func(db *gorm.DB) { _ = db.Exec("SELECT 1").Error },
+		"Scan": func(db *gorm.DB) {
+			var n int
+			_ = db.Raw("SELECT 1").Scan(&n).Error
+		},
+		"Rows": func(db *gorm.DB) {
+			if rows, err := db.Raw("SELECT 1").Rows(); err == nil {
+				_ = rows.Close()
+			}
+		},
+	}
+	for name, site := range sites {
+		t.Run(name, func(t *testing.T) {
+			var out []string
+			config := fakeConfig()
+			config.Logger = logger.New(testLogWriter(func(line string) { out = append(out, line) }),
+				logger.Config{LogLevel: logger.Info, ParameterizedQueries: true})
+			pool := poolFailing(t, poolFailure{stmtErr: driverErr})
+			db, err := openGORM(postgres.New(postgres.Config{Conn: pool}), config)
+			require.NoError(t, err)
 
-	filter, ok := sealed.(gorm.ParamsFilter)
-	require.True(t, ok, "the wrapper hides ParamsFilter from GORM")
-	sql, vars := filter.ParamsFilter(context.Background(), "UPDATE t SET pass = ?", "secret-value")
-	assert.Equal(t, "UPDATE t SET pass = ?", sql)
-	assert.Empty(t, vars, "the bound value was kept")
+			site(db)
 
-	sealed.LogMode(logger.Info).Trace(context.Background(), time.Now(), func() (string, int64) { return "SELECT 1", 0 },
-		fmt.Errorf("write unix @->/run/%s/.s.PGSQL.5432: %w", leakWord, syscall.EPIPE))
-	require.Len(t, out, 1)
-	assert.NotContains(t, out[0], leakWord)
-	assert.Contains(t, out[0], "database operation failed: connection reset")
+			require.NotEmpty(t, out, "the trace line was printed, or this proves nothing")
+			for _, line := range out {
+				assert.NotContains(t, line, leakWord)
+				assert.NotContains(t, line, "10.9.8.7")
+			}
+		})
+	}
 }
 
 type testLogWriter func(string)
