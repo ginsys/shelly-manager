@@ -148,7 +148,7 @@ Create Backup → Select devices/format → Preview → Create → (later) Resto
 
 ### 3.2 Component Status
 
-The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` components were removed (ginsys/shelly-manager#256). `components/bulk/BulkOperationsDialog.vue` and `components/shared/ErrorDisplay.vue` have no importer and stay until someone decides their fate.
+The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` components were removed (ginsys/shelly-manager#256). `components/bulk/BulkOperationsDialog.vue` is mounted on the devices page (ginsys/shelly-manager#136). `components/shared/ErrorDisplay.vue` is used by that dialog.
 
 ---
 
@@ -251,8 +251,10 @@ The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` compo
 | `/config/bulk-drift-detect-enhanced` | POST | The same comparison, answered with the comprehensive report |
 
 All three take `{"device_ids": [...], "options": {"stop_on_error": false}}` and act on exactly those
-devices (`ui/src/api/bulk.ts` types the answers; the dialog that calls them is not mounted yet,
-ginsys/shelly-manager#136).
+devices (`ui/src/api/bulk.ts` types the answers). The devices page mounts the dialog that calls
+them: a select column with a select-all for the visible rows, and a Bulk Operations button that
+stays disabled while nothing is picked. The selection is kept by device id in the devices store,
+so it survives a page change, and the dialog sends exactly the picked ids.
 
 #### Export - Backup (9 endpoints)
 | Endpoint | Method | Purpose |
@@ -421,11 +423,6 @@ legacy stored key that apply and the override editor never read.
 - `POST /api/v1/configuration/convert-to-raw` - Convert typed to raw
 - `GET /api/v1/configuration/schema` - Get config schema
 - `POST /api/v1/configuration/bulk-validate` - Bulk validate
-
-#### Bulk Operations (3 unused)
-- `POST /api/v1/config/bulk-import` - Bulk import configs
-- `POST /api/v1/config/bulk-drift-detect` - Bulk drift detect
-- `POST /api/v1/config/bulk-drift-detect-enhanced` - Enhanced bulk drift
 
 #### Drift Detection Schedules — fail-closed (#270)
 Schedules are stored but never executed. The UI (`DriftSchedulesPage.vue`) wires
