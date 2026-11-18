@@ -16,7 +16,7 @@ and [SMA browser import](images/sma-import-preview.png).
 
 ## Executive Summary
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 56% of backend API functionality (75/134 endpoints) through a well-organized, user-friendly interface.
+The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 55% of backend API functionality (73/132 endpoints) through a well-organized, user-friendly interface.
 
 **Key Metrics:**
 - 41 Vue components (21 pages + 1 layout + 19 reusable components)
@@ -166,11 +166,11 @@ The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` compo
 | Category | Total Endpoints | Used | Unused | Coverage |
 |----------|-----------------|------|--------|----------|
 | Device Management | 8 | 8 | 0 | 100% |
-| Device Configuration | 11 | 11 | 0 | 100% |
+| Device Configuration | 10 | 10 | 0 | 100% |
 | Device Login | 1 | 1 | 0 | 100% |
 | Configuration Templates | 8 | 8 | 0 | 100% |
 | Typed Configuration | 8 | 8 | 0 | 100% |
-| Bulk Operations | 4 | 4 | 0 | 100% |
+| Bulk Operations | 3 | 3 | 0 | 100% |
 | Drift Detection Schedules | 7 | 7 | 0 | 100% |
 | Drift Reporting | 4 | 4 | 0 | 100% |
 | Export/Backup | 21 | 21 | 0 | 100% |
@@ -183,9 +183,9 @@ The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` compo
 | DHCP | 1 | 0 | 1 | 0% |
 | Admin | 1 | 1 | 0 | 100% |
 | Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **134** | **75** | **59** | **56%** |
+| **TOTAL** | **132** | **73** | **59** | **55%** |
 
-### 4.3 Used Endpoints (75 total)
+### 4.3 Used Endpoints (73 total)
 
 #### Devices (2 endpoints)
 | Endpoint | Method | Purpose |

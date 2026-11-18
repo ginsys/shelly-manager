@@ -129,7 +129,7 @@ components:
                 type: string
               config_id:
                 type: integer
-                description: The stored configuration the import wrote. Absent for an export.
+                description: The stored configuration the import wrote.
               status:
                 type: string
                 enum: [success, failed, skipped]
