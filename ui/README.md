@@ -22,7 +22,7 @@ Folder structure (planned):
 
 Note: Dependencies are not installed here to avoid network usage in this environment.
 
-Dev runtime config (automatic with make run)
+Dev runtime config (served by `make run`, not loaded by the UI)
 - `make run` now sets `SHELLY_DEV_EXPOSE_ADMIN_KEY=1` and the Go server serves `/app-config.js` that injects:
   - `window.__API_BASE__ = '/api/v1'`
   - `window.__ADMIN_KEY__ = '<security.admin_api_key from config>'` when set
@@ -31,7 +31,7 @@ Dev runtime config (automatic with make run)
 
 How to run the SPA (development)
 - Backend: run `make run` in project root (serves API on :8080 and `/app-config.js`).
-- Frontend: run `make ui-dev` (Vite on :5173). The included `vite.config.ts` proxies `/api`, `/metrics`, and `/app-config.js` to :8080, so the app works without extra env. The Metrics dashboard route is available at `/dashboard` (not `/metrics`), to avoid conflict with backend metrics APIs.
+- Frontend: run `make ui-dev` (Vite on :5173). The included `vite.config.ts` proxies `/api`, `/metrics`, and `/app-config.js` to :8080, so API calls work without extra env when the server has no admin key; with one, set `VITE_ADMIN_KEY` in `ui/.env.local`. The Metrics dashboard route is available at `/dashboard` (not `/metrics`), to avoid conflict with backend metrics APIs.
 - Optional: You can also run directly from `ui/` with `npm run dev`.
 
 Manual fallback (if not using the provided proxy)
@@ -83,7 +83,7 @@ VITE_ENABLE_DEVTOOLS=false
 | `VITE_WS_URL` | WebSocket server URL | Auto-detected from API URL |
 | `VITE_ENABLE_DEVTOOLS` | Enable Vue devtools | `false` |
 
-**Note**: The default setup with `make run` and `make ui-dev` handles configuration automatically via `/app-config.js` injection. Manual `.env` files are only needed for custom deployments.
+**Note**: With `make run` and `make ui-dev` the API base needs no `.env` file. A server with an admin key needs `VITE_ADMIN_KEY` set in `ui/.env.local` (the dev `/app-config.js` is not loaded by the UI).
 
 ## End-to-End Testing
 
