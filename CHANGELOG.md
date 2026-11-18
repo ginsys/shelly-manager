@@ -284,8 +284,10 @@ All notable changes to this project are documented here. The project follows Con
   PostgreSQL dialector no longer reads a `TimeZone=` DSN key (pgx still sends it as the session
   `timezone`, and no repository DSN sets it); a SQLite DSN with a query now takes its directory
   from the path part only, so a stray directory is no longer made from a query value. Not covered
-  here: the text of a server message on an already established connection, and the value a SQLite
-  driver quotes when it refuses an invalid `_` parameter. (ginsys/shelly-manager#587)
+  here: the text of a query error on a connection that is already open after `Connect` returned
+  (the ping and the version probe of `Connect` are sealed, and GORM logs only once they are
+  done), and the value a SQLite driver quotes when it refuses an invalid `_` parameter.
+  (ginsys/shelly-manager#587)
 - A device writer saves only the columns it owns, and a whole-row save exists only where it is
   versioned. The discovery upsert, the GitOps import and the CLI discover command saved the whole
   row they had read, so a flag, a setting or a desired configuration that another writer committed

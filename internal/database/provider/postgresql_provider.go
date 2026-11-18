@@ -86,16 +86,20 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	// is the first connect or a reconnect long after.
 	sqlDB := sql.OpenDB(sealConnector(stdlib.GetConnector(*connConfig)))
 
-	// Configure GORM logger based on config
+	// GORM logs nothing until the probes below are done: an error of an open
+	// connection (a reset on a unix socket, a refused write) quotes the socket
+	// path or the address, and the provider reports those errors sealed itself.
 	gormConfig := &gorm.Config{
-		Logger: p.createGormLogger(),
+		Logger: logger.Discard,
 	}
 
 	// Open database connection with PostgreSQL driver
 	db, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), gormConfig)
 	if err != nil {
 		_ = sqlDB.Close()
-		return fmt.Errorf("failed to connect to PostgreSQL database: %w", err)
+		sealed := sealError(err)
+		p.logger.WithFields(map[string]any{"error": sealed.Error()}).Error("Failed to connect to PostgreSQL database")
+		return fmt.Errorf("failed to connect to PostgreSQL database: %w", sealed)
 	}
 
 	p.db = db
@@ -124,9 +128,12 @@ func (p *PostgreSQLProvider) Connect(config DatabaseConfig) error {
 	// Get PostgreSQL version
 	if err := p.updateProviderVersion(); err != nil {
 		p.logger.WithFields(map[string]any{
-			"error": err.Error(),
+			"error": sealError(err).Error(),
 		}).Warn("Failed to get PostgreSQL version")
 	}
+
+	// From here on GORM logs as configured.
+	db.Logger = p.createGormLogger()
 
 	// Parsing does not make a field safe: a misplaced password can land in the
 	// host or the database name, so only the target is printed.
@@ -177,7 +184,7 @@ func (p *PostgreSQLProvider) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return sqlDB.PingContext(ctx)
+	return sealError(sqlDB.PingContext(ctx))
 }
 
 // Migrate performs database migration

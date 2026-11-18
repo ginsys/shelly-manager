@@ -4,6 +4,9 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -19,6 +22,15 @@ func fakePostgres(t *testing.T) (port int) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
+	serveFakePostgresOn(t, listener, false)
+	return listener.Addr().(*net.TCPAddr).Port
+}
+
+// serveFakePostgresOn serves listener until the test ends. With resetOnQuery
+// the server drops the connection at the first extended-protocol message, which
+// is the version probe, after startup and the pings have completed.
+func serveFakePostgresOn(t *testing.T, listener net.Listener, resetOnQuery bool) {
+	t.Helper()
 	t.Cleanup(func() { _ = listener.Close() })
 
 	go func() {
@@ -27,13 +39,12 @@ func fakePostgres(t *testing.T) (port int) {
 			if acceptErr != nil {
 				return
 			}
-			go serveFakePostgres(conn)
+			go serveFakePostgres(conn, resetOnQuery)
 		}
 	}()
-	return listener.Addr().(*net.TCPAddr).Port
 }
 
-func serveFakePostgres(conn net.Conn) {
+func serveFakePostgres(conn net.Conn, resetOnQuery bool) {
 	defer func() { _ = conn.Close() }()
 
 	// startup message: int32 length (self included), then the payload
@@ -73,6 +84,9 @@ func serveFakePostgres(conn net.Conn) {
 			reply = ready
 			errorSent = false
 		default:
+			if resetOnQuery {
+				return
+			}
 			if !errorSent {
 				errorSent = true
 				reply = message('E', []byte("SERROR\x00C0A000\x00Mnot supported by the test server\x00\x00")...)
@@ -105,5 +119,36 @@ func TestPostgreSQLConnect_SuccessLogHoldsNoDSNText(t *testing.T) {
 	require.NoError(t, err, "the second host answers")
 	logged := readLog()
 	assert.Contains(t, logged, "Connected to PostgreSQL database", "the success path ran, or this proves nothing")
+	assert.NotContains(t, logged, leakWord)
+}
+
+// An error of an open connection is not a connect error: pgx reports a reset on
+// a unix socket with the socket path in it, and the version probe of Connect
+// used to print it in the application log, GORM's log and the warning.
+func TestPostgreSQLConnect_ProbeErrorHoldsNoDSNText(t *testing.T) {
+	dir, err := os.MkdirTemp("", "sk")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	socketDir := filepath.Join(dir, leakWord)
+	require.NoError(t, os.Mkdir(socketDir, 0o700))
+	socket := filepath.Join(socketDir, ".s.PGSQL.5432")
+	require.Less(t, len(socket), 100, "a unix socket path is limited to 108 bytes")
+	listener, err := net.Listen("unix", socket)
+	require.NoError(t, err)
+	serveFakePostgresOn(t, listener, true)
+
+	logger, readLog := fileLogger(t)
+	p := NewPostgreSQLProvider(logger)
+	t.Cleanup(func() { _ = p.Close() })
+
+	err = p.Connect(DatabaseConfig{
+		Provider: "postgresql",
+		DSN:      "postgresql://app@localhost:5432/shelly?host=" + url.QueryEscape(socketDir) + "&sslmode=disable&connect_timeout=2",
+		LogLevel: "info",
+	})
+
+	require.NoError(t, err, "a failed version probe is a warning, not a failed connect")
+	logged := readLog()
+	assert.Contains(t, logged, "Failed to get PostgreSQL version", "the probe failed, or this proves nothing")
 	assert.NotContains(t, logged, leakWord)
 }
