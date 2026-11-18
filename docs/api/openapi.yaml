@@ -1318,7 +1318,7 @@ paths:
             data holds success, applied_count, failed_count, requires_reboot, unconfirmed,
             failures (refused settings by path and read-back differences, secret values masked)
             and warnings. unconfirmed is true when a Wi-Fi write changed the station network and
-            the device stopped answering; it is neither a success nor a failure, and the device
+            the device stopped answering (Gen1, Gen2 and Gen3); it is neither a success nor a failure, and the device
             stays pending. requires_reboot is also true when an earlier apply wrote a setting that
             needs a reboot and failed before the device rebooted; it stays owed until a later
             apply reboots the device. On Gen2 and Gen3 a restart the device asked for that

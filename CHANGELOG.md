@@ -18,10 +18,19 @@ All notable changes to this project are documented here. The project follows Con
   would have no way back to the device), and any Wi-Fi setting beyond the station (`wifi.ap.*`
   and `wifi.roam_threshold`). A device that cannot be read before a Wi-Fi `ssid` write is
   refused too, with the error of a failed device read. A wrong static address strands the device.
-  After a change of network the read-back can fail, and the apply then reports an error and the
-  device stays pending (`config_applied` false), where Gen1 reports `unconfirmed`. Not confirmed
+  After a change of network the device may stop answering: see the `unconfirmed` entry below. Not confirmed
   on hardware (read from the Shelly Gen2 WiFi reference): every key, the read-back and what
   `restart_required` means for these keys. Part of ginsys/shelly-manager#381.
+- A Gen2 or Gen3 apply that changes the Wi-Fi station network (a different `ssid`, `enable`,
+  `ipv4mode`, `ip`, `netmask` or `gw`; the password and name server never count) now reports
+  `unconfirmed: true`, as Gen1 does, when the device then gives no answer: to the write, to the
+  reboot or to the read-back. It is neither a success nor a failure, the device stays pending,
+  and no reboot is requested for a write that got no answer. A device that answers with an
+  error, or a reply that is not a configuration, keeps its error. Any station write of those
+  keys now reads the device first and is refused when it cannot be read (before, only an
+  `ssid` did). The stored address is not changed: after a static address change, re-discover the
+  device or correct its address, then apply again. Fixes ginsys/shelly-manager#545 and
+  ginsys/shelly-manager#550.
 - Apply to a Shelly 2.5 in roller mode now writes the roller keys beyond the travel times,
   direction and inputs, with `POST /settings/roller/0`, and reads them back: `default_state`,
   the button type (`button_type`, sent as `btn_type`, read back as `button_type`),
