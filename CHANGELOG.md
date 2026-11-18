@@ -84,10 +84,7 @@ All notable changes to this project are documented here. The project follows Con
   input that switch runs and not input N; the path is `input.inputs.I.mode`, with I the position
   in the desired list. A channel list that holds one id twice is refused too, at the second
   entry (for example `relay.relays.1.id`), whether or not the entries set anything, because it
-  cannot say which channel the settings belong to. A template and an override that the configuration merge
-  pairs by position can still put a channel's settings under another id when the ids differ:
-  ginsys/shelly-manager#537 tracks it.
-  Refused with 422 before anything is
+  cannot say which channel the settings belong to. Refused with 422 before anything is
   written, with one path for each setting: any other value (the Gen1 mode `action`, an input
   type `analog` or `count`, a negative timer), an input push action or timing, a relay
   schedule and the top-level relay and input settings. `cycle` and `activate` are left to the device, which answers with its
@@ -204,6 +201,18 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- The configuration merge now pairs the channels of a template and an override by id, not by
+  list position. Before, a sparse override such as `[{"id": 1, "name": "B"}]` over a template
+  with channels 0 and 1 was merged into the first list entry and copied its id over it, so
+  channel 0's settings could end up under channel 1 (and the Gen2 apply, which writes by id,
+  wrote them there). It covers `relay.relays`, `input.inputs`, the effective configuration,
+  the inherited view and `PATCH` of the device overrides, where a `null` inside a channel
+  removes that field of the channel with the same `id` and no longer of the element at the same
+  position. A channel that the lower layer lacks is added at the end. A merged channel is a copy
+  that shares nothing with the override. A list written without ids (every id decodes as 0)
+  takes the list index as the id, as the Gen1 apply already reads it. A list that repeats an id
+  still merges by position, and the Gen2 apply refuses it at the second entry. Fixes
+  ginsys/shelly-manager#537.
 - A fractional `auto_on`, `auto_off` or `max_power` is now read as no value instead of being cut to
   its whole part, on every read of a device document: the Gen1 and Gen2 device clients, the Gen1
   converter, the typed and raw configuration conversions, the typed import and the normalized

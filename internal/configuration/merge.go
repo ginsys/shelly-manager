@@ -113,6 +113,10 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 }
 
 func mergeSlices(dstField, srcField reflect.Value, sources map[string]string, sourceName, fieldPath string) {
+	if mergeChannelsByID(dstField, srcField, sources, sourceName, fieldPath) {
+		return
+	}
+
 	srcLen := srcField.Len()
 
 	if dstField.IsNil() || dstField.Len() < srcLen {
@@ -149,6 +153,173 @@ func mergeSlices(dstField, srcField reflect.Value, sources map[string]string, so
 				sources[elemPath] = sourceName
 			}
 		}
+	}
+}
+
+// channelIDs returns the channel id of each element of a list of structs that carry an int ID, and
+// false for any other list or when two elements share an id. An id left out of a stored template
+// decodes as 0, so in a list of more than one entry whose ids are all 0 the id is the list index,
+// which is what the Gen1 apply requires of a channel (id equals position).
+func channelIDs(list reflect.Value) ([]int, bool) {
+	elem := list.Type().Elem()
+	if elem.Kind() != reflect.Struct {
+		return nil, false
+	}
+	if field, ok := elem.FieldByName("ID"); !ok || field.Type.Kind() != reflect.Int {
+		return nil, false
+	}
+
+	ids := make([]int, list.Len())
+	allZero := true
+	for i := range ids {
+		ids[i] = int(list.Index(i).FieldByName("ID").Int())
+		allZero = allZero && ids[i] == 0
+	}
+	if allZero && len(ids) > 1 {
+		for i := range ids {
+			ids[i] = i
+		}
+	}
+
+	seen := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			return nil, false
+		}
+		seen[id] = true
+	}
+	return ids, true
+}
+
+// pairChannels returns, for each channel of src, its position in the list that merging src into dst
+// gives: the position of the channel with the same id in dst, or the next position after the end of
+// dst for a channel dst lacks. It reports false for a list that cannot be paired by id.
+func pairChannels(dst, src reflect.Value) ([]int, bool) {
+	dstIDs, ok := channelIDs(dst)
+	if !ok {
+		return nil, false
+	}
+	srcIDs, ok := channelIDs(src)
+	if !ok {
+		return nil, false
+	}
+
+	at := make(map[int]int, len(dstIDs)+len(srcIDs))
+	for i, id := range dstIDs {
+		at[id] = i
+	}
+
+	positions := make([]int, len(srcIDs))
+	for i, id := range srcIDs {
+		pos, found := at[id]
+		if !found {
+			pos = len(at)
+			at[id] = pos
+		}
+		positions[i] = pos
+	}
+	return positions, true
+}
+
+// mergeChannelsByID merges a list of channels by id, so that a sparse layer that names channel 1
+// changes channel 1 and never the first channel of the list. A channel the destination lacks is
+// appended as a copy. It reports false, and changes nothing, for a list it cannot pair by id; the
+// caller then merges by position.
+func mergeChannelsByID(dstField, srcField reflect.Value, sources map[string]string, sourceName, fieldPath string) bool {
+	positions, ok := pairChannels(dstField, srcField)
+	if !ok {
+		return false
+	}
+	srcIDs, _ := channelIDs(srcField)
+
+	for i, pos := range positions {
+		if pos == dstField.Len() {
+			dstField.Set(reflect.Append(dstField, reflect.Zero(dstField.Type().Elem())))
+		}
+		elemPath := fieldPath + "." + strconv.Itoa(pos)
+		mergeStructs(dstField.Index(pos), cloneValue(srcField.Index(i)), sources, sourceName, elemPath)
+		dstField.Index(pos).FieldByName("ID").SetInt(int64(srcIDs[i]))
+	}
+	return true
+}
+
+// remapChannelPaths turns the paths of a patch body into paths of the configuration that merging
+// the patch into existing gives. A path through a list holds the index of the element in the patch
+// body. The merge puts a channel where its id is, so in a relay or input channel list the index is
+// changed to the position of the channel with the same id. A list that is merged by position, and
+// every other path, keeps its index. The paths given are not changed.
+func remapChannelPaths(paths [][]string, existing, patch *DeviceConfiguration) [][]string {
+	var existingRelays, patchRelays []SingleRelayConfig
+	if existing.Relay != nil {
+		existingRelays = existing.Relay.Relays
+	}
+	if patch.Relay != nil {
+		patchRelays = patch.Relay.Relays
+	}
+	var existingInputs, patchInputs []SingleInputConfig
+	if existing.Input != nil {
+		existingInputs = existing.Input.Inputs
+	}
+	if patch.Input != nil {
+		patchInputs = patch.Input.Inputs
+	}
+
+	relayAt, _ := pairChannels(reflect.ValueOf(existingRelays), reflect.ValueOf(patchRelays))
+	inputAt, _ := pairChannels(reflect.ValueOf(existingInputs), reflect.ValueOf(patchInputs))
+
+	remapped := make([][]string, len(paths))
+	for i, path := range paths {
+		remapped[i] = path
+		if len(path) < 3 {
+			continue
+		}
+		var positions []int
+		switch {
+		case strings.EqualFold(path[0], "relay") && strings.EqualFold(path[1], "relays"):
+			positions = relayAt
+		case strings.EqualFold(path[0], "input") && strings.EqualFold(path[1], "inputs"):
+			positions = inputAt
+		}
+		index, err := strconv.Atoi(path[2])
+		if err != nil || index < 0 || index >= len(positions) {
+			continue
+		}
+		remapped[i] = append([]string{path[0], path[1], strconv.Itoa(positions[index])}, path[3:]...)
+	}
+	return remapped
+}
+
+// cloneValue returns a deep copy of v, so that a value taken from one layer shares no pointer or
+// list with the merged result.
+func cloneValue(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v
+		}
+		clone := reflect.New(v.Type().Elem())
+		clone.Elem().Set(cloneValue(v.Elem()))
+		return clone
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		clone := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := 0; i < v.Len(); i++ {
+			clone.Index(i).Set(cloneValue(v.Index(i)))
+		}
+		return clone
+	case reflect.Struct:
+		clone := reflect.New(v.Type()).Elem()
+		clone.Set(v)
+		for i := 0; i < v.NumField(); i++ {
+			if clone.Field(i).CanSet() {
+				clone.Field(i).Set(cloneValue(v.Field(i)))
+			}
+		}
+		return clone
+	default:
+		return v
 	}
 }
 

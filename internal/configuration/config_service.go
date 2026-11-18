@@ -392,7 +392,9 @@ func (s *ConfigurationService) PatchDeviceOverrides(deviceID uint, patch *Device
 		return fmt.Errorf("failed to merge overrides: %w", err)
 	}
 
-	RemovePaths(result.Config, removed)
+	// A path through a channel list holds the index in the patch body, and the merge puts a channel
+	// where its id is.
+	RemovePaths(result.Config, remapChannelPaths(removed, existing, patch))
 
 	return s.SetDeviceOverrides(deviceID, result.Config)
 }
