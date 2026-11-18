@@ -46,7 +46,11 @@ func newFakeGen2Device() *fakeGen2Device {
 			"location": map[string]interface{}{"tz": "Europe/Brussels", "lat": 50.8, "lon": 4.3},
 			"sntp":     map[string]interface{}{"server": "time.google.com"},
 		},
-		"wifi":  map[string]interface{}{"sta": map[string]interface{}{"ssid": "home", "enable": true}},
+		"wifi": map[string]interface{}{
+			"sta": map[string]interface{}{"ssid": "home", "enable": true},
+			// A device always holds an access point; a new one is open and on.
+			"ap": map[string]interface{}{"ssid": "ShellyPlus2PM-AABBCCDDEEFF", "is_open": true, "enable": true},
+		},
 		"mqtt":  map[string]interface{}{"enable": false, "server": nil},
 		"cloud": map[string]interface{}{"enable": true, "server": "iot.shelly.cloud:6012/jrpc"},
 	}
@@ -90,8 +94,10 @@ func (d *fakeGen2Device) CallConfigSetter(_ context.Context, method string, para
 		storeKeys(section, config)
 		// A device never returns the MQTT password or the Wi-Fi password.
 		delete(section, "pass")
-		if sta, ok := section["sta"].(map[string]interface{}); ok {
-			delete(sta, "pass")
+		for _, part := range []string{"sta", "ap"} {
+			if sub, ok := section[part].(map[string]interface{}); ok {
+				delete(sub, "pass")
+			}
 		}
 	}
 	return d.restart, nil
@@ -324,13 +330,13 @@ func TestApplyDesiredConfig_Gen2RefusesSectionsItCannotWriteYet(t *testing.T) {
 		desired *DeviceConfiguration
 		path    string
 	}{
-		"wifi":   {&DeviceConfiguration{WiFi: &WiFiConfiguration{RoamThreshold: IntPtr(-70)}}, "wifi"},
+		"wifi":   {&DeviceConfiguration{WiFi: &WiFiConfiguration{AccessPoint: &AccessPointConfig{Key: StringPtr("k")}}}, "wifi.ap.key"},
 		"login":  {&DeviceConfiguration{Auth: &AuthConfiguration{Enable: BoolPtr(true), Username: StringPtr("a"), Password: StringPtr("b")}}, "auth"},
 		"roller": {&DeviceConfiguration{Roller: &RollerConfig{MotorSpeed: IntPtr(50)}}, "roller"},
 		"mixed": {&DeviceConfiguration{
 			System: &SystemConfiguration{Device: &TypedDeviceConfig{Name: StringPtr("lamp")}},
-			WiFi:   &WiFiConfiguration{RoamThreshold: IntPtr(-70)},
-		}, "wifi"},
+			WiFi:   &WiFiConfiguration{AccessPoint: &AccessPointConfig{Key: StringPtr("k")}},
+		}, "wifi.ap.key"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
