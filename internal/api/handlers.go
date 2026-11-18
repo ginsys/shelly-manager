@@ -318,16 +318,10 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 			"request_id":  r.Context().Value("request_id"),
 		}).Error("AddDevice operation failed with detailed context")
 
-		// Check if it's a unique constraint violation and return appropriate error
-		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") ||
-			strings.Contains(strings.ToLower(err.Error()), "constraint failed") {
-			if strings.Contains(strings.ToLower(err.Error()), "ip") {
-				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this IP address already exists", nil)
-			} else if strings.Contains(strings.ToLower(err.Error()), "mac") {
-				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this MAC address already exists", nil)
-			} else {
-				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device already exists", nil)
-			}
+		// A unique constraint violation is a conflict. The database seals driver text,
+		// so the violation is read by type and the column is no longer known.
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this IP or MAC address already exists", nil)
 			return
 		}
 
@@ -424,15 +418,8 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 			"request_id": r.Context().Value("request_id"),
 		}).Error("UpdateDevice operation failed with detailed context")
 
-		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") ||
-			strings.Contains(strings.ToLower(err.Error()), "constraint failed") {
-			if strings.Contains(strings.ToLower(err.Error()), "ip") {
-				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this IP address already exists", nil)
-			} else if strings.Contains(strings.ToLower(err.Error()), "mac") {
-				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this MAC address already exists", nil)
-			} else {
-				h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device conflict", nil)
-			}
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Device with this IP or MAC address already exists", nil)
 			return
 		}
 
