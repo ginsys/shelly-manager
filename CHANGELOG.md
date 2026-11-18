@@ -250,10 +250,11 @@ All notable changes to this project are documented here. The project follows Con
   PostgreSQL and MySQL the apply holds a lock in the database for its whole span: snapshot,
   device writes, read-back, the pending-reboot record and clear, and the `config_applied` update.
   A second replica's apply waits up to 30 seconds, then is refused with `409` `CONFLICT` and
-  writes nothing. A lock lost during an apply fails the apply with `config_applied` left false,
-  since the device may hold a mix of two applies. SQLite keeps the in-process lock. A connection
-  pooler in transaction mode breaks the lock, and an abrupt loss of a replica frees it only when
-  the server notices the dead client. You no longer need to run one manager replica when you use
+  writes nothing. A lock lost during an apply fails the apply and leaves the device pending with
+  a reboot owed (`config_applied` false, `pending_reboot` true), since the device may hold a mix
+  of two applies. SQLite keeps the in-process lock. A connection pooler in transaction mode
+  breaks the lock, `max_open_conns` must be at least 2, and an abrupt loss of a replica frees the
+  lock only when the server notices the dead client. You no longer need to run one manager replica when you use
   apply. Fixes ginsys/shelly-manager#425.
 - Device control, verify and the handling of stored logins no longer act on whatever device
   answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and

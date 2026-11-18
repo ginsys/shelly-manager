@@ -8,7 +8,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 )
 
 // ErrUnsupportedGeneration is returned when the device generation has no
@@ -439,6 +438,14 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 
 	verifier := NewConfigVerifier(converter, s.logger)
 	verifier.WithPendingReboot(device.PendingReboot, func(pending bool) error {
+		// A clear can erase the record of another replica that took the lock after ours was lost,
+		// so it is made only while the lock is still held. A failed clear is a warning: the flag
+		// stays set and costs one more reboot.
+		if !pending {
+			if lockErr := stillHeld(ctx, lock); lockErr != nil {
+				return fmt.Errorf("%w: %v", ErrApplyLockLost, lockErr)
+			}
+		}
 		return s.repo.SetDevicePendingReboot(deviceID, pending)
 	})
 	if hooks != nil {
@@ -456,6 +463,13 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 		})
 	}
 	result, err := verifier.ApplyAndVerify(ctx, client, desired, deviceType)
+	// A lock lost during the apply lets another replica write in between: the device writes cannot
+	// be undone, but the other replica's flags are not left standing over a device that may hold
+	// this apply's older writes. Whatever this apply returned, the device is pending and owes a reboot.
+	if lockErr := stillHeld(ctx, lock); lockErr != nil {
+		s.markPendingAfterLockLoss(deviceID)
+		return nil, fmt.Errorf("%w: %v", ErrApplyLockLost, lockErr)
+	}
 	if err != nil {
 		var refused *refusedBeforeWriteError
 		if errors.As(err, &refused) && device.ConfigApplied {
@@ -470,14 +484,6 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 	}
 
 	if result.ConfigApplied {
-		// A lock lost during the apply lets another replica write in between. The writes cannot be
-		// undone, but success is not claimed: the flag stays false, as it was set before the first write.
-		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		lockErr := lock.StillHeld(checkCtx)
-		cancel()
-		if lockErr != nil {
-			return nil, fmt.Errorf("%w: %v", ErrApplyLockLost, lockErr)
-		}
 		set, err := s.repo.SetDeviceConfigAppliedIfDesired(deviceID, snapshot)
 		if err != nil {
 			return nil, fmt.Errorf("configuration applied but could not record it: %w", err)

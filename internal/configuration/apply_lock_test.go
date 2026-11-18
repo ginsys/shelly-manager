@@ -29,6 +29,8 @@ type lockServer struct {
 	name string
 	// open is a new handle on the test database with its own connection pool, as one replica has.
 	open func(t *testing.T) *gorm.DB
+	// openSized is open with a pool of at most n connections.
+	openSized func(t *testing.T, n int) *gorm.DB
 	// endSessions ends every session on the test database but the caller's own, as a restarted
 	// server or a cut connection does.
 	endSessions func(t *testing.T)
@@ -62,6 +64,12 @@ func newLockDatabaseName() string {
 
 func openQuiet(t *testing.T, dialector gorm.Dialector) *gorm.DB {
 	t.Helper()
+	return openQuietSized(t, dialector, 8)
+}
+
+// openQuietSized opens a handle whose pool holds at most maxOpen connections.
+func openQuietSized(t *testing.T, dialector gorm.Dialector, maxOpen int) *gorm.DB {
+	t.Helper()
 	db, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
@@ -69,8 +77,8 @@ func openQuiet(t *testing.T, dialector gorm.Dialector) *gorm.DB {
 	// Idle connections stay in the pool (the default keeps two and closes the rest), so a lock that
 	// leaked onto a returned connection would still be held and a case that frees it by accident
 	// would not pass for the wrong reason.
-	sqlDB.SetMaxOpenConns(8)
-	sqlDB.SetMaxIdleConns(8)
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxOpen)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	return db
 }
@@ -93,6 +101,9 @@ func postgresLockServer(t *testing.T) *lockServer {
 	return &lockServer{
 		name: "postgres",
 		open: func(t *testing.T) *gorm.DB { return openQuiet(t, postgres.Open(dsn(database))) },
+		openSized: func(t *testing.T, n int) *gorm.DB {
+			return openQuietSized(t, postgres.Open(dsn(database)), n)
+		},
 		endSessions: func(t *testing.T) {
 			require.NoError(t, admin.Exec(
 				"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ? AND pid <> pg_backend_pid()", database).Error)
@@ -118,6 +129,9 @@ func mysqlLockServer(t *testing.T) *lockServer {
 	return &lockServer{
 		name: "mysql",
 		open: func(t *testing.T) *gorm.DB { return openQuiet(t, mysql.Open(dsn(database))) },
+		openSized: func(t *testing.T, n int) *gorm.DB {
+			return openQuietSized(t, mysql.Open(dsn(database)), n)
+		},
 		endSessions: func(t *testing.T) {
 			var ids []int64
 			require.NoError(t, admin.Raw("SELECT id FROM information_schema.processlist WHERE db = ?", database).Scan(&ids).Error)
@@ -160,7 +174,8 @@ func (f *lockFixture) replica(t *testing.T) (*ConfigurationService, *GormConfigR
 
 func (f *lockFixture) setDesired(t *testing.T, desired string) {
 	t.Helper()
-	require.NoError(t, f.setup.Model(&DbDevice{}).Where("id = ?", 1).
+	// A fresh handle, as in stored: sessions the server ended leave dead connections in the setup pool.
+	require.NoError(t, f.server.open(t).Model(&DbDevice{}).Where("id = ?", 1).
 		Updates(map[string]any{"desired_config": desired, "config_applied": false}).Error)
 }
 
@@ -385,12 +400,15 @@ func (d *rebootingDevice) Reboot(ctx context.Context) error {
 	return d.fakeGen1Device.Reboot(ctx)
 }
 
-// A lock lost during the apply (the server ended the session) lets another replica in. The device
-// writes cannot be undone, but the apply must not claim success: the flag stays false and the
-// error says the lock was lost.
-func TestApplyLockProviders_ALockLostDuringTheApplyIsNotReportedAsSuccess(t *testing.T) {
+// A lock lost during the apply (the server ended the session) lets another replica in. Replica A
+// stalls before its write and loses its session; replica B applies the newer configuration and sets
+// the flag; A then writes its old snapshot. The device writes cannot be undone, but B's true flag must
+// not stay over a device that holds A's older write: A reports the lost lock and leaves the device
+// pending, owing a reboot, so the next apply repairs it.
+func TestApplyLockProviders_ALockLostDuringTheApplyLeavesTheDevicePending(t *testing.T) {
 	for _, server := range lockServers(t) {
 		t.Run(server.name, func(t *testing.T) {
+			shortLockWait(t, 5*time.Second)
 			f := newLockFixture(t, server)
 			svcA, _ := f.replica(t)
 			dev := newParkedDevice()
@@ -398,12 +416,116 @@ func TestApplyLockProviders_ALockLostDuringTheApplyIsNotReportedAsSuccess(t *tes
 			aDone := applyAsync(svcA, dev)
 			waitClosed(t, dev.parked, "replica A to park inside its write")
 			server.endSessions(t)
+			f.setDesired(t, desiredNameJSON(t, "new"))
+			svcB, _ := f.replica(t)
+			b := waitOutcome(t, applyAsync(svcB, dev), "replica B")
+			require.NoError(t, b.err)
+			require.True(t, f.stored(t).ConfigApplied, "B applied the newer configuration")
 			close(dev.release)
 
 			a := waitOutcome(t, aDone, "replica A")
 
 			require.ErrorIs(t, a.err, ErrApplyLockLost)
-			assert.False(t, f.stored(t).ConfigApplied, "success was not recorded")
+			names := dev.writtenNames()
+			assert.Equal(t, "old", names[len(names)-1], "A's older write landed last: %v", names)
+			stored := f.stored(t)
+			assert.False(t, stored.ConfigApplied, "B's flag does not stay over a device that holds A's write")
+			assert.True(t, stored.PendingReboot, "the next apply reboots")
+		})
+	}
+}
+
+// A replica whose lock was lost does not clear the owed reboot of the replica that took over.
+func TestApplyLockProviders_ALostLockDoesNotClearTheOwedReboot(t *testing.T) {
+	for _, server := range lockServers(t) {
+		t.Run(server.name, func(t *testing.T) {
+			f := newLockFixture(t, server)
+			raw, err := json.Marshal(mqttAndSNTP())
+			require.NoError(t, err)
+			f.setDesired(t, string(raw))
+			svcA, _ := f.replica(t)
+			rebootParked, rebootRelease := make(chan struct{}), make(chan struct{})
+			var parkedOnce atomic.Bool
+			dev := &rebootingDevice{fakeGen1Device: newDeviceWithMQTT(), onReboot: func() {
+				if parkedOnce.CompareAndSwap(false, true) {
+					close(rebootParked)
+					<-rebootRelease
+				}
+			}}
+
+			aDone := applyAsync(svcA, dev)
+			waitClosed(t, rebootParked, "replica A to park inside its reboot")
+			server.endSessions(t)
+			close(rebootRelease)
+
+			a := waitOutcome(t, aDone, "replica A")
+
+			require.ErrorIs(t, a.err, ErrApplyLockLost)
+			assert.True(t, f.stored(t).PendingReboot, "the reboot stays owed")
+		})
+	}
+}
+
+// Each running apply pins one connection and still needs another for its own queries, so a pool
+// can hold at most half of its connections pinned. With every connection pinned the applies would
+// wait for each other for ever; the ones past the limit queue for a slot and are refused after the
+// wait, and the ones inside it finish.
+func TestApplyLockProviders_PinnedLocksNeverTakeTheWholePool(t *testing.T) {
+	for _, server := range lockServers(t) {
+		t.Run(server.name, func(t *testing.T) {
+			shortLockWait(t, 400*time.Millisecond)
+			f := newLockFixture(t, server)
+			for id := uint(2); id <= 4; id++ {
+				require.NoError(t, f.setup.Create(&DbDevice{ID: id, MAC: testDeviceMAC, DesiredConfig: desiredNameJSON(t, "old")}).Error)
+			}
+			repo := NewGormConfigRepository(server.openSized(t, 4), nil)
+			svc := NewConfigurationService(repo, nil, nil)
+
+			devs := make([]*parkedDevice, 4)
+			done := make([]<-chan applyOutcome, 4)
+			for i := range devs {
+				devs[i] = newParkedDevice()
+			}
+			applyTo := func(id uint, dev ShellyClient) <-chan applyOutcome {
+				out := make(chan applyOutcome, 1)
+				go func() {
+					result, err := svc.ApplyDesiredConfig(context.Background(), id, dev, "SHPLG-S")
+					out <- applyOutcome{result, err}
+				}()
+				return out
+			}
+			done[0], done[1] = applyTo(1, devs[0]), applyTo(2, devs[1])
+			waitClosed(t, devs[0].parked, "the first apply to park inside its write")
+			waitClosed(t, devs[1].parked, "the second apply to park inside its write")
+
+			// Two connections are pinned, two are left for their queries. Two more applies find no slot.
+			third := waitOutcome(t, applyTo(3, devs[2]), "the third apply")
+			fourth := waitOutcome(t, applyTo(4, devs[3]), "the fourth apply")
+			require.ErrorIs(t, third.err, ErrApplyInProgress)
+			require.ErrorIs(t, fourth.err, ErrApplyInProgress)
+
+			close(devs[0].release)
+			close(devs[1].release)
+			require.NoError(t, waitOutcome(t, done[0], "the first apply").err)
+			require.NoError(t, waitOutcome(t, done[1], "the second apply").err)
+		})
+	}
+}
+
+// A pool of one connection cannot hold a lock and run the apply's queries: the error says so.
+func TestApplyLockProviders_APoolOfOneConnectionIsRefusedWithAnExplanation(t *testing.T) {
+	for _, server := range lockServers(t) {
+		t.Run(server.name, func(t *testing.T) {
+			f := newLockFixture(t, server)
+			repo := NewGormConfigRepository(server.openSized(t, 1), nil)
+			_ = f
+
+			lock, err := repo.LockDeviceApply(context.Background(), 1)
+
+			require.Error(t, err)
+			assert.Nil(t, lock)
+			assert.NotErrorIs(t, err, ErrApplyInProgress)
+			assert.Contains(t, err.Error(), "max_open_conns")
 		})
 	}
 }
