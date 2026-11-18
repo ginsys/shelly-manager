@@ -1623,11 +1623,11 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 			if btnType, ok := firstRelay["btn_type"].(string); ok {
 				relay.ButtonType = StringPtr(btnType)
 			}
-			if autoOn, ok := firstRelay["auto_on"].(float64); ok && autoOn > 0 {
-				relay.AutoOn = IntPtr(int(autoOn))
+			if autoOn, ok := shelly.WholeNumber(firstRelay["auto_on"]); ok && autoOn > 0 {
+				relay.AutoOn = IntPtr(autoOn)
 			}
-			if autoOff, ok := firstRelay["auto_off"].(float64); ok && autoOff > 0 {
-				relay.AutoOff = IntPtr(int(autoOff))
+			if autoOff, ok := shelly.WholeNumber(firstRelay["auto_off"]); ok && autoOff > 0 {
+				relay.AutoOff = IntPtr(autoOff)
 			}
 			if hasTimer, ok := firstRelay["has_timer"].(bool); ok {
 				relay.HasTimer = BoolPtr(hasTimer)
@@ -1635,8 +1635,8 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 			if schedule, ok := firstRelay["schedule"].(bool); ok && schedule {
 				relay.HasTimer = BoolPtr(true)
 			}
-			if maxPower, ok := firstRelay["max_power"].(float64); ok && maxPower > 0 {
-				relay.MaxPowerLimit = IntPtr(int(maxPower))
+			if maxPower, ok := shelly.WholeNumber(firstRelay["max_power"]); ok && maxPower > 0 {
+				relay.MaxPowerLimit = IntPtr(maxPower)
 			}
 		}
 
@@ -1657,11 +1657,11 @@ func (s *Service) ConvertRawToTyped(rawConfig json.RawMessage) (*TypedConfigurat
 				if defaultState, ok := relayMap["default_state"].(string); ok {
 					singleRelay.DefaultState = StringPtr(defaultState)
 				}
-				if autoOn, ok := relayMap["auto_on"].(float64); ok && autoOn > 0 {
-					singleRelay.AutoOn = IntPtr(int(autoOn))
+				if autoOn, ok := shelly.WholeNumber(relayMap["auto_on"]); ok && autoOn > 0 {
+					singleRelay.AutoOn = IntPtr(autoOn)
 				}
-				if autoOff, ok := relayMap["auto_off"].(float64); ok && autoOff > 0 {
-					singleRelay.AutoOff = IntPtr(int(autoOff))
+				if autoOff, ok := shelly.WholeNumber(relayMap["auto_off"]); ok && autoOff > 0 {
+					singleRelay.AutoOff = IntPtr(autoOff)
 				}
 				if schedule, ok := relayMap["schedule"].(bool); ok {
 					singleRelay.Schedule = BoolPtr(schedule)

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/service"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // TypedConfigurationRequest represents a typed configuration request
@@ -1225,13 +1225,11 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 		if btnType, ok := relayData["btn_type"].(string); ok {
 			relay.ButtonType = configuration.StringPtr(btnType)
 		}
-		if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
-			autoOnInt := int(autoOn)
-			relay.AutoOn = &autoOnInt
+		if autoOn, ok := shelly.WholeNumber(relayData["auto_on"]); ok && autoOn > 0 {
+			relay.AutoOn = &autoOn
 		}
-		if autoOff, ok := relayData["auto_off"].(float64); ok && autoOff > 0 {
-			autoOffInt := int(autoOff)
-			relay.AutoOff = &autoOffInt
+		if autoOff, ok := shelly.WholeNumber(relayData["auto_off"]); ok && autoOff > 0 {
+			relay.AutoOff = &autoOff
 		}
 		if hasTimer, ok := relayData["has_timer"].(bool); ok {
 			relay.HasTimer = configuration.BoolPtr(hasTimer)
@@ -1259,20 +1257,18 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 						relay.DefaultState = configuration.StringPtr(defaultState)
 					}
 				}
-				if autoOn, ok := relayMap["auto_on"].(float64); ok {
-					autoOnInt := int(autoOn)
-					singleRelay.AutoOn = &autoOnInt
+				if autoOn, ok := shelly.WholeNumber(relayMap["auto_on"]); ok {
+					singleRelay.AutoOn = &autoOn
 					// Also set global auto_on from first relay
 					if i == 0 && relay.AutoOn == nil {
-						relay.AutoOn = &autoOnInt
+						relay.AutoOn = &autoOn
 					}
 				}
-				if autoOff, ok := relayMap["auto_off"].(float64); ok {
-					autoOffInt := int(autoOff)
-					singleRelay.AutoOff = &autoOffInt
+				if autoOff, ok := shelly.WholeNumber(relayMap["auto_off"]); ok {
+					singleRelay.AutoOff = &autoOff
 					// Also set global auto_off from first relay
 					if i == 0 && relay.AutoOff == nil {
-						relay.AutoOff = &autoOffInt
+						relay.AutoOff = &autoOff
 					}
 				}
 				if schedule, ok := relayMap["schedule"].(bool); ok {
@@ -1310,13 +1306,11 @@ func (h *Handler) convertRelayConfig(data map[string]interface{}, deviceType str
 				if defaultState, ok := relayData["default_state"].(string); ok {
 					singleRelay.DefaultState = configuration.StringPtr(defaultState)
 				}
-				if autoOn, ok := relayData["auto_on"].(float64); ok && autoOn > 0 {
-					autoOnInt := int(autoOn)
-					singleRelay.AutoOn = &autoOnInt
+				if autoOn, ok := shelly.WholeNumber(relayData["auto_on"]); ok && autoOn > 0 {
+					singleRelay.AutoOn = &autoOn
 				}
-				if autoOff, ok := relayData["auto_off"].(float64); ok && autoOff > 0 {
-					autoOffInt := int(autoOff)
-					singleRelay.AutoOff = &autoOffInt
+				if autoOff, ok := shelly.WholeNumber(relayData["auto_off"]); ok && autoOff > 0 {
+					singleRelay.AutoOff = &autoOff
 				}
 				if schedule, ok := relayData["schedule"].(bool); ok {
 					singleRelay.Schedule = configuration.BoolPtr(schedule)
@@ -1363,8 +1357,8 @@ func readRelayChannelFields(channel *configuration.SingleRelayConfig, entry map[
 		channel.ScheduleRules = &list
 	}
 	// A fraction reads as no value, never as its truncation, so a stored 7 never stands for a 7.5.
-	if maxPower, ok := entry["max_power"].(float64); ok && maxPower == math.Trunc(maxPower) {
-		channel.MaxPower = configuration.IntPtr(int(maxPower))
+	if maxPower, ok := shelly.WholeNumber(entry["max_power"]); ok {
+		channel.MaxPower = &maxPower
 	}
 }
 
@@ -1372,9 +1366,8 @@ func (h *Handler) convertPowerMeteringConfig(data map[string]interface{}) (*conf
 	power := &configuration.PowerMeteringConfig{}
 	var warnings []string
 
-	if maxPower, ok := data["max_power"].(float64); ok && maxPower > 0 {
-		maxPowerInt := int(maxPower)
-		power.MaxPower = &maxPowerInt
+	if maxPower, ok := shelly.WholeNumber(data["max_power"]); ok && maxPower > 0 {
+		power.MaxPower = &maxPower
 	}
 	if maxVoltage, ok := data["max_voltage"].(float64); ok && maxVoltage > 0 {
 		maxVoltageInt := int(maxVoltage)

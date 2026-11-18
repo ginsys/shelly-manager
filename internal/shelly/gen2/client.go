@@ -356,11 +356,11 @@ func (c *Client) GetConfig(ctx context.Context) (*shelly.DeviceConfig, error) {
 				if initialState, ok := switchData["initial_state"].(string); ok {
 					sw.InitialState = initialState
 				}
-				if autoOn, ok := switchData["auto_on"].(float64); ok {
-					sw.AutoOn = int(autoOn)
+				if autoOn, ok := shelly.WholeNumber(switchData["auto_on"]); ok {
+					sw.AutoOn = autoOn
 				}
-				if autoOff, ok := switchData["auto_off"].(float64); ok {
-					sw.AutoOff = int(autoOff)
+				if autoOff, ok := shelly.WholeNumber(switchData["auto_off"]); ok {
+					sw.AutoOff = autoOff
 				}
 
 				config.Switches = append(config.Switches, sw)

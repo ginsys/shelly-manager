@@ -1,9 +1,10 @@
 package configuration
 
 import (
-	"math"
 	"slices"
 	"strings"
+
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // The Shelly 2.5 roller keys beyond the travel times, direction and inputs (POST and GET
@@ -40,11 +41,10 @@ func rollerEnum(raw interface{}, allowed []string) *string {
 // rollerNumber returns a JSON number as a whole number, and nil for anything else. A fraction is left
 // unread and never truncated, so a live 2.5 shows as a difference from a desired 2.
 func rollerNumber(raw interface{}) *int {
-	n, ok := raw.(float64)
-	if !ok || n != math.Trunc(n) {
+	whole, ok := shelly.WholeNumber(raw)
+	if !ok {
 		return nil
 	}
-	whole := int(n)
 	return &whole
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // Gen1Converter handles Gen1 device API conversion
@@ -418,11 +419,11 @@ func (c *Gen1Converter) convertRelay(gen1 map[string]interface{}, config *Device
 		if defaultState, ok := relayMap["default_state"].(string); ok {
 			singleRelay.DefaultState = StringPtr(defaultState)
 		}
-		if autoOn, ok := relayMap["auto_on"].(float64); ok {
-			singleRelay.AutoOn = IntPtr(int(autoOn))
+		if autoOn, ok := shelly.WholeNumber(relayMap["auto_on"]); ok {
+			singleRelay.AutoOn = IntPtr(autoOn)
 		}
-		if autoOff, ok := relayMap["auto_off"].(float64); ok {
-			singleRelay.AutoOff = IntPtr(int(autoOff))
+		if autoOff, ok := shelly.WholeNumber(relayMap["auto_off"]); ok {
+			singleRelay.AutoOff = IntPtr(autoOff)
 		}
 		if applianceType, ok := relayMap["appliance_type"].(string); ok {
 			singleRelay.ApplianceType = StringPtr(applianceType)
@@ -439,8 +440,8 @@ func (c *Gen1Converter) convertRelay(gen1 map[string]interface{}, config *Device
 			}
 			singleRelay.ScheduleRules = &list
 		}
-		if maxPower, ok := relayMap["max_power"].(float64); ok {
-			singleRelay.MaxPower = IntPtr(int(maxPower))
+		if maxPower, ok := shelly.WholeNumber(relayMap["max_power"]); ok {
+			singleRelay.MaxPower = IntPtr(maxPower)
 		}
 
 		relay.Relays = append(relay.Relays, singleRelay)
@@ -458,9 +459,9 @@ func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config
 		return nil
 	}
 
-	if maxPower, ok := gen1["max_power"].(float64); ok {
+	if maxPower, ok := shelly.WholeNumber(gen1["max_power"]); ok {
 		config.PowerMetering = &PowerMeteringConfig{
-			MaxPower: IntPtr(int(maxPower)),
+			MaxPower: IntPtr(maxPower),
 		}
 	}
 
@@ -492,11 +493,11 @@ func commonChannelMaxPower(gen1 map[string]interface{}) (int, bool) {
 	}
 	common := 0
 	for i, relay := range relays {
-		value, ok := relay["max_power"].(float64)
-		if !ok || (i > 0 && int(value) != common) {
+		value, ok := shelly.WholeNumber(relay["max_power"])
+		if !ok || (i > 0 && value != common) {
 			return 0, false
 		}
-		common = int(value)
+		common = value
 	}
 	return common, true
 }

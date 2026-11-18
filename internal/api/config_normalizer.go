@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 // NormalizedConfig represents a configuration in a standardized, comparable format
@@ -253,11 +254,11 @@ func (n *ConfigNormalizer) NormalizeRawConfig(rawConfig map[string]interface{}) 
 					normalized.Relay.State = "off"
 				}
 			}
-			if autoOff, ok := relay["auto_off"].(float64); ok {
-				normalized.Relay.AutoOff = int(autoOff)
+			if autoOff, ok := shelly.WholeNumber(relay["auto_off"]); ok {
+				normalized.Relay.AutoOff = autoOff
 			}
-			if autoOn, ok := relay["auto_on"].(float64); ok {
-				normalized.Relay.AutoOn = int(autoOn)
+			if autoOn, ok := shelly.WholeNumber(relay["auto_on"]); ok {
+				normalized.Relay.AutoOn = autoOn
 			}
 			if defaultState, ok := relay["default_state"].(string); ok {
 				normalized.Relay.DefaultState = defaultState
@@ -296,9 +297,9 @@ func (n *ConfigNormalizer) NormalizeRawConfig(rawConfig map[string]interface{}) 
 		normalized.Raw.LEDStatusDisable = &ledStatus
 		rawHandledFields["led_status_disable"] = true
 	}
-	if maxPower, ok := rawConfig["max_power"].(float64); ok {
-		maxPowerInt := int(maxPower)
-		normalized.Raw.MaxPower = &maxPowerInt
+	// A fraction is not read here, so it stays in the remainder below and a comparison sees it.
+	if maxPower, ok := shelly.WholeNumber(rawConfig["max_power"]); ok {
+		normalized.Raw.MaxPower = &maxPower
 		rawHandledFields["max_power"] = true
 	}
 	if discoverable, ok := rawConfig["discoverable"].(bool); ok {
@@ -472,9 +473,8 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 				normalized.Raw.LEDStatusDisable = &ledStatus
 				handledFields["led_status_disable"] = true
 			}
-			if maxPower, ok := rawData["max_power"].(float64); ok {
-				maxPowerInt := int(maxPower)
-				normalized.Raw.MaxPower = &maxPowerInt
+			if maxPower, ok := shelly.WholeNumber(rawData["max_power"]); ok {
+				normalized.Raw.MaxPower = &maxPower
 				handledFields["max_power"] = true
 			}
 			if discoverable, ok := rawData["discoverable"].(bool); ok {
