@@ -185,8 +185,9 @@ All notable changes to this project are documented here. The project follows Con
   answer shows the stored values. A client that set them through the device `PUT` uses the owning
   route instead: `PUT /devices/{id}/templates/new`, `PUT` or `PATCH /devices/{id}/overrides/new`,
   and the apply for `config_applied`. `desired_config` is derived from the templates and
-  overrides. A body without `updated_at` is now saved against the row the server read, so a
-  writer that saved in between makes it answer 409, as a versioned body already did.
+  overrides. A body without `updated_at` is now saved against the row the server reads when the save
+  starts, so a writer that saves between that read and the save makes it answer 409, as a
+  versioned body already did.
   (ginsys/shelly-manager#572)
 - The typed-configuration routes answer with the standard `{success, data | error}` envelope on
   success and on failure. `PUT /devices/{id}/config/typed`, `POST /config/validate-typed`,
