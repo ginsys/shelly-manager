@@ -38,6 +38,11 @@ test.describe('bulk operations on the devices page (mocked API)', () => {
     // Registered before the first navigation: later routes win, so the bulk stubs of a test
     // override the refusal below.
     await refuseUnstubbedBulkRoutes(page)
+    // The app asks for the server version at start-up; an answer without a git revision shows no
+    // version banner.
+    await page.route('**/api/v1/version', route =>
+      route.fulfill({ contentType: 'application/json', body: JSON.stringify(envelope({})) }),
+    )
     await stubDeviceList(page)
     await page.goto('/')
     await expect(page.getByTestId('devices-table')).toBeVisible()

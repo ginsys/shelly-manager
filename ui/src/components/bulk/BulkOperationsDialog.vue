@@ -252,7 +252,12 @@ const view = computed(() => (result.value ? viewOf(result.value) : null))
 // The one option the routes read: after the first failed device the rest are skipped.
 const stopOnError = ref(false)
 
+// The run whose answer may still be shown. Closing the dialog moves it on, so the answer of a
+// request sent before the close never lands in a dialog that was reopened for other devices.
+let currentRun = 0
+
 function close() {
+  currentRun++
   operation.value = null
   isProcessing.value = false
   result.value = null
@@ -263,15 +268,23 @@ function close() {
 async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, action: string) {
   if (props.selectedDevices.length === 0) return
   clearError()
+  const mine = ++currentRun
   try {
     isProcessing.value = true
-    result.value = await call({
+    const answer = await call({
       device_ids: props.selectedDevices.map((d) => d.id),
       options: { stop_on_error: stopOnError.value }
     })
+    // The devices were contacted either way, so the page still refreshes its list.
+    if (mine !== currentRun) {
+      emit('complete', answer)
+      return
+    }
+    result.value = answer
     isProcessing.value = false
-    emit('complete', result.value)
+    emit('complete', answer)
   } catch (e: unknown) {
+    if (mine !== currentRun) return
     isProcessing.value = false
     setError(e, { action, resource: 'Devices' })
   }
