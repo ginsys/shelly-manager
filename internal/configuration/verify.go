@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -79,6 +80,20 @@ func NewConfigVerifier(converter ConfigConverter, logger *logging.Logger) *Confi
 	}
 }
 
+// deviceReadError marks the failure of the device read inside VerifyConfig, apart from a device
+// answer that does not convert. Only the read can be silent because the device moved networks.
+type deviceReadError struct{ err error }
+
+func (e *deviceReadError) Error() string { return e.err.Error() }
+func (e *deviceReadError) Unwrap() error { return e.err }
+
+// stationUnanswered reports whether a failure after a station network change means the device
+// stopped answering, so the change is unconfirmed rather than failed. A device that answers with
+// an error, or a document that does not convert, is on its network and keeps its error.
+func stationUnanswered(applyResult *ApplyResult, err error, fromRead bool) bool {
+	return applyResult.stationMoves && fromRead && !deviceAnswered(err)
+}
+
 // VerifyConfig imports config from device and compares to desired
 func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, desired *DeviceConfiguration, deviceType string) (*VerifyResult, error) {
 	startTime := time.Now()
@@ -91,7 +106,7 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 
 	deviceConfig, err := client.GetConfig(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get device config: %w", err)
+		return nil, &deviceReadError{fmt.Errorf("failed to get device config: %w", err)}
 	}
 
 	imported, err := v.converter.FromAPIConfig(deviceConfig.Raw, deviceType)
@@ -159,6 +174,14 @@ func comparableDesired(desired *DeviceConfiguration) *DeviceConfiguration {
 	return &normalized
 }
 
+// unconfirmedStation reports a station network change that nothing could confirm: the device
+// stopped answering, so it may be on another network. Neither success nor failure.
+func (v *ConfigVerifier) unconfirmedStation(result *ApplyVerifyResult) *ApplyVerifyResult {
+	result.ApplyResult.Unconfirmed = true
+	result.ApplyResult.Warnings = append(result.ApplyResult.Warnings, wifiUnconfirmedWarning)
+	return result
+}
+
 // ApplyAndVerify applies configuration and then verifies it was applied correctly
 func (v *ConfigVerifier) ApplyAndVerify(ctx context.Context, client ShellyClient, config *DeviceConfiguration, deviceType string) (*ApplyVerifyResult, error) {
 	startTime := time.Now()
@@ -211,6 +234,9 @@ func (v *ConfigVerifier) ApplyAndVerify(ctx context.Context, client ShellyClient
 
 		if rebootErr := v.applier.RebootAndWait(ctx, client, 60*time.Second); rebootErr != nil {
 			result.Duration = time.Since(startTime)
+			if stationUnanswered(applyResult, rebootErr, true) {
+				return v.unconfirmedStation(result), nil
+			}
 			return nil, fmt.Errorf("reboot failed: %w", rebootErr)
 		}
 		if owed := v.applier.owed; owed != nil {
@@ -227,6 +253,10 @@ func (v *ConfigVerifier) ApplyAndVerify(ctx context.Context, client ShellyClient
 	verifyResult, err := v.VerifyConfig(ctx, client, config, deviceType)
 	if err != nil {
 		result.Duration = time.Since(startTime)
+		var readErr *deviceReadError
+		if stationUnanswered(applyResult, err, errors.As(err, &readErr)) {
+			return v.unconfirmedStation(result), nil
+		}
 		return nil, fmt.Errorf("verify failed: %w", err)
 	}
 	result.VerifyResult = verifyResult

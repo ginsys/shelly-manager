@@ -275,7 +275,12 @@ func TestApplyDesiredConfig_Gen2RefusesWiFiSettingsItCannotWrite(t *testing.T) {
 func TestApplyDesiredConfig_Gen2KeepsTheWiFiPasswordOutOfFailuresAndLogs(t *testing.T) {
 	svc, repo := newGen2Service(t, gen2WiFiDesired())
 	dev := newFakeGen2Device()
-	dev.refuse = errors.New(`invalid argument: {"pass":"wifi-pass-1"}`)
+	// A device that refuses a write answers with an error of its own. A bare transport error
+	// would be no answer at all, which a network change treats as possibly applied.
+	dev.refuse = &shelly.DeviceError{
+		IP: "192.168.1.60", Generation: 2, Operation: "WiFi.SetConfig", StatusCode: 400,
+		Message: `invalid argument: {"pass":"wifi-pass-1"}`,
+	}
 
 	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
 

@@ -227,17 +227,18 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 		return nil, fmt.Errorf("failed to convert config to API format: %w", err)
 	}
 	var apiConfig map[string]interface{}
-	if err := json.Unmarshal(apiJSON, &apiConfig); err != nil {
+	if err = json.Unmarshal(apiJSON, &apiConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse API config: %w", err)
 	}
-	if err := refuseUnsafeWiFi(ctx, client, apiConfig); err != nil {
+	result.stationMoves, err = prepareWiFiStation(ctx, client, apiConfig)
+	if err != nil {
 		return nil, err
 	}
 	for _, write := range gen2WritesOf(apiConfig) {
 		result.SettingsCount += len(gen2Leaves(write.key, write.body))
 	}
 
-	if err := refuseRemappedInputs(ctx, client, config); err != nil {
+	if err = refuseRemappedInputs(ctx, client, config); err != nil {
 		return nil, err
 	}
 
@@ -347,6 +348,18 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 					msg: "the device refused the " + section.method + " write; its error text is hidden because this apply holds a password",
 					err: err,
 				}
+			}
+			if section.key == "wifi.sta" && result.stationMoves && !deviceAnswered(err) {
+				// No answer is not a refusal: the device may have taken the new network and left
+				// this address before it replied. The write is neither a failure nor an applied
+				// setting, and the read that follows decides. The restart the answer would have
+				// asked for is unknown, so none is requested.
+				a.logger.WithFields(map[string]any{
+					"error":     err.Error(),
+					"method":    section.method,
+					"component": "config_applier",
+				}).Warn("No answer to the " + section.key + " write after a network change; the read that follows decides")
+				continue
 			}
 			a.logger.WithFields(map[string]any{
 				"error":     err.Error(),

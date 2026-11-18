@@ -29,6 +29,11 @@ type ApplyResult struct {
 	// failure nor a success, so verify does not run and the device stays pending.
 	Unconfirmed bool `json:"unconfirmed"`
 
+	// stationMoves is set by a Gen2 apply that writes a station network change. The device then
+	// reconnects about a second later, so a read that gets no answer means it may sit on another
+	// network (Unconfirmed), where Gen1 decides this inside its own apply.
+	stationMoves bool
+
 	// login is the login change the device accepted in this apply, or nil. It is unexported so
 	// the credentials never reach a response or a log.
 	login *LoginChange

@@ -117,31 +117,61 @@ func gen2WiFiStation(apiConfig map[string]interface{}) map[string]interface{} {
 	return sta
 }
 
-// refuseUnsafeWiFi stops an apply, before the first write, that would leave the device unable to
-// join its network. The station is never written blind, so a desired ssid needs the device to be
-// readable. A new network needs its password: the device keeps none it was not sent. The network
-// the device is already on needs none, and its ssid is left out of the write, because the device
-// wants a password with every ssid it is given.
-func refuseUnsafeWiFi(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}) error {
+// gen2StationNetworkKeys are the station keys whose change can move the device to another network
+// or address. The password does not, and neither does the name server (Gen1 skips both too).
+var gen2StationNetworkKeys = []string{"enable", "ssid", "ipv4mode", "ip", "netmask", "gw"}
+
+// gen2StationNetworkChanged reports whether the station write moves the device's network: a
+// network key it sets differs from what the device reported before the write. Only then can a
+// device that stops answering have moved.
+func gen2StationNetworkChanged(sta, live map[string]interface{}) bool {
+	for _, key := range gen2StationNetworkKeys {
+		if value, written := sta[key]; written && !relayValuesEqual(value, live[key]) {
+			return true
+		}
+	}
+	return false
+}
+
+// prepareWiFiStation reads the device before the first write when the station sets a network key,
+// and stops an apply that would leave the device unable to join its network. The station is never
+// written blind, so a device that cannot be read is refused. A new network needs its password: the
+// device keeps none it was not sent. The network the device is already on needs none, and its ssid
+// is left out of the write, because the device wants a password with every ssid it is given. It
+// reports whether the write changes the network. A write of the password or the name server alone
+// reads nothing and changes no network.
+func prepareWiFiStation(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}) (bool, error) {
 	sta := gen2WiFiStation(apiConfig)
-	ssid, ok := sta["ssid"].(string)
-	if !ok {
-		return nil
+	sets := false
+	for _, key := range gen2StationNetworkKeys {
+		if _, ok := sta[key]; ok {
+			sets = true
+		}
+	}
+	if !sets {
+		return false, nil
 	}
 	live, err := client.GetConfig(ctx)
 	if err != nil {
-		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the Wi-Fi station: %w", err)}
+		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the Wi-Fi station: %w", err)}
 	}
 	var doc map[string]interface{}
 	if err = json.Unmarshal(live.Raw, &doc); err != nil {
-		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the Wi-Fi station: %w", err)}
+		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the Wi-Fi station: %w", err)}
+	}
+	liveStation := gen2WiFiStation(doc)
+	changed := gen2StationNetworkChanged(sta, liveStation)
+
+	ssid, ok := sta["ssid"].(string)
+	if !ok {
+		return changed, nil
 	}
 	if _, hasPassword := sta["pass"]; hasPassword {
-		return nil
+		return changed, nil
 	}
-	if current, _ := gen2WiFiStation(doc)["ssid"].(string); current != ssid {
-		return &refusedBeforeWriteError{fmt.Errorf("%w: wifi.ssid: a new network needs its password, and none that can be sent is set", ErrUnsupportedSettings)}
+	if current, _ := liveStation["ssid"].(string); current != ssid {
+		return false, &refusedBeforeWriteError{fmt.Errorf("%w: wifi.ssid: a new network needs its password, and none that can be sent is set", ErrUnsupportedSettings)}
 	}
 	delete(sta, "ssid")
-	return nil
+	return changed, nil
 }
