@@ -29,19 +29,7 @@ import (
 
 // knownOpenMutating lists mutating routes that answer without the admin key today.
 // Key: "METHOD /api/v1/path/{template}". Value: the follow-up that guards or closes it.
-var knownOpenMutating = map[string]string{
-	"POST /api/v1/devices":                          followUpOpenRoutes,
-	"PUT /api/v1/devices/{id}":                      followUpOpenRoutes,
-	"DELETE /api/v1/devices/{id}":                   followUpOpenRoutes,
-	"POST /api/v1/devices/{id}/control":             followUpOpenRoutes,
-	"POST /api/v1/devices/{id}/tags/new":            followUpOpenRoutes,
-	"DELETE /api/v1/devices/{id}/tags/new/{tag}":    followUpOpenRoutes,
-	"POST /api/v1/notifications/channels":           followUpOpenRoutes,
-	"PUT /api/v1/notifications/channels/{id}":       followUpOpenRoutes,
-	"DELETE /api/v1/notifications/channels/{id}":    followUpOpenRoutes,
-	"POST /api/v1/notifications/channels/{id}/test": followUpOpenRoutes,
-	"POST /api/v1/notifications/rules":              followUpOpenRoutes,
-}
+var knownOpenMutating = map[string]string{}
 
 // openReads lists non-mutating routes that answer without the admin key: "by design", or the
 // follow-up that guards them.
@@ -56,9 +44,6 @@ var openReads = map[string]string{
 	"GET /api/v1/devices/{id}/tags/new":        followUpOpenRoutes,
 	"GET /api/v1/tags/new":                     followUpOpenRoutes,
 	"GET /api/v1/tags/new/{tag}/devices":       followUpOpenRoutes,
-	"GET /api/v1/notifications/channels":       followUpOpenRoutes,
-	"GET /api/v1/notifications/rules":          followUpOpenRoutes,
-	"GET /api/v1/notifications/history":        followUpOpenRoutes,
 	"GET /api/v1/dhcp/reservations":            followUpOpenRoutes,
 	"GET /api/v1/provisioning/status":          followUpOpenRoutes,
 	"GET /api/v1/export/plugins":               followUpOpenRoutes,
