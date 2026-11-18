@@ -266,6 +266,7 @@ func (m *mockRepository) ListAllTags() ([]string, error) {
 func (m *mockRepository) addDevice(id uint) {
 	m.devices[id] = &ServiceDevice{
 		ID:            id,
+		MAC:           testDeviceMAC,
 		TemplateIDs:   "[]",
 		Overrides:     "{}",
 		DesiredConfig: "{}",

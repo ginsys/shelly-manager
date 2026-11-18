@@ -1261,7 +1261,12 @@ paths:
       summary: Write the desired configuration to a Gen1, Gen2 or Gen3 device, read it back and compare
       description: >-
         Needs the admin key when the server has one configured; with no admin key configured
-        the route is open. Takes no request body. Clears config_applied before the write
+        the route is open. Takes no request body. Before it marks or writes anything it reads
+        the MAC the device at the stored address reports and compares it with the stored MAC
+        (case and the separators colon, dash and dot are ignored); a different MAC, a device
+        that reports none, or a record with no MAC is refused with 409 and nothing is written,
+        so an address that now leads to another device never receives this device's
+        configuration. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
         change during the apply. A Gen2 or Gen3 device takes the system, MQTT, cloud, switch
         and input settings and the Wi-Fi station only: name, eco mode, discoverable, timezone, latitude, longitude and
@@ -1336,6 +1341,17 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '404':
           description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '409':
+          description: >-
+            Nothing written and no flag changed (CONFLICT). The device at the stored address
+            reports another MAC than the stored one (the error names both and says to run
+            discovery, POST /api/v1/discover), reports no MAC, or the device record has no MAC
+            (set it with PUT /api/v1/devices/{id}, field mac). A record with no MAC is refused
+            because the device at its address cannot be identified.
           content:
             application/json:
               schema:
@@ -1905,6 +1921,12 @@ paths:
     post:
       tags: [Configuration]
       summary: Bulk export configurations
+      description: >-
+        Exports each device's stored configuration with the same export as
+        POST /api/v1/devices/{id}/config/export. A device whose answering MAC differs from its
+        stored MAC, or that cannot be identified (no stored MAC, no reported MAC), gets nothing
+        and is reported as an error in its own result entry; the other devices are still
+        exported.
       operationId: bulkExportConfigs
       security:
         - BearerAuth: []

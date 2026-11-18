@@ -498,9 +498,11 @@ func TestExportToDevice_Gen1(t *testing.T) {
 
 	mockClient := new(mockShellyClient)
 
-	// Setup mock expectations
+	// Setup mock expectations. The device reports its MAC without separators and the stored one has
+	// colons (createTestDevice), so this export also proves that the compare is normalised.
 	deviceInfo := &shelly.DeviceInfo{
 		ID:         "shelly1-123456",
+		MAC:        testDeviceMAC,
 		Generation: 1,
 		Model:      "SHSW-1",
 	}
@@ -585,6 +587,7 @@ func TestExportToDevice_Gen2(t *testing.T) {
 	// Setup mock expectations for Gen2+
 	deviceInfo := &shelly.DeviceInfo{
 		ID:         "shellyplus1-123456",
+		MAC:        testDeviceMAC,
 		Generation: 2,
 		Model:      "SHSW-25",
 	}
@@ -705,6 +708,7 @@ func TestExportToDevice_ValidationFailures(t *testing.T) {
 
 			deviceInfo := &shelly.DeviceInfo{
 				ID:         "test-device",
+				MAC:        testDeviceMAC,
 				Generation: tt.generation,
 				Model:      "SHSW-1",
 			}
@@ -738,6 +742,7 @@ func TestExportToDevice_SetConfigError(t *testing.T) {
 
 	deviceInfo := &shelly.DeviceInfo{
 		ID:         "shelly1-123456",
+		MAC:        testDeviceMAC,
 		Generation: 1,
 	}
 	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
@@ -770,6 +775,7 @@ func TestExportToDevice_EmptyConfig(t *testing.T) {
 
 	deviceInfo := &shelly.DeviceInfo{
 		ID:         "shelly1-123456",
+		MAC:        testDeviceMAC,
 		Generation: 1,
 	}
 	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)

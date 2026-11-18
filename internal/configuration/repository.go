@@ -53,6 +53,7 @@ func (DbDeviceTag) TableName() string {
 // DbDevice contains only the config-related fields we need
 type DbDevice struct {
 	ID            uint      `gorm:"primaryKey"`
+	MAC           string    `gorm:"column:mac"`
 	TemplateIDs   string    `gorm:"column:template_ids"`
 	Overrides     string    `gorm:"column:overrides"`
 	DesiredConfig string    `gorm:"column:desired_config"`
@@ -203,6 +204,7 @@ func (r *GormConfigRepository) GetDevice(id uint) (*ServiceDevice, error) {
 
 	return &ServiceDevice{
 		ID:            dbDevice.ID,
+		MAC:           dbDevice.MAC,
 		TemplateIDs:   dbDevice.TemplateIDs,
 		Overrides:     dbDevice.Overrides,
 		DesiredConfig: dbDevice.DesiredConfig,
@@ -379,6 +381,7 @@ func dbTemplateToService(t *DbConfigTemplate) *ServiceConfigTemplate {
 func dbDeviceToService(d DbDevice) ServiceDevice {
 	return ServiceDevice{ //nolint:staticcheck
 		ID:            d.ID,
+		MAC:           d.MAC,
 		TemplateIDs:   d.TemplateIDs,
 		Overrides:     d.Overrides,
 		DesiredConfig: d.DesiredConfig,
