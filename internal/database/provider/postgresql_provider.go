@@ -360,15 +360,10 @@ var credentialSafeQueryKeys = map[string]bool{
 	"sslcert": true, "sslkey": true, "sslrootcert": true,
 }
 
-// parseErrorWithoutDSN returns what is wrong with a DSN that url.Parse refused,
-// without the DSN: url.Error quotes it, and the quoted text may hold a password.
-func parseErrorWithoutDSN(err error) error {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		return urlErr.Err
-	}
-	return err
-}
+// errDSNNotAURL is what a DSN that url.Parse refused reports. url.Error quotes
+// the DSN, and even its inner text quotes a slice of it (a password that holds
+// a "/" ends up in the "invalid port" message), so nothing of it is passed on.
+var errDSNNotAURL = errors.New("the DSN is not a valid URL (postgresql://[user[:password]@]host[:port]/database[?options])")
 
 // buildDSN constructs a PostgreSQL DSN with SSL/TLS settings and security validation
 func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string) (string, error) {
@@ -385,7 +380,7 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	// Parse the base DSN to validate format
 	parsedURL, err := url.Parse(baseDSN)
 	if err != nil {
-		return "", fmt.Errorf("invalid DSN format: %w", parseErrorWithoutDSN(err))
+		return "", fmt.Errorf("invalid DSN format: %w", errDSNNotAURL)
 	}
 
 	// Ensure it has a scheme that looks like a valid database URL
@@ -474,7 +469,7 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	if hasCredentials {
 		withCredentials, err := url.Parse(dsn)
 		if err != nil {
-			return "", fmt.Errorf("invalid DSN format: %w", parseErrorWithoutDSN(err))
+			return "", fmt.Errorf("invalid DSN format: %w", errDSNNotAURL)
 		}
 		if p.config.Password == "" {
 			withCredentials.User = url.User(p.config.Username)

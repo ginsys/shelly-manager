@@ -68,10 +68,12 @@ type DatabaseConfig struct {
 }
 
 var (
-	// urlUserinfo matches the credentials of a URL DSN: "://user:password@".
-	urlUserinfo = regexp.MustCompile(`://[^/@]*@`)
+	// urlUserinfo matches the credentials of a URL DSN: "://user:password@",
+	// greedy up to the last "@", because a password holding "/" or "?" has no
+	// boundary a parser and this expression would agree on.
+	urlUserinfo = regexp.MustCompile(`://.*@`)
 	// mysqlUserinfo matches the credentials of a MySQL DSN: "user:password@tcp(".
-	mysqlUserinfo = regexp.MustCompile(`^[^(]*@`)
+	mysqlUserinfo = regexp.MustCompile(`^.*@`)
 )
 
 // String prints the configuration with the password and any credentials in the

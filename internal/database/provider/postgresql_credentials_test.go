@@ -178,11 +178,12 @@ func TestPostgreSQLCredentials_ErrorsAndLogsHoldNoPassword(t *testing.T) {
 	// Here the error comes from this package's own code and quotes the DSN with a
 	// password in it, so only the sanitising wrapper in Connect keeps it out.
 	for name, dsn := range map[string]string{
-		"userinfo":              "postgresql://inline_user:inline_pw@db.example:badport/shelly",
-		"password parameter":    "postgresql://db.example:badport/shelly?password=inline_pw",
-		"encoded key":           "postgresql://db.example:badport/shelly?pass%77ord=inline_pw",
-		"padded key":            "postgresql://db.example:badport/shelly? password =inline_pw",
-		"password after a hash": "postgresql://db.example:badport/shelly?application_name=x#&password=inline_pw",
+		"userinfo":                "postgresql://inline_user:inline_pw@db.example:badport/shelly",
+		"password parameter":      "postgresql://db.example:badport/shelly?password=inline_pw",
+		"encoded key":             "postgresql://db.example:badport/shelly?pass%77ord=inline_pw",
+		"padded key":              "postgresql://db.example:badport/shelly? password =inline_pw",
+		"a slash in the password": "postgresql://app:inline_pw/tail@db.example/shelly",
+		"password after a hash":   "postgresql://db.example:badport/shelly?application_name=x#&password=inline_pw",
 	} {
 		t.Run("a DSN that cannot be built, with "+name, func(t *testing.T) {
 			p := NewPostgreSQLProvider(logging.GetDefault())
@@ -265,6 +266,7 @@ func TestDatabaseConfig_StringMasksSecrets(t *testing.T) {
 		"password parameter":         "postgresql://db.example/shelly?user=app&password=inline_pw",
 		"encoded password parameter": "postgresql://db.example/shelly?pass%77ord=inline_pw&sslmode=disable",
 		"ssl password parameter":     "postgresql://db.example/shelly?sslpassword=inline_pw",
+		"userinfo with a slash":      "postgresql://app:inline_pw/tail@db.example/shelly",
 		"padded password parameter":  "postgresql://db.example/shelly? password =inline_pw",
 		"padded sslpassword":         "postgresql://db.example/shelly? sslpassword =inline_pw",
 		"password after a hash":      "postgresql://db.example/shelly?application_name=x#&password=inline_pw",
