@@ -76,6 +76,113 @@ components:
         request_id:
           type: string
 
+    # Bulk configuration routes (bulk-import, bulk-export, bulk-drift-detect,
+    # bulk-drift-detect-enhanced) act on the named devices only.
+    BulkDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [device_ids]
+      properties:
+        device_ids:
+          type: array
+          minItems: 1
+          description: >-
+            The devices to act on. Each id is a positive integer; a repeated id runs once, in
+            first-seen order. A missing or empty list is refused, and no device is contacted.
+          items:
+            type: integer
+            minimum: 1
+        options:
+          type: object
+          additionalProperties: false
+          properties:
+            stop_on_error:
+              type: boolean
+              default: false
+              description: >-
+                After the first failed device the remaining devices are reported `skipped` and are
+                not contacted.
+
+    BulkConfigResult:
+      type: object
+      description: Answer of bulk-import and bulk-export, in the `data` member.
+      properties:
+        total:
+          type: integer
+        success:
+          type: integer
+        failed:
+          type: integer
+        skipped:
+          type: integer
+        results:
+          type: array
+          description: One entry per named device, in request order.
+          items:
+            type: object
+            properties:
+              device_id:
+                type: integer
+              device_name:
+                type: string
+              device_ip:
+                type: string
+              config_id:
+                type: integer
+                description: The stored configuration the import wrote. Absent for an export.
+              status:
+                type: string
+                enum: [success, failed, skipped]
+              error:
+                type: string
+
+    BulkDriftResult:
+      type: object
+      description: Answer of bulk-drift-detect, in the `data` member.
+      properties:
+        total:
+          type: integer
+        in_sync:
+          type: integer
+        drifted:
+          type: integer
+        errors:
+          type: integer
+        skipped:
+          type: integer
+        results:
+          type: array
+          description: One entry per named device, in request order.
+          items:
+            type: object
+            properties:
+              device_id:
+                type: integer
+              device_name:
+                type: string
+              device_ip:
+                type: string
+              status:
+                type: string
+                enum: [synced, drift, error, skipped]
+              error:
+                type: string
+              drift_summary:
+                type: string
+              difference_count:
+                type: integer
+              drift:
+                type: object
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration:
+          type: integer
+          description: Nanoseconds.
+
     APIError:
       type: object
       properties:
@@ -1931,6 +2038,10 @@ paths:
     post:
       tags: [Configuration]
       summary: Bulk import configurations
+      description: >-
+        Reads the live configuration of each named device into the manager, as
+        POST /api/v1/devices/{id}/config/import does for one device. It never writes to a device.
+        An id that names no device is that device's `failed` entry and the others still run.
       operationId: bulkImportConfigs
       security:
         - BearerAuth: []
@@ -1940,17 +2051,16 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                device_ids:
-                  type: array
-                  items:
-                    type: integer
-                config:
-                  type: object
+              $ref: '#/components/schemas/BulkDeviceRequest'
       responses:
         '200':
-          description: Bulk import result
+          description: Bulk import result; `data` is a BulkConfigResult
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: No body, invalid JSON, no `device_ids`, a non-positive id, or a field or option the server does not read (VALIDATION_FAILED); no device is contacted
           content:
             application/json:
               schema:
@@ -1961,11 +2071,12 @@ paths:
       tags: [Configuration]
       summary: Bulk export configurations
       description: >-
-        Exports each device's stored configuration with the same export as
-        POST /api/v1/devices/{id}/config/export. A device whose answering MAC differs from its
-        stored MAC, or that cannot be identified (no stored MAC, no reported MAC), gets nothing
-        and is reported as an error in its own result entry; the other devices are still
-        exported.
+        Writes each named device's stored import/export configuration to the device, with the
+        same export as POST /api/v1/devices/{id}/config/export. It is not the desired
+        configuration: it takes no apply lock and never changes `config_applied` or
+        `pending_reboot`. A device whose answering MAC differs from its stored MAC, or that cannot
+        be identified (no stored MAC, no reported MAC), gets nothing and is `failed` in its own
+        result entry; the other devices are still exported.
       operationId: bulkExportConfigs
       security:
         - BearerAuth: []
@@ -1975,15 +2086,16 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                device_ids:
-                  type: array
-                  items:
-                    type: integer
+              $ref: '#/components/schemas/BulkDeviceRequest'
       responses:
         '200':
-          description: Bulk export result
+          description: Bulk export result; `data` is a BulkConfigResult
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: No body, invalid JSON, no `device_ids`, a non-positive id, or a field or option the server does not read (VALIDATION_FAILED); no device is contacted
           content:
             application/json:
               schema:
@@ -1993,6 +2105,7 @@ paths:
     post:
       tags: [Drift]
       summary: Bulk drift detection
+      description: Compares the stored and the live configuration of each named device. It never writes to a device.
       operationId: bulkDetectDrift
       security:
         - BearerAuth: []
@@ -2002,15 +2115,16 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                device_ids:
-                  type: array
-                  items:
-                    type: integer
+              $ref: '#/components/schemas/BulkDeviceRequest'
       responses:
         '200':
-          description: Bulk drift detection result
+          description: Bulk drift detection result; `data` is a BulkDriftResult
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: No body, invalid JSON, no `device_ids`, a non-positive id, or a field or option the server does not read (VALIDATION_FAILED); no device is contacted
           content:
             application/json:
               schema:
@@ -2020,13 +2134,26 @@ paths:
     post:
       tags: [Drift]
       summary: Bulk drift detection with comprehensive reporting
+      description: The same selection and `stop_on_error` as bulk-drift-detect; the answer is the comprehensive drift report.
       operationId: bulkDetectDriftEnhanced
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkDeviceRequest'
       responses:
         '200':
           description: Enhanced bulk drift detection result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: No body, invalid JSON, no `device_ids`, a non-positive id, or a field or option the server does not read (VALIDATION_FAILED); no device is contacted
           content:
             application/json:
               schema:

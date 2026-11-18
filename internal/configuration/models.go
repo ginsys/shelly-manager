@@ -118,19 +118,30 @@ type ImportStatus struct {
 	UpdatedAt  time.Time  `json:"updated_at,omitempty"`
 }
 
-// ImportResult represents the result of importing a single device
+// Per-device outcomes of a bulk import or export. A device is skipped when an earlier device failed
+// and the request asked to stop on the first error; a skipped device is not contacted.
+const (
+	BulkStatusSuccess = "success"
+	BulkStatusFailed  = "failed"
+	BulkStatusSkipped = "skipped"
+)
+
+// ImportResult is the outcome of one device in a bulk import or a bulk export.
 type ImportResult struct {
-	DeviceID uint   `json:"device_id"`
-	ConfigID uint   `json:"config_id,omitempty"`
-	Status   string `json:"status"` // "success" or "error"
-	Error    string `json:"error,omitempty"`
+	DeviceID   uint   `json:"device_id"`
+	DeviceName string `json:"device_name"`
+	DeviceIP   string `json:"device_ip"`
+	ConfigID   uint   `json:"config_id,omitempty"`
+	Status     string `json:"status"` // BulkStatusSuccess, BulkStatusFailed or BulkStatusSkipped
+	Error      string `json:"error,omitempty"`
 }
 
-// BulkImportResult represents the result of a bulk import operation
+// BulkImportResult is the answer of a bulk import and of a bulk export.
 type BulkImportResult struct {
 	Total   int            `json:"total"`
 	Success int            `json:"success"`
 	Failed  int            `json:"failed"`
+	Skipped int            `json:"skipped"`
 	Results []ImportResult `json:"results"`
 }
 
@@ -271,6 +282,7 @@ type BulkDriftResult struct {
 	InSync      int           `json:"in_sync"`
 	Drifted     int           `json:"drifted"`
 	Errors      int           `json:"errors"`
+	Skipped     int           `json:"skipped"`
 	Results     []DriftResult `json:"results"`
 	StartedAt   time.Time     `json:"started_at"`
 	CompletedAt time.Time     `json:"completed_at"`
@@ -282,7 +294,7 @@ type DriftResult struct {
 	DeviceID        uint         `json:"device_id"`
 	DeviceName      string       `json:"device_name"`
 	DeviceIP        string       `json:"device_ip"`
-	Status          string       `json:"status"` // "synced", "drift", "error"
+	Status          string       `json:"status"` // "synced", "drift", "error" or BulkStatusSkipped
 	Error           string       `json:"error,omitempty"`
 	DriftSummary    string       `json:"drift_summary,omitempty"`
 	DifferenceCount int          `json:"difference_count,omitempty"`

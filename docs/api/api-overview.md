@@ -218,12 +218,20 @@ Every typed-configuration route answers with the standard envelope, on success a
 
 ### 8. Bulk Operations (4 endpoints)
 
-| Method | Endpoint | Description | Input |
-|--------|----------|-------------|-------|
-| POST | `/api/v1/config/bulk-import` | Import configs to multiple devices | Device IDs + config |
-| POST | `/api/v1/config/bulk-export` | Export configs from multiple devices; a device whose MAC is not the stored one is reported as an error and gets nothing | Device IDs |
-| POST | `/api/v1/config/bulk-drift-detect` | Detect drift on multiple devices | Device IDs |
-| POST | `/api/v1/config/bulk-drift-detect-enhanced` | Enhanced drift detection | Device IDs + options |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/config/bulk-import` | For each named device, read its live configuration into the manager (the per-device `POST /devices/{id}/config/import`). Never writes to a device |
+| POST | `/api/v1/config/bulk-export` | For each named device, write its stored import/export configuration to the device (the per-device `POST /devices/{id}/config/export`). A device whose MAC is not the stored one is reported `failed` and gets nothing |
+| POST | `/api/v1/config/bulk-drift-detect` | For each named device, compare its stored and live configuration. Never writes to a device |
+| POST | `/api/v1/config/bulk-drift-detect-enhanced` | The same selection as `bulk-drift-detect`, answered with the comprehensive drift report |
+
+**One request contract (all four routes, admin key).** The body is `{"device_ids": [1, 2, 3], "options": {"stop_on_error": false}}`, and the routes act on exactly those devices. `device_ids` is required: no body, invalid JSON, a missing or empty list, or an id that is not a positive integer is 400 `VALIDATION_FAILED`, and no device is contacted. A repeated id runs once, in the order first seen. A field or option the server does not read is refused with 400 naming it, so `deviceIds`, `configurations` and `validate_only` are errors, not ignored. An id that names no device is that device's `failed` entry (`error`: "device not found") and the other devices still run. With `stop_on_error`, the devices after the first failure are reported `skipped` and are not contacted.
+
+**Answers.** Import and export answer `data` as `{total, success, failed, skipped, results}`, with one `results` entry per named device, in request order: `{device_id, device_name, device_ip, status, error}`, where `status` is `success`, `failed` or `skipped` (an import also carries `config_id`). Drift answers `{total, in_sync, drifted, errors, skipped, results, started_at, completed_at, duration}`, where each result is `{device_id, device_name, device_ip, status, error, drift_summary, difference_count, drift}` and `status` is `synced`, `drift`, `error` or `skipped`. The calls are synchronous: there is no operation id, status or progress.
+
+**What bulk export is.** It writes the stored import/export record (`device_configs`) to the device, as the per-device export does. It is not the desired configuration of `POST /devices/{id}/config/new/apply`: it takes no apply lock, and it never changes `config_applied` or `pending_reboot`. Apply is the route that owns the desired configuration; making export go through it is ginsys/shelly-manager#592.
+
+**Changed behaviour.** These routes used to ignore the body and act on every device, and an empty or missing `device_ids` meant "all devices". It is now an error: a client that wants the whole fleet sends every id. The import and export answers used to carry `errors` (now `failed`), `ip` (now `device_ip`) and the status `error` (now `failed`).
 
 ---
 

@@ -133,14 +133,13 @@ func TestBulkExportConfigs_ReportsAMismatchPerDevice(t *testing.T) {
 	wrong := deviceAt(t, db, wrongAddr, "B4:CF:12:34:56:78")
 	right := deviceAt(t, db, rightAddr, storedMAC)
 
-	w := httptest.NewRecorder()
-	handler.BulkExportConfigs(w, httptest.NewRequest("POST", "/api/v1/config/bulk-export", nil))
+	w := postBulk(handler, (*Handler).BulkExportConfigs, "/api/v1/config/bulk-export", idsBody(wrong.ID, right.ID))
 
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 	var body struct {
 		Data struct {
 			Success int `json:"success"`
-			Errors  int `json:"errors"`
+			Failed  int `json:"failed"`
 			Results []struct {
 				DeviceID uint   `json:"device_id"`
 				Status   string `json:"status"`
@@ -150,11 +149,11 @@ func TestBulkExportConfigs_ReportsAMismatchPerDevice(t *testing.T) {
 	}
 	testutil.AssertNoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	testutil.AssertEqual(t, 1, body.Data.Success)
-	testutil.AssertEqual(t, 1, body.Data.Errors)
+	testutil.AssertEqual(t, 1, body.Data.Failed)
 	for _, r := range body.Data.Results {
 		switch r.DeviceID {
 		case wrong.ID:
-			testutil.AssertEqual(t, "error", r.Status)
+			testutil.AssertEqual(t, "failed", r.Status)
 			if !strings.Contains(r.Error, "stored MAC") {
 				t.Errorf("the mismatching device's error should say what differs, got %q", r.Error)
 			}

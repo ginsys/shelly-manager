@@ -66,7 +66,8 @@ The `backup` plugin is not covered: it writes a database snapshot, which holds
 every secret by design, so protect that file as you protect the database. The
 push routes `POST /api/v1/devices/{id}/config/export` and
 `POST /api/v1/config/bulk-export` send the stored configuration to the device
-and return no configuration.
+and return no configuration. The bulk route sends it only to the devices named
+in its `device_ids`; see the bulk operations section of the API overview.
 
 ### Preview export
 

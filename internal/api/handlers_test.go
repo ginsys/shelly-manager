@@ -1304,13 +1304,22 @@ func TestBulkDetectConfigDrift(t *testing.T) {
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
-	req := httptest.NewRequest("POST", "/api/v1/config/drift/detect/bulk", nil)
+	req := httptest.NewRequest("POST", "/api/v1/config/drift/detect/bulk", strings.NewReader(`{"device_ids":[4242]}`))
 
 	w := httptest.NewRecorder()
 	handler.BulkDetectConfigDrift(w, req)
 
-	// Should succeed even without devices since it just tries to process all devices
+	// A device that does not exist is that device's error; the request itself succeeds.
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
+	var response struct {
+		Data struct {
+			Total  int `json:"total"`
+			Errors int `json:"errors"`
+		} `json:"data"`
+	}
+	testutil.AssertNoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	testutil.AssertEqual(t, 1, response.Data.Total)
+	testutil.AssertEqual(t, 1, response.Data.Errors)
 }
 
 func TestNewHandler(t *testing.T) {
@@ -1473,34 +1482,39 @@ func TestBulkImportConfigs(t *testing.T) {
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
-	req := httptest.NewRequest("POST", "/api/v1/config/import/bulk", nil)
+	req := httptest.NewRequest("POST", "/api/v1/config/import/bulk", strings.NewReader(`{"device_ids":[4242]}`))
 	w := httptest.NewRecorder()
 
 	handler.BulkImportConfigs(w, req)
 
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
+	assertBulkNotFoundAnswer(t, w)
+}
 
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	testutil.AssertNoError(t, err)
-	data, ok := response["data"].(map[string]interface{})
-	testutil.AssertEqual(t, true, ok)
-
-	// Check that response has expected structure inside data
-	total, totalExists := data["total"]
-	testutil.AssertTrue(t, totalExists)
-	testutil.AssertEqual(t, 0, int(total.(float64))) // No devices, so total should be 0
-	successCount, successExists := data["success"]
-	testutil.AssertTrue(t, successExists)
-	testutil.AssertEqual(t, 0, int(successCount.(float64)))
-
-	errors, errorsExists := data["errors"]
-	testutil.AssertTrue(t, errorsExists)
-	testutil.AssertEqual(t, 0, int(errors.(float64)))
-
-	results, resultsExists := data["results"]
-	testutil.AssertTrue(t, resultsExists)
-	testutil.AssertEqual(t, 0, len(results.([]interface{})))
+// assertBulkNotFoundAnswer checks the answer to a bulk import or export that named one device
+// that does not exist: the request succeeds and that device is the one failure.
+func assertBulkNotFoundAnswer(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
+	var response struct {
+		Data struct {
+			Total   int `json:"total"`
+			Success int `json:"success"`
+			Failed  int `json:"failed"`
+			Skipped int `json:"skipped"`
+			Results []struct {
+				DeviceID uint   `json:"device_id"`
+				Status   string `json:"status"`
+			} `json:"results"`
+		} `json:"data"`
+	}
+	testutil.AssertNoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	testutil.AssertEqual(t, 1, response.Data.Total)
+	testutil.AssertEqual(t, 0, response.Data.Success)
+	testutil.AssertEqual(t, 1, response.Data.Failed)
+	testutil.AssertEqual(t, 0, response.Data.Skipped)
+	testutil.AssertEqual(t, 1, len(response.Data.Results))
+	testutil.AssertEqual(t, uint(4242), response.Data.Results[0].DeviceID)
+	testutil.AssertEqual(t, "failed", response.Data.Results[0].Status)
 }
 
 func TestBulkExportConfigs(t *testing.T) {
@@ -1510,35 +1524,13 @@ func TestBulkExportConfigs(t *testing.T) {
 	notificationHandler := testNotificationHandler(t, db)
 	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
 
-	req := httptest.NewRequest("POST", "/api/v1/config/export/bulk", nil)
+	req := httptest.NewRequest("POST", "/api/v1/config/export/bulk", strings.NewReader(`{"device_ids":[4242]}`))
 	w := httptest.NewRecorder()
 
 	handler.BulkExportConfigs(w, req)
 
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	testutil.AssertNoError(t, err)
-	data, ok := response["data"].(map[string]interface{})
-	testutil.AssertEqual(t, true, ok)
-
-	// Check that response has expected structure inside data
-	total, totalExists := data["total"]
-	testutil.AssertTrue(t, totalExists)
-	testutil.AssertEqual(t, 0, int(total.(float64))) // No devices, so total should be 0
-
-	successCount, successExists := data["success"]
-	testutil.AssertTrue(t, successExists)
-	testutil.AssertEqual(t, 0, int(successCount.(float64)))
-
-	errors, errorsExists := data["errors"]
-	testutil.AssertTrue(t, errorsExists)
-	testutil.AssertEqual(t, 0, int(errors.(float64)))
-
-	results, resultsExists := data["results"]
-	testutil.AssertTrue(t, resultsExists)
-	testutil.AssertEqual(t, 0, len(results.([]interface{})))
+	assertBulkNotFoundAnswer(t, w)
 }
 
 func TestDetectConfigDrift_InvalidID(t *testing.T) {
