@@ -3,6 +3,16 @@
     <div class="toolbar">
       <h1 class="title" data-testid="page-title">Devices</h1>
       <div class="spacer" />
+      <button
+        class="btn"
+        :disabled="store.loading"
+        title="Refresh the list (R)"
+        aria-keyshortcuts="r"
+        @click="handleRefresh"
+        data-testid="refresh-btn"
+      >
+        {{ store.loading ? 'Refreshing...' : 'Refresh' }}
+      </button>
       <ColumnToggle
         :columns="columnOptions"
         :visibleColumns="store.visibleColumns"
@@ -161,7 +171,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createDevice, updateDevice, deleteDevice, controlDevice, isAbortError } from '../api/devices'
 import type { Device } from '../api/types'
 import { useDevicesStore } from '../stores/devices'
@@ -191,9 +201,37 @@ const columnOptions = [
   { key: 'actions', label: 'Actions' }
 ]
 
+// The button and the R key share this: a load that is already running is not started twice.
+function handleRefresh() {
+  if (store.loading) return
+  store.fetchDevices()
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  const el = target as HTMLElement | null
+  if (!el || !el.tagName) return false
+  return ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) || el.isContentEditable
+}
+
+// R refreshes, unless the key is for something else: a modifier, a held key, a field being
+// typed in, or a dialog of this page.
+function handleRefreshKey(event: KeyboardEvent) {
+  if (event.key.toLowerCase() !== 'r') return
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+  if (event.repeat || event.defaultPrevented) return
+  if (isTypingTarget(event.target)) return
+  if (showCreateDialog.value || showEditDialog.value || showBulkDialog.value) return
+  handleRefresh()
+}
+
 onMounted(() => {
   store.loadPreferences()
   store.fetchDevices()
+  window.addEventListener('keydown', handleRefreshKey)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleRefreshKey)
 })
 
 // Watch for page/pageSize changes and refetch
