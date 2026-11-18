@@ -84,6 +84,7 @@ func configRoutesRouter(t *testing.T, adminKey string) *mux.Router {
 	db, cleanup := testutil.TestDatabase(t)
 	t.Cleanup(cleanup)
 	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
+	t.Cleanup(handler.WaitBackground) // a request to POST /discover starts work; it ends before the database closes
 	if adminKey != "" {
 		handler.SetAdminAPIKey(adminKey)
 	}
