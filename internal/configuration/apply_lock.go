@@ -163,9 +163,12 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 		return fmt.Errorf("could not take the apply lock: %w", err)
 	}
 
-	releaseSlot, err := r.takeLockSlot(ctx, sqlDB)
+	releaseSlot, ok, err := r.takeLockSlot(ctx, sqlDB)
 	if err != nil {
 		return nil, refused(err)
+	}
+	if !ok {
+		return nil, nil
 	}
 	conn, err := sqlDB.Conn(ctx)
 	if err != nil {
@@ -223,28 +226,31 @@ func (r *GormConfigRepository) LockDeviceApply(parent context.Context, deviceID 
 // takeLockSlot admits one more pinned lock connection. Each running apply pins one connection and
 // still needs another for its own queries, so at most half of the pool may be pinned: with every
 // connection pinned, every apply would wait for a free one for ever. An unbounded pool needs no
-// limit; a pool of one cannot hold a lock and run the apply's queries at all.
-func (r *GormConfigRepository) takeLockSlot(ctx context.Context, sqlDB *sql.DB) (func(), error) {
+// limit. A pool of one cannot hold a lock and run the apply's queries at all: it gets no database
+// lock (ok is false), a warning once, and the in-process mutex as before.
+func (r *GormConfigRepository) takeLockSlot(ctx context.Context, sqlDB *sql.DB) (release func(), ok bool, err error) {
 	r.lockSlotsOnce.Do(func() {
 		switch maxOpen := sqlDB.Stats().MaxOpenConnections; {
 		case maxOpen == 1:
-			r.lockSlotsErr = errors.New("the database pool allows one connection, which the cross-replica apply lock " +
-				"cannot share with the apply's own queries; set max_open_conns to at least 2")
+			r.lockPoolOfOne = true
+			r.logger.Warn("The database pool allows one connection, so applies to one device are not serialized " +
+				"across manager replicas, only inside this process; set database.max_open_conns to at least 2 " +
+				"(the PostgreSQL and MySQL default is 25)")
 		case maxOpen > 1:
 			r.lockSlots = make(chan struct{}, maxOpen/2)
 		}
 	})
-	if r.lockSlotsErr != nil {
-		return nil, r.lockSlotsErr
+	if r.lockPoolOfOne {
+		return nil, false, nil
 	}
 	if r.lockSlots == nil {
-		return func() {}, nil
+		return func() {}, true, nil
 	}
 	select {
 	case r.lockSlots <- struct{}{}:
-		return func() { <-r.lockSlots }, nil
+		return func() { <-r.lockSlots }, true, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, false, ctx.Err()
 	}
 }
 
