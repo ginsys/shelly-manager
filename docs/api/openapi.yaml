@@ -1374,8 +1374,8 @@ paths:
             model does not know. On a Gen2 or Gen3 device every section except the system, MQTT,
             cloud, switch and input settings and the Wi-Fi (station, access point, roaming), the
             access point key (wifi.ap.key), switching the access point off while the station is not
-            steady, switching an access point on with no password while the device holds it open
-            or off, switching the station off (wifi.enable false), a new
+            steady, switching an access point on that is off with no password (unless the device
+            reports it closed), switching the station off (wifi.enable false), a new
             Wi-Fi network with no password, a switch or input value that no Gen2 word names
             (an input type other than switch or button, the Gen1 mode action, a negative timer),
             an input push action or timing, a relay schedule,

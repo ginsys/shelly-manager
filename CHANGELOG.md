@@ -27,7 +27,7 @@ All notable changes to this project are documented here. The project follows Con
   the station password and may be sent alone. `wifi.ap.key` is refused (422): the Gen2 access
   point has one secret, `pass`. Two rules refuse before anything is written (422): switching the
   access point off needs a steady station (the device reports it enabled with a `ssid`, and the
-  apply does not change it), so the device keeps a way back; and switching an access point on
+  apply changes neither its network nor its password), so the device keeps a way back; and switching an access point on
   needs a `wifi.ap.pass` in the same configuration, or a device that reports it closed, because a
   Shelly access point is open until it has a password. An access point that already runs open
   is left open. A station network change on a device whose access point is off is not checked
