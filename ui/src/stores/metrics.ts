@@ -8,6 +8,7 @@ import {
   getDriftSummary,
   type MetricsStatus,
 } from '@/api/metrics'
+import { getAdminKey } from '@/api/adminKey'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { assertNever } from '@/api/metricsMessages'
 import {
@@ -103,7 +104,7 @@ export const useMetricsStore = defineStore('metrics', () => {
     const base = (window as unknown as { __API_BASE__?: string }).__API_BASE__ || '/api/v1'
     const loc = window.location
     const proto = loc.protocol === 'https:' ? 'wss' : 'ws'
-    const token = (window as unknown as { __ADMIN_KEY__?: string }).__ADMIN_KEY__
+    const token = getAdminKey()
     return `${proto}://${loc.host}${base.replace('/api/v1', '')}/metrics/ws${
       token ? `?token=${encodeURIComponent(token)}` : ''
     }`

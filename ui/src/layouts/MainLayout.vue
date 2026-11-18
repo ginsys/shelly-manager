@@ -84,6 +84,25 @@
           Admin
         </router-link>
       </nav>
+      <div class="key-actions">
+        <button
+          type="button"
+          class="key-btn"
+          data-testid="admin-key-btn"
+          @click="openAdminKeyPrompt"
+        >
+          Admin key
+        </button>
+        <button
+          v-if="hasSessionKey"
+          type="button"
+          class="key-btn"
+          data-testid="admin-key-forget-btn"
+          @click="forgetAdminKey"
+        >
+          Forget key
+        </button>
+      </div>
     </header>
     
     <!-- Breadcrumb Navigation -->
@@ -118,6 +137,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { hasSessionKey, openAdminKeyPrompt, forgetAdminKey } from '@/api/adminKey'
 
 const route = useRoute()
 
@@ -268,6 +288,29 @@ const showBreadcrumb = computed(() => {
 .nav-link.router-link-active {
   color: #60a5fa;
   background: rgba(96, 165, 250, 0.1);
+}
+
+/* Admin key actions, pushed to the right end of the header */
+.key-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.key-btn {
+  background: none;
+  border: 1px solid rgba(203, 213, 225, 0.4);
+  border-radius: 6px;
+  color: #cbd5e1;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.key-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Dropdown Navigation */
