@@ -265,10 +265,10 @@ All notable changes to this project are documented here. The project follows Con
   a reboot owed (`config_applied` false, `pending_reboot` true), since the device may hold a mix
   of two applies. SQLite keeps the in-process lock. A connection pooler in transaction mode
   breaks the lock, and an abrupt loss of a replica frees the lock only when the server notices the
-  dead client. The lock needs `database.max_open_conns` of at least 2: with one connection (the
-  default configuration value today) there is no cross-replica lock, only the in-process one, and
-  the server logs a warning once. Set it to 2 or more to run several replicas; making that the
-  default is ginsys/shelly-manager#570. Refs ginsys/shelly-manager#425.
+  dead client. The lock needs `database.max_open_conns` of at least 2: with one connection
+  there is no cross-replica lock, only the in-process one, and the server logs a warning once. The
+  PostgreSQL and MySQL default pool is 25 (ginsys/shelly-manager#570), so only a pool set to 1 on
+  purpose, or kept from an older example config, loses the lock. Refs ginsys/shelly-manager#425.
 - Device control, verify and the handling of stored logins no longer act on whatever device
   answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and
   `POST /devices/{id}/config/new/verify` read the MAC the device reports and answer `409`
