@@ -148,7 +148,7 @@ Create Backup → Select devices/format → Preview → Create → (later) Resto
 
 ### 3.2 Component Status
 
-The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` components were removed (ginsys/shelly-manager#256). `components/bulk/BulkOperationsDialog.vue` is mounted on the devices page (ginsys/shelly-manager#136). `components/shared/ErrorDisplay.vue` is used by that dialog.
+The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` components were removed (ginsys/shelly-manager#256). `components/bulk/BulkOperationsDialog.vue` is mounted on the devices page (ginsys/shelly-manager#136). `components/shared/ErrorDisplay.vue` is used by that dialog. The devices page has a Refresh button and an `R` shortcut that reload the list and keep the selection (ginsys/shelly-manager#80); the store drops a list answer that a newer load has overtaken.
 
 ---
 
