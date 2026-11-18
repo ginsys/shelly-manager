@@ -1160,6 +1160,8 @@ func TestWriteConfigDeviceError(t *testing.T) {
 		{"unsupported settings", fmt.Errorf("x: %w", configuration.ErrUnsupportedSettings), http.StatusUnprocessableEntity},
 		{"auth failed", fmt.Errorf("apply: %w", shelly.ErrAuthFailed), http.StatusBadGateway},
 		{"another device at the address", fmt.Errorf("x: %w", configuration.ErrDeviceIdentity), http.StatusConflict},
+		{"another replica is applying", fmt.Errorf("x: %w", configuration.ErrApplyInProgress), http.StatusConflict},
+		{"the apply lock was lost", fmt.Errorf("x: %w", configuration.ErrApplyLockLost), http.StatusInternalServerError},
 		{"other error", errors.New("boom"), http.StatusInternalServerError},
 	}
 	for _, tc := range cases {

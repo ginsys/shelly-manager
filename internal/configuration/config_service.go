@@ -89,6 +89,9 @@ type ConfigurationService struct {
 	// device so a slow apply cannot overwrite a newer one and leave the flag claiming applied.
 	applyLocks sync.Map
 
+	// noApplyLockOnce logs once that the repository offers no cross-replica apply lock.
+	noApplyLockOnce sync.Once
+
 	// loginHooks is set once at startup by the code that owns the device credentials. While it
 	// is nil, apply refuses a login instead of writing one it could not store.
 	loginHooks LoginHooks

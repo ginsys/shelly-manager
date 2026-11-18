@@ -246,6 +246,15 @@ All notable changes to this project are documented here. The project follows Con
   The desired configuration now carries the real time. Verify is unchanged: no device reports
   `energy_reset`, so verifying a configuration that sets it still reports a difference there, as it
   did with the zero time (ginsys/shelly-manager#567 covers that). Fixes ginsys/shelly-manager#562.
+- Apply to one device is now serialized across manager replicas, not only inside one process. On
+  PostgreSQL and MySQL the apply holds a lock in the database for its whole span: snapshot,
+  device writes, read-back, the pending-reboot record and clear, and the `config_applied` update.
+  A second replica's apply waits up to 30 seconds, then is refused with `409` `CONFLICT` and
+  writes nothing. A lock lost during an apply fails the apply with `config_applied` left false,
+  since the device may hold a mix of two applies. SQLite keeps the in-process lock. A connection
+  pooler in transaction mode breaks the lock, and an abrupt loss of a replica frees it only when
+  the server notices the dead client. You no longer need to run one manager replica when you use
+  apply. Fixes ginsys/shelly-manager#425.
 - Device control, verify and the handling of stored logins no longer act on whatever device
   answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and
   `POST /devices/{id}/config/new/verify` read the MAC the device reports and answer `409`
