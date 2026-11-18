@@ -90,6 +90,10 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 				continue
 			}
 
+			if mergeOpaqueLeaf(dstField, srcField, sources, sourceName, fieldPath) {
+				continue
+			}
+
 			if isPointerToBasicType(srcField.Type()) {
 				dstField.Set(cloneValue(srcField))
 				sources[fieldPath] = sourceName
@@ -133,6 +137,10 @@ func mergeSlices(dstField, srcField reflect.Value, sources map[string]string, so
 		dstElem := dstField.Index(i)
 
 		elemPath := fieldPath + "." + strconv.Itoa(i)
+
+		if mergeOpaqueLeaf(dstElem, srcElem, sources, sourceName, elemPath) {
+			continue
+		}
 
 		if srcElem.Kind() == reflect.Struct {
 			mergeStructs(dstElem, srcElem, sources, sourceName, elemPath)
@@ -384,6 +392,38 @@ func cloneValue(v reflect.Value) reflect.Value {
 	}
 }
 
+// isOpaqueStruct reports whether t is a struct with no exported field, such as time.Time. The merge
+// cannot set a field of one, so it takes the value whole.
+func isOpaqueStruct(t reflect.Type) bool {
+	if t.Kind() != reflect.Struct {
+		return false
+	}
+	for i := 0; i < t.NumField(); i++ {
+		if t.Field(i).IsExported() {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeOpaqueLeaf copies src into dst as one value and records its source, when src is an opaque struct
+// or a pointer to one that is not nil. It reports whether it did: otherwise the caller merges as usual.
+func mergeOpaqueLeaf(dst, src reflect.Value, sources map[string]string, sourceName, path string) bool {
+	t := src.Type()
+	if t.Kind() == reflect.Pointer {
+		if src.IsNil() {
+			return false
+		}
+		t = t.Elem()
+	}
+	if !isOpaqueStruct(t) {
+		return false
+	}
+	dst.Set(cloneValue(src))
+	sources[path] = sourceName
+	return true
+}
+
 func mergeStructs(dstVal, srcVal reflect.Value, sources map[string]string, sourceName, pathPrefix string) {
 	if !dstVal.IsValid() || !srcVal.IsValid() {
 		return
@@ -403,6 +443,10 @@ func mergeStructs(dstVal, srcVal reflect.Value, sources map[string]string, sourc
 		}
 
 		fieldPath := buildFieldPath(pathPrefix, srcTypeField)
+
+		if mergeOpaqueLeaf(dstField, srcField, sources, sourceName, fieldPath) {
+			continue
+		}
 
 		if srcField.Kind() == reflect.Pointer {
 			if srcField.IsNil() {

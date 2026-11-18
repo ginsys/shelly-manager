@@ -238,6 +238,15 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- A configured `power_metering.energy_reset` now survives the configuration merge. The merge walked
+  into the time field by field, found no field it can set, and left the zero time in the merged
+  configuration with no source, so the desired configuration of a device (and what the API returns
+  for it) showed `0001-01-01T00:00:00Z` where a template or override had set a time. A struct with
+  no exported field is now taken whole, with the later layer winning and its source recorded.
+  The desired configuration now carries the real time. Verify and drift read it as before: no
+  device reports `energy_reset`, so a configuration that sets it reports `power_metering.energy_reset`
+  as a difference, as it already did with the zero time (ginsys/shelly-manager#567 covers that).
+  Fixes ginsys/shelly-manager#562.
 - Device control, verify and the handling of stored logins no longer act on whatever device
   answers at the stored address. `POST /devices/{id}/control` (on, off, toggle, reboot) and
   `POST /devices/{id}/config/new/verify` read the MAC the device reports and answer `409`
