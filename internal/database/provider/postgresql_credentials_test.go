@@ -3,6 +3,8 @@ package provider
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,17 +26,13 @@ func passwordForms(password string) []string {
 		password,
 		url.QueryEscape(password),
 		url.PathEscape(password),
-		url.UserPassword("u", password).String(),
+		strings.TrimPrefix(url.UserPassword("", password).String(), ":"),
 	}
 }
 
 func assertNoPassword(t *testing.T, text, password string) {
 	t.Helper()
 	for _, form := range passwordForms(password) {
-		// The userinfo form carries the user name; only its password part matters.
-		if i := strings.Index(form, ":"); i >= 0 && strings.HasPrefix(form, "u:") {
-			form = form[i+1:]
-		}
 		assert.NotContains(t, text, form, "text must not hold the password")
 	}
 }
@@ -43,6 +41,20 @@ func newCredentialProvider(cfg DatabaseConfig) *PostgreSQLProvider {
 	p := NewPostgreSQLProvider(logging.GetDefault())
 	p.config = cfg
 	return p
+}
+
+// fileLogger returns a logger that writes everything to a file and a function
+// that reads the file back.
+func fileLogger(t *testing.T) (*logging.Logger, func() string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "provider.log")
+	logger, err := logging.New(logging.Config{Level: "debug", Format: "json", Output: path})
+	require.NoError(t, err)
+	return logger, func() string {
+		b, err := os.ReadFile(path)
+		require.NoError(t, err)
+		return string(b)
+	}
 }
 
 func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
@@ -85,16 +97,29 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 		assert.Equal(t, base+"&connect_timeout=10", dsn)
 	})
 
-	t.Run("a DSN that carries credentials and the two fields is refused without printing either", func(t *testing.T) {
-		p := newCredentialProvider(DatabaseConfig{Username: "shelly", Password: trickyPassword})
+	// pgx applies the user and password query parameters after the userinfo, so a
+	// DSN that carries them would override the configured credentials.
+	for name, dsn := range map[string]string{
+		"userinfo":                   "postgresql://inline_user:inline_pw@db.example/shelly",
+		"userinfo user only":         "postgresql://inline_user@db.example/shelly",
+		"user parameter":             "postgresql://db.example/shelly?user=inline_user",
+		"password parameter":         "postgresql://db.example/shelly?sslmode=disable&password=inline_pw",
+		"encoded password parameter": "postgresql://db.example/shelly?pass%77ord=inline_pw",
+		"encoded user parameter":     "postgresql://db.example/shelly?us%65r=inline_user",
+	} {
+		t.Run("a DSN with "+name+" and the two fields is refused without printing either", func(t *testing.T) {
+			p := newCredentialProvider(DatabaseConfig{Username: "shelly", Password: trickyPassword})
 
-		_, err := p.buildDSN("postgresql://inline_user:inline_pw@db.example/shelly", nil)
-		require.Error(t, err)
-		for _, secret := range []string{"inline_user", "inline_pw", "shelly:", trickyPassword} {
-			assert.NotContains(t, err.Error(), secret)
-		}
-		assert.Contains(t, err.Error(), "database.username")
-	})
+			_, err := p.buildDSN(dsn, nil)
+
+			require.Error(t, err)
+			for _, secret := range []string{"inline_user", "inline_pw", "shelly:"} {
+				assert.NotContains(t, err.Error(), secret)
+			}
+			assertNoPassword(t, err.Error(), trickyPassword)
+			assert.Contains(t, err.Error(), "database.username")
+		})
+	}
 
 	t.Run("a password without a username is refused", func(t *testing.T) {
 		p := newCredentialProvider(DatabaseConfig{Password: trickyPassword})
@@ -106,32 +131,42 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 	})
 }
 
-func TestPostgreSQLCredentials_ErrorsHoldNoPassword(t *testing.T) {
-	t.Run("a refused connection", func(t *testing.T) {
+func TestPostgreSQLCredentials_ErrorsAndLogsHoldNoPassword(t *testing.T) {
+	t.Run("a refused connection, error and log", func(t *testing.T) {
 		// Port 1 on the loopback address is closed: the connect fails at once and
-		// no server is needed.
-		p := NewPostgreSQLProvider(logging.GetDefault())
+		// no server is needed. The driver's own error omits the password, so this
+		// is the regression guard for the whole path, and the log is read too.
+		logger, readLog := fileLogger(t)
+		p := NewPostgreSQLProvider(logger)
+
 		err := p.Connect(DatabaseConfig{
 			Provider: "postgresql",
 			DSN:      "postgresql://127.0.0.1:1/shelly",
 			Username: "shelly",
 			Password: trickyPassword,
+			LogLevel: "info",
 			Options:  map[string]string{"sslmode": "disable", "connect_timeout": "1"},
 		})
+
 		require.Error(t, err)
 		assertNoPassword(t, err.Error(), trickyPassword)
+		logged := readLog()
+		assert.NotEmpty(t, logged, "the log must hold something, or this assertion proves nothing")
+		assertNoPassword(t, logged, trickyPassword)
 	})
 
+	// Here the error comes from this package's own code and quotes the DSN with a
+	// password in it, so only the sanitising wrapper in Connect keeps it out.
 	t.Run("a DSN that cannot be built", func(t *testing.T) {
 		p := NewPostgreSQLProvider(logging.GetDefault())
+
 		err := p.Connect(DatabaseConfig{
 			Provider: "postgresql",
 			DSN:      "postgresql://inline_user:" + url.QueryEscape("in line") + "@db.example:badport/shelly",
-			Username: "shelly",
-			Password: trickyPassword,
 		})
+
 		require.Error(t, err)
-		assertNoPassword(t, err.Error(), trickyPassword)
+		assert.Contains(t, err.Error(), "failed to build DSN")
 		assert.NotContains(t, err.Error(), "in+line")
 		assert.NotContains(t, err.Error(), "in%20line")
 	})
@@ -145,8 +180,8 @@ func TestPostgreSQLSanitizeError_Password(t *testing.T) {
 		gone []string
 	}{
 		{
-			name: "the known password in an unkeyed position, raw and escaped",
-			msg:  fmt.Sprintf("dial failed near %s then %s", trickyPassword, url.QueryEscape(trickyPassword)),
+			name: "the known password in an unkeyed position, in every spelling",
+			msg:  "dial failed near " + strings.Join(passwordForms(trickyPassword), " then "),
 			cfg:  DatabaseConfig{Username: "shelly", Password: trickyPassword},
 			gone: passwordForms(trickyPassword),
 		},
@@ -172,6 +207,7 @@ func TestPostgreSQLSanitizeError_Password(t *testing.T) {
 			p := newCredentialProvider(tc.cfg)
 
 			got := p.sanitizeError(fmt.Errorf("%s", tc.msg))
+
 			require.Error(t, got)
 			for _, secret := range tc.gone {
 				assert.NotContains(t, got.Error(), secret)
@@ -200,24 +236,32 @@ func TestMySQLProvider_RefusesSeparateCredentials(t *testing.T) {
 }
 
 func TestDatabaseConfig_StringMasksSecrets(t *testing.T) {
-	cfg := DatabaseConfig{
-		Provider: "postgresql",
-		DSN:      "postgresql://inline_user:inline_pw@db.example/shelly",
-		Username: "shelly",
-		Password: trickyPassword,
-	}
-
-	for name, got := range map[string]string{
-		"%v value":    fmt.Sprintf("%v", cfg),
-		"%+v value":   fmt.Sprintf("%+v", cfg),
-		"%v pointer":  fmt.Sprintf("%v", &cfg),
-		"%+v pointer": fmt.Sprintf("%+v", &cfg),
-		"String()":    cfg.String(),
+	for name, dsn := range map[string]string{
+		"userinfo":                   "postgresql://inline_user:inline_pw@db.example/shelly",
+		"password parameter":         "postgresql://db.example/shelly?user=app&password=inline_pw",
+		"encoded password parameter": "postgresql://db.example/shelly?pass%77ord=inline_pw&sslmode=disable",
+		"ssl password parameter":     "postgresql://db.example/shelly?sslpassword=inline_pw",
 	} {
 		t.Run(name, func(t *testing.T) {
-			assertNoPassword(t, got, trickyPassword)
-			assert.NotContains(t, got, "inline_pw")
-			assert.Contains(t, got, "db.example", "the host stays readable")
+			cfg := DatabaseConfig{Provider: "postgresql", DSN: dsn, Username: "shelly", Password: trickyPassword}
+
+			for how, got := range map[string]string{
+				"%v value":    fmt.Sprintf("%v", cfg),
+				"%+v value":   fmt.Sprintf("%+v", cfg),
+				"%v pointer":  fmt.Sprintf("%v", &cfg),
+				"%+v pointer": fmt.Sprintf("%+v", &cfg),
+				"String()":    cfg.String(),
+			} {
+				assertNoPassword(t, got, trickyPassword)
+				assert.NotContains(t, got, "inline_pw", how)
+				assert.Contains(t, got, "db.example", "the host stays readable: "+how)
+			}
 		})
 	}
+
+	t.Run("a DSN without secrets prints as it is", func(t *testing.T) {
+		cfg := DatabaseConfig{Provider: "postgresql", DSN: "postgresql://db.example/shelly?sslmode=disable&connect_timeout=5"}
+
+		assert.Contains(t, cfg.String(), "postgresql://db.example/shelly?sslmode=disable&connect_timeout=5")
+	})
 }

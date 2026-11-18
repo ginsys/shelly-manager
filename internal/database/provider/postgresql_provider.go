@@ -383,7 +383,12 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 		if p.config.Username == "" {
 			return "", fmt.Errorf("database.password is set without database.username")
 		}
-		if parsedURL.User != nil {
+		// pgx applies the user and password query parameters after the userinfo,
+		// so they would override the configured credentials: refuse them too.
+		// Query() decodes the keys, so an encoded name is caught as well.
+		_, hasUserParam := parsedURL.Query()["user"]
+		_, hasPasswordParam := parsedURL.Query()["password"]
+		if parsedURL.User != nil || hasUserParam || hasPasswordParam {
 			return "", fmt.Errorf("the DSN carries credentials and database.username is set as well: use one of them")
 		}
 	}

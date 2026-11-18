@@ -160,6 +160,22 @@ func readableEnvNames(t *testing.T) map[string]bool {
 	return names
 }
 
+// urlCarriesCredentials reports userinfo, or a user/password/sslpassword query
+// parameter: pgx applies those after the userinfo, so they would override the
+// credentials the Secret supplies. Query keys are compared after decoding.
+func urlCarriesCredentials(u *url.URL) bool {
+	if u.User != nil {
+		return true
+	}
+	for key := range u.Query() {
+		switch strings.ToLower(key) {
+		case "user", "password", "sslpassword":
+			return true
+		}
+	}
+	return false
+}
+
 // problems lists what is wrong with a set of env entries; nil means none.
 func problems(entries []envEntry, readable map[string]bool) []string {
 	var out []string
@@ -171,7 +187,7 @@ func problems(entries []envEntry, readable map[string]bool) []string {
 			out = append(out, e.Source+": "+e.Name+" is a credential and must come from a secretKeyRef")
 		}
 		if strings.Contains(e.Value, "://") {
-			if u, err := url.Parse(e.Value); err == nil && u.User != nil {
+			if u, err := url.Parse(e.Value); err == nil && urlCarriesCredentials(u) {
 				out = append(out, e.Source+": "+e.Name+" carries credentials in its URL")
 			}
 		}
@@ -213,9 +229,11 @@ func TestDeployEnvNames_CheckerFindsTheMistakes(t *testing.T) {
 		{Source: "c", Name: "SHELLY_DATABASE_PASSWORD", Value: "hunter2"},
 		{Source: "d", Name: "SHELLY_DATABASE_USERNAME", Value: "shelly"},
 		{Source: "e", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://shelly:hunter2@db/shelly"},
+		{Source: "i", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://db/shelly?user=app&password=hunter2"},
+		{Source: "j", Name: "SHELLY_DATABASE_DSN", Value: "postgresql://db/shelly?pass%77ord=hunter2"},
 	}
-	if got := problems(bad, readable); len(got) != 5 {
-		t.Errorf("found %d problems in 5 mistakes: %q", len(got), got)
+	if got := problems(bad, readable); len(got) != 7 {
+		t.Errorf("found %d problems in 7 mistakes: %q", len(got), got)
 	}
 
 	good := []envEntry{
