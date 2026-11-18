@@ -33,7 +33,7 @@ func TestDiscoverDevices_BackfillKeepsALoginSavedAfterItsRead(t *testing.T) {
 	service := NewService(db, createTestConfig())
 	device := createTestDevice(t, db, "192.0.2.10")
 	device.Settings = `{"gen":1,"auth_enabled":true,"auth_user":"old","auth_pass":"oldpw","note":"keep"}`
-	if err := db.UpdateDevice(device); err != nil {
+	if err := saveDevice(db, device); err != nil {
 		t.Fatal(err)
 	}
 	service.SetDiscoverFunc(func(context.Context, []string, time.Duration) ([]discovery.ShellyDevice, error) {
@@ -51,8 +51,8 @@ func TestDiscoverDevices_BackfillKeepsALoginSavedAfterItsRead(t *testing.T) {
 				return
 			}
 			stored.Settings = `{"gen":1,"auth_enabled":true,"auth_user":"bee","auth_pass":"beepw","note":"keep"}`
-			if err := db.UpdateDevice(stored); err != nil {
-				t.Errorf("UpdateDevice failed: %v", err)
+			if err := saveDevice(db, stored); err != nil {
+				t.Errorf("saveDevice failed: %v", err)
 			}
 		},
 	}

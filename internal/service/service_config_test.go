@@ -460,7 +460,7 @@ func TestShellyService_getClient_UsesLegacyDeviceCredentials(t *testing.T) {
 
 	device := createTestDevice(t, db, server.URL[len("http://"):])
 	device.Settings = `{"gen":1,"auth":{"username":"legacy","password":"legacypw"}}`
-	if err := db.UpdateDevice(device); err != nil {
+	if err := saveDevice(db, device); err != nil {
 		t.Fatal(err)
 	}
 
@@ -504,7 +504,7 @@ func TestShellyService_getClient_RejectedSavedLoginDoesNotDeadlock(t *testing.T)
 
 	device := createTestDevice(t, db, server.URL[len("http://"):])
 	device.Settings = `{"gen":1,"auth_enabled":true,"auth_user":"saved","auth_pass":"wrong"}`
-	if err := db.UpdateDevice(device); err != nil {
+	if err := saveDevice(db, device); err != nil {
 		t.Fatal(err)
 	}
 
@@ -570,7 +570,7 @@ func TestShellyService_getClientWithAuthRetry_RejectedLegacyOnlyLogin(t *testing
 
 			device := createTestDevice(t, db, server.URL[len("http://"):])
 			device.Settings = stored
-			if err := db.UpdateDevice(device); err != nil {
+			if err := saveDevice(db, device); err != nil {
 				t.Fatal(err)
 			}
 

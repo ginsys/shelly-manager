@@ -62,7 +62,8 @@ func checkColumnScopedWrites(t *testing.T, manager *Manager) {
 		require.NoError(t, getErr)
 		time.Sleep(5 * time.Millisecond)
 		seen := time.Now().Truncate(time.Second)
-		require.NoError(t, manager.UpdateDeviceDiscovery(device.ID, "192.0.2.22", "online", seen, "1.1"))
+		require.NoError(t, manager.UpdateDeviceDiscovery(device.ID,
+			DiscoveryUpdate{IP: "192.0.2.22", Firmware: "1.1", Status: "online", LastSeen: seen}))
 		got, getErr := manager.GetDevice(device.ID)
 		require.NoError(t, getErr)
 		assert.Equal(t, "192.0.2.22", got.IP)
@@ -99,7 +100,8 @@ func checkColumnScopedWrites(t *testing.T, manager *Manager) {
 
 	t.Run("missing device", func(t *testing.T) {
 		assert.ErrorIs(t, manager.UpdateDeviceSettings(4242, `{}`), gorm.ErrRecordNotFound)
-		assert.ErrorIs(t, manager.UpdateDeviceDiscovery(4242, "192.0.2.99", "online", time.Now(), "1"), gorm.ErrRecordNotFound)
+		assert.ErrorIs(t, manager.UpdateDeviceDiscovery(4242,
+			DiscoveryUpdate{IP: "192.0.2.99", Firmware: "1", Status: "online", LastSeen: time.Now()}), gorm.ErrRecordNotFound)
 	})
 }
 

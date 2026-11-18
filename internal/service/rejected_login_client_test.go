@@ -28,7 +28,7 @@ func cacheClientWithOtherLogin(t *testing.T, service *ShellyService, device *dat
 		t.Fatal(err)
 	}
 	restore.Settings = saved
-	if err := service.DB.UpdateDevice(restore); err != nil {
+	if err := saveDevice(service.DB, restore); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -48,8 +48,8 @@ func loginGoesAToBToA(t *testing.T, service *ShellyService, id uint, saved strin
 				return
 			}
 			stored.Settings = settings
-			if err := service.DB.UpdateDevice(stored); err != nil {
-				t.Errorf("UpdateDevice failed: %v", err)
+			if err := saveDevice(service.DB, stored); err != nil {
+				t.Errorf("saveDevice failed: %v", err)
 			}
 		}
 	}
@@ -91,8 +91,8 @@ func TestGetClientWithAuthRetry_401RetriesWhenTheCachedClientHadNoSavedLogin(t *
 			return
 		}
 		stored.Settings = `{"gen":1,"auth_enabled":true,"auth_user":"bee","auth_pass":"beepw","note":"keep"}`
-		if err := service.DB.UpdateDevice(stored); err != nil {
-			t.Errorf("UpdateDevice failed: %v", err)
+		if err := saveDevice(service.DB, stored); err != nil {
+			t.Errorf("saveDevice failed: %v", err)
 		}
 	}
 	gate.mu.Unlock()

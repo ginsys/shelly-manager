@@ -180,6 +180,14 @@ All notable changes to this project are documented here. The project follows Con
   device in relay mode refuses the endpoint. (ginsys/shelly-manager#504)
 
 ### Changed
+- **Behaviour change:** `PUT /devices/{id}` no longer writes `template_ids`, `overrides`,
+  `desired_config` or `config_applied`. A body that carries them changes none of them, and the
+  answer shows the stored values. A client that set them through the device `PUT` uses the owning
+  route instead: `PUT /devices/{id}/templates/new`, `PUT` or `PATCH /devices/{id}/overrides/new`,
+  and the apply for `config_applied`. `desired_config` is derived from the templates and
+  overrides. A body without `updated_at` is now saved against the row the server read, so a
+  writer that saved in between makes it answer 409, as a versioned body already did.
+  (ginsys/shelly-manager#572)
 - The typed-configuration routes answer with the standard `{success, data | error}` envelope on
   success and on failure. `PUT /devices/{id}/config/typed`, `POST /config/validate-typed`,
   `POST /config/bulk-validate` and `GET /devices/{id}/config/typed/normalized` used to answer
@@ -238,6 +246,15 @@ All notable changes to this project are documented here. The project follows Con
   reached any of it, so nothing changes for a user or an API client. (ginsys/shelly-manager#256)
 
 ### Fixed
+- A device writer saves only the columns it owns, and a whole-row save exists only where it is
+  versioned. The discovery upsert, the GitOps import and the CLI discover command saved the whole
+  row they had read, so a flag, a setting or a desired configuration that another writer committed
+  in between was written back as it was read. They now write the discovery columns (address,
+  firmware, status, last seen, and the type only when the discovery found one) or the name and the
+  type, and move `updated_at`. The unversioned whole-row `UpdateDevice` and the unused
+  `UpsertDevice` are removed. Not covered here: a discovery pass moves `updated_at` even when
+  nothing changed, so a person's next save can meet a 409 (ginsys/shelly-manager#583).
+  (ginsys/shelly-manager#572)
 - The database pool now follows the provider. The built-in default of `database.max_open_conns` and
   `max_idle_conns` was 1 for every provider, and the example config set 1 too, so a PostgreSQL or
   MySQL deployment that set only the provider and the DSN ran a pool of one. An unset or 0 value now

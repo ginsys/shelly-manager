@@ -56,7 +56,7 @@ func saveLogin(t *testing.T, db database.DatabaseInterface, id uint, user, pass 
 	text, err := json.Marshal(settings)
 	require.NoError(t, err)
 	stored.Settings = string(text)
-	require.NoError(t, db.UpdateDevice(stored))
+	require.NoError(t, db.GetDB().Save(stored).Error)
 }
 
 func requireStoredLogin(t *testing.T, db database.DatabaseInterface, id uint, user, pass string) {

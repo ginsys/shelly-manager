@@ -283,46 +283,18 @@ func (m *Manager) keepStoredTimes(device *Device) error {
 	return nil
 }
 
-// UpdateDevice updates a device (legacy compatibility)
-func (m *Manager) UpdateDevice(device *Device) error {
-	// Note: Device settings validation can be added here if needed
-
-	if err := m.keepStoredTimes(device); err != nil {
-		return err
-	}
-
-	start := time.Now()
-	result := m.GetDB().Save(device)
-	duration := time.Since(start)
-
-	if result.Error != nil {
-		m.logger.WithFields(map[string]any{
-			"device_id": device.ID,
-			"error":     result.Error.Error(),
-			"duration":  duration,
-			"operation": "update",
-			"table":     "devices",
-			"component": "database",
-		}).Error("Database operation failed")
-		return result.Error
-	}
-
-	m.logger.WithFields(map[string]any{
-		"device_id": device.ID,
-		"duration":  duration,
-		"operation": "update",
-		"table":     "devices",
-		"component": "database",
-	}).Info("Device updated successfully")
-
-	return nil
-}
-
 // ErrDeviceVersionChanged means a conditional save found no row with that id and that updated_at:
 // another writer saved the device after the caller read it (ginsys/shelly-manager#509).
 var ErrDeviceVersionChanged = errors.New("the device row changed since it was read")
 
-// UpdateDeviceIfVersion saves the whole device row like UpdateDevice, but only where the stored
+// deviceConfigColumns are the columns of the device row that other writers own: the template and
+// overrides routes, the derivation of the desired configuration and the apply
+// (ginsys/shelly-manager#572). The device PUT never writes them. pending_reboot is read-only on the
+// model and needs no entry.
+var deviceConfigColumns = []string{"template_ids", "overrides", "desired_config", "config_applied"}
+
+// UpdateDeviceIfVersion is the save of the device PUT. It writes every column of the device that
+// the PUT owns, which is all of them except deviceConfigColumns, but only where the stored
 // updated_at is still version. Check and save are one UPDATE, so no writer can commit between them.
 // It returns ErrDeviceVersionChanged when the row exists with another updated_at, and
 // gorm.ErrRecordNotFound when no device has that id. version must be a value read from the
@@ -341,7 +313,7 @@ func (m *Manager) UpdateDeviceIfVersion(device *Device, version time.Time) error
 	}
 	device.UpdatedAt = next
 	db := m.GetDB().Session(&gorm.Session{NowFunc: func() time.Time { return next }})
-	result := db.Model(device).Where("updated_at = ?", version).Select("*").Updates(device)
+	result := db.Model(device).Where("updated_at = ?", version).Select("*").Omit(deviceConfigColumns...).Updates(device)
 	if result.Error != nil {
 		m.logger.WithFields(map[string]any{
 			"device_id": device.ID,
@@ -385,14 +357,20 @@ func (m *Manager) UpdateDeviceSettings(id uint, settings string) error {
 	return m.updateDeviceColumns(id, "update-settings", map[string]any{"settings": settings}, true)
 }
 
-// UpdateDeviceDiscovery stores what a discovery found again about a known device (address,
-// status, last seen time and firmware) and no other column. Like UpdateDeviceSettings it moves
-// updated_at, because the address and the firmware are fields a client edits. It reports
-// gorm.ErrRecordNotFound when no device has that id.
-func (m *Manager) UpdateDeviceDiscovery(id uint, ip, status string, lastSeen time.Time, firmware string) error {
-	return m.updateDeviceColumns(id, "update-discovery", map[string]any{
-		"ip": ip, "status": status, "last_seen": lastSeen, "firmware": firmware,
-	}, true)
+// UpdateDeviceDiscovery stores what a discovery found again about a known device (address, type,
+// firmware, status and last seen time) and no other column. It is the one discovery writer: the
+// service, the discovery upsert and the CLI all call it (ginsys/shelly-manager#572). An empty
+// update.Type means the discovery could not name the model, and the stored type stays. Like
+// UpdateDeviceSettings it moves updated_at, because the address, the type and the firmware are
+// fields a client edits. It reports gorm.ErrRecordNotFound when no device has that id.
+func (m *Manager) UpdateDeviceDiscovery(id uint, update DiscoveryUpdate) error {
+	columns := map[string]any{
+		"ip": update.IP, "status": update.Status, "last_seen": update.LastSeen, "firmware": update.Firmware,
+	}
+	if update.Type != "" {
+		columns["type"] = update.Type
+	}
+	return m.updateDeviceColumns(id, "update-discovery", columns, true)
 }
 
 // deviceColumnsAttempts bounds the retries of a versioned column write that keeps meeting another
@@ -502,59 +480,6 @@ func (m *Manager) DeleteDevice(id uint) error {
 	return nil
 }
 
-// UpsertDevice adds or updates a device (legacy compatibility)
-func (m *Manager) UpsertDevice(device *Device) error {
-	// Note: Device settings validation can be added here if needed
-
-	start := time.Now()
-
-	// Try to find existing device by MAC address
-	var existingDevice Device
-	result := m.GetDB().Where("mac = ?", device.MAC).First(&existingDevice)
-
-	var operation string
-	var err error
-
-	if result.Error == gorm.ErrRecordNotFound {
-		// Device doesn't exist, create new
-		operation = "upsert-create"
-		err = m.GetDB().Create(device).Error
-	} else if result.Error != nil {
-		// Database error
-		return fmt.Errorf("failed to check existing device: %w", result.Error)
-	} else {
-		// Device exists, update
-		operation = "upsert-update"
-		device.ID = existingDevice.ID // Preserve the ID
-		err = m.GetDB().Save(device).Error
-	}
-
-	duration := time.Since(start)
-
-	if err != nil {
-		m.logger.WithFields(map[string]any{
-			"device_mac": device.MAC,
-			"error":      err.Error(),
-			"duration":   duration,
-			"operation":  operation,
-			"table":      "devices",
-			"component":  "database",
-		}).Error("Database operation failed")
-		return err
-	}
-
-	m.logger.WithFields(map[string]any{
-		"device_id":  device.ID,
-		"device_mac": device.MAC,
-		"duration":   duration,
-		"operation":  operation,
-		"table":      "devices",
-		"component":  "database",
-	}).Info("Device upserted successfully")
-
-	return nil
-}
-
 // GetDeviceByMAC retrieves a device by MAC address (legacy compatibility)
 func (m *Manager) GetDeviceByMAC(mac string) (*Device, error) {
 	var device Device
@@ -631,20 +556,18 @@ func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, 
 		}).Error("Database operation failed")
 		return nil, err
 	} else {
-		// Update existing device - only update discovery fields
-		device.IP = update.IP
-		device.Type = update.Type
-		device.Firmware = update.Firmware
-		device.Status = update.Status
-		device.LastSeen = update.LastSeen
-		// Note: Preserve Name, Settings, and other user-configured fields
-
-		err = db.Save(&device).Error
+		// Update existing device: the discovery columns and no other, so a column that another
+		// writer committed after the read above is not written back (ginsys/shelly-manager#572).
+		// The row that is returned is read again, so it carries the stored values.
+		err = m.UpdateDeviceDiscovery(device.ID, update)
+		if err == nil {
+			err = db.First(&device, device.ID).Error
+		}
 		m.logger.WithFields(map[string]any{
 			"mac":       mac,
 			"ip":        update.IP,
 			"operation": "update",
-			"preserved": "name,settings,sync_status",
+			"columns":   "ip,type,firmware,status,last_seen",
 			"duration":  time.Since(start),
 			"component": "database",
 		}).Info("Updated existing device from discovery")

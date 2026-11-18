@@ -319,7 +319,17 @@ func (g *GitOpsImporter) Import(ctx context.Context, gitopsData *GitOpsData, opt
 			}
 
 			if updated {
-				if err := tx.Save(existing).Error; err != nil {
+				// The import owns the name and the type. Saving the whole row would write back the
+				// other columns as loaded, over an apply or an edit that committed since
+				// (ginsys/shelly-manager#572). updated_at moves, so a client that read the old name
+				// meets a 409 on its next save.
+				version := time.Now()
+				if min := existing.UpdatedAt.Add(time.Millisecond); version.Before(min) {
+					version = min
+				}
+				if err := tx.Model(&database.Device{}).Where("id = ?", existing.ID).UpdateColumns(map[string]any{
+					"name": existing.Name, "type": existing.Type, "updated_at": version,
+				}).Error; err != nil {
 					result.Errors = append(result.Errors, fmt.Sprintf("failed to update device %s: %v", gitopsDevice.Name, err))
 					result.Success = false
 					continue

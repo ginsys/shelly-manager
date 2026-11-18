@@ -98,7 +98,7 @@ func retryFixture(t *testing.T, gate *gatedDevice) (*ShellyService, *database.De
 	service := NewService(db, createTestConfig())
 	device := createTestDevice(t, db, server.URL[len("http://"):])
 	device.Settings = `{"gen":1,"auth_enabled":true,"auth_user":"old","auth_pass":"oldpw","note":"keep"}`
-	if err := db.UpdateDevice(device); err != nil {
+	if err := saveDevice(db, device); err != nil {
 		t.Fatal(err)
 	}
 	return service, device
@@ -261,7 +261,7 @@ func TestGetClient_401ClearingALegacyLoginFallsBackToTheProvisioningLogin(t *tes
 	service.Config.Provisioning.AuthUser = "prov"
 	service.Config.Provisioning.AuthPassword = "provpw"
 	device.Settings = `{"gen":1,"auth":{"username":"old","password":"bad"}}`
-	if err := service.DB.UpdateDevice(device); err != nil {
+	if err := saveDevice(service.DB, device); err != nil {
 		t.Fatal(err)
 	}
 

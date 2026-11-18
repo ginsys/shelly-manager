@@ -139,9 +139,18 @@ var discoverCmd = &cobra.Command{
 				// Update existing device with new IP if changed
 				existingDevice, _ := dbManager.GetDeviceByMAC(device.MAC)
 				if existingDevice.IP != device.IP {
-					existingDevice.IP = device.IP
-					existingDevice.LastSeen = time.Now()
-					if err := dbManager.UpdateDevice(existingDevice); err != nil {
+					// Only the discovery columns are written (ginsys/shelly-manager#572).
+					status := device.Status
+					if status == "" {
+						status = existingDevice.Status
+					}
+					firmware := device.Firmware
+					if firmware == "" {
+						firmware = existingDevice.Firmware
+					}
+					if err := dbManager.UpdateDeviceDiscovery(existingDevice.ID, database.DiscoveryUpdate{
+						IP: device.IP, Type: device.Type, Firmware: firmware, Status: status, LastSeen: time.Now(),
+					}); err != nil {
 						fmt.Printf("✗ Failed to update device: %v\n", err)
 					} else {
 						fmt.Printf("✓ Updated IP address in database\n")
