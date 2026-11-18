@@ -19,12 +19,6 @@
             <p>Read the current configuration of the selected devices into the manager</p>
           </button>
 
-          <button class="operation-card" @click="operation = 'export'">
-            <span class="operation-icon">📤</span>
-            <h3>Bulk Export</h3>
-            <p>Send the stored import/export configuration to the selected devices</p>
-          </button>
-
           <button class="operation-card" @click="operation = 'drift'">
             <span class="operation-icon">🔍</span>
             <h3>Drift Detection</h3>
@@ -45,7 +39,8 @@
         <form @submit.prevent="handleImport">
           <p class="form-note">
             Reads the current configuration of each selected device into the manager. Nothing is
-            written to the devices.
+            written to the devices; to write a configuration to a device, apply it from that
+            device's page.
           </p>
 
           <div class="form-field checkbox">
@@ -61,34 +56,6 @@
           <div class="form-actions">
             <button type="button" class="btn" @click="operation = null">Back</button>
             <button type="submit" class="btn primary">Import</button>
-          </div>
-        </form>
-      </div>
-
-      <!-- Export Form -->
-      <div v-else-if="operation === 'export' && !isProcessing && !result">
-        <h3>Bulk Export Configuration</h3>
-        <form @submit.prevent="handleExport">
-          <p class="form-note">
-            Writes the stored import/export configuration of each selected device to that device.
-            A device that answers with another MAC than the stored one gets nothing and is
-            reported as failed. This is not the desired configuration, and it does not change the
-            applied state.
-          </p>
-
-          <div class="form-field checkbox">
-            <input
-              id="export-stop-on-error"
-              v-model="stopOnError"
-              type="checkbox"
-              class="form-checkbox"
-            />
-            <label for="export-stop-on-error">Stop on first error</label>
-          </div>
-
-          <div class="form-actions">
-            <button type="button" class="btn" @click="operation = null">Back</button>
-            <button type="submit" class="btn primary">Export</button>
           </div>
         </form>
       </div>
@@ -201,7 +168,6 @@
 import { ref, computed } from 'vue'
 import {
   bulkImport,
-  bulkExport,
   bulkDriftDetect,
   bulkDriftDetectEnhanced,
   viewOf,
@@ -220,7 +186,7 @@ const emit = defineEmits<{
   complete: [result: BulkAnswer]
 }>()
 
-type Operation = 'import' | 'export' | 'drift' | 'drift-enhanced'
+type Operation = 'import' | 'drift' | 'drift-enhanced'
 
 const operation = ref<Operation | null>(null)
 const isProcessing = ref(false)
@@ -253,7 +219,6 @@ async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, failure:
 }
 
 const handleImport = () => run(bulkImport, 'Bulk import failed')
-const handleExport = () => run(bulkExport, 'Bulk export failed')
 const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection failed')
 const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report failed')
 

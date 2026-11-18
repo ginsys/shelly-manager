@@ -291,10 +291,13 @@ All notable changes to this project are documented here. The project follows Con
 - The bulk operations types and dialog in the web UI now match the bulk routes. The request is
   `{device_ids, options: {stop_on_error}}` and the answers are typed as the backend sends them
   (`failed` and `skipped` counts, `device_name` and `device_ip`; no operation id or overall status,
-  and no timestamps on an import or export answer). The dialog no longer offers what the routes never did: the JSON to apply, "validate
-  only", the export format, secrets and metadata, and the comparison, threshold and history options.
-  Import reads the devices into the manager, export sends the stored import/export configuration to
-  them, and the dialog says so. The dialog is still not mounted (ginsys/shelly-manager#136); applying
+  and no timestamps on an import answer). The dialog no longer offers what the routes never did: the
+  JSON to apply, "validate only", the export format, secrets and metadata, and the comparison,
+  threshold and history options. It no longer offers bulk export either: that route writes a second,
+  unlocked copy of the configuration and is being retired in favour of the apply
+  (ginsys/shelly-manager#592), so the dialog points to the per-device apply for writing a
+  configuration to a device. Import reads the devices into the manager and the dialog says so. The
+  dialog is still not mounted (ginsys/shelly-manager#136); applying
   operator JSON to selected devices and downloading their configuration are
   ginsys/shelly-manager#594 and ginsys/shelly-manager#595. Fixes ginsys/shelly-manager#248.
 - A device writer saves only the columns it owns, and a whole-row save exists only where it is

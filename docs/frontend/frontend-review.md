@@ -247,7 +247,7 @@ The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` compo
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/config/bulk-import` | POST | Read the live configuration of the named devices into the manager |
-| `/config/bulk-export` | POST | Write the stored import/export configuration to the named devices |
+| ~~`/config/bulk-export`~~ | POST | Not used by the UI; being retired in favour of the per-device apply (ginsys/shelly-manager#592) |
 | `/config/bulk-drift-detect` | POST | Compare stored and live configuration of the named devices |
 | `/config/bulk-drift-detect-enhanced` | POST | The same comparison, answered with the comprehensive report |
 
