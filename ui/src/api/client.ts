@@ -35,6 +35,7 @@ api.interceptors.response.use(
     const adminGuard =
       error?.response?.status === 401 && error.response.data?.error?.code === 'UNAUTHORIZED'
     if (!adminGuard || !config) throw error
+    // The route contract test allows one use of the instance here: api.request(<ident>.config).
 
     if (config._adminKeyRetried) {
       // The key we just sent was refused: no loop, the next key is the operator's act.
@@ -45,7 +46,7 @@ api.interceptors.response.use(
     const key = await requestAdminKey()
     if (!key) throw error
     config._adminKeyRetried = true
-    return api.request(config)
+    return api.request(error.config)
   },
 )
 
