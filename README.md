@@ -153,6 +153,21 @@ SHELLY_DATABASE_DSN="host=localhost user=app dbname=shelly sslmode=disable"
 SHELLY_SECURITY_ADMIN_API_KEY=your-secure-admin-key
 ```
 
+### Database connection pool
+
+Leave `database.max_open_conns` and `database.max_idle_conns` unset (or `0`) to get the provider's own pool:
+
+| Provider | Open | Idle |
+|---|---|---|
+| SQLite | 1 | 1 |
+| PostgreSQL, MySQL | 25 | 5 |
+
+A value you set is used as is. The environment names are `SHELLY_DATABASE_MAX_OPEN_CONNS` and
+`SHELLY_DATABASE_MAX_IDLE_CONNS`. Each replica opens its own pool, so keep replicas × `max_open_conns`
+below the database server's `max_connections` (PostgreSQL's default is 100), counting the extra replica of a
+rolling update and the most the autoscaler can add. A pool of 1 on PostgreSQL or MySQL cannot take the
+cross-replica apply lock; keep it at 2 or more when more than one replica runs.
+
 ### YAML Configuration
 
 **API Server** (`/etc/shelly/config.yaml`):

@@ -510,6 +510,9 @@ func TestSetDefaults(t *testing.T) {
 		{"logging.format", config.Logging.Format, "text"},
 		{"logging.output", config.Logging.Output, "stdout"},
 		{"database.path", config.Database.Path, "data/shelly.db"},
+		// 0 means "the provider's own pool" (GetDatabaseConfig); the key is still registered for env overrides
+		{"database.max_open_conns", config.Database.MaxOpenConns, 0},
+		{"database.max_idle_conns", config.Database.MaxIdleConns, 0},
 		{"discovery.enabled", config.Discovery.Enabled, true},
 		{"discovery.interval", config.Discovery.Interval, 300},
 		{"discovery.timeout", config.Discovery.Timeout, 5},

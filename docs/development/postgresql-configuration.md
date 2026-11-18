@@ -14,8 +14,8 @@ database:
   dsn: "connection_string"                  # PostgreSQL connection string
   options:                                  # Provider-specific options
     key: "value"
-  max_open_conns: 25                       # Maximum concurrent connections
-  max_idle_conns: 5                        # Maximum idle connections
+  max_open_conns: 25                       # Maximum concurrent connections (default when unset: 25)
+  max_idle_conns: 5                        # Maximum idle connections (default when unset: 5)
   conn_max_lifetime: "1h"                  # Maximum connection lifetime
   conn_max_idle_time: "10m"                # Maximum connection idle time
   slow_query_threshold: "200ms"            # Slow query detection threshold

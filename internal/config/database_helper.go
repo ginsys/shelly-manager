@@ -39,12 +39,15 @@ func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
 	config.SlowQueryThreshold = time.Duration(c.Database.SlowQueryTime) * time.Millisecond
 	config.LogLevel = c.Database.LogLevel
 
-	// Ensure we have sensible defaults based on provider
+	// Ensure we have sensible defaults based on provider. A value the operator
+	// set is never replaced; only 0 means "the provider's own pool". The
+	// provider names are the ones the provider factory accepts.
+	providerKind := strings.ToLower(strings.TrimSpace(config.Provider))
 	if config.MaxOpenConns == 0 {
-		switch config.Provider {
-		case "sqlite":
+		switch providerKind {
+		case "sqlite", "sqlite3":
 			config.MaxOpenConns = 1
-		case "postgresql", "mysql":
+		case "postgresql", "postgres", "mysql":
 			config.MaxOpenConns = 25
 		default:
 			config.MaxOpenConns = 10
@@ -52,13 +55,17 @@ func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
 	}
 
 	if config.MaxIdleConns == 0 {
-		switch config.Provider {
-		case "sqlite":
+		switch providerKind {
+		case "sqlite", "sqlite3":
 			config.MaxIdleConns = 1
-		case "postgresql", "mysql":
+		case "postgresql", "postgres", "mysql":
 			config.MaxIdleConns = 5
 		default:
 			config.MaxIdleConns = 2
+		}
+		// A default idle count must not exceed an open count the operator set.
+		if config.MaxIdleConns > config.MaxOpenConns {
+			config.MaxIdleConns = config.MaxOpenConns
 		}
 	}
 
