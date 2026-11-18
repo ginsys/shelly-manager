@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,6 +17,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
 const (
@@ -340,5 +343,29 @@ func TestSetAuth_IsSentOnceWhateverTheClientRetries(t *testing.T) {
 				t.Fatalf("Shelly.SetAuth requests = %d, want 2 (one SetAuth and one ResetAuth, no retry)", setAuthCalls)
 			}
 		})
+	}
+}
+
+// A reply that ends before its declared length is a device error that holds the read error, which
+// is how the apply layer tells it from a refusal the device wrote.
+func TestSetAuth_ATruncatedAnswerHoldsTheReadError(t *testing.T) {
+	skipWithoutSockets(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "Shelly.GetDeviceInfo") {
+			_, _ = fmt.Fprintf(w, `{"id":1,"result":{"id":%q}}`, testDeviceID)
+			return
+		}
+		w.Header().Set("Content-Length", "100")
+		_, _ = w.Write([]byte(`{"id":1,"res`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL[len("http://"):], WithRetry(0, time.Millisecond))
+	err := client.SetAuth(context.Background(), "admin", "secret")
+
+	var deviceErr *shelly.DeviceError
+	if !errors.As(err, &deviceErr) || deviceErr.Err == nil {
+		t.Fatalf("want a device error holding the read error, got %v", err)
 	}
 }
