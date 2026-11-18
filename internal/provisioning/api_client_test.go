@@ -14,6 +14,16 @@ import (
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
+// writeEnvelope answers the way every manager route does: {"success": true, "data": <data>}.
+func writeEnvelope(t *testing.T, w http.ResponseWriter, status int, data interface{}) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "data": data}); err != nil {
+		t.Logf("Failed to encode JSON response: %v", err)
+	}
+}
+
 func TestAPIClient(t *testing.T) {
 	logger, err := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
 	if err != nil {
@@ -58,16 +68,12 @@ func TestAPIClient(t *testing.T) {
 			// Note: status is not part of the registration request
 
 			// Send success response
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(map[string]interface{}{
-				"success":       true,
+			writeEnvelope(t, w, http.StatusCreated, map[string]interface{}{
 				"agent_id":      "test-agent",
 				"registered_at": time.Now(),
 				"status":        "registered",
 				"message":       "Agent registered successfully",
-			}); err != nil {
-				t.Logf("Failed to encode JSON response: %v", err)
-			}
+			})
 		}))
 		defer server.Close()
 
@@ -119,12 +125,11 @@ func TestAPIClient(t *testing.T) {
 			assert.Equal(t, "/api/v1/provisioner/agents/test-agent/tasks", r.URL.Path)
 			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(map[string]interface{}{
-				"tasks": expectedTasks,
-			}); err != nil {
-				t.Logf("Failed to encode JSON response: %v", err)
-			}
+			writeEnvelope(t, w, http.StatusOK, map[string]interface{}{
+				"agent_id": "test-agent",
+				"tasks":    expectedTasks,
+				"count":    len(expectedTasks),
+			})
 		}))
 		defer server.Close()
 
@@ -144,12 +149,9 @@ func TestAPIClient(t *testing.T) {
 	t.Run("PollTasks_EmptyResponse", func(t *testing.T) {
 		testutil.SkipIfNoSocketPermissions(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			writeEnvelope(t, w, http.StatusOK, map[string]interface{}{
 				"tasks": []interface{}{},
-			}); err != nil {
-				t.Logf("Failed to encode JSON response: %v", err)
-			}
+			})
 		}))
 		defer server.Close()
 
@@ -183,10 +185,7 @@ func TestAPIClient(t *testing.T) {
 			assert.Equal(t, "completed", statusUpdate.Status)
 			assert.Equal(t, "Device provisioned successfully", statusUpdate.Result["message"])
 
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(map[string]string{"status": "updated"}); err != nil {
-				t.Logf("Failed to encode JSON response: %v", err)
-			}
+			writeEnvelope(t, w, http.StatusOK, map[string]string{"status": "updated"})
 		}))
 		defer server.Close()
 
@@ -224,13 +223,10 @@ func TestAPIClient(t *testing.T) {
 			assert.Equal(t, "/api/v1/provisioner/health", r.URL.Path)
 			assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(map[string]string{
+			writeEnvelope(t, w, http.StatusOK, map[string]string{
 				"status":    "healthy",
 				"timestamp": time.Now().Format(time.RFC3339),
-			}); err != nil {
-				t.Logf("Failed to encode JSON response: %v", err)
-			}
+			})
 		}))
 		defer server.Close()
 
@@ -253,10 +249,7 @@ func TestAPIClient(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Simulate slow response
 			time.Sleep(200 * time.Millisecond)
-			w.WriteHeader(http.StatusOK)
-			if err := json.NewEncoder(w).Encode(map[string]string{"status": "healthy"}); err != nil {
-				t.Logf("Failed to encode JSON response: %v", err)
-			}
+			writeEnvelope(t, w, http.StatusOK, map[string]string{"status": "healthy"})
 		}))
 		defer server.Close()
 
@@ -324,17 +317,12 @@ func TestAPIClient(t *testing.T) {
 			assert.Equal(t, -45, req.Devices[0].Signal)
 
 			// Return success response
-			response := DeviceDiscoveryResponse{
-				Success:          true,
+			writeEnvelope(t, w, http.StatusOK, DeviceDiscoveryResponse{
 				DevicesReceived:  2,
 				DevicesProcessed: 2,
 				Timestamp:        time.Now(),
 				Message:          "Successfully processed devices",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			if err := json.NewEncoder(w).Encode(response); err != nil {
-				t.Logf("Failed to encode JSON response: %v", err)
-			}
+			})
 		}))
 		defer server.Close()
 
@@ -421,4 +409,85 @@ func TestProvisioningTask_JSONSerialization(t *testing.T) {
 		assert.Equal(t, float64(300), unmarshaled.Config["timeout"])
 	})
 
+}
+
+func TestAPIClient_RegistrationIsLostAndRegainedByAnswer(t *testing.T) {
+	testutil.SkipIfNoSocketPermissions(t)
+	logger, err := logging.New(logging.Config{Level: "info", Format: "text", Output: "stdout"})
+	require.NoError(t, err)
+
+	// answer is what the fake manager returns for every route except register.
+	answer := func(w http.ResponseWriter, status int) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte("refused"))
+	}
+	newClient := func(status int) (*APIClient, *int) {
+		registers := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/v1/provisioner/agents/register" {
+				registers++
+				writeEnvelope(t, w, http.StatusCreated, map[string]interface{}{"agent_id": "a", "status": "registered"})
+				return
+			}
+			answer(w, status)
+		}))
+		t.Cleanup(server.Close)
+		return NewAPIClient(server.URL, "k", "a", logger), &registers
+	}
+
+	t.Run("a poll answered 401 or 404 unregisters, and EnsureRegistered registers again", func(t *testing.T) {
+		for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound} {
+			client, registers := newClient(status)
+			require.NoError(t, client.EnsureRegistered("h", nil, nil))
+			require.True(t, client.IsRegistered())
+
+			_, err := client.PollTasks()
+			require.Error(t, err)
+			var httpErr *HTTPError
+			require.ErrorAs(t, err, &httpErr)
+			assert.Equal(t, status, httpErr.StatusCode)
+			assert.False(t, client.IsRegistered(), "status %d", status)
+
+			require.NoError(t, client.EnsureRegistered("h", nil, nil))
+			assert.True(t, client.IsRegistered())
+			assert.Equal(t, 2, *registers, "registered twice")
+		}
+	})
+
+	t.Run("a status update or a report answered 401 unregisters, a 404 does not", func(t *testing.T) {
+		client, _ := newClient(http.StatusUnauthorized)
+		require.NoError(t, client.EnsureRegistered("h", nil, nil))
+		require.Error(t, client.UpdateTaskStatus("t", "completed", nil, ""))
+		assert.False(t, client.IsRegistered())
+
+		client, _ = newClient(http.StatusUnauthorized)
+		require.NoError(t, client.EnsureRegistered("h", nil, nil))
+		require.Error(t, client.ReportDiscoveredDevices("", []*DiscoveredDevice{{MAC: "AA"}}))
+		assert.False(t, client.IsRegistered())
+
+		client, _ = newClient(http.StatusNotFound) // an unknown task says nothing about the registration
+		require.NoError(t, client.EnsureRegistered("h", nil, nil))
+		require.Error(t, client.UpdateTaskStatus("t", "completed", nil, ""))
+		assert.True(t, client.IsRegistered())
+	})
+
+	t.Run("EnsureRegistered does not register twice", func(t *testing.T) {
+		client, registers := newClient(http.StatusOK)
+		require.NoError(t, client.EnsureRegistered("h", nil, nil))
+		require.NoError(t, client.EnsureRegistered("h", nil, nil))
+		assert.Equal(t, 1, *registers)
+	})
+
+	t.Run("an answer with success false is an error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success":false,"error":{"code":"X","message":"not today"}}`))
+		}))
+		defer server.Close()
+		client := NewAPIClient(server.URL, "k", "a", logger)
+		err := client.RegisterAgent("h", nil, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not today")
+		assert.False(t, client.IsRegistered())
+	})
 }

@@ -420,24 +420,32 @@ func getActualConfigPath(configFile string) string {
 	return "./configs/shelly-provisioner.yaml"
 }
 
+// registrationDetails is what the agent tells the manager about itself when it registers.
+func registrationDetails() (hostname string, capabilities []string, metadata map[string]string) {
+	hostname, _ = os.Hostname()
+	capabilities = []string{"wifi-provisioning", "device-discovery", "shelly-gen1", "shelly-gen2"}
+	metadata = map[string]string{
+		"version":  "0.5.0-alpha",
+		"platform": "golang",
+	}
+	return hostname, capabilities, metadata
+}
+
 func registerWithAPI() error {
 	if apiClient == nil {
 		return fmt.Errorf("API client not initialized")
 	}
 
-	hostname, _ := os.Hostname()
-	capabilities := []string{"wifi-provisioning", "device-discovery", "shelly-gen1", "shelly-gen2"}
-	metadata := map[string]string{
-		"version":  "0.5.0-alpha",
-		"platform": "golang",
-	}
-
-	return apiClient.RegisterAgent(hostname, capabilities, metadata)
+	return apiClient.RegisterAgent(registrationDetails())
 }
 
 func pollForTasks(ctx context.Context) error {
-	if apiClient == nil || !apiClient.IsRegistered() {
-		return fmt.Errorf("API client not initialized or not registered")
+	if apiClient == nil {
+		return fmt.Errorf("API client not initialized")
+	}
+	// Register first when the start-up attempt failed or the manager lost the registration (a restart).
+	if err := apiClient.EnsureRegistered(registrationDetails()); err != nil {
+		return err
 	}
 
 	tasks, err := apiClient.PollTasks()

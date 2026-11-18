@@ -125,9 +125,7 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		"status":        "registered",
 		"message":       "Agent registered successfully",
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	h.writeJSON(w, response)
+	h.responseWriter().WriteCreated(w, r, response)
 }
 
 // GetProvisionerAgents handles GET /api/v1/provisioner/agents
@@ -474,7 +472,6 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 	}
 
 	response := map[string]interface{}{
-		"success":           true,
 		"devices_received":  len(req.Devices),
 		"devices_processed": devicesProcessed,
 		"devices_persisted": devicesPersisted,
