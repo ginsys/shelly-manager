@@ -13,12 +13,15 @@ async function load() {
   vi.resetModules()
   const key = await import('../adminKey')
   const { api } = await import('../client')
-  const calls: { auth: string | undefined; url: string | undefined }[] = []
-  let answer: (auth: string | undefined) => Answer = () => ({ status: 200, body: { success: true } })
+  const calls: { auth: string | undefined; url: string | undefined; data: unknown }[] = []
+  let answer: (auth: string | undefined, url: string | undefined) => Answer | Promise<Answer> = () => ({
+    status: 200,
+    body: { success: true },
+  })
   api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
     const auth = (config.headers as any)?.Authorization as string | undefined
-    calls.push({ auth, url: config.url })
-    const a = answer(auth)
+    calls.push({ auth, url: config.url, data: config.data })
+    const a = await answer(auth, config.url)
     const response = { data: a.body, status: a.status, statusText: '', headers: {}, config } as any
     if (a.status >= 200 && a.status < 300) return response
     throw new AxiosError(
@@ -79,6 +82,33 @@ describe('client admin-key handling', () => {
     await pending
     expect(calls).toHaveLength(2)
     expect(calls[1].url).toBe('/devices')
+    // the retry carries the same body as the first attempt
+    expect(JSON.parse(calls[0].data as string)).toEqual({ name: 'x' })
+    expect(calls[1].data).toBe(calls[0].data)
+  })
+
+  it('a slow refusal of a wrong key does not delete the key typed after it', async () => {
+    const { api, key, setAnswer } = await load()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    setAnswer(async (auth, url) => {
+      if (auth === 'Bearer good') return ok
+      if (auth === 'Bearer wrong' && url === '/b') await gate // the second retry answers late
+      return unauthorized
+    })
+
+    const a = api.get('/a').catch((e) => e)
+    const b = api.get('/b').catch((e) => e)
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.submitAdminKey('wrong')
+    await a // /a's retry is refused at once: the key is forgotten and the dialog reopens
+    expect(key.promptMessage.value).toBe('That key was not accepted.')
+
+    key.submitAdminKey('good') // the operator types the right key
+    release() // now /b's retry, sent with the wrong key, is refused
+    await b
+    expect(key.getAdminKey()).toBe('good')
+    expect(key.hasSessionKey.value).toBe(true)
   })
 
   it('a second 401 forgets the key, reopens the prompt with a message and rejects; no loop', async () => {

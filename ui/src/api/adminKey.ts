@@ -11,17 +11,18 @@ import { ref } from 'vue'
 const STORAGE_NAME = 'shelly_admin_key'
 const REJECTED_MESSAGE = 'That key was not accepted.'
 
-// Used when sessionStorage is unavailable (blocked storage), so the key still lasts the page.
-let memoryKey: string | null = null
+// The key this page set or forgot. `undefined` means nothing was set or forgotten yet, so a reload
+// reads sessionStorage. Once set, memory wins over storage, so a blocked or failing write can never
+// leave an older stored key in charge; `null` is a deliberate forget.
+let memoryKey: string | null | undefined
 
 function readStored(): string | null {
+  if (memoryKey !== undefined) return memoryKey
   try {
-    const v = sessionStorage.getItem(STORAGE_NAME)
-    if (v) return v
+    return sessionStorage.getItem(STORAGE_NAME) || null
   } catch {
-    // fall through to memory
+    return null
   }
-  return memoryKey
 }
 
 /** True while an operator-entered key exists; drives the header's "Forget key" button. */
@@ -109,8 +110,13 @@ export function cancelAdminKeyPrompt(): void {
   settle(null)
 }
 
-/** The server refused the key we just sent: drop it, say so, and ask again. */
-export function rejectAdminKey(): void {
+/**
+ * The server refused `sentKey`: drop it, say so, and ask again. A refusal of a key that is no longer
+ * the entered one (a slower request, or the operator already entered a newer key) changes nothing,
+ * so a late answer never deletes the key that was just typed.
+ */
+export function rejectAdminKey(sentKey: string): void {
+  if (readStored() !== sentKey) return
   forgetAdminKey()
   promptMessage.value = REJECTED_MESSAGE
   promptOpen.value = true
