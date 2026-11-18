@@ -158,6 +158,22 @@ printf 'Fixed\n- one.\n- two.\n' >"$FX/changelog.d/9-two.md"
 run bash scripts/changelog-assemble.sh
 eq "two bullets in one file: exit 2" 2 "$RC"
 
+newfx star-bullet
+printf 'Fixed\n- one.\n* two.\n' >"$FX/changelog.d/9-star.md"
+run bash scripts/changelog-assemble.sh
+eq "a second bullet written with * : exit 2" 2 "$RC"
+
+newfx heading-line
+printf 'Fixed\n- one.\n## [9.9.9] - 2030-01-01\n' >"$FX/changelog.d/9-heading.md"
+run bash scripts/changelog-assemble.sh
+eq "an unindented heading line in the body: exit 2" 2 "$RC"
+has "heading line: the error names the file" "9-heading.md" "$OUT"
+
+newfx continuation
+printf 'Fixed\n- one,\n  continued.\n\n  A second paragraph. Fixes owner/repo#9.\n' >"$FX/changelog.d/9-cont.md"
+run bash scripts/changelog-assemble.sh
+eq "indented continuation lines and an indented paragraph pass: exit 0" 0 "$RC"
+
 newfx none
 run bash scripts/changelog-assemble.sh
 eq "no fragments, preview: exit 3" 3 "$RC"
@@ -201,6 +217,26 @@ run env CHANGELOG_DATE=2026-01-02 bash scripts/changelog-assemble.sh --write 1.2
 eq "second write: exit 3" 3 "$RC"
 eq "second write: CHANGELOG.md unchanged" "$BEFORE" "$(cat "$FX/CHANGELOG.md")"
 
+# The release is written beside CHANGELOG.md and renamed over it, so a failed
+# write leaves the original whole: with the directory unwritable no temporary
+# file can be made, and nothing may change.
+newfx write-atomic
+frag 3-a.md Added '- Add a.'
+(cd "$FX" && fxgit add -A && fxgit commit -q -m frags)
+BEFORE=$(cat "$FX/CHANGELOG.md")
+chmod a-w "$FX"
+run env CHANGELOG_DATE=2026-01-02 bash scripts/changelog-assemble.sh --write 1.2.3
+chmod u+w "$FX"
+if [ "$RC" -ne 0 ]; then ok "unwritable directory: the write is refused"; else bad "unwritable directory: the write is refused" "exit was 0"; fi
+eq "unwritable directory: CHANGELOG.md unchanged" "$BEFORE" "$(cat "$FX/CHANGELOG.md")"
+eq "unwritable directory: the fragment is still there" 1 "$(nfrags)"
+
+newfx write-mode
+frag 3-a.md Added '- Add a.'
+chmod 640 "$FX/CHANGELOG.md"
+run env CHANGELOG_DATE=2026-01-02 bash scripts/changelog-assemble.sh --write 1.2.3
+eq "write: CHANGELOG.md keeps its mode" 1 "$(find "$FX/CHANGELOG.md" -perm 640 | wc -l | tr -d ' ')"
+
 newfx bad-version
 frag 3-a.md Added '- Add a.'
 run bash scripts/changelog-assemble.sh --write v1
@@ -219,7 +255,7 @@ newfx check-pass
 prbranch fix/1-a
 frag 1-a.md Fixed '- Fix. Fixes owner/repo#1.'
 commit_all c
-check HEAD_REF_NAME=fix/1-a PR_LABELS=bug
+check HEAD_REF_NAME=fix/1-a
 eq "check: a PR with a fragment passes (exit 0)" 0 "$RC"
 has "check: PASS line" "PASS" "$OUT"
 
@@ -227,7 +263,7 @@ newfx check-nofrag
 prbranch fix/2-a
 printf 'code\n' >"$FX/code.txt"
 commit_all c
-check HEAD_REF_NAME=fix/2-a PR_LABELS=bug
+check HEAD_REF_NAME=fix/2-a
 eq "check: no fragment fails (exit 1)" 1 "$RC"
 has "check: FAIL line says what to add" "changelog.d/" "$OUT"
 
@@ -235,7 +271,7 @@ newfx check-readme-only
 prbranch docs/3-a
 printf 'more notes\n' >>"$FX/changelog.d/README.md"
 commit_all c
-check HEAD_REF_NAME=docs/3-a PR_LABELS=
+check HEAD_REF_NAME=docs/3-a
 eq "check: editing README.md is not a fragment (exit 1)" 1 "$RC"
 
 newfx check-edit-unreleased
@@ -243,39 +279,43 @@ prbranch fix/4-a
 frag 4-a.md Fixed '- Fix. Fixes owner/repo#4.'
 (cd "$FX" && sed -i 's/^- Legacy fix. Fixes owner\/repo#3.$/&\n- Added the old way. Fixes owner\/repo#4./' CHANGELOG.md)
 commit_all c
-check HEAD_REF_NAME=fix/4-a PR_LABELS=bug
+check HEAD_REF_NAME=fix/4-a
 eq "check: a CHANGELOG.md edit fails even with a fragment (exit 1)" 1 "$RC"
 has "check: FAIL names CHANGELOG.md" "CHANGELOG.md" "$OUT"
 
+# The workflow passes the exact-membership answer (contains() over the label
+# array), never a joined label list, so a label such as "docs,no-changelog"
+# cannot pass for the label no-changelog.
 newfx check-label
 prbranch ci/5-a
 printf 'ci\n' >"$FX/ci.txt"
 commit_all c
-check HEAD_REF_NAME=ci/5-a PR_LABELS=bug,no-changelog
-eq "check: label no-changelog skips (exit 0)" 0 "$RC"
+check HEAD_REF_NAME=ci/5-a PR_NO_CHANGELOG=true
+eq "check: PR_NO_CHANGELOG=true skips (exit 0)" 0 "$RC"
 has "check: SKIP line names the reason" "SKIP" "$OUT"
-check HEAD_REF_NAME=ci/5-a "PR_LABELS=bug
-no-changelog"
-eq "check: label list split on newlines too (exit 0)" 0 "$RC"
-check HEAD_REF_NAME=ci/5-a PR_LABELS=no-changelog-not
-eq "check: a label that only starts with the name does not skip (exit 1)" 1 "$RC"
+check HEAD_REF_NAME=ci/5-a PR_NO_CHANGELOG=false
+eq "check: PR_NO_CHANGELOG=false does not skip (exit 1)" 1 "$RC"
+check HEAD_REF_NAME=ci/5-a PR_NO_CHANGELOG=
+eq "check: an empty PR_NO_CHANGELOG does not skip (exit 1)" 1 "$RC"
+check HEAD_REF_NAME=ci/5-a PR_NO_CHANGELOG=yes
+eq "check: only the word true skips (exit 1)" 1 "$RC"
 
 newfx check-bots
 prbranch dependabot/go_modules/x
 printf 'dep\n' >"$FX/dep.txt"
 commit_all c
-check HEAD_REF_NAME=dependabot/go_modules/x PR_LABELS=dependencies
+check HEAD_REF_NAME=dependabot/go_modules/x
 eq "check: dependabot ref skips (exit 0)" 0 "$RC"
-check HEAD_REF_NAME=renovate/x PR_LABELS=
+check HEAD_REF_NAME=renovate/x
 eq "check: renovate ref skips (exit 0)" 0 "$RC"
-check HEAD_REF_NAME=fix/dependabot/x PR_LABELS=
+check HEAD_REF_NAME=fix/dependabot/x
 eq "check: dependabot only as a prefix (exit 1)" 1 "$RC"
 
 newfx check-badfrag
 prbranch fix/6-a
 frag 6-a.md Feature '- Bad section.'
 commit_all c
-check HEAD_REF_NAME=fix/6-a PR_LABELS=
+check HEAD_REF_NAME=fix/6-a
 eq "check: an invalid fragment fails (exit 1)" 1 "$RC"
 has "check: FAIL names the fragment" "6-a.md" "$OUT"
 
@@ -284,7 +324,7 @@ prbranch fix/7-a
 mkdir -p "$FX/changelog.d/sub"
 printf 'Fixed\n- text.\n' >"$FX/changelog.d/sub/7-a.md"
 commit_all c
-check HEAD_REF_NAME=fix/7-a PR_LABELS=
+check HEAD_REF_NAME=fix/7-a
 eq "check: a fragment in a subdirectory is not one (exit 1)" 1 "$RC"
 
 newfx check-nobase
@@ -292,7 +332,7 @@ newfx check-nobase
 prbranch fix/8-a
 frag 8-a.md Fixed '- Fix.'
 commit_all c
-check HEAD_REF_NAME=fix/8-a PR_LABELS=
+check HEAD_REF_NAME=fix/8-a
 eq "check: a missing base ref is an error, never an empty diff (exit 2)" 2 "$RC"
 has "check: ERROR line names the ref" "ERROR origin/main not found" "$OUT"
 
@@ -301,7 +341,7 @@ newfx check-base-ref
 prbranch fix/9-a
 frag 9-a.md Fixed '- Fix.'
 commit_all c
-check BASE_REF=develop HEAD_REF_NAME=fix/9-a PR_LABELS=
+check BASE_REF=develop HEAD_REF_NAME=fix/9-a
 eq "check: BASE_REF selects another base (exit 0)" 0 "$RC"
 
 newfx check-release
@@ -311,8 +351,41 @@ commit_all frags
 prbranch chore/release
 (cd "$FX" && CHANGELOG_DATE=2026-01-02 bash scripts/changelog-assemble.sh --write 1.2.3 >/dev/null 2>&1)
 commit_all release
-check HEAD_REF_NAME=chore/release PR_LABELS=
+check HEAD_REF_NAME=chore/release
 eq "check: the assemble commit passes (exit 0)" 0 "$RC"
+has "check: it says it is a release commit" "release commit" "$OUT"
+
+# A release commit must show each deleted fragment's entry in CHANGELOG.md, under
+# a full version heading. A heading alone, or an incomplete one, is no release.
+newfx check-release-discards
+frag 3-a.md Added '- Add a. Refs owner/repo#3.'
+commit_all frags
+(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
+prbranch chore/release2
+(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1.2.3] - 2026-01-02/' CHANGELOG.md)
+commit_all discards
+check HEAD_REF_NAME=chore/release2
+eq "check: a full heading but a discarded entry is not a release (exit 1)" 1 "$RC"
+
+newfx check-release-short-heading
+frag 3-a.md Added '- Add a. Refs owner/repo#3.'
+commit_all frags
+(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
+prbranch chore/release3
+(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1\n- Add a. Refs owner\/repo#3./' CHANGELOG.md)
+commit_all short
+check HEAD_REF_NAME=chore/release3
+eq "check: an incomplete heading is not a release (exit 1)" 1 "$RC"
+
+newfx check-release-invalid-deleted
+printf 'Feature\n- Odd. Refs owner/repo#3.\n' >"$FX/changelog.d/3-a.md"
+commit_all frags
+(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
+prbranch chore/release4
+(cd "$FX" && git rm -q changelog.d/3-a.md && sed -i 's/^## \[Unreleased\]$/&\n\n## [1.2.3] - 2026-01-02\n- Odd. Refs owner\/repo#3./' CHANGELOG.md)
+commit_all odd
+check HEAD_REF_NAME=chore/release4
+eq "check: a deleted fragment that was invalid is not a release (exit 1)" 1 "$RC"
 
 newfx check-fake-release
 frag 3-a.md Added '- Add a.'
@@ -321,7 +394,7 @@ commit_all frags
 prbranch fix/10-a
 (cd "$FX" && git rm -q changelog.d/3-a.md)
 commit_all removal
-check HEAD_REF_NAME=fix/10-a PR_LABELS=
+check HEAD_REF_NAME=fix/10-a
 eq "check: deleting a fragment without a version heading is not a release (exit 1)" 1 "$RC"
 
 # ------------------------------------------------- the acceptance: two PRs

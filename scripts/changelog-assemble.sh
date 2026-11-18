@@ -60,11 +60,13 @@ validate_file() {
 		{
 			if (!seen) { seen = 1; if ($0 !~ /^- /) bad = "the entry must start with \"- \"" }
 			else if ($0 ~ /^- /) multi = 1
+			else if ($0 !~ /^[[:space:]]*$/ && $0 !~ /^  /) cont = 1
 		}
 		END {
 			if (!seen) print "the entry is empty"
 			else if (bad != "") print bad
 			else if (multi) print "one entry per file: a second line starts with \"- \""
+			else if (cont) print "every line after the first must be blank or indented two spaces"
 		}' "$path")
 	if [ -n "$verdict" ]; then
 		echo "ERROR $path: $verdict" >&2
@@ -141,7 +143,8 @@ done
 [ "$invalid" -eq 0 ] || exit 2
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/changelog-assemble.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+next=
+trap 'rm -rf "$tmp"; [ -z "$next" ] || rm -f "$next"' EXIT
 
 gen=$tmp/generated
 : >"$gen"
@@ -199,7 +202,13 @@ awk -v ver="$version" -v date="$date" -v gen="$gen" '
 	END { if (state == 1) flush(0) }
 ' "$CHANGELOG" >"$tmp/new"
 
-cat "$tmp/new" >"$CHANGELOG"
+# Write beside CHANGELOG.md and rename over it: a failed or interrupted write
+# leaves the original whole, and the fragments go only after the rename.
+next=$(mktemp "$ROOT/$CHANGELOG.XXXXXX")
+cp -p "$CHANGELOG" "$next"
+cat "$tmp/new" >"$next"
+mv -f "$next" "$CHANGELOG"
+next=
 for n in "${names[@]}"; do
 	if git ls-files --error-unmatch -- "$FRAG_DIR/$n" >/dev/null 2>&1; then
 		git rm -q -f -- "$FRAG_DIR/$n"
