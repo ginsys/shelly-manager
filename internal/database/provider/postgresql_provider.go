@@ -293,10 +293,11 @@ func (p *PostgreSQLProvider) sanitizeError(err error) error {
 
 	sanitizedMsg := err.Error()
 
-	// The password this provider was given is known, so remove it by value, in
-	// every spelling a driver or the URL package may print it in. The patterns
-	// below only catch what looks like a credential.
-	if password := p.config.Password; password != "" {
+	// The passwords this provider was given are known, so remove them by value
+	// (exact match, no pattern), in every spelling a driver or the URL package
+	// may print them in, wherever in the text they land. The patterns below only
+	// catch what looks like a credential.
+	for _, password := range p.knownPasswords() {
 		for _, form := range []string{
 			password,
 			url.QueryEscape(password),
@@ -330,6 +331,27 @@ func (p *PostgreSQLProvider) sanitizeError(err error) error {
 	sanitizedMsg = urlPattern.ReplaceAllString(sanitizedMsg, "://***:***@")
 
 	return fmt.Errorf("%s", sanitizedMsg)
+}
+
+// knownPasswords lists the password values the provider holds: the
+// database.password field, and the userinfo password and password query values
+// of the DSN where it parses.
+func (p *PostgreSQLProvider) knownPasswords() []string {
+	var out []string
+	if p.config.Password != "" {
+		out = append(out, p.config.Password)
+	}
+	if u, err := url.Parse(p.config.DSN); err == nil {
+		if password, ok := u.User.Password(); ok && password != "" {
+			out = append(out, password)
+		}
+		for _, value := range u.Query()["password"] {
+			if value != "" {
+				out = append(out, value)
+			}
+		}
+	}
+	return out
 }
 
 // validateDSNInput validates and sanitizes DSN components for security
@@ -386,6 +408,14 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	// Ensure it has a scheme that looks like a valid database URL
 	if parsedURL.Scheme == "" || (!strings.HasPrefix(parsedURL.Scheme, "postgres")) {
 		return "", fmt.Errorf("invalid PostgreSQL DSN scheme, expected postgres:// or postgresql://")
+	}
+
+	// A URL the driver would read differently from net/url puts a password into
+	// the host or the database name, and the driver prints both in its connect
+	// error: "postgresql://h:1/secret@h/db" parses with "secret@h/db" as the
+	// database. A database name is one path segment without "@" or a blank.
+	if name := strings.TrimPrefix(parsedURL.Path, "/"); strings.ContainsAny(name, "/@ \t") {
+		return "", fmt.Errorf("invalid DSN format: the database name must be one path segment without '@', '/' or blanks")
 	}
 
 	// database.username and database.password are the credentials kept out of

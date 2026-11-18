@@ -272,7 +272,8 @@ All notable changes to this project are documented here. The project follows Con
   `connect_timeout`, `application_name`, `search_path`, `sslcert`, `sslkey` and `sslrootcert` (the driver
   reads `user`, `password`, `passfile` and `service` from the query and lets them win). MySQL refuses the
   two keys, and SQLite ignores them. A password never appears in an error, a health status or a printed
-  database config (which now shows no DSN query at all); the keyed patterns of the PostgreSQL error
+  database config (which prints no DSN for a network provider, and a DSN whose path is not one plain
+  database name is refused with a fixed message); the keyed patterns of the PostgreSQL error
   sanitizer also missed a value that starts with `s` or holds `=`, now fixed. A test reads the manifests
   and fails on any name the app does not read, a credential outside a Secret, or a URL with a query.
   The provisioner's `SHELLY_API_URL` is no longer set (it named a Service that does not exist under the
