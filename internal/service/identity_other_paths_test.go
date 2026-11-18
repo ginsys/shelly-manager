@@ -3,11 +3,13 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
@@ -31,12 +33,21 @@ type identityDevice struct {
 	strictInfo bool
 	writes     int // POST requests served
 	reads      int // GET requests served on a path other than /shelly
+	// probeArrived is closed by the first identity read; that read then waits until probeHold is
+	// closed. Both are nil when a test does not need to stop the read.
+	probeArrived chan struct{}
+	probeHold    chan struct{}
+	arriveOnce   sync.Once
 }
 
 func (d *identityDevice) handler(w http.ResponseWriter, r *http.Request) {
 	user, pass, hasLogin := r.BasicAuth()
 	accepted := d.login == "" || (hasLogin && user+":"+pass == d.login)
 	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Path == "/shelly" && r.UserAgent() == identityProbeUserAgent && d.probeHold != nil {
+		d.arriveOnce.Do(func() { close(d.probeArrived) })
+		<-d.probeHold
+	}
 	if r.URL.Path == "/shelly" {
 		if d.strictInfo && hasLogin && !accepted {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -75,10 +86,15 @@ func identityFixture(t *testing.T, dev *identityDevice, storedMAC, settings stri
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(dev.handler))
 	t.Cleanup(server.Close)
+	return serviceWithDeviceAt(t, strings.TrimPrefix(server.URL, "http://"), storedMAC, settings)
+}
 
+// serviceWithDeviceAt is a service with one Gen1 device record at addr.
+func serviceWithDeviceAt(t *testing.T, addr, storedMAC, settings string) (*ShellyService, *database.Device) {
+	t.Helper()
 	db := createTestDB(t)
 	service := NewService(db, createTestConfig())
-	device := createTestDevice(t, db, strings.TrimPrefix(server.URL, "http://"))
+	device := createTestDevice(t, db, addr)
 	device.MAC = storedMAC
 	device.Settings = settings
 	if err := db.UpdateDevice(device); err != nil {
@@ -253,5 +269,103 @@ func TestGetDeviceStatus_StillReadsWhateverAnswers(t *testing.T) {
 	}
 	if writes, _ := dev.counts(); writes != 0 {
 		t.Errorf("a read path sent %d writes", writes)
+	}
+}
+
+// The identity read is one request, because a caller may hold clientMu while it waits. A device
+// that cannot be reached is not retried with a sleep between the attempts: the default client
+// would sleep three seconds before giving up.
+func TestCheckStoredIdentity_DoesNotRetryAnUnreachableDevice(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	addr := strings.TrimPrefix(server.URL, "http://")
+	server.Close() // nothing listens at addr now
+	service, device := serviceWithDeviceAt(t, addr, identityStoredMAC, identityNoLogin)
+
+	start := time.Now()
+	err := service.checkStoredIdentity(device)
+	elapsed := time.Since(start)
+
+	if err == nil || errors.Is(err, configuration.ErrDeviceIdentity) {
+		t.Fatalf("got %v, want the read's own error", err)
+	}
+	if elapsed > 1500*time.Millisecond {
+		t.Errorf("the identity read took %v, want no sleeping retry", elapsed)
+	}
+}
+
+// The probe is built for one read, so it must not leave a keep-alive connection behind: a control
+// call would otherwise leave one open connection and its goroutines for every command.
+func TestCheckStoredIdentity_LeavesNoConnectionOpen(t *testing.T) {
+	dev := &identityDevice{mac: identityReportedMAC}
+	var mu sync.Mutex
+	open := 0
+	server := httptest.NewUnstartedServer(http.HandlerFunc(dev.handler))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch state {
+		case http.StateNew:
+			open++
+		case http.StateClosed, http.StateHijacked:
+			open--
+		}
+	}
+	server.Start()
+	t.Cleanup(server.Close)
+	service, device := serviceWithDeviceAt(t, strings.TrimPrefix(server.URL, "http://"), identityStoredMAC, identityNoLogin)
+
+	if err := service.checkStoredIdentity(device); err != nil {
+		t.Fatalf("checkStoredIdentity failed: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := open
+		mu.Unlock()
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connection(s) of the identity read are still open", n)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// clientMu is shared by every device, so a device that is slow to answer its identity read must not
+// hold it: another device's client would wait for that read. While the read of this device is in
+// flight, the lock is free.
+func TestGetClient_TheIdentityReadForASaveDoesNotHoldTheClientLock(t *testing.T) {
+	dev := &identityDevice{mac: identityReportedMAC, login: "cfg:cfgpw",
+		probeArrived: make(chan struct{}), probeHold: make(chan struct{})}
+	service, device := identityFixture(t, dev, identityStoredMAC, `{"gen":1,"auth_enabled":true}`)
+	service.Config.Provisioning.AuthEnabled = true
+	service.Config.Provisioning.AuthUser = "cfg"
+	service.Config.Provisioning.AuthPassword = "cfgpw"
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.getClientWithRetry(device, true)
+		done <- err
+	}()
+
+	select {
+	case <-dev.probeArrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the identity read never reached the device")
+	}
+	if !service.clientMu.TryLock() {
+		close(dev.probeHold)
+		t.Fatal("clientMu is held while the identity read waits for the device")
+	}
+	service.clientMu.Unlock()
+	close(dev.probeHold)
+
+	if err := <-done; err != nil {
+		t.Fatalf("getClientWithRetry failed: %v", err)
+	}
+	if user, _ := storedLogin(t, service, device.ID); user != "cfg" {
+		t.Errorf("the stored login is %q, want the config login saved for the stored device", user)
 	}
 }

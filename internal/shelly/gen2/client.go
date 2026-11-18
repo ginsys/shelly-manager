@@ -420,6 +420,12 @@ func (c *Client) GetIP() string {
 	return c.ip
 }
 
+// CloseIdleConnections closes the keep-alive connections of this client. A client that lives for
+// one request calls it when it is done, because its transport is private and has no idle timeout.
+func (c *Client) CloseIdleConnections() {
+	c.httpClient.CloseIdleConnections()
+}
+
 // rpcCall performs a JSON-RPC call to the device
 func (c *Client) rpcCall(ctx context.Context, method string, params interface{}, result interface{}) error {
 	url := fmt.Sprintf("http://%s/rpc", c.ip)

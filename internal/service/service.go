@@ -497,6 +497,16 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		s.beforeClientBuild()
 	}
 
+	// A login that the global configuration supplies is saved only for the stored device. The
+	// identity is read here, before the lock, because it is a network call and clientMu is shared
+	// by every device: one silent device must not stall the others. A record that the read below
+	// finds in need of a save, but that this read did not cover, saves nothing this time.
+	var identityRead bool
+	var identityErr error
+	if s.mayAdoptConfigLogin(device) {
+		identityRead, identityErr = true, s.checkStoredIdentity(device)
+	}
+
 	// Create new client based on generation
 	// The cache lock is released once the client is cached: the connection test and the retry
 	// below run without it, because the retry takes the lock again.
@@ -604,13 +614,14 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 		if err == nil {
 			// The login works on whatever answers at this address. It is saved only for the stored
 			// device: another device accepting it proves nothing about this record.
-			if idErr := s.checkStoredIdentity(device); idErr != nil {
+			if !identityRead || identityErr != nil {
 				s.logger.WithFields(map[string]any{
-					"device_id": device.ID,
-					"device_ip": device.IP,
-					"error":     idErr.Error(),
-					"component": "service",
-				}).Warn("Not saving the config login: the device at this address is not the stored device")
+					"device_id":     device.ID,
+					"device_ip":     device.IP,
+					"identity_read": identityRead,
+					"error":         fmt.Sprint(identityErr),
+					"component":     "service",
+				}).Warn("Not saving the config login: the device at this address is not shown to be the stored device")
 			} else {
 				// Credentials work, save them to device settings
 				settings.AuthUser = authUser
