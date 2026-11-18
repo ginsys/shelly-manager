@@ -589,6 +589,34 @@ func TestApplyLockProviders_ACancelledRequestStillReleasesTheLock(t *testing.T) 
 	}
 }
 
+// A try that is cancelled while it is in flight may have taken the lock on the server before the
+// client saw the answer. The session must not go back into the pool holding it: whatever the many
+// short deadlines do, a second replica gets the lock at once afterwards.
+func TestApplyLockProviders_AnAcquisitionCancelledInFlightLeavesNoLockHeld(t *testing.T) {
+	for _, server := range lockServers(t) {
+		t.Run(server.name, func(t *testing.T) {
+			shortLockWait(t, time.Second)
+			f := newLockFixture(t, server)
+			_, repoA := f.replica(t)
+			_, repoB := f.replica(t)
+
+			for i := 0; i < 300; i++ {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Duration(200+i*10)*time.Microsecond)
+				lock, err := repoA.LockDeviceApply(ctx, 1)
+				cancel()
+				if err == nil {
+					lock.Unlock() // the try won the race: an ordinary apply
+				}
+			}
+
+			second, err := repoB.LockDeviceApply(context.Background(), 1)
+			require.NoError(t, err, "a cancelled acquisition left the lock held on a pooled connection")
+			require.NotNil(t, second)
+			second.Unlock()
+		})
+	}
+}
+
 // Release on a clean disconnect: a replica that closes the connection holding the lock frees it at
 // once. An abrupt loss of the replica (a pod that vanishes with no TCP reset) is not tested: the
 // server then frees the lock when it notices the dead client, which the docs name as a limit.
