@@ -154,6 +154,12 @@ SHELLY_SECURITY_ADMIN_API_KEY=your-secure-admin-key
 SHELLY_SECURITY_AGENT_API_KEY=a-different-key-for-the-provisioner-agent
 ```
 
+When an admin key is set, every `/api/v1` route needs it (`Authorization: Bearer <key>` or `X-API-Key: <key>`),
+including the device and notification routes, except `GET /api/v1/version` and `GET /api/v1/metrics/prometheus`.
+With no key set the routes are open. The web UI sends the key only if it was built with `VITE_ADMIN_KEY`, so give
+it that key or its device list answers 401 (see `ui/README.md`). Entering the key in a production UI is tracked in
+[ginsys/shelly-manager#619](https://github.com/ginsys/shelly-manager/issues/619).
+
 The PostgreSQL credentials can stay out of the DSN: set `SHELLY_DATABASE_USERNAME` and
 `SHELLY_DATABASE_PASSWORD` (`database.username` and `database.password`) and give a DSN without them,
 for example `postgresql://db.example:5432/shelly`. The app puts them into the URL with the escaping a
