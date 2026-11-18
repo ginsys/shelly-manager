@@ -60,6 +60,15 @@ func lockEnvOrDefault(key, fallback string) string {
 	return fallback
 }
 
+// lockProbeContext bounds a probe that expects a free lock: the repository no longer sets a wait of
+// its own, so a leaked lock would block the probe until the suite timeout instead of failing it.
+func lockProbeContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+	return ctx
+}
+
 func newLockDatabaseName() string {
 	return fmt.Sprintf("sm_apply_lock_%d", time.Now().UnixNano())
 }
@@ -644,7 +653,7 @@ func TestApplyLockProviders_TheLockIsReleasedOnTheConnectionThatTookIt(t *testin
 			lock.Unlock()
 
 			started := time.Now()
-			second, err := repoB.LockDeviceApply(context.Background(), 1)
+			second, err := repoB.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err, "the lock was still held after Unlock")
 			require.NotNil(t, second)
 			second.Unlock()
@@ -669,7 +678,7 @@ func TestApplyLockProviders_ACancelledRequestStillReleasesTheLock(t *testing.T) 
 			cancel()
 			lock.Unlock()
 
-			second, err := repoB.LockDeviceApply(context.Background(), 1)
+			second, err := repoB.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err)
 			require.NotNil(t, second)
 			second.Unlock()
@@ -700,7 +709,7 @@ func TestApplyLockProviders_AnAcquisitionCancelledInFlightLeavesNoLockHeld(t *te
 				}
 			}
 
-			second, err := repoB.LockDeviceApply(context.Background(), 1)
+			second, err := repoB.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err, "a cancelled acquisition left the lock held on a pooled connection")
 			require.NotNil(t, second)
 			second.Unlock()
@@ -729,7 +738,7 @@ func TestApplyLockProviders_ACleanDisconnectReleasesTheLock(t *testing.T) {
 			_ = held.conn.Raw(func(any) error { return driver.ErrBadConn })
 			_ = held.conn.Close()
 
-			second, err := repoB.LockDeviceApply(context.Background(), 1)
+			second, err := repoB.LockDeviceApply(lockProbeContext(t), 1)
 			require.NoError(t, err, "the lock outlived its connection")
 			require.NotNil(t, second)
 			second.Unlock()

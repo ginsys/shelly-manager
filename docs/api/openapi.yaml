@@ -1541,10 +1541,13 @@ paths:
           description: >-
             Server error (INTERNAL_SERVER_ERROR). The body is generic and the cause is in the
             server log. It includes an apply whose database lock was lost while it ran: the
-            device may hold a mix of two applies, so the apply leaves config_applied false and
-            pending_reboot true, and the next apply writes the configuration again and reboots
-            once more. An apply that found the lock already lost, before its first write,
-            writes nothing and forces no flag. The call can be repeated.
+            device may hold a mix of two applies, so the apply sets config_applied false and
+            pending_reboot true as a best effort (the two updates are tried twice each and
+            then only logged, so a database that stays unreachable leaves the flags as another
+            replica set them). Read the device state, or verify it, before relying on the
+            flags; the next apply writes the configuration again and reboots once more. An
+            apply that found the lock already lost, before its first write, writes nothing and
+            forces no flag. The call can be repeated.
           content:
             application/json:
               schema:
