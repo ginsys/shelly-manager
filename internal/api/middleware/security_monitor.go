@@ -224,7 +224,7 @@ func (sm *SecurityMonitor) TrackRateLimitViolation(r *http.Request) {
 	defer attackInfo.mu.Unlock()
 
 	now := time.Now()
-	attackInfo.LastSeen = now // the cleanup drops an entry by LastSeen, a new entry has none yet
+	attackInfo.LastSeen = now // the cleanup drops an entry by LastSeen
 	sm.recordRateLimitViolation(attackInfo, r, clientIP)
 	if sm.shouldBlockIP(attackInfo, now) && !attackInfo.Blocked {
 		sm.blockIP(attackInfo, clientIP)
