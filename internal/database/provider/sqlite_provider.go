@@ -115,7 +115,7 @@ func (s *SQLiteProvider) Connect(config DatabaseConfig) error {
 	// Open database connection
 	db, err := openGORM(sqlite.Open(config.DSN), gormConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to SQLite database: %w", err)
+		return fmt.Errorf("failed to connect to SQLite database: %w", sealDSNParameterError(config.DSN, err))
 	}
 
 	s.db = db
