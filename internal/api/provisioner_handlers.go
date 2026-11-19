@@ -4,10 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/mux"
 
@@ -16,52 +17,17 @@ import (
 	"github.com/ginsys/shelly-manager/internal/security/apikey"
 )
 
-// ProvisionerAgent represents a registered provisioning agent
-type ProvisionerAgent struct {
-	ID           string            `json:"id"`
-	Hostname     string            `json:"hostname"`
-	IP           string            `json:"ip"`
-	Version      string            `json:"version,omitempty"`
-	Capabilities []string          `json:"capabilities,omitempty"`
-	Status       string            `json:"status"`
-	LastSeen     time.Time         `json:"last_seen"`
-	RegisteredAt time.Time         `json:"registered_at"`
-	Metadata     map[string]string `json:"metadata,omitempty"`
-
-	// token is the identity the manager issued at registration. It is never serialised.
-	token string
-}
+// The provisioner registry (agents, their hashed tokens and their tasks) lives in the database, behind
+// database.ProvisionerStore. A handler decides who the caller is, calls the store and maps its errors to a
+// response; it keeps no registry state of its own.
 
 // agentOfflineAfter is how long an agent may stay silent before it counts as offline and
 // another caller may register under its id.
 const agentOfflineAfter = 5 * time.Minute
 
-// ProvisioningTask represents a task for a provisioning agent
-type ProvisioningTask struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	DeviceMAC  string                 `json:"device_mac,omitempty"`
-	TargetSSID string                 `json:"target_ssid,omitempty"`
-	Config     map[string]interface{} `json:"config,omitempty"`
-	Status     string                 `json:"status"`
-	AgentID    string                 `json:"agent_id,omitempty"`
-	CreatedAt  time.Time              `json:"created_at"`
-	UpdatedAt  time.Time              `json:"updated_at"`
-	Priority   int                    `json:"priority,omitempty"`
-}
-
-// ProvisionerRegistry manages registered agents and tasks
-type ProvisionerRegistry struct {
-	mu     sync.RWMutex
-	agents map[string]*ProvisionerAgent
-	tasks  map[string]*ProvisioningTask
-}
-
-// Global registry instance
-var registry = &ProvisionerRegistry{
-	agents: make(map[string]*ProvisionerAgent),
-	tasks:  make(map[string]*ProvisioningTask),
-}
+// maxProvisionerValueLen is the longest agent id, task type, task status or task agent id the registry stores,
+// in characters: the indexed columns that hold them are 191 characters wide.
+const maxProvisionerValueLen = 191
 
 const agentTokenHeader = "X-Agent-Token"
 
@@ -79,36 +45,47 @@ func (h *Handler) holdsAdminKey(r *http.Request) bool {
 	return key == "" || apikey.Authorized(r, key)
 }
 
-// agentOf returns the registered agent whose token the request presents, or nil. The caller holds registry.mu.
-func agentOf(r *http.Request) *ProvisionerAgent {
-	presented := r.Header.Get(agentTokenHeader)
-	for _, agent := range registry.agents {
-		if apikey.Equal(presented, agent.token) {
-			return agent
-		}
-	}
-	return nil
+// provisionerStore returns the registry store over the handler's database.
+func (h *Handler) provisionerStore() *database.ProvisionerStore {
+	return database.NewProvisionerStore(h.DB.GetDB())
 }
 
-// authorizeAgent decides whether the caller may act for the agent want. The admin key, or no admin key at
-// all, may act for any agent. Anyone else needs the token issued to want at registration: no valid token is
-// a 401, which tells a real agent to register again, and a valid token of another agent is a 403. It writes
-// the refusal and returns false. Call it before anything that records activity for the agent, so a refused
-// caller cannot keep an agent id looking online. The caller holds registry.mu.
-func (h *Handler) authorizeAgent(w http.ResponseWriter, r *http.Request, want string) bool {
-	if h.holdsAdminKey(r) {
-		return true
+// provisionerActor says who calls: the admin key (or no admin key at all) may act for any agent, anyone
+// else is the holder of the token they present. Only the hash of the token reaches the store.
+func (h *Handler) provisionerActor(r *http.Request) database.ProvisionerActor {
+	return database.ProvisionerActor{
+		Privileged: h.holdsAdminKey(r),
+		TokenHash:  database.HashAgentToken(r.Header.Get(agentTokenHeader)),
 	}
-	agent := agentOf(r)
-	if agent == nil {
-		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Agent token required: register the agent", nil)
+}
+
+// tooLongForRegistry reports whether any value is over the longest the registry stores, and writes the
+// 400 for it.
+func (h *Handler) tooLongForRegistry(w http.ResponseWriter, r *http.Request, name, value string) bool {
+	if utf8.RuneCountInString(value) <= maxProvisionerValueLen {
 		return false
 	}
-	if agent.ID != want {
-		h.responseWriter().WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "The agent token does not belong to this agent", nil)
-		return false
-	}
+	h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("%s must be at most %d characters", name, maxProvisionerValueLen))
 	return true
+}
+
+// writeProvisionerError maps a store error to its response. A refused agent is a 401, which tells a real
+// agent to register again, or a 403 when the token belongs to another agent. Anything else is a 500.
+func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, database.ErrUnauthorized):
+		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Agent token required: register the agent", nil)
+	case errors.Is(err, database.ErrForbidden):
+		h.responseWriter().WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "The agent token does not belong to this agent", nil)
+	case errors.Is(err, database.ErrAgentInUse):
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id in use", nil)
+	case errors.Is(err, database.ErrAgentNotFound):
+		h.responseWriter().WriteNotFoundError(w, r, "Agent")
+	case errors.Is(err, database.ErrTaskNotFound):
+		h.responseWriter().WriteNotFoundError(w, r, "Task")
+	default:
+		h.responseWriter().WriteInternalError(w, r, err)
+	}
 }
 
 // RegisterAgent handles POST /api/v1/provisioner/agents/register
@@ -131,6 +108,9 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		h.responseWriter().WriteValidationError(w, r, "Missing required fields: id and hostname")
 		return
 	}
+	if h.tooLongForRegistry(w, r, "Agent id", req.ID) {
+		return
+	}
 
 	// Get client IP
 	clientIP := r.Header.Get("X-Forwarded-For")
@@ -141,59 +121,42 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		clientIP = r.RemoteAddr
 	}
 
-	// Create or update agent registration
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-
-	now := time.Now()
-	agent, exists := registry.agents[req.ID]
-
-	// An id that is online belongs to the agent that holds its token. Without this, anyone with the shared key
-	// could register the id again and receive the tasks assigned to it.
-	if exists && !h.holdsAdminKey(r) && now.Sub(agent.LastSeen) <= agentOfflineAfter &&
-		!apikey.Equal(r.Header.Get(agentTokenHeader), agent.token) {
-		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id in use", nil)
-		return
-	}
-
 	token, err := newAgentToken()
 	if err != nil {
 		h.responseWriter().WriteInternalError(w, r, err)
 		return
 	}
 
-	if !exists {
-		agent = &ProvisionerAgent{
-			ID:           req.ID,
-			RegisteredAt: now,
-		}
-		registry.agents[req.ID] = agent
-
-		h.logger.WithFields(map[string]any{
-			"agent_id": req.ID,
-			"hostname": req.Hostname,
-			"ip":       clientIP,
-		}).Info("New provisioning agent registered")
-	} else {
-		h.logger.WithFields(map[string]any{
-			"agent_id": req.ID,
-			"hostname": req.Hostname,
-			"ip":       clientIP,
-		}).Debug("Existing provisioning agent re-registered")
+	// An id that is online belongs to the agent that holds its token. Without this, anyone with the shared key
+	// could register the id again and receive the tasks assigned to it. The store applies the rule, and a
+	// register of an existing id replaces the old token.
+	now := time.Now()
+	agent, created, err := h.provisionerStore().RegisterAgent(r.Context(), h.provisionerActor(r), database.ProvisionerAgent{
+		AgentID:      req.ID,
+		TokenHash:    database.HashAgentToken(token),
+		Hostname:     req.Hostname,
+		IP:           clientIP,
+		Version:      req.Version,
+		Capabilities: req.Capabilities,
+		Status:       "online",
+		Metadata:     req.Metadata,
+		LastSeen:     now,
+		RegisteredAt: now,
+	}, agentOfflineAfter)
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
 	}
 
-	// Update agent information
-	agent.Hostname = req.Hostname
-	agent.IP = clientIP
-	agent.Version = req.Version
-	agent.Capabilities = req.Capabilities
-	agent.Status = "online"
-	agent.LastSeen = now
-	agent.Metadata = req.Metadata
-	agent.token = token // a register of an existing id replaces the old token
+	fields := map[string]any{"agent_id": req.ID, "hostname": req.Hostname, "ip": clientIP}
+	if created {
+		h.logger.WithFields(fields).Info("New provisioning agent registered")
+	} else {
+		h.logger.WithFields(fields).Debug("Existing provisioning agent re-registered")
+	}
 
 	response := map[string]interface{}{
-		"agent_id":      agent.ID,
+		"agent_id":      agent.AgentID,
 		"agent_token":   token,
 		"registered_at": agent.RegisteredAt,
 		"status":        "registered",
@@ -204,16 +167,16 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 
 // GetProvisionerAgents handles GET /api/v1/provisioner/agents
 func (h *Handler) GetProvisionerAgents(w http.ResponseWriter, r *http.Request) {
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-
-	agents := make([]*ProvisionerAgent, 0, len(registry.agents))
-	for _, agent := range registry.agents {
+	agents, err := h.provisionerStore().ListAgents(r.Context())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
+	for i := range agents {
 		// Update status based on last seen time
-		if time.Since(agent.LastSeen) > agentOfflineAfter {
-			agent.Status = "offline"
+		if time.Since(agents[i].LastSeen) > agentOfflineAfter {
+			agents[i].Status = "offline"
 		}
-		agents = append(agents, agent)
 	}
 
 	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
@@ -232,32 +195,12 @@ func (h *Handler) PollTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-
-	if !h.authorizeAgent(w, r, agentID) {
+	// The store authorizes the caller before it records any activity for the agent, so a refused caller
+	// cannot keep an agent id looking online, then claims every pending task that is unassigned or the agent's.
+	availableTasks, err := h.provisionerStore().ClaimTasks(r.Context(), h.provisionerActor(r), agentID, time.Now())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
 		return
-	}
-
-	// Update agent last seen time
-	agent, exists := registry.agents[agentID]
-	if !exists {
-		h.responseWriter().WriteNotFoundError(w, r, "Agent")
-		return
-	}
-
-	agent.LastSeen = time.Now()
-	agent.Status = "online"
-
-	// Find pending tasks for this agent or unassigned tasks
-	var availableTasks []*ProvisioningTask
-	for _, task := range registry.tasks {
-		if (task.AgentID == "" || task.AgentID == agentID) && task.Status == "pending" {
-			task.AgentID = agentID
-			task.Status = "assigned"
-			task.UpdatedAt = time.Now()
-			availableTasks = append(availableTasks, task)
-		}
 	}
 
 	h.logger.WithFields(map[string]any{
@@ -294,28 +237,17 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
-
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-
-	// An agent may update only a task assigned to it. An unassigned or unknown task is nobody's (want is ""),
-	// so an agent gets the same 403 for both and learns nothing about which task ids exist.
-	task, exists := registry.tasks[taskID]
-	want := ""
-	if exists {
-		want = task.AgentID
-	}
-	if !h.authorizeAgent(w, r, want) {
-		return
-	}
-	if !exists {
-		h.responseWriter().WriteNotFoundError(w, r, "Task")
+	if h.tooLongForRegistry(w, r, "Task status", req.Status) {
 		return
 	}
 
-	// Update task status
-	task.Status = req.Status
-	task.UpdatedAt = time.Now()
+	// An agent may update only a task assigned to it. An unassigned or unknown task is nobody's, so an agent
+	// gets the same 403 for both and learns nothing about which task ids exist.
+	task, err := h.provisionerStore().UpdateTaskStatus(r.Context(), h.provisionerActor(r), taskID, req.Status, time.Now())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
 
 	h.logger.WithFields(map[string]any{
 		"task_id":  taskID,
@@ -353,30 +285,30 @@ func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request)
 		h.responseWriter().WriteValidationError(w, r, "Task type is required")
 		return
 	}
+	if h.tooLongForRegistry(w, r, "Task type", req.Type) || h.tooLongForRegistry(w, r, "Task agent id", req.AgentID) {
+		return
+	}
 
-	// Generate task ID
-	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
-
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-
-	task := &ProvisioningTask{
-		ID:         taskID,
+	now := time.Now()
+	task := &database.ProvisioningTask{
+		TaskID:     fmt.Sprintf("task_%d", now.UnixNano()),
 		Type:       req.Type,
 		DeviceMAC:  req.DeviceMAC,
 		TargetSSID: req.TargetSSID,
 		Config:     req.Config,
 		Status:     "pending",
 		AgentID:    req.AgentID,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		CreatedAt:  now,
+		UpdatedAt:  now,
 		Priority:   req.Priority,
 	}
-
-	registry.tasks[taskID] = task
+	if err := h.provisionerStore().CreateTask(r.Context(), task); err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
 
 	h.logger.WithFields(map[string]any{
-		"task_id":     taskID,
+		"task_id":     task.TaskID,
 		"type":        req.Type,
 		"device_mac":  req.DeviceMAC,
 		"target_ssid": req.TargetSSID,
@@ -384,7 +316,7 @@ func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request)
 	}).Info("New provisioning task created")
 
 	response := map[string]interface{}{
-		"task_id":    taskID,
+		"task_id":    task.TaskID,
 		"status":     "pending",
 		"created_at": task.CreatedAt,
 	}
@@ -394,12 +326,10 @@ func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request)
 
 // GetProvisioningTasks handles GET /api/v1/provisioner/tasks
 func (h *Handler) GetProvisioningTasks(w http.ResponseWriter, r *http.Request) {
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-
-	tasks := make([]*ProvisioningTask, 0, len(registry.tasks))
-	for _, task := range registry.tasks {
-		tasks = append(tasks, task)
+	tasks, err := h.provisionerStore().ListTasks(r.Context())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
 	}
 
 	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
@@ -410,30 +340,20 @@ func (h *Handler) GetProvisioningTasks(w http.ResponseWriter, r *http.Request) {
 
 // HealthCheck handles GET /api/v1/provisioner/health
 func (h *Handler) ProvisionerHealthCheck(w http.ResponseWriter, r *http.Request) {
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-
-	activeAgents := 0
-	for _, agent := range registry.agents {
-		if time.Since(agent.LastSeen) <= agentOfflineAfter {
-			activeAgents++
-		}
-	}
-
-	pendingTasks := 0
-	for _, task := range registry.tasks {
-		if task.Status == "pending" || task.Status == "assigned" {
-			pendingTasks++
-		}
+	now := time.Now()
+	counts, err := h.provisionerStore().Counts(r.Context(), now, agentOfflineAfter)
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
 	}
 
 	response := map[string]interface{}{
 		"status":          "healthy",
-		"total_agents":    len(registry.agents),
-		"active_agents":   activeAgents,
-		"total_tasks":     len(registry.tasks),
-		"pending_tasks":   pendingTasks,
-		"timestamp":       time.Now(),
+		"total_agents":    counts.Agents,
+		"active_agents":   counts.ActiveAgents,
+		"total_tasks":     counts.Tasks,
+		"pending_tasks":   counts.PendingTasks,
+		"timestamp":       now,
 		"provisioner_api": "operational",
 	}
 
@@ -462,46 +382,48 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-
-	// Identity first: a refused caller learns nothing from the validation answers below.
-	if !h.authorizeAgent(w, r, req.AgentID) {
-		return
+	devices := make([]database.DiscoveredDevice, len(req.Devices))
+	for i, device := range req.Devices {
+		// Stored for UI display, and expired after 24 hours.
+		devices[i] = database.DiscoveredDevice{
+			MAC:        device.MAC,
+			SSID:       device.SSID,
+			Model:      device.Model,
+			Generation: device.Generation,
+			IP:         device.IP,
+			Signal:     device.Signal,
+			AgentID:    req.AgentID,
+			TaskID:     req.TaskID,
+			Discovered: device.Discovered,
+			ExpiresAt:  device.Discovered.Add(24 * time.Hour),
+		}
 	}
 
-	if req.AgentID == "" {
+	// Identity first: a refused caller learns nothing from the validation answers. The store then records
+	// the devices, marks the agent seen, and completes the task if one is named and it is assigned to the
+	// reporting agent: the report route must not become a way to complete another agent's task.
+	devicesPersisted, failures, err := h.provisionerStore().ReportDiscovered(r.Context(), h.provisionerActor(r), req.AgentID, req.TaskID, devices, time.Now())
+	switch {
+	case errors.Is(err, database.ErrAgentIDRequired):
 		http.Error(w, "Agent ID is required", http.StatusBadRequest)
 		return
-	}
-
-	if len(req.Devices) == 0 {
+	case errors.Is(err, database.ErrNoDevices):
 		http.Error(w, "At least one device is required", http.StatusBadRequest)
 		return
-	}
-
-	// Verify agent is registered
-	agent, exists := registry.agents[req.AgentID]
-	if !exists {
+	case errors.Is(err, database.ErrAgentNotFound):
 		http.Error(w, "Agent not registered", http.StatusUnauthorized)
 		return
+	case err != nil:
+		h.writeProvisionerError(w, r, err)
+		return
 	}
-
-	// Update agent's last seen timestamp
-	agent.LastSeen = time.Now()
-
 	h.logger.WithFields(map[string]any{
 		"agent_id":     req.AgentID,
 		"task_id":      req.TaskID,
 		"device_count": len(req.Devices),
 		"component":    "provisioner_handler",
 	}).Info("Received discovered devices from provisioning agent")
-
-	// Process discovered devices
-	devicesProcessed := 0
-	devicesPersisted := 0
 	for _, device := range req.Devices {
-		// Log each discovered device
 		h.logger.WithFields(map[string]any{
 			"mac":        device.MAC,
 			"ssid":       device.SSID,
@@ -512,52 +434,17 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 			"discovered": device.Discovered,
 			"agent_id":   req.AgentID,
 			"component":  "provisioner_handler",
-		}).Info("Processing discovered Shelly device")
-
-		// Store discovered device in database for UI display
-		discoveredDevice := &database.DiscoveredDevice{
-			MAC:        device.MAC,
-			SSID:       device.SSID,
-			Model:      device.Model,
-			Generation: device.Generation,
-			IP:         device.IP,
-			Signal:     device.Signal,
-			AgentID:    req.AgentID,
-			TaskID:     req.TaskID,
-			Discovered: device.Discovered,
-			ExpiresAt:  device.Discovered.Add(24 * time.Hour), // Expire after 24 hours
-		}
-
-		if err := h.DB.UpsertDiscoveredDevice(discoveredDevice); err != nil {
-			h.logger.WithFields(map[string]any{
-				"mac":       device.MAC,
-				"agent_id":  req.AgentID,
-				"error":     err.Error(),
-				"component": "provisioner_handler",
-			}).Warn("Failed to persist discovered device")
-		} else {
-			devicesPersisted++
-		}
-
-		devicesProcessed++
+		}).Info("Processed discovered Shelly device")
+	}
+	for _, failure := range failures {
+		h.logger.WithFields(map[string]any{
+			"agent_id":  req.AgentID,
+			"error":     failure.Error(),
+			"component": "provisioner_handler",
+		}).Warn("Failed to persist discovered device")
 	}
 
-	// Complete the task if one is named, and only if it is assigned to the reporting agent: the report
-	// route must not become a way to complete another agent's task.
-	if req.TaskID != "" {
-		if task, taskExists := registry.tasks[req.TaskID]; taskExists && (h.holdsAdminKey(r) || task.AgentID == req.AgentID) {
-			task.Status = "completed"
-			task.UpdatedAt = time.Now()
-
-			h.logger.WithFields(map[string]any{
-				"task_id":       req.TaskID,
-				"agent_id":      req.AgentID,
-				"devices_found": len(req.Devices),
-				"component":     "provisioner_handler",
-			}).Info("Discovery task completed with results")
-		}
-	}
-
+	devicesProcessed := len(req.Devices)
 	response := map[string]interface{}{
 		"devices_received":  len(req.Devices),
 		"devices_processed": devicesProcessed,

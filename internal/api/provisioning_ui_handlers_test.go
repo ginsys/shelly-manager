@@ -18,16 +18,6 @@ import (
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
-// resetProvisioningRegistry clears the in-memory agents/tasks maps for
-// isolated handler tests. Kept local to the test file so production paths
-// cannot accidentally wipe state.
-func resetProvisioningRegistry() {
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	registry.agents = make(map[string]*ProvisionerAgent)
-	registry.tasks = make(map[string]*ProvisioningTask)
-}
-
 func newTestHandler(t *testing.T) (*Handler, *database.Manager) {
 	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)
@@ -45,8 +35,7 @@ func seedDevice(t *testing.T, db *database.Manager, ip, mac, name string) *datab
 }
 
 func TestListProvisioningTasksUI_EmptyThenPopulated(t *testing.T) {
-	resetProvisioningRegistry()
-	h, _ := newTestHandler(t)
+	h, db := newTestHandler(t)
 
 	// Empty
 	req := httptest.NewRequest("GET", "/api/v1/provisioning/tasks", nil)
@@ -66,13 +55,11 @@ func TestListProvisioningTasksUI_EmptyThenPopulated(t *testing.T) {
 	assert.Equal(t, 0, env.Data.Count)
 	assert.Empty(t, env.Data.Tasks)
 
-	// Seed a task directly in the registry
-	registry.mu.Lock()
-	registry.tasks["task_abc"] = &ProvisioningTask{
-		ID: "task_abc", Type: "configure", Status: "pending",
+	// Seed a task row
+	seedProvisionerTask(t, db, database.ProvisioningTask{
+		TaskID: "task_abc", Type: "configure", Status: "pending",
 		Config: map[string]interface{}{}, CreatedAt: time.Now(), UpdatedAt: time.Now(),
-	}
-	registry.mu.Unlock()
+	})
 
 	w = httptest.NewRecorder()
 	h.ListProvisioningTasksUI(w, req)
@@ -85,16 +72,12 @@ func TestListProvisioningTasksUI_EmptyThenPopulated(t *testing.T) {
 }
 
 func TestListProvisioningTasksUI_StatusFilterAndMapping(t *testing.T) {
-	resetProvisioningRegistry()
-	h, _ := newTestHandler(t)
+	h, db := newTestHandler(t)
 
 	now := time.Now()
-	registry.mu.Lock()
-	registry.tasks["t1"] = &ProvisioningTask{ID: "t1", Type: "configure", Status: "pending", CreatedAt: now}
-	registry.tasks["t2"] = &ProvisioningTask{ID: "t2", Type: "configure", Status: "assigned", CreatedAt: now}
-	registry.tasks["t3"] = &ProvisioningTask{ID: "t3", Type: "configure", Status: "in_progress", CreatedAt: now}
-	registry.tasks["t4"] = &ProvisioningTask{ID: "t4", Type: "configure", Status: "completed", CreatedAt: now}
-	registry.mu.Unlock()
+	for id, status := range map[string]string{"t1": "pending", "t2": "assigned", "t3": "in_progress", "t4": "completed"} {
+		seedProvisionerTask(t, db, database.ProvisioningTask{TaskID: id, Type: "configure", Status: status, CreatedAt: now})
+	}
 
 	req := httptest.NewRequest("GET", "/api/v1/provisioning/tasks?status=running", nil)
 	w := httptest.NewRecorder()
@@ -116,15 +99,12 @@ func TestListProvisioningTasksUI_StatusFilterAndMapping(t *testing.T) {
 }
 
 func TestGetProvisioningTaskUI_FoundAndMissing(t *testing.T) {
-	resetProvisioningRegistry()
-	h, _ := newTestHandler(t)
+	h, db := newTestHandler(t)
 
-	registry.mu.Lock()
-	registry.tasks["task_xyz"] = &ProvisioningTask{
-		ID: "task_xyz", Type: "update", Status: "completed",
+	seedProvisionerTask(t, db, database.ProvisioningTask{
+		TaskID: "task_xyz", Type: "update", Status: "completed",
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
-	}
-	registry.mu.Unlock()
+	})
 
 	req := httptest.NewRequest("GET", "/api/v1/provisioning/tasks/task_xyz", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "task_xyz"})
@@ -141,7 +121,6 @@ func TestGetProvisioningTaskUI_FoundAndMissing(t *testing.T) {
 }
 
 func TestCreateProvisioningTaskUI_ResolvesDeviceMAC(t *testing.T) {
-	resetProvisioningRegistry()
 	h, db := newTestHandler(t)
 
 	dev := seedDevice(t, db, "10.0.0.1", "AA:BB:CC:DD:EE:01", "Living Room")
@@ -168,16 +147,13 @@ func TestCreateProvisioningTaskUI_ResolvesDeviceMAC(t *testing.T) {
 	assert.Equal(t, "Living Room", env.Data.DeviceName)
 
 	// Confirm task got inserted with the MAC resolved from deviceId
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-	require.Len(t, registry.tasks, 1)
-	for _, task := range registry.tasks {
-		assert.Equal(t, dev.MAC, task.DeviceMAC)
-	}
+	tasks, err := database.NewProvisionerStore(db.GetDB()).ListTasks(registryDeadline(t))
+	require.NoError(t, err)
+	require.Len(t, tasks, 1)
+	assert.Equal(t, dev.MAC, tasks[0].DeviceMAC)
 }
 
 func TestCreateProvisioningTaskUI_ValidationErrors(t *testing.T) {
-	resetProvisioningRegistry()
 	h, _ := newTestHandler(t)
 
 	cases := []struct {
@@ -201,13 +177,10 @@ func TestCreateProvisioningTaskUI_ValidationErrors(t *testing.T) {
 }
 
 func TestCancelProvisioningTaskUI(t *testing.T) {
-	resetProvisioningRegistry()
-	h, _ := newTestHandler(t)
+	h, db := newTestHandler(t)
 
-	registry.mu.Lock()
-	registry.tasks["t_pending"] = &ProvisioningTask{ID: "t_pending", Type: "configure", Status: "pending", Config: map[string]interface{}{}}
-	registry.tasks["t_done"] = &ProvisioningTask{ID: "t_done", Type: "configure", Status: "completed", Config: map[string]interface{}{}}
-	registry.mu.Unlock()
+	seedProvisionerTask(t, db, database.ProvisioningTask{TaskID: "t_pending", Type: "configure", Status: "pending", Config: map[string]interface{}{}})
+	seedProvisionerTask(t, db, database.ProvisioningTask{TaskID: "t_done", Type: "configure", Status: "completed", Config: map[string]interface{}{}})
 
 	for _, id := range []string{"t_pending", "t_done"} {
 		req := httptest.NewRequest("POST", "/api/v1/provisioning/tasks/"+id+"/cancel", nil)
@@ -218,16 +191,18 @@ func TestCancelProvisioningTaskUI(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 	}
 
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-	assert.Equal(t, "failed", registry.tasks["t_pending"].Status)
-	assert.Equal(t, "canceled", registry.tasks["t_pending"].Config["_error"])
+	store := database.NewProvisionerStore(db.GetDB())
+	pending, err := store.GetTask(registryDeadline(t), "t_pending")
+	require.NoError(t, err)
+	assert.Equal(t, "failed", pending.Status)
+	assert.Equal(t, "canceled", pending.Config["_error"])
 	// Completed task untouched
-	assert.Equal(t, "completed", registry.tasks["t_done"].Status)
+	done, err := store.GetTask(registryDeadline(t), "t_done")
+	require.NoError(t, err)
+	assert.Equal(t, "completed", done.Status)
 }
 
 func TestCancelProvisioningTaskUI_NotFound(t *testing.T) {
-	resetProvisioningRegistry()
 	h, _ := newTestHandler(t)
 
 	req := httptest.NewRequest("POST", "/api/v1/provisioning/tasks/nope/cancel", nil)
@@ -239,7 +214,6 @@ func TestCancelProvisioningTaskUI_NotFound(t *testing.T) {
 }
 
 func TestBulkProvisionUI(t *testing.T) {
-	resetProvisioningRegistry()
 	h, db := newTestHandler(t)
 
 	d1 := seedDevice(t, db, "10.0.0.1", "AA:BB:CC:DD:EE:01", "dev1")
@@ -270,7 +244,6 @@ func TestBulkProvisionUI(t *testing.T) {
 }
 
 func TestBulkProvisionUI_EmptyIDs(t *testing.T) {
-	resetProvisioningRegistry()
 	h, _ := newTestHandler(t)
 
 	req := httptest.NewRequest("POST", "/api/v1/provisioning/bulk",
@@ -282,20 +255,17 @@ func TestBulkProvisionUI_EmptyIDs(t *testing.T) {
 }
 
 func TestListProvisioningAgentsUI_FieldTranslation(t *testing.T) {
-	resetProvisioningRegistry()
-	h, _ := newTestHandler(t)
+	h, db := newTestHandler(t)
 
 	now := time.Now()
-	registry.mu.Lock()
-	registry.agents["a1"] = &ProvisionerAgent{
-		ID: "a1", Hostname: "alpha", IP: "10.0.0.5", Version: "v1.2.3",
+	require.NoError(t, db.GetDB().Create(&database.ProvisionerAgent{
+		AgentID: "a1", TokenHash: database.HashAgentToken("t1"), Hostname: "alpha", IP: "10.0.0.5", Version: "v1.2.3",
 		Capabilities: []string{"wifi"}, Status: "online", LastSeen: now, RegisteredAt: now,
-	}
-	registry.agents["a2"] = &ProvisionerAgent{
-		ID: "a2", Hostname: "bravo", Status: "online",
+	}).Error)
+	require.NoError(t, db.GetDB().Create(&database.ProvisionerAgent{
+		AgentID: "a2", TokenHash: database.HashAgentToken("t2"), Hostname: "bravo", Status: "online",
 		LastSeen: now.Add(-10 * time.Minute), RegisteredAt: now.Add(-time.Hour),
-	}
-	registry.mu.Unlock()
+	}).Error)
 
 	req := httptest.NewRequest("GET", "/api/v1/provisioning/agents", nil)
 	w := httptest.NewRecorder()
@@ -320,12 +290,9 @@ func TestListProvisioningAgentsUI_FieldTranslation(t *testing.T) {
 }
 
 func TestGetProvisioningAgentStatusUI(t *testing.T) {
-	resetProvisioningRegistry()
-	h, _ := newTestHandler(t)
+	h, db := newTestHandler(t)
 
-	registry.mu.Lock()
-	registry.agents["a1"] = &ProvisionerAgent{ID: "a1", Hostname: "alpha", Status: "online", LastSeen: time.Now()}
-	registry.mu.Unlock()
+	seedProvisionerAgent(t, db, "a1")
 
 	req := httptest.NewRequest("GET", "/api/v1/provisioning/agents/a1/status", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "a1"})
@@ -341,7 +308,6 @@ func TestGetProvisioningAgentStatusUI(t *testing.T) {
 }
 
 func TestProvisioningUI_RequiresAdminWhenKeyConfigured(t *testing.T) {
-	resetProvisioningRegistry()
 	h, _ := newTestHandler(t)
 	h.SetAdminAPIKey("secret")
 	t.Cleanup(func() { h.SetAdminAPIKey("") })

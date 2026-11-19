@@ -1,6 +1,9 @@
 # Provisioner registry in the database, and agent enrolment
 
-Status: proposal for ginsys/shelly-manager#638. Nothing in this note is built.
+Status: proposal for ginsys/shelly-manager#638. Slice 1 is built: the tables and the store
+(merged as ginsys/shelly-manager#724) and the handlers that use them. The delete route and the
+purge of old rows (slice 1's last part) and slices 2 and 3 are not built. Sections below that
+describe the registry "today" describe the code before slice 1.
 Read at origin/main 147080796e83 (cites are `file:line` at that commit). Every
 cited file is the same at 6343b21c3fda, the base this note sits on.
 
@@ -113,7 +116,7 @@ The decisions that need an owner are at the end ("Decisions needed").
 
 | Event | What the agent sees | Wait |
 |---|---|---|
-| Manager restarts, one replica | Its next poll gets 401 (the registry is empty), it registers again at its next poll. No 409, because the manager has no record. `TestProvisionerClient_RegistersAgainAfterAManagerRestart` (`internal/api/provisioner_client_e2e_test.go:117`) proves this. | One poll interval (30 s in the shipped agent config, 600 s in the shipped Kubernetes agent). Tasks in memory are gone. |
+| Manager restarts, one replica | Its next poll gets 401 (the registry is empty), it registers again at its next poll. No 409, because the manager has no record. Since slice 1 a restart keeps the registry, so this row now describes an agent the manager lost (a restored backup), which `TestProvisionerClient_RegistersAgainWhenTheManagerForgetsIt` proves. | One poll interval (30 s in the shipped agent config, 600 s in the shipped Kubernetes agent). Tasks in memory are gone. |
 | Agent restarts and keeps its id (container), one replica | It has no token. It registers with the agent key only. If the manager's record was seen less than 5 minutes ago, the answer is 409. It retries at each poll. | The rest of the 5 minutes counted from its last poll before the restart, plus up to one poll interval for the retry. With a 600-second interval the record is often already more than 5 minutes old, and then there is no wait at all. Tasks assigned to the old process stay `assigned` and nobody polls them again. |
 | Agent restarts with a new id (host) | It registers a new id. No wait. The old row stays as an offline agent. | None. |
 | Agent holds the admin key | `holdsAdminKey` is true, so the 409 never applies (`:153`) and tokens are not checked. | None. This is the pre-token behaviour, and the reason the docs say to send the agent key and never the admin key (`docs/security/SECURITY_SECRETS.md:15`). |
@@ -121,7 +124,9 @@ The decisions that need an owner are at the end ("Decisions needed").
 `docs/api/api-overview.md:433` says "a manager restart drops them, and a
 restarted agent waits until its old record is 5 minutes silent". Read together,
 the two clauses suggest a manager restart causes the wait. It does not: the
-wait follows an **agent** restart. The build slice corrects the sentence.
+wait follows an **agent** restart. Slice 1 corrected the sentence: it now says
+that a restarted agent waits, and that the registry itself survives a manager
+restart.
 
 ### Limit 4: one registry per replica
 

@@ -167,7 +167,8 @@ func (c *APIClient) RegisterAgent(hostname string, capabilities []string, metada
 }
 
 // EnsureRegistered registers the agent unless it already is. The poll loop calls it before every poll, so a
-// registration that failed at start-up, or that the manager lost (a restart empties its registry), is retried.
+// registration that failed at start-up, or that the manager lost (its database was restored from an older
+// backup, or an operator removed the agent), is retried.
 func (c *APIClient) EnsureRegistered(hostname string, capabilities []string, metadata map[string]string) error {
 	if c.registered {
 		return nil
