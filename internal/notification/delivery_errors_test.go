@@ -188,10 +188,15 @@ func TestRequestError_KeepsNoURLText(t *testing.T) {
 	})
 
 	t.Run("host not found", func(t *testing.T) {
-		err := do(t, "http://no-such-host.invalid/"+urlToken+"?t="+urlQuery, client)
+		// The dial answers as a resolver does for a missing name, so the test sends no query.
+		notFound := &http.Client{Transport: &http.Transport{
+			DialContext: func(context.Context, string, string) (net.Conn, error) {
+				return nil, &net.DNSError{Err: "no such host", Name: "no-such-host.invalid", IsNotFound: true}
+			},
+		}}
+		err := do(t, "http://no-such-host.invalid/"+urlToken+"?t="+urlQuery, notFound)
 		assertNoURLText(t, "dns", err)
-		// A sandbox without a resolver fails the lookup in another way or times out.
-		assert.Contains(t, []string{"request failed: Post host not found", "request failed: Post failed", "request failed: Post timed out"}, err.Error())
+		assert.Equal(t, "request failed: Post host not found", err.Error())
 	})
 
 	t.Run("a missing name is told from a failing resolver", func(t *testing.T) {

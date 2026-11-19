@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/netguard"
 )
 
 // Client represents an OPNSense API client
@@ -73,7 +74,7 @@ func NewClient(config ClientConfig, logger *logging.Logger) (*Client, error) {
 	baseURL := fmt.Sprintf("%s://%s:%d", scheme, config.Host, config.Port)
 
 	// Create HTTP client with custom transport for TLS configuration
-	transport := &http.Transport{}
+	transport := &http.Transport{DialContext: netguard.DialContext}
 	if config.UseHTTPS && config.InsecureSkipVerify {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}

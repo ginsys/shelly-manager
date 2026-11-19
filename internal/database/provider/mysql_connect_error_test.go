@@ -23,7 +23,7 @@ var mysqlReproDSNs = map[string]string{
 	"a bad boolean value":                          "app:pw@tcp(127.0.0.1:1)/shelly?parseTime=LEAKWORD7",
 	"a bad bool, second place":                     "app:pw@tcp(127.0.0.1:1)/shelly?tls=false&interpolateParams=LEAKWORD7",
 	"a refused port with the password in the user": "LEAKWORD7:LEAKWORD7@tcp(127.0.0.1:1)/shelly?timeout=1s",
-	"an address that never resolves":               "app:pw@tcp(LEAKWORD7.invalid:3306)/shelly?timeout=1s",
+	"a socket that does not exist":                 "app:pw@unix(/LEAKWORD7-missing.sock)/shelly?timeout=1s",
 }
 
 // recordingLogger stands for the MySQL driver's default logger, which writes to

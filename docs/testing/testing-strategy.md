@@ -71,6 +71,27 @@ func TestNetworkOperation(t *testing.T) {
   touches a real interface
 - **Database Isolation**: Tests use in-memory SQLite or temporary files
 
+### The dial guard
+
+Every test package has a `TestMain` that calls `dialguard.Main`
+(`internal/testutil/dialguard`). The guard refuses any dial that is not a loopback address,
+`localhost` or a unix socket, and it refuses every DNS query. The refusal names the address. A test
+that dials off the host fails, and the package fails even if every test passed. A meta-test
+(`TestEveryTestPackageCallsMain`) fails for a test package without the call, whether the `TestMain`
+sits in the internal or the external test package.
+
+- **What it covers:** `http.DefaultTransport` (so `http.DefaultClient` and every client that does
+  not set its own transport), `net.DefaultResolver`, and the three transports the code builds
+  itself (OPNsense, Shelly gen1 and gen2). Those three dial through `internal/netguard`, which
+  production leaves at the plain dialer.
+- **A test database host** must be a literal loopback address or `localhost`. A host name is a DNS
+  query, and the guard refuses it.
+- **What it does not cover:** a raw `net.Dial`, `smtp.SendMail`, multicast (mDNS), and a database
+  driver that dials by itself with its own resolver. Use a loopback address in those tests.
+- **Proof that nothing leaves the host:** run the suite in an empty network namespace with only
+  `lo` up: `unshare -rn sh -c 'ip link set lo up && go test -short ./...'`. A dial to any other
+  address then fails at once with `ENETUNREACH`.
+
 ### Performance Optimizations (2024)
 - **Timeout Reductions**: Discovery tests reduced from 5s to 100ms
 - **Sleep Elimination**: Removed unnecessary `time.Sleep()` calls:

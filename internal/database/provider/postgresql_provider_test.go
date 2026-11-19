@@ -57,7 +57,7 @@ func TestPostgreSQLProviderConnectionFailure(t *testing.T) {
 			name: "Connection timeout",
 			config: DatabaseConfig{
 				Provider: "postgresql",
-				DSN:      "postgres://user:pass@nonexistent:5432/db",
+				DSN:      "postgres://user:pass@127.0.0.1:1/db", // a closed loopback port: refuses at once, no name lookup
 				Options: map[string]string{
 					"connect_timeout": "1", // 1 second timeout
 				},
@@ -654,11 +654,11 @@ func (suite *PostgreSQLTestSuite) TestStatistics() {
 
 // Test connection timeout and error scenarios
 func (suite *PostgreSQLTestSuite) TestConnectionTimeoutAndErrors() {
-	// Test connection timeout with invalid host
+	// A connection that fails: a closed loopback port refuses at once and needs no name lookup
 	provider := NewPostgreSQLProvider(suite.logger)
 	config := DatabaseConfig{
 		Provider: "postgresql",
-		DSN:      "postgres://user:pass@nonexistent.host.invalid:5432/testdb",
+		DSN:      "postgres://user:pass@127.0.0.1:1/testdb",
 		Options: map[string]string{
 			"connect_timeout": "2",
 			"sslmode":         "disable",
@@ -984,7 +984,7 @@ func TestPostgreSQLCredentialSecurity(t *testing.T) {
 	// Test with sensitive credentials
 	sensitiveConfig := DatabaseConfig{
 		Provider: "postgresql",
-		DSN:      "postgres://secret_user:super_secret_password@nonexistent.host:5432/testdb",
+		DSN:      "postgres://secret_user:super_secret_password@127.0.0.1:1/testdb", // a closed loopback port: no name lookup
 		Options: map[string]string{
 			"sslmode": "disable",
 		},

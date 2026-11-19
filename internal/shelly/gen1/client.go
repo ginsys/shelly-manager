@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/netguard"
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
@@ -89,6 +90,7 @@ func NewClient(ip string, opts ...ClientOption) *Client {
 	}
 
 	transport := &http.Transport{
+		DialContext: netguard.DialContext,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: cfg.skipTLSVerify,
 		},
