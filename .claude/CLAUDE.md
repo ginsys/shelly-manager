@@ -14,11 +14,11 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 - ✅ **Backend Investment**: 138 API endpoints across 6 handler modules, 19 internal packages
 - ⚠️ **Frontend Progress**: API coverage, unreachable pages and open frontend issues are measured in [Frontend Review](../docs/frontend/frontend-review.md)
 - ✅ **Metrics System**: Real-time WebSocket metrics with a contract-enforced Go/TS message protocol, a freshness watchdog (truthful "LIVE"), and REST fallback (#247)
-- ✅ **Export/Import**: Enhanced preview forms with schema-driven UX (100% API coverage)
+- ✅ **Export/Import**: Enhanced preview forms with schema-driven UX (API coverage per module is measured in [Frontend Review](../docs/frontend/frontend-review.md))
 - ✅ **Strict SMA/Previews**: Registry-backed previews and closed SMA `2026.1`
   with RFC 8785 integrity, bounded import normalization, and atomic generation
 - ✅ **TypeScript**: Raw `vue-tsc` passes with a zero-error ratchet
-- ⚠️ **Remaining Systems**: Notification (0%), Device Config (0%), Provisioning (0%), Drift Detection (0%)
+- ⚠️ **Remaining Systems**: Notification, Device Config, Provisioning and Drift Detection have API clients; what is still missing in the UI is listed in [Frontend Review](../docs/frontend/frontend-review.md)
 - ✅ **Technical Debt Reduction**: Enhanced components eliminate major duplication patterns
 
 **Security & Testing Achievement**:
