@@ -247,9 +247,13 @@ func (sm *SecurityMonitor) attackInfoFor(clientIP string) *AttackInfo {
 	if value, exists := sm.attackMap.Load(clientIP); exists {
 		return value.(*AttackInfo)
 	}
+	now := time.Now()
+	// LastSeen is set before the entry is published: the cleanup drops an entry by LastSeen and may
+	// run the moment the entry is visible.
 	value, _ := sm.attackMap.LoadOrStore(clientIP, &AttackInfo{
 		IP:          clientIP,
-		FirstSeen:   time.Now(),
+		FirstSeen:   now,
+		LastSeen:    now,
 		AttackTypes: make(map[string]int),
 	})
 	return value.(*AttackInfo)

@@ -162,6 +162,21 @@ func TestCleanupKeepsAnEntryBlockedByDirectViolations(t *testing.T) {
 	assert.True(t, monitor.IsIPBlocked(ip))
 }
 
+// A new entry is visible to the cleanup the moment attackInfoFor returns it, before any tracking
+// call sets LastSeen: it must already carry one.
+func TestNewEntryCarriesLastSeenWhenItIsPublished(t *testing.T) {
+	monitor := newRulesMonitor(t)
+	ip := "10.66.1.6"
+
+	info := monitor.attackInfoFor(ip)
+	assert.False(t, info.LastSeen.IsZero())
+	assert.False(t, info.FirstSeen.IsZero())
+
+	monitor.cleanupOldDataOnce(time.Now().Add(-24 * time.Hour))
+	_, kept := monitor.attackMap.Load(ip)
+	assert.True(t, kept, "a just-created entry is not dropped by the cleanup")
+}
+
 func TestTrustedIPIsNeverTrackedForViolations(t *testing.T) {
 	monitor := newRulesMonitor(t)
 
