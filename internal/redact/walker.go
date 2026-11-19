@@ -172,6 +172,17 @@ func MatchKey(m map[string]any, k string) (string, bool) {
 	return "", false
 }
 
+// FoldCount returns how many keys of m fold to k. More than one means a lookup by k is ambiguous.
+func FoldCount(m map[string]any, k string) int {
+	n := 0
+	for key := range m {
+		if strings.EqualFold(key, k) {
+			n++
+		}
+	}
+	return n
+}
+
 // savedSecret returns the stored value a placeholder under key k takes back, and false when there is none:
 // nothing stored, an ambiguous key, an empty value, or a stored placeholder (which is never copied back).
 func savedSecret(old map[string]any, k string) (any, bool) {
@@ -188,9 +199,18 @@ func savedSecret(old map[string]any, k string) (any, bool) {
 // everything but their secrets. A reordered or removed entry would otherwise take another entry's secret,
 // so its placeholder is dropped instead. It returns ErrAmbiguousEntry when an entry matches more than one
 // stored entry and those disagree at a secret the entry gets back.
-func RestoreTree(doc, stored any, root Slots) error { return restoreNode(doc, stored, root, true) }
+func RestoreTree(doc, stored any, root Slots) error {
+	return restoreNode(doc, stored, root, true, false)
+}
 
-func restoreNode(v, stored any, slots Slots, top bool) error {
+// RestoreTreeInner is RestoreTree for a caller whose clients may still hold a container read member by member:
+// a container under a secret key that is not the placeholder is walked, and each placeholder inside it takes
+// the stored member or is dropped. RestoreTree leaves such a container as sent, so a replacement is literal.
+func RestoreTreeInner(doc, stored any, root Slots) error {
+	return restoreNode(doc, stored, root, true, true)
+}
+
+func restoreNode(v, stored any, slots Slots, top, inner bool) error {
 	switch x := v.(type) {
 	case map[string]any:
 		old, _ := stored.(map[string]any)
@@ -204,14 +224,14 @@ func restoreNode(v, stored any, slots Slots, top bool) error {
 					} else {
 						delete(x, k)
 					}
-				case isContainer(child):
+				case inner && isContainer(child):
 					// A container read before it was masked whole still holds masked members.
-					if err := restoreNode(child, lookupFold(old, k), slots, false); err != nil {
+					if err := restoreNode(child, lookupFold(old, k), slots, false, inner); err != nil {
 						return err
 					}
 				}
 			case isContainer(child):
-				if err := restoreNode(child, lookupFold(old, k), slots, false); err != nil {
+				if err := restoreNode(child, lookupFold(old, k), slots, false, inner); err != nil {
 					return err
 				}
 			}
@@ -226,7 +246,7 @@ func restoreNode(v, stored any, slots Slots, top bool) error {
 				}
 				counterpart = old[i]
 			}
-			if err := restoreNode(child, counterpart, slots, false); err != nil {
+			if err := restoreNode(child, counterpart, slots, false, inner); err != nil {
 				return err
 			}
 		}

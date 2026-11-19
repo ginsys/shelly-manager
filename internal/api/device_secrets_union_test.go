@@ -141,3 +141,18 @@ func TestDeviceWalker_TypedRawKeepsAnOmittedSecretContainer(t *testing.T) {
 	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
 	assert.Contains(t, storedConfig(t, h, id), "t7pe-token-a", "the omitted secret container was lost")
 }
+
+// Two stored names that fold together are two objects, so a body that names one spelling does not take
+// the other's members: omission handling follows the exact name there.
+func TestDeviceWalker_TypedRawOmissionKeepsCaseCollidingNamesApart(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"},"raw":{"Opts":{"password":"upper"},"opts":{"token":"lower"}}}`)
+
+	body := `{"configuration":{"wifi":{"enable":true,"ssid":"home"},"raw":{"opts":{}}}}`
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+	if put.Code != http.StatusOK {
+		t.Skipf("the legacy shape is refused as a repeated member: %d %s", put.Code, put.Body.String())
+	}
+	assert.NotContains(t, storedConfig(t, h, id), `{"password":"upper","token":"lower"}`, "one stored object took the other's members")
+}

@@ -302,3 +302,13 @@ func TestMaskedChannel_DoesNotChangeTheStoredChannel(t *testing.T) {
 	assert.NotContains(t, string(out.Config), "s3")
 	assert.Equal(t, uint(1), out.ID)
 }
+
+// A credential container sent with a mask inside it is a replacement, taken literally: the stored header
+// must not follow a new URL (the device routes restore inner masks, the channel routes do not).
+func TestRestoreConfig_ACredentialContainerIsReplacedLiterally(t *testing.T) {
+	stored := json.RawMessage(`{"url":"https://old.example","headers":{"X-Api-Key":"saved"}}`)
+	out, err := restoreConfig(json.RawMessage(`{"url":"https://new.example","headers":{"X-Api-Key":"********"}}`), stored)
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "saved")
+	assert.JSONEq(t, `{"url":"https://new.example","headers":{"X-Api-Key":"********"}}`, string(out))
+}
