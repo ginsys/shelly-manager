@@ -139,7 +139,13 @@ func (h *Handler) BulkApplyConfigs(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// The run's own context outlives the request: a client that leaves, or the deadline of the
 		// request, never cuts a device in the middle of a write. Only the budget does.
-		runCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), bulkApplyBudget)
+		// The budget counts from the request's own deadline when it has one, so a body that arrived late
+		// leaves the run less time and the answer is still written before the deadline.
+		budget := bulkApplyBudget
+		if dl, ok := r.Context().Deadline(); ok {
+			budget = min(budget, time.Until(dl)-(bulkApplyDeadline-bulkApplyBudget))
+		}
+		runCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), budget)
 		defer cancel()
 		entries = h.bulkApplyRun(r.Context(), runCtx, entries, req.Config, selection.StopOnError)
 	}

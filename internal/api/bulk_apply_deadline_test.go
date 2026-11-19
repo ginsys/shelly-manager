@@ -157,6 +157,31 @@ func TestBulkApply_TheBudgetEndsTheRunAndSaysSo(t *testing.T) {
 	}
 }
 
+// A request whose body arrived late has little of its deadline left, and the run may not start a
+// device it cannot finish before that deadline: the budget counts from the request's deadline.
+func TestBulkApply_ALateRequestLeavesTheRunLessThanTheBudget(t *testing.T) {
+	prevBudget, prevDeadline := bulkApplyBudget, bulkApplyDeadline
+	bulkApplyBudget, bulkApplyDeadline = 150*time.Millisecond, 300*time.Millisecond
+	t.Cleanup(func() { bulkApplyBudget, bulkApplyDeadline = prevBudget, prevDeadline })
+
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	ids := slowFleet(t, db, 2, 0, nil)
+	// 50 ms are left of the deadline, which is less than the 150 ms margin the answer needs.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	res := decodeApply(t, postApplyWith(ctx, handler, applyBody(applyNamePatch, false, ids...)))
+
+	require.Len(t, res.Results, 2)
+	for i, e := range res.Results {
+		assert.Equal(t, bulkApplySkipped, e.Status, "%+v", e)
+		assert.Equal(t, reasonCallEnded, e.Reason)
+		assert.False(t, overridesNameTheBulkName(t, db, ids[i]))
+	}
+}
+
 // A route reaches the longer deadline only by the exact name set where it is registered. The test
 // reads the real route table and counts it first: a walk that saw nothing would pass for anything.
 func TestRouteDeadline_OnlyTheBulkApplyRouteHasOne(t *testing.T) {
