@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { listDevices, getDevice } from '@/api/devices'
+import { listDevices } from '@/api/devices'
 import type { Device } from '@/api/types'
 
 type SortField = keyof Device | 'last_seen'
@@ -230,10 +230,10 @@ export const useDevicesStore = defineStore('devices', {
     },
 
     // Run when the bulk dialog opens, the one place the selection is sent. A ticked device that is not
-    // on the loaded page may be on another page, so only the server can say it is gone: ask for each
-    // one, drop those it answers 404 for, and refresh the name and address of the others. A failed
-    // check keeps the device (the bulk answer reports it). A device unticked or cleared while the
-    // answers were pending stays out.
+    // on the loaded page may be on another page, so only the server can say it is gone: ask for the
+    // whole list once (page size 0), drop the ticked devices it no longer lists, and refresh the name
+    // and address of the others. A failed request keeps every device (the bulk answer reports them).
+    // A device unticked or cleared while the answer was pending stays out.
     async checkSelection() {
       const mine = ++latestCheck
       this.removedFromSelection = 0
@@ -249,20 +249,28 @@ export const useDevicesStore = defineStore('devices', {
       }
       this.checkingSelection = true
       try {
-        const answers = await Promise.allSettled(ids.map((id) => getDevice(id)))
+        // One request for the whole fleet, never one per device: the server counts every request of
+        // a client against the bulk limit, so a probe per ticked device could exhaust it.
+        let listed: Map<number, Device>
+        try {
+          const { items } = await listDevices({ page: 1, pageSize: 0 })
+          listed = new Map(items.map((d) => [d.id, d]))
+        } catch {
+          return // keep every ticked device; the bulk answer reports any that are gone
+        }
         if (mine !== latestCheck) return
         let removed = 0
         const nowOnPage = loadsLanded === landedAtStart ? new Set<number>() : new Set(this.items.map((d) => d.id))
-        answers.forEach((answer, i) => {
-          const id = ids[i]
-          if (!this.selected.has(id) || nowOnPage.has(id)) return
-          if (answer.status === 'fulfilled') {
-            this.selected.set(id, { name: answer.value.name || '', ip: answer.value.ip || '' })
-          } else if ((answer.reason as any)?.response?.status === 404) {
+        for (const id of ids) {
+          if (!this.selected.has(id) || nowOnPage.has(id)) continue
+          const d = listed.get(id)
+          if (d) {
+            this.selected.set(id, { name: d.name || '', ip: d.ip || '' })
+          } else {
             this.selected.delete(id)
             removed++
           }
-        })
+        }
         this.removedFromSelection = removed
       } finally {
         if (mine === latestCheck) this.checkingSelection = false

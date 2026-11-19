@@ -4,12 +4,11 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DevicesPage from '../DevicesPage.vue'
 import { useDevicesStore } from '@/stores/devices'
-import { listDevices, getDevice, deleteDevice } from '@/api/devices'
+import { listDevices, deleteDevice } from '@/api/devices'
 import type { Device } from '@/api/types'
 
 vi.mock('@/api/devices', () => ({
   listDevices: vi.fn(),
-  getDevice: vi.fn(),
   createDevice: vi.fn(),
   updateDevice: vi.fn(),
   deleteDevice: vi.fn(),
@@ -176,17 +175,19 @@ describe('DevicesPage bulk operations', () => {
     store.toggleSelect(devices[0])
     store.toggleSelect(device(9, 'Elsewhere', '10.0.0.9'))
     await flushPromises() // the button enables once the store has a selection
-    let answerProbe!: (e: unknown) => void
-    vi.mocked(getDevice).mockReturnValueOnce(new Promise((_, reject) => (answerProbe = reject)) as any)
+    let answerList!: (r: unknown) => void
+    vi.mocked(listDevices).mockClear()
+    vi.mocked(listDevices).mockReturnValueOnce(new Promise((resolve) => (answerList = resolve)) as any)
 
     await bulkButton(wrapper).trigger('click')
 
-    expect(getDevice).toHaveBeenCalledTimes(1)
-    expect(getDevice).toHaveBeenCalledWith(9)
+    expect(listDevices).toHaveBeenCalledTimes(1)
+    expect(listDevices).toHaveBeenCalledWith({ page: 1, pageSize: 0 })
     expect(dialog.props('isOpen')).toBe(true)
     expect(dialog.props('checking')).toBe(true)
 
-    answerProbe(Object.assign(new Error('404'), { response: { status: 404 } }))
+    // The whole list no longer has device 9.
+    answerList({ items: devices, meta: {} })
     await flushPromises()
 
     expect(dialog.props('checking')).toBe(false)
@@ -195,14 +196,15 @@ describe('DevicesPage bulk operations', () => {
     expect(bulkButton(wrapper).text()).toBe('Bulk Operations (1)')
   })
 
-  it('sends no probe when every selected device is on the page', async () => {
+  it('asks for no whole list when every selected device is on the page', async () => {
     const wrapper = await mountPage()
     await rowBoxes(wrapper)[0].setValue(true)
+    vi.mocked(listDevices).mockClear()
 
     await bulkButton(wrapper).trigger('click')
     await flushPromises()
 
-    expect(getDevice).not.toHaveBeenCalled()
+    expect(listDevices).not.toHaveBeenCalled()
   })
 
   it('refetches the list when the dialog completes, and closes it on close', async () => {
