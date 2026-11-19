@@ -39,6 +39,8 @@ type AttackInfo struct {
 
 	// mu guards every field above and below against concurrent use of one IP's entry. Every reader and
 	// writer takes it: TrackRequest, TrackRateLimitViolation, IsIPBlocked, GetMetrics and the cleanup.
+	// The cleanup deletes the entry from attackMap while holding it, so a writer that must count into a
+	// live entry takes it through lockedAttackInfo, which checks the map still holds it.
 	// Lock order: mu first, then SecurityStatistics.mutex (the writers take the statistics lock while
 	// holding mu), so nothing may take mu while holding the statistics lock.
 	mu sync.Mutex
@@ -157,8 +159,7 @@ func (sm *SecurityMonitor) TrackRequest(r *http.Request, statusCode int, duratio
 		return
 	}
 
-	attackInfo := sm.attackInfoFor(clientIP)
-	attackInfo.mu.Lock()
+	attackInfo := sm.lockedAttackInfo(clientIP)
 	defer attackInfo.mu.Unlock()
 
 	now := time.Now()
@@ -221,8 +222,7 @@ func (sm *SecurityMonitor) TrackRateLimitViolation(r *http.Request) {
 		return
 	}
 
-	attackInfo := sm.attackInfoFor(clientIP)
-	attackInfo.mu.Lock()
+	attackInfo := sm.lockedAttackInfo(clientIP)
 	defer attackInfo.mu.Unlock()
 
 	now := time.Now()
@@ -244,7 +244,29 @@ func (sm *SecurityMonitor) recordRateLimitViolation(attackInfo *AttackInfo, r *h
 	sm.generateAlert(r, "rate_limit_violation", clientIP, http.StatusTooManyRequests)
 }
 
-// attackInfoFor returns the tracking entry of an IP and creates it on first sight.
+// lockedAttackInfo returns the live tracking entry of an IP with its mu held; the caller unlocks it.
+func (sm *SecurityMonitor) lockedAttackInfo(clientIP string) *AttackInfo {
+	return sm.lockLive(sm.attackInfoFor(clientIP), clientIP)
+}
+
+// lockLive locks info and returns it if the map still holds it for the IP. The cleanup deletes an
+// entry only while holding its mu, so once the lock is held the answer cannot change until unlock. An
+// entry the cleanup deleted between the caller's load and this lock is replaced by the live one, so a
+// request is never counted into an entry nobody reads again.
+func (sm *SecurityMonitor) lockLive(info *AttackInfo, clientIP string) *AttackInfo {
+	for {
+		info.mu.Lock()
+		if value, ok := sm.attackMap.Load(clientIP); ok && value == info {
+			return info
+		}
+		info.mu.Unlock()
+		info = sm.attackInfoFor(clientIP)
+	}
+}
+
+// attackInfoFor returns the tracking entry of an IP and creates it on first sight. The entry can be
+// deleted by the cleanup at any moment: take mu through lockedAttackInfo, never by locking what this
+// returns.
 func (sm *SecurityMonitor) attackInfoFor(clientIP string) *AttackInfo {
 	if value, exists := sm.attackMap.Load(clientIP); exists {
 		return value.(*AttackInfo)

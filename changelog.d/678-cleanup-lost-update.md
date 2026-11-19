@@ -1,0 +1,2 @@
+Fixed
+- A request is no longer lost from the security monitor's counts when the hourly cleanup deletes the client's entry at the same moment (ginsys/shelly-manager#678). A request that had loaded an entry just before the cleanup removed it counted into an entry nobody read again. A request now checks, after taking the entry's lock, that the entry is still the live one, and otherwise counts into the current one. Thresholds, statuses and blocks are unchanged.
