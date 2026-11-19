@@ -3,7 +3,8 @@ import { defineComponent, h } from 'vue'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DevicesPage from '../DevicesPage.vue'
-import { listDevices, deleteDevice, controlDevice } from '@/api/devices'
+import { listDevices, createDevice, deleteDevice, controlDevice } from '@/api/devices'
+import { notice, dismissNotice } from '@/composables/useNotice'
 import type { Device } from '@/api/types'
 
 vi.mock('@/api/devices', () => ({
@@ -120,6 +121,116 @@ describe('DevicesPage shows a failed device action as an error panel', () => {
 
     await wrapper.get('[data-testid="devices-action-error"] .dismiss-button').trigger('click')
 
+    expect(wrapper.find('[data-testid="devices-action-error"]').exists()).toBe(false)
+  })
+})
+
+// ginsys/shelly-manager#648: a failure the page panel cannot show goes to the app notice.
+describe('DevicesPage failures that the page panel cannot show', () => {
+  // A request that stays open until the test fails it.
+  function hold(fn: (...a: any[]) => any) {
+    let fail: (e: Error) => void = () => {}
+    vi.mocked(fn).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        }) as any
+    )
+    return (e: Error) => fail(e)
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vi.stubGlobal('localStorage', memoryStorage())
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    dismissNotice()
+  })
+
+  afterEach(() => {
+    mounted?.unmount()
+    mounted = null
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('shows a delete that fails while the add-device dialog is open in the notice', async () => {
+    const failDelete = hold(deleteDevice)
+    const wrapper = await mountPage()
+
+    await wrapper.get('button[title="Delete"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="add-device-btn"]').trigger('click')
+    expect(wrapper.find('.modal-overlay').exists()).toBe(true)
+
+    failDelete(new Error('device is locked'))
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('device is locked')
+    expect(notice.value?.context?.action).toBe('Delete device')
+    expect(wrapper.find('[data-testid="devices-action-error"]').exists()).toBe(false)
+  })
+
+  it('shows a delete that fails after the page was left in the notice', async () => {
+    const failDelete = hold(deleteDevice)
+    const wrapper = await mountPage()
+
+    await wrapper.get('button[title="Delete"]').trigger('click')
+    await flushPromises()
+    wrapper.unmount()
+    mounted = null
+
+    failDelete(new Error('device is locked'))
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('device is locked')
+    expect(notice.value?.context?.action).toBe('Delete device')
+  })
+
+  it('shows a save that fails after the page was left in the notice', async () => {
+    const failCreate = hold(createDevice)
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="add-device-btn"]').trigger('click')
+    wrapper.findComponent({ name: 'DeviceForm' }).vm.$emit('submit', { name: 'New' })
+    await flushPromises()
+    wrapper.unmount()
+    mounted = null
+
+    failCreate(new Error('name already used'))
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('name already used')
+    expect(notice.value?.context?.action).toBe('Save device')
+  })
+
+  it('shows a save that fails after its dialog was cancelled on the page panel', async () => {
+    const failCreate = hold(createDevice)
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="add-device-btn"]').trigger('click')
+    wrapper.findComponent({ name: 'DeviceForm' }).vm.$emit('submit', { name: 'New' })
+    await flushPromises()
+    wrapper.findComponent({ name: 'DeviceForm' }).vm.$emit('cancel')
+    await flushPromises()
+
+    failCreate(new Error('name already used'))
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="devices-action-error"]').text()).toContain('name already used')
+    expect(notice.value).toBeNull()
+  })
+
+  it('keeps a save that fails while its dialog is open in the dialog', async () => {
+    const failCreate = hold(createDevice)
+    const wrapper = await mountPage()
+    await wrapper.get('[data-testid="add-device-btn"]').trigger('click')
+    wrapper.findComponent({ name: 'DeviceForm' }).vm.$emit('submit', { name: 'New' })
+    await flushPromises()
+
+    failCreate(new Error('name already used'))
+    await flushPromises()
+
+    expect(wrapper.get('.error-message').text()).toContain('name already used')
+    expect(notice.value).toBeNull()
     expect(wrapper.find('[data-testid="devices-action-error"]').exists()).toBe(false)
   })
 })

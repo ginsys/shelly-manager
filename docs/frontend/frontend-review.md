@@ -186,8 +186,9 @@ reachability from the route table (ginsys/shelly-manager#646).
   `ImportPreviewForm`, `GitOpsConfigForm`, `PluginDetailsView`, `PluginSchemaViewer`).
 - **Stores** (`ui/src/stores`): devices, deviceConfigNew, drift, export, import, metrics,
   notifications, plugin, provisioning, templates, typedConfig.
-- **Composables:** `useError` (normalises an error into a message, suggestions and a retry flag)
-  and `useWebSocket`.
+- **Composables:** `useError` (normalises an error into a message, suggestions and a retry flag),
+  `useNotice` (`usePageError`: the same, but a failure the page cannot show goes to the app notice
+  that `MainLayout` mounts) and `useWebSocket`.
 - **Utilities** (`ui/src/utils`): SMA parser and generator, strict JSON, JCS and SHA-256 helpers for
   the SMA integrity check, plugin schema helpers, config form helpers, a version banner.
 
@@ -294,6 +295,8 @@ Found by reading the code at this commit; not a plan.
    error (ginsys/shelly-manager#614). The devices list, device, device configuration and
    configuration history pages are done: a failure shows in an error panel where it happened, and an
    apply result shows in a card on the configuration page. A failure that arrives after the user
-   left the page, or while a modal is open, is not shown reliably yet
-   (ginsys/shelly-manager#648). Command:
+   left the page, or while a dialog covers the page panel, shows in one app notice
+   (ginsys/shelly-manager#648): a page that moves off `alert()` takes its error from
+   `usePageError` instead of `useError`. The result of an apply that worked is still shown only in
+   the page. Command:
    `rg -n '\balert\(' ui/src --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**'`.

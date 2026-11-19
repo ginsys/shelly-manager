@@ -103,6 +103,8 @@
     <main class="content" data-testid="main-content">
       <router-view />
     </main>
+
+    <AppNotice />
   </div>
 </template>
 
@@ -111,6 +113,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { hasSessionKey, openAdminKeyPrompt, forgetAdminKey } from '@/api/adminKey'
 import NavMenu, { type NavMenuSection } from '@/components/NavMenu.vue'
+import AppNotice from '@/components/shared/AppNotice.vue'
 
 const route = useRoute()
 

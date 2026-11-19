@@ -224,6 +224,7 @@ import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useError } from '@/composables/useError'
+import { usePageError } from '@/composables/useNotice'
 import { getCurrentDeviceConfig } from '@/api/deviceConfig'
 import { nullRemovedSecrets } from '@/utils/config-form'
 import { TemplateSaveError, type FieldError } from '@/api/templates'
@@ -255,7 +256,10 @@ const liveLoading = ref(false)
 
 // A failed action shows as an error panel under the toolbar. A failed template add shows inside the
 // add-template dialog instead, which is open and covers the page when it happens.
-const { error: actionError, setError: setActionError, clearError: clearActionError } = useError()
+// A failure after the page was left goes to the app notice. No dialog of this page can open over a
+// pending action (the body shows "Loading..." meanwhile), so no panel is ever covered. `addError`
+// stays page-local: once the page is left, `handleAddTemplate` sends its failure here instead.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
 const { error: addError, setError: setAddError, clearError: clearAddError } = useError()
 const addIdError = ref('')
 // What the last apply came to. It is a result, not an error: an unconfirmed apply is neither a

@@ -185,7 +185,7 @@ import { detectConfigDrift } from '../api/deviceConfig'
 import { getDeviceCapabilities } from '../api/typedConfig'
 import DeviceLoginCard from '../components/devices/DeviceLoginCard.vue'
 import ErrorDisplay from '../components/shared/ErrorDisplay.vue'
-import { useError } from '../composables/useError'
+import { usePageError } from '../composables/useNotice'
 import type { Device } from '../api/types'
 import type { DeviceStatus, DeviceEnergy } from '../api/devices'
 import type { ConfigDrift } from '../api/deviceConfig'
@@ -204,8 +204,10 @@ const showEditDialog = ref(false)
 const editForm = ref<{ name: string; settings: string }>({ name: '', settings: '' })
 // A failed control command shows under the toolbar. A failed save shows inside the edit dialog,
 // which is open and covers the page when it happens.
-const { error: actionError, setError: setActionError, clearError: clearActionError } = useError()
-const { error: saveError, setError: setSaveError, clearError: clearSaveError } = useError()
+// A failure after the page was left goes to the app notice. While the edit dialog is open the catch
+// blocks send a failure to `saveError`, inside the dialog, so no panel is covered.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
+const { error: saveError, setError: setSaveError, clearError: clearSaveError } = usePageError()
 const abortController = new AbortController()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 

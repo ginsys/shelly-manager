@@ -73,11 +73,11 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getConfigHistory, updateDeviceConfig, type ConfigHistoryEntry } from '@/api/deviceConfig'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
-import { useError } from '@/composables/useError'
+import { usePageError } from '@/composables/useNotice'
 
 const route = useRoute()
 const router = useRouter()
-const { error: restoreError, setError: setRestoreError, clearError: clearRestoreError } = useError()
+const { error: restoreError, setError: setRestoreError, clearError: clearRestoreError } = usePageError()
 
 const deviceId = ref<number | string>(route.params.id as string)
 const history = ref<ConfigHistoryEntry[]>([])

@@ -188,14 +188,17 @@ import ErrorDisplay from '../components/shared/ErrorDisplay.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ColumnToggle from '../components/shared/ColumnToggle.vue'
 import BulkOperationsDialog from '../components/bulk/BulkOperationsDialog.vue'
-import { useError } from '../composables/useError'
+import { usePageError } from '../composables/useNotice'
 
 const store = useDevicesStore()
 // A failed delete or control command. The list load keeps its own ErrorState above.
-const { error: actionError, setError: setActionError, clearError: clearActionError } = useError()
 const showBulkDialog = ref(false)
 const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
+// A failure shows in the app notice when the page was left, or when a dialog covers the panel.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError(
+  () => showCreateDialog.value || showEditDialog.value || showBulkDialog.value
+)
 const editingDevice = ref<Device | null>(null)
 const deviceFormRef = ref<InstanceType<typeof DeviceForm> | null>(null)
 
@@ -322,7 +325,13 @@ async function handleFormSubmit(data: Partial<Device>) {
     closeDialogs()
     await store.fetchDevices()
   } catch (e: any) {
-    deviceFormRef.value?.setError(e?.message || 'Operation failed')
+    // The dialog shows its own failure. With the dialog gone (cancelled, or the page left) there is
+    // no form to tell, so the failure goes to the page panel, or to the notice once the page is gone.
+    if (deviceFormRef.value) {
+      deviceFormRef.value.setError(e?.message || 'Operation failed')
+    } else {
+      setActionError(e, { action: 'Save device', resource: 'Device' })
+    }
   }
 }
 

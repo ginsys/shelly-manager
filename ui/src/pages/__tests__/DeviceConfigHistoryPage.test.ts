@@ -9,6 +9,7 @@ vi.mock('@/api/deviceConfig', () => ({
 }))
 
 import { getConfigHistory, updateDeviceConfig } from '@/api/deviceConfig'
+import { notice, dismissNotice } from '@/composables/useNotice'
 
 const entry = {
   id: 1,
@@ -138,5 +139,28 @@ describe('DeviceConfigHistoryPage restore', () => {
 
     expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="restore-error"] .retry-button').exists()).toBe(false)
+  })
+
+  // ginsys/shelly-manager#648: the page panel is gone once the page is left, so the failure goes to
+  // the app notice.
+  it('shows a restore that fails after the page was left in the notice', async () => {
+    dismissNotice()
+    let rejectRestore: (reason: any) => void = () => {}
+    vi.mocked(updateDeviceConfig).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRestore = reject
+        }) as any,
+    )
+    const { wrapper } = await openPage()
+    await wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!.trigger('click')
+    await flushPromises() // the restore is open
+    wrapper.unmount()
+
+    rejectRestore(new Error('device refused the configuration'))
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('device refused the configuration')
+    expect(notice.value?.context?.action).toBe('Restore configuration')
   })
 })
