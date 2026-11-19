@@ -288,6 +288,41 @@ func TestNotificationSecrets_TestSendErrorCarriesNoURLInAnySpelling(t *testing.T
 	}
 }
 
+// Two members that fold together are read in text order by delivery. A save must not reorder them, or
+// the Authorization header would go to the other destination.
+func TestNotificationSecrets_RepeatedMemberKeepsTheDestinationDeliveryReads(t *testing.T) {
+	env := setupNotificationSecrets(t)
+	var oldHit, newHit capturedRequest
+	oldSrv := httptest.NewServer(http.HandlerFunc(oldHit.handler))
+	newSrv := httptest.NewServer(http.HandlerFunc(newHit.handler))
+	t.Cleanup(oldSrv.Close)
+	t.Cleanup(newSrv.Close)
+
+	cfg := fmt.Sprintf(`{"url":%q,"URL":%q,"headers":{"Authorization":%q}}`, oldSrv.URL+"/old", newSrv.URL+"/new", leakBearer)
+	id, _ := env.createChannel(t, map[string]any{
+		"name": "twice", "type": "webhook", "enabled": true, "config": json.RawMessage(cfg),
+	})
+	require.NoError(t, env.svc.TestChannel(context.Background(), id))
+
+	newHit.mu.Lock()
+	defer newHit.mu.Unlock()
+	oldHit.mu.Lock()
+	defer oldHit.mu.Unlock()
+	assert.Equal(t, "/new", newHit.path, "the last member in the text is the destination")
+	assert.Equal(t, leakBearer, newHit.headers.Get("Authorization"))
+	assert.Empty(t, oldHit.path, "the other destination got nothing")
+
+	// A repeated member next to the placeholder is refused and the stored channel is left as it was.
+	code, resp := env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{
+		"name": "twice", "type": "webhook",
+		"config": json.RawMessage(`{"url":"` + redact.Placeholder + `","url":null}`),
+	})
+	assert.Equal(t, http.StatusBadRequest, code, resp)
+	var stored notification.NotificationChannel
+	require.NoError(t, env.db.First(&stored, id).Error)
+	assert.JSONEq(t, cfg, string(stored.Config))
+}
+
 // A list of credentials is masked on read and comes back whole when the client sends the read back.
 func TestNotificationSecrets_ListOfSecretsRoundTrips(t *testing.T) {
 	env := setupNotificationSecrets(t)
