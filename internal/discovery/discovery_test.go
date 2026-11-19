@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -410,5 +411,58 @@ func TestInc(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// redirectingServers returns a server that answers every request with a redirect to a second
+// server, and a counter of the requests the second server received.
+func redirectingServers(t *testing.T) (redirector *httptest.Server, hits *atomic.Int32) {
+	t.Helper()
+
+	hits = &atomic.Int32{}
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`{"type":"SHPLG-S","mac":"A4CF12345678","auth":false,"fw":"20231219-134356"}`))
+	}))
+	t.Cleanup(target.Close)
+
+	redirector = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+r.URL.Path, http.StatusFound)
+	}))
+	t.Cleanup(redirector.Close)
+
+	return redirector, hits
+}
+
+// A device that answers with a redirect is not followed: the scanner sends requests to the
+// addresses it was given and nowhere else.
+func TestScanHost_DoesNotFollowRedirects(t *testing.T) {
+	redirector, hits := redirectingServers(t)
+	scanner := NewScanner(time.Second, 1)
+
+	device, err := scanner.ScanHost(context.Background(), strings.TrimPrefix(redirector.URL, "http://"))
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+	if device != nil {
+		t.Errorf("Expected no device behind a redirect, got: %+v", device)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("Expected the redirect target to receive no request, got %d", n)
+	}
+}
+
+func TestGetDeviceStatus_DoesNotFollowRedirects(t *testing.T) {
+	redirector, hits := redirectingServers(t)
+	scanner := NewScanner(time.Second, 1)
+
+	for _, gen := range []int{1, 2} {
+		status, err := scanner.GetDeviceStatus(context.Background(), strings.TrimPrefix(redirector.URL, "http://"), gen)
+		if err == nil {
+			t.Errorf("gen %d: expected an error for a redirect response, got status: %v", gen, status)
+		}
+	}
+	if n := hits.Load(); n != 0 {
+		t.Errorf("Expected the redirect target to receive no request, got %d", n)
 	}
 }
