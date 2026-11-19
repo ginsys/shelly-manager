@@ -214,7 +214,11 @@ components:
                 type: string
                 description: >-
                   A fixed text when `status` is `error`: `device not found`, `no desired
-                  configuration is set for this device` or `the configuration could not be read`.
+                  configuration is set for this device`, `the stored configuration has settings
+                  this version does not know, so it cannot be downloaded completely` (a stored
+                  field the typed configuration would drop, such as a legacy row restored by an
+                  import: the entry is refused rather than returned incomplete) or `the
+                  configuration could not be read`.
 
     BulkDriftResult:
       type: object
