@@ -100,6 +100,14 @@ copies are operational data failures. Equivalent nil and empty `config` maps
 both normalize to `{}` and do not conflict. Configurations are not a top-level
 archive field and are not counted separately.
 
+The `sync_status` of a configuration is import and restore state: `synced`
+when the stored configuration reached the device, `pending` when it waits to
+go there. It is never drift. A drift check reads the device and stores
+nothing, so an archive says nothing about drift. A row written before
+ginsys/shelly-manager#606 can still carry `drift` or `error`, and the engine
+exports it as it is; neither value means drift now. The parser accepts any
+string and reads no meaning from it.
+
 ## Generation and import
 
 Generation materializes one validated generic tree, computes its integrity
