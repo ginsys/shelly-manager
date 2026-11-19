@@ -527,3 +527,25 @@ func TestBulkApply_StopOnErrorSkipsALaterMissingDeviceToo(t *testing.T) {
 	assert.Equal(t, 2, res.Skipped)
 	assert.Zero(t, fleet[0].hits.Load())
 }
+
+// The mask stands for the stored secret. Where the stored overrides cannot be read it would become an
+// empty secret, which this route then applies to the device, so the device is failed and left as it was.
+func TestBulkApply_UnreadableStoredOverridesFailTheDeviceAndKeepTheMask(t *testing.T) {
+	handler, db, fleet := applyFleet(t, 2)
+	id := fleet[0].device.ID
+	const broken = `{"mqtt":`
+	setOverrides(t, db, id, broken)
+
+	w := postApply(handler, applyBody(`{"mqtt":{"pass":"`+secretMask+`"}}`, false, id, fleet[1].device.ID))
+	res := decodeApply(t, w)
+
+	require.Len(t, res.Results, 2)
+	e := res.Results[0]
+	assert.Equal(t, bulkApplyFailed, e.Status, w.Body.String())
+	require.NotNil(t, e.Stored)
+	assert.False(t, *e.Stored)
+	assert.Contains(t, e.Reason, "could not be read")
+	assert.Zero(t, fleet[0].hits.Load(), "the device with unreadable overrides was contacted")
+	assert.Equal(t, broken, storedOverrides(t, db, id), "the unreadable record was changed")
+	assert.NotEqual(t, bulkApplySkipped, res.Results[1].Status, "the other device was blocked")
+}

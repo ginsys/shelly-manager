@@ -45,19 +45,20 @@ const (
 // The reasons are fixed texts: they name what happened and never a value or the text of a device
 // error, which can echo what it was sent. An error text goes to the log.
 const (
-	reasonNotFound       = "device not found"
-	reasonUnreadable     = "the device record could not be read; nothing was changed"
-	reasonNotStored      = "could not store the configuration"
-	reasonInvalid        = "the settings are not valid for this device model; nothing was stored or written"
-	reasonBlocked        = "not written: the settings are not valid for another selected device"
-	reasonStopped        = "not contacted: an earlier device did not end applied and stop_on_error is set"
-	reasonPending        = "the desired configuration changed while it was applied; the device stays pending"
-	reasonUnconfirmed    = "the device stopped answering after a network change, so the write was not verified; the device stays pending"
-	reasonRefusedWrite   = "the device refused a write; the device stays pending"
-	reasonDifferent      = "the device holds a different value than asked; the device stays pending"
-	reasonRejectedLogin  = "the device rejected the stored login; the device stays pending"
-	reasonNotRecorded    = "the apply did not end in a verified, recorded write; the device stays pending"
-	refusedAfterStoreTag = "nothing was written to the device, the new settings are stored and the device stays pending"
+	reasonNotFound        = "device not found"
+	reasonUnreadable      = "the device record could not be read; nothing was changed"
+	reasonNotStored       = "could not store the configuration"
+	reasonOverridesUnread = "the stored overrides could not be read; nothing was changed"
+	reasonInvalid         = "the settings are not valid for this device model; nothing was stored or written"
+	reasonBlocked         = "not written: the settings are not valid for another selected device"
+	reasonStopped         = "not contacted: an earlier device did not end applied and stop_on_error is set"
+	reasonPending         = "the desired configuration changed while it was applied; the device stays pending"
+	reasonUnconfirmed     = "the device stopped answering after a network change, so the write was not verified; the device stays pending"
+	reasonRefusedWrite    = "the device refused a write; the device stays pending"
+	reasonDifferent       = "the device holds a different value than asked; the device stays pending"
+	reasonRejectedLogin   = "the device rejected the stored login; the device stays pending"
+	reasonNotRecorded     = "the apply did not end in a verified, recorded write; the device stays pending"
+	refusedAfterStoreTag  = "nothing was written to the device, the new settings are stored and the device stays pending"
 )
 
 // bulkApplyEntry is one device of the answer. Stored says whether the new overrides are stored; it is
@@ -243,12 +244,17 @@ func (h *Handler) bulkApplyDevice(ctx context.Context, entry bulkApplyEntry, raw
 	id := entry.DeviceID
 	patch, removed, err := decodeBulkApplyConfig(raw)
 	if err != nil {
+		// A guard: the same bytes decoded in the handler, so this cannot fail today, and a later
+		// change must not be able to store an unchecked patch.
 		return bulkApplyStoredEntry(entry, bulkApplyRefused, false, reasonInvalid)
 	}
-	// A secret sent back as the mask leaves the stored one as it is.
-	stored, readErr := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
-	if readErr != nil {
-		stored = nil
+	// A secret sent back as the mask leaves the stored one as it is. Without the stored overrides the
+	// mask would become an empty secret, and this route applies it to the device in the same call, so
+	// an unreadable record is a refusal and not the PATCH route's fallback.
+	stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(id)
+	if err != nil {
+		h.logBulkApply(id, entry.DeviceIP, err, "Could not read the stored overrides for bulk-apply")
+		return bulkApplyStoredEntry(entry, bulkApplyFailed, false, reasonOverridesUnread)
 	}
 	restoreMaskedSecrets(patch, stored)
 
