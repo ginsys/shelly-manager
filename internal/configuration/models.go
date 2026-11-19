@@ -75,14 +75,19 @@ func (ConfigTemplate) TableName() string {
 	return "config_templates"
 }
 
-// DeviceConfig represents a device-specific configuration
+// DeviceConfig represents a device-specific configuration.
+//
+// SyncStatus is import and restore state only: "synced" when an import from the device wrote the row,
+// "pending" when the row waits to go to the device. It is never drift: a drift check reads the device
+// and stores nothing. "error" and "drift" are old values that nothing writes any more, and a row
+// written before ginsys/shelly-manager#606 can still hold one.
 type DeviceConfig struct {
 	ID         uint            `json:"id" gorm:"primaryKey"`
 	DeviceID   uint            `json:"device_id" gorm:"index;not null"`
 	TemplateID *uint           `json:"template_id" gorm:"index"` // Optional template reference
 	Config     json.RawMessage `json:"config" gorm:"type:text"`
 	LastSynced *time.Time      `json:"last_synced"`
-	SyncStatus string          `json:"sync_status"` // "synced", "pending", "error", "drift"
+	SyncStatus string          `json:"sync_status"` // "synced" or "pending"; see above
 	CreatedAt  time.Time       `json:"created_at"`
 	UpdatedAt  time.Time       `json:"updated_at"`
 }

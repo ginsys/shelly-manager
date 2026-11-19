@@ -86,7 +86,7 @@ UI, the device list answers 401 and the UI opens the key dialog.
 | GET | `/api/v1/devices/{id}/config/current/normalized` | Get normalized live config (stores nothing) |
 | GET | `/api/v1/devices/{id}/config/typed/normalized` | Get typed normalized config. `data.configuration` holds the normalized configuration, as on `/config/current/normalized` |
 | POST | `/api/v1/devices/{id}/config/import` | Import config to device |
-| GET | `/api/v1/devices/{id}/config/status` | Get import status |
+| GET | `/api/v1/devices/{id}/config/status` | Get import status: the state that an import or restore last stored (`synced` or `pending`), not drift. Use `/config/drift` for drift |
 | GET | `/api/v1/devices/{id}/config/drift` | Detect configuration drift |
 | POST | `/api/v1/devices/{id}/config/apply-template` | Apply template to device |
 | GET | `/api/v1/devices/{id}/config/history` | Get config change history |

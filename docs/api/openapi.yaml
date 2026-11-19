@@ -347,6 +347,12 @@ components:
         sync_status:
           type: string
           enum: [synced, pending, error, drift]
+          description: >-
+            Import and restore state of the stored configuration, never drift. synced means an
+            import from the device wrote it; pending means it waits to go to the device. error and
+            drift are old values that nothing writes any more, and a row written before drift
+            checks stopped storing their result can still hold one. Drift is read only from
+            GET /api/v1/devices/{id}/config/drift.
         created_at:
           type: string
           format: date-time

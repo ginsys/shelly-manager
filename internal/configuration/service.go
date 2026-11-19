@@ -252,7 +252,8 @@ func (s *Service) readDeviceConfigData(deviceID uint, client shelly.Client) (jso
 	return configData, nil
 }
 
-// GetImportStatus gets the import status for a device
+// GetImportStatus gets the import status for a device: what an import or a restore last wrote to its
+// device_configs row, which is not drift (ginsys/shelly-manager#635).
 func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 	var config DeviceConfig
 	err := s.db.Where("device_id = ?", deviceID).First(&config).Error
@@ -284,7 +285,9 @@ func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 	case "pending":
 		status.Message = "Configuration imported but pending sync to device"
 	case "drift":
-		status.Message = "Configuration drift detected - device config differs from stored"
+		// Nothing writes this value any more: a drift check stores nothing. A row that still holds it
+		// is from before that change, so it says nothing about the device now.
+		status.Message = "Drift is no longer stored here; run a drift check (GET /devices/{id}/config/drift)"
 	case "error":
 		status.Message = "Error occurred during last import/sync operation"
 	default:
