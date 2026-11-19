@@ -425,8 +425,14 @@ that lost its token or its rotation response, and it needs the admin key at
 creation, so it is no weaker than the admin delete followed by a new
 enrolment.
 
-- Protects: limit 2. A new id needs an enrolment from the admin. The claim
-  exposure falls with it, because only enrolled agents can claim.
+- Protects: limit 2. A new id needs an enrolment from the admin, so a caller
+  with only the agent key cannot create an id. **Until slice 3 this protects
+  new ids only.** The 5-minute silence rule stays in slice 2
+  (`provisioner_handlers.go:153-157`), so an agent-key holder can still take an
+  enrolled id once it has been silent for 5 minutes, and then claim tasks.
+  Only after slice 3 (option D) is "only enrolled agents can claim" true. Slice
+  2 does not remove the silence rule, so it changes no control beyond the
+  enrolment of new ids.
 - Operator: one secret per agent, passed into the agent's secret store.
 - Agent: **must keep its id and its token across restarts.** A used secret
   cannot be used again, so without a kept token each agent restart needs a new
@@ -519,7 +525,7 @@ State this plainly, because it moves a security boundary:
 
 Do slice 1 first. Then B, with a token file in the agent. Then D, once enrolment
 is required. Keep C as the fallback if the operator does not want to hand out
-secrets, and leave E until after B: once only enrolled agents can claim, most of
+secrets, and leave E until after B and D: once only enrolled agents can claim, most of
 E's exposure is gone.
 
 Why B over C: the secret is given out by the admin and reaches only the agent
@@ -695,7 +701,7 @@ One recommendation per question.
    weakens revocation. A lost register response is recovered by a new
    enrolment or an admin delete.
 9. **Unassigned tasks (E).** Recommended: leave claimable for now. Revisit after
-   B, when only enrolled agents can claim.
+   B and D, when only enrolled agents can claim.
 10. **Docs.** The build slice updates `docs/security/SECURITY_SECRETS.md:21`
     and `docs/api/api-overview.md:433` (including the restart sentence), and adds
     its provider test to the `-run` list in `.github/workflows/test.yml`.
