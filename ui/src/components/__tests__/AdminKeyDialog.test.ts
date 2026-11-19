@@ -172,12 +172,40 @@ describe('AdminKeyDialog', () => {
     await flushPromises()
     outside.focus()
     expect(document.activeElement).toBe(outside)
-    const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
-    dialog()!.dispatchEvent(ev)
+    // A real keypress goes to the focused control and bubbles through its own ancestors, never
+    // through the dialog's backdrop.
+    const ev = tab(false)
     expect(ev.defaultPrevented).toBe(true)
     expect(document.activeElement).toBe(input())
     cancelAdminKeyPrompt()
     await p
+    outside.remove()
+  })
+
+  it('Escape pressed on a control outside the dialog still cancels', async () => {
+    mountDialog()
+    const outside = document.createElement('button')
+    Element.prototype.appendChild.call(document.body, outside)
+    const p = requestAdminKey()
+    await flushPromises()
+    outside.focus()
+    outside.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    await expect(p).resolves.toBeNull()
+    outside.remove()
+  })
+
+  it('stops reading keys once the dialog is closed', async () => {
+    mountDialog()
+    const p = requestAdminKey()
+    await flushPromises()
+    cancelAdminKeyPrompt()
+    await p
+    await flushPromises()
+    const outside = document.createElement('button')
+    Element.prototype.appendChild.call(document.body, outside)
+    outside.focus()
+    expect(tab(false).defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(outside)
     outside.remove()
   })
 
