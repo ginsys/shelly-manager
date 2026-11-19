@@ -162,6 +162,39 @@ describe('adminKey store', () => {
     expect(m.promptMessage.value).toBe('')
   })
 
+  it('a refusal after Cancel forgets the refused key and leaves the dialog closed and silent', async () => {
+    const m = await load()
+    m.setAdminKey('newer')
+    m.cancelAdminKeyPrompt()
+    m.rejectAdminKey('newer')
+    expect(m.getAdminKey()).toBeUndefined()
+    expect(m.hasSessionKey.value).toBe(false)
+    expect(m.promptOpen.value).toBe(false)
+    expect(m.promptMessage.value).toBe('')
+  })
+
+  it('a refusal reopens the dialog again once the header button lifted the Cancel', async () => {
+    const m = await load()
+    m.cancelAdminKeyPrompt()
+    m.openAdminKeyPrompt()
+    m.cancelAdminKeyPrompt() // close it again; the flag is set once more
+    m.openAdminKeyPrompt() // the header button lifts it
+    m.setAdminKey('wrong')
+    m.promptOpen.value = false
+    m.rejectAdminKey('wrong')
+    expect(m.promptOpen.value).toBe(true)
+    expect(m.promptMessage.value).toBe('That key was not accepted.')
+  })
+
+  it('a refusal reopens the dialog again once a key was submitted after the Cancel', async () => {
+    const m = await load()
+    m.cancelAdminKeyPrompt()
+    m.submitAdminKey('wrong')
+    m.rejectAdminKey('wrong')
+    expect(m.promptOpen.value).toBe(true)
+    expect(m.promptMessage.value).toBe('That key was not accepted.')
+  })
+
   it('a new key wins when the storage write fails and an older key is still stored', async () => {
     vi.stubGlobal('sessionStorage', failingStorage({ set: true, initial: 'old' }))
     const m = await load()

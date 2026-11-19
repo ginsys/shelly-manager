@@ -133,6 +133,83 @@ describe('client admin-key handling', () => {
     expect(key.promptMessage.value).toBe('That key was not accepted.')
   })
 
+  it('after Cancel, a late 401 from an older key whose retry is refused stays quiet', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    setAnswer(async (auth, url) => {
+      if (url === '/old' && auth === 'Bearer old') await gate // refused late
+      return unauthorized
+    })
+    key.setAdminKey('old')
+    const old = api.get('/old').catch((e) => e)
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+    key.setAdminKey('newer') // entered while /old was in flight
+    const fresh = api.get('/fresh').catch((e) => e) // sent with newer, refused: the dialog opens
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.cancelAdminKeyPrompt()
+    await fresh
+
+    release() // /old's 401 arrives; its one retry goes out with newer and is refused too
+    const err: any = await old
+
+    expect(err.response.status).toBe(401)
+    expect(calls.map((c) => c.auth)).toEqual(['Bearer old', 'Bearer newer', 'Bearer newer'])
+    expect(key.promptOpen.value).toBe(false)
+    expect(key.promptMessage.value).toBe('')
+    expect(key.getAdminKey()).toBeUndefined() // the server refused it, so it is forgotten
+  })
+
+  it('after Cancel, a retry already in flight that is refused stays quiet', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    let releaseOld: () => void = () => {}
+    let releaseRetry: () => void = () => {}
+    const oldGate = new Promise<void>((resolve) => (releaseOld = resolve))
+    const retryGate = new Promise<void>((resolve) => (releaseRetry = resolve))
+    setAnswer(async (auth, url) => {
+      if (url === '/r' && auth === 'Bearer old') await oldGate
+      if (url === '/r' && auth === 'Bearer newer') await retryGate
+      return unauthorized
+    })
+    key.setAdminKey('old')
+    const r = api.get('/r').catch((e) => e)
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+    key.setAdminKey('newer')
+    releaseOld() // /r's 401 takes the shortcut: one retry with newer, held in flight
+    await vi.waitFor(() => expect(calls.filter((c) => c.url === '/r')).toHaveLength(2))
+
+    const x = api.get('/x').catch((e) => e) // another request, refused with newer: the dialog opens
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.cancelAdminKeyPrompt()
+    await x
+
+    releaseRetry() // now the retry is refused
+    const err: any = await r
+
+    expect(err.response.status).toBe(401)
+    expect(key.promptOpen.value).toBe(false)
+    expect(key.promptMessage.value).toBe('')
+  })
+
+  it('without a Cancel a refused retry still reopens the dialog, and again after the header button', async () => {
+    const { api, key, setAnswer } = await load()
+    setAnswer(() => unauthorized)
+    const a = api.get('/a').catch((e) => e)
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.cancelAdminKeyPrompt()
+    await a
+
+    key.openAdminKeyPrompt() // the header button lifts the Cancel
+    key.setAdminKey('wrong')
+    key.promptOpen.value = false
+    const b = api.get('/b').catch((e) => e) // sent with wrong, refused: the dialog opens
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.submitAdminKey('wrong2') // the retry with wrong2 is refused
+    await b
+    expect(key.promptOpen.value).toBe(true)
+    expect(key.promptMessage.value).toBe('That key was not accepted.')
+  })
+
   describe('a blob response (downloads)', () => {
     const blobOf = (text: string) => new Blob([text], { type: 'application/json' })
     const adminBlob = () => ({ status: 401, body: blobOf(JSON.stringify(unauthorized.body)) })

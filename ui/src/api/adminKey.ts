@@ -60,8 +60,8 @@ export const promptMessage = ref('')
 
 let pending: Promise<string | null> | null = null
 let resolvePending: ((key: string | null) => void) | null = null
-// Set by Cancel: a later 401 (a polling page, say) rejects quietly instead of reopening the dialog,
-// until the operator opens it from the header or submits a key.
+// Set by Cancel: a later 401 (a polling page, say) or a refused retry rejects quietly instead of
+// reopening the dialog, until the operator opens it from the header or submits a key.
 let declined = false
 
 function settle(key: string | null) {
@@ -113,11 +113,13 @@ export function cancelAdminKeyPrompt(): void {
 /**
  * The server refused `sentKey`: drop it, say so, and ask again. A refusal of a key that is no longer
  * the entered one (a slower request, or the operator already entered a newer key) changes nothing,
- * so a late answer never deletes the key that was just typed.
+ * so a late answer never deletes the key that was just typed. After a Cancel the key is still
+ * dropped, but the dialog stays closed: a refused retry is no reason to ask again.
  */
 export function rejectAdminKey(sentKey: string): void {
   if (readStored() !== sentKey) return
   forgetAdminKey()
+  if (declined) return
   promptMessage.value = REJECTED_MESSAGE
   promptOpen.value = true
 }
