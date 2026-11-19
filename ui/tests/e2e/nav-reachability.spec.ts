@@ -167,19 +167,25 @@ test.describe('navigation reachability', () => {
     await expect(trigger).toBeFocused()
   })
 
-  test('Escape hides a menu the pointer is over, and the pointer leaving keeps a menu that holds focus', async ({ page }) => {
+  test('a menu opens only on a click, hides on Escape with the pointer still over it, and stays while it holds focus', async ({ page }) => {
     await page.goto('/')
     const trigger = page.getByRole('button', { name: 'Notifications' })
     const panel = page.locator('.nav-dropdown', { has: trigger }).locator('.dropdown-menu')
 
+    // Hover alone opens nothing.
     await trigger.hover()
+    await expect(panel).toBeHidden()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    // A click opens it, and the visible panel agrees with aria-expanded.
+    await trigger.click()
     await expect(panel).toBeVisible()
     await expect(trigger).toHaveAttribute('aria-expanded', 'true')
     await page.keyboard.press('Escape')
     await expect(panel).toBeHidden()
     await expect(trigger).toHaveAttribute('aria-expanded', 'false')
 
-    // Opened by click, focus moved into an item: moving the mouse away must not hide it.
+    // Focus moved into an item: moving the mouse away does not hide it.
     await trigger.click()
     await page.keyboard.press('Tab')
     const first = panel.locator('.dropdown-item').first()
@@ -187,6 +193,16 @@ test.describe('navigation reachability', () => {
     await page.mouse.move(5, 400)
     await expect(panel).toBeVisible()
     await expect(first).toBeFocused()
+  })
+
+  test('a menu closes on a click outside it', async ({ page }) => {
+    await page.goto('/')
+    const trigger = page.getByRole('button', { name: 'Drift' })
+    const panel = page.locator('.nav-dropdown', { has: trigger }).locator('.dropdown-menu')
+    await trigger.click()
+    await expect(panel).toBeVisible()
+    await page.mouse.click(5, 400)
+    await expect(panel).toBeHidden()
   })
 
   test('the top bar fits on one line at 1280 px', async ({ page }) => {

@@ -142,100 +142,45 @@ describe('NavMenu', () => {
     expect(isOpen()).toBe(false)
   })
 
-  // jsdom has no PointerEvent, so a plain Event carries the pointerType the handlers read.
-  const pointer = (type: string, pointerType: string) =>
-    Object.assign(new Event(type), { pointerType })
-  const root = () => document.body.querySelector('.nav-dropdown') as HTMLElement
-
-  it('opens on mouse hover through the same state as a click, so aria-expanded agrees', async () => {
-    mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'mouse'))
-    await nextTick()
-    expect(isOpen()).toBe(true)
-    expect(trigger().getAttribute('aria-expanded')).toBe('true')
-    expect(document.body.querySelector('.dropdown-menu')!.getAttribute('aria-hidden')).toBe('false')
-  })
-
-  it('keeps a menu open when the click follows the hover that opened it, and the next click closes it', async () => {
-    mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'mouse'))
-    await nextTick()
-    trigger().click()
-    await nextTick()
-    expect(isOpen()).toBe(true)
-    trigger().click()
-    await nextTick()
-    expect(isOpen()).toBe(false)
-  })
-
-  it('toggles on the first Enter after hover, focus and the mouse leaving (the hover mark is gone)', async () => {
-    mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'mouse'))
-    await nextTick()
-    trigger().focus()
-    root().dispatchEvent(pointer('pointerleave', 'mouse'))
-    await nextTick()
-    expect(isOpen()).toBe(true)
-    trigger().click()
-    await nextTick()
-    expect(isOpen()).toBe(false)
-  })
-
-  it('toggles on a click after a key press, even while the mouse is still over the menu', async () => {
-    mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'mouse'))
-    await nextTick()
-    trigger().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    trigger().click()
-    await nextTick()
-    expect(isOpen()).toBe(false)
-  })
-
   it('closes on Escape pressed with the focus outside the menu, and leaves the focus alone', async () => {
     mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    trigger().click()
     await nextTick()
+    trigger().blur()
     expect(document.activeElement).not.toBe(trigger())
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await nextTick()
     expect(isOpen()).toBe(false)
+    expect(trigger().getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).not.toBe(trigger())
   })
 
-  it('does not open on a touch pointer, whose tap then toggles it with the click', async () => {
+  it('closes on a Tab out after a press that began inside the menu and ended outside it', async () => {
     mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'touch'))
     trigger().click()
     await nextTick()
-    expect(isOpen()).toBe(true)
+    const panel = document.body.querySelector('.dropdown-menu') as HTMLElement
+    panel.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    // a drag out of the panel: the release happens outside it
+    document.body.dispatchEvent(new Event('pointerup', { bubbles: true }))
+    const outside = document.createElement('button')
+    Element.prototype.appendChild.call(document.body, outside)
+    items()[0].dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: outside }))
+    await nextTick()
+    outside.remove()
+    expect(isOpen()).toBe(false)
   })
 
-  it('stays closed after Escape even while the pointer is over it', async () => {
+  it('also ends a press on pointercancel', async () => {
     mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'mouse'))
-    await nextTick()
-    items()[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    await nextTick()
-    expect(isOpen()).toBe(false)
-    expect(trigger().getAttribute('aria-expanded')).toBe('false')
-  })
-
-  it('closes when the mouse leaves, unless keyboard focus is still inside', async () => {
-    mountMenu()
-    root().dispatchEvent(pointer('pointerenter', 'mouse'))
-    await nextTick()
-    root().dispatchEvent(pointer('pointerleave', 'mouse'))
-    await nextTick()
-    expect(isOpen()).toBe(false)
-
     trigger().click()
     await nextTick()
-    // the stubbed links have no href, so they cannot take focus; the button stands in for an item
-    trigger().focus()
-    expect(document.activeElement).toBe(trigger())
-    root().dispatchEvent(pointer('pointerleave', 'mouse'))
+    const panel = document.body.querySelector('.dropdown-menu') as HTMLElement
+    panel.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    document.body.dispatchEvent(new Event('pointercancel', { bubbles: true }))
+    trigger().dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }))
     await nextTick()
-    expect(isOpen()).toBe(true)
+    expect(isOpen()).toBe(false)
   })
 
   it('closes when an item is chosen', async () => {
