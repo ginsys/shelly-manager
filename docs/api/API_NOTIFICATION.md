@@ -62,7 +62,8 @@ object under a secret name is secret as a whole.
   replaces the stored one. A credential left out is removed: an update replaces the whole config, as before.
   The placeholder is never stored: where nothing is stored for it, it is dropped, and a channel left without a
   required `url` or `webhook_url` is refused. A stored config with two keys that differ only in case
-  (`URL` and `url`) restores neither: send the value. A secret list (`"token_list": ["a", "b"]`) comes back whole only
+  (`URL` and `url`) restores neither: send the value. A config that repeats a member and also carries
+  `********` is refused. A secret list (`"token_list": ["a", "b"]`) comes back whole only
   when every entry is `********` and the stored list has as many entries; any other `********` inside a list is
   dropped. To change one entry, send the whole list with its new values.
 - **Errors.** A failed delivery's error text quotes its destination. `GET /notifications/history` (`error`) and

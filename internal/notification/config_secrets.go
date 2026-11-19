@@ -220,52 +220,66 @@ func restoreConfig(incoming, stored json.RawMessage) json.RawMessage {
 	if storedDoc, storedOK := decodeDocument(bytes.TrimSpace(stored)); storedOK {
 		old = storedDoc
 	}
+	// A repeated member is read one way by the generic decode above (the last wins) and another by the
+	// struct decode that validation and delivery use (in text order, a null is ignored), and re-encoding
+	// sorts the members. So where a member repeats and the text carries the placeholder, there is no
+	// faithful restore: the config is refused (a string is no channel config). Without the placeholder
+	// there is nothing to restore, and the client's own bytes keep the order delivery reads.
+	repeats, hasPlaceholder := scanMembers(bytes.TrimSpace(incoming))
+	if repeats && hasPlaceholder {
+		return quotedPlaceholder()
+	}
 	before := encodeDocument(m)
 	restored := encodeDocument(restoreNode(m, old, true, false))
-	// The client's own bytes come back only when nothing changed and no object repeats a member: decoding
-	// a repeated member keeps the last, but the struct decode that validation and delivery use reads
-	// {"url":"<placeholder>","url":null} as the placeholder, so a text with repeats is always re-encoded.
-	if bytes.Equal(before, restored) && !repeatsMember(bytes.TrimSpace(incoming)) {
-		return incoming
+	if bytes.Equal(before, restored) {
+		return incoming // nothing to restore: keep the client's own bytes
 	}
 	return restored
 }
 
-// repeatsMember reports whether any object in raw holds two members whose names fold together.
-func repeatsMember(raw []byte) bool {
-	return scanMembers(json.NewDecoder(bytes.NewReader(raw)))
-}
-
-func scanMembers(dec *json.Decoder) bool {
-	tok, err := dec.Token()
-	if err != nil {
-		return false
-	}
-	switch tok {
-	case json.Delim('{'):
-		seen := map[string]bool{}
-		for dec.More() {
-			nameTok, nameErr := dec.Token()
-			name, isName := nameTok.(string)
-			if nameErr != nil || !isName {
-				return false
-			}
-			folded := strings.ToLower(strings.ToUpper(name))
-			if seen[folded] || scanMembers(dec) {
-				return true
-			}
-			seen[folded] = true
+// scanMembers reports whether any object in raw holds two members whose names fold together, and
+// whether any string in it is the placeholder.
+func scanMembers(raw []byte) (repeats, placeholder bool) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	var walk func() bool // false once the text cannot be read on
+	walk = func() bool {
+		tok, err := dec.Token()
+		if err != nil {
+			return false
 		}
-		_, _ = dec.Token() // the closing brace
-	case json.Delim('['):
-		for dec.More() {
-			if scanMembers(dec) {
-				return true
+		switch v := tok.(type) {
+		case string:
+			placeholder = placeholder || v == redact.Placeholder
+		case json.Delim:
+			switch v {
+			case '{':
+				seen := map[string]bool{}
+				for dec.More() {
+					nameTok, nameErr := dec.Token()
+					name, isName := nameTok.(string)
+					if nameErr != nil || !isName {
+						return false
+					}
+					folded := strings.ToLower(strings.ToUpper(name))
+					repeats = repeats || seen[folded]
+					seen[folded] = true
+					if !walk() {
+						return false
+					}
+				}
+			case '[':
+				for dec.More() {
+					if !walk() {
+						return false
+					}
+				}
 			}
+			_, _ = dec.Token() // the closing delimiter
 		}
-		_, _ = dec.Token() // the closing bracket
+		return true
 	}
-	return false // a scalar was the whole value
+	walk()
+	return repeats, placeholder
 }
 
 // maskedChannel returns a copy of c that is safe to send out. The stored record is never changed:
@@ -304,7 +318,10 @@ func collectSecrets(v any, top, secret bool, out *[]string) {
 //
 // The Op is any HTTP method token (RFC 9110: letters, digits and !#$%&'*+-.^_`|~), because the method is
 // configurable and Go accepts every token.
-var quotedURLError = regexp.MustCompile("(?:^|\\s)[!#$%&'*+.^_`|~0-9A-Za-z-]+ \"(?:[^\"\\\\]|\\\\.)*\": ")
+//
+// The match ends at the colon and leaves the space after it, because nested errors share that space
+// (`failed to parse Location header "<url>": parse "<url>": ...`).
+var quotedURLError = regexp.MustCompile("(?:^|\\s)[!#$%&'*+.^_`|~0-9A-Za-z-]+ \"(?:[^\"\\\\]|\\\\.)*\":")
 
 // spellings lists how an error can write the credential s: as stored, and with %q (a quote, a backslash
 // or a control character escaped), for the text a *url.Error does not hold.
@@ -338,7 +355,7 @@ func scrubText(text string, config json.RawMessage) string {
 	}
 	sort.Slice(forms, func(i, j int) bool { return len(forms[i]) > len(forms[j]) }) // a longer value first
 	text = quotedURLError.ReplaceAllStringFunc(text, func(m string) string {
-		return m[:strings.IndexByte(m, '"')] + `"` + redact.Placeholder + `": `
+		return m[:strings.IndexByte(m, '"')] + `"` + redact.Placeholder + `":`
 	})
 	if len(forms) == 0 {
 		return text

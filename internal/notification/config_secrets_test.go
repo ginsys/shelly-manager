@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -375,29 +376,64 @@ func TestScrubText_AnyMethodToken(t *testing.T) {
 }
 
 // A repeated member is read one way by the generic decode (the last wins) and another by the struct
-// decode validation uses (a null is ignored), so a text that repeats a member is always re-encoded.
+// decode validation uses (in text order, a null is ignored). Where the text also carries the placeholder
+// there is no faithful restore, so the config is refused; otherwise the client's bytes are left alone,
+// because re-encoding sorts the members and moves the effective destination.
 func TestRestoreConfig_RepeatedMembers(t *testing.T) {
 	stored := json.RawMessage(`{"url":"https://h.example/stored"}`)
+	type webhook struct {
+		URL string `json:"url"`
+	}
+
 	for name, incoming := range map[string]string{
-		"null after":       `{"url":"` + ph + `","url":null}`,
-		"folded null":      `{"URL":"` + ph + `","url":null}`,
-		"nested":           `{"headers":{"A":"` + ph + `","A":null},"url":"u"}`,
-		"in a list":        `{"opts":[{"x":1,"x":2}],"url":"` + ph + `"}`,
-		"plain repetition": `{"url":"u","url":"v"}`,
+		"null after":  `{"url":"` + ph + `","url":null}`,
+		"folded null": `{"URL":"` + ph + `","url":null}`,
+		"nested":      `{"headers":{"A":"` + ph + `","A":null},"url":"u"}`,
+		"in a list":   `{"opts":[{"x":1,"x":2}],"url":"` + ph + `"}`,
 	} {
 		out := restoreConfig(json.RawMessage(incoming), stored)
-		assert.NotContains(t, string(out), ph, name)
-		assert.NotEqual(t, incoming, string(out), name)
-		var cfg struct {
-			URL string `json:"url"`
-		}
-		require.NoError(t, json.Unmarshal(out, &cfg), name)
-		assert.NotEqual(t, ph, cfg.URL, "%s: the struct decode never sees the placeholder", name)
+		assert.Equal(t, `"`+ph+`"`, string(out), "%s: refused", name)
+		var cfg webhook
+		assert.Error(t, json.Unmarshal(out, &cfg), "%s: a string is no channel config", name)
 	}
+
+	// No placeholder: the client's bytes come back, so the member delivery reads is the member the client wrote.
+	for name, incoming := range map[string]string{
+		"plain repetition": `{"url":"old","url":"new"}`,
+		"folded":           `{"url":"https://old.example/hook","URL":"https://new.example/hook","headers":{"Authorization":"Bearer x"}}`,
+		"nested":           `{"opts":{"a":1,"a":2},"url":"u"}`,
+	} {
+		out := restoreConfig(json.RawMessage(incoming), stored)
+		assert.Equal(t, incoming, string(out), name)
+	}
+	var cfg webhook
+	require.NoError(t, json.Unmarshal(restoreConfig(json.RawMessage(`{"url":"old","URL":"new"}`), stored), &cfg))
+	assert.Equal(t, "new", cfg.URL, "the last member in the text is the one delivery reads")
 
 	// A config with no repeated member keeps the client's bytes.
 	same := json.RawMessage(`{ "url": "u", "headers": {"A": "b"}, "opts": [{"x": 1}, {"x": 2}] }`)
 	assert.Equal(t, string(same), string(restoreConfig(same, stored)))
+}
+
+// Go nests errors: a bad Location header is reported as `... header "<url>": parse "<url>": ...`, and
+// the cut of the first quoted URL must leave the space the second one starts after.
+func TestScrubText_NestedURLErrorFromARedirect(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/bad%zz?token=LEAK620")
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+	stored := srv.URL + "/hook?token=LEAK620"
+
+	_, err := http.Post(stored, "application/json", nil) //nolint:gosec // loopback test server
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `header "/bad%zz?token=LEAK620": parse "/bad%zz?token=LEAK620"`, "the premise: two quoted URLs in one text")
+
+	cfg, jerr := json.Marshal(map[string]any{"url": stored})
+	require.NoError(t, jerr)
+	text := scrubText("failed to send webhook: "+err.Error(), cfg)
+	assert.NotContains(t, text, "LEAK620")
+	assert.Equal(t, 3, strings.Count(text, `"`+ph+`":`), "the request URL, the Location header and the parse error are all cut")
 }
 
 func TestScrubText_SecretInsideAList(t *testing.T) {
