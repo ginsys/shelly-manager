@@ -284,6 +284,10 @@ Found by reading the code at this commit; not a plan.
 5. **No generated API client and no checked coverage.** The 117 functions are written by hand, and
    section 1 of this file is recomputed by hand. A script or CI check that regenerates it would stop
    this file going stale again.
-6. **44 `alert(` calls remain in 15 pages** where `useError` and `ErrorDisplay` should show the
-   error (ginsys/shelly-manager#614). Command:
+6. **28 `alert(` calls remain in 11 pages** where `useError` and `ErrorDisplay` should show the
+   error (ginsys/shelly-manager#614). The devices list, device, device configuration and
+   configuration history pages are done: a failure shows in an error panel where it happened, and an
+   apply result shows in a card on the configuration page. A failure that arrives after the user
+   left the page, or while a modal is open, is not shown reliably yet
+   (ginsys/shelly-manager#648). Command:
    `rg -n '\balert\(' ui/src --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**'`.
