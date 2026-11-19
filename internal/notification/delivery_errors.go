@@ -7,6 +7,9 @@ import (
 	"net"
 	"net/url"
 	"syscall"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // A webhook or Slack URL is the credential: its path, query or userinfo carries the token. Go quotes the
@@ -32,4 +35,38 @@ func requestError(what string, err error) error {
 		}
 	}
 	return fmt.Errorf("%s: %s %s", what, ue.Op, class)
+}
+
+// legacyDeliveryErrorPrefixes are the four texts a failed send began with before requestError: each one
+// wrapped the quoted request URL. They are never written any more, so a stored error that starts with one
+// is an old row.
+var legacyDeliveryErrorPrefixes = []string{
+	"failed to send webhook:",
+	"failed to send slack notification:",
+	"failed to create request:",
+	"failed to create slack request:",
+}
+
+// RemoveLegacyDeliveryErrors replaces the whole text of each old failed-send row with its prefix and a
+// note, so a stored URL is no longer readable through the history. It matches the exact prefix and never
+// the URL, and keeps nothing of the old text. It returns the number of rows changed, and a second run
+// changes none. NewService runs it at every start: four LIKE scans of the history table are the cost.
+func RemoveLegacyDeliveryErrors(db *gorm.DB) (int64, error) {
+	if !db.Migrator().HasTable(&NotificationHistory{}) {
+		return 0, nil
+	}
+	var changed int64
+	for _, prefix := range legacyDeliveryErrorPrefixes {
+		note := prefix + " details removed"
+		col := clause.Column{Name: "error"}
+		res := db.Model(&NotificationHistory{}).
+			Where(clause.Like{Column: col, Value: prefix + "%"}).
+			Where(clause.Neq{Column: col, Value: note}).
+			Update("error", note)
+		if res.Error != nil {
+			return changed, res.Error
+		}
+		changed += res.RowsAffected
+	}
+	return changed, nil
 }

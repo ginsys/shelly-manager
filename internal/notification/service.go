@@ -43,6 +43,13 @@ type EmailSMTPConfig struct {
 
 // NewService creates a new notification service
 func NewService(db *gorm.DB, logger *logging.Logger, emailConfig EmailSMTPConfig) *Service {
+	if changed, err := RemoveLegacyDeliveryErrors(db); err != nil {
+		logger.WithFields(map[string]any{"component": "notification", "error": err.Error()}).
+			Warn("Could not rewrite old delivery error texts")
+	} else if changed > 0 {
+		logger.WithFields(map[string]any{"component": "notification", "rows": changed}).
+			Info("Rewrote old delivery error texts that quoted a request URL")
+	}
 	return &Service{
 		db:          db,
 		logger:      logger,
