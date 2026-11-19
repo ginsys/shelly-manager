@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { getAdminKey, requestAdminKey, rejectAdminKey } from './adminKey'
+import { errorEnvelopeCode } from './errorBody'
 
 const env: any = (import.meta as any)?.env || {}
 const runtimeBase: string | undefined = (globalThis as any)?.window?.__API_BASE__
@@ -32,19 +33,21 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error?.config as RetryConfig | undefined
-    const adminGuard =
-      error?.response?.status === 401 && error.response.data?.error?.code === 'UNAUTHORIZED'
-    if (!adminGuard || !config) throw error
+    if (error?.response?.status !== 401 || !config) throw error
+    if ((await errorEnvelopeCode(error.response.data)) !== 'UNAUTHORIZED') throw error
     // The route contract test allows one use of the instance here: api.request(<ident>.config).
 
+    const sentKey = String((config.headers as any)?.Authorization ?? '').replace(/^Bearer /, '')
     if (config._adminKeyRetried) {
       // The key we just sent was refused: no loop, the next key is the operator's act.
-      rejectAdminKey(String((config.headers as any)?.Authorization ?? '').replace(/^Bearer /, ''))
+      rejectAdminKey(sentKey)
       throw error
     }
 
-    const key = await requestAdminKey()
-    if (!key) throw error
+    // A request sent before the operator entered a key (or with an older one) is refused late: the
+    // current key is the one retry, with no second dialog.
+    const current = getAdminKey()
+    if (!(current && current !== sentKey) && !(await requestAdminKey())) throw error
     config._adminKeyRetried = true
     return api.request(error.config)
   },
