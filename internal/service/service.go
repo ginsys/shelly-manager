@@ -1344,6 +1344,11 @@ func (s *ShellyService) GenerateDeviceDriftReport(deviceID uint) (*configuration
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
 
+	// No desired configuration, nothing to report on: say so before the device is contacted.
+	if noDesired := s.ConfigSvc.ConfigurationSvc.RequireDesiredConfig(deviceID); errors.Is(noDesired, configuration.ErrNoDesiredConfig) {
+		return nil, noDesired
+	}
+
 	client, err := s.getClientWithAuthRetry(device)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
