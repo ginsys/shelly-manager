@@ -1046,16 +1046,60 @@ type retryHandler struct {
 }
 
 var (
-	// An assignment to the parameter or to its config, in any operator form.
+	// An assignment to the parameter or to anything under it (error = ...,
+	// error.config = ..., error['config'] ||= ...), in any operator form.
 	retryAssignRe = func(param string) *regexp.Regexp {
 		p := regexp.QuoteMeta(param)
-		return regexp.MustCompile(`(^|[^.\w$])` + p + `\s*(\??\.\s*config\s*)?(\*\*|&&|\|\||\?\?|<<|>>>?|[-+*/%&|^])?=([^=>]|$)`)
+		return regexp.MustCompile(`(^|[^.\w$])` + p + `(\s*(\??\.\s*[\w$]+|\[[^\]]*\]))*\s*(\*\*|&&|\|\||\?\?|<<|>>>?|[-+*/%&|^])?=([^=>]|$)`)
 	}
-	// A declaration of the parameter's name inside the handler.
+	// A declaration that binds the parameter's name again inside the handler:
+	// const|let|var with the name before the next = or ; (so a destructuring
+	// and a for-of count), or a catch clause.
 	retryDeclRe = func(param string) *regexp.Regexp {
-		return regexp.MustCompile(`(^|[^.\w$])(const|let|var)\s+` + regexp.QuoteMeta(param) + `([^\w$]|$)`)
+		p := regexp.QuoteMeta(param)
+		return regexp.MustCompile(`(^|[^.\w$])((const|let|var)\b[^;=]*?(^|[^.\w$])|catch\s*\(\s*)` + p + `([^\w$]|$)`)
 	}
 )
+
+// maskComments blanks the comments of js and keeps its strings, so a comment
+// between two tokens cannot hide an assignment from the scans above. It is a
+// plain scan: a regular expression literal that holds a quote or a comment
+// opener can confuse it.
+func maskComments(js string) string {
+	out := []byte(js)
+	for i := 0; i < len(out); {
+		c := out[i]
+		switch {
+		case c == '\'' || c == '"' || c == '`':
+			for i++; i < len(out) && out[i] != c; i++ {
+				if out[i] == '\\' {
+					i++
+				}
+			}
+			i++
+		case c == '/' && i+1 < len(out) && out[i+1] == '*':
+			end := len(out)
+			for j := i + 2; j+1 < len(out); j++ {
+				if out[j] == '*' && out[j+1] == '/' {
+					end = j + 2
+					break
+				}
+			}
+			for ; i < end; i++ {
+				if out[i] != '\n' {
+					out[i] = ' '
+				}
+			}
+		case c == '/' && i+1 < len(out) && out[i+1] == '/':
+			for ; i < len(out) && out[i] != '\n'; i++ {
+				out[i] = ' '
+			}
+		default:
+			i++
+		}
+	}
+	return string(out)
+}
 
 // recordRetryHandler is called with the axios instance just read, followed by
 // .interceptors. If the call is .response.use(<fulfilled>, <rejected>) and the
@@ -1083,7 +1127,7 @@ func (s *routeScanner) recordRetryHandler() {
 	if param == "" {
 		return
 	}
-	body := string(s.src[args[1].start:args[1].end])
+	body := maskComments(string(s.src[args[1].start:args[1].end]))
 	if retryAssignRe(param).MatchString(body) || retryDeclRe(param).MatchString(body) {
 		return // fail closed: a false positive is a refusal, never a pass
 	}
@@ -1114,6 +1158,21 @@ func (s *routeScanner) handlerParam(start int) string {
 	}
 	paren := w.peek('(')
 	if paren {
+		// The parameter list must close and be followed by => (or, for a
+		// function expression, the body): (error, api.request(x)) is a call
+		// argument, not a handler.
+		_, after, ok := w.callArgs()
+		if !ok {
+			return ""
+		}
+		list := w.probe()
+		list.restore(after)
+		list.skipSpaceComments()
+		arrow := list.peek('=') && list.peekN(1) == '>'
+		body := isFunction && list.peek('{')
+		if !arrow && !body {
+			return ""
+		}
 		w.i++
 		w.skipSpaceComments()
 	} else if isFunction {
