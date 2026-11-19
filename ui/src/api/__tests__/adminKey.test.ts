@@ -187,6 +187,14 @@ describe('adminKey store', () => {
     expect(m.promptMessage.value).toBe('')
   })
 
+  it('keeps the key exactly as typed, spaces included (the server compares exactly)', async () => {
+    const m = await load()
+    const p = m.requestAdminKey()
+    m.submitAdminKey('  pad key  ')
+    await expect(p).resolves.toBe('  pad key  ')
+    expect(m.getAdminKey()).toBe('  pad key  ')
+  })
+
   it('ignores a blank key', async () => {
     const m = await load()
     const p = m.requestAdminKey()

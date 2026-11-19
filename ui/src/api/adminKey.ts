@@ -94,13 +94,13 @@ export function openAdminKeyPrompt(): void {
 }
 
 export function submitAdminKey(key: string): void {
-  const trimmed = key.trim()
-  if (!trimmed) return
-  setAdminKey(trimmed)
+  // Trimming is only for the blank check: the server stores and compares the exact string.
+  if (!key.trim()) return
+  setAdminKey(key)
   declined = false
   promptMessage.value = ''
   promptOpen.value = false
-  settle(trimmed)
+  settle(key)
 }
 
 export function cancelAdminKeyPrompt(): void {
