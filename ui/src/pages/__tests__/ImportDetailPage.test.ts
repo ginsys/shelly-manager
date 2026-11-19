@@ -90,6 +90,8 @@ describe('ImportDetailPage', () => {
     expect(box.find('[data-testid="count-create"]').text()).toContain('2')
     expect(box.find('[data-testid="count-update"]').text()).toContain('1')
     expect(box.find('[data-testid="count-delete"]').text()).toContain('1')
+    // the table sits in a scroll wrapper, so a long resource ID cannot be clipped
+    expect(box.find('.table-wrap table').exists()).toBe(true)
     const rows = box.findAll('tbody tr')
     expect(rows).toHaveLength(4)
     expect(rows[2].text()).toContain('config')

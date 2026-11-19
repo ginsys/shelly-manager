@@ -34,17 +34,19 @@
           <span data-testid="count-update">Update: {{ counts.update }}</span>
           <span data-testid="count-delete">Delete: {{ counts.delete }}</span>
         </p>
-        <table>
-          <thead><tr><th>Type</th><th>Resource</th><th>ID</th><th>Field</th></tr></thead>
-          <tbody>
-            <tr v-for="(c, i) in data.changes" :key="i">
-              <td>{{ c.type }}</td>
-              <td>{{ c.resource }}</td>
-              <td>{{ c.resource_id }}</td>
-              <td>{{ c.field || '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Resource</th><th>ID</th><th>Field</th></tr></thead>
+            <tbody>
+              <tr v-for="(c, i) in data.changes" :key="i">
+                <td>{{ c.type }}</td>
+                <td>{{ c.resource }}</td>
+                <td>{{ c.resource_id }}</td>
+                <td>{{ c.field || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </template>
   </div>
@@ -89,7 +91,8 @@ onMounted(async () => {
 .toolbar { display: flex; align-items: center; gap: 12px; }
 .title { font-size: 20px; margin: 0; }
 .btn { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; color: inherit; }
-.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; padding: 16px; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; padding: 16px; overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .section-title { margin: 0 0 8px 0; font-size: 16px; font-weight: 600; }
 .counts { display: flex; gap: 16px; margin: 0 0 8px 0; }
