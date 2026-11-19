@@ -101,6 +101,8 @@ POST /api/v1/export/preview
 
 ### Result structure (Export)
 
+`duration` is a number of nanoseconds, in the import result as well.
+
 ```
 {
   "success": true,
@@ -112,7 +114,7 @@ POST /api/v1/export/preview
     "record_count": 100,
     "file_size": 4096,
     "checksum": "sha256:...",
-    "duration": "123ms",
+    "duration": 123000000,
     "warnings": []
   },
   "timestamp": "..."
@@ -203,7 +205,7 @@ POST /api/v1/import/preview
     "format": "...",
     "records_imported": 10,
     "records_skipped": 1,
-    "duration": "250ms",
+    "duration": 250000000,
     "changes": [ ... ],
     "warnings": []
   }
