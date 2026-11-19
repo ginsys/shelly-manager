@@ -17,6 +17,9 @@ import { notice, dismissNotice } from '@/composables/useNotice'
   top: 64px;
   right: 16px;
   max-width: 28rem;
+  /* A long error or a short screen scrolls inside the notice, so its Dismiss button stays reachable. */
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   z-index: 1500;
 }
 </style>
