@@ -89,6 +89,31 @@ describe('DeviceDetailPage shows a failed action as an error panel', () => {
     expect(alertSpy).not.toHaveBeenCalled()
   })
 
+  it('under the toolbar when the dialog was closed while the save was still open', async () => {
+    let rejectSave: (reason: any) => void = () => {}
+    vi.mocked(updateDevice).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectSave = reject
+        }) as any,
+    )
+    const wrapper = await openPage()
+    await wrapper.get('button[title="Edit Device"]').trigger('click')
+    await wrapper.get('.modal-dialog .btn-primary').trigger('click')
+    await flushPromises() // the save is open
+    await wrapper.get('.modal-dialog .btn-secondary').trigger('click')
+    expect(wrapper.find('.modal-dialog').exists()).toBe(false)
+
+    rejectSave(new Error('the device changed meanwhile'))
+    await flushPromises()
+
+    const panel = wrapper.get('[data-testid="device-action-error"]')
+    expect(panel.text()).toContain('the device changed meanwhile')
+    expect(panel.text()).toContain('Save device')
+    expect(wrapper.find('[data-testid="device-save-error"]').exists()).toBe(false)
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
   it('clears the save message when the dialog is opened again', async () => {
     vi.mocked(updateDevice).mockRejectedValue(new Error('the device changed meanwhile'))
     const wrapper = await openPage()
