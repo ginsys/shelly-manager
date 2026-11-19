@@ -75,7 +75,8 @@ func newAgentToken() (string, error) {
 
 // holdsAdminKey reports whether the request may act for any agent: the admin key, or no admin key configured.
 func (h *Handler) holdsAdminKey(r *http.Request) bool {
-	return h.AdminAPIKey == "" || apikey.Authorized(r, h.AdminAPIKey)
+	key := h.adminKey.Get()
+	return key == "" || apikey.Authorized(r, key)
 }
 
 // agentOf returns the registered agent whose token the request presents, or nil. The caller holds registry.mu.

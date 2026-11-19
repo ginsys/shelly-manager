@@ -36,8 +36,10 @@ type Handler struct {
 	ImportHandlers      *ImportHandlers
 	logger              *logging.Logger
 	securityMonitor     interface{} // Security monitor for metrics (using interface{} to avoid circular imports)
-	// AdminAPIKey provides simple guard for sensitive endpoints until full auth is implemented
-	AdminAPIKey string
+	// adminKey provides simple guard for sensitive endpoints until full auth is implemented. The export,
+	// import and metrics handlers read the same key once ShareAdminKey has run, so a rotation switches
+	// all of them at once.
+	adminKey apikey.Key
 	// AgentAPIKey is the second key, accepted next to the admin key on the provisioner agent
 	// routes only. Empty means the agent routes accept the admin key alone.
 	AgentAPIKey string
@@ -77,18 +79,37 @@ func NewHandlerWithLogger(db database.DatabaseInterface, svc *service.ShellyServ
 }
 
 // SetAdminAPIKey sets the in-memory admin key for guarding sensitive operations.
-func (h *Handler) SetAdminAPIKey(key string) { h.AdminAPIKey = key }
+func (h *Handler) SetAdminAPIKey(key string) { h.adminKey.Set(key) }
+
+// AdminAPIKey returns the current admin key, or "" when none is set.
+func (h *Handler) AdminAPIKey() string { return h.adminKey.Get() }
+
+// ShareAdminKey makes the export, import and metrics handlers read this handler's admin key, so one
+// change of it, RotateAdminKey, switches all of them at once. Call it when the handlers are
+// assembled, after they are attached; their own earlier keys are dropped.
+func (h *Handler) ShareAdminKey() {
+	if h.ExportHandlers != nil {
+		h.ExportHandlers.adminKey.Share(&h.adminKey)
+	}
+	if h.ImportHandlers != nil {
+		h.ImportHandlers.adminKey.Share(&h.adminKey)
+	}
+	if h.MetricsHandler != nil {
+		h.MetricsHandler.ShareAdminKey(&h.adminKey)
+	}
+}
 
 // SetAgentAPIKey sets the in-memory key the provisioner agents send. It opens the agent routes and
 // nothing else.
 func (h *Handler) SetAgentAPIKey(key string) { h.AgentAPIKey = key }
 
-// requireAdmin checks Authorization or X-API-Key against AdminAPIKey.
+// requireAdmin checks Authorization or X-API-Key against the admin key.
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if h.AdminAPIKey == "" {
+	key := h.adminKey.Get()
+	if key == "" {
 		return true
 	}
-	if !apikey.Authorized(r, h.AdminAPIKey) {
+	if !apikey.Authorized(r, key) {
 		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Admin authorization required", nil)
 		return false
 	}
@@ -99,17 +120,19 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 // key as well. With no admin key set the route stays open, as every guarded route does; an unset agent
 // key adds no credential.
 func (h *Handler) requireAgentOrAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if h.AdminAPIKey == "" {
+	key := h.adminKey.Get()
+	if key == "" {
 		return true
 	}
-	if !apikey.Authorized(r, h.AdminAPIKey, h.AgentAPIKey) {
+	if !apikey.Authorized(r, key, h.AgentAPIKey) {
 		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Authorization required", nil)
 		return false
 	}
 	return true
 }
 
-// RotateAdminKey updates the in-memory admin key used by API/WS/export/import handlers.
+// RotateAdminKey updates the in-memory admin key used by API/WS/export/import handlers, all at once
+// (they read one shared key, see ShareAdminKey).
 // Body: {"new_key": "..."}
 func (h *Handler) RotateAdminKey(w http.ResponseWriter, r *http.Request) {
 	// Require current admin privileges
@@ -136,17 +159,8 @@ func (h *Handler) RotateAdminKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update admin key across components
-	h.AdminAPIKey = body.NewKey
-	if h.ExportHandlers != nil {
-		h.ExportHandlers.SetAdminAPIKey(body.NewKey)
-	}
-	if h.ImportHandlers != nil {
-		h.ImportHandlers.SetAdminAPIKey(body.NewKey)
-	}
-	if h.MetricsHandler != nil {
-		h.MetricsHandler.SetAdminAPIKey(body.NewKey)
-	}
+	// One store switches every handler that shares the key (ShareAdminKey).
+	h.adminKey.Set(body.NewKey)
 
 	if h.logger != nil {
 		h.logger.WithFields(map[string]any{

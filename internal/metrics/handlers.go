@@ -24,7 +24,7 @@ type Handler struct {
 	wsHub    *WebSocketHub
 	notifier func(ctx context.Context, alertType, severity, message string)
 
-	adminAPIKey string
+	adminKey apikey.Key
 }
 
 // NewHandler creates a new metrics handler
@@ -43,14 +43,19 @@ func (h *Handler) SetNotifier(fn func(ctx context.Context, alertType, severity, 
 }
 
 // SetAdminAPIKey enables optional admin-key authentication for metrics endpoints (including WebSocket)
-func (h *Handler) SetAdminAPIKey(key string) { h.adminAPIKey = key }
+func (h *Handler) SetAdminAPIKey(key string) { h.adminKey.Set(key) }
+
+// ShareAdminKey makes this handler read src, the API handler's admin key, so one rotation switches
+// both. Its own earlier key is dropped.
+func (h *Handler) ShareAdminKey(src *apikey.Key) { h.adminKey.Share(src) }
 
 // requireAdmin enforces admin key when configured
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if h.adminAPIKey == "" {
+	key := h.adminKey.Get()
+	if key == "" {
 		return true
 	}
-	if !apikey.Authorized(r, h.adminAPIKey) {
+	if !apikey.Authorized(r, key) {
 		response := map[string]any{
 			"success": false,
 			"error": map[string]string{
@@ -268,12 +273,12 @@ func (h *Handler) GetDashboardMetrics(w http.ResponseWriter, r *http.Request) {
 // HandleWebSocket handles WebSocket connections for real-time metrics
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Optional admin key enforcement
-	if h.adminAPIKey != "" {
+	if key := h.adminKey.Get(); key != "" {
 		// A browser cannot set headers on a WebSocket, so the key may also come as ?token=.
 		auth := r.Header.Get("Authorization")
-		ok := apikey.Equal(r.URL.Query().Get("token"), h.adminAPIKey)
+		ok := apikey.Equal(r.URL.Query().Get("token"), key)
 		if !ok && strings.HasPrefix(auth, "Bearer ") {
-			ok = apikey.Equal(strings.TrimPrefix(auth, "Bearer "), h.adminAPIKey)
+			ok = apikey.Equal(strings.TrimPrefix(auth, "Bearer "), key)
 		}
 		if !ok {
 			response := map[string]any{

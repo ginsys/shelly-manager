@@ -315,7 +315,8 @@ func startServer() {
 	// Create API handler with service and logger
 	apiHandler := api.NewHandlerWithLogger(dbManager, shellyService, notificationHandler, metricsHandler, logger)
 
-	// Initialize admin key on handler and subcomponents (if configured)
+	// Initialize the admin key (if configured). The export, import and metrics handlers read this same
+	// key once ShareAdminKey has run below, so a rotation switches all of them at once.
 	if cfg != nil && cfg.Security.AdminAPIKey != "" {
 		apiHandler.SetAdminAPIKey(cfg.Security.AdminAPIKey)
 	}
@@ -345,19 +346,14 @@ func startServer() {
 
 	// Wire sync handlers for export/import functionality
 	syncHandlers := api.NewSyncHandlers(syncEngine, logger)
-	// Protect sensitive endpoints with simple admin key if configured
-	if cfg != nil && cfg.Security.AdminAPIKey != "" {
-		syncHandlers.SetAdminAPIKey(cfg.Security.AdminAPIKey)
-	}
 	// Restrict export downloads to configured directory if provided
 	if cfg != nil && cfg.Export.OutputDirectory != "" {
 		syncHandlers.SetExportBaseDir(cfg.Export.OutputDirectory)
 	}
 	apiHandler.ExportHandlers = syncHandlers
 	apiHandler.ImportHandlers = api.NewImportHandlers(syncEngine, logger)
-	if cfg != nil && cfg.Security.AdminAPIKey != "" {
-		apiHandler.ImportHandlers.SetAdminAPIKey(cfg.Security.AdminAPIKey)
-	}
+	// Protect the export, import and metrics endpoints with the one admin key
+	apiHandler.ShareAdminKey()
 
 	// Build security config from application config
 	secCfg := middleware.DefaultSecurityConfig()
@@ -394,9 +390,10 @@ func startServer() {
 		_, _ = fmt.Fprintln(w, "window.__API_BASE__ = window.__API_BASE__ || '/api/v1';")
 
 		if v := os.Getenv("SHELLY_DEV_EXPOSE_ADMIN_KEY"); strings.EqualFold(v, "1") || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") {
-			if cfg != nil && cfg.Security.AdminAPIKey != "" {
+			// The live key, so a rotation shows here too (also one rotated from an empty start-up key)
+			if key := apiHandler.AdminAPIKey(); key != "" {
 				// Serialize as JSON string to safely escape characters
-				if b, err := json.Marshal(cfg.Security.AdminAPIKey); err == nil {
+				if b, err := json.Marshal(key); err == nil {
 					_, _ = fmt.Fprintf(w, "window.__ADMIN_KEY__ = %s;\n", string(b))
 				}
 			}
@@ -449,10 +446,7 @@ func startServer() {
 
 	// Start WebSocket hub if metrics are enabled
 	if metricsHandler != nil {
-		// Configure WS admin key (optional) using same Admin API key
-		if cfg != nil && cfg.Security.AdminAPIKey != "" {
-			metricsHandler.SetAdminAPIKey(cfg.Security.AdminAPIKey)
-		}
+		// The WebSocket reads the same admin key through apiHandler.ShareAdminKey above
 		wsHub := metricsHandler.GetWebSocketHub()
 		if wsHub != nil {
 			logger.WithFields(map[string]any{

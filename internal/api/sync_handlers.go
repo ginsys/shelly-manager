@@ -26,7 +26,7 @@ type SyncHandlers struct {
 	logger     *logging.Logger
 
 	// Security controls
-	adminAPIKey   string
+	adminKey      apikey.Key
 	exportBaseDir string
 }
 
@@ -49,7 +49,7 @@ func NewExportHandlers(exportEngine *sync.ExportEngine, logger *logging.Logger) 
 // SetAdminAPIKey sets an optional admin API key for RBAC guarding of sensitive endpoints.
 // When set, endpoints in this handler require either `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 func (eh *SyncHandlers) SetAdminAPIKey(key string) {
-	eh.adminAPIKey = key
+	eh.adminKey.Set(key)
 }
 
 // SetExportBaseDir sets an optional base directory for export downloads.
@@ -61,10 +61,11 @@ func (eh *SyncHandlers) SetExportBaseDir(dir string) {
 // requireAdmin checks admin credentials if configured. It writes a standardized
 // error response and returns false when access is denied.
 func (eh *SyncHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if eh.adminAPIKey == "" {
+	key := eh.adminKey.Get()
+	if key == "" {
 		return true
 	}
-	if !apikey.Authorized(r, eh.adminAPIKey) {
+	if !apikey.Authorized(r, key) {
 		eh.logger.WithFields(map[string]any{
 			"path":      r.URL.Path,
 			"method":    r.Method,
