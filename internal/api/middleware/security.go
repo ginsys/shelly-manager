@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -472,7 +473,8 @@ func RequestSizeMiddleware(config *SecurityConfig, logger *logging.Logger) func(
 			if config.MaxRequestSize > 0 {
 				// If Content-Length is known and exceeds the limit, reject immediately
 				if r.ContentLength > 0 && r.ContentLength > config.MaxRequestSize {
-					w.WriteHeader(http.StatusRequestEntityTooLarge)
+					apiresp.NewResponseWriter(logger).WriteError(w, r, http.StatusRequestEntityTooLarge,
+						apiresp.ErrCodeRequestTooLarge, "Request body too large", nil)
 					return
 				}
 				// Otherwise wrap the body to enforce a hard cap during reads

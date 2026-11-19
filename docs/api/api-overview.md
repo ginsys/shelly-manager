@@ -516,6 +516,8 @@ All API responses follow this envelope:
 
 `PUT /devices/{id}/config/auth` takes `{"username", "password"}`. A username with an empty password returns 400 `VALIDATION_FAILED`. An empty username turns device auth off.
 
+**Changed answers.** Five answers did not carry the envelope and now do. `GET /devices/{id}/config/current/normalized` with an id that is not a number was HTTP 200 with a string `error`, and is now 400 `BAD_REQUEST`. A request whose `Content-Length` is over the size limit was 413 with no body, and is now 413 `REQUEST_TOO_LARGE`. `GET /provisioning/status`, `POST /provisioning/provision` and `GET /dhcp/reservations` answered a bare object or array, and a client that read it now reads it from `data`.
+
 ---
 
 ## Security & Middleware

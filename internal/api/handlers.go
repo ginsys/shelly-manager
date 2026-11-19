@@ -623,8 +623,7 @@ func (h *Handler) GetProvisioningStatus(w http.ResponseWriter, r *http.Request) 
 		"auto_provision": false,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, status)
+	h.responseWriter().WriteSuccess(w, r, status)
 }
 
 // ProvisionDevices handles POST /api/v1/provisioning/provision
@@ -634,16 +633,14 @@ func (h *Handler) ProvisionDevices(w http.ResponseWriter, r *http.Request) {
 		"message": "Device provisioning has been initiated",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, response)
+	h.responseWriter().WriteSuccess(w, r, response)
 }
 
 // GetDHCPReservations handles GET /api/v1/dhcp/reservations
 func (h *Handler) GetDHCPReservations(w http.ResponseWriter, r *http.Request) {
 	reservations := []map[string]interface{}{}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, reservations)
+	h.responseWriter().WriteSuccess(w, r, reservations)
 }
 
 // ControlDevice handles POST /api/v1/devices/{id}/control
@@ -843,11 +840,7 @@ func (h *Handler) GetCurrentDeviceConfigNormalized(w http.ResponseWriter, r *htt
 	vars := mux.Vars(r)
 	id, err := strconv.ParseUint(vars["id"], 10, 32)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		h.writeJSON(w, map[string]interface{}{
-			"success": false,
-			"error":   "Invalid device ID",
-		})
+		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
 		return
 	}
 
