@@ -359,7 +359,10 @@ async function handleControl(action: string) {
       fetchDevice()
     }, 1000)
   } catch (e: any) {
-    setActionError(e, { action: 'Control device', resource: 'Device', resourceId: id })
+    const context = { action: 'Control device', resource: 'Device', resourceId: id }
+    // An open edit dialog covers the page panel, so the failure shows inside the dialog then.
+    if (showEditDialog.value) setSaveError(e, context)
+    else setActionError(e, context)
   }
 }
 

@@ -458,6 +458,26 @@ describe('DeviceConfigPage shows no browser dialog', () => {
     expect(wrapper.find('[data-testid="add-template-error"]').exists()).toBe(false)
   })
 
+  it('turns Add off while an add is open, sends one request, and turns it on again after a failure', async () => {
+    let rejectAdd: (reason: any) => void = () => {}
+    api.addDeviceTemplateNew.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => (rejectAdd = reject)) as any,
+    )
+    const { wrapper } = await mountPage()
+    await button(wrapper, '+ Add Template').trigger('click')
+    await wrapper.get('input[placeholder="Enter template ID"]').setValue('5')
+
+    await button(wrapper, 'Add').trigger('click')
+    await flushPromises() // the add is open
+    expect(button(wrapper, 'Add').attributes('disabled')).toBeDefined()
+    await button(wrapper, 'Add').trigger('click')
+    expect(api.addDeviceTemplateNew).toHaveBeenCalledTimes(1)
+
+    rejectAdd(new Error('no such template'))
+    await flushPromises()
+    expect(button(wrapper, 'Add').attributes('disabled')).toBeUndefined()
+  })
+
   it('shows no Retry button on a retryable failure, since nothing handles it', async () => {
     api.verifyDeviceConfigNew.mockRejectedValue(
       Object.assign(new Error('Network Error'), { isAxiosError: true }),

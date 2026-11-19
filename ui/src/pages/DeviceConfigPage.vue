@@ -210,7 +210,7 @@
         </div>
         <div class="modal-actions">
           <button class="btn" @click="closeAddTemplate">Cancel</button>
-          <button class="btn primary" @click="handleAddTemplate">Add</button>
+          <button class="btn primary" :disabled="addingTemplate" @click="handleAddTemplate">Add</button>
         </div>
       </div>
     </div>
@@ -364,7 +364,12 @@ function onTemplateIdInput() {
 // A failure or an apply result that arrives after the page moved to another device is still shown:
 // the apply changed a physical device. The error panel names its device in its context line, and the
 // result card names it when it is not the device on screen.
+// True from the click until the add and its refresh are done. Add is off meanwhile, so two adds never
+// overlap: a second add failing could otherwise hide the first one's failed refresh.
+const addingTemplate = ref(false)
+
 async function handleAddTemplate() {
+  if (addingTemplate.value) return
   clearAddError()
   if (!newTemplateId.value) {
     addIdError.value = 'Template ID is required'
@@ -375,6 +380,7 @@ async function handleAddTemplate() {
 
   const id = deviceId.value
   const generation = routeGeneration
+  addingTemplate.value = true
   try {
     await store.addTemplate(
       id, 
@@ -397,6 +403,8 @@ async function handleAddTemplate() {
     }
     actionFailed.value = true
     setAddError(e, context)
+  } finally {
+    if (routeGeneration === generation) addingTemplate.value = false
   }
 }
 
@@ -522,6 +530,7 @@ watch(deviceId, (next, previous) => {
   loadOverrides(null)
   editOverrides.value = false
   showAddTemplate.value = false
+  addingTemplate.value = false
   newTemplateId.value = null
   newTemplatePosition.value = null
   addIdError.value = ''
