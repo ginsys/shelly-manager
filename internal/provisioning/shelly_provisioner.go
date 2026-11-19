@@ -28,6 +28,9 @@ func NewShellyProvisioner(logger *logging.Logger, netIface NetworkInterface) *Sh
 		netIface: netIface,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			// A request goes to the device address it was given and nowhere else: a redirect
+			// is returned as a response, never followed.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
 }
@@ -688,7 +691,8 @@ func (sp *ShellyProvisioner) makeDeviceRequest(ctx context.Context, method, url 
 		}
 	}()
 
-	if resp.StatusCode >= 400 {
+	// Any answer but 2xx is a refusal: a redirect is not followed, so a 3xx is not a success.
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("device returned error %d: %s", resp.StatusCode, string(respBody))
 	}
