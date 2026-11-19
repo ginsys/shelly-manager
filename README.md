@@ -169,7 +169,10 @@ The PostgreSQL credentials can stay out of the DSN: set `SHELLY_DATABASE_USERNAM
 `SHELLY_DATABASE_PASSWORD` (`database.username` and `database.password`) and give a DSN without them,
 for example `postgresql://db.example:5432/shelly`. The app puts them into the URL with the escaping a
 password needs. A DSN that carries credentials as well is refused, and so is a DSN query other than
-`sslmode`, `connect_timeout`, `application_name`, `search_path`, `sslcert`, `sslkey` and `sslrootcert`.
+`sslmode`, `connect_timeout`, `application_name`, `search_path`, `sslcert`, `sslkey`, `sslrootcert`,
+`sslcertmode`, `sslsni`, `sslnegotiation`, `channel_binding`, `require_auth`, `target_session_attrs`,
+`statement_cache_capacity` and `description_cache_capacity`: the keys that could carry a credential, a
+host or a user (`user`, `password`, `passfile`, `service`, `servicefile`, `sslpassword`, `host`) stay refused.
 The MySQL provider refuses the two settings, and SQLite ignores them.
 
 ### Database connection pool

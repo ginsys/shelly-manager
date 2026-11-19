@@ -109,6 +109,44 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 		assert.Equal(t, "x", u.Query().Get("application_name"))
 	})
 
+	// Each key below is a pgx client option (read in pgconn/config.go or conn.go) that
+	// names no credential, host or user, so it may stay in the DSN next to the two fields.
+	for key, value := range map[string]string{
+		"target_session_attrs":       "read-write",
+		"sslcertmode":                "disable",
+		"sslsni":                     "0",
+		"sslnegotiation":             "direct",
+		"channel_binding":            "require",
+		"require_auth":               "scram-sha-256",
+		"statement_cache_capacity":   "64",
+		"description_cache_capacity": "64",
+	} {
+		t.Run("the client option "+key+" is accepted next to the two fields", func(t *testing.T) {
+			p := newCredentialProvider(DatabaseConfig{Username: "shelly", Password: trickyPassword})
+
+			dsn, err := p.buildDSN("postgresql://db.example/shelly?sslmode=disable&"+key+"="+value, nil)
+
+			require.NoError(t, err)
+			u, err := url.Parse(dsn)
+			require.NoError(t, err)
+			assert.Equal(t, value, u.Query().Get(key))
+			got, _ := u.User.Password()
+			assert.Equal(t, trickyPassword, got, "the configured credentials still win")
+		})
+	}
+
+	t.Run("the refusal names every key the guard accepts", func(t *testing.T) {
+		p := newCredentialProvider(DatabaseConfig{Username: "shelly"})
+
+		_, err := p.buildDSN("postgresql://db.example/shelly?password=x", nil)
+
+		require.Error(t, err)
+		require.NotEmpty(t, credentialSafeQueryKeys)
+		for key := range credentialSafeQueryKeys {
+			assert.Contains(t, err.Error(), key)
+		}
+	})
+
 	// database.options.sslmode and database.options.connect_timeout are appended to the
 	// DSN after the query check ran, so a value holding "&" must stay one value.
 	for name, tc := range map[string]struct {
@@ -151,6 +189,11 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 		"sslpassword parameter":      "postgresql://db.example/shelly?sslpassword=inline_pw",
 		"passfile parameter":         "postgresql://db.example/shelly?passfile=/inline_pw",
 		"service parameter":          "postgresql://db.example/shelly?service=inline_pw",
+		"servicefile parameter":      "postgresql://db.example/shelly?servicefile=/inline_pw",
+		"host parameter":             "postgresql://db.example/shelly?host=inline_pw",
+		"pool_max_conns parameter":   "postgresql://db.example/shelly?pool_max_conns=inline_pw",
+		"statement_cache_mode":       "postgresql://db.example/shelly?statement_cache_mode=inline_pw",
+		"role setting":               "postgresql://db.example/shelly?role=inline_pw",
 		"a key with no value":        "postgresql://db.example/shelly?inline_pw",
 	} {
 		t.Run("a DSN with "+name+" and the two fields is refused without printing either", func(t *testing.T) {
