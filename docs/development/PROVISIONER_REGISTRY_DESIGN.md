@@ -357,7 +357,7 @@ Three details matter:
    replaced may finish after it, for the length of one request. Closing that
    needs a row lock on the agent row shared by the register and the claim
    (`SELECT ... FOR UPDATE`, which SQLite does not have, but SQLite has one
-   writer at a time). The note leaves that choice to the build plan.
+   writer at a time). Decision 11 asks for that choice.
    The number of tasks per poll is small. A side effect: the database can order
    the result by `priority` and `created_at`, where the map walk today is in
    random order.
