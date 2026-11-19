@@ -190,7 +190,9 @@
           <p class="form-note" data-testid="bulk-download-notice">{{ maskNotice }}</p>
 
           <div class="form-actions">
-            <button type="button" class="btn" @click="operation = null">Back</button>
+            <button type="button" class="btn" :disabled="downloading" @click="operation = null">
+              Back
+            </button>
             <button
               type="submit"
               class="btn primary"

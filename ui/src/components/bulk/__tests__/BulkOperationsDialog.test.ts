@@ -401,6 +401,28 @@ describe('BulkOperationsDialog', () => {
 
       expect(bulkDownload).not.toHaveBeenCalled()
     })
+
+    it('keeps Back off while the request is pending, then opens the card on the form and not on a summary', async () => {
+      let answer!: (value: unknown) => void
+      vi.mocked(bulkDownload).mockReturnValue(new Promise((resolve) => (answer = resolve)) as any)
+      const wrapper = await openForm()
+      await byId(wrapper, 'bulk-download-submit').trigger('submit')
+
+      const back = () => wrapper.findAll('button').find((b) => b.text() === 'Back')!
+      expect(back().attributes('disabled')).toBeDefined()
+
+      answer(answerOf([readable]))
+      await flushPromises()
+      // The file was saved once, for the form the operator stayed on.
+      expect(clicks).toHaveLength(1)
+      await byId(wrapper, 'bulk-download-close').trigger('click')
+
+      // Reopened for the same devices: the card opens on the form, not on the old summary.
+      await wrapper.setProps({ isOpen: true })
+      await byId(wrapper, 'bulk-op-download').trigger('click')
+      expect(byId(wrapper, 'bulk-download-submit').exists()).toBe(true)
+      expect(byId(wrapper, 'bulk-download-saved').exists()).toBe(false)
+    })
   })
 
   it('emits close from the header button', async () => {
