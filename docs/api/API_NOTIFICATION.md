@@ -49,7 +49,9 @@ Type-specific config examples:
 
 A channel's config holds credentials for its destination: a webhook `url` and `webhook_url` (a Slack or
 Discord webhook URL is the token), every value under `headers` (such as `Authorization`), and any key named
-like a secret (`secret`, `token`, `password`, `api_key`, ...).
+like a secret (`secret`, `token`, `password`, `api_key`, ...). Key names are matched without regard to case
+(`URL` and `Headers` are accepted by the server, so they are credentials too). A key that holds a list or an
+object under a secret name is secret as a whole.
 
 - **Reads.** `GET /notifications/channels`, `GET /notifications/rules`, `GET /notifications/history` and the
   `POST /notifications/channels` response send `********` in place of each of these. The same holds for the
@@ -59,10 +61,13 @@ like a secret (`secret`, `token`, `password`, `api_key`, ...).
   so a client that read the config can send it back with one field changed. Any other value is a new credential and
   replaces the stored one. A credential left out is removed: an update replaces the whole config, as before.
   The placeholder is never stored: where nothing is stored for it, it is dropped, and a channel left without a
-  required `url` or `webhook_url` is refused.
+  required `url` or `webhook_url` is refused. A secret list (`"token_list": ["a", "b"]`) comes back whole only
+  when every entry is `********` and the stored list has as many entries; any other `********` inside a list is
+  dropped. To change one entry, send the whole list with its new values.
 - **Errors.** A failed delivery's error text quotes its destination. `GET /notifications/history` (`error`) and
   `POST /notifications/channels/{id}/test` (the 500 message) show `********` where the text held a stored
-  credential. An `error` stored before a channel's URL changed keeps the old URL, because the cut uses the current
+  credential, in the spelling it was stored in and in the spelling Go writes for it (percent-encoded, or with
+  control characters escaped). An `error` stored before a channel's URL changed keeps the old URL, because the cut uses the current
   config.
 
 ## Rule object (selected fields)
