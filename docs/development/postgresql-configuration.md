@@ -16,9 +16,9 @@ database:
     key: "value"
   max_open_conns: 25                       # Maximum concurrent connections (default when unset: 25)
   max_idle_conns: 5                        # Maximum idle connections (default when unset: 5)
-  conn_max_lifetime: "1h"                  # Maximum connection lifetime
-  conn_max_idle_time: "10m"                # Maximum connection idle time
-  slow_query_threshold: "200ms"            # Slow query detection threshold
+  conn_max_lifetime: 3600                  # Maximum connection lifetime in seconds (unset or 0: 300)
+  conn_max_idle_time: 600                  # Maximum connection idle time in seconds (unset or 0: 600)
+  slow_query_time: 200                     # Slow query threshold in milliseconds (unset or 0: 500)
   log_level: "warn"                        # Logging level for database operations
 ```
 
@@ -150,8 +150,8 @@ database:
 database:
   max_open_conns: 10                      # Lower concurrency
   max_idle_conns: 2                       # Minimal idle connections
-  conn_max_lifetime: "30m"                # Shorter lifetime for development
-  conn_max_idle_time: "5m"                # Quick cleanup
+  conn_max_lifetime: 1800                # Shorter lifetime for development
+  conn_max_idle_time: 300                # Quick cleanup
 ```
 
 #### Production Environment
@@ -159,8 +159,8 @@ database:
 database:
   max_open_conns: 50                      # Higher concurrency
   max_idle_conns: 10                      # Maintain ready connections
-  conn_max_lifetime: "2h"                 # Longer lifetime for stability
-  conn_max_idle_time: "15m"               # Balanced cleanup
+  conn_max_lifetime: 7200                 # Longer lifetime for stability
+  conn_max_idle_time: 900               # Balanced cleanup
 ```
 
 #### High-Traffic Environment
@@ -168,8 +168,8 @@ database:
 database:
   max_open_conns: 100                     # Maximum concurrency
   max_idle_conns: 25                      # High idle count
-  conn_max_lifetime: "4h"                 # Very long lifetime
-  conn_max_idle_time: "30m"               # Extended idle time
+  conn_max_lifetime: 14400                 # Very long lifetime
+  conn_max_idle_time: 1800               # Extended idle time
 ```
 
 ### Pool Sizing Calculation
@@ -192,7 +192,7 @@ database:
 #### Slow Query Detection
 ```yaml
 database:
-  slow_query_threshold: "200ms"           # Log queries slower than 200ms
+  slow_query_time: 200           # Log queries slower than 200ms
   log_level: "warn"                       # Include slow queries in warnings
 ```
 
@@ -231,9 +231,9 @@ database:
     application_name: "shelly-manager-dev"
   max_open_conns: 10
   max_idle_conns: 2
-  conn_max_lifetime: "30m"
-  conn_max_idle_time: "5m"
-  slow_query_threshold: "100ms"
+  conn_max_lifetime: 1800
+  conn_max_idle_time: 300
+  slow_query_time: 100
   log_level: "info"
 ```
 
@@ -250,9 +250,9 @@ database:
     application_name: "shelly-manager-staging"
   max_open_conns: 25
   max_idle_conns: 5
-  conn_max_lifetime: "1h"
-  conn_max_idle_time: "10m"
-  slow_query_threshold: "200ms"
+  conn_max_lifetime: 3600
+  conn_max_idle_time: 600
+  slow_query_time: 200
   log_level: "warn"
 ```
 
@@ -272,9 +272,9 @@ database:
     application_name: "shelly-manager-prod"
   max_open_conns: 50
   max_idle_conns: 10
-  conn_max_lifetime: "2h"
-  conn_max_idle_time: "15m"
-  slow_query_threshold: "500ms"
+  conn_max_lifetime: 7200
+  conn_max_idle_time: 900
+  slow_query_time: 500
   log_level: "error"
 ```
 
@@ -454,8 +454,8 @@ database:
     target_session_attrs: "read-write"  # Connect to primary only
   max_open_conns: 50
   max_idle_conns: 10
-  conn_max_lifetime: "1h"
-  conn_max_idle_time: "10m"
+  conn_max_lifetime: 3600
+  conn_max_idle_time: 600
 ```
 
 ### Read Replica Configuration
@@ -480,7 +480,7 @@ database:
     application_name: "shelly-manager-pooled"
   max_open_conns: 20                    # Lower due to pooler
   max_idle_conns: 5
-  conn_max_lifetime: "10m"              # Shorter for pooled connections
+  conn_max_lifetime: 600              # Shorter for pooled connections
 ```
 
 ## Usage Examples

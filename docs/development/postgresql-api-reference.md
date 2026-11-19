@@ -454,7 +454,7 @@ type DatabaseConfig struct {
 - `MaxIdleConns`: 5
 - `ConnMaxLifetime`: 5 minutes
 - `ConnMaxIdleTime`: 10 minutes
-- `SlowQueryThreshold`: 200ms
+- `SlowQueryThreshold`: 500ms
 - `LogLevel`: "warn"
 
 ### PostgreSQL Options

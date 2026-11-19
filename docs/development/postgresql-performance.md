@@ -39,8 +39,8 @@ Where workload_factor:
 database:
   max_open_conns: 10          # Lower concurrency for dev
   max_idle_conns: 2           # Minimal resource usage
-  conn_max_lifetime: "30m"    # Shorter lifetime for rapid iteration
-  conn_max_idle_time: "5m"    # Quick cleanup
+  conn_max_lifetime: 1800    # Shorter lifetime for rapid iteration
+  conn_max_idle_time: 300    # Quick cleanup
 ```
 
 **Production Environment:**
@@ -48,8 +48,8 @@ database:
 database:
   max_open_conns: 50          # Higher concurrency for production load
   max_idle_conns: 10          # Balance between reuse and resource consumption
-  conn_max_lifetime: "2h"     # Longer lifetime for stability
-  conn_max_idle_time: "15m"   # Reasonable idle timeout
+  conn_max_lifetime: 7200     # Longer lifetime for stability
+  conn_max_idle_time: 900   # Reasonable idle timeout
 ```
 
 **High-Traffic Environment:**
@@ -57,8 +57,8 @@ database:
 database:
   max_open_conns: 100         # Maximum concurrency
   max_idle_conns: 25          # High idle count for rapid reuse
-  conn_max_lifetime: "4h"     # Very long lifetime to minimize churn
-  conn_max_idle_time: "30m"   # Extended idle time
+  conn_max_lifetime: 14400     # Very long lifetime to minimize churn
+  conn_max_idle_time: 1800   # Extended idle time
 ```
 
 ### Connection Pool Monitoring
@@ -136,8 +136,8 @@ func (p *PostgreSQLProvider) optimizePoolSize() {
 ```yaml
 database:
   # Balance connection reuse with resource management
-  conn_max_lifetime: "2h"     # Prevent stale connections
-  conn_max_idle_time: "15m"   # Clean up unused connections
+  conn_max_lifetime: 7200     # Prevent stale connections
+  conn_max_idle_time: 900   # Clean up unused connections
   
   # PostgreSQL-specific timeout settings
   options:
@@ -159,7 +159,7 @@ func (p *PostgreSQLProvider) createGormLogger() logger.Interface {
     return logger.New(
         log.New(&gormLogWriter{logger: p.logger}, "", 0),
         logger.Config{
-            SlowThreshold:             p.config.SlowQueryThreshold,  // Default: 200ms
+            SlowThreshold:             p.config.SlowQueryThreshold,  // Default: 500ms
             LogLevel:                  logLevel,
             IgnoreRecordNotFoundError: true,
             Colorful:                  false,
@@ -643,11 +643,11 @@ database:
   # Optimize for your workload
   max_open_conns: 50                # Match application concurrency
   max_idle_conns: 10                # 20% of max_open_conns
-  conn_max_lifetime: "2h"           # Balance between reuse and freshness
-  conn_max_idle_time: "15m"         # Clean up idle connections
+  conn_max_lifetime: 7200           # Balance between reuse and freshness
+  conn_max_idle_time: 900         # Clean up idle connections
   
   # Query performance
-  slow_query_threshold: "200ms"     # Detect performance issues early
+  slow_query_time: 200     # Detect performance issues early
   
   # PostgreSQL-specific optimizations
   options:

@@ -397,9 +397,9 @@ database:
     application_name: "shelly-manager"
   max_open_conns: 25
   max_idle_conns: 5
-  conn_max_lifetime: "1h"
-  conn_max_idle_time: "10m"
-  slow_query_threshold: "200ms"
+  conn_max_lifetime: 3600
+  conn_max_idle_time: 600
+  slow_query_time: 200
   log_level: "warn"
 EOF
 
@@ -482,8 +482,7 @@ database:
   dsn: "file:./data/shelly.db?_foreign_keys=on&_journal_mode=WAL"
   max_open_conns: 1
   max_idle_conns: 1
-  conn_max_lifetime: "0"
-  slow_query_threshold: "100ms"
+  slow_query_time: 100
 ```
 
 #### After Migration (PostgreSQL)
@@ -497,9 +496,9 @@ database:
     application_name: "shelly-manager"
   max_open_conns: 25
   max_idle_conns: 5
-  conn_max_lifetime: "1h"
-  conn_max_idle_time: "10m"
-  slow_query_threshold: "200ms"
+  conn_max_lifetime: 3600
+  conn_max_idle_time: 600
+  slow_query_time: 200
   log_level: "warn"
 ```
 
