@@ -238,8 +238,10 @@ func (rl *RateLimiter) matchRule(path string) (limit int, counterKey string, ok 
 }
 
 // matchPathKey reports whether path starts with key, with {id} matching one non-empty segment, and
-// returns the matched part of path.
+// returns the matched part of path. A numeric id loses its leading zeros, so 7 and 07 give one
+// counter: the routes parse the id as a decimal number.
 func matchPathKey(key, path string) (string, bool) {
+	var matched strings.Builder
 	pos := 0
 	for i, part := range strings.Split(key, "{id}") {
 		if i > 0 {
@@ -250,14 +252,29 @@ func matchPathKey(key, path string) (string, bool) {
 			if segment == 0 {
 				return "", false
 			}
+			matched.WriteString(canonicalID(path[pos : pos+segment]))
 			pos += segment
 		}
 		if !strings.HasPrefix(path[pos:], part) {
 			return "", false
 		}
+		matched.WriteString(part)
 		pos += len(part)
 	}
-	return path[:pos], true
+	return matched.String(), true
+}
+
+// canonicalID drops the leading zeros of an all-digit id and leaves any other id as it is.
+func canonicalID(id string) string {
+	for _, c := range id {
+		if c < '0' || c > '9' {
+			return id
+		}
+	}
+	if trimmed := strings.TrimLeft(id, "0"); trimmed != "" {
+		return trimmed
+	}
+	return "0"
 }
 
 // cleanup removes old client entries
