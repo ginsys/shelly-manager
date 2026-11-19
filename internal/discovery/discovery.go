@@ -66,6 +66,9 @@ func NewScannerWithLogger(timeout time.Duration, concurrentScans int, logger *lo
 		concurrentScans: concurrentScans,
 		httpClient: &http.Client{
 			Timeout: timeout,
+			// A scan sends requests to the addresses it was given and nowhere else, so a
+			// redirect is returned as a response, never followed.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 		logger: logger,
 	}
