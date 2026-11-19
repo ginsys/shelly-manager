@@ -289,6 +289,19 @@ var ErrDeviceVersionChanged = errors.New("the device row changed since it was re
 // model and needs no entry.
 var deviceConfigColumns = []string{"template_ids", "overrides", "desired_config", "config_applied"}
 
+// nextDeviceVersion is the updated_at that a write of a device stores over the stored one: the clock,
+// but at least a millisecond past stored. MySQL counts changed rows and keeps milliseconds, so a
+// write inside the stored millisecond would count zero rows and look like a conflict, and would leave
+// a PUT that read the older row passing its version check. Every writer that moves the version uses
+// it (ginsys/shelly-manager#580).
+func nextDeviceVersion(stored time.Time) time.Time {
+	next := time.Now()
+	if min := stored.Add(time.Millisecond); next.Before(min) {
+		return min
+	}
+	return next
+}
+
 // UpdateDeviceIfVersion is the save of the device PUT. It writes every column of the device that
 // the PUT owns, which is all of them except deviceConfigColumns, but only where the stored
 // updated_at is still version. Check and save are one UPDATE, so no writer can commit between them.
@@ -299,14 +312,8 @@ func (m *Manager) UpdateDeviceIfVersion(device *Device, version time.Time) error
 	if err := m.keepStoredTimes(device); err != nil {
 		return err
 	}
-	// The new updated_at is at least a millisecond past the old one, so the UPDATE changes the row
-	// on every driver. MySQL counts changed rows and keeps milliseconds, so a save inside the same
-	// millisecond would otherwise count zero rows and look like a conflict.
 	// GORM stamps updated_at from its own clock on an update, so that clock is the one to set.
-	next := time.Now()
-	if min := version.Add(time.Millisecond); next.Before(min) {
-		next = min
-	}
+	next := nextDeviceVersion(version)
 	device.UpdatedAt = next
 	db := m.GetDB().Session(&gorm.Session{NowFunc: func() time.Time { return next }})
 	result := db.Model(device).Where("updated_at = ?", version).Select("*").Omit(deviceConfigColumns...).Updates(device)
@@ -412,11 +419,7 @@ func writeDeviceColumns(db *gorm.DB, id uint, columns map[string]any, moveVersio
 			if err := db.Clauses(clause.Locking{Strength: "UPDATE"}).Select("updated_at").Where("id = ?", id).First(&stored).Error; err != nil {
 				return err
 			}
-			next := time.Now()
-			if min := stored.UpdatedAt.Add(time.Millisecond); next.Before(min) {
-				next = min
-			}
-			columns["updated_at"] = next
+			columns["updated_at"] = nextDeviceVersion(stored.UpdatedAt)
 			query = query.Where("updated_at = ?", stored.UpdatedAt)
 		}
 		result := query.UpdateColumns(columns)
