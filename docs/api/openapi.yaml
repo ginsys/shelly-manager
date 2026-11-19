@@ -3349,7 +3349,7 @@ paths:
               properties:
                 new_key:
                   type: string
-                  description: The new admin key. It must not be blank and must not start or end with whitespace, because a header value loses that whitespace and the key could never be presented again.
+                  description: The new admin key. It must not be blank and must not start or end with whitespace, because header handling drops it (always at the end, and at the start in `X-API-Key`), so the key could not be presented reliably.
               required:
                 - new_key
       responses:
