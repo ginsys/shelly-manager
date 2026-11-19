@@ -1,7 +1,8 @@
 # Provisioner registry in the database, and agent enrolment
 
 Status: proposal for ginsys/shelly-manager#638. Nothing in this note is built.
-Read at origin/main 147080796e83 (cites are `file:line` at that commit).
+Read at origin/main 147080796e83 (cites are `file:line` at that commit). Every
+cited file is the same at 6343b21c3fda, the base this note sits on.
 
 ## Summary
 
@@ -62,9 +63,15 @@ The decisions that need an owner are at the end ("Decisions needed").
 - `PollTasks` (`:226`) gives the caller every task whose status is `pending`
   and whose agent is empty or the caller, and marks it `assigned` to the caller
   (`:254-259`). A task with no agent is claimable by any registered agent. That
-  is by design, and the UI creates tasks without an agent
-  (ginsys/shelly-manager#638). `CreateProvisioningTask` stores the task in
-  memory (`:337`, store at `:376`).
+  is by design, and the UI creates tasks without an agent (`createTaskLocked`
+  sets no `AgentID`: `internal/api/provisioning_ui_handlers.go:227-235`, used
+  by `CreateProvisioningTaskUI` at `:215` and `BulkProvisionUI` at `:307`).
+  `CreateProvisioningTask` stores the task in memory (`:337`, store at `:376`).
+- **A second set of handlers uses the same `registry`.** The admin UI routes
+  under `/api/v1/provisioning/` (`internal/api/router_routes.go:227-233`) list,
+  read, create, cancel and bulk-create tasks, and list and read agents
+  (`provisioning_ui_handlers.go:142-361`). Each checks the admin key itself. The
+  store of slice 1 serves them too; see "The store".
 - The discovered devices an agent reports are already in the database
   (`database.DiscoveredDevice`, `internal/database/models.go:62`). They carry
   the agent id as a plain string, with no foreign key.
@@ -73,16 +80,20 @@ The decisions that need an owner are at the end ("Decisions needed").
 
 - The agent id is `provisioner-<hostname>-<pid>` (`generateAgentID`,
   `cmd/shelly-provisioner/main.go:403`), computed at each start. On a host the
-  pid changes on each start, so a restarted agent has a new id. In a container
-  the pid is usually 1 and the hostname is stable across a restart, so a
-  restarted agent keeps its id.
+  pid changes on each start, so a restarted agent has a new id. In the shipped
+  image the agent is the container's first process (exec-form `CMD`,
+  `deploy/docker/Dockerfile.provisioner:60`), so the pid is 1. The shipped
+  Kubernetes agent is a DaemonSet with `hostNetwork: true`
+  (`deploy/kubernetes/kustomize/base/deployment.yaml:128`, `:149`), so the
+  hostname is the node's. A restarted container there keeps its id.
 - The token is kept in memory only (`internal/provisioning/api_client.go:25`).
   A restarted agent has no token.
 - The agent polls every `provisioning.provision_interval` seconds
   (`main.go:130-133`). The code falls back to 30 seconds only when that value is
   zero or less. The configuration default is **600 seconds**
   (`internal/config/config.go:276`), and the shipped Kubernetes agent sets 600
-  (`deploy/kubernetes/kustomize/base/deployment.yaml:183-184`). Only the shipped
+  (the DaemonSet,
+  `deploy/kubernetes/kustomize/base/deployment.yaml:183-184`). Only the shipped
   agent config file sets 30 (`configs/shelly-provisioner.yaml:12`). Before each
   poll the agent calls `EnsureRegistered` (`main.go:447`; `api_client.go:171`).
   On a 401 or 404 from a poll it drops its registration, so the next poll
@@ -92,6 +103,9 @@ The decisions that need an owner are at the end ("Decisions needed").
   each cycle, and the takeover rule (`:153`) allows a register of its id by any
   agent-key holder for about half of each cycle. So for the shipped Kubernetes
   agent, limit 3 is open for about half of the time, not only after an outage.
+  Only a poll, a register or a discovery report moves `last_seen`
+  (`provisioner_handlers.go:191`, `:249`, `:491`), so a discovery report in the
+  middle of the cycle shortens the open part.
 - The agent sends the agent key as `Authorization: Bearer` and the token as
   `X-Agent-Token` (`api_client.go`, `makeRequest`).
 
@@ -129,7 +143,9 @@ Each replica has its own `registry`. With more than one replica:
   discovered devices of that task are discarded, and the task status update
   cannot run while the agent is unregistered.
 - A task created on replica A is visible and claimable only by polls that land
-  on A. A status report that lands on replica B finds no task.
+  on A. A status report that lands on replica B is refused: 401 when B does not
+  know the agent's token, 403 when it does (an unknown task is nobody's task,
+  `provisioner_handlers.go:303-310`). An admin-key caller gets 404.
 - The wait in the table above shows only when the register request lands on the
   replica that holds the old record. On any other replica there is no record
   and the register succeeds at once.
@@ -183,7 +199,7 @@ public id (as `ExportHistory.ExportID` does).
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uint, primary key | |
-| `task_id` | string, `size:191`, unique index | Today `task_<unixnano>`, made in `CreateProvisioningTask` (`provisioner_handlers.go:337`). The API keeps its string id. |
+| `task_id` | string, `size:191`, unique index | Today `task_<unixnano>`, made in `CreateProvisioningTask` (`provisioner_handlers.go:358`) and in `createTaskLocked` (`provisioning_ui_handlers.go:222`). The API keeps its string id. |
 | `type`, `status` | string, `size:191`; `status` indexed | |
 | `device_mac`, `target_ssid` | string | |
 | `config` | text, size to decide | JSON. See "Column types" for the size, and "Risk". |
@@ -206,7 +222,8 @@ public id (as `ExportHistory.ExportID` does).
   says it adds a limit.** The handlers check very little. `RegisterAgent` checks
   only that `id` and `hostname` are not empty (`provisioner_handlers.go:116-133`)
   and `CreateProvisioningTask` checks only the task type (`:338-354`). The
-  request limit is 10 MiB (`internal/api/middleware/security.go:80`). Two kinds
+  request limit is 10 MiB (the default, `internal/api/middleware/security.go:80`,
+  applied at `:473-481` and built in `cmd/shelly-manager/main.go:366`). Two kinds
   of column follow from that:
   - **Free text the client supplies**: task `config`, and agent `capabilities`
     and `metadata`. `TEXT` on MySQL holds about 64 KiB, so a plain `type:text`
@@ -220,8 +237,9 @@ public id (as `ExportHistory.ExportID` does).
     adding limits.
   - **Indexed strings** (`agent_id`, `task_id`, `token_hash`, and the task
     `status`, `type` and `agent_id`): `size:191` is a real limit on MySQL and,
-    through `varchar(191)`, on PostgreSQL (the pinned GORM PostgreSQL driver maps
-    `size:191` to `varchar(191)`; SQLite does not enforce a length). These are
+    through `varchar(191)`, on PostgreSQL (the pinned GORM PostgreSQL driver,
+    `go.mod:26`, maps a sized string to `varchar(<size>)`: `postgres.go:254-257`
+    in `gorm.io/driver/postgres` v1.6.3; SQLite does not enforce a length). These are
     **new restrictions** on what today's handlers accept. The build slice
     validates them on every provider (a 400 with a clear message for an id, task
     type or status longer than 191 characters) and lists them in the API doc
@@ -285,8 +303,14 @@ Tests the build slice adds:
 The registry becomes a store behind an interface on `Handler`. The handler
 keeps the authentication rules (`authorizeAgent` stays where it is). The store
 holds the rows. Rough methods: register or replace an agent, find an agent by
-token hash, touch `last_seen`, list agents, create a task, claim tasks for an
-agent, update a task's status, delete an agent.
+token hash, touch `last_seen`, list and get agents, create, list and get tasks,
+claim tasks for an agent, update a task's status, cancel a task, delete an
+agent. The admin UI handlers (`provisioning_ui_handlers.go:142-361`) use the
+same store. The cancel today sets the status to `failed` and writes
+`config["_error"] = "canceled"` on a task that is `pending`, `assigned` or
+`in_progress` (`:269-276`). That edits the JSON in `config`, so in the store it
+is a read and a write of the row in one transaction, with the status test in
+the write.
 
 Three details matter:
 
@@ -341,10 +365,12 @@ Three details matter:
    is 2,880 writes a day, and every 600 seconds is 144. For a few agents this is
    negligible, and the note does not propose a write throttle.
 
-The cost: the tests that today reset or fill `registry` directly
-(`internal/api/provisioner_client_e2e_test.go:23`,
-`internal/api/provisioner_discovered_devices_test.go`) move to the store. That
-is a test change of known size, in the files that already touch the global.
+The cost: the tests that today reset or fill `registry` directly move to the
+store. Five test files in `internal/api` use `registry.`
+(`provisioner_client_e2e_test.go:23`, `provisioner_handlers_test.go`,
+`provisioning_ui_handlers_test.go`, `provisioner_discovered_devices_test.go`,
+`provisioner_identity_test.go`). That is a test change in the files that
+already touch the global, and its size is for the build plan to count.
 
 A SQLite database file is for one manager process, so a SQLite deployment has
 one registry, as today. That is a deployment requirement and not a guarantee:
@@ -667,8 +693,10 @@ A token is a credential. These are the rules for it.
   because the header carries the token and the manager hashes it. It also leaks
   task `config` in plain text. `Device.Settings` and `Device.DesiredConfig`
   are already plain-text columns in the same database (`models.go:25`, `:35`)
-  and the codebase has no encryption at rest for them, so a task `config` adds
-  no new class of data at rest. It is still a decision (below).
+  and the database package has no field encryption (`rg -i encrypt` over
+  `internal/database` finds one hit, the `Encryption` option of a backup
+  config, `provider/interface.go:165`), so a task `config` adds no new class of data
+  at rest. It is still a decision (below).
 
 ## What this does not solve
 
