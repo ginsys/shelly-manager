@@ -1,0 +1,2 @@
+Fixed
+- The PostgreSQL provider now accepts the pgx client options `target_session_attrs`, `sslcertmode`, `sslsni`, `sslnegotiation`, `channel_binding`, `require_auth`, `statement_cache_capacity` and `description_cache_capacity` in the DSN next to `database.username` and `database.password`. Every key that could carry a credential, a host or a user is still refused. Fixes ginsys/shelly-manager#590.

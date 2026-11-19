@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -334,10 +336,20 @@ func (p *PostgreSQLProvider) validateDSNInput(dsn string) error {
 }
 
 // credentialSafeQueryKeys are the DSN query keys accepted when
-// database.username or database.password is set.
+// database.username or database.password is set. Each is a client option pgx
+// reads itself (pgconn/config.go, conn.go) or a server setting that names no
+// identity, and none names a credential, a host or a user. A key that is not
+// listed is refused, so the keys that override them stay out: user, password,
+// passfile, service, servicefile, sslpassword, host, port and database, and
+// any key pgx would send to the server as a setting (role, for one).
+// default_query_exec_mode is not listed either: validateDSNInput refuses the
+// text "EXEC" in any DSN, so listing it here would change nothing.
 var credentialSafeQueryKeys = map[string]bool{
 	"sslmode": true, "connect_timeout": true, "application_name": true, "search_path": true,
 	"sslcert": true, "sslkey": true, "sslrootcert": true,
+	"sslcertmode": true, "sslsni": true, "sslnegotiation": true,
+	"channel_binding": true, "require_auth": true, "target_session_attrs": true,
+	"statement_cache_capacity": true, "description_cache_capacity": true,
 }
 
 // errDSNNotAURL is what a DSN that url.Parse refused reports. url.Error quotes
@@ -396,7 +408,8 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 			for _, pair := range strings.Split(baseQuery[1], "&") {
 				key, _, _ := strings.Cut(pair, "=")
 				if !credentialSafeQueryKeys[key] {
-					return "", fmt.Errorf("the DSN query holds a parameter that is not allowed together with database.username (allowed: sslmode, connect_timeout, application_name, search_path, sslcert, sslkey, sslrootcert)")
+					return "", fmt.Errorf("the DSN query holds a parameter that is not allowed together with database.username (allowed: %s)",
+						strings.Join(slices.Sorted(maps.Keys(credentialSafeQueryKeys)), ", "))
 				}
 			}
 		}
