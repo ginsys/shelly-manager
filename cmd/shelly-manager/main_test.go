@@ -300,22 +300,13 @@ discovery:
 		}
 	})
 
+	// The address is checked before any probe, so this reaches no network. A run against an
+	// address that no device answers is covered in discover_added_test.go with a fake probe: the
+	// binary has no fake, and a real probe would leave the machine.
 	t.Run("add command with invalid IP", func(t *testing.T) {
 		_, err := runCommand(t, binaryPath, "--config", configPath, "add", "invalid-ip")
 		if err == nil {
 			t.Error("Expected error for add command with invalid IP")
-		}
-	})
-
-	t.Run("add command with unreachable IP", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping network-dependent test in short mode")
-		}
-
-		// Use a non-routable IP address that will timeout quickly
-		_, err := runCommandWithTimeout(t, 5*time.Second, binaryPath, "--config", configPath, "add", "10.255.255.254")
-		if err == nil {
-			t.Error("Expected error for add command with unreachable IP")
 		}
 	})
 }

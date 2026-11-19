@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
-	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/api"
 	"github.com/ginsys/shelly-manager/internal/api/middleware"
@@ -99,7 +100,7 @@ var discoverCmd = &cobra.Command{
 			fmt.Printf("Discovering devices on network %s...\n", network)
 		}
 
-		devices, err := shellyService.DiscoverDevices(network)
+		devices, err := shellyService.DiscoverDevicesReport(network)
 		if err != nil {
 			log.Fatal("Discovery failed:", err)
 		}
@@ -127,17 +128,12 @@ var discoverCmd = &cobra.Command{
 				}
 			}
 
-			// Check if device already exists by MAC
-			_, err := dbManager.GetDeviceByMAC(device.MAC)
-			if err != nil && err == gorm.ErrRecordNotFound {
-				if addErr := dbManager.AddDevice(&device); addErr != nil {
-					log.Printf("Failed to add device %s: %v", device.IP, addErr)
-				} else {
-					fmt.Printf("✓ Added to database\n")
-				}
-			} else if err == nil {
-				// DiscoverDevices already stored what the discovery found about a known device, its
-				// address included, so this command writes nothing more (ginsys/shelly-manager#572).
+			// The discovery has stored the device already, an address included, and it reports
+			// whether this pass created the row, so this command writes nothing more
+			// (ginsys/shelly-manager#572, ginsys/shelly-manager#585).
+			if device.Added {
+				fmt.Printf("✓ Added to database\n")
+			} else {
 				fmt.Printf("• Already in database\n")
 			}
 			fmt.Println(strings.Repeat("-", 80))
@@ -150,29 +146,40 @@ var addCmd = &cobra.Command{
 	Short: "Add a device by IP address",
 	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
-		ip := args[0]
-		name := "Unknown Device"
+		name := ""
 		if len(args) > 1 {
 			name = args[1]
 		}
-
-		// Try to discover the specific device first
-		devices, err := shellyService.DiscoverDevices(ip + "/32")
-		if err != nil || len(devices) == 0 {
-			log.Fatal("Could not discover device at", ip)
+		if err := runAdd(os.Stdout, args[0], name); err != nil {
+			log.Fatal(err)
 		}
-
-		device := devices[0]
-		if name != "Unknown Device" {
-			device.Name = name
-		}
-
-		if err := dbManager.AddDevice(&device); err != nil {
-			log.Fatal("Failed to add device:", err)
-		}
-
-		fmt.Printf("Added device: %s (%s) at %s\n", device.Name, device.Type, device.IP)
 	},
+}
+
+// runAdd discovers the device at ip and reports it. name is empty when none was given.
+func runAdd(w io.Writer, ip, name string) error {
+	if net.ParseIP(ip) == nil {
+		return fmt.Errorf("%q is not an IP address", ip)
+	}
+
+	// The probe stores the device under the name, so there is nothing left to create or save here.
+	// A device that is known keeps the name it has.
+	found, err := shellyService.DiscoverHost(ip, name)
+	if err != nil {
+		return fmt.Errorf("could not discover device at %s: %w", ip, err)
+	}
+	if found == nil {
+		return fmt.Errorf("could not discover device at %s", ip)
+	}
+	device := *found
+
+	if !device.Added {
+		_, err = fmt.Fprintf(w, "Device already known: %s (%s) at %s\n", device.Name, device.Type, device.IP)
+		return err
+	}
+
+	_, err = fmt.Fprintf(w, "Added device: %s (%s) at %s\n", device.Name, device.Type, device.IP)
+	return err
 }
 
 var scanAPCmd = &cobra.Command{

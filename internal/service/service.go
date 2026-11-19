@@ -73,6 +73,9 @@ type ShellyService struct {
 	// discover runs the network discovery. Nil means discovery.CombinedDiscovery.
 	discover DiscoverFunc
 
+	// probe reads one address for DiscoverHost. Nil means discovery.Scanner.ScanHost.
+	probe ProbeFunc
+
 	// beforeClientBuild is a test hook. getClientWithRetry calls it after a cache miss and before
 	// it takes the cache lock to build a client. It is nil in production.
 	beforeClientBuild func()
@@ -89,6 +92,13 @@ type DiscoverFunc func(ctx context.Context, networks []string, timeout time.Dura
 // SetDiscoverFunc replaces the discovery that DiscoverDevices runs. A test uses it so that
 // it never scans a real network. Call it before the first DiscoverDevices.
 func (s *ShellyService) SetDiscoverFunc(fn DiscoverFunc) { s.discover = fn }
+
+// ProbeFunc reads one address and returns the Shelly device that answers there, or nil.
+type ProbeFunc func(ctx context.Context, host string, timeout time.Duration) (*discovery.ShellyDevice, error)
+
+// SetProbeFunc replaces the probe that DiscoverHost runs, so that a test never reaches a real
+// address. Call it before the first DiscoverHost.
+func (s *ShellyService) SetProbeFunc(fn ProbeFunc) { s.probe = fn }
 
 // NewService creates a new Shelly service
 func NewService(db database.DatabaseInterface, cfg *config.Config) *ShellyService {
@@ -138,8 +148,29 @@ func (h loginHooks) Client(_ context.Context, deviceID uint) (configuration.Shel
 	return h.s.getClient(device)
 }
 
+// DiscoveredDevice is a device that a discovery stored. Added is true when this pass created its
+// row and false when the device was already known.
+type DiscoveredDevice struct {
+	database.Device
+	Added bool
+}
+
 // DiscoverDevices performs device discovery using HTTP and mDNS
 func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, error) {
+	found, err := s.DiscoverDevicesReport(network)
+	if err != nil {
+		return nil, err
+	}
+	var devices []database.Device
+	for _, d := range found {
+		devices = append(devices, d.Device)
+	}
+	return devices, nil
+}
+
+// DiscoverDevicesReport performs the discovery of DiscoverDevices and also reports, for each
+// device, whether this pass added it.
+func (s *ShellyService) DiscoverDevicesReport(network string) ([]DiscoveredDevice, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -179,49 +210,11 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 	}
 
 	// Upsert discovered devices to preserve existing data
-	var devices []database.Device
+	var devices []DiscoveredDevice
 	for _, sd := range shellyDevices {
-		// Skip devices without MAC address (can't use as unique identifier)
-		if sd.MAC == "" {
-			s.logger.WithFields(map[string]any{
-				"device_ip": sd.IP,
-				"device_id": sd.ID,
-				"component": "service",
-			}).Warn("Skipping device with empty MAC address")
-			continue
+		if device := s.storeDiscovered(sd, sd.ID); device != nil {
+			devices = append(devices, *device)
 		}
-
-		// Prepare discovery update data
-		update := database.DiscoveryUpdate{
-			IP:       sd.IP,
-			Type:     discovery.GetDeviceType(sd.Model),
-			Firmware: sd.Version,
-			Status:   "online",
-			LastSeen: sd.Discovered,
-		}
-
-		// Use UpsertDeviceFromDiscovery to preserve existing data
-		device, err := s.DB.UpsertDeviceFromDiscovery(sd.MAC, update, sd.ID)
-		if err != nil {
-			s.logger.WithFields(map[string]any{
-				"mac":       sd.MAC,
-				"ip":        sd.IP,
-				"error":     err.Error(),
-				"component": "service",
-			}).Error("Failed to upsert device from discovery")
-			continue
-		}
-
-		// Store the latest discovery info in the settings and keep the rest, the login included
-		if err := s.backfillDiscoverySettings(device, sd.Model, sd.Generation, sd.AuthEn); err != nil {
-			s.logger.WithFields(map[string]any{
-				"device_id": device.ID,
-				"error":     err.Error(),
-				"component": "service",
-			}).Error("Failed to update device settings")
-		}
-
-		devices = append(devices, *device)
 	}
 
 	s.logger.WithFields(map[string]any{
@@ -231,6 +224,84 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 
 	log.Printf("Discovery complete. Found %d devices", len(devices))
 	return devices, nil
+}
+
+// storeDiscovered stores one discovered device and returns it, or nil when it cannot be stored.
+// initialName names the device when this call creates it; a known device keeps its name.
+func (s *ShellyService) storeDiscovered(sd discovery.ShellyDevice, initialName string) *DiscoveredDevice {
+	// Skip devices without MAC address (can't use as unique identifier)
+	if sd.MAC == "" {
+		s.logger.WithFields(map[string]any{
+			"device_ip": sd.IP,
+			"device_id": sd.ID,
+			"component": "service",
+		}).Warn("Skipping device with empty MAC address")
+		return nil
+	}
+
+	// Prepare discovery update data
+	update := database.DiscoveryUpdate{
+		IP:       sd.IP,
+		Type:     discovery.GetDeviceType(sd.Model),
+		Firmware: sd.Version,
+		Status:   "online",
+		LastSeen: sd.Discovered,
+	}
+
+	// Use UpsertDeviceFromDiscovery to preserve existing data
+	device, created, err := s.DB.UpsertDeviceFromDiscovery(sd.MAC, update, initialName)
+	if err != nil {
+		s.logger.WithFields(map[string]any{
+			"mac":       sd.MAC,
+			"ip":        sd.IP,
+			"error":     err.Error(),
+			"component": "service",
+		}).Error("Failed to upsert device from discovery")
+		return nil
+	}
+
+	// Store the latest discovery info in the settings and keep the rest, the login included
+	if err := s.backfillDiscoverySettings(device, sd.Model, sd.Generation, sd.AuthEn); err != nil {
+		s.logger.WithFields(map[string]any{
+			"device_id": device.ID,
+			"error":     err.Error(),
+			"component": "service",
+		}).Error("Failed to update device settings")
+	}
+
+	return &DiscoveredDevice{Device: *device, Added: created}
+}
+
+// DiscoverHost probes the one address with an HTTP read and stores the device found there, and no
+// other device. It returns nil when no Shelly device answers at the address. mDNS is not used,
+// because it answers for every device on the network whatever address was asked for. name is the
+// name of the device when this call adds it, and the discovered id when name is empty.
+func (s *ShellyService) DiscoverHost(ip, name string) (*DiscoveredDevice, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	timeout := time.Duration(s.Config.Discovery.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+
+	probe := s.probe
+	if probe == nil {
+		probe = func(ctx context.Context, host string, timeout time.Duration) (*discovery.ShellyDevice, error) {
+			return discovery.NewScanner(timeout, 1).ScanHost(ctx, host)
+		}
+	}
+	sd, err := probe(ctx, ip, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("probe of %s failed: %w", ip, err)
+	}
+	if sd == nil {
+		return nil, nil
+	}
+	if name == "" {
+		name = sd.ID
+	}
+	return s.storeDiscovered(*sd, name), nil
 }
 
 // Stop gracefully stops the service

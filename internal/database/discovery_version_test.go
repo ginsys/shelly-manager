@@ -148,7 +148,7 @@ func TestUpsertDeviceFromDiscovery_UnchangedKeepsTheVersion(t *testing.T) {
 	defer cleanup()
 	before := addVersionedDevice(t, manager, "AA:BB:CC:DD:EE:44")
 
-	returned, err := manager.UpsertDeviceFromDiscovery(before.MAC,
+	returned, _, err := manager.UpsertDeviceFromDiscovery(before.MAC,
 		DiscoveryUpdate{IP: before.IP, Type: before.Type, Firmware: before.Firmware, Status: "online", LastSeen: time.Now()}, "ignored")
 	require.NoError(t, err)
 

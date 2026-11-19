@@ -53,7 +53,7 @@ func TestUpsertDeviceFromDiscovery_KeepsTheOtherWritersColumns(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	seen := time.Now().Truncate(time.Second)
-	returned, err := manager.UpsertDeviceFromDiscovery(device.MAC,
+	returned, _, err := manager.UpsertDeviceFromDiscovery(device.MAC,
 		DiscoveryUpdate{IP: "192.0.2.32", Type: "SHPLG-S2", Firmware: "1.1", Status: "online", LastSeen: seen}, "ignored")
 	require.NoError(t, err)
 
@@ -89,7 +89,7 @@ func TestUpsertDeviceFromDiscovery_AnEmptyTypeLeavesTheStoredType(t *testing.T) 
 	}
 	require.NoError(t, manager.AddDevice(device))
 
-	_, err := manager.UpsertDeviceFromDiscovery(device.MAC,
+	_, _, err := manager.UpsertDeviceFromDiscovery(device.MAC,
 		DiscoveryUpdate{IP: "192.0.2.34", Firmware: "1.2", Status: "online", LastSeen: time.Now()}, "ignored")
 	require.NoError(t, err)
 

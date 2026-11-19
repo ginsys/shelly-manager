@@ -25,7 +25,7 @@ type DatabaseInterface interface {
 	UpdateDeviceDiscovery(id uint, update DiscoveryUpdate) error
 	DeleteDevice(id uint) error
 	GetDeviceByMAC(mac string) (*Device, error)
-	UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, initialName string) (*Device, error)
+	UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, initialName string) (device *Device, created bool, err error)
 
 	// Discovered device operations
 	AddDiscoveredDevice(device *DiscoveredDevice) error
