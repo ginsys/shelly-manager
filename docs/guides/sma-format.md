@@ -101,8 +101,9 @@ both normalize to `{}` and do not conflict. Configurations are not a top-level
 archive field and are not counted separately.
 
 The `sync_status` of a configuration is import and restore state: `synced`
-when the stored configuration reached the device, `pending` when it waits to
-go there. It is never drift. A drift check reads the device and stores
+when the stored configuration matched the device when it was written (an
+import from it, or an apply to it), `pending` when it waits to go there. It is
+never drift. A drift check reads the device and stores
 nothing, so an archive says nothing about drift. A row written before
 ginsys/shelly-manager#606 can still carry `drift` or `error`, and the engine
 exports it as it is; neither value means drift now. The parser accepts any
