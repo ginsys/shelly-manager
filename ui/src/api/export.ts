@@ -54,6 +54,7 @@ export async function getExportStatistics(): Promise<ExportStatistics> {
 }
 
 export interface ExportResult {
+  success: boolean
   export_id: string
   plugin_name: string
   format: string
@@ -61,8 +62,10 @@ export interface ExportResult {
   record_count?: number
   file_size?: number
   checksum?: string
-  duration?: string
+  duration?: number // nanoseconds (a Go time.Duration)
+  errors?: string[]
   warnings?: string[]
+  created_at?: string
 }
 
 export async function getExportResult(id: string): Promise<ExportResult> {
