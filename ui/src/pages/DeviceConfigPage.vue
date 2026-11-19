@@ -224,7 +224,7 @@ import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useError } from '@/composables/useError'
-import { usePageError } from '@/composables/useNotice'
+import { usePageError, useLateResult } from '@/composables/useNotice'
 import { getCurrentDeviceConfig } from '@/api/deviceConfig'
 import { nullRemovedSecrets } from '@/utils/config-form'
 import { TemplateSaveError, type FieldError } from '@/api/templates'
@@ -269,6 +269,7 @@ const addIdError = ref('')
 // failure nor a success, so it has its own card and does not go through ErrorDisplay.
 type ApplyNotice = { kind: 'success' | 'unconfirmed' | 'failed'; deviceId: string; text: string }
 const applyNotice = ref<ApplyNotice | null>(null)
+const reportLateResult = useLateResult()
 
 function loadOverrides(body: Record<string, any> | null | undefined) {
   overridesData.value = JSON.parse(JSON.stringify(body || {}))
@@ -453,10 +454,11 @@ async function handleApply() {
   const generation = routeGeneration
   try {
     const result = await store.apply(id)
+    let outcome: ApplyNotice
     if (result.unconfirmed) {
       // A Wi-Fi network change that the device stopped answering after. Not a failure and not a
       // success: the device stays pending until a later read confirms it.
-      applyNotice.value = {
+      outcome = {
         kind: 'unconfirmed',
         deviceId: String(id),
         text:
@@ -464,18 +466,26 @@ async function handleApply() {
           'Find the device on its new network, then verify it.',
       }
     } else if (result.success) {
-      applyNotice.value = {
+      outcome = {
         kind: 'success',
         deviceId: String(id),
         text: `Applied successfully. ${result.applied_count} field(s) updated.`,
       }
     } else {
-      applyNotice.value = {
+      outcome = {
         kind: 'failed',
         deviceId: String(id),
         text: `Apply completed with errors. ${result.failed_count} field(s) failed.`,
       }
     }
+    applyNotice.value = outcome
+    // Apply changes a physical device: after the user left the page the card is gone, so the app
+    // notice says what it came to (ginsys/shelly-manager#660).
+    reportLateResult(outcome.kind === 'success' ? 'info' : 'warning', outcome.text, {
+      action: 'Apply configuration',
+      resource: 'Device',
+      resourceId: id,
+    })
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {

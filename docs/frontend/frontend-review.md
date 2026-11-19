@@ -211,7 +211,8 @@ page imports still counts. The Playwright spec is what proves the links are rend
   notifications, plugin, provisioning, templates, typedConfig.
 - **Composables:** `useError` (normalises an error into a message, suggestions and a retry flag),
   `useNotice` (`usePageError`: the same, but a failure the page cannot show goes to the app notice
-  that `MainLayout` mounts) and `useWebSocket`.
+  that `MainLayout` mounts; `useLateFailure` and `useLateResult` for what a page shows itself while
+  it is open) and `useWebSocket`.
 - **Utilities** (`ui/src/utils`): SMA parser and generator, strict JSON, JCS and SHA-256 helpers for
   the SMA integrity check, plugin schema helpers, config form helpers, a version banner.
 
@@ -335,7 +336,9 @@ Found by reading the code at this commit; not a plan.
    the user left the page, or while a dialog covers the page panel, shows in one app notice
    (ginsys/shelly-manager#648): such a page takes its error from `usePageError` instead of
    `useError`, and a store-backed page calls `useLateFailure`, which shows the failure there only
-   when the page is already gone. Two things are left. A store action that fails replaces the whole list with the error
+   when the page is already gone. The result of an Apply that the device configuration page shows in
+   a card goes to the same notice once the page is gone (`useLateResult`), as a notice for a success and as a warning for an
+   unconfirmed apply or one that completed with errors (ginsys/shelly-manager#660). Two things are left. A store action that fails replaces the whole list with the error
    text, so a failed delete or create blanks the table (ginsys/shelly-manager#701). The guard reads
    pages only: a component or a composable could still call `alert(`. Command:
    `rg -n '\balert\(' ui/src --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**'`.

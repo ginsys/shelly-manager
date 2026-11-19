@@ -1,13 +1,13 @@
 <template>
-  <!-- Always mounted, so a screen reader announces the failure when it arrives. Mounted once, in the layout. -->
+  <!-- Always mounted, so a screen reader announces what arrives. Mounted once, in the layout. -->
   <div class="app-notice" role="alert" data-testid="app-notice">
-    <ErrorDisplay :error="notice" :show-retry="false" @dismiss="dismissNotice" />
+    <ErrorDisplay :error="notice" :severity="noticeSeverity" :show-retry="false" @dismiss="dismissNotice" />
   </div>
 </template>
 
 <script setup lang="ts">
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
-import { notice, dismissNotice } from '@/composables/useNotice'
+import { notice, noticeSeverity, dismissNotice } from '@/composables/useNotice'
 </script>
 
 <style scoped>
