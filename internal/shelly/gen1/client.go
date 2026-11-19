@@ -99,6 +99,9 @@ func NewClient(ip string, opts ...ClientOption) *Client {
 		httpClient: &http.Client{
 			Timeout:   cfg.timeout,
 			Transport: transport,
+			// A request goes to the device address it was given and nowhere else: a redirect
+			// is returned as a response, never followed.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 		config:     cfg,
 		logger:     logging.GetDefault(),

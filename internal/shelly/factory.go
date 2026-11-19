@@ -38,6 +38,9 @@ func NewFactoryWithLogger(logger *logging.Logger) Factory {
 	return &factory{
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
+			// A request goes to the device address it was given and nowhere else: a redirect
+			// is returned as a response, never followed.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 		logger: logger,
 	}
