@@ -5,9 +5,10 @@
 # prints one verdict:
 #   SKIP  the head branch is a bot's (dependabot/, renovate/) or the PR carries
 #         the label no-changelog (CI, tests and docs-only changes, and the release
-#         PR made by changelog-assemble.sh --write)
-#   PASS  the PR adds a valid changelog.d/<issue>-<slug>.md and adds no line to
-#         CHANGELOG.md
+#         PR made by changelog-assemble.sh --write); the label lifts the need for
+#         a fragment, not the validation of one the PR adds or edits
+#   PASS  the PR adds a valid changelog.d/<issue>-<slug>.md, leaves every fragment
+#         it edits valid, and adds no line to CHANGELOG.md
 #   FAIL  anything else, with what to do
 #   ERROR the base ref is missing (a shallow checkout): never read as "no fragment"
 #
@@ -36,25 +37,41 @@ dependabot/* | renovate/*)
 	;;
 esac
 
-if [ "$no_changelog" = true ]; then
-	echo "SKIP label no-changelog"
-	exit 0
-fi
-
 added=()
+modified=()
 subdir=()
 while IFS=$'\t' read -r status path; do
 	case "$path" in
 	changelog.d/README.md) continue ;;
 	changelog.d/*/*.md) [ "$status" = A ] && subdir+=("$path") ;;
-	changelog.d/*.md) [ "$status" = A ] && added+=("$path") ;;
+	changelog.d/*.md)
+		[ "$status" = A ] && added+=("$path")
+		[ "$status" = M ] && modified+=("$path")
+		;;
 	esac
 done < <(git diff --name-status --no-renames "$base...HEAD")
+
+# A fragment the PR adds or edits is read by the release, so both are validated,
+# the label or not. A deleted fragment is not read, so a release PR still passes.
+fail=0
+for p in ${added[@]+"${added[@]}"} ${modified[@]+"${modified[@]}"}; do
+	if ! msg=$("$here/changelog-assemble.sh" --validate "$p" 2>&1); then
+		echo "FAIL $msg"
+		fail=1
+	fi
+done
+
+if [ "$no_changelog" = true ]; then
+	if [ "$fail" -ne 0 ]; then
+		exit 1
+	fi
+	echo "SKIP label no-changelog"
+	exit 0
+fi
 
 changelog_lines=$(git diff --no-renames -U0 "$base...HEAD" -- CHANGELOG.md |
 	awk '/^\+\+\+ /{next} /^\+/{n++} END{print n+0}')
 
-fail=0
 if [ "$changelog_lines" -gt 0 ]; then
 	echo "FAIL CHANGELOG.md has $changelog_lines added line(s): put the entry in changelog.d/<issue>-<slug>.md instead (a release PR carries the label no-changelog)"
 	fail=1
@@ -67,14 +84,12 @@ if [ "${#added[@]}" -eq 0 ]; then
 	echo "FAIL no fragment added: add changelog.d/<issue>-<slug>.md, or label the PR no-changelog when it needs no entry"
 	fail=1
 fi
-for p in ${added[@]+"${added[@]}"}; do
-	if ! msg=$("$here/changelog-assemble.sh" --validate "$p" 2>&1); then
-		echo "FAIL $msg"
-		fail=1
-	fi
-done
 
 if [ "$fail" -ne 0 ]; then
 	exit 1
 fi
-echo "PASS ${#added[@]} fragment(s) added"
+if [ "${#modified[@]}" -gt 0 ]; then
+	echo "PASS ${#added[@]} fragment(s) added, ${#modified[@]} modified"
+else
+	echo "PASS ${#added[@]} fragment(s) added"
+fi
