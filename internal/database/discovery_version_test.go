@@ -115,12 +115,13 @@ func TestUpdateDeviceDiscovery_UnchangedKeepsAClientEditCommittedAfterTheRead(t 
 	defer cleanup()
 	before := addVersionedDevice(t, manager, "AA:BB:CC:DD:EE:43")
 
-	var editedAt time.Time
+	// The client's version, as the database stored it.
+	var edited Device
 	afterFirstDeviceRead(t, manager.GetDB(), func(tx *gorm.DB) {
-		editedAt = time.Now()
 		require.NoError(t, tx.Model(&Device{}).Where("id = ?", before.ID).UpdateColumns(map[string]any{
-			"ip": "192.0.2.77", "updated_at": editedAt,
+			"ip": "192.0.2.77", "updated_at": time.Now(),
 		}).Error)
+		require.NoError(t, tx.First(&edited, before.ID).Error)
 	})
 
 	require.NoError(t, manager.UpdateDeviceDiscovery(before.ID,
@@ -129,7 +130,7 @@ func TestUpdateDeviceDiscovery_UnchangedKeepsAClientEditCommittedAfterTheRead(t 
 	got, err := manager.GetDevice(before.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "192.0.2.77", got.IP, "the client's address was written over")
-	assert.WithinDuration(t, editedAt, got.UpdatedAt, time.Second, "the client's version was moved")
+	assert.True(t, edited.UpdatedAt.Equal(got.UpdatedAt), "the client's version %v was moved to %v", edited.UpdatedAt, got.UpdatedAt)
 	assert.Equal(t, "online", got.Status)
 }
 
