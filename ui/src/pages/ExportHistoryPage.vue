@@ -43,10 +43,13 @@
 
     <section style="margin-top:16px">
       <h2>Statistics</h2>
-      <div class="stats">
-        <div class="card">Total: {{ store.stats.total }}</div>
-        <div class="card">Success: {{ store.stats.success }}</div>
-        <div class="card">Failure: {{ store.stats.failure }}</div>
+      <div class="stats" data-testid="history-stats">
+        <div v-if="store.statsError" class="card err" role="alert">Statistics unavailable: {{ store.statsError }}</div>
+        <template v-else>
+          <div class="card">Total: {{ store.stats.total }}</div>
+          <div class="card">Success: {{ store.stats.success }}</div>
+          <div class="card">Failure: {{ store.stats.failure }}</div>
+        </template>
       </div>
     </section>
   </main>
@@ -67,4 +70,5 @@ onMounted(() => { store.fetchHistory(); store.fetchStats() })
 <style scoped>
 .stats { display:flex; gap:12px; }
 .card { border:1px solid #e5e7eb; padding:8px 12px; border-radius:6px; }
+.err { color:#b91c1c }
 </style>
