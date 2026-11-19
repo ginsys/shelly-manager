@@ -89,7 +89,7 @@ async function download() {
 .toolbar { display: flex; align-items: center; gap: 12px; }
 .title { font-size: 20px; margin: 0; }
 .btn { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; color: inherit; }
-.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; padding: 16px; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; padding: 16px; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .section-title { margin: 0 0 8px 0; font-size: 16px; font-weight: 600; }
 .state { text-align: center; color: #64748b; }

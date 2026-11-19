@@ -172,9 +172,10 @@ ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
 Linked is not the same as working: the Channel detail page has no matching `GET` route on the server
 (ginsys/shelly-manager#250), the Drift schedules page says its schedules are not executed
 (ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
-server process still holds in memory (ginsys/shelly-manager#647). Both pages show every field the
-server returns for a result (status, created time, duration, errors, warnings, and for an import the
-changes by type, never their values; ginsys/shelly-manager#139). The export page downloads the file
+server process still holds in memory (ginsys/shelly-manager#647). Both pages show the main fields
+of a result (status, created time, duration, errors, warnings, and for an import the changes by
+type, never their values; ginsys/shelly-manager#139). They do not show the export `output_path`,
+`webhook_sent` and `metadata`, nor the import `metadata`. The export page downloads the file
 through the API client, because a plain link sends no admin key; an import has no download because the
 API has no such route. The import history page shows the statistics, and both history pages show the
 error of a failed statistics request instead of zeros. The routes are still inline in `ui/src/main.ts`, so a test cannot check
