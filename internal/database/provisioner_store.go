@@ -43,8 +43,9 @@ type ProvisionerActor struct {
 // One cycle remains on MySQL: a register that replaces a token locks the agent row by its id, and a
 // request that presents the old token locks the same row through the token's index entry, which the
 // register then needs to replace. InnoDB detects the cycle and aborts one of the two with a deadlock
-// error. Nothing is authorized or written by the aborted one, so the outcome is a failed request that
-// the agent repeats, never a wrong answer.
+// error. The aborted transaction rolls back: nothing is authorized or written by it, so the outcome is a
+// failed request and never a wrong answer. The caller gets the database error and decides whether to
+// retry; the provisioning agent logs a failed task status update and does not retry it.
 //
 // Never call the database through another handle while a store transaction is open, and never from
 // inside one: on SQLite that call waits for the one connection for ever. Resolve everything the store
