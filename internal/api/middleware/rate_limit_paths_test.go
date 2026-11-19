@@ -119,6 +119,20 @@ func TestRateLimiterPathCountersAreWindowedAndPerClient(t *testing.T) {
 	assert.True(t, rl.Allow("10.58.0.7", bulkPath), "the bulk counter resets with its window")
 }
 
+// The control route parses the id as a decimal number, so 7, 07 and 007 are one device: they
+// share one counter, or a client could dodge the limit by changing the spelling.
+func TestRateLimiterControlLimitCountsOneDeviceUnderEverySpelling(t *testing.T) {
+	rl := newTestLimiter(DefaultSecurityConfig())
+	ip := "10.58.0.7"
+
+	assert.Equal(t, 100, allowN(rl, ip, controlPath(7), 100), "the control limit is 100 calls")
+	assert.False(t, rl.Allow(ip, "/api/v1/devices/07/control"), "a leading zero is the same device")
+	assert.False(t, rl.Allow(ip, "/api/v1/devices/0007/control"), "so are more leading zeros")
+	assert.True(t, rl.Allow(ip, controlPath(70)), "70 is another device")
+	assert.True(t, rl.Allow(ip, "/api/v1/devices/0/control"), "0 is its own device")
+	assert.True(t, rl.Allow(ip, "/api/v1/devices/00/control"), "00 is device 0")
+}
+
 func TestRateLimiterLongestMatchingRuleWins(t *testing.T) {
 	// Map order is random, so run the case many times.
 	for i := 0; i < 50; i++ {
@@ -172,6 +186,9 @@ func TestRateLimiterMatchRule(t *testing.T) {
 	}{
 		{path: "/api/v1/devices/7/control", wantLimit: 100, wantKey: "/api/v1/devices/7/control"},
 		{path: "/api/v1/devices/abc-12/control/extra", wantLimit: 100, wantKey: "/api/v1/devices/abc-12/control"},
+		{path: "/api/v1/devices/007/control", wantLimit: 100, wantKey: "/api/v1/devices/7/control"},
+		{path: "/api/v1/devices/00/control", wantLimit: 100, wantKey: "/api/v1/devices/0/control"},
+		{path: "/api/v1/devices/0a7/control", wantLimit: 100, wantKey: "/api/v1/devices/0a7/control"},
 		{path: "/api/v1/devices//control", wantNoRule: true},
 		{path: "/api/v1/devices/7/status", wantNoRule: true},
 		{path: "/api/v1/devices/7", wantNoRule: true},
