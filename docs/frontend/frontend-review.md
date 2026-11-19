@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Measured:** 2026-11-19 at commit 13e3038 (`main`)
-**Status:** 113 of 117 exported API functions are referenced by the UI (97%). Fifteen of the 26 routed pages cannot be reached from the top bar by clicking.
+**Measured:** 2026-11-19 at commit 13e3038 (`main`); the counts table in section 1 and all of section 3 were re-measured at commit 0648bab
+**Status:** 113 of 117 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -103,11 +103,11 @@ Counts (commands, from the repository root):
 | What | Count | Command |
 |------|-------|---------|
 | Routed page components | 26 | `fd -e vue . ui/src/pages \| wc -l` |
-| Reusable components (excluding tests) | 38 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
+| Reusable components (excluding tests) | 40 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
 | Pinia stores (excluding tests) | 11 | `fd -e ts . ui/src/stores \| rg -v '\.test\.ts\|__tests__' \| wc -l` |
 | Composables | 2 | `fd -e ts . ui/src/composables \| rg -v __tests__ \| wc -l` |
-| Unit test files / `it`+`test` calls | 63 / 616 | `fd '\.test\.ts$' ui/src \| wc -l`; `rg --no-filename -c '^\s*(it\|test)\(' ui/src --glob '*.test.ts' \| awk '{s+=$1} END{print s}'` |
-| End-to-end spec files / `test` calls | 18 / 49 | `fd '\.spec\.ts$' ui/tests/e2e \| wc -l`; `rg --no-filename -c '^\s*test\(' ui/tests/e2e --glob '*.spec.ts' \| awk '{s+=$1} END{print s}'` |
+| Unit test files / `it`+`test` calls | 70 / 687 | `fd '\.test\.ts$' ui/src \| wc -l`; `rg --no-filename -c '^\s*(it\|test)\(' ui/src --glob '*.test.ts' \| awk '{s+=$1} END{print s}'` |
+| End-to-end spec files / `test` calls | 20 / 59 | `fd '\.spec\.ts$' ui/tests/e2e \| wc -l`; `rg --no-filename -c '^\s*test\(' ui/tests/e2e --glob '*.spec.ts' \| awk '{s+=$1} END{print s}'` |
 
 The e2e figure counts `test(` calls once. Playwright runs each across the browsers its config lists,
 so the number of executed scenarios is higher.
@@ -117,12 +117,14 @@ so the number of executed scenarios is higher.
 ## 3. Pages and routes
 
 Lines are `wc -l` of the page file. "Linked from" is read from the output of the navigation-target
-command below; "none" means no nav item and no page links to that route.
+command below (re-run at commit 0648bab for this section); "none" would mean no nav item and no page
+links to that route. The top-bar menu entries are written in `ui/src/layouts/MainLayout.vue` as
+`to: '/path'` and drawn by `ui/src/components/NavMenu.vue`, so the pattern includes that form.
 
 **Command:**
 
 ```bash
-rg -n --no-heading -o '(to="[^"]+"|:to="[^"]+"|router\.(push|replace)\([^)]*\)|href="/[^"]*")' ui/src \
+rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|replace)\([^)]*\)|href=\"/[^\"]*\")" ui/src \
   --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**' | sort -u
 ```
 
@@ -132,43 +134,47 @@ rg -n --no-heading -o '(to="[^"]+"|:to="[^"]+"|router\.(push|replace)\([^)]*\)|h
 | `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | 452 | Devices, Device configuration, Drift reports, Task details |
 | `/devices/:id/config` | Device configuration (templates, overrides, apply, verify) | 493 | Device details, Configuration history |
 | `/devices/:id/config/history` | Configuration history | 143 | Device details |
-| `/templates` | Configuration templates | 395 | its own detail page only |
+| `/templates` | Configuration templates | 395 | top bar |
 | `/templates/:id` | Template detail | 375 | Templates |
-| `/drift/schedules` | Drift schedules (inspect and delete only, see section 5) | 357 | **none** |
-| `/drift/reports` | Drift reports | 519 | **none** |
-| `/drift/trends` | Drift trends | 517 | **none** |
+| `/drift/schedules` | Drift schedules (inspect and delete only, see section 5) | 357 | top bar (Drift) |
+| `/drift/reports` | Drift reports | 519 | top bar (Drift) |
+| `/drift/trends` | Drift trends | 517 | top bar (Drift) |
 | `/export/backup` | Backup management | 856 | top bar (Export & Import) |
 | `/export/gitops` | GitOps export | 577 | top bar (Export & Import) |
 | `/export/history` | Export history | 70 | top bar (Export & Import) |
-| `/export/:id` | Export result | 43 | **none** |
+| `/export/:id` | Export result | 43 | Export history |
 | `/import/history` | Import history | 57 | top bar (Export & Import) |
-| `/import/:id` | Import result | 34 | **none** |
+| `/import/:id` | Import result | 34 | Import history |
 | `/plugins` | Plugin management (read-only) | 565 | top bar |
 | `/dashboard` | Metrics dashboard | 649 | top bar |
 | `/admin` | Admin settings (admin key rotation) | 45 | top bar |
-| `/notifications/channels` | Notification channels | 197 | its own detail page only |
+| `/notifications/channels` | Notification channels | 197 | top bar (Notifications) |
 | `/notifications/channels/:id` | Channel detail | 126 | Channels |
-| `/notifications/rules` | Notification rules | 199 | **none** |
-| `/notifications/history` | Notification history | 156 | **none** |
-| `/provisioning` | Provisioning dashboard | 86 | **none** |
-| `/provisioning/tasks` | Provisioning tasks | 92 | Provisioning dashboard, Task details |
+| `/notifications/rules` | Notification rules | 199 | top bar (Notifications) |
+| `/notifications/history` | Notification history | 156 | top bar (Notifications) |
+| `/provisioning` | Provisioning dashboard | 86 | top bar (Provisioning) |
+| `/provisioning/tasks` | Provisioning tasks | 92 | top bar (Provisioning), Provisioning dashboard, Task details |
 | `/provisioning/tasks/:id` | Task details | 124 | Tasks, dashboard |
-| `/provisioning/agents` | Provisioning agents | 95 | Provisioning dashboard |
+| `/provisioning/agents` | Provisioning agents | 95 | top bar (Provisioning), Provisioning dashboard |
 
 Any other path falls through to the Devices page.
 
 ### Pages a user cannot reach by clicking
 
-A page is reachable when a chain of links leads to it from the top bar. The top bar links Devices,
-Export & Import (backup, GitOps, export history, import history), Plugins, Metrics and Admin.
-Eight routes have no inbound link at all: `/drift/schedules`, `/drift/reports`, `/drift/trends`,
-`/export/:id`, `/import/:id`, `/notifications/rules`, `/notifications/history` and `/provisioning`.
-Two more, `/templates` and `/notifications/channels`, are linked only from their own detail pages,
-and five pages are linked only from pages in that unreachable set (`/templates/:id`,
-`/notifications/channels/:id`, `/provisioning/tasks`, `/provisioning/tasks/:id`,
-`/provisioning/agents`). So 15 of the 26 pages work only when the URL is typed. The export and
-import detail pages are tracked in ginsys/shelly-manager#139; the whole navigation gap is
-ginsys/shelly-manager#641.
+None. A page is reachable when a chain of links leads to it from the top bar. The top bar links
+Devices, Templates, Plugins, Metrics and Admin, and has four menus: Drift (schedules, reports,
+trends), Notifications (channels, rules, history), Provisioning (dashboard, tasks, agents) and
+Export & Import (backup, GitOps, export history, import history). Every other route (`:id` detail
+pages and the device configuration pages) is linked from its list page. This was fixed by
+ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
+(`ui/tests/e2e/nav-reachability.spec.ts`) walks the links.
+
+Linked is not the same as working: the Channel detail page has no matching `GET` route on the server
+(ginsys/shelly-manager#250), the Drift schedules page says its schedules are not executed
+(ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
+server process still holds in memory (ginsys/shelly-manager#647). Their layout is tracked in
+ginsys/shelly-manager#139. The routes are still inline in `ui/src/main.ts`, so a test cannot check
+reachability from the route table (ginsys/shelly-manager#646).
 
 ---
 
@@ -254,10 +260,10 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 | Issue | Subject |
 |-------|---------|
 | ginsys/shelly-manager#632 | Admin key dialog: a delayed 401 can reopen it after Cancel |
-| ginsys/shelly-manager#641 | 15 of 26 pages cannot be reached from the top bar |
 | ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
 | ginsys/shelly-manager#618 | Keep rows while refreshing; reconcile the bulk selection with the refreshed list |
 | ginsys/shelly-manager#614 | Replace the remaining `alert()` calls with `useError` and `ErrorDisplay` |
+| ginsys/shelly-manager#646 | Move the route table out of `main.ts` so a test can check every route is reachable |
 | ginsys/shelly-manager#255 | Harden admin key rotation UX |
 | ginsys/shelly-manager#139 | Polish export/import detail pages |
 | ginsys/shelly-manager#134 | Metrics REST response-shape alignment |
@@ -274,8 +280,8 @@ started). Parked issues are not next work.
 
 Found by reading the code at this commit; not a plan.
 
-1. **Fifteen pages are reachable only by typing the URL** (section 3,
-   ginsys/shelly-manager#641).
+1. **The route table is inline in `main.ts`** (section 3, ginsys/shelly-manager#646), so no unit test
+   can check that every route is reachable; the end-to-end spec carries an explicit path list.
 2. **Quasar is a dependency nothing imports** (section 2).
 3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (649),
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
