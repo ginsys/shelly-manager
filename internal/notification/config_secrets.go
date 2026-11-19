@@ -204,7 +204,7 @@ func restoreWholeList(incoming []any, stored any) ([]any, bool) {
 
 // restoreConfig takes the stored credential back for each placeholder in a config a client sends.
 func restoreConfig(incoming, stored json.RawMessage) json.RawMessage {
-	// The text is decoded before anything is decided: "********" is the placeholder too.
+	// The text is decoded before anything is decided: a JSON escape of a star is the placeholder too.
 	doc, ok := decodeDocument(bytes.TrimSpace(incoming))
 	if !ok {
 		return incoming // not ours to read: validation decides
@@ -222,10 +222,50 @@ func restoreConfig(incoming, stored json.RawMessage) json.RawMessage {
 	}
 	before := encodeDocument(m)
 	restored := encodeDocument(restoreNode(m, old, true, false))
-	if bytes.Equal(before, restored) {
-		return incoming // nothing to restore: keep the client's own bytes
+	// The client's own bytes come back only when nothing changed and no object repeats a member: decoding
+	// a repeated member keeps the last, but the struct decode that validation and delivery use reads
+	// {"url":"<placeholder>","url":null} as the placeholder, so a text with repeats is always re-encoded.
+	if bytes.Equal(before, restored) && !repeatsMember(bytes.TrimSpace(incoming)) {
+		return incoming
 	}
 	return restored
+}
+
+// repeatsMember reports whether any object in raw holds two members whose names fold together.
+func repeatsMember(raw []byte) bool {
+	return scanMembers(json.NewDecoder(bytes.NewReader(raw)))
+}
+
+func scanMembers(dec *json.Decoder) bool {
+	tok, err := dec.Token()
+	if err != nil {
+		return false
+	}
+	switch tok {
+	case json.Delim('{'):
+		seen := map[string]bool{}
+		for dec.More() {
+			nameTok, nameErr := dec.Token()
+			name, isName := nameTok.(string)
+			if nameErr != nil || !isName {
+				return false
+			}
+			folded := strings.ToLower(strings.ToUpper(name))
+			if seen[folded] || scanMembers(dec) {
+				return true
+			}
+			seen[folded] = true
+		}
+		_, _ = dec.Token() // the closing brace
+	case json.Delim('['):
+		for dec.More() {
+			if scanMembers(dec) {
+				return true
+			}
+		}
+		_, _ = dec.Token() // the closing bracket
+	}
+	return false // a scalar was the whole value
 }
 
 // maskedChannel returns a copy of c that is safe to send out. The stored record is never changed:
@@ -261,7 +301,10 @@ func collectSecrets(v any, top, secret bool, out *[]string) {
 // the URL is written with %q. net/http spells that URL its own way (percent-encoded, the password
 // written ***, an empty port dropped), so the stored value cannot be matched against it, and the shape
 // is cut out whatever the spelling. The Op is the request method, or "parse" for a URL that does not parse.
-var quotedURLError = regexp.MustCompile(`\b[A-Za-z]+ "(?:[^"\\]|\\.)*": `)
+//
+// The Op is any HTTP method token (RFC 9110: letters, digits and !#$%&'*+-.^_`|~), because the method is
+// configurable and Go accepts every token.
+var quotedURLError = regexp.MustCompile("(?:^|\\s)[!#$%&'*+.^_`|~0-9A-Za-z-]+ \"(?:[^\"\\\\]|\\\\.)*\": ")
 
 // spellings lists how an error can write the credential s: as stored, and with %q (a quote, a backslash
 // or a control character escaped), for the text a *url.Error does not hold.
