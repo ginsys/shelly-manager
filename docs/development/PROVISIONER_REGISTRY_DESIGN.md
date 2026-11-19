@@ -557,9 +557,12 @@ slice 1 they stay forever, and a purge that waited for "no non-terminal task"
 would never remove that agent's row. The purge therefore waits only for
 `pending` tasks (decision 12).
 
-Recovery exists today: the admin key may act for any agent
-(`authorizeAgent`), so an admin can set the task back to `pending` through
-`UpdateTaskStatus` (`:317`). Decision 12 asks whether to automate it.
+Manual recovery exists today, under the existing ownership checks: the admin
+key may act for any agent, and the agent that owns the task may act for it
+(`authorizeAgent`, `UpdateTaskStatus` at `:303-317`). Either can set the task
+back to `pending`, because the handler accepts any status. An agent can do this
+only while it holds a token for that id. Decision 12 asks whether to automate
+it.
 
 ## Compatibility at upgrade
 
@@ -704,10 +707,11 @@ One recommendation per question.
     few agents, each polls rarely, so the cost is small, and slice 1 then
     loosens no control. Without it, slice 1 loosens one control slightly, and
     the lead and Serge should know that before slice 1 is built.
-12. **Stranded `assigned` tasks.** Choices: keep the recovery admin-only (set the
-    task back to `pending`), or release the `assigned` tasks of an agent silent
-    for N. Recommended: admin-only recovery in slice 1, which keeps today's
-    behaviour. Automatic release can run a provisioning step twice on a device,
+12. **Stranded `assigned` tasks.** Choices: keep the manual recovery as it is
+    (the admin key or the owning agent sets the task back to `pending`), or
+    release the `assigned` tasks of an agent silent for N. Recommended: the
+    manual recovery in slice 1, which keeps today's behaviour and adds no
+    permission. Automatic release can run a provisioning step twice on a device,
     so it needs its own decision. The purge (decision 7) ignores `assigned`
     tasks of the agent it removes, and marks them `failed` with a stated
     reason, so the UI shows them.
