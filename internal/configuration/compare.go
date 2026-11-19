@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"time"
 )
 
 // CompareResult holds the result of comparing two configurations
@@ -170,8 +171,9 @@ func (c *ConfigComparator) compareFields(expected, actual reflect.Value, path st
 		return
 	}
 
-	// Handle struct fields
-	if expected.Kind() == reflect.Struct {
+	// Handle struct fields. A struct with no exported field, such as time.Time, has nothing to walk
+	// into: it is compared as one value below.
+	if expected.Kind() == reflect.Struct && !isOpaqueStruct(expected.Type()) {
 		c.compareStruct(expected, actual, path, result)
 		return
 	}
@@ -298,6 +300,12 @@ func (c *ConfigComparator) valuesEqual(expected, actual interface{}, rule *Field
 		if ok1 && ok2 {
 			return math.Abs(expectedFloat-actualFloat) <= rule.Tolerance
 		}
+	}
+
+	// A time is the same instant whatever location or monotonic reading it carries.
+	if expectedTime, ok := expected.(time.Time); ok {
+		actualTime, ok := actual.(time.Time)
+		return ok && expectedTime.Equal(actualTime)
 	}
 
 	// String comparison
