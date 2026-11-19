@@ -267,14 +267,27 @@ func (rl *RateLimiter) cleanup() {
 
 	for range ticker.C {
 		rl.mutex.Lock()
-		now := time.Now()
-		for ip, client := range rl.clients {
-			// Remove entries older than 2 hours
-			if now.Sub(client.window) > time.Hour*2 {
-				delete(rl.clients, ip)
+		rl.prune(time.Now())
+		rl.mutex.Unlock()
+	}
+}
+
+// prune drops the clients whose window is older than 2 hours and, for the others, the path counters
+// whose window has passed. An active client keeps its entry for ever, so without this a client that
+// asks for a new device id every time would grow its path counters without bound. The caller holds
+// the mutex.
+func (rl *RateLimiter) prune(now time.Time) {
+	for ip, client := range rl.clients {
+		// Remove entries older than 2 hours
+		if now.Sub(client.window) > time.Hour*2 {
+			delete(rl.clients, ip)
+			continue
+		}
+		for key, counter := range client.paths {
+			if now.Sub(counter.window) > rl.config.RateLimitWindow {
+				delete(client.paths, key)
 			}
 		}
-		rl.mutex.Unlock()
 	}
 }
 
