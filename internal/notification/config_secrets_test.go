@@ -2,12 +2,6 @@ package notification
 
 import (
 	"encoding/json"
-	"errors"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +17,13 @@ func decodeMap(t *testing.T, raw json.RawMessage) map[string]any {
 	var m map[string]any
 	require.NoError(t, json.Unmarshal(raw, &m), string(raw))
 	return m
+}
+
+func mustRestore(t *testing.T, incoming, stored json.RawMessage) json.RawMessage {
+	t.Helper()
+	out, err := restoreConfig(incoming, stored)
+	require.NoError(t, err, string(incoming))
+	return out
 }
 
 func TestMaskConfig_MasksEveryChannelSlot(t *testing.T) {
@@ -69,7 +70,7 @@ func TestRestoreConfig(t *testing.T) {
 
 	t.Run("a placeholder takes the stored value, a plain field is as sent", func(t *testing.T) {
 		incoming := json.RawMessage(`{"url":"` + ph + `","secret":"` + ph + `","headers":{"Authorization":"` + ph + `"},"timeout":9}`)
-		m := decodeMap(t, restoreConfig(incoming, stored))
+		m := decodeMap(t, mustRestore(t, incoming, stored))
 		assert.Equal(t, "https://h.example/hook?t=tok", m["url"])
 		assert.Equal(t, "s3", m["secret"])
 		assert.Equal(t, map[string]any{"Authorization": "Bearer b"}, m["headers"])
@@ -77,95 +78,32 @@ func TestRestoreConfig(t *testing.T) {
 	})
 
 	t.Run("a new value replaces the stored one", func(t *testing.T) {
-		m := decodeMap(t, restoreConfig(json.RawMessage(`{"url":"https://new.example","secret":"`+ph+`"}`), stored))
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"https://new.example","secret":"`+ph+`"}`), stored))
 		assert.Equal(t, "https://new.example", m["url"])
 		assert.Equal(t, "s3", m["secret"])
 	})
 
 	t.Run("a placeholder with nothing stored is dropped", func(t *testing.T) {
-		m := decodeMap(t, restoreConfig(json.RawMessage(`{"url":"u","secret":"`+ph+`","headers":{"X":"`+ph+`"}}`), nil))
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"u","secret":"`+ph+`","headers":{"X":"`+ph+`"}}`), nil))
 		assert.NotContains(t, m, "secret")
 		assert.Equal(t, map[string]any{}, m["headers"])
 	})
 
 	t.Run("a secret left out stays out", func(t *testing.T) {
-		m := decodeMap(t, restoreConfig(json.RawMessage(`{"url":"u"}`), stored))
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"u"}`), stored))
 		assert.NotContains(t, m, "secret")
 	})
 
 	t.Run("a config with no placeholder comes back untouched", func(t *testing.T) {
 		incoming := json.RawMessage(`{"url": "u",   "secret":"x"}`)
-		assert.Equal(t, string(incoming), string(restoreConfig(incoming, stored)))
+		assert.Equal(t, string(incoming), string(mustRestore(t, incoming, stored)))
 	})
 
 	t.Run("the masked whole text and text that is not ours", func(t *testing.T) {
-		assert.Equal(t, string(stored), string(restoreConfig(json.RawMessage(`"`+ph+`"`), stored)))
-		assert.Equal(t, `{"a":`, string(restoreConfig(json.RawMessage(`{"a":`), stored)))
-		assert.Equal(t, `[1]`, string(restoreConfig(json.RawMessage(`[1]`), stored)))
+		assert.Equal(t, string(stored), string(mustRestore(t, json.RawMessage(`"`+ph+`"`), stored)))
+		assert.Equal(t, `{"a":`, string(mustRestore(t, json.RawMessage(`{"a":`), stored)))
+		assert.Equal(t, `[1]`, string(mustRestore(t, json.RawMessage(`[1]`), stored)))
 	})
-}
-
-// closedPortURL returns a loopback URL with userinfo to a port nothing listens on.
-func closedPortURL(t *testing.T) string {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := l.Addr().String()
-	require.NoError(t, l.Close())
-	return "http://hook:pw620@" + addr + "/services/LEAKPATH620?t=LEAKQUERY620"
-}
-
-// What net/http writes into a failed send's error is the premise the scrub rests on: the password is
-// "***" there, so the host, the path and the query token stay in the text unless the scrub matches
-// that spelling too.
-func TestScrubText_ARealFailedSendWithUserinfo(t *testing.T) {
-	target := closedPortURL(t)
-	_, err := http.Post(target, "application/json", nil) //nolint:gosec // loopback, closed port
-	require.Error(t, err)
-
-	assert.Contains(t, err.Error(), "hook:***@", "net/http writes the password as ***")
-	assert.NotContains(t, err.Error(), "pw620")
-	assert.Contains(t, err.Error(), "LEAKPATH620", "the path and query stay in the text")
-
-	cfg := json.RawMessage(`{"url":"` + target + `"}`)
-	text := scrubText("failed to send webhook: "+err.Error(), cfg)
-	assert.NotContains(t, text, "LEAKPATH620")
-	assert.NotContains(t, text, "LEAKQUERY620")
-	assert.NotContains(t, text, "***@")
-	assert.Contains(t, text, ph)
-	// The dial address is the network error's own text, not the URL: it stays.
-	assert.Contains(t, text, "dial tcp 127.0.0.1:")
-
-	// Only the stored spelling is matched without the net/http one: the control for why both are.
-	assert.Contains(t, err.Error(), "LEAKQUERY620")
-	assert.NotContains(t, strings.ReplaceAll(err.Error(), target, ph), ph, "the stored spelling alone matches nothing")
-}
-
-func TestScrubText_OtherShapes(t *testing.T) {
-	cfg := json.RawMessage(`{"url":"https://h.example/x?t=tok","secret":"s3cret","headers":{"Authorization":"Bearer bb"},"method":"POST"}`)
-
-	// An unparseable URL quotes the raw string.
-	assert.Equal(t, `parse "`+ph+`": bad`, scrubText(`parse "https://h.example/x?t=tok": bad`, cfg))
-	// Several credentials in one text, and a plain field is left alone.
-	assert.Equal(t, ph+" "+ph+" "+ph+" POST", scrubText("https://h.example/x?t=tok s3cret Bearer bb POST", cfg))
-	// A text with nothing to cut, a config that is not an object, and an empty text.
-	assert.Equal(t, "connection refused", scrubText("connection refused", cfg))
-	assert.Equal(t, "see s3cret", scrubText("see s3cret", json.RawMessage(`not json`)))
-	assert.Equal(t, "", scrubText("", cfg))
-	// A longer credential goes before a shorter one it contains.
-	nested := json.RawMessage(`{"secret":"abc","token":"abcdef"}`)
-	assert.Equal(t, ph, scrubText("abcdef", nested))
-}
-
-func TestScrubError(t *testing.T) {
-	cfg := json.RawMessage(`{"secret":"s3cret"}`)
-	assert.NoError(t, scrubError(nil, cfg))
-
-	clean := errors.New("connection refused")
-	assert.Same(t, clean, scrubError(clean, cfg), "an error with nothing to cut is returned as it is")
-
-	got := scrubError(errors.New("failed: s3cret"), cfg)
-	assert.EqualError(t, got, "failed: "+ph)
 }
 
 // encoding/json accepts any casing for a struct field, so "URL" and "Headers" are valid config keys
@@ -189,7 +127,7 @@ func TestRestoreConfig_AnyKeyCasing(t *testing.T) {
 	stored := json.RawMessage(`{"URL":"https://h.example/SECRET","Headers":{"Authorization":"Bearer b"},"Secret":"s3"}`)
 	incoming := json.RawMessage(`{"url":"` + ph + `","HEADERS":{"authorization":"` + ph + `"},"secret":"` + ph + `"}`)
 
-	m := decodeMap(t, restoreConfig(incoming, stored))
+	m := decodeMap(t, mustRestore(t, incoming, stored))
 
 	assert.Equal(t, "https://h.example/SECRET", m["url"])
 	assert.Equal(t, map[string]any{"authorization": "Bearer b"}, m["HEADERS"])
@@ -205,77 +143,32 @@ func TestRestoreConfig_Lists(t *testing.T) {
 	t.Run("the masked read comes back whole", func(t *testing.T) {
 		masked := maskConfig(stored)
 		require.Contains(t, string(masked), ph)
-		m := decodeMap(t, restoreConfig(masked, stored))
+		m := decodeMap(t, mustRestore(t, masked, stored))
 		assert.Equal(t, []any{"a", "b"}, m["token_list"])
 		assert.Equal(t, map[string]any{"keys": []any{"x", "y", "z"}}, m["opts"])
-		assert.NotContains(t, string(restoreConfig(masked, stored)), ph)
+		assert.NotContains(t, string(mustRestore(t, masked, stored)), ph)
 	})
 
 	t.Run("a different length takes nothing from the stored list", func(t *testing.T) {
-		m := decodeMap(t, restoreConfig(json.RawMessage(`{"token_list":["`+ph+`","`+ph+`","`+ph+`"]}`), stored))
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"token_list":["`+ph+`","`+ph+`","`+ph+`"]}`), stored))
 		assert.Equal(t, []any{}, m["token_list"])
 	})
 
 	t.Run("a mixed list keeps the new entry and drops the placeholder", func(t *testing.T) {
-		m := decodeMap(t, restoreConfig(json.RawMessage(`{"token_list":["`+ph+`","fresh"]}`), stored))
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"token_list":["`+ph+`","fresh"]}`), stored))
 		assert.Equal(t, []any{"fresh"}, m["token_list"])
 	})
 
 	t.Run("nothing stored drops every placeholder", func(t *testing.T) {
-		out := restoreConfig(json.RawMessage(`{"token_list":["`+ph+`"],"x":{"password":["`+ph+`"]}}`), nil)
+		out := mustRestore(t, json.RawMessage(`{"token_list":["`+ph+`"],"x":{"password":["`+ph+`"]}}`), nil)
 		assert.NotContains(t, string(out), ph)
 	})
 
 	t.Run("a list that is not secret is left as sent", func(t *testing.T) {
-		m := decodeMap(t, restoreConfig(json.RawMessage(`{"recipients":["`+ph+`","b@example.com"]}`), stored))
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"recipients":["`+ph+`","b@example.com"]}`), stored))
 		assert.Equal(t, []any{ph, "b@example.com"}, m["recipients"])
 	})
 }
-
-// The failed send quotes a URL the way net/url does, not the way it was stored.
-func TestScrubText_QuotedAndNormalizedSpellings(t *testing.T) {
-	t.Run("a control character is written as an escape", func(t *testing.T) {
-		stored := "http://h.example/x?t=LEAKQUERY620\n"
-		_, err := http.NewRequest(http.MethodPost, stored, nil)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), `LEAKQUERY620\n`, "net/url quotes the raw URL with %q")
-		require.NotContains(t, err.Error(), stored)
-
-		cfg, jerr := json.Marshal(map[string]any{"url": stored})
-		require.NoError(t, jerr)
-		text := scrubText(err.Error(), cfg)
-		assert.NotContains(t, text, "LEAKQUERY620")
-		assert.Contains(t, text, ph)
-	})
-
-	t.Run("a URL with a quote and a backslash", func(t *testing.T) {
-		stored := `http://h.example/a"b\c?t=LEAKQUERY620`
-		text := scrubText(`failed: Post `+strconv.Quote(stored)+`: boom`, json.RawMessage(`{"url":`+strconv.Quote(stored)+`}`))
-		assert.NotContains(t, text, "LEAKQUERY620")
-	})
-
-	t.Run("a path net/http percent-encodes", func(t *testing.T) {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		addr := l.Addr().String()
-		require.NoError(t, l.Close())
-		stored := "http://" + addr + "/p/Ünï/LEAKPATH620?t=LEAKQUERY620"
-
-		_, perr := http.Post(stored, "application/json", nil) //nolint:gosec // loopback, closed port
-		require.Error(t, perr)
-		require.Contains(t, perr.Error(), "%C3%9C", "net/http writes the encoded path")
-		require.NotContains(t, perr.Error(), "Ün", "so the stored spelling is not in the text")
-
-		cfg, jerr := json.Marshal(map[string]any{"url": stored})
-		require.NoError(t, jerr)
-		text := scrubText(perr.Error(), cfg)
-		assert.NotContains(t, text, "LEAKPATH620")
-		assert.NotContains(t, text, "LEAKQUERY620")
-		assert.NotContains(t, text, "%C3%9C")
-	})
-}
-
-// Round 2 of the review: each case below came from a way the first repair still leaked or corrupted.
 
 // encoding/json folds U+017F (long s) to s and U+212A (Kelvin) to k when it matches a field name, so
 // delivery reads these keys as "secret" and "..key".
@@ -291,154 +184,63 @@ func TestMaskConfig_FoldedUnicodeKeys(t *testing.T) {
 	assert.Equal(t, ph, m["apiKey"])
 }
 
-// Three "*" credentials made four identical spellings each, and every replacement expanded the stars an
-// earlier one had written.
-func TestScrubText_PlaceholderIsNeverScrubbedAgain(t *testing.T) {
-	cfg := json.RawMessage(`{"headers":{"a":"*","b":"*","c":"*"}}`)
-	assert.Equal(t, strings.Repeat(ph, 3), scrubText("***", cfg))
-	assert.Equal(t, ph+" and "+ph, scrubText("* and *", cfg))
-}
-
-// http.NewRequest drops an empty port, so the text holds a URL the stored one does not match.
-func TestScrubText_URLErrorWhateverItsSpelling(t *testing.T) {
-	stored := "nosuch://h.example:/LEAKPATH620?t=LEAKQUERY620"
-	_, err := http.Post(stored, "application/json", nil) //nolint:gosec // unsupported scheme: nothing is dialed
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "nosuch://h.example/LEAKPATH620", "net/http wrote the URL without the empty port")
-	require.NotContains(t, err.Error(), stored)
-
-	cfg, jerr := json.Marshal(map[string]any{"url": stored})
-	require.NoError(t, jerr)
-	text := scrubText("failed to send webhook: "+err.Error(), cfg)
-	assert.NotContains(t, text, "LEAKPATH620")
-	assert.NotContains(t, text, "LEAKQUERY620")
-	assert.Contains(t, text, `Post "`+ph+`": `)
-	assert.Contains(t, text, "unsupported protocol scheme", "the rest of the error stays")
-
-	// A URL that does not parse is cut the same way, and an error with no URL is left as it is.
-	assert.Equal(t, `failed to create request: parse "`+ph+`": bad`, scrubText(`failed to create request: parse "http://x/%zz": bad`, json.RawMessage(`{"secret":"s3cret"}`)))
-	assert.Equal(t, "dial tcp 10.0.0.1:443: connect: refused", scrubText("dial tcp 10.0.0.1:443: connect: refused", cfg))
-}
-
-// Trimming the quotes of a quoted credential that ends in a quote cut one quote too many.
-func TestScrubText_CredentialEndingInAQuote(t *testing.T) {
-	cfg := json.RawMessage(`{"secret":"abc\""}`)
-	assert.Equal(t, `abc\xyz`, scrubText(`abc\xyz`, cfg), "text that holds no credential is not changed")
-	assert.Equal(t, ph, scrubText(`abc\"`, cfg), "the %q spelling of the credential is cut")
-	assert.Equal(t, ph, scrubText(`abc"`, cfg), "the stored spelling is cut")
-}
-
 // A JSON escape of the first star decodes to the placeholder, and a save of it must restore like the
 // plain spelling. The backslash is joined at run time so the text is a real JSON escape.
 func TestRestoreConfig_EscapedPlaceholder(t *testing.T) {
 	escaped := `\` + `u002a*******`
 	require.NotContains(t, escaped, ph, "the premise: the bytes do not hold the placeholder")
 	stored := json.RawMessage(`{"url":"https://h.example/hook","secret":"s3"}`)
-	m := decodeMap(t, restoreConfig(json.RawMessage(`{"url":"`+escaped+`","secret":"`+escaped+`"}`), stored))
+	m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"`+escaped+`","secret":"`+escaped+`"}`), stored))
 	assert.Equal(t, "https://h.example/hook", m["url"])
 	assert.Equal(t, "s3", m["secret"])
 
-	assert.Equal(t, string(stored), string(restoreConfig(json.RawMessage(`"`+escaped+`"`), stored)), "the whole text, escaped")
+	assert.Equal(t, string(stored), string(mustRestore(t, json.RawMessage(`"`+escaped+`"`), stored)), "the whole text, escaped")
 
 	untouched := json.RawMessage(`{ "url": "u",  "secret": "x" }`)
-	assert.Equal(t, string(untouched), string(restoreConfig(untouched, stored)), "no placeholder: the client's bytes come back")
+	assert.Equal(t, string(untouched), string(mustRestore(t, untouched, stored)), "no placeholder: the client's bytes come back")
 }
 
 // Two stored keys that fold together name one decoded field by position, which a map does not keep.
 // The placeholder takes neither, so a save cannot move the destination.
 func TestRestoreConfig_AmbiguousFoldedKeys(t *testing.T) {
 	stored := json.RawMessage(`{"URL":"https://a.example","url":"https://b.example"}`)
-	m := decodeMap(t, restoreConfig(json.RawMessage(`{"Url":"`+ph+`"}`), stored))
-	assert.NotContains(t, m, "Url", "an ambiguous placeholder is dropped")
-	assert.NotContains(t, string(restoreConfig(json.RawMessage(`{"Url":"`+ph+`"}`), stored)), "example")
+	out := mustRestore(t, json.RawMessage(`{"Url":"`+ph+`"}`), stored)
+	assert.NotContains(t, decodeMap(t, out), "Url", "an ambiguous placeholder is dropped")
+	assert.NotContains(t, string(out), "example")
 }
 
-// Round 3 of the review.
-
-// The method is configurable and Go accepts every HTTP token, a digit included; the failed send names
-// it as the Op of the url.Error.
-func TestScrubText_AnyMethodToken(t *testing.T) {
-	stored := "nosuch://user:pass@h.example/LEAKPATH620?t=LEAKQUERY620"
-	for _, method := range []string{"POST", "X1", "M-SEARCH", "v.2"} {
-		req, err := http.NewRequest(method, stored, nil)
-		require.NoError(t, err, method)
-		_, err = http.DefaultClient.Do(req) //nolint:gosec // unsupported scheme: nothing is dialed
-		require.Error(t, err, method)
-		require.Contains(t, err.Error(), "user:***@", "net/http writes the password as ***")
-
-		cfg, jerr := json.Marshal(map[string]any{"url": stored, "method": method})
-		require.NoError(t, jerr)
-		text := scrubText("failed to send webhook: "+err.Error(), cfg)
-		assert.NotContains(t, text, "LEAKPATH620", method)
-		assert.NotContains(t, text, "LEAKQUERY620", method)
-		assert.Contains(t, text, `"`+ph+`": `, method)
-	}
-}
-
-// A repeated member is read one way by the generic decode (the last wins) and another by the struct
-// decode validation uses (in text order, a null is ignored). Where the text also carries the placeholder
-// there is no faithful restore, so the config is refused; otherwise the client's bytes are left alone,
-// because re-encoding sorts the members and moves the effective destination.
-func TestRestoreConfig_RepeatedMembers(t *testing.T) {
-	stored := json.RawMessage(`{"url":"https://h.example/stored"}`)
-	type webhook struct {
-		URL string `json:"url"`
-	}
+// encoding/json reads a repeated member in text order (a later null is ignored, names fold together);
+// the generic decode keeps the last value and loses the order, and re-encoding sorts the members. No
+// restore can promise to keep the destination delivery reads, so a config that repeats a name is refused
+// whether or not it carries the placeholder, for every spelling of the name and at any depth.
+func TestRestoreConfig_RepeatedMembersAreRefused(t *testing.T) {
+	stored := json.RawMessage(`{"url":"https://h.example/stored","headers":{"Authorization":"Bearer x"}}`)
 
 	for name, incoming := range map[string]string{
-		"null after":  `{"url":"` + ph + `","url":null}`,
-		"folded null": `{"URL":"` + ph + `","url":null}`,
-		"nested":      `{"headers":{"A":"` + ph + `","A":null},"url":"u"}`,
-		"in a list":   `{"opts":[{"x":1,"x":2}],"url":"` + ph + `"}`,
+		"plain":                `{"url":"old","url":"new"}`,
+		"folded":               `{"url":"https://old.example/hook","URL":"https://new.example/hook","headers":{"Authorization":"Bearer x"}}`,
+		"long s folds to s":    `{"ſecret":"a","secret":"b","url":"u"}`,
+		"nested":               `{"opts":{"a":1,"a":2},"url":"u"}`,
+		"in a list":            `{"opts":[{"x":1,"x":2}],"url":"u"}`,
+		"with the placeholder": `{"url":"` + ph + `","url":null}`,
+		"folded placeholder":   `{"URL":"` + ph + `","url":null}`,
+		"after a huge number":  `{"n":1e1000,"url":"https://old.example","URL":"https://new.example","headers":{"Authorization":"` + ph + `"}}`,
 	} {
-		out := restoreConfig(json.RawMessage(incoming), stored)
-		assert.Equal(t, `"`+ph+`"`, string(out), "%s: refused", name)
-		var cfg webhook
-		assert.Error(t, json.Unmarshal(out, &cfg), "%s: a string is no channel config", name)
+		out, err := restoreConfig(json.RawMessage(incoming), stored)
+		require.ErrorIs(t, err, errRepeatedMember, name)
+		assert.Nil(t, out, name)
 	}
 
-	// No placeholder: the client's bytes come back, so the member delivery reads is the member the client wrote.
+	// Nothing is refused that repeats no name: a huge number, equal names in different objects, a list.
 	for name, incoming := range map[string]string{
-		"plain repetition": `{"url":"old","url":"new"}`,
-		"folded":           `{"url":"https://old.example/hook","URL":"https://new.example/hook","headers":{"Authorization":"Bearer x"}}`,
-		"nested":           `{"opts":{"a":1,"a":2},"url":"u"}`,
+		"huge number":         `{"n":1e1000,"url":"u"}`,
+		"same name elsewhere": `{"url":"u","headers":{"url":"a"},"opts":{"url":"b"}}`,
+		"list of objects":     `{"url":"u","opts":[{"x":1},{"x":2}]}`,
 	} {
-		out := restoreConfig(json.RawMessage(incoming), stored)
+		out, err := restoreConfig(json.RawMessage(incoming), stored)
+		require.NoError(t, err, name)
 		assert.Equal(t, incoming, string(out), name)
 	}
-	var cfg webhook
-	require.NoError(t, json.Unmarshal(restoreConfig(json.RawMessage(`{"url":"old","URL":"new"}`), stored), &cfg))
-	assert.Equal(t, "new", cfg.URL, "the last member in the text is the one delivery reads")
-
-	// A config with no repeated member keeps the client's bytes.
-	same := json.RawMessage(`{ "url": "u", "headers": {"A": "b"}, "opts": [{"x": 1}, {"x": 2}] }`)
-	assert.Equal(t, string(same), string(restoreConfig(same, stored)))
-}
-
-// Go nests errors: a bad Location header is reported as `... header "<url>": parse "<url>": ...`, and
-// the cut of the first quoted URL must leave the space the second one starts after.
-func TestScrubText_NestedURLErrorFromARedirect(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Location", "/bad%zz?token=LEAK620")
-		w.WriteHeader(http.StatusFound)
-	}))
-	t.Cleanup(srv.Close)
-	stored := srv.URL + "/hook?token=LEAK620"
-
-	_, err := http.Post(stored, "application/json", nil) //nolint:gosec // loopback test server
-	require.Error(t, err)
-	require.Contains(t, err.Error(), `header "/bad%zz?token=LEAK620": parse "/bad%zz?token=LEAK620"`, "the premise: two quoted URLs in one text")
-
-	cfg, jerr := json.Marshal(map[string]any{"url": stored})
-	require.NoError(t, jerr)
-	text := scrubText("failed to send webhook: "+err.Error(), cfg)
-	assert.NotContains(t, text, "LEAK620")
-	assert.Equal(t, 3, strings.Count(text, `"`+ph+`":`), "the request URL, the Location header and the parse error are all cut")
-}
-
-func TestScrubText_SecretInsideAList(t *testing.T) {
-	cfg := json.RawMessage(`{"token_list":["tok-one","tok-two"],"recipients":["a@example.com"]}`)
-	assert.Equal(t, ph+" "+ph+" a@example.com", scrubText("tok-one tok-two a@example.com", cfg))
 }
 
 func TestMaskedChannel_DoesNotChangeTheStoredChannel(t *testing.T) {

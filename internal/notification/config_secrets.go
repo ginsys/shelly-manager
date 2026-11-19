@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/ginsys/shelly-manager/internal/redact"
@@ -202,84 +199,81 @@ func restoreWholeList(incoming []any, stored any) ([]any, bool) {
 	return old, true
 }
 
-// restoreConfig takes the stored credential back for each placeholder in a config a client sends.
-func restoreConfig(incoming, stored json.RawMessage) json.RawMessage {
+// errRepeatedMember refuses a config in which a member name appears twice. encoding/json reads such a
+// config in text order (a later null is ignored, names fold together), the generic decode used here
+// keeps the last value and loses the order, so no restore of a placeholder can promise to keep the
+// destination delivery reads. The client sends each name once.
+var errRepeatedMember = errors.New("channel config repeats a member name: send each name once")
+
+// restoreConfig takes the stored credential back for each placeholder in a config a client sends. It
+// refuses a config that repeats a member name.
+func restoreConfig(incoming, stored json.RawMessage) (json.RawMessage, error) {
 	// The text is decoded before anything is decided: a JSON escape of a star is the placeholder too.
 	doc, ok := decodeDocument(bytes.TrimSpace(incoming))
 	if !ok {
-		return incoming // not ours to read: validation decides
+		return incoming, nil // not ours to read: validation decides
 	}
 	if s, isString := doc.(string); isString && s == redact.Placeholder {
-		return stored // the whole malformed text, masked
+		return stored, nil // the whole malformed text, masked
 	}
 	m, isMap := doc.(map[string]any)
 	if !isMap {
-		return incoming
+		return incoming, nil
+	}
+	if repeatsMember(bytes.TrimSpace(incoming)) {
+		return nil, errRepeatedMember
 	}
 	var old any
 	if storedDoc, storedOK := decodeDocument(bytes.TrimSpace(stored)); storedOK {
 		old = storedDoc
 	}
-	// A repeated member is read one way by the generic decode above (the last wins) and another by the
-	// struct decode that validation and delivery use (in text order, a null is ignored), and re-encoding
-	// sorts the members. So where a member repeats and the text carries the placeholder, there is no
-	// faithful restore: the config is refused (a string is no channel config). Without the placeholder
-	// there is nothing to restore, and the client's own bytes keep the order delivery reads.
-	repeats, hasPlaceholder := scanMembers(bytes.TrimSpace(incoming))
-	if repeats && hasPlaceholder {
-		return quotedPlaceholder()
-	}
 	before := encodeDocument(m)
 	restored := encodeDocument(restoreNode(m, old, true, false))
 	if bytes.Equal(before, restored) {
-		return incoming // nothing to restore: keep the client's own bytes
+		return incoming, nil // nothing to restore: keep the client's own bytes
 	}
-	return restored
+	return restored, nil
 }
 
-// scanMembers reports whether any object in raw holds two members whose names fold together, and
-// whether any string in it is the placeholder.
-func scanMembers(raw []byte) (repeats, placeholder bool) {
+// repeatsMember reports whether any object in raw holds two members whose names fold together (the
+// way encoding/json matches them). raw has been decoded already, so a text this cannot read on is
+// refused as well.
+func repeatsMember(raw []byte) bool {
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	var walk func() bool // false once the text cannot be read on
-	walk = func() bool {
+	dec.UseNumber() // a number such as 1e1000 must not end the scan
+	var walk func() (repeats, ok bool)
+	walk = func() (bool, bool) {
 		tok, err := dec.Token()
 		if err != nil {
-			return false
+			return false, false
 		}
-		switch v := tok.(type) {
-		case string:
-			placeholder = placeholder || v == redact.Placeholder
-		case json.Delim:
-			switch v {
-			case '{':
-				seen := map[string]bool{}
-				for dec.More() {
-					nameTok, nameErr := dec.Token()
-					name, isName := nameTok.(string)
-					if nameErr != nil || !isName {
-						return false
-					}
-					folded := strings.ToLower(strings.ToUpper(name))
-					repeats = repeats || seen[folded]
-					seen[folded] = true
-					if !walk() {
-						return false
-					}
+		delim, isDelim := tok.(json.Delim)
+		if !isDelim {
+			return false, true // a scalar
+		}
+		seen := map[string]bool{}
+		for dec.More() {
+			if delim == '{' {
+				nameTok, nameErr := dec.Token()
+				name, isName := nameTok.(string)
+				if nameErr != nil || !isName {
+					return false, false
 				}
-			case '[':
-				for dec.More() {
-					if !walk() {
-						return false
-					}
+				folded := strings.ToLower(strings.ToUpper(name))
+				if seen[folded] {
+					return true, true
 				}
+				seen[folded] = true
 			}
-			_, _ = dec.Token() // the closing delimiter
+			if repeats, ok := walk(); repeats || !ok {
+				return repeats, ok
+			}
 		}
-		return true
+		_, _ = dec.Token() // the closing delimiter
+		return false, true
 	}
-	walk()
-	return repeats, placeholder
+	repeats, ok := walk()
+	return repeats || !ok
 }
 
 // maskedChannel returns a copy of c that is safe to send out. The stored record is never changed:
@@ -287,95 +281,4 @@ func scanMembers(raw []byte) (repeats, placeholder bool) {
 func maskedChannel(c NotificationChannel) NotificationChannel {
 	c.Config = maskConfig(c.Config)
 	return c
-}
-
-// collectSecrets appends every credential string below v.
-func collectSecrets(v any, top, secret bool, out *[]string) {
-	switch x := v.(type) {
-	case map[string]any:
-		for k, child := range x {
-			if isContainer(child) {
-				collectSecrets(child, false, holdsAll(k, top, secret), out)
-			} else if s, isString := child.(string); isString && isSlot(k, top, secret) {
-				*out = append(*out, s)
-			}
-		}
-	case []any:
-		for _, e := range x {
-			if s, isString := e.(string); isString && secret {
-				*out = append(*out, s)
-			} else if isContainer(e) {
-				collectSecrets(e, false, secret, out)
-			}
-		}
-	}
-}
-
-// quotedURLError matches the part of a *url.Error that holds the request URL: `Post "<url>": `, where
-// the URL is written with %q. net/http spells that URL its own way (percent-encoded, the password
-// written ***, an empty port dropped), so the stored value cannot be matched against it, and the shape
-// is cut out whatever the spelling. The Op is the request method, or "parse" for a URL that does not parse.
-//
-// The Op is any HTTP method token (RFC 9110: letters, digits and !#$%&'*+-.^_`|~), because the method is
-// configurable and Go accepts every token.
-//
-// The match ends at the colon and leaves the space after it, because nested errors share that space
-// (`failed to parse Location header "<url>": parse "<url>": ...`).
-var quotedURLError = regexp.MustCompile("(?:^|\\s)[!#$%&'*+.^_`|~0-9A-Za-z-]+ \"(?:[^\"\\\\]|\\\\.)*\":")
-
-// spellings lists how an error can write the credential s: as stored, and with %q (a quote, a backslash
-// or a control character escaped), for the text a *url.Error does not hold.
-func spellings(s string) []string {
-	quoted := strconv.Quote(s)
-	return []string{s, quoted[1 : len(quoted)-1]}
-}
-
-// scrubText replaces, in text, every credential held by the channel config with the placeholder. A
-// failed send quotes its destination, and the text is stored with the history row and returned by a
-// test send, so the request URL of a *url.Error and the config's own values are cut out of it.
-func scrubText(text string, config json.RawMessage) string {
-	doc, ok := decodeDocument(bytes.TrimSpace(config))
-	if !ok || text == "" {
-		return text
-	}
-	var secrets []string
-	collectSecrets(doc, true, false, &secrets)
-	seen := map[string]bool{}
-	var forms []string
-	for _, s := range secrets {
-		if s == "" || s == redact.Placeholder {
-			continue
-		}
-		for _, f := range spellings(s) {
-			if !seen[f] {
-				seen[f] = true
-				forms = append(forms, f)
-			}
-		}
-	}
-	sort.Slice(forms, func(i, j int) bool { return len(forms[i]) > len(forms[j]) }) // a longer value first
-	text = quotedURLError.ReplaceAllStringFunc(text, func(m string) string {
-		return m[:strings.IndexByte(m, '"')] + `"` + redact.Placeholder + `":`
-	})
-	if len(forms) == 0 {
-		return text
-	}
-	// One pass over the text: a placeholder already written is never searched again.
-	pairs := make([]string, 0, 2*len(forms))
-	for _, f := range forms {
-		pairs = append(pairs, f, redact.Placeholder)
-	}
-	return strings.NewReplacer(pairs...).Replace(text)
-}
-
-// scrubError returns err with the channel's credentials cut out of its text; an error that holds none
-// is returned as it is.
-func scrubError(err error, config json.RawMessage) error {
-	if err == nil {
-		return nil
-	}
-	if text := scrubText(err.Error(), config); text != err.Error() {
-		return errors.New(text)
-	}
-	return err
 }

@@ -163,17 +163,24 @@ func TestNotificationSecrets_ReadsMaskEveryCarrier(t *testing.T) {
 		Type: "drift_detected", AlertLevel: notification.AlertLevelWarning, Title: "drift", Message: "m",
 	}))
 
-	for _, path := range []string{"/notifications/channels", "/notifications/rules", "/notifications/history"} {
-		code, body := env.do(t, "GET", path, nil)
-		require.Equal(t, http.StatusOK, code, body)
+	for _, path := range []string{"/notifications/channels", "/notifications/rules"} {
+		status, body := env.do(t, "GET", path, nil)
+		require.Equal(t, http.StatusOK, status, body)
 		assertNoLeaks(t, "GET "+path, body)
 		assert.Contains(t, body, redact.Placeholder, "GET %s shows the placeholder", path)
 	}
 
-	// The history row exists and its error text did quote the URL (the control for the scrub).
+	// The history read carries the channel's config, which is masked. The row's own error text quotes the
+	// request URL (the write side, ginsys/shelly-manager#652), so only the config's credentials are checked.
+	code, history := env.do(t, "GET", "/notifications/history", nil)
+	require.Equal(t, http.StatusOK, code, history)
+	for _, leak := range []string{"LEAKBEARER620", leakSecret, leakUserPwd} {
+		assert.NotContains(t, history, leak, "GET /notifications/history leaks %s", leak)
+	}
+	assert.Contains(t, history, redact.Placeholder)
 	var raw string
 	require.NoError(t, env.db.Raw("SELECT error FROM notification_histories WHERE channel_id = ?", hookID).Scan(&raw).Error)
-	assert.Contains(t, raw, "127.0.0.1", "the stored delivery error quotes the destination")
+	assert.Contains(t, raw, "127.0.0.1", "the history row exists and holds the delivery error")
 
 	// The non-secret fields still come back, and an email channel is unchanged.
 	_, channels := env.do(t, "GET", "/notifications/channels", nil)
@@ -196,26 +203,17 @@ func TestNotificationSecrets_ReadsMaskEveryCarrier(t *testing.T) {
 	assert.Equal(t, strings.Count(a, redact.Placeholder), strings.Count(b, redact.Placeholder))
 }
 
-// A failed test send returns the delivery error as its 500 message; it must not quote the URL.
-func TestNotificationSecrets_TestSendErrorCarriesNoURL(t *testing.T) {
+// The test send is unchanged: a failed send is a 500 with the delivery error, a missing channel a 404.
+// The delivery error text and the stored history error still quote the request URL; keeping it out is
+// the write-side change tracked in ginsys/shelly-manager#652, not part of masking the config.
+func TestNotificationSecrets_TestSendBehaviourIsUnchanged(t *testing.T) {
 	env := setupNotificationSecrets(t)
 
 	id, _ := env.createChannel(t, deadWebhook(closedPort(t)))
 	code, body := env.do(t, "POST", fmt.Sprintf("/notifications/channels/%d/test", id), nil)
-	require.Equal(t, http.StatusInternalServerError, code, body)
-	assertNoLeaks(t, "the failed test send", body)
-	assert.Contains(t, body, redact.Placeholder)
+	assert.Equal(t, http.StatusInternalServerError, code, body)
+	assert.Contains(t, body, "failed to send webhook")
 
-	// A URL that does not parse fails inside http.NewRequest and quotes the raw string.
-	badID, _ := env.createChannel(t, map[string]any{
-		"name": "bad-url", "type": "webhook", "enabled": true,
-		"config": map[string]any{"url": "http://[::1:" + leakPath},
-	})
-	code, body = env.do(t, "POST", fmt.Sprintf("/notifications/channels/%d/test", badID), nil)
-	require.Equal(t, http.StatusInternalServerError, code, body)
-	assertNoLeaks(t, "the failed test send of an unparseable URL", body)
-
-	// The 404 for a missing channel is unchanged.
 	code, _ = env.do(t, "POST", "/notifications/channels/9999/test", nil)
 	assert.Equal(t, http.StatusNotFound, code)
 }
@@ -268,59 +266,36 @@ func TestNotificationSecrets_AnyKeyCasingIsMaskedAndRestored(t *testing.T) {
 	assert.Equal(t, "/"+leakPath, got.path)
 }
 
-// A stored URL that net/url refuses, or that it spells differently, still leaves the error text clean.
-func TestNotificationSecrets_TestSendErrorCarriesNoURLInAnySpelling(t *testing.T) {
+// A config that repeats a member name is refused on create and on update with a 400, in any spelling
+// of the name, and the stored channel is left as it was: encoding/json reads such a text in member
+// order, so no restore of a placeholder can promise to keep the destination delivery reads.
+func TestNotificationSecrets_RepeatedMembersAreRefusedOnSave(t *testing.T) {
 	env := setupNotificationSecrets(t)
-	port := closedPort(t)
-
-	for name, raw := range map[string]string{
-		"a control character": "http://127.0.0.1:1/" + leakPath + "?t=" + leakQuery + "\n",
-		"a non-ASCII path":    fmt.Sprintf("http://127.0.0.1:%d/%s/Ün?t=%s", port, leakPath, leakQuery),
-	} {
-		id, _ := env.createChannel(t, map[string]any{
-			"name": name, "type": "webhook", "enabled": true,
-			"config": map[string]any{"url": raw},
-		})
-		code, body := env.do(t, "POST", fmt.Sprintf("/notifications/channels/%d/test", id), nil)
-		require.Equal(t, http.StatusInternalServerError, code, "%s: %s", name, body)
-		assertNoLeaks(t, name, body)
-		assert.Contains(t, body, redact.Placeholder, name)
-	}
-}
-
-// Two members that fold together are read in text order by delivery. A save must not reorder them, or
-// the Authorization header would go to the other destination.
-func TestNotificationSecrets_RepeatedMemberKeepsTheDestinationDeliveryReads(t *testing.T) {
-	env := setupNotificationSecrets(t)
-	var oldHit, newHit capturedRequest
-	oldSrv := httptest.NewServer(http.HandlerFunc(oldHit.handler))
-	newSrv := httptest.NewServer(http.HandlerFunc(newHit.handler))
-	t.Cleanup(oldSrv.Close)
-	t.Cleanup(newSrv.Close)
-
-	cfg := fmt.Sprintf(`{"url":%q,"URL":%q,"headers":{"Authorization":%q}}`, oldSrv.URL+"/old", newSrv.URL+"/new", leakBearer)
 	id, _ := env.createChannel(t, map[string]any{
-		"name": "twice", "type": "webhook", "enabled": true, "config": json.RawMessage(cfg),
+		"name": "once", "type": "webhook", "enabled": true,
+		"config": map[string]any{"url": "http://old.example/hook", "headers": map[string]string{"Authorization": leakBearer}},
 	})
-	require.NoError(t, env.svc.TestChannel(context.Background(), id))
+	before := env.storedConfig(t, id)
 
-	newHit.mu.Lock()
-	defer newHit.mu.Unlock()
-	oldHit.mu.Lock()
-	defer oldHit.mu.Unlock()
-	assert.Equal(t, "/new", newHit.path, "the last member in the text is the destination")
-	assert.Equal(t, leakBearer, newHit.headers.Get("Authorization"))
-	assert.Empty(t, oldHit.path, "the other destination got nothing")
+	for name, cfg := range map[string]string{
+		"two spellings of url":   `{"url":"http://old.example/hook","URL":"http://new.example/hook","headers":{"Authorization":"` + leakBearer + `"}}`,
+		"the placeholder, null":  `{"url":"` + redact.Placeholder + `","url":null}`,
+		"behind a huge number":   `{"n":1e1000,"url":"http://old.example","URL":"http://new.example","headers":{"Authorization":"` + redact.Placeholder + `"}}`,
+		"repeated header member": `{"url":"http://h.example","headers":{"Authorization":"a","authorization":"b"}}`,
+	} {
+		code, resp := env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{
+			"name": "once", "type": "webhook", "config": json.RawMessage(cfg),
+		})
+		assert.Equal(t, http.StatusBadRequest, code, "update, %s: %s", name, resp)
+		assert.Equal(t, before, env.storedConfig(t, id), "update, %s: the stored channel is unchanged", name)
 
-	// A repeated member next to the placeholder is refused and the stored channel is left as it was.
-	code, resp := env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{
-		"name": "twice", "type": "webhook",
-		"config": json.RawMessage(`{"url":"` + redact.Placeholder + `","url":null}`),
-	})
-	assert.Equal(t, http.StatusBadRequest, code, resp)
-	var stored notification.NotificationChannel
-	require.NoError(t, env.db.First(&stored, id).Error)
-	assert.JSONEq(t, cfg, string(stored.Config))
+		code, resp = env.do(t, "POST", "/notifications/channels", map[string]any{
+			"name": "twice-" + name, "type": "webhook", "config": json.RawMessage(cfg),
+		})
+		assert.Equal(t, http.StatusBadRequest, code, "create, %s: %s", name, resp)
+	}
+	_, list := env.do(t, "GET", "/notifications/channels", nil)
+	assert.Equal(t, 1, strings.Count(list, `"name"`), "no channel was created by a refused save")
 }
 
 // A list of credentials is masked on read and comes back whole when the client sends the read back.
