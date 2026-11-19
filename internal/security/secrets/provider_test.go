@@ -55,9 +55,25 @@ func writeKeyFile(t *testing.T, content string) string {
 	return fp
 }
 
+// clearKeyEnv makes the four key variables absent for the test and restores them afterwards: t.Setenv
+// records the original value, and t.Setenv(k, "") alone would leave the variable set but empty.
+func clearKeyEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{
+		"SHELLY_SECURITY_ADMIN_API_KEY", "SHELLY_SECURITY_ADMIN_API_KEY_FILE",
+		"SHELLY_SECURITY_AGENT_API_KEY", "SHELLY_SECURITY_AGENT_API_KEY_FILE",
+	} {
+		t.Setenv(k, "")
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatalf("unset %s: %v", k, err)
+		}
+	}
+}
+
 // The agent key reads its _FILE form like the admin key does (ginsys/shelly-manager#623): the file is
-// read, one trailing newline is trimmed, and the admin key is left alone.
+// read, its trailing newlines are trimmed, and the admin key is left alone.
 func TestApplyToConfig_AgentKeyFromFile(t *testing.T) {
+	clearKeyEnv(t)
 	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY_FILE", writeKeyFile(t, "agentkey456\n"))
 
 	cfg := &config.Config{}
@@ -84,6 +100,7 @@ func TestApplyToConfig_AgentKeyPlainVariableWinsOverFile(t *testing.T) {
 }
 
 func TestApplyToConfig_AgentKeyKeptWithoutVariable(t *testing.T) {
+	clearKeyEnv(t)
 	cfg := &config.Config{}
 	cfg.Security.AgentAPIKey = "from-config"
 	ApplyToConfig(cfg)
