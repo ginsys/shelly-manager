@@ -41,9 +41,9 @@ database:
     timeout: "10s"
   max_open_conns: 20
   max_idle_conns: 5
-  conn_max_lifetime: "30m"
-  conn_max_idle_time: "5m"
-  slow_query_threshold: "200ms"
+  conn_max_lifetime: 1800
+  conn_max_idle_time: 300
+  slow_query_time: 200
   log_level: "warn"
 ```
 
@@ -149,7 +149,7 @@ database:
   conn_max_idle_time: 600              # Idle connection timeout in seconds (unset or 0: 600, 10 minutes)
   
   # Performance Settings  
-  slow_query_threshold: "200ms"        # Slow query threshold (default: 200ms)
+  slow_query_time: 500                 # Slow query threshold in milliseconds (unset or 0: 500)
   log_level: "warn"                    # Logging level: silent|error|warn|info
   
   # MySQL-Specific Options
@@ -246,9 +246,9 @@ database:
     writeTimeout: "10s"
   max_open_conns: 10
   max_idle_conns: 3
-  conn_max_lifetime: "15m"
-  conn_max_idle_time: "2m"
-  slow_query_threshold: "100ms"
+  conn_max_lifetime: 900
+  conn_max_idle_time: 120
+  slow_query_time: 100
   log_level: "info"  # Verbose logging for development
 ```
 
@@ -308,9 +308,9 @@ database:
     writeTimeout: "30s"
   max_open_conns: 20
   max_idle_conns: 5
-  conn_max_lifetime: "30m"
-  conn_max_idle_time: "5m"
-  slow_query_threshold: "200ms"
+  conn_max_lifetime: 1800
+  conn_max_idle_time: 300
+  slow_query_time: 200
   log_level: "warn"
 ```
 
@@ -341,9 +341,9 @@ database:
     application_name: "shelly-manager"
   max_open_conns: 25                   # Higher for production load
   max_idle_conns: 5
-  conn_max_lifetime: "1h"              # Longer for production stability
-  conn_max_idle_time: "10m"
-  slow_query_threshold: "500ms"        # Production threshold
+  conn_max_lifetime: 3600              # Longer for production stability
+  conn_max_idle_time: 600
+  slow_query_time: 500        # Production threshold
   log_level: "error"                   # Minimal logging for performance
 ```
 
@@ -477,7 +477,7 @@ data:
         charset: "utf8mb4"
       max_open_conns: 25
       max_idle_conns: 5
-      conn_max_lifetime: "1h"
+      conn_max_lifetime: 3600
 ---
 apiVersion: v1
 kind: Secret
@@ -568,8 +568,8 @@ database:
 database:
   max_open_conns: 50      # Higher for high load
   max_idle_conns: 10      # More idle connections
-  conn_max_lifetime: "1h"  # Longer for stability
-  conn_max_idle_time: "10m" # Balanced cleanup
+  conn_max_lifetime: 3600  # Longer for stability
+  conn_max_idle_time: 600 # Balanced cleanup
 ```
 
 #### Low-Resource Environment
@@ -577,8 +577,8 @@ database:
 database:
   max_open_conns: 10      # Lower resource usage
   max_idle_conns: 2       # Minimal idle
-  conn_max_lifetime: "15m" # Frequent rotation
-  conn_max_idle_time: "2m"  # Aggressive cleanup
+  conn_max_lifetime: 900 # Frequent rotation
+  conn_max_idle_time: 120  # Aggressive cleanup
 ```
 
 ### Performance Monitoring
@@ -727,7 +727,7 @@ database:
     charset: "utf8mb4"
     timeout: "30s"      # Longer timeout for debugging
   log_level: "info"     # Verbose logging
-  slow_query_threshold: "50ms"  # Lower threshold for debugging
+  slow_query_time: 50  # Lower threshold for debugging
 ```
 
 This comprehensive usage guide provides all the information needed to successfully configure, deploy, and operate the MySQL database provider in various environments and scenarios.

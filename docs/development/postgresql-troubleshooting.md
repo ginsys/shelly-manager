@@ -200,7 +200,7 @@ ERROR: Query timeout after 5 minutes
 **1. Enable Query Logging**
 ```yaml
 database:
-  slow_query_threshold: "100ms"
+  slow_query_time: 100
   log_level: "info"
 ```
 
@@ -302,8 +302,8 @@ max_connections = 200  # Increase from default 100
 database:
   max_open_conns: 50      # Increase pool size
   max_idle_conns: 10      # Maintain more idle connections
-  conn_max_lifetime: "1h" # Reduce lifetime to prevent stale connections
-  conn_max_idle_time: "10m" # Clean up idle connections
+  conn_max_lifetime: 3600 # Reduce lifetime to prevent stale connections
+  conn_max_idle_time: 600 # Clean up idle connections
 ```
 
 **3. Find and Kill Long-Running Queries**
@@ -494,7 +494,7 @@ log_line_prefix = '%t [%p]: user=%u,db=%d,app=%a,client=%h '
 ```yaml
 database:
   log_level: "info"  # Increase verbosity
-  slow_query_threshold: "100ms"  # Lower threshold for debugging
+  slow_query_time: 100  # Lower threshold for debugging
 ```
 
 ### Health Check Failures

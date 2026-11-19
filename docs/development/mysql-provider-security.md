@@ -454,8 +454,8 @@ database:
     collation: "utf8mb4_unicode_ci"
   max_open_conns: 20
   max_idle_conns: 5
-  conn_max_lifetime: "30m"
-  conn_max_idle_time: "5m"
+  conn_max_lifetime: 1800
+  conn_max_idle_time: 300
 ```
 
 ### 2. Development Environment
