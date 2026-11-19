@@ -83,9 +83,9 @@ func samplePath(template string) string {
 
 func (r guardWalkRoute) key() string { return r.method + " " + r.template }
 
-// guardWalkRouter builds the production /api/v1 table with every optional handler set, on a plain
-// router: no middleware sits in front of the guards, so a 401 is the guard's own answer.
-func guardWalkRouter(t *testing.T, adminKey, agentKey string) *mux.Router {
+// guardWalkHandler builds a Handler with every optional handler set and the admin and agent keys
+// given (an empty key stays unset).
+func guardWalkHandler(t *testing.T, adminKey, agentKey string) (*Handler, *logging.Logger) {
 	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)
 	t.Cleanup(cleanup)
@@ -114,6 +114,14 @@ func guardWalkRouter(t *testing.T, adminKey, agentKey string) *mux.Router {
 	if agentKey != "" {
 		h.SetAgentAPIKey(agentKey)
 	}
+	return h, logger
+}
+
+// guardWalkRouter builds the production /api/v1 table on a plain router: no middleware sits in
+// front of the guards, so a 401 is the guard's own answer.
+func guardWalkRouter(t *testing.T, adminKey, agentKey string) *mux.Router {
+	t.Helper()
+	h, logger := guardWalkHandler(t, adminKey, agentKey)
 
 	// The production router builds a security monitor, and GET /metrics/security exists only with one.
 	monitor := middleware.NewSecurityMonitor(middleware.DefaultSecurityConfig(), logger)
