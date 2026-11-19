@@ -234,7 +234,9 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 
 	// Provisioner agent management routes. The agent calls five of them (register, poll, task status,
 	// report discovered devices, health) with its own key or the admin key; the rest create tasks and
-	// list what the agents reported, so they take the admin key alone.
+	// list what the agents reported, so they take the admin key alone. The shared agent key is enough
+	// for register and health. Poll, task status and report act for one agent, so their handlers also
+	// need the token issued at registration (X-Agent-Token); the admin key needs none.
 	agent := handler.agentOrAdmin
 	api.HandleFunc("/provisioner/agents/register", agent(handler.RegisterAgent)).Methods("POST")
 	api.HandleFunc("/provisioner/agents", admin(handler.GetProvisionerAgents)).Methods("GET")

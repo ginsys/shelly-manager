@@ -57,6 +57,17 @@ components:
       in: header
       name: X-API-Key
 
+  parameters:
+    AgentToken:
+      name: X-Agent-Token
+      in: header
+      required: false
+      description: >-
+        The agent's own token, returned as `agent_token` when it registered. Needed with the agent key on the
+        routes that act for one agent; the admin key needs none. Not checked when the manager has no admin key.
+      schema:
+        type: string
+
   schemas:
     # Common Response Wrapper
     APIResponse:
@@ -3067,11 +3078,17 @@ paths:
               $ref: '#/components/schemas/ProvisionerAgent'
       responses:
         '201':
-          description: Agent registered
+          description: >-
+            Agent registered. `data.agent_token` is the agent's own token, sent as `X-Agent-Token` on poll, task
+            status and report. A new registration of the same id replaces it.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '409':
+          description: >-
+            The id is online (seen within 5 minutes) and the request carries neither that agent's token nor the
+            admin key.
 
   /api/v1/provisioner/agents/{id}/tasks:
     get:
@@ -3087,7 +3104,12 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '#/components/parameters/AgentToken'
       responses:
+        '401':
+          description: No known agent token, so the agent registers again
+        '403':
+          description: The token belongs to another agent than the path id
         '200':
           description: Agent tasks
           content:
@@ -3178,6 +3200,7 @@ paths:
           required: true
           schema:
             type: string
+        - $ref: '#/components/parameters/AgentToken'
       requestBody:
         required: true
         content:
@@ -3191,6 +3214,10 @@ paths:
                 result:
                   type: object
       responses:
+        '401':
+          description: No known agent token, so the agent registers again
+        '403':
+          description: The task is not assigned to the token's agent (an unassigned or unknown task is nobody's)
         '200':
           description: Status updated
           content:
@@ -3221,6 +3248,8 @@ paths:
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentToken'
       requestBody:
         required: true
         content:
@@ -3228,11 +3257,18 @@ paths:
             schema:
               type: object
               properties:
+                agent_id:
+                  type: string
+                  description: Must be the token's agent. A named `task_id` is completed only if assigned to it.
                 devices:
                   type: array
                   items:
                     $ref: '#/components/schemas/Device'
       responses:
+        '401':
+          description: No known agent token, so the agent registers again
+        '403':
+          description: The body `agent_id` is not the token's agent
         '200':
           description: Devices reported
           content:

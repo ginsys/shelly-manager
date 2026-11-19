@@ -15,7 +15,7 @@ Supported secret keys (value or `_FILE`):
 
 `SHELLY_SECURITY_AGENT_API_KEY` (the manager's agent key) is read from the environment only; it has no `_FILE` form yet. Kubernetes gets it through `secretKeyRef`.
 
-Two keys, two jobs. The admin key opens every guarded route. The agent key opens only the five routes the provisioner agent calls (register, poll tasks, update task status, report discovered devices, health), so a leaked agent key cannot reach the admin-only configuration, device or admin routes, and cannot create tasks. It can still poll tasks, and a task carries its configuration (any Wi-Fi settings or device credentials in it), so treat the agent key as a secret too. Use two different values. The agent key has no effect while the admin key is empty.
+Two keys, two jobs. The admin key opens every guarded route. The agent key opens only the five routes the provisioner agent calls (register, poll tasks, update task status, report discovered devices, health), so a leaked agent key cannot reach the admin-only configuration, device or admin routes, and cannot create tasks. On its own it opens register and health only: each agent gets its own token when it registers, and poll, task status and report need that token, so one agent cannot read another agent's tasks or mark them done. A holder of the agent key can still register a new agent id and claim tasks nobody was assigned, and can take over an id that has been silent for 5 minutes, so treat the agent key as a secret too: a task carries its configuration (any Wi-Fi settings or device credentials in it). Use two different values. The agent key has no effect while the admin key is empty.
 
 Other relevant config keys:
 - SHELLY_EXPORT_OUTPUT_DIRECTORY (safe download base directory)

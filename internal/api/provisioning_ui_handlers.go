@@ -66,9 +66,9 @@ func mapInternalToUIStatus(internal string) string {
 }
 
 // agentStatus derives the UI-facing agent status from LastSeen timestamp,
-// mirroring the 5-minute freshness threshold used elsewhere in the registry.
+// using the registry's freshness threshold, agentOfflineAfter.
 func agentStatus(agent *ProvisionerAgent) string {
-	if time.Since(agent.LastSeen) > 5*time.Minute {
+	if time.Since(agent.LastSeen) > agentOfflineAfter {
 		return "offline"
 	}
 	if agent.Status != "" {

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/security/apikey"
 )
 
 // ProvisionerAgent represents a registered provisioning agent
@@ -24,7 +27,14 @@ type ProvisionerAgent struct {
 	LastSeen     time.Time         `json:"last_seen"`
 	RegisteredAt time.Time         `json:"registered_at"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
+
+	// token is the identity the manager issued at registration. It is never serialised.
+	token string
 }
+
+// agentOfflineAfter is how long an agent may stay silent before it counts as offline and
+// another caller may register under its id.
+const agentOfflineAfter = 5 * time.Minute
 
 // ProvisioningTask represents a task for a provisioning agent
 type ProvisioningTask struct {
@@ -51,6 +61,53 @@ type ProvisionerRegistry struct {
 var registry = &ProvisionerRegistry{
 	agents: make(map[string]*ProvisionerAgent),
 	tasks:  make(map[string]*ProvisioningTask),
+}
+
+const agentTokenHeader = "X-Agent-Token"
+
+func newAgentToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// holdsAdminKey reports whether the request may act for any agent: the admin key, or no admin key configured.
+func (h *Handler) holdsAdminKey(r *http.Request) bool {
+	return h.AdminAPIKey == "" || apikey.Authorized(r, h.AdminAPIKey)
+}
+
+// agentOf returns the registered agent whose token the request presents, or nil. The caller holds registry.mu.
+func agentOf(r *http.Request) *ProvisionerAgent {
+	presented := r.Header.Get(agentTokenHeader)
+	for _, agent := range registry.agents {
+		if apikey.Equal(presented, agent.token) {
+			return agent
+		}
+	}
+	return nil
+}
+
+// authorizeAgent decides whether the caller may act for the agent want. The admin key, or no admin key at
+// all, may act for any agent. Anyone else needs the token issued to want at registration: no valid token is
+// a 401, which tells a real agent to register again, and a valid token of another agent is a 403. It writes
+// the refusal and returns false. Call it before anything that records activity for the agent, so a refused
+// caller cannot keep an agent id looking online. The caller holds registry.mu.
+func (h *Handler) authorizeAgent(w http.ResponseWriter, r *http.Request, want string) bool {
+	if h.holdsAdminKey(r) {
+		return true
+	}
+	agent := agentOf(r)
+	if agent == nil {
+		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Agent token required: register the agent", nil)
+		return false
+	}
+	if agent.ID != want {
+		h.responseWriter().WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "The agent token does not belong to this agent", nil)
+		return false
+	}
+	return true
 }
 
 // RegisterAgent handles POST /api/v1/provisioner/agents/register
@@ -90,6 +147,20 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	agent, exists := registry.agents[req.ID]
 
+	// An id that is online belongs to the agent that holds its token. Without this, anyone with the shared key
+	// could register the id again and receive the tasks assigned to it.
+	if exists && !h.holdsAdminKey(r) && now.Sub(agent.LastSeen) <= agentOfflineAfter &&
+		!apikey.Equal(r.Header.Get(agentTokenHeader), agent.token) {
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id in use", nil)
+		return
+	}
+
+	token, err := newAgentToken()
+	if err != nil {
+		h.responseWriter().WriteInternalError(w, r, err)
+		return
+	}
+
 	if !exists {
 		agent = &ProvisionerAgent{
 			ID:           req.ID,
@@ -118,9 +189,11 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	agent.Status = "online"
 	agent.LastSeen = now
 	agent.Metadata = req.Metadata
+	agent.token = token // a register of an existing id replaces the old token
 
 	response := map[string]interface{}{
 		"agent_id":      agent.ID,
+		"agent_token":   token,
 		"registered_at": agent.RegisteredAt,
 		"status":        "registered",
 		"message":       "Agent registered successfully",
@@ -160,6 +233,10 @@ func (h *Handler) PollTasks(w http.ResponseWriter, r *http.Request) {
 
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
+
+	if !h.authorizeAgent(w, r, agentID) {
+		return
+	}
 
 	// Update agent last seen time
 	agent, exists := registry.agents[agentID]
@@ -207,10 +284,9 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Status  string                 `json:"status"`
-		AgentID string                 `json:"agent_id"`
-		Result  map[string]interface{} `json:"result,omitempty"`
-		Error   string                 `json:"error,omitempty"`
+		Status string                 `json:"status"`
+		Result map[string]interface{} `json:"result,omitempty"`
+		Error  string                 `json:"error,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -221,7 +297,16 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
+	// An agent may update only a task assigned to it. An unassigned or unknown task is nobody's (want is ""),
+	// so an agent gets the same 403 for both and learns nothing about which task ids exist.
 	task, exists := registry.tasks[taskID]
+	want := ""
+	if exists {
+		want = task.AgentID
+	}
+	if !h.authorizeAgent(w, r, want) {
+		return
+	}
 	if !exists {
 		h.responseWriter().WriteNotFoundError(w, r, "Task")
 		return
@@ -233,7 +318,7 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.WithFields(map[string]any{
 		"task_id":  taskID,
-		"agent_id": req.AgentID,
+		"agent_id": task.AgentID,
 		"status":   req.Status,
 		"error":    req.Error,
 	}).Info("Provisioning task status updated")
@@ -329,7 +414,7 @@ func (h *Handler) ProvisionerHealthCheck(w http.ResponseWriter, r *http.Request)
 
 	activeAgents := 0
 	for _, agent := range registry.agents {
-		if time.Since(agent.LastSeen) <= 5*time.Minute {
+		if time.Since(agent.LastSeen) <= agentOfflineAfter {
 			activeAgents++
 		}
 	}
@@ -376,6 +461,14 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	// Identity first: a refused caller learns nothing from the validation answers below.
+	if !h.authorizeAgent(w, r, req.AgentID) {
+		return
+	}
+
 	if req.AgentID == "" {
 		http.Error(w, "Agent ID is required", http.StatusBadRequest)
 		return
@@ -385,9 +478,6 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 		http.Error(w, "At least one device is required", http.StatusBadRequest)
 		return
 	}
-
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
 
 	// Verify agent is registered
 	agent, exists := registry.agents[req.AgentID]
@@ -451,9 +541,10 @@ func (h *Handler) ReportDiscoveredDevices(w http.ResponseWriter, r *http.Request
 		devicesProcessed++
 	}
 
-	// Update task status if task ID is provided
+	// Complete the task if one is named, and only if it is assigned to the reporting agent: the report
+	// route must not become a way to complete another agent's task.
 	if req.TaskID != "" {
-		if task, taskExists := registry.tasks[req.TaskID]; taskExists {
+		if task, taskExists := registry.tasks[req.TaskID]; taskExists && (h.holdsAdminKey(r) || task.AgentID == req.AgentID) {
 			task.Status = "completed"
 			task.UpdatedAt = time.Now()
 
