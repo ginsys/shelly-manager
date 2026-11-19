@@ -430,6 +430,34 @@ describe('DeviceConfigPage shows no browser dialog', () => {
     expect(wrapper.find('[data-testid="add-template-error"]').exists()).toBe(false)
   })
 
+  it('shows an add that fails after the dialog was cancelled in the page panel, and leaves nothing in the dialog', async () => {
+    let rejectAdd: (reason: any) => void = () => {}
+    api.addDeviceTemplateNew.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectAdd = reject
+        }) as any,
+    )
+    const { wrapper } = await mountPage()
+    await button(wrapper, '+ Add Template').trigger('click')
+    await wrapper.get('input[placeholder="Enter template ID"]').setValue('5')
+    await button(wrapper, 'Add').trigger('click')
+    await flushPromises() // the add is open
+    await button(wrapper, 'Cancel').trigger('click')
+    expect(wrapper.find('.modal').exists()).toBe(false)
+
+    rejectAdd(new Error('no such template'))
+    await flushPromises()
+
+    const panel = wrapper.get('[data-testid="config-action-error"]')
+    expect(panel.text()).toContain('no such template')
+    expect(panel.text()).toContain('Add template')
+    expect(wrapper.find('.card.state.error').exists()).toBe(false)
+
+    await button(wrapper, '+ Add Template').trigger('click')
+    expect(wrapper.find('[data-testid="add-template-error"]').exists()).toBe(false)
+  })
+
   it('shows no Retry button on a retryable failure, since nothing handles it', async () => {
     api.verifyDeviceConfigNew.mockRejectedValue(
       Object.assign(new Error('Network Error'), { isAxiosError: true }),

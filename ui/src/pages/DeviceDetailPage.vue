@@ -380,7 +380,11 @@ async function handleSaveDevice() {
     showEditDialog.value = false
     await fetchDevice()
   } catch (e: any) {
-    setSaveError(e, { action: 'Save device', resource: 'Device', resourceId: id })
+    const context = { action: 'Save device', resource: 'Device', resourceId: id }
+    // The dialog shows its own failure. When it was closed while the save was open, nothing shows
+    // that panel, so the failure goes to the page panel.
+    if (showEditDialog.value) setSaveError(e, context)
+    else setActionError(e, context)
   }
 }
 

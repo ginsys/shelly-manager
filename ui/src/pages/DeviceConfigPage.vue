@@ -389,8 +389,9 @@ async function handleAddTemplate() {
     newTemplatePosition.value = null
   } catch (e: any) {
     const context = { action: 'Add template', resource: 'Device', resourceId: id }
-    if (routeGeneration !== generation) {
-      // The dialog was closed with the old device: show the failure in the page panel, naming it.
+    if (routeGeneration !== generation || !showAddTemplate.value) {
+      // The dialog was closed (cancelled, or left with the old device): nothing shows its panel, so
+      // the failure goes to the page panel, which names the device.
       failAction(e, context, generation)
       return
     }
