@@ -2,6 +2,7 @@ package config
 
 import (
 	"testing"
+	"time"
 )
 
 // A deployment that sets only provider and dsn must get the provider's pool,
@@ -127,4 +128,43 @@ func TestExampleConfig_PoolFollowsTheProvider(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The lifetime and idle time defaults are the helper's too (ginsys/shelly-manager#581): a configuration
+// that sets neither gets the same pair on every provider, a value the operator set is kept, and the
+// values viper registers are those constants, not a second copy.
+func TestGetDatabaseConfig_LifetimeAndIdleTimeDefaults(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		wantLifetime time.Duration
+		wantIdleTime time.Duration
+	}{
+		{"sqlite", "database:\n  provider: sqlite\n", 5 * time.Minute, 10 * time.Minute},
+		{"postgresql", "database:\n  provider: postgresql\n  dsn: host=db\n", 5 * time.Minute, 10 * time.Minute},
+		{"mysql", "database:\n  provider: mysql\n  dsn: app:pw@tcp(db)/shelly\n", 5 * time.Minute, 10 * time.Minute},
+		{"set values are kept", "database:\n  provider: mysql\n  dsn: app:pw@tcp(db)/shelly\n  conn_max_lifetime: 1800\n  conn_max_idle_time: 60\n",
+			30 * time.Minute, time.Minute},
+		{"an explicit 0 gets the default", "database:\n  provider: mysql\n  dsn: app:pw@tcp(db)/shelly\n  conn_max_lifetime: 0\n  conn_max_idle_time: 0\n",
+			5 * time.Minute, 10 * time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := loadDatabaseConfigFile(t, tt.content).GetDatabaseConfig()
+			if got.ConnMaxLifetime != tt.wantLifetime || got.ConnMaxIdleTime != tt.wantIdleTime {
+				t.Errorf("lifetime / idle time = %v / %v, want %v / %v",
+					got.ConnMaxLifetime, got.ConnMaxIdleTime, tt.wantLifetime, tt.wantIdleTime)
+			}
+		})
+	}
+
+	t.Run("viper registers the constants", func(t *testing.T) {
+		cfg := loadDatabaseConfigFile(t, "database:\n  provider: sqlite\n")
+		if got, want := time.Duration(cfg.Database.ConnMaxLifetime)*time.Second, defaultConnMaxLifetime; got != want {
+			t.Errorf("registered lifetime = %v, want %v", got, want)
+		}
+		if got, want := time.Duration(cfg.Database.ConnMaxIdleTime)*time.Second, defaultConnMaxIdleTime; got != want {
+			t.Errorf("registered idle time = %v, want %v", got, want)
+		}
+	})
 }

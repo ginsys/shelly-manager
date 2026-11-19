@@ -191,7 +191,7 @@ volumes:
 - **Connection Security**: Timeout protection and injection prevention
 
 ### ⚡ Performance Features  
-- **Optimized Connection Pool**: PostgreSQL-tuned defaults (25 max connections, 1-hour lifetime)
+- **Optimized Connection Pool**: pool defaults from the config helper (25 max connections, 5 idle, 5 minute lifetime)
 - **Query Monitoring**: Built-in slow query detection and performance metrics
 - **Health Checking**: Real-time health monitoring with detailed status information
 - **Statistics Collection**: Comprehensive performance metrics and monitoring integration

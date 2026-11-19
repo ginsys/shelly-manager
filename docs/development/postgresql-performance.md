@@ -8,19 +8,13 @@ This guide covers performance optimization, monitoring, and tuning for the Postg
 
 ### Pool Configuration Strategy
 
-The PostgreSQL provider implements intelligent connection pool management optimized for PostgreSQL's connection model:
+The PostgreSQL provider applies the pool it is given. The defaults (25 open, 5 idle, 5 minute lifetime,
+10 minute idle time) come from the config helper, and the provider factory refuses an unset open or idle count:
 
 ```go
-// PostgreSQL-optimized defaults in configureConnectionPool()
-maxOpenConns := p.config.MaxOpenConns
-if maxOpenConns == 0 {
-    maxOpenConns = 25 // PostgreSQL can handle more concurrent connections
-}
-
-connMaxLifetime := p.config.ConnMaxLifetime
-if connMaxLifetime == 0 {
-    connMaxLifetime = time.Hour // PostgreSQL connections can live longer
-}
+// configureConnectionPool() applies the configured pool
+sqlDB.SetMaxOpenConns(p.config.MaxOpenConns)
+sqlDB.SetConnMaxLifetime(p.config.ConnMaxLifetime)
 ```
 
 ### Pool Sizing Guidelines

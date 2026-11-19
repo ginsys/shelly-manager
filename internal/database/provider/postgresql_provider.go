@@ -477,36 +477,18 @@ func (p *PostgreSQLProvider) configureConnectionPool() error {
 		return fmt.Errorf("failed to get underlying SQL DB: %w", err)
 	}
 
-	// Set connection pool parameters with PostgreSQL-appropriate defaults
-	maxOpenConns := p.config.MaxOpenConns
-	if maxOpenConns == 0 {
-		maxOpenConns = 25 // PostgreSQL can handle more concurrent connections
-	}
-	sqlDB.SetMaxOpenConns(maxOpenConns)
-
-	maxIdleConns := p.config.MaxIdleConns
-	if maxIdleConns == 0 {
-		maxIdleConns = 5
-	}
-	sqlDB.SetMaxIdleConns(maxIdleConns)
-
-	connMaxLifetime := p.config.ConnMaxLifetime
-	if connMaxLifetime == 0 {
-		connMaxLifetime = time.Hour // PostgreSQL connections can live longer
-	}
-	sqlDB.SetConnMaxLifetime(connMaxLifetime)
-
-	connMaxIdleTime := p.config.ConnMaxIdleTime
-	if connMaxIdleTime == 0 {
-		connMaxIdleTime = 10 * time.Minute
-	}
-	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
+	// Apply the pool as configured. The defaults live in the config helper (Config.GetDatabaseConfig),
+	// and the factory refuses an unset open or idle count before this provider is built.
+	sqlDB.SetMaxOpenConns(p.config.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(p.config.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(p.config.ConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(p.config.ConnMaxIdleTime)
 
 	p.logger.WithFields(map[string]any{
-		"max_open_conns":     maxOpenConns,
-		"max_idle_conns":     maxIdleConns,
-		"conn_max_lifetime":  connMaxLifetime,
-		"conn_max_idle_time": connMaxIdleTime,
+		"max_open_conns":     p.config.MaxOpenConns,
+		"max_idle_conns":     p.config.MaxIdleConns,
+		"conn_max_lifetime":  p.config.ConnMaxLifetime,
+		"conn_max_idle_time": p.config.ConnMaxIdleTime,
 	}).Debug("Configured PostgreSQL connection pool")
 
 	return nil

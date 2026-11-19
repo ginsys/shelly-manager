@@ -449,10 +449,10 @@ type DatabaseConfig struct {
 }
 ```
 
-**Default Values:**
-- `MaxOpenConns`: 25 (PostgreSQL optimized)
+**Default Values** (filled by `Config.GetDatabaseConfig`; the provider applies the pool as given and an unset open or idle count is refused):
+- `MaxOpenConns`: 25
 - `MaxIdleConns`: 5
-- `ConnMaxLifetime`: 1 hour
+- `ConnMaxLifetime`: 5 minutes
 - `ConnMaxIdleTime`: 10 minutes
 - `SlowQueryThreshold`: 200ms
 - `LogLevel`: "warn"

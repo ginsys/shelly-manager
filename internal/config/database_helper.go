@@ -9,6 +9,26 @@ import (
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 )
 
+// The database pool defaults live here and nowhere else. The providers apply the pool they are given,
+// and the provider factory refuses an unset open or idle count for PostgreSQL and MySQL.
+const (
+	defaultConnMaxLifetime = 5 * time.Minute
+	defaultConnMaxIdleTime = 10 * time.Minute
+)
+
+// poolDefaults returns the default open and idle connection counts of a provider. The provider names
+// are the ones the provider factory accepts.
+func poolDefaults(providerName string) (open, idle int) {
+	switch strings.ToLower(strings.TrimSpace(providerName)) {
+	case "sqlite", "sqlite3":
+		return 1, 1
+	case "postgresql", "postgres", "mysql":
+		return 25, 5
+	default:
+		return 10, 2
+	}
+}
+
 // GetDatabaseConfig converts the config struct to a provider.DatabaseConfig
 // This provides backward compatibility and automatic provider detection
 func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
@@ -44,27 +64,13 @@ func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
 	// Ensure we have sensible defaults based on provider. A value the operator
 	// set is never replaced; only 0 means "the provider's own pool". The
 	// provider names are the ones the provider factory accepts.
-	providerKind := strings.ToLower(strings.TrimSpace(config.Provider))
+	defaultOpen, defaultIdle := poolDefaults(config.Provider)
 	if config.MaxOpenConns == 0 {
-		switch providerKind {
-		case "sqlite", "sqlite3":
-			config.MaxOpenConns = 1
-		case "postgresql", "postgres", "mysql":
-			config.MaxOpenConns = 25
-		default:
-			config.MaxOpenConns = 10
-		}
+		config.MaxOpenConns = defaultOpen
 	}
 
 	if config.MaxIdleConns == 0 {
-		switch providerKind {
-		case "sqlite", "sqlite3":
-			config.MaxIdleConns = 1
-		case "postgresql", "postgres", "mysql":
-			config.MaxIdleConns = 5
-		default:
-			config.MaxIdleConns = 2
-		}
+		config.MaxIdleConns = defaultIdle
 		// A default idle count must not exceed an open count the operator set.
 		if config.MaxIdleConns > config.MaxOpenConns {
 			config.MaxIdleConns = config.MaxOpenConns
@@ -72,11 +78,11 @@ func (c *Config) GetDatabaseConfig() provider.DatabaseConfig {
 	}
 
 	if config.ConnMaxLifetime == 0 {
-		config.ConnMaxLifetime = 5 * time.Minute
+		config.ConnMaxLifetime = defaultConnMaxLifetime
 	}
 
 	if config.ConnMaxIdleTime == 0 {
-		config.ConnMaxIdleTime = 10 * time.Minute
+		config.ConnMaxIdleTime = defaultConnMaxIdleTime
 	}
 
 	if config.SlowQueryThreshold == 0 {

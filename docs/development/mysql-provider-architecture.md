@@ -157,19 +157,16 @@ sqlDB := sql.OpenDB(sealConnector(connector)) // every connect fails with a clas
 
 ### 2. Performance Optimization Strategy
 
-**MySQL-Specific Connection Pool Defaults**
-```go
-// MySQL-appropriate defaults in configureConnectionPool()
-maxOpenConns := 20     // Conservative setting for MySQL
-maxIdleConns := 5      // Minimal idle connections
-connMaxLifetime := 30 * time.Minute  // MySQL connections should be rotated more frequently
-connMaxIdleTime := 5 * time.Minute
-```
+**Connection Pool Defaults**
+The provider applies the pool it is given (`configureConnectionPool()` sets the four values as
+configured) and holds no defaults of its own. The defaults come from the config helper
+(`Config.GetDatabaseConfig`): 25 open and 5 idle connections, a 5 minute lifetime and a 10 minute idle
+time. The provider factory refuses an unset open or idle count before the provider is built.
 
 **Decision Rationale:**
 - MySQL performs better with moderate connection counts
-- Frequent connection rotation prevents connection staleness
-- Balances performance with resource utilization
+- Rotating connections prevents connection staleness
+- One place for the defaults means the provider and the documentation cannot drift apart
 
 **Performance Monitoring**
 ```go

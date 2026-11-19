@@ -293,17 +293,14 @@ MySQL-specific security settings for connection pooling:
 
 ```go
 func (m *MySQLProvider) configureConnectionPool() error {
-    // Conservative MySQL defaults for security
-    maxOpenConns := 20               // Limited concurrent connections
-    maxIdleConns := 5               // Minimal idle connections  
-    connMaxLifetime := 30 * time.Minute // Frequent rotation for security
-    connMaxIdleTime := 5 * time.Minute  // Quick idle cleanup
-    
-    sqlDB.SetMaxOpenConns(maxOpenConns)
-    sqlDB.SetMaxIdleConns(maxIdleConns)
-    sqlDB.SetConnMaxLifetime(connMaxLifetime)
-    sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
-    
+    // The pool is applied as configured. The defaults (25 open, 5 idle, 5 minute
+    // lifetime, 10 minute idle time) come from the config helper, and the provider
+    // factory refuses an unset open or idle count.
+    sqlDB.SetMaxOpenConns(m.config.MaxOpenConns)           // Limited concurrent connections
+    sqlDB.SetMaxIdleConns(m.config.MaxIdleConns)           // Minimal idle connections
+    sqlDB.SetConnMaxLifetime(m.config.ConnMaxLifetime)     // Frequent rotation for security
+    sqlDB.SetConnMaxIdleTime(m.config.ConnMaxIdleTime)     // Quick idle cleanup
+
     return nil
 }
 ```
