@@ -217,7 +217,13 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 #### Layer 6: Request Timeout Middleware
 - **Purpose**: Resource exhaustion prevention
 - **Protection**: Slowloris attacks, resource depletion
-- **Implementation**: Configurable timeout with graceful termination
+- **Implementation**: Configurable timeout with graceful termination. The handler runs in its own
+  goroutine against a guarded writer, so a timed-out request has exactly one writer. At the deadline
+  the client gets `408 REQUEST_TIMEOUT` (JSON) unless the handler had already started its response,
+  in which case that response is left as it is. The handler's later writes are dropped (they return
+  `http.ErrHandlerTimeout`); the handler itself keeps running until it returns. A panic in the
+  handler is recovered and answered `500 Internal Server Error` if nothing was sent yet, otherwise
+  it is only logged; it does not end the server process.
 - **Default**: 30-second timeout with early cancellation
 
 #### Layer 7: Rate Limiting Middleware

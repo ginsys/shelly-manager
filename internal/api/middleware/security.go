@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -514,49 +516,253 @@ func TimeoutMiddleware(config *SecurityConfig, logger *logging.Logger) func(http
 
 			r = r.WithContext(ctx)
 
+			// The handler runs in its own goroutine against a guarded writer, so
+			// that after a timeout exactly one party writes the response.
+			tw := newTimeoutWriter(w)
 			done := make(chan struct{})
 			go func() {
-				next.ServeHTTP(w, r)
-				close(done)
+				// One deferred func, in this order: recover, answer, then close
+				// done. Closing done first would let this request return and
+				// net/http send an empty 200 before the 500 is written.
+				defer func() {
+					if rec := recover(); rec != nil {
+						answered := tw.fail()
+						if logger != nil {
+							logger.WithFields(map[string]any{
+								"method":    r.Method,
+								"path":      r.URL.Path,
+								"remote":    r.RemoteAddr,
+								"panic":     rec,
+								"answered":  answered,
+								"component": "security_timeout",
+							}).Error("HTTP request panicked")
+						}
+					}
+					close(done)
+				}()
+				next.ServeHTTP(tw, r)
 			}()
 
 			select {
 			case <-done:
-				// Request completed normally
+				tw.finish()
 			case <-ctx.Done():
-				// Request timed out
-				if logger != nil && config.LogSecurityEvents {
+				expired, started := tw.expire(done, writeTimeoutAnswer)
+				if expired && logger != nil && config.LogSecurityEvents {
 					logger.WithFields(map[string]any{
-						"method":         r.Method,
-						"path":           r.URL.Path,
-						"client_ip":      getClientIP(r),
-						"timeout":        config.RequestTimeout,
-						"component":      "security_timeout",
-						"security_event": "request_timeout",
+						"method":           r.Method,
+						"path":             r.URL.Path,
+						"client_ip":        getClientIP(r),
+						"timeout":          config.RequestTimeout,
+						"response_started": started,
+						"component":        "security_timeout",
+						"security_event":   "request_timeout",
 					}).Warn("Request timed out")
 				}
-
-				response := map[string]interface{}{
-					"success": false,
-					"error": map[string]interface{}{
-						"code":    "REQUEST_TIMEOUT",
-						"message": "Request processing timeout",
-					},
-					"timestamp": time.Now().UTC(),
-				}
-				body, err := json.Marshal(response)
-				if err != nil {
-					http.Error(w, "Internal server error", http.StatusInternalServerError)
-					return
-				}
-				body = append(body, '\n')
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-				w.WriteHeader(http.StatusRequestTimeout)
-				_, _ = w.Write(body)
 			}
 		})
 	}
+}
+
+// writeTimeoutAnswer writes the 408 REQUEST_TIMEOUT answer to w.
+func writeTimeoutAnswer(w http.ResponseWriter) {
+	response := map[string]interface{}{
+		"success": false,
+		"error": map[string]interface{}{
+			"code":    "REQUEST_TIMEOUT",
+			"message": "Request processing timeout",
+		},
+		"timestamp": time.Now().UTC(),
+	}
+	body, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	body = append(body, '\n')
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(http.StatusRequestTimeout)
+	_, _ = w.Write(body)
+}
+
+// timeoutWriter is the only writer the handler goroutine sees. The real writer
+// is touched under mu alone, so the handler and the timeout path never write
+// at once, and once the timeout answered, the handler's writes are dropped.
+type timeoutWriter struct {
+	mu          sync.Mutex
+	w           http.ResponseWriter // the real writer; touched only under mu
+	h           http.Header         // the handler's own header map; see Header
+	up          http.Header         // the headers upstream middleware set; a 408 or 500 answer starts from them
+	wroteHeader bool                // the handler's response has started (or the 500 went out)
+	timedOut    bool                // the timeout answer went out or was skipped for good
+	finished    bool                // the handler returned; net/http has taken the writer back
+}
+
+// errWriteAfterFinish is returned to a write that arrives after the handler
+// returned, for example from a goroutine the handler started.
+var errWriteAfterFinish = errors.New("write after the handler returned")
+
+// newTimeoutWriter starts the handler's header map as a copy of the headers
+// set so far by the middleware upstream.
+func newTimeoutWriter(w http.ResponseWriter) *timeoutWriter {
+	return &timeoutWriter{w: w, h: w.Header().Clone(), up: w.Header().Clone()}
+}
+
+// Header returns the handler's own map. Only the handler goroutine uses it
+// until the handler has returned, so it needs no lock; it reaches the real
+// writer at the first write.
+func (tw *timeoutWriter) Header() http.Header { return tw.h }
+
+// WriteHeader starts the response, unless it has started or timed out.
+func (tw *timeoutWriter) WriteHeader(code int) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.timedOut || tw.finished || tw.wroteHeader {
+		return
+	}
+	tw.copyHeadersLocked()
+	// An informational status (100 to 199, not 101) is not the final one: the
+	// handler may still send its own, so the response has not started.
+	informational := code >= 100 && code <= 199 && code != http.StatusSwitchingProtocols
+	// The real WriteHeader panics on an invalid code. Mark the response as
+	// started only after it returned, so that the panic can still be answered.
+	tw.w.WriteHeader(code)
+	if !informational {
+		tw.wroteHeader = true
+	}
+}
+
+// Write sends body bytes, starting the response with an implicit 200 as
+// net/http does. After a timeout it writes nothing and returns
+// http.ErrHandlerTimeout; after the handler returned, errWriteAfterFinish.
+func (tw *timeoutWriter) Write(b []byte) (int, error) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.timedOut {
+		return 0, http.ErrHandlerTimeout
+	}
+	if tw.finished {
+		return 0, errWriteAfterFinish
+	}
+	if !tw.wroteHeader {
+		tw.copyHeadersLocked()
+		tw.wroteHeader = true
+	}
+	return tw.w.Write(b)
+}
+
+// copyHeadersLocked makes the real writer's headers equal to the handler's:
+// keys the handler deleted go, the rest are set. The caller holds mu.
+func (tw *timeoutWriter) copyHeadersLocked() {
+	dst := tw.w.Header()
+	for k := range dst {
+		if _, ok := tw.h[k]; !ok {
+			delete(dst, k)
+		}
+	}
+	for k, v := range tw.h {
+		dst[k] = slices.Clone(v) // never share a value slice with the handler
+	}
+}
+
+// resetHeadersLocked puts the real writer's headers back to what upstream
+// middleware had set. An answer of ours (408, 500) starts from there, so it
+// does not inherit handler headers that an informational status already
+// copied over. The caller holds mu.
+func (tw *timeoutWriter) resetHeadersLocked() {
+	dst := tw.w.Header()
+	clear(dst)
+	for k, v := range tw.up {
+		dst[k] = slices.Clone(v)
+	}
+}
+
+// copyTrailersLocked makes the trailer values on the real writer equal to the
+// handler's, once the handler returned after its response had started. The
+// trailers are the names declared in the Trailer header that was sent with the
+// response (now in the real writer's map) and keys with http.TrailerPrefix:
+// values the handler set are copied, values it deleted are removed. The caller
+// holds mu.
+func (tw *timeoutWriter) copyTrailersLocked() {
+	dst := tw.w.Header()
+	names := map[string]bool{}
+	for _, declared := range dst["Trailer"] {
+		for _, name := range strings.Split(declared, ",") {
+			names[http.CanonicalHeaderKey(strings.TrimSpace(name))] = true
+		}
+	}
+	for _, m := range []http.Header{dst, tw.h} {
+		for k := range m {
+			if strings.HasPrefix(k, http.TrailerPrefix) {
+				names[k] = true
+			}
+		}
+	}
+	for name := range names {
+		if v, ok := tw.h[name]; ok {
+			dst[name] = slices.Clone(v)
+		} else {
+			delete(dst, name)
+		}
+	}
+}
+
+// finish runs after the handler returned. A handler that set headers and
+// wrote nothing still gets them sent with net/http's implicit 200.
+func (tw *timeoutWriter) finish() {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	tw.finishLocked()
+}
+
+// finishLocked is finish for a caller that holds mu. From here on the writer
+// belongs to net/http again, so every later write or answer is dropped.
+func (tw *timeoutWriter) finishLocked() {
+	if tw.wroteHeader {
+		tw.copyTrailersLocked()
+	} else {
+		tw.copyHeadersLocked()
+	}
+	tw.finished = true
+}
+
+// expire handles the deadline. If the handler has already finished (done is
+// closed) it keeps that response and sends no timeout answer. Otherwise it
+// stops the handler's writes for good and, if the handler has not started its
+// response, sends answer on the real writer. It reports whether the request
+// timed out and whether the handler had already started its response.
+func (tw *timeoutWriter) expire(done <-chan struct{}, answer func(http.ResponseWriter)) (expired, started bool) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	select {
+	case <-done:
+		tw.finishLocked()
+		return false, false
+	default:
+	}
+	tw.timedOut = true
+	if !tw.wroteHeader {
+		tw.resetHeadersLocked()
+		answer(tw.w)
+	}
+	return true, tw.wroteHeader
+}
+
+// fail answers 500 after a panic in the handler, once only and only if
+// nothing else has answered. It writes on the real writer, never through
+// WriteHeader or Write: those would append the text to a response that has
+// already started, or deadlock on mu.
+func (tw *timeoutWriter) fail() bool {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.wroteHeader || tw.timedOut || tw.finished {
+		return false
+	}
+	tw.wroteHeader = true
+	tw.resetHeadersLocked()
+	http.Error(tw.w, "Internal Server Error", http.StatusInternalServerError)
+	return true
 }
 
 // Helper types and functions
