@@ -1,5 +1,6 @@
 import api from './client'
 import type { APIResponse } from './types'
+import type { DashboardMetrics, NotificationMetrics, ResolutionMetrics } from './metricsContract'
 
 export interface MetricsStatus { enabled: boolean; last_collection_time?: string; uptime_seconds?: number }
 
@@ -33,39 +34,43 @@ export async function getDriftSummary(): Promise<any> {
   return res.data.data
 }
 
-// Advanced Metrics Interfaces
-export interface DashboardSummary {
-  devices: { total: number; online: number; offline: number }
-  exports: { total: number; recent: number }
-  imports: { total: number; recent: number }
-  drifts: { total: number; unresolved: number }
-  notifications: { sent: number; failed: number }
+// Advanced metrics answers. The dashboard, notification and resolution shapes
+// are the Go structs the WebSocket contract already mirrors (metricsContract.ts),
+// so they are imported, not redeclared.
+
+// Mirrors middleware.IPAttackSummary (internal/api/middleware/security_monitor.go).
+export interface IPAttackSummary {
+  ip: string
+  total_requests: number
+  suspicious_requests: number
+  attack_types: Record<string, number>
+  first_seen: string
+  last_seen: string
+  blocked: boolean
 }
 
-export interface NotificationMetrics {
-  totalSent: number
-  totalFailed: number
-  byChannel: Record<string, { sent: number; failed: number }>
-  recentNotifications: Array<{ timestamp: string; channel: string; status: string }>
-}
-
-export interface ResolutionMetrics {
-  totalResolved: number
-  averageResolutionTime: number
-  byType: Record<string, number>
-  byUser: Record<string, number>
-}
-
+// Mirrors middleware.SecurityMetrics (internal/api/middleware/security_monitor.go).
+// A Go nil slice marshals to null, hence the nullable attacker list.
 export interface SecurityMetrics {
-  authAttempts: { successful: number; failed: number }
-  apiCalls: { total: number; errors: number }
-  rateLimit: { triggered: number; blocked: number }
+  total_requests: number
+  blocked_requests: number
+  suspicious_requests: number
+  rate_limit_violations: number
+  validation_failures: number
+  attacks_by_type: Record<string, number>
+  top_attacker_ips: IPAttackSummary[] | null
+  alerts_by_level: Record<string, number>
+  last_updated: string
+  blocked_ips: number
+  active_threats: number
 }
 
+// What SendTestAlert (internal/metrics/handlers.go) sends inside the envelope.
 export interface TestAlertResult {
-  success: boolean
+  status: string
+  alert_type: string
   message: string
-  timestamp: string
+  severity: string
 }
 
 // Get Prometheus-formatted metrics
@@ -105,8 +110,8 @@ export async function collectMetrics(): Promise<MetricsStatus> {
 }
 
 // Get dashboard summary
-export async function getDashboardSummary(): Promise<DashboardSummary> {
-  const res = await api.get<APIResponse<DashboardSummary>>('/metrics/dashboard')
+export async function getDashboardSummary(): Promise<DashboardMetrics> {
+  const res = await api.get<APIResponse<DashboardMetrics>>('/metrics/dashboard')
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.error?.message || 'Failed to load dashboard summary')
   }

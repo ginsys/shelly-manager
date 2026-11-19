@@ -146,7 +146,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/import/history` | Import history | 57 | top bar (Export & Import) |
 | `/import/:id` | Import result | 34 | Import history |
 | `/plugins` | Plugin management (read-only) | 565 | top bar |
-| `/dashboard` | Metrics dashboard | 649 | top bar |
+| `/dashboard` | Metrics dashboard | 661 | top bar |
 | `/admin` | Admin settings (admin key rotation) | 45 | top bar |
 | `/notifications/channels` | Notification channels | 197 | top bar (Notifications), Channel detail |
 | `/notifications/channels/:id` | Channel detail | 126 | Channels |
@@ -233,7 +233,10 @@ reachability from the route table (ginsys/shelly-manager#646).
 - **Device login:** the device page has a Device Login card for the device's own credentials
   (`PUT /devices/{id}/config/auth`).
 - **Metrics** use a WebSocket stream with a REST fallback; the message contract is typed in
-  `ui/src/api/metricsContract.ts`.
+  `ui/src/api/metricsContract.ts`. The REST client reuses those types for the dashboard,
+  notification and resolution answers; `ui/src/api/metrics.ts` types the security answer and the
+  test-alert answer from their Go structs. The dashboard page loads its four REST panels with
+  `Promise.allSettled`, so one failing endpoint empties only its own panel.
 - **Admin key:** `ui/src/api/client.ts` reads the admin key from `VITE_ADMIN_KEY` (set at build
   time) or `window.__ADMIN_KEY__`. A production build has no supported way to get it today
   (ginsys/shelly-manager#619).
@@ -261,7 +264,7 @@ State read from GitHub on 2026-11-19 with `gh api graphql` (`closedByPullRequest
 | ginsys/shelly-manager#131 | Export system API | closed, not planned 2026-07-21 | no pull request |
 | ginsys/shelly-manager#132 | Device management CRUD | closed, completed 2026-04-13 | ginsys/shelly-manager#182 |
 | ginsys/shelly-manager#133 | Notification API | closed, not planned 2026-07-21 | no pull request |
-| ginsys/shelly-manager#134 | Metrics REST response-shape alignment | **open** | |
+| ginsys/shelly-manager#134 | Metrics REST response-shape alignment | closed, completed 2026-11-19 | ginsys/shelly-manager#691 |
 | ginsys/shelly-manager#135 | Typed config | closed, not planned 2026-07-21 | no pull request |
 | ginsys/shelly-manager#136 | Bulk operations (selection and dialog) | closed, completed 2026-11-18 | ginsys/shelly-manager#613 |
 | ginsys/shelly-manager#137 | Capability-specific config UI | closed, completed 2026-11-12 | ginsys/shelly-manager#499 |
@@ -280,7 +283,6 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 | ginsys/shelly-manager#614 | Replace the remaining `alert()` calls with `useError` and `ErrorDisplay` |
 | ginsys/shelly-manager#646 | Move the route table out of `main.ts` so a test can check every route is reachable |
 | ginsys/shelly-manager#139 | Polish export/import detail pages |
-| ginsys/shelly-manager#134 | Metrics REST response-shape alignment |
 | ginsys/shelly-manager#290 | Design the plugin configuration model (plugins stay read-only until then) |
 | ginsys/shelly-manager#250 | Notification API contract mismatches and missing endpoints (**parked**) |
 
@@ -297,7 +299,7 @@ Found by reading the code at this commit; not a plan.
 1. **The route table is inline in `main.ts`** (section 3, ginsys/shelly-manager#646), so no unit test
    can check that every route is reachable; the end-to-end spec carries an explicit path list.
 2. **Quasar is a dependency nothing imports** (section 2).
-3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (649),
+3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (661),
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.

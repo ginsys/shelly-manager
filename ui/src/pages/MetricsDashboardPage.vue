@@ -28,103 +28,95 @@
     </section>
 
     <!-- Dashboard Summary -->
-    <section v-if="dashboardSummary" class="summary-section">
+    <section v-if="dashboardSummary" class="summary-section" data-testid="panel-summary">
       <h2>Dashboard Summary</h2>
       <div class="summary-grid">
         <div class="summary-card">
           <h4>Devices</h4>
-          <p>Total: {{ dashboardSummary.devices.total }}</p>
-          <p>Online: {{ dashboardSummary.devices.online }}</p>
-          <p>Offline: {{ dashboardSummary.devices.offline }}</p>
+          <p>Total: {{ dashboardSummary.system_status.total_devices }}</p>
+          <p>Online: {{ dashboardSummary.system_status.online_devices }}</p>
+          <p>Offline: {{ dashboardSummary.system_status.total_devices - dashboardSummary.system_status.online_devices }}</p>
+          <p>With drift: {{ dashboardSummary.system_status.devices_with_drift }}</p>
         </div>
         <div class="summary-card">
-          <h4>Exports</h4>
-          <p>Total: {{ dashboardSummary.exports.total }}</p>
-          <p>Recent: {{ dashboardSummary.exports.recent }}</p>
-        </div>
-        <div class="summary-card">
-          <h4>Imports</h4>
-          <p>Total: {{ dashboardSummary.imports.total }}</p>
-          <p>Recent: {{ dashboardSummary.imports.recent }}</p>
-        </div>
-        <div class="summary-card">
-          <h4>Drifts</h4>
-          <p>Total: {{ dashboardSummary.drifts.total }}</p>
-          <p>Unresolved: {{ dashboardSummary.drifts.unresolved }}</p>
+          <h4>Drift</h4>
+          <p>Issues: {{ dashboardSummary.drift_metrics.total_drift_issues }}</p>
         </div>
         <div class="summary-card">
           <h4>Notifications</h4>
-          <p>Sent: {{ dashboardSummary.notifications.sent }}</p>
-          <p>Failed: {{ dashboardSummary.notifications.failed }}</p>
+          <p>Sent: {{ dashboardSummary.notification_metrics.total_sent }}</p>
+          <p>Failed: {{ dashboardSummary.notification_metrics.total_failed }}</p>
         </div>
       </div>
     </section>
 
     <!-- Security Metrics -->
-    <section v-if="securityMetrics" class="metrics-section">
+    <section v-if="securityMetrics" class="metrics-section" data-testid="panel-security">
       <h2>Security Metrics</h2>
       <div class="metrics-grid">
         <div class="metric-card">
-          <h4>Auth Attempts</h4>
-          <p>Successful: {{ securityMetrics.authAttempts.successful }}</p>
-          <p>Failed: {{ securityMetrics.authAttempts.failed }}</p>
+          <h4>Requests</h4>
+          <p>Total: {{ securityMetrics.total_requests }}</p>
+          <p>Blocked: {{ securityMetrics.blocked_requests }}</p>
+          <p>Suspicious: {{ securityMetrics.suspicious_requests }}</p>
         </div>
         <div class="metric-card">
-          <h4>API Calls</h4>
-          <p>Total: {{ securityMetrics.apiCalls.total }}</p>
-          <p>Errors: {{ securityMetrics.apiCalls.errors }}</p>
+          <h4>Violations</h4>
+          <p>Rate limit: {{ securityMetrics.rate_limit_violations }}</p>
+          <p>Validation failures: {{ securityMetrics.validation_failures }}</p>
         </div>
         <div class="metric-card">
-          <h4>Rate Limiting</h4>
-          <p>Triggered: {{ securityMetrics.rateLimit.triggered }}</p>
-          <p>Blocked: {{ securityMetrics.rateLimit.blocked }}</p>
+          <h4>Threats</h4>
+          <p>Blocked IPs: {{ securityMetrics.blocked_ips }}</p>
+          <p>Active threats: {{ securityMetrics.active_threats }}</p>
         </div>
       </div>
     </section>
 
     <!-- Resolution Metrics -->
-    <section v-if="resolutionMetrics" class="metrics-section">
+    <section v-if="resolutionMetrics" class="metrics-section" data-testid="panel-resolution">
       <h2>Resolution Metrics</h2>
       <div class="metrics-grid">
         <div class="metric-card">
           <h4>Overview</h4>
-          <p>Total Resolved: {{ resolutionMetrics.totalResolved }}</p>
-          <p>Avg Resolution Time: {{ formatSeconds(resolutionMetrics.averageResolutionTime) }}</p>
+          <p>Total Resolved: {{ resolutionMetrics.total_resolutions }}</p>
+          <p>Avg Review Time: {{ formatSeconds(resolutionMetrics.average_review_time_seconds) }}</p>
         </div>
         <div class="metric-card">
-          <h4>By Type</h4>
-          <div v-for="(count, type) in resolutionMetrics.byType" :key="type">
-            <p>{{ type }}: {{ count }}</p>
+          <h4>By Category</h4>
+          <div v-for="(count, category) in resolutionMetrics.resolutions_by_category" :key="category">
+            <p>{{ category }}: {{ count }}</p>
           </div>
         </div>
         <div class="metric-card">
-          <h4>By User</h4>
-          <div v-for="(count, user) in resolutionMetrics.byUser" :key="user">
-            <p>{{ user }}: {{ count }}</p>
+          <h4>Auto-fix Success Rate</h4>
+          <div v-for="(rate, category) in resolutionMetrics.auto_fix_success_rate" :key="category">
+            <p>{{ category }}: {{ rate }}</p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- Notification Metrics -->
-    <section v-if="notificationMetrics" class="metrics-section">
+    <section v-if="notificationMetrics" class="metrics-section" data-testid="panel-notifications">
       <h2>Notification Metrics</h2>
       <div class="metrics-grid">
         <div class="metric-card">
           <h4>Overview</h4>
-          <p>Total Sent: {{ notificationMetrics.totalSent }}</p>
-          <p>Total Failed: {{ notificationMetrics.totalFailed }}</p>
+          <p>Total Sent: {{ notificationMetrics.total_sent }}</p>
+          <p>Total Failed: {{ notificationMetrics.total_failed }}</p>
+          <p>Avg Latency: {{ formatSeconds(notificationMetrics.average_latency_seconds) }}</p>
         </div>
         <div class="metric-card">
           <h4>By Channel</h4>
-          <div v-for="(stats, channel) in notificationMetrics.byChannel" :key="channel">
-            <p><strong>{{ channel }}:</strong> {{ stats.sent }} sent, {{ stats.failed }} failed</p>
+          <div v-for="(count, channel) in notificationMetrics.channel_breakdown" :key="channel">
+            <p>{{ channel }}: {{ count }}</p>
           </div>
         </div>
         <div class="metric-card">
-          <h4>Recent Notifications</h4>
-          <div v-for="(notif, idx) in notificationMetrics.recentNotifications.slice(0, 5)" :key="idx">
-            <p>{{ notif.channel }} - {{ notif.status }} ({{ new Date(notif.timestamp).toLocaleString() }})</p>
+          <h4>By Alert Level</h4>
+          <div v-for="(count, level) in notificationMetrics.alert_level_breakdown" :key="level">
+            <p>{{ level }}: {{ count }}</p>
           </div>
         </div>
       </div>
@@ -207,11 +199,13 @@ import {
   getNotificationMetrics,
   getResolutionMetrics,
   getSecurityMetrics,
-  type DashboardSummary,
-  type NotificationMetrics,
-  type ResolutionMetrics,
   type SecurityMetrics
 } from '@/api/metrics'
+import type {
+  DashboardMetrics,
+  NotificationMetrics,
+  ResolutionMetrics
+} from '@/api/metricsContract'
 
 // Lazy load chart components only when needed with loading states
 const LineChart = defineAsyncComponent({
@@ -238,7 +232,7 @@ const { error: errorObj, setError, clearError } = useError()
 const error = computed(() => errorObj.value?.message || null)
 
 // Advanced metrics state
-const dashboardSummary = ref<DashboardSummary | null>(null)
+const dashboardSummary = ref<DashboardMetrics | null>(null)
 const notificationMetrics = ref<NotificationMetrics | null>(null)
 const resolutionMetrics = ref<ResolutionMetrics | null>(null)
 const securityMetrics = ref<SecurityMetrics | null>(null)
@@ -262,26 +256,44 @@ onUnmounted(() => {
   store.cleanup()
 })
 
-// Fetch all advanced metrics
+// Fetch all advanced metrics. Each call fills its own panel: a failed call
+// empties only that panel and is named in the banner, so one failing endpoint
+// (the security one is 404 without a security monitor) never blanks the rest.
 async function fetchAdvancedMetrics() {
   loading.value = true
   clearError()
   try {
-    const [summary, notifications, resolution, security] = await Promise.all([
+    const [summary, notifications, resolution, security] = await Promise.allSettled([
       getDashboardSummary(),
       getNotificationMetrics(),
       getResolutionMetrics(),
       getSecurityMetrics()
     ])
-    dashboardSummary.value = summary
-    notificationMetrics.value = notifications
-    resolutionMetrics.value = resolution
-    securityMetrics.value = security
-  } catch (err) {
-    setError(err, { action: 'Loading advanced metrics', resource: 'Dashboard metrics' })
+    dashboardSummary.value = summary.status === 'fulfilled' ? summary.value : null
+    notificationMetrics.value = notifications.status === 'fulfilled' ? notifications.value : null
+    resolutionMetrics.value = resolution.status === 'fulfilled' ? resolution.value : null
+    securityMetrics.value = security.status === 'fulfilled' ? security.value : null
+
+    const failures = [
+      ['Dashboard summary', summary],
+      ['Notification metrics', notifications],
+      ['Resolution metrics', resolution],
+      ['Security metrics', security]
+    ].flatMap(([label, result]) =>
+      (result as PromiseSettledResult<unknown>).status === 'rejected'
+        ? [`${label}: ${reasonMessage((result as PromiseRejectedResult).reason)}`]
+        : []
+    )
+    if (failures.length > 0) {
+      setError(new Error(failures.join('; ')), { action: 'Loading advanced metrics', resource: 'Dashboard metrics' })
+    }
   } finally {
     loading.value = false
   }
+}
+
+function reasonMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason)
 }
 
 // Collection controls
@@ -333,7 +345,7 @@ async function handleExportPrometheus() {
 async function handleTestAlert() {
   try {
     const result = await sendTestAlert()
-    if (result.success) {
+    if (result.status === 'sent') {
       alert(`Success: ${result.message}`)
     } else {
       alert(`Failed: ${result.message}`)
