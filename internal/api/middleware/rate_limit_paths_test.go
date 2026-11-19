@@ -196,3 +196,35 @@ func TestRateLimiterMatchRule(t *testing.T) {
 		})
 	}
 }
+
+// A client that stays active keeps its entry, so its expired path counters are pruned by themselves:
+// a client that asks for a fresh device id every time must not grow the map for ever.
+func TestRateLimiterPrunesExpiredPathCounters(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	rl := newTestLimiter(cfg)
+	ip := "10.58.0.11"
+
+	for id := 1; id <= 5; id++ {
+		require.True(t, rl.Allow(ip, controlPath(id)))
+	}
+	require.Len(t, rl.clients[ip].paths, 5)
+
+	// Within the window nothing is pruned.
+	rl.prune(time.Now().Add(cfg.RateLimitWindow / 2))
+	require.Len(t, rl.clients[ip].paths, 5)
+
+	// Past the window the counters are gone, and the client entry stays (its own window is not
+	// two hours old).
+	rl.prune(time.Now().Add(cfg.RateLimitWindow + time.Minute))
+	require.Contains(t, rl.clients, ip)
+	assert.Empty(t, rl.clients[ip].paths)
+
+	// A fresh counter made after the prune survives a prune at the same instant.
+	rl.mutex.Lock()
+	rl.clients[ip].paths = map[string]*pathCount{
+		"/api/v1/devices/9/control": {requests: 1, window: time.Now().Add(cfg.RateLimitWindow)},
+	}
+	rl.mutex.Unlock()
+	rl.prune(time.Now().Add(cfg.RateLimitWindow + time.Minute))
+	assert.Len(t, rl.clients[ip].paths, 1)
+}
