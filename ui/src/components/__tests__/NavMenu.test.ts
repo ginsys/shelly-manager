@@ -168,6 +168,29 @@ describe('NavMenu', () => {
     expect(isOpen()).toBe(false)
   })
 
+  it('toggles on the first Enter after hover, focus and the mouse leaving (the hover mark is gone)', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    await nextTick()
+    trigger().focus()
+    root().dispatchEvent(pointer('pointerleave', 'mouse'))
+    await nextTick()
+    expect(isOpen()).toBe(true)
+    trigger().click()
+    await nextTick()
+    expect(isOpen()).toBe(false)
+  })
+
+  it('toggles on a click after a key press, even while the mouse is still over the menu', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    await nextTick()
+    trigger().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    trigger().click()
+    await nextTick()
+    expect(isOpen()).toBe(false)
+  })
+
   it('closes on Escape pressed with the focus outside the menu, and leaves the focus alone', async () => {
     mountMenu()
     root().dispatchEvent(pointer('pointerenter', 'mouse'))
