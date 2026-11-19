@@ -178,6 +178,52 @@ describe('BulkOperationsDialog', () => {
     expect(wrapper.emitted('complete')).toHaveLength(1)
   })
 
+  describe('while the page checks the selection', () => {
+    const cards = ['bulk-op-import', 'bulk-op-drift', 'bulk-op-drift-enhanced']
+
+    it('says how many devices it is checking and offers no operation yet', () => {
+      const wrapper = mount(BulkOperationsDialog, {
+        props: { isOpen: true, selectedDevices: picked, checking: true }
+      })
+
+      expect(byId(wrapper, 'bulk-checking').text()).toBe('Checking 2 devices...')
+      for (const id of cards) {
+        expect(byId(wrapper, id).attributes('disabled')).toBeDefined()
+      }
+    })
+
+    it('shows no checking line and enables the operations once the check is over', () => {
+      const wrapper = mount(BulkOperationsDialog, {
+        props: { isOpen: true, selectedDevices: picked, checking: false }
+      })
+
+      expect(byId(wrapper, 'bulk-checking').exists()).toBe(false)
+      for (const id of cards) {
+        expect(byId(wrapper, id).attributes('disabled')).toBeUndefined()
+      }
+    })
+
+    it('shows neither the checking line nor the removed line by default', () => {
+      const wrapper = open()
+
+      expect(byId(wrapper, 'bulk-checking').exists()).toBe(false)
+      expect(byId(wrapper, 'bulk-removed').exists()).toBe(false)
+    })
+
+    it('says in one line how many selected devices were removed because they no longer exist', () => {
+      const plural = mount(BulkOperationsDialog, {
+        props: { isOpen: true, selectedDevices: picked, removedCount: 2 }
+      })
+      const singular = mount(BulkOperationsDialog, {
+        props: { isOpen: true, selectedDevices: picked, removedCount: 1 }
+      })
+
+      expect(byId(plural, 'bulk-removed').text()).toBe('2 selected devices no longer exist and were removed')
+      expect(byId(plural, 'bulk-removed').attributes('role')).toBe('status')
+      expect(byId(singular, 'bulk-removed').text()).toBe('1 selected device no longer exists and was removed')
+    })
+  })
+
   it('emits close from the header button', async () => {
     const wrapper = open()
 

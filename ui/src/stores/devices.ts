@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { listDevices } from '@/api/devices'
+import { listDevices, getDevice } from '@/api/devices'
 import type { Device } from '@/api/types'
 
 type SortField = keyof Device | 'last_seen'
@@ -26,6 +26,10 @@ interface DevicesState {
   // Devices picked for a bulk operation, by id, in the order they were ticked. The paging is
   // server-side, so the selection outlives a page change.
   selected: Map<number, { name: string; ip: string }>
+  // True while `checkSelection` waits for the server, and how many ticked devices its last pass
+  // removed because the server no longer has them. The bulk dialog shows both.
+  checkingSelection: boolean
+  removedFromSelection: number
   // Column visibility preferences
   visibleColumns: {
     select: boolean
@@ -42,6 +46,8 @@ interface DevicesState {
 
 // The load whose answer may still be applied (see `fetchDevices`). Not state: nothing renders it.
 let latestLoad = 0
+// The same rule for `checkSelection`: only the newest check may end the "checking" state or show a count.
+let latestCheck = 0
 
 export const useDevicesStore = defineStore('devices', {
   state: (): DevicesState => ({
@@ -55,6 +61,8 @@ export const useDevicesStore = defineStore('devices', {
     search: '',
     sort: null,
     selected: new Map(),
+    checkingSelection: false,
+    removedFromSelection: 0,
     // All columns visible by default
     visibleColumns: {
       select: true,
@@ -137,6 +145,10 @@ export const useDevicesStore = defineStore('devices', {
         })
         if (mine !== latestLoad) return
         this.items = items
+        // A device ticked earlier may have been renamed or moved: the row on this page is the newest word.
+        for (const d of items) {
+          if (this.selected.has(d.id)) this.selected.set(d.id, { name: d.name || '', ip: d.ip || '' })
+        }
         const p = meta?.pagination
         this.totalPages = p?.total_pages ?? null
         this.hasNext = !!p?.has_next
@@ -213,7 +225,43 @@ export const useDevicesStore = defineStore('devices', {
       for (const id of ids) this.selected.delete(id)
     },
 
+    // Run when the bulk dialog opens, the one place the selection is sent. A ticked device that is not
+    // on the loaded page may be on another page, so only the server can say it is gone: ask for each
+    // one, drop those it answers 404 for, and refresh the name and address of the others. A failed
+    // check keeps the device (the bulk answer reports it). A device unticked or cleared while the
+    // answers were pending stays out.
+    async checkSelection() {
+      const mine = ++latestCheck
+      this.removedFromSelection = 0
+      const onPage = new Set(this.items.map((d) => d.id))
+      const ids = [...this.selected.keys()].filter((id) => !onPage.has(id))
+      if (ids.length === 0) {
+        this.checkingSelection = false
+        return
+      }
+      this.checkingSelection = true
+      try {
+        const answers = await Promise.allSettled(ids.map((id) => getDevice(id)))
+        if (mine !== latestCheck) return
+        let removed = 0
+        answers.forEach((answer, i) => {
+          const id = ids[i]
+          if (!this.selected.has(id)) return
+          if (answer.status === 'fulfilled') {
+            this.selected.set(id, { name: answer.value.name || '', ip: answer.value.ip || '' })
+          } else if ((answer.reason as any)?.response?.status === 404) {
+            this.selected.delete(id)
+            removed++
+          }
+        })
+        this.removedFromSelection = removed
+      } finally {
+        if (mine === latestCheck) this.checkingSelection = false
+      }
+    },
+
     clearSelection() {
+      this.removedFromSelection = 0
       this.selected.clear()
     },
 

@@ -9,6 +9,7 @@ import type { Device } from '@/api/types'
 
 vi.mock('@/api/devices', () => ({
   listDevices: vi.fn(),
+  getDevice: vi.fn(),
   createDevice: vi.fn(),
   updateDevice: vi.fn(),
   deleteDevice: vi.fn(),
@@ -145,6 +146,38 @@ describe('DevicesPage refresh', () => {
     await flushPromises()
     expect(refreshButton(wrapper).attributes('disabled')).toBeUndefined()
     expect(refreshButton(wrapper).text()).toBe('Refresh')
+  })
+
+  it('keeps the rows on screen while a refresh runs, and marks the table busy', async () => {
+    const wrapper = await mountPage()
+    const finish = holdNextLoad()
+
+    await refreshButton(wrapper).trigger('click')
+
+    expect(wrapper.find('[data-testid="loading-state"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid="device-row"]')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="devices-table"]').attributes('aria-busy')).toBe('true')
+
+    finish()
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="device-row"]')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="devices-table"]').attributes('aria-busy')).toBe('false')
+  })
+
+  it('still shows the loading text while the first load has nothing to show', async () => {
+    vi.mocked(listDevices).mockReturnValueOnce(new Promise(() => {}) as any)
+    host = document.createElement('div')
+    document.body.append(host)
+    mounted = mount(DevicesPage, {
+      attachTo: host,
+      global: {
+        stubs: { BulkOperationsDialog: DialogStub, SortIcon: SortIconStub, RouterLink: RouterLinkStub }
+      }
+    })
+    await flushPromises()
+
+    expect(mounted.find('[data-testid="loading-state"]').exists()).toBe(true)
+    expect(mounted.find('[data-testid="devices-table"]').exists()).toBe(false)
   })
 
   it('announces the shortcut on the button', async () => {

@@ -4,11 +4,12 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import DevicesPage from '../DevicesPage.vue'
 import { useDevicesStore } from '@/stores/devices'
-import { listDevices, deleteDevice } from '@/api/devices'
+import { listDevices, getDevice, deleteDevice } from '@/api/devices'
 import type { Device } from '@/api/types'
 
 vi.mock('@/api/devices', () => ({
   listDevices: vi.fn(),
+  getDevice: vi.fn(),
   createDevice: vi.fn(),
   updateDevice: vi.fn(),
   deleteDevice: vi.fn(),
@@ -38,7 +39,12 @@ const devices = [
 // The real dialog has its own tests; here it only has to show what the page hands it.
 const DialogStub = defineComponent({
   name: 'BulkOperationsDialog',
-  props: { isOpen: Boolean, selectedDevices: { type: Array, default: () => [] } },
+  props: {
+    isOpen: Boolean,
+    selectedDevices: { type: Array, default: () => [] },
+    checking: Boolean,
+    removedCount: { type: Number, default: 0 }
+  },
   emits: ['close', 'complete', 'remove'],
   setup(props) {
     return () => (props.isOpen ? h('div', { 'data-testid': 'bulk-dialog-stub' }) : null)
@@ -160,6 +166,43 @@ describe('DevicesPage bulk operations', () => {
       { id: 1, name: 'Alpha', ip: '10.0.0.1' },
       { id: 3, name: 'Charlie', ip: '10.0.0.3' }
     ])
+  })
+
+  it('checks the selection when the button opens the dialog, and hands the dialog the outcome', async () => {
+    const wrapper = await mountPage()
+    const dialog = wrapper.findComponent(DialogStub)
+    const store = useDevicesStore()
+    // Device 9 was ticked on another page and was deleted since; 1 is on this page.
+    store.toggleSelect(devices[0])
+    store.toggleSelect(device(9, 'Elsewhere', '10.0.0.9'))
+    await flushPromises() // the button enables once the store has a selection
+    let answerProbe!: (e: unknown) => void
+    vi.mocked(getDevice).mockReturnValueOnce(new Promise((_, reject) => (answerProbe = reject)) as any)
+
+    await bulkButton(wrapper).trigger('click')
+
+    expect(getDevice).toHaveBeenCalledTimes(1)
+    expect(getDevice).toHaveBeenCalledWith(9)
+    expect(dialog.props('isOpen')).toBe(true)
+    expect(dialog.props('checking')).toBe(true)
+
+    answerProbe(Object.assign(new Error('404'), { response: { status: 404 } }))
+    await flushPromises()
+
+    expect(dialog.props('checking')).toBe(false)
+    expect(dialog.props('removedCount')).toBe(1)
+    expect(dialog.props('selectedDevices')).toEqual([{ id: 1, name: 'Alpha', ip: '10.0.0.1' }])
+    expect(bulkButton(wrapper).text()).toBe('Bulk Operations (1)')
+  })
+
+  it('sends no probe when every selected device is on the page', async () => {
+    const wrapper = await mountPage()
+    await rowBoxes(wrapper)[0].setValue(true)
+
+    await bulkButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(getDevice).not.toHaveBeenCalled()
   })
 
   it('refetches the list when the dialog completes, and closes it on close', async () => {
