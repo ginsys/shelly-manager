@@ -465,8 +465,9 @@ func runCommandWithTimeout(t *testing.T, timeout time.Duration, binary string, a
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 
-	// Set CGO_ENABLED for SQLite
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
+	// Set CGO_ENABLED for SQLite. The manager reads SHELLY_* variables over its config file, so
+	// pin mDNS off here: a variable in the caller's environment must not send multicast from a test.
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=1", "SHELLY_DISCOVERY_ENABLE_MDNS=false")
 
 	done := make(chan error, 1)
 

@@ -81,7 +81,7 @@ components:
         success:
           type: boolean
         data:
-          type: object
+          description: What the route returns, an object or on a list route an array.
         error:
           $ref: '#/components/schemas/APIError'
         meta:
