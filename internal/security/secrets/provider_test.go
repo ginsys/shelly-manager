@@ -18,7 +18,10 @@ func TestGetEnvOrFile_FileTakesEffect(t *testing.T) {
 
 	t.Setenv("DEMO_SECRET_FILE", fp)
 
-	got, ok := GetEnvOrFile("DEMO_SECRET")
+	got, ok, err := GetEnvOrFile("DEMO_SECRET")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !ok {
 		t.Fatalf("expected secret to be found via *_FILE")
 	}
@@ -41,10 +44,17 @@ func TestApplyToConfig_OverridesFromEnvFile(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Security.AdminAPIKey = ""
 
-	ApplyToConfig(cfg)
+	mustApply(t, cfg)
 
 	if cfg.Security.AdminAPIKey != "adminkey123" {
 		t.Fatalf("expected AdminAPIKey from file, got %q", cfg.Security.AdminAPIKey)
+	}
+}
+
+func mustApply(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	if err := ApplyToConfig(cfg); err != nil {
+		t.Fatalf("ApplyToConfig: %v", err)
 	}
 }
 
@@ -61,10 +71,16 @@ func writeKeyFile(t *testing.T, content string) string {
 // records the original value, and t.Setenv(k, "") alone would leave the variable set but empty.
 func clearKeyEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{
+	unsetEnv(t,
 		"SHELLY_SECURITY_ADMIN_API_KEY", "SHELLY_SECURITY_ADMIN_API_KEY_FILE",
 		"SHELLY_SECURITY_AGENT_API_KEY", "SHELLY_SECURITY_AGENT_API_KEY_FILE",
-	} {
+	)
+}
+
+// unsetEnv makes the variables absent for the test and restores them afterwards.
+func unsetEnv(t *testing.T, names ...string) {
+	t.Helper()
+	for _, k := range names {
 		t.Setenv(k, "")
 		if err := os.Unsetenv(k); err != nil {
 			t.Fatalf("unset %s: %v", k, err)
@@ -79,7 +95,7 @@ func TestApplyToConfig_AgentKeyFromFile(t *testing.T) {
 	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY_FILE", writeKeyFile(t, "agentkey456\n"))
 
 	cfg := &config.Config{}
-	ApplyToConfig(cfg)
+	mustApply(t, cfg)
 
 	if cfg.Security.AgentAPIKey != "agentkey456" {
 		t.Fatalf("expected AgentAPIKey from file, got %q", cfg.Security.AgentAPIKey)
@@ -94,7 +110,7 @@ func TestApplyToConfig_AgentKeyPlainVariableWinsOverFile(t *testing.T) {
 	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY_FILE", writeKeyFile(t, "from-file\n"))
 
 	cfg := &config.Config{}
-	ApplyToConfig(cfg)
+	mustApply(t, cfg)
 
 	if cfg.Security.AgentAPIKey != "from-env" {
 		t.Fatalf("expected the plain variable to win, got %q", cfg.Security.AgentAPIKey)
@@ -105,7 +121,7 @@ func TestApplyToConfig_AgentKeyKeptWithoutVariable(t *testing.T) {
 	clearKeyEnv(t)
 	cfg := &config.Config{}
 	cfg.Security.AgentAPIKey = "from-config"
-	ApplyToConfig(cfg)
+	mustApply(t, cfg)
 
 	if cfg.Security.AgentAPIKey != "from-config" {
 		t.Fatalf("expected the configured key to stay, got %q", cfg.Security.AgentAPIKey)
@@ -122,7 +138,7 @@ func TestApplyToConfig_EmptyPlainVariableFallsThroughToFile(t *testing.T) {
 	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY_FILE", writeKeyFile(t, "agentkey456\n"))
 
 	cfg := &config.Config{}
-	ApplyToConfig(cfg)
+	mustApply(t, cfg)
 
 	if cfg.Security.AdminAPIKey != "adminkey123" || cfg.Security.AgentAPIKey != "agentkey456" {
 		t.Fatalf("expected both keys from their files, got admin %q and agent %q",
@@ -140,7 +156,7 @@ func TestApplyToConfig_EmptyPlainVariableKeepsConfiguredWithoutFile(t *testing.T
 	cfg := &config.Config{}
 	cfg.Security.AdminAPIKey = "admin-from-config"
 	cfg.Security.AgentAPIKey = "agent-from-config"
-	ApplyToConfig(cfg)
+	mustApply(t, cfg)
 
 	if cfg.Security.AdminAPIKey != "admin-from-config" || cfg.Security.AgentAPIKey != "agent-from-config" {
 		t.Fatalf("expected the configured keys to stay, got admin %q and agent %q",
@@ -160,7 +176,7 @@ func TestApplyToConfig_EmptyKeyFileKeepsConfigured(t *testing.T) {
 			cfg := &config.Config{}
 			cfg.Security.AdminAPIKey = "admin-from-config"
 			cfg.Security.AgentAPIKey = "agent-from-config"
-			ApplyToConfig(cfg)
+			mustApply(t, cfg)
 
 			if cfg.Security.AdminAPIKey != "admin-from-config" || cfg.Security.AgentAPIKey != "agent-from-config" {
 				t.Fatalf("expected the configured keys to stay, got admin %q and agent %q",
@@ -186,23 +202,23 @@ func TestGetEnvOrFile_EmptyPlainFallsThroughAndEmptyIsAbsent(t *testing.T) {
 		unset(t)
 		t.Setenv(key, "")
 		t.Setenv(key+"_FILE", writeKeyFile(t, "from-file\n"))
-		if got, ok := GetEnvOrFile(key); !ok || got != "from-file" {
-			t.Fatalf("expected the file value, got %q, %v", got, ok)
+		if got, ok, err := GetEnvOrFile(key); err != nil || !ok || got != "from-file" {
+			t.Fatalf("expected the file value, got %q, %v, %v", got, ok, err)
 		}
 	})
 	t.Run("empty plain alone is absent", func(t *testing.T) {
 		unset(t)
 		t.Setenv(key, "")
-		if got, ok := GetEnvOrFile(key); ok || got != "" {
-			t.Fatalf("expected absent, got %q, %v", got, ok)
+		if got, ok, err := GetEnvOrFile(key); err != nil || ok || got != "" {
+			t.Fatalf("expected absent, got %q, %v, %v", got, ok, err)
 		}
 	})
 	for name, content := range map[string]string{"empty file": "", "newlines only": "\n\n"} {
 		t.Run(name+" is absent", func(t *testing.T) {
 			unset(t)
 			t.Setenv(key+"_FILE", writeKeyFile(t, content))
-			if got, ok := GetEnvOrFile(key); ok || got != "" {
-				t.Fatalf("expected absent, got %q, %v", got, ok)
+			if got, ok, err := GetEnvOrFile(key); err != nil || ok || got != "" {
+				t.Fatalf("expected absent, got %q, %v, %v", got, ok, err)
 			}
 		})
 	}
