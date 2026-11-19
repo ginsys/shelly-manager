@@ -152,6 +152,33 @@ components:
               error:
                 type: string
 
+    BulkDownloadRequest:
+      type: object
+      description: >-
+        The request of bulk-download: the bulk request with a cap of 10 devices, and with
+        `options.stop_on_error` limited to `false`, which is the same as leaving it out.
+      additionalProperties: false
+      required: [device_ids]
+      properties:
+        device_ids:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: >-
+            The devices to download. Each id is a positive integer; a repeated id counts once, in
+            first-seen order. More than 10 distinct ids are refused, and nothing is read.
+          items:
+            type: integer
+            minimum: 1
+        options:
+          type: object
+          additionalProperties: false
+          properties:
+            stop_on_error:
+              type: boolean
+              enum: [false]
+              description: A read has nothing to stop; `true` is refused with 400.
+
     BulkDownloadFile:
       type: object
       description: >-
@@ -2274,7 +2301,7 @@ paths:
         database and never contacts a device. A device that cannot be read is an entry with
         `status: error` and a fixed text, and the call still answers 200. At most 10 devices per
         call. The request is the one of the other bulk routes, except that `options.stop_on_error`
-        is refused.
+        can only be `false`.
       operationId: bulkDownloadConfigs
       security:
         - BearerAuth: []
@@ -2284,7 +2311,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BulkDeviceRequest'
+              $ref: '#/components/schemas/BulkDownloadRequest'
       responses:
         '200':
           description: The file; the body is a BulkDownloadFile
