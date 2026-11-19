@@ -682,8 +682,10 @@ func initApp() {
 		log.Fatal("Failed to load config:", err)
 	}
 
-	// Apply secret overrides (env and *_FILE)
-	secrets.ApplyToConfig(cfg)
+	// Apply secret overrides (env and *_FILE). A *_FILE that cannot be read stops the start.
+	if err = secrets.ApplyToConfig(cfg); err != nil {
+		log.Fatalf("Failed to read secrets: %v", err)
+	}
 
 	// Initialize logger from config
 	logger, err = logging.New(logging.Config{

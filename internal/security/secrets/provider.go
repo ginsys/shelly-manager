@@ -6,14 +6,6 @@ import (
 	"strings"
 )
 
-// Provider abstracts a secret source.
-// Implementations may read from environment variables, files, or secret stores.
-type Provider interface {
-	// Get returns the secret value for a given key if present.
-	// The boolean indicates whether a value was found.
-	Get(key string) (string, bool)
-}
-
 // EnvProvider reads secrets from environment variables using a conventional
 // "NAME" or "NAME_FILE" pattern (the latter treated as a filesystem path).
 type EnvProvider struct{}
@@ -26,60 +18,49 @@ func NewEnvProvider() *EnvProvider { return &EnvProvider{} }
 // absent, for the variable and for the file content alike (viper treats an empty env value the same
 // way), so a Compose file that always sets the plain variable, empty by default, still reads the file,
 // and an unfilled key file never blanks a key set in the config file.
-func (p *EnvProvider) Get(key string) (string, bool) {
+//
+// A "key_FILE" that is set to a path the process cannot read is an error naming the variable and the
+// path: a typo in a mount path must not leave the key empty, which opens the guarded routes. A plain
+// value that wins is returned before the file is looked at, so it hides an unreadable file.
+func (p *EnvProvider) Get(key string) (string, bool, error) {
 	// Direct value takes precedence
 	if v, ok := os.LookupEnv(key); ok && v != "" {
-		return v, true
+		return v, true, nil
 	}
 	// "_FILE" indirection (Docker/K8s secrets convention)
 	if path, ok := os.LookupEnv(key + "_FILE"); ok && path != "" {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			// Surface a clear error in logs via wrapper caller, but here
-			// indicate not found to allow fallbacks.
-			return "", false
+			return "", false, fmt.Errorf("%s_FILE: %w", key, err)
 		}
 		// Trim the trailing newlines commonly present in secret files
 		s := string(b)
 		s = strings.TrimRight(s, "\n")
 		if s == "" {
-			return "", false
+			return "", false, nil
 		}
-		return s, true
+		return s, true, nil
 	}
-	return "", false
-}
-
-// MultiProvider checks each provider in order and returns the first hit.
-type MultiProvider struct{ providers []Provider }
-
-// NewMultiProvider creates a new MultiProvider chain.
-func NewMultiProvider(providers ...Provider) *MultiProvider {
-	return &MultiProvider{providers: providers}
-}
-
-// Get queries each provider in order and returns the first present value.
-func (m *MultiProvider) Get(key string) (string, bool) {
-	for _, p := range m.providers {
-		if v, ok := p.Get(key); ok {
-			return v, true
-		}
-	}
-	return "", false
+	return "", false, nil
 }
 
 // Helper: GetEnvOrFile fetches a secret using the common convention.
 // It is a convenience wrapper for one-off lookups without constructing a provider.
-func GetEnvOrFile(key string) (string, bool) {
+func GetEnvOrFile(key string) (string, bool, error) {
 	return NewEnvProvider().Get(key)
 }
 
-// Helper: OverrideIfPresent returns envValue if present, otherwise original.
-func OverrideIfPresent(original string, envKey string) string {
-	if v, ok := GetEnvOrFile(envKey); ok {
-		return v
+// Helper: OverrideIfPresent returns the secret for envKey if present, otherwise original. It fails
+// when the secret's _FILE variable names a file that cannot be read.
+func OverrideIfPresent(original string, envKey string) (string, error) {
+	v, ok, err := GetEnvOrFile(envKey)
+	if err != nil {
+		return original, err
 	}
-	return original
+	if ok {
+		return v, nil
+	}
+	return original, nil
 }
 
 // DebugString redacts secret values for logs.
