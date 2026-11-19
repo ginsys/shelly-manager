@@ -48,6 +48,9 @@ interface DevicesState {
 let latestLoad = 0
 // The same rule for `checkSelection`: only the newest check may end the "checking" state or show a count.
 let latestCheck = 0
+// How many loads have put rows on the page. A check that saw one land while it waited knows the rows
+// changed under it; a failed load changes none.
+let loadsLanded = 0
 
 export const useDevicesStore = defineStore('devices', {
   state: (): DevicesState => ({
@@ -145,6 +148,7 @@ export const useDevicesStore = defineStore('devices', {
         })
         if (mine !== latestLoad) return
         this.items = items
+        loadsLanded++
         // A device ticked earlier may have been renamed or moved: the row on this page is the newest word.
         for (const d of items) {
           if (this.selected.has(d.id)) this.selected.set(d.id, { name: d.name || '', ip: d.ip || '' })
@@ -234,10 +238,11 @@ export const useDevicesStore = defineStore('devices', {
       const mine = ++latestCheck
       this.removedFromSelection = 0
       // The rows are the newest word only while no load is running: a load in flight may be about to
-      // drop a device, so then every ticked device is asked about, and the answer of a check never
-      // overrides a row that a load has put on the page since.
-      const pageIds = () => (this.loading ? new Set<number>() : new Set(this.items.map((d) => d.id)))
-      const ids = [...this.selected.keys()].filter((id) => !pageIds().has(id))
+      // drop a device, so then every ticked device is asked about. And once a load has landed while
+      // the check waited, its rows beat the check's answer for the devices they list.
+      const landedAtStart = loadsLanded
+      const onPage = this.loading ? new Set<number>() : new Set(this.items.map((d) => d.id))
+      const ids = [...this.selected.keys()].filter((id) => !onPage.has(id))
       if (ids.length === 0) {
         this.checkingSelection = false
         return
@@ -247,7 +252,7 @@ export const useDevicesStore = defineStore('devices', {
         const answers = await Promise.allSettled(ids.map((id) => getDevice(id)))
         if (mine !== latestCheck) return
         let removed = 0
-        const nowOnPage = pageIds()
+        const nowOnPage = loadsLanded === landedAtStart ? new Set<number>() : new Set(this.items.map((d) => d.id))
         answers.forEach((answer, i) => {
           const id = ids[i]
           if (!this.selected.has(id) || nowOnPage.has(id)) return
