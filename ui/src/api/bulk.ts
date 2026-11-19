@@ -1,4 +1,6 @@
 import api from './client'
+import { blobText } from './errorBody'
+import { downloadBlobWithName } from './export'
 import type { APIResponse } from './types'
 
 // The bulk configuration routes act on exactly the devices named in `device_ids`, in the direction
@@ -9,6 +11,8 @@ import type { APIResponse } from './types'
 //
 //   bulk-import   reads each device's live configuration into the manager
 //   bulk-drift-*  compares stored and live configuration
+//   bulk-download saves the desired configuration of the named devices as one file, secrets masked;
+//                 it reads the database and contacts no device (ginsys/shelly-manager#595)
 
 export interface BulkRequest {
   device_ids: number[]
@@ -85,6 +89,30 @@ export interface BulkDriftReport {
   }[]
 }
 
+// bulk-download answers the file itself, not the {success, data} envelope. The route masks every secret in
+// `config` (never omits it), so a masked value is what the file holds, not the device's real value. The
+// route refuses more devices than its cap, and says the number in its refusal.
+export interface BulkDownloadEntry {
+  device_id: number
+  device_name?: string
+  mac?: string
+  // `error` entries carry a fixed text in `error` and no `config`.
+  status: 'ok' | 'error'
+  config?: unknown
+  error?: string
+}
+
+export interface BulkDownloadFile {
+  generated_at: string
+  devices: BulkDownloadEntry[]
+}
+
+// The request has no options: the route refuses `stop_on_error: true`, since a device that cannot be
+// read is an entry and not a stop.
+export interface BulkDownloadRequest {
+  device_ids: number[]
+}
+
 // What the dialog shows for any of the answers.
 export type BulkTone = 'success' | 'failure' | 'skipped' | 'warning'
 
@@ -140,6 +168,27 @@ export function bulkDriftDetectEnhanced(
     ),
     'Failed to execute enhanced bulk drift detection'
   )
+}
+
+// Download the desired configuration of the named devices. Returns the file as the server sent it (to be
+// saved byte for byte), the name it gave it, and its parsed form for the summary. A refusal throws the
+// route's own text, which names the cap.
+export async function bulkDownload(
+  request: BulkDownloadRequest
+): Promise<{ blob: Blob; filename?: string; file: BulkDownloadFile }> {
+  const { blob, filename } = await downloadBlobWithName(() =>
+    api.post('/config/bulk-download', request, { responseType: 'blob' })
+  )
+  let file: BulkDownloadFile | undefined
+  try {
+    file = JSON.parse(await blobText(blob))
+  } catch {
+    // handled below: not JSON is not the file
+  }
+  if (!file || !Array.isArray(file.devices)) {
+    throw new Error('The answer is not the configuration file')
+  }
+  return { blob, filename, file }
 }
 
 const configTone: Record<BulkConfigStatus, BulkTone> = {

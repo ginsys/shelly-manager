@@ -1,6 +1,6 @@
 import type { AxiosResponse } from 'axios'
 import api from './client'
-import { errorEnvelopeMessage } from './errorBody'
+import { errorEnvelopeDetails, errorEnvelopeMessage } from './errorBody'
 import type { APIResponse, Metadata } from './types'
 
 export interface ExportHistoryItem {
@@ -268,16 +268,17 @@ export async function downloadBackup(id: string): Promise<Blob> {
 }
 
 // A download with the file name the server sends. A blob request delivers the server's error envelope
-// as a Blob, so a failure shows that message and not the status text.
+// as a Blob, so a failure shows the envelope's text and not the status text: its details when they are a
+// text (a validation refusal says why there, and its message only says it failed), else its message.
 // The caller makes the request, so each route stays a literal the route contract test can read.
-async function downloadBlobWithName(
+export async function downloadBlobWithName(
   request: () => Promise<AxiosResponse>,
 ): Promise<{ blob: Blob; filename?: string }> {
   let res
   try {
     res = await request()
   } catch (e: any) {
-    const message = await errorEnvelopeMessage(e?.response?.data)
+    const message = (await errorEnvelopeDetails(e?.response?.data)) ?? (await errorEnvelopeMessage(e?.response?.data))
     if (message) throw new Error(message)
     throw e
   }

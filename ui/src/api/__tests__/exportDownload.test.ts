@@ -40,6 +40,34 @@ describe.each([
     expect(err.message).not.toContain('status code')
   })
 
+  it('shows the string details of the envelope when it has them: the message alone says only that validation failed', async () => {
+    const withDetails = new Blob([
+      JSON.stringify({
+        success: false,
+        error: { code: 'VALIDATION_FAILED', message: 'Validation failed', details: 'Missing export ID' },
+      }),
+    ])
+    ;(api.get as any).mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 400'), { response: { status: 400, data: withDetails } }),
+    )
+    const err = await download('e1').catch((e) => e)
+    expect(err.message).toBe('Missing export ID')
+  })
+
+  it('keeps the message when the details are not a string', async () => {
+    const mapDetails = new Blob([
+      JSON.stringify({
+        success: false,
+        error: { code: 'VALIDATION_FAILED', message: 'Validation failed', details: { field: 'why' } },
+      }),
+    ])
+    ;(api.get as any).mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 400'), { response: { status: 400, data: mapDetails } }),
+    )
+    const err = await download('e1').catch((e) => e)
+    expect(err.message).toBe('Validation failed')
+  })
+
   it('rethrows the original error when the body is not an error envelope', async () => {
     const original = Object.assign(new Error('Network Error'), { response: { data: new Blob(['not json']) } })
     ;(api.get as any).mockRejectedValue(original)

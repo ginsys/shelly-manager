@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import BulkOperationsDialog from '../BulkOperationsDialog.vue'
-import { bulkImport, bulkDriftDetect } from '@/api/bulk'
+import { bulkImport, bulkDriftDetect, bulkDownload } from '@/api/bulk'
 
 vi.mock('@/api/bulk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/bulk')>()
@@ -9,7 +9,8 @@ vi.mock('@/api/bulk', async (importOriginal) => {
     ...actual,
     bulkImport: vi.fn(),
     bulkDriftDetect: vi.fn(),
-    bulkDriftDetectEnhanced: vi.fn()
+    bulkDriftDetectEnhanced: vi.fn(),
+    bulkDownload: vi.fn()
   }
 })
 
@@ -143,6 +144,7 @@ describe('BulkOperationsDialog', () => {
     expect(byId(wrapper, 'bulk-op-import').attributes('disabled')).toBeDefined()
     expect(byId(wrapper, 'bulk-op-drift').attributes('disabled')).toBeDefined()
     expect(byId(wrapper, 'bulk-op-drift-enhanced').attributes('disabled')).toBeDefined()
+    expect(byId(wrapper, 'bulk-op-download').attributes('disabled')).toBeDefined()
 
     await byId(wrapper, 'bulk-op-import').trigger('click')
     expect(bulkImport).not.toHaveBeenCalled()
@@ -179,7 +181,7 @@ describe('BulkOperationsDialog', () => {
   })
 
   describe('while the page checks the selection', () => {
-    const cards = ['bulk-op-import', 'bulk-op-drift', 'bulk-op-drift-enhanced']
+    const cards = ['bulk-op-import', 'bulk-op-drift', 'bulk-op-drift-enhanced', 'bulk-op-download']
 
     it('says how many devices it is checking and offers no operation yet', () => {
       const wrapper = mount(BulkOperationsDialog, {
@@ -221,6 +223,183 @@ describe('BulkOperationsDialog', () => {
       expect(byId(plural, 'bulk-removed').text()).toBe('2 selected devices no longer exist and were removed')
       expect(byId(plural, 'bulk-removed').attributes('role')).toBe('status')
       expect(byId(singular, 'bulk-removed').text()).toBe('1 selected device no longer exists and was removed')
+    })
+  })
+
+  describe('download configuration', () => {
+    const readable = {
+      device_id: 4,
+      device_name: 'Kitchen',
+      status: 'ok',
+      config: { system: { device: { name: 'config-marker-xyz' } }, mqtt: { pass: '********' } }
+    }
+    const unreadable = {
+      device_id: 9,
+      device_name: 'Garage',
+      status: 'error',
+      error: 'no desired configuration is set for this device'
+    }
+    const answerOf = (devices: unknown[], filename: string | null = 'shelly-configs-20261120-002000.json') => ({
+      blob: new Blob(['{}']),
+      // null stands for a server that sent no Content-Disposition name
+      filename: filename ?? undefined,
+      file: { generated_at: '2026-11-20T00:20:00Z', devices }
+    })
+
+    let clicks: { download: string; href: string }[]
+    const createUrl = vi.fn()
+    const revokeUrl = vi.fn()
+
+    // The shared test setup answers document.createElement('a') with a plain object whose click is its
+    // own mock: use real elements and watch the click of the download anchor instead.
+    const realCreateElement = Document.prototype.createElement.bind(document)
+
+    beforeEach(() => {
+      clicks = []
+      vi.mocked(document.createElement).mockImplementation(((tag: string, opts?: any) =>
+        realCreateElement(tag, opts)) as any)
+      createUrl.mockReturnValue('blob:fake')
+      ;(URL as any).createObjectURL = createUrl
+      ;(URL as any).revokeObjectURL = revokeUrl
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        clicks.push({ download: this.download, href: this.href })
+      })
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    async function openForm(devices = picked) {
+      const wrapper = open(devices)
+      await byId(wrapper, 'bulk-op-download').trigger('click')
+      return wrapper
+    }
+
+    const send = async (wrapper: ReturnType<typeof mount>) => {
+      await byId(wrapper, 'bulk-download-submit').trigger('submit')
+      await flushPromises()
+    }
+
+    it('sends exactly the picked ids and no options, whatever the stop box says in another form', async () => {
+      vi.mocked(bulkDownload).mockResolvedValue(answerOf([readable]) as any)
+      const wrapper = open()
+      await byId(wrapper, 'bulk-op-import').trigger('click')
+      await byId(wrapper, 'bulk-stop-on-error').setValue(true)
+      await wrapper.findAll('button').find((b) => b.text() === 'Back')!.trigger('click')
+      await byId(wrapper, 'bulk-op-download').trigger('click')
+
+      await send(wrapper)
+
+      expect(bulkDownload).toHaveBeenCalledTimes(1)
+      const request = vi.mocked(bulkDownload).mock.calls[0][0]
+      expect(request.device_ids).toEqual([4, 9])
+      expect(Object.keys(request)).toEqual(['device_ids'])
+    })
+
+    it('saves the one file under the name the server sent, and does not tell the page to refresh', async () => {
+      const answer = answerOf([readable])
+      vi.mocked(bulkDownload).mockResolvedValue(answer as any)
+      const wrapper = await openForm()
+
+      await send(wrapper)
+
+      expect(createUrl).toHaveBeenCalledTimes(1)
+      expect(createUrl).toHaveBeenCalledWith(answer.blob)
+      expect(clicks).toEqual([{ download: 'shelly-configs-20261120-002000.json', href: 'blob:fake' }])
+      expect(revokeUrl).toHaveBeenCalledWith('blob:fake')
+      // No device was contacted, so the devices page has nothing to refresh.
+      expect(wrapper.emitted('complete')).toBeUndefined()
+    })
+
+    it('names the file itself when the server sent no name', async () => {
+      vi.mocked(bulkDownload).mockResolvedValue(answerOf([readable], null) as any)
+      const wrapper = await openForm()
+
+      await send(wrapper)
+
+      expect(clicks.map((c) => c.download)).toEqual(['shelly-configs.json'])
+    })
+
+    it('says which device could not be read and why, and counts the others as saved', async () => {
+      vi.mocked(bulkDownload).mockResolvedValue(answerOf([readable, unreadable]) as any)
+      const wrapper = await openForm()
+
+      await send(wrapper)
+
+      const saved = byId(wrapper, 'bulk-download-saved')
+      expect(saved.text()).toContain('shelly-configs-20261120-002000.json')
+      expect(saved.text()).toContain('1 of 2')
+      const failed = byId(wrapper, 'bulk-download-failed')
+      expect(failed.text()).toContain('Garage')
+      expect(failed.text()).toContain('no desired configuration is set for this device')
+      expect(failed.text()).not.toContain('Kitchen')
+    })
+
+    it('shows no failed list when every device was read', async () => {
+      vi.mocked(bulkDownload).mockResolvedValue(answerOf([readable]) as any)
+      const wrapper = await openForm()
+
+      await send(wrapper)
+
+      expect(byId(wrapper, 'bulk-download-saved').text()).toContain('1 of 1')
+      expect(byId(wrapper, 'bulk-download-failed').exists()).toBe(false)
+    })
+
+    it('shows the cap the route named when it refuses the selection, saves no file and stays on the form', async () => {
+      vi.mocked(bulkDownload).mockRejectedValue(new Error('bulk-download takes at most 10 devices, got 12'))
+      const wrapper = await openForm()
+
+      await send(wrapper)
+
+      expect(byId(wrapper, 'bulk-error').text()).toContain('bulk-download takes at most 10 devices, got 12')
+      expect(createUrl).not.toHaveBeenCalled()
+      expect(clicks).toEqual([])
+      expect(byId(wrapper, 'bulk-download-saved').exists()).toBe(false)
+      expect(byId(wrapper, 'bulk-download-submit').exists()).toBe(true)
+      expect(wrapper.emitted('complete')).toBeUndefined()
+    })
+
+    it('says on the form and in the summary that every secret is masked, and renders no configuration', async () => {
+      vi.mocked(bulkDownload).mockResolvedValue(answerOf([readable, unreadable]) as any)
+      const wrapper = await openForm()
+
+      const notice = byId(wrapper, 'bulk-download-notice')
+      expect(notice.text()).toContain('********')
+      expect(notice.text()).toMatch(/masked/i)
+      expect(notice.text()).toMatch(/cannot restore/i)
+
+      await send(wrapper)
+
+      expect(byId(wrapper, 'bulk-download-saved').text()).toContain('********')
+      expect(byId(wrapper, 'bulk-download-saved').text()).toMatch(/masked/i)
+      // The configuration goes to the file and never to the screen.
+      expect(wrapper.text()).not.toContain('config-marker-xyz')
+      expect(wrapper.text()).not.toContain('mqtt')
+    })
+
+    it('saves nothing when the dialog was closed before the file arrived', async () => {
+      let answer!: (value: unknown) => void
+      vi.mocked(bulkDownload).mockReturnValue(new Promise((resolve) => (answer = resolve)) as any)
+      const wrapper = await openForm()
+      await byId(wrapper, 'bulk-download-submit').trigger('submit')
+
+      await byId(wrapper, 'bulk-close').trigger('click')
+      answer(answerOf([readable]))
+      await flushPromises()
+
+      expect(createUrl).not.toHaveBeenCalled()
+      expect(clicks).toEqual([])
+      expect(byId(wrapper, 'bulk-download-saved').exists()).toBe(false)
+    })
+
+    it('sends nothing when the selection empties after the form was opened', async () => {
+      const wrapper = await openForm()
+
+      await wrapper.setProps({ selectedDevices: [] })
+      await send(wrapper)
+
+      expect(bulkDownload).not.toHaveBeenCalled()
     })
   })
 
