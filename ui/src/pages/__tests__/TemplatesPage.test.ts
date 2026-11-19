@@ -521,6 +521,24 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('[data-testid="template-action-error"]').exists()).toBe(false)
   })
 
+  // A save that worked must never be reported as a failed save: only the refresh after it failed.
+  it('a refresh that fails after a save, with the page left, says "Load templates" and not "Save template"', async () => {
+    dismissNotice()
+    vi.mocked(listTemplates).mockResolvedValueOnce([] as any).mockRejectedValueOnce(new Error('list down'))
+    const pending = deferred<any>()
+    vi.mocked(createTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('.modal .form-input[type="text"]').setValue('first')
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    wrapper.unmount()
+    pending.resolve(plainTemplate(2, 'first'))
+    await flushPromises()
+    expect(notice.value?.message).toContain('list down')
+    expect(notice.value?.context?.action).toBe('Load templates')
+  })
+
   it('a second Save click while a save is pending sends nothing', async () => {
     const pending = deferred<any>()
     vi.mocked(createTemplate).mockReturnValueOnce(pending.promise)
