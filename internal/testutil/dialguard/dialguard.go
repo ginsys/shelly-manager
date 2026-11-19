@@ -45,11 +45,22 @@ func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	if host == "localhost" && err == nil {
 		// Never hand the name to the resolver: with "hosts: dns files" it would ask DNS first and
 		// record a refusal. The loopback address is what /etc/hosts gives it anyway.
-		loopback := "127.0.0.1"
-		if strings.HasSuffix(network, "6") {
-			loopback = "::1"
+		// A network that names no family tries both loopback addresses, IPv4 first.
+		loopbacks := []string{"127.0.0.1", "::1"}
+		switch {
+		case strings.HasSuffix(network, "4"):
+			loopbacks = loopbacks[:1]
+		case strings.HasSuffix(network, "6"):
+			loopbacks = loopbacks[1:]
 		}
-		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(loopback, port))
+		var conn net.Conn
+		var dialErr error
+		for _, loopback := range loopbacks {
+			if conn, dialErr = (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(loopback, port)); dialErr == nil {
+				return conn, nil
+			}
+		}
+		return nil, dialErr
 	}
 	// netip accepts an IPv6 zone ("::1%lo"), which net.ParseIP does not.
 	if ip, parseErr := netip.ParseAddr(host); host == "localhost" || (parseErr == nil && ip.IsLoopback()) {

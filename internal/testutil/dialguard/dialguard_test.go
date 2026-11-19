@@ -91,6 +91,23 @@ func TestGuardAllowsScopedIPv6Loopback(t *testing.T) {
 	}
 }
 
+// A server that listens on ::1 only is still reached through the name localhost.
+func TestGuardLocalhostFallsBackToIPv6(t *testing.T) {
+	ln, err := net.Listen("tcp", "[::1]:0")
+	if err != nil {
+		t.Skipf("no IPv6 loopback on this host: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	got := dialguard.Capture()
+	conn, err := dialguard.Dial(context.Background(), "tcp", "localhost:"+port)
+	refused := got()
+	if err != nil || len(refused) != 0 {
+		t.Fatalf("err %v, refused %v", err, refused)
+	}
+	_ = conn.Close()
+}
+
 func TestGuardAllowsLoopback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	defer srv.Close()
@@ -108,7 +125,7 @@ func TestGuardAllowsLoopback(t *testing.T) {
 	}
 	defer func() { _ = ln.Close() }()
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
-	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", "localhost:"+port)
+	conn, err := dialguard.Dial(context.Background(), "tcp", "localhost:"+port)
 	if err != nil {
 		t.Fatal(err)
 	}
