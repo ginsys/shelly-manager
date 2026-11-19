@@ -57,9 +57,9 @@ The Shelly Manager UI provides a comprehensive, user-friendly interface for mana
 
 ### Main Navigation
 
-Every page is reached from the top bar, or from a page the top bar reaches. A menu opens on hover,
-or on a click or Enter on its button; Tab moves into its items, and Escape closes it and returns
-to its button.
+Every page is reached from the top bar, or from a page the top bar reaches. A menu opens on a
+click, or on Enter or Space on its button; Tab moves into its items. It closes on Escape (focus
+returns to its button), on a click outside it, when focus leaves it, and when you choose an item.
 
 ```
 Top bar:

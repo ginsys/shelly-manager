@@ -4,12 +4,7 @@
     class="nav-dropdown"
     :class="{ open: isOpen }"
     @focusout="onFocusOut"
-    @keydown="openedByHover = false"
     @pointerdown="pressInside = true"
-    @pointerup="pressInside = false"
-    @pointercancel="pressInside = false"
-    @pointerenter="onPointerEnter"
-    @pointerleave="onPointerLeave"
   >
     <button
       ref="trigger"
@@ -17,7 +12,7 @@
       class="nav-link dropdown-trigger"
       :class="{ active }"
       :aria-expanded="isOpen"
-      @click="onTriggerClick"
+      @click="isOpen = !isOpen"
     >
       {{ label }}
     </button>
@@ -68,42 +63,12 @@ const trigger = ref<HTMLButtonElement | null>(null)
 const isOpen = ref(false)
 
 // A pointer press inside the menu blurs the trigger with no related target in some browsers, which
-// is indistinguishable from focus going nowhere; the flag tells the two apart.
+// is indistinguishable from focus going nowhere; the flag tells the two apart. It is set by a press
+// inside the menu and cleared by the release or cancel of any press, wherever it ends.
 const pressInside = ref(false)
-
-// True while the menu is open only because the mouse is over it.
-const openedByHover = ref(false)
 
 function close() {
   isOpen.value = false
-  openedByHover.value = false
-}
-
-// Hover opens and closes the menu through the same state as a click, so the open class, the panel
-// and the aria attributes never disagree. A touch tap fires pointerenter before its click, so only
-// a mouse hovers.
-function onPointerEnter(event: PointerEvent) {
-  if (event.pointerType !== 'mouse' || isOpen.value) return
-  isOpen.value = true
-  openedByHover.value = true
-}
-
-// A click on a menu the mouse just opened keeps it open (it would shut it otherwise, a moment after
-// the pointer opened it); any other click toggles.
-function onTriggerClick() {
-  if (openedByHover.value) {
-    openedByHover.value = false
-    return
-  }
-  isOpen.value = !isOpen.value
-}
-
-// Leaving with the pointer keeps the menu open while keyboard focus is still inside it.
-function onPointerLeave(event: PointerEvent) {
-  if (event.pointerType !== 'mouse') return
-  openedByHover.value = false
-  if (root.value?.contains(document.activeElement)) return
-  close()
 }
 
 function onFocusOut(event: FocusEvent) {
@@ -117,6 +82,10 @@ function onDocumentPointerDown(event: Event) {
   if (!root.value?.contains(event.target as Node)) close()
 }
 
+function onDocumentPointerEnd() {
+  pressInside.value = false
+}
+
 // Escape closes an open menu wherever the focus is; focus goes back to the button only when it was
 // inside the menu, since otherwise it would be left on a hidden item.
 function onDocumentKeydown(event: KeyboardEvent) {
@@ -128,10 +97,14 @@ function onDocumentKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerDown)
+  document.addEventListener('pointerup', onDocumentPointerEnd)
+  document.addEventListener('pointercancel', onDocumentPointerEnd)
   document.addEventListener('keydown', onDocumentKeydown)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown)
+  document.removeEventListener('pointerup', onDocumentPointerEnd)
+  document.removeEventListener('pointercancel', onDocumentPointerEnd)
   document.removeEventListener('keydown', onDocumentKeydown)
 })
 </script>
@@ -178,17 +151,6 @@ onBeforeUnmount(() => {
   z-index: 1000;
   margin-top: 4px;
   overflow: hidden;
-}
-
-/* Invisible bridge, so the pointer does not leave the menu while crossing the gap */
-.dropdown-menu::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 0;
-  right: 0;
-  height: 8px;
-  background: transparent;
 }
 
 .nav-dropdown.open .dropdown-menu {
