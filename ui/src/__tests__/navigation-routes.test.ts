@@ -1,96 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
+import { routes as appRoutes } from '@/router/routes'
 
-// Define the routes exactly as in main.ts
-const routes = [
-  // Main pages
-  { 
-    path: '/', 
-    name: 'devices',
-    component: () => Promise.resolve({ template: '<div>Devices Page</div>' }),
-    meta: { title: 'Devices' }
-  },
-  { 
-    path: '/devices/:id', 
-    name: 'device-detail',
-    component: () => Promise.resolve({ template: '<div>Device Details Page</div>' }),
-    meta: { title: 'Device Details' }
-  },
-  
-  // Export & Import routes
-  { 
-    path: '/export/backup', 
-    name: 'export-backup',
-    component: () => Promise.resolve({ template: '<div>Export Backup Page</div>' }),
-    meta: { title: 'Backup Management', category: 'export' }
-  },
-  { 
-    path: '/export/gitops', 
-    name: 'export-gitops',
-    component: () => Promise.resolve({ template: '<div>Export GitOps Page</div>' }),
-    meta: { title: 'GitOps Export', category: 'export' }
-  },
-  { 
-    path: '/export/history', 
-    name: 'export-history',
-    component: () => Promise.resolve({ template: '<div>Export History Page</div>' }),
-    meta: { title: 'Export History', category: 'export' }
-  },
-  { 
-    path: '/export/:id', 
-    name: 'export-detail',
-    component: () => Promise.resolve({ template: '<div>Export Detail Page</div>' }),
-    meta: { title: 'Export Details', category: 'export' }
-  },
-  { 
-    path: '/import/history', 
-    name: 'import-history',
-    component: () => Promise.resolve({ template: '<div>Import History Page</div>' }),
-    meta: { title: 'Import History', category: 'import' }
-  },
-  { 
-    path: '/import/:id', 
-    name: 'import-detail',
-    component: () => Promise.resolve({ template: '<div>Import Detail Page</div>' }),
-    meta: { title: 'Import Details', category: 'import' }
-  },
-  
-  // Plugin management
-  { 
-    path: '/plugins', 
-    name: 'plugins',
-    component: () => Promise.resolve({ template: '<div>Plugins Page</div>' }),
-    meta: { title: 'Plugin Management' }
-  },
-  
-  // Metrics and monitoring
-  {
-    path: '/dashboard',
-    name: 'metrics',
-    component: () => Promise.resolve({ template: '<div>Metrics Page</div>' }),
-    meta: { title: 'Metrics Dashboard' }
-  },
-
-  // Admin
-  { 
-    path: '/admin', 
-    name: 'admin',
-    component: () => Promise.resolve({ template: '<div>Admin Page</div>' }),
-    meta: { title: 'Admin Settings' }
-  },
-  
-  // 404 handler
-  {
-    path: '/:pathMatch(.*)*',
-    name: 'not-found',
-    component: () => Promise.resolve({ template: '<div>Not Found</div>' }),
-    meta: { title: 'Page Not Found' }
-  }
-]
+// The real route table, the one `main.ts` builds the router from. Every page is lazy-loaded, and a
+// navigation would load the whole page and its API modules, so each route gets one stub component.
+// Paths, names and meta stay the table's own.
+const stub = { template: '<div>page</div>' }
+const routes = appRoutes.map(route => ({ ...route, component: stub }))
 
 describe('Navigation Routes Configuration', () => {
   let router: any
-  
+
   beforeEach(() => {
     router = createRouter({
       history: createWebHistory(),
@@ -100,22 +20,22 @@ describe('Navigation Routes Configuration', () => {
 
   it('should have all required routes configured', () => {
     const routeNames = routes.map(r => r.name)
-    
+
     // Main navigation routes
     expect(routeNames).toContain('devices')
     expect(routeNames).toContain('device-detail')
-    
+
     // Export routes
     expect(routeNames).not.toContain('export-schedules')
     expect(routeNames).toContain('export-backup')
     expect(routeNames).toContain('export-gitops')
     expect(routeNames).toContain('export-history')
     expect(routeNames).toContain('export-detail')
-    
+
     // Import routes
     expect(routeNames).toContain('import-history')
     expect(routeNames).toContain('import-detail')
-    
+
     // Other routes
     expect(routeNames).toContain('plugins')
     expect(routeNames).toContain('metrics')
@@ -126,14 +46,14 @@ describe('Navigation Routes Configuration', () => {
   it('should have correct meta information for route categories', () => {
     const exportRoutes = routes.filter(r => r.meta?.category === 'export')
     const importRoutes = routes.filter(r => r.meta?.category === 'import')
-    
+
     expect(exportRoutes).toHaveLength(4)
     expect(importRoutes).toHaveLength(2) // history, detail
-    
+
     // Check specific export routes
     const backupRoute = routes.find(r => r.name === 'export-backup')
     expect(backupRoute?.meta?.title).toBe('Backup Management')
-    
+
     const gitopsRoute = routes.find(r => r.name === 'export-gitops')
     expect(gitopsRoute?.meta?.title).toBe('GitOps Export')
   })
@@ -179,7 +99,7 @@ describe('Navigation Routes Configuration', () => {
 
   it('should have correct path patterns', () => {
     const pathPatterns = routes.map(r => r.path)
-    
+
     // Verify path patterns are correct
     expect(pathPatterns).toContain('/')
     expect(pathPatterns).toContain('/devices/:id')
@@ -201,22 +121,22 @@ describe('Navigation Routes Configuration', () => {
     const exportRoutes = ['export-backup', 'export-gitops', 'export-history', 'export-detail']
     const importRoutes = ['import-history', 'import-detail']
     const detailRoutes = ['device-detail', 'export-detail', 'import-detail']
-    
+
     mainRoutes.forEach(name => {
       const route = routes.find(r => r.name === name)
       expect(route).toBeDefined()
     })
-    
+
     exportRoutes.forEach(name => {
       const route = routes.find(r => r.name === name)
       expect(route?.meta?.category).toBe('export')
     })
-    
+
     importRoutes.forEach(name => {
       const route = routes.find(r => r.name === name)
       expect(route?.meta?.category).toBe('import')
     })
-    
+
     detailRoutes.forEach(name => {
       const route = routes.find(r => r.name === name)
       expect(route?.path).toContain(':id')
