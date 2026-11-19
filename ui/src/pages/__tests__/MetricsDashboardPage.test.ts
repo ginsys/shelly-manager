@@ -96,7 +96,10 @@ describe('MetricsDashboardPage', () => {
 
   const panel = (name: string) => wrapper.find(`[data-testid="panel-${name}"]`)
 
+  // Replaces the fixture mounted by beforeEach: the old component is unmounted first,
+  // so its timers and store polling stop and cannot consume this test's mocks.
   function mountPage() {
+    wrapper?.unmount()
     return mount(MetricsDashboardPage, {
       global: {
         plugins: [createTestingPinia({ stubActions: false })],
@@ -264,15 +267,7 @@ describe('MetricsDashboardPage', () => {
       const errorMessage = 'Failed to load metrics'
       vi.mocked(metricsApi.getDashboardSummary).mockRejectedValue(new Error(errorMessage))
 
-      wrapper = mount(MetricsDashboardPage, {
-        global: {
-          plugins: [createTestingPinia({ stubActions: false })],
-          stubs: {
-            LineChart: { template: '<div class="line-chart-stub"></div>' },
-            BarChart: { template: '<div class="bar-chart-stub"></div>' }
-          }
-        }
-      })
+      wrapper = mountPage()
 
       await flushPromises()
 
@@ -283,15 +278,7 @@ describe('MetricsDashboardPage', () => {
       // First call fails
       vi.mocked(metricsApi.getDashboardSummary).mockRejectedValueOnce(new Error('Network error'))
 
-      wrapper = mount(MetricsDashboardPage, {
-        global: {
-          plugins: [createTestingPinia({ stubActions: false })],
-          stubs: {
-            LineChart: { template: '<div class="line-chart-stub"></div>' },
-            BarChart: { template: '<div class="bar-chart-stub"></div>' }
-          }
-        }
-      })
+      wrapper = mountPage()
 
       await flushPromises()
       expect(wrapper.text()).toContain('Network error')
