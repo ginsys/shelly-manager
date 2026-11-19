@@ -70,7 +70,7 @@ help:
 	@echo ""
 	@echo "$(CYAN)CI$(NC)"
 	@echo "  $(WHITE)test-ci$(NC)             Complete CI test suite $(YELLOW)→ check-go-version, deps, test-coverage-ci, test-coverage-check, lint, typecheck-check, test-vitest$(NC)"
-	@echo "  $(WHITE)test-vitest$(NC)         Run frontend unit tests (vitest)"
+	@echo "  $(WHITE)test-vitest$(NC)         Run frontend unit tests (vitest), printing every test name"
 	@echo "  $(WHITE)typecheck-check$(NC)     Check the vue-tsc baseline ratchet (and its parser tests)"
 	@echo ""
 	@echo "$(CYAN)LINTING & QUALITY$(NC)"
@@ -305,7 +305,7 @@ typecheck-check: ui-deps-check
 # Frontend unit tests (vitest)
 test-vitest: ui-deps-check
 	@echo "Running frontend unit tests (vitest)..."
-	cd ui && npx vitest run --coverage
+	cd ui && npx vitest run --coverage --reporter=verbose
 
 # Complete CI test suite - matches GitHub Actions test.yml workflow exactly
 # This is the most important test to run locally before committing
@@ -348,7 +348,7 @@ test-all:
 	$(MAKE) test-security
 	@echo ""
 	@echo "Step 4/6: Running frontend unit tests (vitest)..."
-	cd ui && npx vitest run --coverage
+	$(MAKE) test-vitest
 	@echo ""
 	@echo "Step 5/6: Running Go lint..."
 	$(MAKE) lint
