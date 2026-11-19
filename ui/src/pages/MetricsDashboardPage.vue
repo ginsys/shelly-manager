@@ -292,7 +292,13 @@ async function fetchAdvancedMetrics() {
   }
 }
 
+// The backend's own message (the error envelope of an axios rejection) beats the
+// bare "Request failed with status code N" text, as it did before the panels
+// loaded separately.
 function reasonMessage(reason: unknown): string {
+  const backend = (reason as { response?: { data?: { error?: { message?: string } } } } | null)
+    ?.response?.data?.error?.message
+  if (backend) return backend
   return reason instanceof Error ? reason.message : String(reason)
 }
 
