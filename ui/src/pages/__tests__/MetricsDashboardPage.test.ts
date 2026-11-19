@@ -339,16 +339,22 @@ describe('MetricsDashboardPage', () => {
       expect(text).toContain('Security metrics: boom 4')
     })
 
-    it('empties a panel whose refresh fails instead of keeping stale numbers', async () => {
+    it.each([
+      ['summary', 'getDashboardSummary'],
+      ['notifications', 'getNotificationMetrics'],
+      ['resolution', 'getResolutionMetrics'],
+      ['security', 'getSecurityMetrics']
+    ] as const)('empties the %s panel when its refresh fails instead of keeping stale numbers', async (name, call) => {
       await flushPromises()
-      expect(panel('security').exists()).toBe(true)
+      expect(panel(name).exists()).toBe(true)
 
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(new Error('gone'))
+      vi.mocked(metricsApi[call]).mockRejectedValue(new Error('gone'))
       await wrapper.vm.fetchAdvancedMetrics()
       await flushPromises()
 
-      expect(panel('security').exists()).toBe(false)
-      expect(panel('summary').exists()).toBe(true)
+      expect(panel(name).exists()).toBe(false)
+      const others = ['summary', 'notifications', 'resolution', 'security'].filter(n => n !== name)
+      for (const other of others) expect(panel(other).exists()).toBe(true)
     })
 
     it('fills the panel again once its call succeeds', async () => {
