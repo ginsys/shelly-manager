@@ -117,7 +117,7 @@ describe('DeviceConfigPage shows the fields the server refused on Save', () => {
     expect(wrapper.find('[data-testid="override-save-errors"]').exists()).toBe(false)
   })
 
-  it('a refusal that is not a field list still shows an alert', async () => {
+  it('a refusal that is not a field list shows an error panel, not a field list or an alert', async () => {
     api.setDeviceOverridesNew.mockRejectedValue(new Error('device not found'))
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
     const wrapper = await openEditor()
@@ -125,6 +125,11 @@ describe('DeviceConfigPage shows the fields the server refused on Save', () => {
     await wrapper.find('[data-testid="save-overrides"]').trigger('click')
     await flushPromises()
 
-    expect(alert).toHaveBeenCalledWith('Failed to save overrides: device not found')
+    const panel = wrapper.find('[data-testid="config-action-error"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('device not found')
+    expect(panel.text()).toContain('Save overrides')
+    expect(wrapper.find('[data-testid="override-save-errors"]').exists()).toBe(false)
+    expect(alert).not.toHaveBeenCalled()
   })
 })

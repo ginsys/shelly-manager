@@ -4,12 +4,14 @@
       <router-link class="btn" to="/">← Back</router-link>
       <h1 class="title">Device Details</h1>
       <div class="spacer" />
-      <button class="btn" @click="showEditDialog = true" title="Edit Device">✏️ Edit</button>
+      <button class="btn" @click="openEditDialog" title="Edit Device">✏️ Edit</button>
       <button class="control-btn on" @click="handleControl('on')" title="Turn On">ON</button>
       <button class="control-btn off" @click="handleControl('off')" title="Turn Off">OFF</button>
       <button class="control-btn" @click="handleControl('restart')" title="Restart">↻</button>
       <button class="btn" @click="refreshAll">Refresh</button>
     </div>
+
+    <ErrorDisplay :error="actionError" data-testid="device-action-error" @dismiss="clearActionError" />
 
     <div class="card" v-if="loading">
       <div class="state">Loading...</div>
@@ -146,6 +148,7 @@
           <button class="modal-close" @click="showEditDialog = false">✕</button>
         </div>
         <div class="modal-body">
+          <ErrorDisplay :error="saveError" data-testid="device-save-error" @dismiss="clearSaveError" />
           <div class="form-group">
             <label>Device Name</label>
             <input v-model="editForm.name" type="text" class="form-input" placeholder="Device name" />
@@ -171,6 +174,8 @@ import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevic
 import { detectConfigDrift } from '../api/deviceConfig'
 import { getDeviceCapabilities } from '../api/typedConfig'
 import DeviceLoginCard from '../components/devices/DeviceLoginCard.vue'
+import ErrorDisplay from '../components/shared/ErrorDisplay.vue'
+import { useError } from '../composables/useError'
 import type { Device } from '../api/types'
 import type { DeviceStatus, DeviceEnergy } from '../api/devices'
 import type { ConfigDrift } from '../api/deviceConfig'
@@ -187,6 +192,10 @@ const drift = ref<ConfigDrift | null>(null)
 const driftLoading = ref(false)
 const showEditDialog = ref(false)
 const editForm = ref<{ name: string; settings: string }>({ name: '', settings: '' })
+// A failed control command shows under the toolbar. A failed save shows inside the edit dialog,
+// which is open and covers the page when it happens.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = useError()
+const { error: saveError, setError: setSaveError, clearError: clearSaveError } = useError()
 const abortController = new AbortController()
 let refreshInterval: ReturnType<typeof setInterval> | null = null
 
@@ -330,8 +339,9 @@ async function refreshAll() {
 }
 
 async function handleControl(action: string) {
+  clearActionError()
+  const id = route.params.id as string
   try {
-    const id = route.params.id as string
     await controlDevice(id, { action: action as any })
     // Refresh status after control command
     setTimeout(() => {
@@ -339,13 +349,19 @@ async function handleControl(action: string) {
       fetchDevice()
     }, 1000)
   } catch (e: any) {
-    alert('Failed to control device: ' + (e?.message || 'Unknown error'))
+    setActionError(e, { action: 'Control device', resource: 'Device', resourceId: id })
   }
 }
 
+function openEditDialog() {
+  clearSaveError()
+  showEditDialog.value = true
+}
+
 async function handleSaveDevice() {
+  clearSaveError()
+  const id = route.params.id as string
   try {
-    const id = route.params.id as string
     await updateDevice(id, {
       name: editForm.value.name,
       settings: editForm.value.settings,
@@ -354,7 +370,7 @@ async function handleSaveDevice() {
     showEditDialog.value = false
     await fetchDevice()
   } catch (e: any) {
-    alert('Failed to save device: ' + (e?.message || 'Unknown error'))
+    setSaveError(e, { action: 'Save device', resource: 'Device', resourceId: id })
   }
 }
 

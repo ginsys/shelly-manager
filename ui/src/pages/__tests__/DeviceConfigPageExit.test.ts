@@ -89,7 +89,6 @@ describe('DeviceConfigPage drops work when it is left (ginsys/shelly-manager#402
 
   it('does not apply the status answer of the old device to the next device', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'alert').mockImplementation(() => {})
     let releaseApply: (value: any) => void = () => {}
     api.getConfigStatusNew.mockImplementation(
       async (id: any) => ({ config_applied: false, pending_changes: String(id) === '7', owner: `device-${id}` }) as any,

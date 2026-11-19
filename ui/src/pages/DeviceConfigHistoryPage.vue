@@ -7,6 +7,9 @@
       <button class="btn" @click="handleRefresh">Refresh</button>
     </div>
 
+    <!-- A failed restore. While the viewer is open it covers the page, so the error shows in the viewer. -->
+    <ErrorDisplay v-if="!viewingConfig" :error="restoreError" data-testid="restore-error" @dismiss="clearRestoreError" />
+
     <!-- Loading/Error states -->
     <div v-if="loading" class="card state">Loading...</div>
     <div v-else-if="error" class="card state error">{{ error }}</div>
@@ -43,6 +46,7 @@
     <div v-if="viewingConfig" class="modal-overlay" @click.self="viewingConfig = null">
       <div class="modal">
         <h2>Configuration from {{ formatDate(viewingConfig.timestamp) }}</h2>
+        <ErrorDisplay :error="restoreError" data-testid="restore-error" @dismiss="clearRestoreError" />
         <pre class="config-view">{{ JSON.stringify(viewingConfig.config, null, 2) }}</pre>
         <div class="modal-actions">
           <button class="btn" @click="viewingConfig = null">Close</button>
@@ -57,9 +61,12 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getConfigHistory, updateDeviceConfig, type ConfigHistoryEntry } from '@/api/deviceConfig'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { useError } from '@/composables/useError'
 
 const route = useRoute()
 const router = useRouter()
+const { error: restoreError, setError: setRestoreError, clearError: clearRestoreError } = useError()
 
 const deviceId = ref<number | string>(route.params.id as string)
 const history = ref<ConfigHistoryEntry[]>([])
@@ -82,13 +89,14 @@ function viewConfig(entry: ConfigHistoryEntry) {
 async function restoreConfig(entry: ConfigHistoryEntry) {
   if (!confirm('Are you sure you want to restore this configuration?')) return
 
+  clearRestoreError()
   try {
     await updateDeviceConfig(deviceId.value, entry.config)
     viewingConfig.value = null
-    alert('Configuration restored successfully')
+    // The configuration page opens next and shows the device's status: that is the confirmation.
     router.push(`/devices/${deviceId.value}/config`)
   } catch (e: any) {
-    alert('Failed to restore configuration: ' + (e?.message || 'Unknown error'))
+    setRestoreError(e, { action: 'Restore configuration', resource: 'Device', resourceId: deviceId.value })
   }
 }
 
