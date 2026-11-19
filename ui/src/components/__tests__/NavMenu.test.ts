@@ -123,7 +123,10 @@ describe('NavMenu', () => {
     mountMenu()
     trigger().click()
     await nextTick()
+    // the stubbed links have no href, so give one a tabindex to hold the focus
+    items()[1].setAttribute('tabindex', '0')
     items()[1].focus()
+    expect(document.activeElement).toBe(items()[1])
     items()[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await nextTick()
     expect(isOpen()).toBe(false)
@@ -137,6 +140,79 @@ describe('NavMenu', () => {
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await nextTick()
     expect(isOpen()).toBe(false)
+  })
+
+  // jsdom has no PointerEvent, so a plain Event carries the pointerType the handlers read.
+  const pointer = (type: string, pointerType: string) =>
+    Object.assign(new Event(type), { pointerType })
+  const root = () => document.body.querySelector('.nav-dropdown') as HTMLElement
+
+  it('opens on mouse hover through the same state as a click, so aria-expanded agrees', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    await nextTick()
+    expect(isOpen()).toBe(true)
+    expect(trigger().getAttribute('aria-expanded')).toBe('true')
+    expect(document.body.querySelector('.dropdown-menu')!.getAttribute('aria-hidden')).toBe('false')
+  })
+
+  it('keeps a menu open when the click follows the hover that opened it, and the next click closes it', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    await nextTick()
+    trigger().click()
+    await nextTick()
+    expect(isOpen()).toBe(true)
+    trigger().click()
+    await nextTick()
+    expect(isOpen()).toBe(false)
+  })
+
+  it('closes on Escape pressed with the focus outside the menu, and leaves the focus alone', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    await nextTick()
+    expect(document.activeElement).not.toBe(trigger())
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+    expect(isOpen()).toBe(false)
+    expect(document.activeElement).not.toBe(trigger())
+  })
+
+  it('does not open on a touch pointer, whose tap then toggles it with the click', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'touch'))
+    trigger().click()
+    await nextTick()
+    expect(isOpen()).toBe(true)
+  })
+
+  it('stays closed after Escape even while the pointer is over it', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    await nextTick()
+    items()[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+    expect(isOpen()).toBe(false)
+    expect(trigger().getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('closes when the mouse leaves, unless keyboard focus is still inside', async () => {
+    mountMenu()
+    root().dispatchEvent(pointer('pointerenter', 'mouse'))
+    await nextTick()
+    root().dispatchEvent(pointer('pointerleave', 'mouse'))
+    await nextTick()
+    expect(isOpen()).toBe(false)
+
+    trigger().click()
+    await nextTick()
+    // the stubbed links have no href, so they cannot take focus; the button stands in for an item
+    trigger().focus()
+    expect(document.activeElement).toBe(trigger())
+    root().dispatchEvent(pointer('pointerleave', 'mouse'))
+    await nextTick()
+    expect(isOpen()).toBe(true)
   })
 
   it('closes when an item is chosen', async () => {
