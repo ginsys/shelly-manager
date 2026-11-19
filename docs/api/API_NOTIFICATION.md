@@ -7,8 +7,7 @@ All endpoints return the standard API wrapper with `success|error`, `data`, opti
 **Admin key.** If the server has an admin key configured, every notification route needs it
 (`Authorization: Bearer <key>` or `X-API-Key: <key>`) and answers 401 `UNAUTHORIZED` without it. With no
 admin key configured the routes are open. Even with the key, a read never returns a credential stored in a
-channel's config, with one limit for history rows written by an earlier version (see "Secrets in a channel's
-config").
+channel's config (see "Secrets in a channel's config").
 
 ## Endpoints
 
@@ -71,9 +70,10 @@ credential, whatever its type: a string, a number, an object (`headers`) or a li
   of a failed `POST /notifications/channels/{id}/test`, the log lines) names the operation and the failure class
   only, for example `webhook request failed: Post timed out`. It never carries the request URL, which holds the
   webhook token.
-- **Limit: old history rows.** A history row written by an earlier version still holds the old error text, which
-  quotes the request URL. It is returned as stored until those rows are rewritten, which is tracked in
-  ginsys/shelly-manager#652.
+- **Old history rows.** A history row written by an earlier version holds an error text that quoted the request
+  URL. At every start the server replaces the whole text of such a row by its first words and a note (for
+  example `failed to send webhook: details removed`) and logs how many rows it changed, never their content. The
+  old text is not kept.
 
 ## Rule object (selected fields)
 

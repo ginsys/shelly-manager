@@ -48,6 +48,43 @@ func closedLoopbackPort(t *testing.T) int {
 	return port
 }
 
+// NewService rewrites the old rows and logs how many it changed, never what they held; a second start
+// changes and logs nothing.
+func TestNewService_RewritesOldRowsAndLogsTheCount(t *testing.T) {
+	_, db, cleanup := setupSimpleTestService(t)
+	defer cleanup()
+
+	channel := &NotificationChannel{Name: "hook", Type: "webhook", Enabled: true}
+	require.NoError(t, db.Create(channel).Error)
+	rule := &NotificationRule{Name: "r", Enabled: true, ChannelID: channel.ID, AlertLevel: "all"}
+	require.NoError(t, db.Create(rule).Error)
+	h := &NotificationHistory{
+		RuleID: rule.ID, ChannelID: channel.ID, TriggerType: "test", Status: "failed", CreatedAt: time.Now(),
+		Error: `failed to send webhook: Post "http://h.example/` + urlToken + `": refused`,
+	}
+	require.NoError(t, db.Create(h).Error)
+
+	start := func() string {
+		logFile := filepath.Join(t.TempDir(), "notification.log")
+		logger, err := logging.New(logging.Config{Level: "debug", Format: "text", Output: logFile})
+		require.NoError(t, err)
+		NewService(db, logger, EmailSMTPConfig{})
+		logged, err := os.ReadFile(logFile)
+		require.NoError(t, err)
+		return string(logged)
+	}
+
+	first := start()
+	assert.Contains(t, first, "Rewrote old delivery error texts")
+	assert.Contains(t, first, "rows=1")
+	assert.NotContains(t, first, urlToken)
+	var stored NotificationHistory
+	require.NoError(t, db.First(&stored, h.ID).Error)
+	assert.Equal(t, "failed to send webhook: details removed", stored.Error)
+
+	assert.NotContains(t, start(), "Rewrote old delivery error texts", "a second start changes nothing")
+}
+
 // A successful webhook send logs the channel and the status, and no part of the URL that carries the token.
 func TestSendWebhook_SuccessLogCarriesNoURL(t *testing.T) {
 	_, db, cleanup := setupSimpleTestService(t)
