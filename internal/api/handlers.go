@@ -1413,6 +1413,10 @@ func (h *Handler) GenerateDeviceDriftReport(w http.ResponseWriter, r *http.Reque
 
 	report, err := h.Service.GenerateDeviceDriftReport(uint(id))
 	if err != nil {
+		if errors.Is(err, configuration.ErrNoDesiredConfig) {
+			h.responseWriter().WriteError(w, r, http.StatusNotFound, apiresp.ErrCodeNotFound, err.Error(), nil)
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"error":     err.Error(),

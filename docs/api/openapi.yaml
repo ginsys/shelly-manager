@@ -434,6 +434,10 @@ components:
         last_synced:
           type: string
           format: date-time
+          nullable: true
+          description: >-
+            Always null: drift compares with the desired configuration, which
+            has no sync time.
         drift_detected:
           type: string
           format: date-time
