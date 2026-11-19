@@ -3349,11 +3349,18 @@ paths:
               properties:
                 new_key:
                   type: string
+                  description: The new admin key. It must not be blank and must not start or end with whitespace, because a header value loses that whitespace and the key could never be presented again.
               required:
                 - new_key
       responses:
         '200':
           description: Key rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: Invalid JSON, a blank key, or a key that starts or ends with whitespace (VALIDATION_FAILED); the stored key does not change
           content:
             application/json:
               schema:

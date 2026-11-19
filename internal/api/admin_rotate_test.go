@@ -181,3 +181,70 @@ func TestRotateAdminKey_InvalidBody(t *testing.T) {
 	r.ServeHTTP(rr2, req2)
 	require.Equal(t, http.StatusBadRequest, rr2.Code)
 }
+
+// rotateRouter serves only the rotation route, guarded by the admin key "secret".
+func rotateRouter(t *testing.T) *mux.Router {
+	t.Helper()
+	db, cleanup := testutil.TestDatabase(t)
+	t.Cleanup(cleanup)
+
+	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+	require.NoError(t, err)
+	h := NewHandlerWithLogger(db, nil, nil, nil, logger)
+	h.SetAdminAPIKey("secret")
+	r := mux.NewRouter()
+	api := r.PathPrefix("/api/v1").Subrouter()
+	api.HandleFunc("/admin/rotate-admin-key", h.RotateAdminKey).Methods("POST")
+	return r
+}
+
+// rotate posts new_key to the rotation route as the holder of the bearer key.
+func rotate(t *testing.T, r http.Handler, bearer, newKey string) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(map[string]string{"new_key": newKey})
+	require.NoError(t, err)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/v1/admin/rotate-admin-key", bytes.NewReader(b))
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "TestAgent/1.0")
+	r.ServeHTTP(rr, req)
+	return rr
+}
+
+// A key with leading or trailing whitespace cannot be presented again (a header
+// value loses it), so the endpoint refuses it and keeps the stored key. The
+// assertion that carries the test is that the old key still works afterwards.
+func TestRotateAdminKey_RefusesEdgeWhitespace(t *testing.T) {
+	for name, key := range map[string]string{
+		"leading space":      " k3y",
+		"trailing space":     "k3y ",
+		"leading tab":        "\tk3y",
+		"trailing newline":   "k3y\n",
+		"trailing nbsp":      "k3y ",
+		"both ends":          "  k3y  ",
+		"inner and trailing": "a b ",
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := rotateRouter(t)
+
+			rr := rotate(t, r, "secret", key)
+			require.Equal(t, http.StatusBadRequest, rr.Code, rr.Body.String())
+			require.Contains(t, rr.Body.String(), "whitespace")
+
+			// The old key still authenticates: a key was not stored.
+			require.Equal(t, http.StatusOK, rotate(t, r, "secret", "next").Code)
+			// The refused key was not stored either.
+			require.Equal(t, http.StatusUnauthorized, rotate(t, r, key, "again").Code)
+		})
+	}
+}
+
+// Whitespace inside a key is fine: the key is stored and compared exactly as sent.
+func TestRotateAdminKey_AcceptsInnerWhitespace(t *testing.T) {
+	r := rotateRouter(t)
+
+	require.Equal(t, http.StatusOK, rotate(t, r, "secret", "a b\tc").Code)
+	require.Equal(t, http.StatusUnauthorized, rotate(t, r, "secret", "next").Code, "the old key is replaced")
+	require.Equal(t, http.StatusOK, rotate(t, r, "a b\tc", "next").Code, "the key authenticates exactly as sent")
+}
