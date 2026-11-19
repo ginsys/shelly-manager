@@ -283,8 +283,15 @@ var ProductionRateLimits = map[string]int{
 
 #### Path-Specific Rate Limiting
 
+The map below is an example of how to shape `RateLimitByPath`, not the built-in default: the default
+(`DefaultSecurityConfig`) holds only the device control, provisioning and bulk keys, and the server
+has no `/api/v1/auth` routes. A key matches a request when the path starts with it (`{id}` is one
+path segment), the longest matching key wins, and each key counts only its own paths per client IP
+(per device for `{id}`), in its own window. See "Multi-Tier Rate Limiting" in the security features
+document.
+
 ```go
-// Production path-specific limits
+// Example path-specific limits
 var ProductionPathLimits = map[string]int{
     // Authentication endpoints - strict limits
     "/api/v1/auth/login":           10,  // Login attempts

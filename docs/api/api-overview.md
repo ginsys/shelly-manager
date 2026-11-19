@@ -545,6 +545,13 @@ All API responses follow this envelope:
 | `/provisioning/*` | 50/hour |
 | `/config/bulk*` | 20/hour |
 
+The default limit counts every request of a client IP. A path limit counts only the requests to its
+own paths, per client IP, with its own one-hour window. `/devices/{id}/control` counts per device: 100
+calls an hour for each device id. Going over a path limit refuses the calls to that path until its
+window resets and blocks no other route. Going over the default limit refuses the client on every
+route for 15 minutes. Every refusal is `429 RATE_LIMIT_EXCEEDED`, and its `X-RateLimit-Limit` header
+shows the default limit. When several path patterns match, the longest wins.
+
 ### Client Requirements
 - Every request needs a `User-Agent` header. An empty one is treated as an
   attack signal: the request fails with `400 VALIDATION_FAILED` and the security
