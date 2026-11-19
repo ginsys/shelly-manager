@@ -170,17 +170,15 @@ func TestNotificationSecrets_ReadsMaskEveryCarrier(t *testing.T) {
 		assert.Contains(t, body, redact.Placeholder, "GET %s shows the placeholder", path)
 	}
 
-	// The history read carries the channel's config, which is masked. The row's own error text quotes the
-	// request URL (the write side, ginsys/shelly-manager#652), so only the config's credentials are checked.
+	// The history read carries the channel's masked config and the row's own error text, which names the
+	// operation and the failure class and never the request URL.
 	code, history := env.do(t, "GET", "/notifications/history", nil)
 	require.Equal(t, http.StatusOK, code, history)
-	for _, leak := range []string{"LEAKBEARER620", leakSecret, leakUserPwd} {
-		assert.NotContains(t, history, leak, "GET /notifications/history leaks %s", leak)
-	}
+	assertNoLeaks(t, "GET /notifications/history", history)
 	assert.Contains(t, history, redact.Placeholder)
 	var raw string
 	require.NoError(t, env.db.Raw("SELECT error FROM notification_histories WHERE channel_id = ?", hookID).Scan(&raw).Error)
-	assert.Contains(t, raw, "127.0.0.1", "the history row exists and holds the delivery error")
+	assert.Equal(t, "webhook request failed: Post connection refused", raw, "the stored row holds the class, not the URL")
 
 	// The non-secret fields still come back, and an email channel is unchanged.
 	_, channels := env.do(t, "GET", "/notifications/channels", nil)
@@ -203,16 +201,27 @@ func TestNotificationSecrets_ReadsMaskEveryCarrier(t *testing.T) {
 	assert.Equal(t, strings.Count(a, redact.Placeholder), strings.Count(b, redact.Placeholder))
 }
 
-// The test send is unchanged: a failed send is a 500 with the delivery error, a missing channel a 404.
-// The delivery error text and the stored history error still quote the request URL; keeping it out is
-// the write-side change tracked in ginsys/shelly-manager#652, not part of masking the config.
+// A failed test send is a 500 whose message names the operation and the failure class and never the
+// request URL, for a webhook and for a Slack channel; a missing channel is a 404.
 func TestNotificationSecrets_TestSendBehaviourIsUnchanged(t *testing.T) {
 	env := setupNotificationSecrets(t)
 
 	id, _ := env.createChannel(t, deadWebhook(closedPort(t)))
 	code, body := env.do(t, "POST", fmt.Sprintf("/notifications/channels/%d/test", id), nil)
 	assert.Equal(t, http.StatusInternalServerError, code, body)
-	assert.Contains(t, body, "failed to send webhook")
+	assert.Contains(t, body, "webhook request failed: Post connection refused")
+	assertNoLeaks(t, "the webhook test-send response", body)
+	assert.NotContains(t, body, "127.0.0.1")
+
+	slack := fmt.Sprintf("http://127.0.0.1:%d/services/T1/B1/LEAKSLACK620", closedPort(t))
+	slackID, _ := env.createChannel(t, map[string]any{
+		"name": "dead-slack", "type": "slack", "enabled": true,
+		"config": map[string]any{"webhook_url": slack},
+	})
+	code, body = env.do(t, "POST", fmt.Sprintf("/notifications/channels/%d/test", slackID), nil)
+	assert.Equal(t, http.StatusInternalServerError, code, body)
+	assert.Contains(t, body, "slack request failed: Post connection refused")
+	assertNoLeaks(t, "the slack test-send response", body)
 
 	code, _ = env.do(t, "POST", "/notifications/channels/9999/test", nil)
 	assert.Equal(t, http.StatusNotFound, code)

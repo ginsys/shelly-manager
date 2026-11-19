@@ -26,7 +26,7 @@ import (
 
 // secretKey reports whether the value under key k is a credential. top says the object is the root.
 func secretKey(k string, top bool) bool {
-	return redact.IsKey(strings.ToLower(strings.ToUpper(k))) ||
+	return redact.IsKey(foldName(k)) ||
 		(top && (strings.EqualFold(k, "url") || strings.EqualFold(k, "webhook_url") || strings.EqualFold(k, "headers")))
 }
 
