@@ -52,6 +52,49 @@ func runPreMigrationFixups(db *gorm.DB, logger *logging.Logger) error {
 	return err
 }
 
+// mysqlBinaryCollation compares strings byte for byte: no case folding, no accent folding.
+const mysqlBinaryCollation = "utf8mb4_0900_bin"
+
+// useBinaryCollationMySQL converts the two provisioner tables to a binary collation. It runs after
+// AutoMigrate and does nothing on another provider: SQLite and PostgreSQL already compare byte for byte.
+//
+// Agent ids, task ids and task statuses are identities: "Alpha" is not "alpha". MySQL's default
+// collation (utf8mb4_0900_ai_ci) folds case and accents, so a registration of "Alpha" would find the row
+// of "alpha". The step reads the server's catalog, converts a table only where a column still has another
+// collation, and so is idempotent. AutoMigrate does not compare collations, so it leaves the result alone.
+//
+// utf8mb4_0900_bin exists from MySQL 8.0.17. A server without it (MariaDB, MySQL 5.7, MySQL 8.0.0 to
+// 8.0.16) is not covered: the tables stay as AutoMigrate made them, and the start-up log says so.
+func useBinaryCollationMySQL(db *gorm.DB, logger *logging.Logger) error {
+	if db.Name() != "mysql" {
+		return nil
+	}
+	var known int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.collations WHERE collation_name = ?", mysqlBinaryCollation).Scan(&known).Error; err != nil {
+		return fmt.Errorf("failed to read the server's collations: %w", err)
+	}
+	if known == 0 {
+		logger.WithFields(map[string]any{"collation": mysqlBinaryCollation, "component": "database"}).
+			Warn("This MySQL server lacks the binary collation the provisioner tables need (MySQL 8.0.17 or later): agent and task ids compare without case")
+		return nil
+	}
+
+	for _, table := range []string{provisionerAgentsTable, provisioningTasksTable} {
+		var folded int64
+		if err := db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() "+
+			"AND table_name = ? AND collation_name IS NOT NULL AND collation_name <> ?", table, mysqlBinaryCollation).Scan(&folded).Error; err != nil {
+			return fmt.Errorf("failed to read the %s collations: %w", table, err)
+		}
+		if folded == 0 {
+			continue
+		}
+		if err := db.Exec(fmt.Sprintf("ALTER TABLE `%s` CONVERT TO CHARACTER SET utf8mb4 COLLATE %s", table, mysqlBinaryCollation)).Error; err != nil {
+			return fmt.Errorf("failed to convert %s to %s: %w", table, mysqlBinaryCollation, err)
+		}
+	}
+	return nil
+}
+
 // configTemplateFixupResult records what the fixup actually did. Schema actions
 // and row counts are kept separate so a partially completed run stays legible —
 // and so tests can assert which half of the work happened.
