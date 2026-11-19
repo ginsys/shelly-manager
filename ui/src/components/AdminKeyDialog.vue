@@ -7,8 +7,9 @@
     aria-modal="true"
     aria-labelledby="akd-title"
     @keydown.escape="cancelAdminKeyPrompt"
+    @keydown.tab="trapTab"
   >
-    <form class="akd-panel" @submit.prevent="submit">
+    <form ref="panel" class="akd-panel" @submit.prevent="submit">
       <h2 id="akd-title" class="akd-title">Admin key</h2>
       <p class="akd-help">
         Enter the admin key for this server. It is kept for this browser tab only and is forgotten when the tab closes.
@@ -39,15 +40,45 @@ import { promptOpen, promptMessage, submitAdminKey, cancelAdminKeyPrompt } from 
 
 const key = ref('')
 const field = ref<HTMLInputElement | null>(null)
+const panel = ref<HTMLElement | null>(null)
+// The control that had focus when the dialog opened gets it back when the dialog closes.
+let opener: HTMLElement | null = null
 
 function focusField() {
   key.value = ''
   nextTick(() => field.value?.focus())
 }
 
+function restoreFocus() {
+  const back = opener
+  opener = null
+  if (back && back.isConnected) back.focus()
+}
+
+// Tab stays inside the dialog: aria-modal does not contain focus by itself.
+function trapTab(event: KeyboardEvent) {
+  const items = Array.from(panel.value?.querySelectorAll<HTMLElement>('input, button') ?? [])
+  if (!items.length) return
+  const first = items[0]
+  const last = items[items.length - 1]
+  const active = document.activeElement
+  if (event.shiftKey && (active === first || !panel.value?.contains(active))) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && (active === last || !panel.value?.contains(active))) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 // Each opening starts with an empty field: a refused key is never left in it.
 watch(promptOpen, (open) => {
-  if (open) focusField()
+  if (open) {
+    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    focusField()
+  } else {
+    restoreFocus()
+  }
 })
 onMounted(() => {
   if (promptOpen.value) focusField()
