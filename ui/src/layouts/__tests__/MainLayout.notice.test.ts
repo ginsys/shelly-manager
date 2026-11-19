@@ -134,6 +134,28 @@ describe('app notice for failures the page cannot show (ginsys/shelly-manager#64
     expect(w.find('[data-testid="app-notice"] .error-display').exists()).toBe(false)
   })
 
+  it('shows a failure in the notice when the page moved to another device and a dialog covers the panel', async () => {
+    const failApply = holdApply()
+    const { wrapper: w, router } = await mountConfigPage()
+
+    await buttonWithText(w, 'Apply Config').trigger('click')
+    await flushPromises() // the apply of device 7 is open
+    // The same page instance now shows device 8, with its body loaded, so its dialog can open.
+    await router.push('/devices/8/config')
+    await flushPromises()
+    await buttonWithText(w, '+ Add Template').trigger('click')
+    await flushPromises()
+    expect(w.find('.modal-overlay').exists()).toBe(true)
+
+    failApply(new Error('failure behind the dialog'))
+    await flushPromises()
+
+    const notice = w.get('[data-testid="app-notice"]')
+    expect(notice.text()).toContain('failure behind the dialog')
+    expect(notice.text()).toContain('7') // it names the device the apply was for
+    expect(w.find('[data-testid="config-action-error"]').exists()).toBe(false)
+  })
+
   it('removes the notice when the user dismisses it', async () => {
     const failApply = holdApply()
     const { wrapper: w, router } = await mountConfigPage()
