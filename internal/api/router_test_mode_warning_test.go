@@ -13,10 +13,9 @@ import (
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
-const testModeEnv = "SHELLY_SECURITY_VALIDATION_TEST_MODE"
-
 // testModeProtections are the protections the test-mode router leaves out.
-// The warning must name every one of them.
+// The warning must name every one of them (spelled here on purpose, so an
+// emptied or renamed list in the router fails the test).
 var testModeProtections = []string{
 	"IP blocking", "security monitoring", "security logging", "security headers",
 	"request timeout", "rate limiting", "request size limit",

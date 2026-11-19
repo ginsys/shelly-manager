@@ -44,8 +44,15 @@ func SetupRoutesWithLogger(handler *Handler, logger *logging.Logger) *mux.Router
 // SetupRoutesWithSecurity configures all API routes with comprehensive security middleware
 func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityConfig *middleware.SecurityConfig, validationConfig *middleware.ValidationConfig) *mux.Router {
 	// TEST MODE: Use optimized router
-	if os.Getenv("SHELLY_SECURITY_VALIDATION_TEST_MODE") == "true" {
+	if os.Getenv(testModeEnv) == "true" {
 		return SetupTestModeRoutes(handler, logger)
+	}
+
+	// The validation config's test mode (security.validation_test_mode, or the env
+	// var set to a value other than "true" that viper still reads as true) keeps
+	// this router and only skips two request checks.
+	if validationConfig.TestMode {
+		logger.Warn("TEST MODE for request validation (security.validation_test_mode): request validation no longer blocks suspicious header content or suspicious User-Agent values. The other protections stay on.")
 	}
 
 	r := mux.NewRouter()
@@ -254,8 +261,21 @@ func SetupTestModeRoutes(handler *Handler, logger *logging.Logger) *mux.Router {
 		registerAPIRoutes(api, handler, logger, nil)
 	}
 
-	logger.Info("Configured test mode router with the production API table")
+	logger.Warn("TEST MODE ENABLED ("+testModeEnv+"=true): this router serves the full API without the protections listed in disabled_protections. Admin authorization is per handler and still applies. Never use test mode outside tests.",
+		"disabled_protections", testModeDisabledProtections)
 	return r
+}
+
+// testModeEnv is the environment variable that selects the test-mode router.
+const testModeEnv = "SHELLY_SECURITY_VALIDATION_TEST_MODE"
+
+// testModeDisabledProtections names what the production chain applies and the
+// test-mode router does not (see SetupRoutesWithSecurity).
+var testModeDisabledProtections = []string{
+	"IP blocking", "security monitoring", "security logging", "security headers",
+	"request timeout", "rate limiting", "request size limit",
+	"request validation (headers, content type, query, JSON)",
+	"CORS restrictions (every origin is allowed)", "request logging",
 }
 
 // testModeCORSMiddleware provides minimal CORS middleware for test mode
