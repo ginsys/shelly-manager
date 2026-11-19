@@ -94,6 +94,13 @@ func (h *Handler) bulkDownloadEntry(id uint) bulkDownloadEntry {
 		}
 		return h.bulkDownloadUnreadable(entry, err)
 	}
+	if err = configuration.CheckDesiredConfigComplete(device.DesiredConfig); err != nil {
+		if errors.Is(err, configuration.ErrUnsupportedSettings) {
+			entry.Error = "the stored configuration has settings this version does not know, so it cannot be downloaded completely"
+			return entry
+		}
+		return h.bulkDownloadUnreadable(entry, err)
+	}
 	config, _, err := svc.GetDesiredConfig(id)
 	if err != nil {
 		return h.bulkDownloadUnreadable(entry, err)
