@@ -145,10 +145,17 @@ func TestTrackingOneIPConcurrentlyIsRaceFree(t *testing.T) {
 	assert.True(t, monitor.IsIPBlocked(ip))
 }
 
-// A block made by direct violations must survive the hourly cleanup: the entry carries a LastSeen.
+// A block made by direct violations must survive the hourly cleanup: the violations refresh the
+// entry's LastSeen. The entry here is older than the cleanup cutoff, as one of a client that has been
+// quiet for two days, so only that refresh keeps it.
 func TestCleanupKeepsAnEntryBlockedByDirectViolations(t *testing.T) {
 	monitor := newRulesMonitor(t)
 	ip := "10.66.1.5"
+
+	old := monitor.attackInfoFor(ip)
+	old.mu.Lock()
+	old.LastSeen = time.Now().Add(-48 * time.Hour)
+	old.mu.Unlock()
 
 	for i := 0; i < 5; i++ {
 		monitor.TrackRateLimitViolation(rulesRequest(ip, "/api/v1/devices"))
