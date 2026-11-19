@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,14 +29,20 @@ func isURLKey(k string) bool {
 	return strings.EqualFold(k, "url") || strings.EqualFold(k, "webhook_url")
 }
 
+// secretName is redact.IsKey on a key folded the way encoding/json folds field names: it reads the
+// long s (U+017F) as s and the Kelvin sign (U+212A) as k, which a plain lower-casing does not.
+func secretName(k string) bool {
+	return redact.IsKey(strings.ToLower(strings.ToUpper(k)))
+}
+
 // holdsAll reports whether every scalar below the entry (k, container) is a credential.
 func holdsAll(k string, top, secret bool) bool {
-	return secret || redact.IsKey(k) || (top && strings.EqualFold(k, "headers"))
+	return secret || secretName(k) || (top && strings.EqualFold(k, "headers"))
 }
 
 // isSlot reports whether the scalar entry k holds a credential.
 func isSlot(k string, top, secret bool) bool {
-	return secret || redact.IsKey(k) || (top && isURLKey(k))
+	return secret || secretName(k) || (top && isURLKey(k))
 }
 
 func isContainer(v any) bool {
@@ -113,17 +119,22 @@ func maskConfig(raw json.RawMessage) json.RawMessage {
 	return encodeDocument(doc)
 }
 
-// lookupFold returns the value stored under k, matching the key without regard to case.
+// lookupFold returns the value stored under k, matching the key without regard to case. Two stored keys
+// that fold together ({"URL":..., "url":...}) are ambiguous, because decoding picks one by position and
+// a map has none: nothing is returned, so the placeholder is dropped and the client must send a value.
 func lookupFold(m map[string]any, k string) any {
-	if v, ok := m[k]; ok {
-		return v
-	}
+	var found any
+	n := 0
 	for key, v := range m {
 		if strings.EqualFold(key, k) {
-			return v
+			found = v
+			n++
 		}
 	}
-	return nil
+	if n != 1 {
+		return nil
+	}
+	return found
 }
 
 // kept reports whether stored is a credential that can stand in for a placeholder.
@@ -193,23 +204,28 @@ func restoreWholeList(incoming []any, stored any) ([]any, bool) {
 
 // restoreConfig takes the stored credential back for each placeholder in a config a client sends.
 func restoreConfig(incoming, stored json.RawMessage) json.RawMessage {
-	trimmed := bytes.TrimSpace(incoming)
-	if bytes.Equal(trimmed, quotedPlaceholder()) {
+	// The text is decoded before anything is decided: "********" is the placeholder too.
+	doc, ok := decodeDocument(bytes.TrimSpace(incoming))
+	if !ok {
+		return incoming // not ours to read: validation decides
+	}
+	if s, isString := doc.(string); isString && s == redact.Placeholder {
 		return stored // the whole malformed text, masked
 	}
-	if !bytes.Contains(trimmed, []byte(redact.Placeholder)) {
-		return incoming // nothing to restore
-	}
-	doc, ok := decodeDocument(trimmed)
 	m, isMap := doc.(map[string]any)
-	if !ok || !isMap {
-		return incoming // not ours to read: validation decides
+	if !isMap {
+		return incoming
 	}
 	var old any
 	if storedDoc, storedOK := decodeDocument(bytes.TrimSpace(stored)); storedOK {
 		old = storedDoc
 	}
-	return encodeDocument(restoreNode(m, old, true, false))
+	before := encodeDocument(m)
+	restored := encodeDocument(restoreNode(m, old, true, false))
+	if bytes.Equal(before, restored) {
+		return incoming // nothing to restore: keep the client's own bytes
+	}
+	return restored
 }
 
 // maskedChannel returns a copy of c that is safe to send out. The stored record is never changed:
@@ -241,28 +257,22 @@ func collectSecrets(v any, top, secret bool, out *[]string) {
 	}
 }
 
-// spellings lists how a failed send can quote the credential s. net/http builds a *url.Error from the
-// parsed URL: u.String() (percent-encoded, with the password written as ***), and url.Error quotes that
-// text with %q, which escapes a quote, a backslash or a control character. So each credential is cut out
-// as stored, as net/http normalises it, and in the %q spelling of both.
+// quotedURLError matches the part of a *url.Error that holds the request URL: `Post "<url>": `, where
+// the URL is written with %q. net/http spells that URL its own way (percent-encoded, the password
+// written ***, an empty port dropped), so the stored value cannot be matched against it, and the shape
+// is cut out whatever the spelling. The Op is the request method, or "parse" for a URL that does not parse.
+var quotedURLError = regexp.MustCompile(`\b[A-Za-z]+ "(?:[^"\\]|\\.)*": `)
+
+// spellings lists how an error can write the credential s: as stored, and with %q (a quote, a backslash
+// or a control character escaped), for the text a *url.Error does not hold.
 func spellings(s string) []string {
-	forms := []string{s}
-	if u, err := url.Parse(s); err == nil {
-		normal := u.String()
-		if _, set := u.User.Password(); set {
-			normal = strings.Replace(normal, u.User.String()+"@", u.User.Username()+":***@", 1)
-		}
-		forms = append(forms, normal)
-	}
-	for _, f := range forms[:len(forms):len(forms)] {
-		forms = append(forms, strings.Trim(strconv.Quote(f), `"`))
-	}
-	return forms
+	quoted := strconv.Quote(s)
+	return []string{s, quoted[1 : len(quoted)-1]}
 }
 
 // scrubText replaces, in text, every credential held by the channel config with the placeholder. A
 // failed send quotes its destination, and the text is stored with the history row and returned by a
-// test send, so the config's own values are cut out of it.
+// test send, so the request URL of a *url.Error and the config's own values are cut out of it.
 func scrubText(text string, config json.RawMessage) string {
 	doc, ok := decodeDocument(bytes.TrimSpace(config))
 	if !ok || text == "" {
@@ -270,19 +280,32 @@ func scrubText(text string, config json.RawMessage) string {
 	}
 	var secrets []string
 	collectSecrets(doc, true, false, &secrets)
+	seen := map[string]bool{}
 	var forms []string
 	for _, s := range secrets {
-		if s != "" && s != redact.Placeholder {
-			forms = append(forms, spellings(s)...)
+		if s == "" || s == redact.Placeholder {
+			continue
+		}
+		for _, f := range spellings(s) {
+			if !seen[f] {
+				seen[f] = true
+				forms = append(forms, f)
+			}
 		}
 	}
 	sort.Slice(forms, func(i, j int) bool { return len(forms[i]) > len(forms[j]) }) // a longer value first
-	for _, f := range forms {
-		if f != "" {
-			text = strings.ReplaceAll(text, f, redact.Placeholder)
-		}
+	text = quotedURLError.ReplaceAllStringFunc(text, func(m string) string {
+		return m[:strings.IndexByte(m, '"')] + `"` + redact.Placeholder + `": `
+	})
+	if len(forms) == 0 {
+		return text
 	}
-	return text
+	// One pass over the text: a placeholder already written is never searched again.
+	pairs := make([]string, 0, 2*len(forms))
+	for _, f := range forms {
+		pairs = append(pairs, f, redact.Placeholder)
+	}
+	return strings.NewReplacer(pairs...).Replace(text)
 }
 
 // scrubError returns err with the channel's credentials cut out of its text; an error that holds none
