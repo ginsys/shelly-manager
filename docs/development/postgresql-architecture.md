@@ -77,11 +77,11 @@ The provider implements multiple interfaces for comprehensive functionality:
 
 #### Connection Pool Optimization
 
-**PostgreSQL-Optimized Defaults**:
+**Defaults** (filled by the config helper; the provider applies the pool as given):
 - Maximum Open Connections: 25 (PostgreSQL can handle higher concurrency than SQLite)
 - Maximum Idle Connections: 5 (balanced for quick reuse without resource waste)
-- Connection Lifetime: 1 hour (PostgreSQL connections can live longer safely)
-- Idle Timeout: 10 minutes (appropriate for PostgreSQL workloads)
+- Connection Lifetime: 5 minutes
+- Idle Timeout: 10 minutes
 
 **Dynamic Configuration**: All pool parameters are configurable based on deployment requirements.
 

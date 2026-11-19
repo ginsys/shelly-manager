@@ -382,13 +382,13 @@ func TestMySQLSecurityResourceLimits(t *testing.T) {
 	logger := logging.GetDefault()
 	_ = NewMySQLProvider(logger)
 
-	// Test connection pool limits with MySQL-specific defaults
+	// Test connection pool limits with explicit values
 	config := DatabaseConfig{
 		Provider:        "mysql",
 		DSN:             "user:pass@tcp(localhost:3306)/testdb",
 		MaxOpenConns:    10,               // Limited
 		MaxIdleConns:    3,                // Limited
-		ConnMaxLifetime: 30 * time.Minute, // MySQL-specific default
+		ConnMaxLifetime: 30 * time.Minute, // an explicit value
 		ConnMaxIdleTime: 5 * time.Minute,
 		Options: map[string]string{
 			"tls": "false",
@@ -400,9 +400,9 @@ func TestMySQLSecurityResourceLimits(t *testing.T) {
 	assert.Equal(t, 3, config.MaxIdleConns)
 	assert.Equal(t, 30*time.Minute, config.ConnMaxLifetime)
 
-	// Test MySQL-specific defaults are reasonable
+	// Test the configured values are reasonable
 	if config.MaxOpenConns == 0 {
-		t.Error("MaxOpenConns should have a reasonable default")
+		t.Error("MaxOpenConns should be set")
 	}
 
 	// Test very high connection limits (potential DoS)
