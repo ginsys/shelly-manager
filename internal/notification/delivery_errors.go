@@ -27,7 +27,7 @@ func requestError(what string, err error) error {
 		class = "connection refused"
 	default:
 		var dns *net.DNSError
-		if errors.As(err, &dns) {
+		if errors.As(err, &dns) && dns.IsNotFound { // a SERVFAIL or a refused query stays "failed" // a SERVFAIL or a refused query stays "failed"
 			class = "host not found"
 		}
 	}
