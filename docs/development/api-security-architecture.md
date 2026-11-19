@@ -254,6 +254,12 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 - **Purpose**: Cross-origin request security
 - **Protection**: CSRF, unauthorized cross-origin access
 - **Implementation**: Strict origin validation with preflight handling
+- **Allowlist**: `security.cors.allowed_origins` (default empty). With no list the middleware answers
+  `Access-Control-Allow-Origin: *`. With a list, an `Origin` that equals an entry exactly (scheme, host
+  and port, case-sensitive) or a list that holds `*` is echoed back. Any other `Origin` gets no
+  `Access-Control-*` header (only `Vary: Origin`), so a browser refuses its preflight and will not let
+  the page read the response; the request is still served and admin authorization is unchanged. A
+  request with no `Origin` header gets `*`.
 
 #### Layer 11: Standard Logging Middleware
 - **Purpose**: Operational visibility and debugging

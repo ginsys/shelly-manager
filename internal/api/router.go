@@ -159,42 +159,42 @@ func enhancedCORSMiddleware(logger *logging.Logger, config *middleware.SecurityC
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
+			w.Header().Set("Vary", "Origin")
 
-			// Determine allowed origin
+			// No allowlist, or no Origin header: "*". With an allowlist, an Origin
+			// outside it is refused (allowedOrigin ""): it gets no Access-Control-*
+			// header, so a browser blocks its preflight and will not let the page read
+			// the response. The request itself is still served.
 			allowedOrigin := "*"
-			if config != nil && len(config.CORSAllowedOrigins) > 0 {
-				// If a specific list is configured, only echo back when matched
+			if config != nil && len(config.CORSAllowedOrigins) > 0 && origin != "" {
+				allowedOrigin = ""
 				for _, ao := range config.CORSAllowedOrigins {
 					if ao == "*" || ao == origin {
 						allowedOrigin = origin
 						break
 					}
 				}
-				if origin == "" {
-					allowedOrigin = "*"
+			}
+
+			if allowedOrigin != "" {
+				methods := "GET, POST, PUT, DELETE, OPTIONS"
+				if config != nil && len(config.CORSAllowedMethods) > 0 {
+					methods = strings.Join(config.CORSAllowedMethods, ", ")
 				}
+				headers := "Content-Type, Authorization, X-Requested-With"
+				if config != nil && len(config.CORSAllowedHeaders) > 0 {
+					headers = strings.Join(config.CORSAllowedHeaders, ", ")
+				}
+				maxAge := "86400"
+				if config != nil && config.CORSMaxAge > 0 {
+					maxAge = strconv.Itoa(config.CORSMaxAge)
+				}
+				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+				w.Header().Set("Access-Control-Allow-Methods", methods)
+				w.Header().Set("Access-Control-Allow-Headers", headers)
+				w.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset")
+				w.Header().Set("Access-Control-Max-Age", maxAge)
 			}
-
-			// Security-aware CORS headers
-			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-			w.Header().Set("Vary", "Origin")
-
-			methods := "GET, POST, PUT, DELETE, OPTIONS"
-			if config != nil && len(config.CORSAllowedMethods) > 0 {
-				methods = strings.Join(config.CORSAllowedMethods, ", ")
-			}
-			headers := "Content-Type, Authorization, X-Requested-With"
-			if config != nil && len(config.CORSAllowedHeaders) > 0 {
-				headers = strings.Join(config.CORSAllowedHeaders, ", ")
-			}
-			maxAge := "86400"
-			if config != nil && config.CORSMaxAge > 0 {
-				maxAge = strconv.Itoa(config.CORSMaxAge)
-			}
-			w.Header().Set("Access-Control-Allow-Methods", methods)
-			w.Header().Set("Access-Control-Allow-Headers", headers)
-			w.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset")
-			w.Header().Set("Access-Control-Max-Age", maxAge)
 
 			// Log CORS requests for security monitoring
 			if origin != "" {
@@ -202,11 +202,9 @@ func enhancedCORSMiddleware(logger *logging.Logger, config *middleware.SecurityC
 					"method":    r.Method,
 					"path":      r.URL.Path,
 					"origin":    origin,
+					"allowed":   allowedOrigin != "",
 					"component": "cors",
 				}).Debug("CORS request processed")
-
-				// TODO: Add origin validation for production
-				// For now, accept all origins but log them for monitoring
 			}
 
 			// Handle preflight requests
