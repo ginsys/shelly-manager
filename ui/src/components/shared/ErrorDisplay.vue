@@ -31,7 +31,7 @@
 
     <div class="error-actions">
       <button
-        v-if="error.retryable"
+        v-if="error.retryable && showRetry"
         @click="emit('retry')"
         class="retry-button"
       >
@@ -54,8 +54,11 @@ import type { AppError } from '@/types/errors'
 const props = withDefaults(defineProps<{
   error: AppError | null
   severity?: 'error' | 'warning' | 'info'
+  // Set to false where the parent does not handle `retry`, so no button does nothing.
+  showRetry?: boolean
 }>(), {
-  severity: 'error'
+  severity: 'error',
+  showRetry: true
 })
 
 const emit = defineEmits<{

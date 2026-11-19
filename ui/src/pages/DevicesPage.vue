@@ -46,7 +46,12 @@
       </select>
     </div>
 
-    <ErrorDisplay :error="actionError" data-testid="devices-action-error" @dismiss="clearActionError" />
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="devices-action-error"
+      @dismiss="clearActionError"
+    />
 
     <div class="card" data-testid="device-list">
       <div v-if="store.loading" class="state" data-testid="loading-state">Loading...</div>

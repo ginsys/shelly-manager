@@ -89,10 +89,16 @@ describe('DeviceConfigHistoryPage restore', () => {
     expect(alertSpy).not.toHaveBeenCalled()
   })
 
-  it('clears the failure when the next restore starts', async () => {
+  it('clears the failure as soon as the next restore starts, before it finishes', async () => {
     vi.mocked(updateDeviceConfig).mockRejectedValueOnce(new Error('device refused the configuration'))
-    vi.mocked(updateDeviceConfig).mockResolvedValue(undefined as any)
-    const { wrapper } = await openPage()
+    let finishSecond: (value: any) => void = () => {}
+    vi.mocked(updateDeviceConfig).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSecond = resolve
+        }) as any,
+    )
+    const { wrapper, router } = await openPage()
     const restore = () => wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!
 
     await restore().trigger('click')
@@ -100,7 +106,37 @@ describe('DeviceConfigHistoryPage restore', () => {
     expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(true)
 
     await restore().trigger('click')
-    await flushPromises()
+    await flushPromises() // the second restore is still open
+    expect(vi.mocked(updateDeviceConfig)).toHaveBeenCalledTimes(2)
+    expect(router.currentRoute.value.path).toBe('/devices/7/config/history')
     expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(false)
+
+    finishSecond(undefined)
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/devices/7/config')
+  })
+
+  it('dismisses the failure with its Dismiss button', async () => {
+    vi.mocked(updateDeviceConfig).mockRejectedValue(new Error('device refused the configuration'))
+    const { wrapper } = await openPage()
+
+    await wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!.trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="restore-error"] .dismiss-button').trigger('click')
+
+    expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(false)
+  })
+
+  it('shows no Retry button on a retryable failure, since nothing handles it', async () => {
+    vi.mocked(updateDeviceConfig).mockRejectedValue(
+      Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', isAxiosError: true }),
+    )
+    const { wrapper } = await openPage()
+
+    await wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="restore-error"] .retry-button').exists()).toBe(false)
   })
 })

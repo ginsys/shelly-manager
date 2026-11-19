@@ -15,7 +15,12 @@
       </button>
     </div>
 
-    <ErrorDisplay :error="actionError" data-testid="config-action-error" @dismiss="clearActionError" />
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="config-action-error"
+      @dismiss="clearActionError"
+    />
 
     <div
       v-if="applyNotice"
@@ -182,7 +187,12 @@
     <div v-if="showAddTemplate" class="modal-overlay" @click.self="closeAddTemplate">
       <div class="modal">
         <h2>Add Template</h2>
-        <ErrorDisplay :error="addError" data-testid="add-template-error" @dismiss="clearAddError" />
+        <ErrorDisplay
+          :error="addError"
+          :show-retry="false"
+          data-testid="add-template-error"
+          @dismiss="clearAddError"
+        />
         <div class="form-group">
           <label>Template ID *</label>
           <input
@@ -190,7 +200,7 @@
             type="number"
             class="form-input"
             placeholder="Enter template ID"
-            @input="addIdError = ''"
+            @input="onTemplateIdInput"
           />
           <div v-if="addIdError" class="field-error" data-testid="add-template-id-error">{{ addIdError }}</div>
         </div>
@@ -250,8 +260,9 @@ const { error: actionError, setError: setActionError, clearError: clearActionErr
 const { error: addError, setError: setAddError, clearError: clearAddError } = useError()
 const addIdError = ref('')
 // The store sets its own error when an action fails and keeps it until its next call. The page error
-// card shows only a load that failed, so it stays off after an action failed, also when the panel was
-// dismissed: the card replaces the whole page body.
+// card shows only a load that failed, so it stays off after an action on this device failed, also when
+// the panel was dismissed: the card replaces the whole page body. A refresh, or the next action, resets
+// it. A failure for a device the page has left never sets it: the store ignores such a failure too.
 const actionFailed = ref(false)
 
 function beginAction() {
@@ -259,10 +270,13 @@ function beginAction() {
   clearActionError()
 }
 
-function failAction(e: unknown, context: { action: string; resource: string; resourceId: string | number }) {
-  actionFailed.value = true
+type FailureContext = { action: string; resource: string; resourceId: string | number }
+
+function failAction(e: unknown, context: FailureContext, generation: number) {
+  if (routeGeneration === generation) actionFailed.value = true
   setActionError(e, context)
 }
+
 // What the last apply came to. It is a result, not an error: an unconfirmed apply is neither a
 // failure nor a success, so it has its own card and does not go through ErrorDisplay.
 type ApplyNotice = { kind: 'success' | 'unconfirmed' | 'failed'; deviceId: string; text: string }
@@ -301,6 +315,7 @@ let routeGeneration = 0
 async function handleRefresh() {
   const id = deviceId.value
   const generation = routeGeneration
+  actionFailed.value = false
   try {
     await store.refresh(id)
     if (routeGeneration !== generation) return
@@ -340,17 +355,23 @@ function closeAddTemplate() {
   clearAddError()
 }
 
+// Typing another id drops both the empty-id message and a failure of the last add.
+function onTemplateIdInput() {
+  addIdError.value = ''
+  clearAddError()
+}
+
 // A failure or an apply result that arrives after the page moved to another device is still shown:
 // the apply changed a physical device. The error panel names its device in its context line, and the
 // result card names it when it is not the device on screen.
 async function handleAddTemplate() {
-  actionFailed.value = false
   clearAddError()
   if (!newTemplateId.value) {
     addIdError.value = 'Template ID is required'
     return
   }
   addIdError.value = ''
+  actionFailed.value = false
 
   const id = deviceId.value
   const generation = routeGeneration
@@ -367,9 +388,14 @@ async function handleAddTemplate() {
     newTemplateId.value = null
     newTemplatePosition.value = null
   } catch (e: any) {
-    if (routeGeneration !== generation) return
+    const context = { action: 'Add template', resource: 'Device', resourceId: id }
+    if (routeGeneration !== generation) {
+      // The dialog was closed with the old device: show the failure in the page panel, naming it.
+      failAction(e, context, generation)
+      return
+    }
     actionFailed.value = true
-    setAddError(e, { action: 'Add template', resource: 'Device', resourceId: id })
+    setAddError(e, context)
   }
 }
 
@@ -384,7 +410,7 @@ async function handleRemoveTemplate(templateId: number) {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    failAction(e, { action: 'Remove template', resource: 'Device', resourceId: id })
+    failAction(e, { action: 'Remove template', resource: 'Device', resourceId: id }, generation)
   }
 }
 
@@ -405,7 +431,7 @@ async function handleSaveOverrides() {
       if (routeGeneration === generation) saveErrors.value = e.fields
       return
     }
-    failAction(e, { action: 'Save overrides', resource: 'Device', resourceId: id })
+    failAction(e, { action: 'Save overrides', resource: 'Device', resourceId: id }, generation)
   }
 }
 
@@ -420,7 +446,7 @@ async function handleClearOverrides() {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    failAction(e, { action: 'Clear overrides', resource: 'Device', resourceId: id })
+    failAction(e, { action: 'Clear overrides', resource: 'Device', resourceId: id }, generation)
   }
 }
 
@@ -459,17 +485,18 @@ async function handleApply() {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    failAction(e, { action: 'Apply configuration', resource: 'Device', resourceId: id })
+    failAction(e, { action: 'Apply configuration', resource: 'Device', resourceId: id }, generation)
   }
 }
 
 async function handleVerify() {
   beginAction()
   const id = deviceId.value
+  const generation = routeGeneration
   try {
     await store.verify(id)
   } catch (e: any) {
-    failAction(e, { action: 'Verify device', resource: 'Device', resourceId: id })
+    failAction(e, { action: 'Verify device', resource: 'Device', resourceId: id }, generation)
   }
 }
 
