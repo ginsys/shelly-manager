@@ -17,6 +17,7 @@ export const useExportStore = defineStore('export', {
     success: undefined as boolean | undefined,
     meta: undefined as Metadata | undefined,
     stats: { total: 0, success: 0, failure: 0, by_plugin: {} as Record<string, number> },
+    statsError: '' as string,
   }),
   actions: {
     async fetchHistory() {
@@ -38,10 +39,11 @@ export const useExportStore = defineStore('export', {
       }
     },
     async fetchStats() {
+      this.statsError = ''
       try {
         this.stats = await getExportStatistics()
-      } catch (e) {
-        // ignore for now; UI can display N/A
+      } catch (e: any) {
+        this.statsError = e?.message || 'Failed to load statistics'
       }
     },
     setPlugin(val: string) {

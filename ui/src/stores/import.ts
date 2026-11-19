@@ -13,6 +13,7 @@ export const useImportStore = defineStore('import', {
     success: undefined as boolean | undefined,
     meta: undefined as Metadata | undefined,
     stats: { total: 0, success: 0, failure: 0, by_plugin: {} as Record<string, number> },
+    statsError: '' as string,
   }),
   actions: {
     async fetchHistory() {
@@ -34,7 +35,12 @@ export const useImportStore = defineStore('import', {
       }
     },
     async fetchStats() {
-      try { this.stats = await getImportStatistics() } catch {}
+      this.statsError = ''
+      try {
+        this.stats = await getImportStatistics()
+      } catch (e: any) {
+        this.statsError = e?.message || 'Failed to load statistics'
+      }
     },
     setPlugin(val: string) { this.plugin = val; this.page = 1 },
     setSuccess(val: boolean | undefined) { this.success = val; this.page = 1 },
