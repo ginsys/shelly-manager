@@ -166,7 +166,7 @@ public id (as `ExportHistory.ExportID` does).
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uint, primary key | |
-| `agent_id` | string, `size:191`, unique index, case-sensitive collation | The id the agent chooses. |
+| `agent_id` | string, `size:191`, unique index, no-pad binary comparison | The id the agent chooses. |
 | `hostname`, `ip`, `version` | string | Not indexed. |
 | `capabilities`, `metadata` | text, size to decide | JSON documents. No column default; seeded by `BeforeSave`. See "Column types". |
 | `token_hash` | string, `size:64`, unique index | Hex SHA-256 of the token. |
@@ -213,25 +213,33 @@ public id (as `ExportHistory.ExportID` does).
     unbounded text type on all three providers. This note recommends this over
     adding limits.
   - **Indexed strings** (`agent_id`, `task_id`, `token_hash`, and the task
-    `status`, `type` and `agent_id`): `size:191` is a real limit on MySQL, and
-    SQLite and PostgreSQL would accept longer values than it. These are **new
-    restrictions** on what today's handlers accept. The build slice validates
-    them (a 400 with a clear message for an id, task type or status longer than
-    191 characters) and lists them in the API doc change. A value that long is
-    not expected, but the restriction must be stated, not left to a database
-    error.
-- **Identity comparisons must be byte-exact on every provider.** Today the
-  handlers compare ids as Go strings (`provisioner_handlers.go:255`, and the map
-  key at `:149`), so `alpha` and `Alpha` are different agents. MySQL's default
-  collation compares case-insensitively, and the repository already documents
-  that hazard (`migrations.go:365-370`). With the proposed schema on MySQL,
-  agent `alpha` would match a task assigned to `Alpha`, and the unique index on
-  `agent_id` would reject `Alpha` after `alpha`. So `agent_id` (in both tables)
-  and `task_id` need a case-sensitive collation on MySQL (for example
-  `utf8mb4_bin`), and the provider test proves that `alpha` and `Alpha` are two
-  agents and that a task owned by one is not claimed by the other. The
-  `token_hash` is lowercase hex that the manager writes itself, so it needs the
-  same collation only for strictness.
+    `status`, `type` and `agent_id`): `size:191` is a real limit on MySQL and,
+    through `varchar(191)`, on PostgreSQL (the pinned GORM PostgreSQL driver maps
+    `size:191` to `varchar(191)`; SQLite does not enforce a length). These are
+    **new restrictions** on what today's handlers accept. The build slice
+    validates them on every provider (a 400 with a clear message for an id, task
+    type or status longer than 191 characters) and lists them in the API doc
+    change. A value that long is not expected, but the restriction must be
+    stated, not left to a database error.
+- **Identity and status comparisons must be byte-exact on every provider.**
+  Today the handlers compare ids and statuses as Go strings
+  (`provisioner_handlers.go:255`, the map key at `:149`, and the status test
+  against exactly `"pending"` at `:255`). So `alpha`, `Alpha` and `alpha ` (a
+  trailing space, which the handlers accept: `:130`) are three different
+  agents, and a task whose status was set to `"PENDING"` through
+  `UpdateTaskStatus` (`:317`) is not claimable. SQLite compares strings
+  byte for byte by default, and so does PostgreSQL for `varchar` and `text`.
+  **MySQL does not**: its default collation compares case-insensitively (the
+  repository already documents that hazard, `migrations.go:365-370`), and even
+  the binary collation `utf8mb4_bin` pads with spaces, so `alpha` equals
+  `alpha `. The build slice therefore gives `agent_id` (in both tables),
+  `task_id`, `status` and `token_hash` a **no-pad binary** comparison on MySQL:
+  the collation `utf8mb4_0900_bin` (MySQL 8.0 and later, which CI runs) or a
+  binary string type. The provider test proves, on every provider, that
+  `alpha`, `Alpha` and `alpha ` are three agents (and the unique index accepts
+  all three), that a task owned by one is not claimed by another, and that a
+  `"PENDING"` task is not claimed. The `token_hash` is lowercase hex that the
+  manager writes itself, so it needs the collation only for strictness.
 - The hash column is exactly 64 hex characters, so `size:64` is a hard fit and
   needs no 191 workaround.
 
