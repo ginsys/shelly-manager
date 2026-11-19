@@ -20,7 +20,7 @@ This note proposes three slices, each of which ships alone:
 
 | Slice | What it does | Fixes | Changes who may enrol an agent? |
 |---|---|---|---|
-| 1 | The whole registry moves to the database: agents, hashed tokens, tasks. | 1, 4, and the empty-registry window | No new right. It only closes a window (see "The empty-registry window"). |
+| 1 | The whole registry moves to the database: agents, hashed tokens, tasks. | 1, 4, and the empty-registry window | No new right. It closes a window (see "The empty-registry window") and opens a smaller one: a request that began before a token was replaced may finish after it, for one request (see "The store", detail 2, and decision 11). |
 | 2 | Enrolment: an agent id can only be created by the admin key holder. | 2 | **Yes.** Today the agent key is enough. |
 | 3 | An id is no longer freed by 5 minutes of silence. Stale rows are removed on purpose. | 3 | **Yes.** Today the agent key frees an id after 5 minutes of silence. |
 
@@ -501,7 +501,11 @@ State this plainly, because it moves a security boundary:
 
 - **A (slice 1):** does not change who may enrol. It closes one window: after
   a manager restart an id the manager has already seen is no longer free to
-  take at once. This tightens a control and never loosens one.
+  take at once. That is a tightening. It is not a pure one: without the row
+  lock of decision 11, a claim, a status update or a report that began before a
+  token was replaced can finish after it, for one request. Today one mutex
+  covers the token check and the claim, so that is a small loosening of one
+  control. Decision 11 settles it.
 - **B, when the manager requires enrolment:** an agent id can only be created by
   the **admin key holder** (through an enrolment). The agent key alone no
   longer creates an id. Today it does.
@@ -531,7 +535,7 @@ Two things can remove a row:
 
 1. **An admin delete route** (admin key). It frees an id and revokes its token.
    Needed for D in any case.
-2. **A purge of rows silent for N days**, with no non-terminal task. Proposed
+2. **A purge of rows silent for N days**, with no `pending` task. Proposed
    N is 30. It runs in the manager, on any replica, as a conditional `DELETE`.
 
 The 5-minute silence rule removes no row. It lets a register **replace** the
@@ -542,6 +546,20 @@ token of an existing row, which keeps the row and its `registered_at`
 D and the cleanup interact. With D, only (1) and (2) free an id. An agent that
 lost its token waits for a purge or an admin. So D needs B or a kept token, as
 above.
+
+### Stranded `assigned` tasks
+
+`PollTasks` hands out only tasks whose status is `pending`
+(`provisioner_handlers.go:254-255`). A task assigned to an agent process that
+died is therefore never delivered again, to the same id or to a new one (the
+restart table above says so). Today a manager restart wipes such tasks. After
+slice 1 they stay forever, and a purge that waited for "no non-terminal task"
+would never remove that agent's row. The purge therefore waits only for
+`pending` tasks (decision 12).
+
+Recovery exists today: the admin key may act for any agent
+(`authorizeAgent`), so an admin can set the task back to `pending` through
+`UpdateTaskStatus` (`:317`). Decision 12 asks whether to automate it.
 
 ## Compatibility at upgrade
 
@@ -648,8 +666,9 @@ A token is a credential. These are the rules for it.
 One recommendation per question.
 
 1. **Build slice 1 (the whole registry in the database) now?** Recommended:
-   yes. It fixes limits 1 and 4 and the empty-registry window, changes no API
-   and no control, and needs no agent change.
+   yes. It fixes limits 1 and 4 and the empty-registry window, changes no API,
+   and needs no agent change. Its one change to a control is the one-request
+   window of decision 11.
 2. **Store a task's `config` in the database as plain text?** Recommended: yes,
    like `Device.DesiredConfig`. Field encryption is a separate, larger decision.
 3. **Which enrolment option?** Recommended: B (a one-time enrolment secret per
@@ -667,7 +686,8 @@ One recommendation per question.
    B is required or the agent keeps its token. This **changes who may free an
    id**.
 7. **Stale rows.** Recommended: an admin delete route, and a purge of rows
-   silent for 30 days with no non-terminal task.
+   silent for 30 days with no `pending` task (see decision 12 for `assigned`
+   tasks).
 8. **Rotation grace for the previous token?** Recommended: no. A grace period
    weakens revocation. A lost register response is recovered by a new
    enrolment or an admin delete.
@@ -676,3 +696,18 @@ One recommendation per question.
 10. **Docs.** The build slice updates `docs/security/SECURITY_SECRETS.md:21`
     and `docs/api/api-overview.md:433` (including the restart sentence), and adds
     its provider test to the `-run` list in `.github/workflows/test.yml`.
+11. **Close the one-request window with a row lock, or accept it?** The choices:
+    accept the window (a request that began before a token was replaced may
+    finish after it), or take the agent row `FOR UPDATE` in the register and in
+    the claim, status update and report transactions on PostgreSQL and MySQL
+    (SQLite has one writer at a time). Recommended: take the lock. There are
+    few agents, each polls rarely, so the cost is small, and slice 1 then
+    loosens no control. Without it, slice 1 loosens one control slightly, and
+    the lead and Serge should know that before slice 1 is built.
+12. **Stranded `assigned` tasks.** Choices: keep the recovery admin-only (set the
+    task back to `pending`), or release the `assigned` tasks of an agent silent
+    for N. Recommended: admin-only recovery in slice 1, which keeps today's
+    behaviour. Automatic release can run a provisioning step twice on a device,
+    so it needs its own decision. The purge (decision 7) ignores `assigned`
+    tasks of the agent it removes, and marks them `failed` with a stated
+    reason, so the UI shows them.
