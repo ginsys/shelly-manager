@@ -209,7 +209,7 @@ func (h *Handler) GetProvisionerAgents(w http.ResponseWriter, r *http.Request) {
 	agents := make([]*ProvisionerAgent, 0, len(registry.agents))
 	for _, agent := range registry.agents {
 		// Update status based on last seen time
-		if time.Since(agent.LastSeen) > 5*time.Minute {
+		if time.Since(agent.LastSeen) > agentOfflineAfter {
 			agent.Status = "offline"
 		}
 		agents = append(agents, agent)
