@@ -7,7 +7,8 @@ All endpoints return the standard API wrapper with `success|error`, `data`, opti
 **Admin key.** If the server has an admin key configured, every notification route needs it
 (`Authorization: Bearer <key>` or `X-API-Key: <key>`) and answers 401 `UNAUTHORIZED` without it. With no
 admin key configured the routes are open. Even with the key, a read never returns a credential stored in a
-channel's config, with one limit for delivery error texts (see "Secrets in a channel's config").
+channel's config, with one limit for history rows written by an earlier version (see "Secrets in a channel's
+config").
 
 ## Endpoints
 
@@ -66,11 +67,13 @@ credential, whatever its type: a string, a number, an object (`headers`) or a li
   that differ only in case (`URL` and `url`) restores neither: send the value. A config that repeats a member
   name, with names matched the way the server's JSON decoder matches them and at any depth, is refused with 400
   on create and on update, because the server reads such a text in member order.
-- **Limit: delivery errors.** A failed delivery's error text quotes the request URL, and that text is stored in
-  the history row (`error` in `GET /notifications/history`) and returned as the message of a failed
-  `POST /notifications/channels/{id}/test`. These texts are not masked yet, so a token that sits in the URL
-  stays readable there (the channel's own `config` is masked). Keeping the URL out of the stored text is
-  tracked in ginsys/shelly-manager#652.
+- **Delivery errors.** The error text of a failed delivery (`error` in `GET /notifications/history`, the message
+  of a failed `POST /notifications/channels/{id}/test`, the log lines) names the operation and the failure class
+  only, for example `webhook request failed: Post timed out`. It never carries the request URL, which holds the
+  webhook token.
+- **Limit: old history rows.** A history row written by an earlier version still holds the old error text, which
+  quotes the request URL. It is returned as stored until those rows are rewritten, which is tracked in
+  ginsys/shelly-manager#652.
 
 ## Rule object (selected fields)
 

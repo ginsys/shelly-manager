@@ -712,7 +712,7 @@ func (s *Service) sendWebhook(ctx context.Context, channel *NotificationChannel,
 
 	req, err := http.NewRequestWithContext(ctx, method, config.URL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return requestError("webhook request not built", err)
 	}
 
 	// Set headers
@@ -732,7 +732,7 @@ func (s *Service) sendWebhook(ctx context.Context, channel *NotificationChannel,
 	// Send request
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send webhook: %w", err)
+		return requestError("webhook request failed", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -747,7 +747,6 @@ func (s *Service) sendWebhook(ctx context.Context, channel *NotificationChannel,
 
 	s.logger.WithFields(map[string]any{
 		"channel_id": channel.ID,
-		"url":        config.URL,
 		"status":     resp.StatusCode,
 		"component":  "notification",
 	}).Info("Sent webhook notification")
@@ -794,14 +793,14 @@ func (s *Service) sendSlack(ctx context.Context, channel *NotificationChannel, h
 	// Send to Slack
 	req, err := http.NewRequestWithContext(ctx, "POST", config.WebhookURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		return fmt.Errorf("failed to create slack request: %w", err)
+		return requestError("slack request not built", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send slack notification: %w", err)
+		return requestError("slack request failed", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
