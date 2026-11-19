@@ -98,8 +98,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useDriftStore } from '@/stores/drift'
+import { useLateFailure } from '@/composables/useNotice'
 
 const store = useDriftStore()
+const reportLate = useLateFailure()
 
 const page = ref(1)
 const pageSize = ref(25)
@@ -132,8 +134,9 @@ async function handleDelete(id: number) {
   }
   try {
     await store.remove(id)
-  } catch (e: any) {
-    alert(e?.message || 'Failed to delete schedule')
+  } catch (e) {
+    // The store keeps the failure in `store.error`, which the page shows above the list while it is open.
+    reportLate(e, { action: 'Delete drift schedule', resource: 'Drift schedule', resourceId: String(id) })
   }
 }
 

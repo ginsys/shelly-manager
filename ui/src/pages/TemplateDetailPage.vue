@@ -11,6 +11,14 @@
       </button>
     </div>
 
+    <p v-if="statusMessage" class="status-line" role="status" data-testid="template-status">{{ statusMessage }}</p>
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="template-action-error"
+      @dismiss="clearActionError"
+    />
+
     <div v-if="loading" class="card state">Loading...</div>
     <div v-else-if="error" class="card state error">
       {{ error }}
@@ -137,6 +145,8 @@ import {
   type TemplateScope,
 } from '@/api/templates'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { usePageError, useLateFailure } from '@/composables/useNotice'
 import { clone, sameValue, savedSecretBaseline, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
 
 const route = useRoute()
@@ -170,6 +180,25 @@ const savedSecrets = computed(() => (template.value ? savedSecretBaseline(templa
 
 const showAssignDialog = ref(false)
 const assign = ref<{ deviceId: number | null; position: number | null }>({ deviceId: null, position: null })
+
+// What an action did: one success line, or one failure panel. While the assign dialog is open it
+// covers the panel, so a failure there goes to the app notice.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError(
+  () => showAssignDialog.value
+)
+const statusMessage = ref('')
+const reportLate = useLateFailure()
+
+// A new action starts: the outcome of the one before it is obsolete.
+function startAction() {
+  clearActionError()
+  statusMessage.value = ''
+}
+
+function reportFailure(e: unknown, action: string) {
+  statusMessage.value = ''
+  setActionError(e, { action, resource: 'Template' })
+}
 
 function formatDate(iso: string) {
   try {
@@ -251,6 +280,7 @@ async function handleSave() {
   if (!template.value || !configValid.value || busy.value) return
   const parsedConfig = clone(configBody.value)
   const session = editSession
+  startAction()
   saveErrors.value = []
   saving.value = true
 
@@ -274,10 +304,17 @@ async function handleSave() {
     await load()
   } catch (e: any) {
     if (e instanceof TemplateSaveError) {
-      if (session === editSession) saveErrors.value = e.fields
+      if (session === editSession) {
+        saveErrors.value = e.fields
+        // The field list is part of the edit form. Where the form is hidden or gone, the notice says it.
+        reportLate(e, { action: 'Save template', resource: 'Template' }, showAssignDialog.value)
+      } else {
+        // The edit was cancelled, so no form shows the fields: the page panel does.
+        reportFailure(e, 'Save template')
+      }
       return
     }
-    alert('Save failed: ' + (e?.message || 'Unknown error'))
+    reportFailure(e, 'Save template')
   } finally {
     saving.value = false
   }
@@ -286,30 +323,33 @@ async function handleSave() {
 async function handleDelete() {
   if (!template.value || busy.value) return
   if (!confirm('Delete this template?')) return
+  startAction()
 
   try {
     await deleteTemplate(template.value.id)
     await router.push('/templates')
-  } catch (e: any) {
-    alert('Delete failed: ' + (e?.message || 'Unknown error'))
+  } catch (e) {
+    reportFailure(e, 'Delete template')
   }
 }
 
 async function copyConfig() {
   if (busy.value) return
+  startAction()
   try {
     // In edit mode the body being edited is the config on screen, not the saved one.
     const text = editMode.value ? JSON.stringify(configBody.value, null, 2) : configJson.value
     await navigator.clipboard.writeText(text)
   } catch {
-    alert('Copy failed')
+    reportFailure(new Error('The browser did not allow copying to the clipboard'), 'Copy config')
   }
 }
 
 async function handleAssign() {
   if (!template.value) return
+  startAction()
   if (!assign.value.deviceId) {
-    alert('Device ID is required')
+    reportFailure(new Error('Device ID is required'), 'Assign template')
     return
   }
 
@@ -322,9 +362,9 @@ async function handleAssign() {
 
     showAssignDialog.value = false
     assign.value = { deviceId: null, position: null }
-    alert('Assigned')
-  } catch (e: any) {
-    alert('Assign failed: ' + (e?.message || 'Unknown error'))
+    statusMessage.value = 'Template assigned to the device'
+  } catch (e) {
+    reportFailure(e, 'Assign template')
   }
 }
 
@@ -364,6 +404,7 @@ label { font-size: 12px; color: #64748b; }
 .code { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 
 .hint { font-size: 12px; color: #64748b; margin-top: 8px; }
+.status-line { margin: 0; color: #065f46; }
 .save-errors { margin: 8px 0 0; padding: 8px 12px 8px 28px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 

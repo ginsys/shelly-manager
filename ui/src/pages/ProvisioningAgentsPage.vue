@@ -48,8 +48,10 @@
 import { onMounted } from 'vue'
 import { useProvisioningStore } from '@/stores/provisioning'
 import DataTable from '@/components/DataTable.vue'
+import { useLateFailure } from '@/composables/useNotice'
 
 const store = useProvisioningStore()
+const reportLate = useLateFailure()
 
 onMounted(() => {
   store.fetchAgents()
@@ -75,7 +77,8 @@ async function handleRefreshAgent(id: string) {
   try {
     await store.refreshAgentStatus(id)
   } catch (e) {
-    alert('Failed to refresh agent status: ' + (e as Error).message)
+    // The store keeps the failure in `agentsError`, which the table shows while the page is open.
+    reportLate(e, { action: 'Refresh agent status', resource: 'Provisioning agent', resourceId: id })
   }
 }
 </script>

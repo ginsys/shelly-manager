@@ -16,17 +16,20 @@ vi.mock('@/api/templates', async (importOriginal) => {
     listDeviceTypes: vi.fn(),
     createTemplate: vi.fn(),
     updateTemplate: vi.fn(),
+    deleteTemplate: vi.fn(),
   }
 })
 
 import { getConfigSchema } from '@/api/typedConfig'
 import {
   createTemplate,
+  deleteTemplate,
   listDeviceTypes,
   listTemplates,
   updateTemplate,
   TemplateSaveError,
 } from '@/api/templates'
+import { dismissNotice, notice } from '@/composables/useNotice'
 import TemplatesPage from '../TemplatesPage.vue'
 
 // A cut-down template schema, in the shape GET /config/schema returns.
@@ -512,5 +515,69 @@ describe('TemplatesPage template form', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="template-save-errors"]').text()).toContain('roller: SHPLG-S has no roller settings')
     expect(wrapper.find('.modal').exists()).toBe(true)
+  })
+
+  // ginsys/shelly-manager#614: a failure that is not a field list shows once, where the user acted, and
+  // opens no alert().
+  it('a save that fails for another reason shows its message in the open dialog and raises no alert', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    vi.mocked(createTemplate).mockRejectedValue(new Error('server down'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    expect(alertSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('.modal').exists()).toBe(true)
+    expect(wrapper.find('.modal [data-testid="template-dialog-error"]').text()).toBe('server down')
+    alertSpy.mockRestore()
+  })
+
+  it('a delete that fails shows its message once and raises no alert', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(listTemplates).mockResolvedValue([plainTemplate(1, 'A')] as any)
+    vi.mocked(deleteTemplate).mockReset()
+    vi.mocked(deleteTemplate).mockRejectedValue(new Error('Template is assigned to devices'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.find('.action-btn.danger').trigger('click')
+    await flushPromises()
+    expect(alertSpy).not.toHaveBeenCalled()
+    expect(wrapper.text().split('Template is assigned to devices').length - 1).toBe(1)
+    alertSpy.mockRestore()
+    confirmSpy.mockRestore()
+  })
+
+  // The page is gone when the answer arrives, so the notice shows what the dialog and the card cannot.
+  it('a delete that fails after the page was left shows in the app notice', async () => {
+    dismissNotice()
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(listTemplates).mockResolvedValue([plainTemplate(1, 'A')] as any)
+    let fail: (e: Error) => void = () => {}
+    vi.mocked(deleteTemplate).mockReset()
+    vi.mocked(deleteTemplate).mockImplementation(() => new Promise((_r, reject) => { fail = reject }) as any)
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.find('.action-btn.danger').trigger('click')
+    wrapper.unmount()
+    fail(new Error('Template is assigned to devices'))
+    await flushPromises()
+    expect(notice.value?.message).toContain('Template is assigned to devices')
+    confirmSpy.mockRestore()
+  })
+
+  it('a save that fails after the page was left shows in the app notice', async () => {
+    dismissNotice()
+    let fail: (e: Error) => void = () => {}
+    vi.mocked(createTemplate).mockImplementation(() => new Promise((_r, reject) => { fail = reject }) as any)
+    const wrapper = mountPage()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    wrapper.unmount()
+    fail(new Error('server down'))
+    await flushPromises()
+    expect(notice.value?.message).toContain('server down')
   })
 })

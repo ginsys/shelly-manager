@@ -51,9 +51,11 @@
 import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useLateFailure } from '@/composables/useNotice'
 
 const route = useRoute()
 const store = useNotificationsStore()
+const reportLate = useLateFailure()
 
 onMounted(() => {
   const id = route.params.id as string
@@ -64,12 +66,13 @@ onMounted(() => {
 
 async function toggleEnabled() {
   if (!store.currentChannel) return
+  // The channel can be deleted while the update is pending, so the id is read before the call.
+  const { id, enabled } = store.currentChannel
   try {
-    await store.modifyChannel(store.currentChannel.id, {
-      enabled: !store.currentChannel.enabled
-    })
+    await store.modifyChannel(id, { enabled: !enabled })
   } catch (e) {
-    alert('Failed to update channel: ' + (e as Error).message)
+    // The store keeps the failure in `channelsError`, which the page shows while it is open.
+    reportLate(e, { action: 'Update channel', resource: 'Notification channel', resourceId: id })
   }
 }
 </script>

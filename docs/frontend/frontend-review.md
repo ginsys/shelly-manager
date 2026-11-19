@@ -285,7 +285,6 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 | Issue | Subject |
 |-------|---------|
 | ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
-| ginsys/shelly-manager#614 | Replace the remaining `alert()` calls with `useError` and `ErrorDisplay` |
 | ginsys/shelly-manager#646 | Move the route table out of `main.ts` so a test can check every route is reachable |
 | ginsys/shelly-manager#290 | Design the plugin configuration model (plugins stay read-only until then) |
 | ginsys/shelly-manager#250 | Notification API contract mismatches and missing endpoints (**parked**) |
@@ -303,19 +302,22 @@ Found by reading the code at this commit; not a plan.
 1. **The route table is inline in `main.ts`** (section 3, ginsys/shelly-manager#646), so no unit test
    can check that every route is reachable; the end-to-end spec carries an explicit path list.
 2. **Quasar is a dependency nothing imports** (section 2).
-3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (667),
+3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (697),
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
 5. **No generated API client and no checked coverage.** The 117 functions are written by hand, and
    section 1 of this file is recomputed by hand. A script or CI check that regenerates it would stop
    this file going stale again.
-6. **28 `alert(` calls remain in 11 pages** where `useError` and `ErrorDisplay` should show the
-   error (ginsys/shelly-manager#614). The devices list, device, device configuration and
-   configuration history pages are done: a failure shows in an error panel where it happened, and an
-   apply result shows in a card on the configuration page. A failure that arrives after the user
-   left the page, or while a dialog covers the page panel, shows in one app notice
-   (ginsys/shelly-manager#648): a page that moves off `alert()` takes its error from
-   `usePageError` instead of `useError`. The result of an apply that worked is still shown only in
-   the page. Command:
+6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
+   `ui/src/pages/__tests__/noAlertPages.test.ts` fails if one does. A page that gets its data
+   through a store shows the store's error where the user acted: in the list, or inside the dialog
+   that stays open. A page that calls the API itself (the metrics dashboard, the template detail)
+   shows a failure in an error panel, and a success in one status line. A failure that arrives after
+   the user left the page, or while a dialog covers the page panel, shows in one app notice
+   (ginsys/shelly-manager#648): such a page takes its error from `usePageError` instead of
+   `useError`, and a store-backed page calls `useLateFailure`, which shows the failure there only
+   when the page is already gone. Two things are left. A store action that fails replaces the whole list with the error
+   text, so a failed delete or create blanks the table (ginsys/shelly-manager#701). The guard reads
+   pages only: a component or a composable could still call `alert(`. Command:
    `rg -n '\balert\(' ui/src --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**'`.

@@ -6,7 +6,7 @@
     </p>
 
     <div style="margin-bottom:16px">
-      <button class="primary-button" @click="showCreateForm = true">
+      <button class="primary-button" @click="openCreateForm">
         ➕ Create Rule
       </button>
     </div>
@@ -42,6 +42,7 @@
     <div v-if="showCreateForm" class="modal-overlay" @click="showCreateForm = false">
       <div class="modal" @click.stop>
         <h2>Create Notification Rule</h2>
+        <p v-if="createError" class="form-error" role="alert" data-testid="rule-create-error">{{ createError }}</p>
         <form @submit.prevent="handleCreate">
           <div class="form-group">
             <label>Name:</label>
@@ -80,9 +81,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import DataTable from '@/components/DataTable.vue'
+import { useLateFailure } from '@/composables/useNotice'
 
 const store = useNotificationsStore()
+const reportLate = useLateFailure()
 const showCreateForm = ref(false)
+// The failure of this form's own submission. The store's `rulesError` may hold an older failure.
+const createError = ref('')
 const eventTypesInput = ref('')
 const newRule = ref({
   name: '',
@@ -101,15 +106,36 @@ const getChannelName = computed(() => (channelId: string) => {
   return store.channelById(channelId)?.name || 'Unknown'
 })
 
+// The number of the form that is open now. A submission keeps the number it started with and touches
+// the form only if the number is still the same: the answer of a cancelled form belongs to nobody.
+let formSession = 0
+
+function openCreateForm() {
+  formSession++
+  createError.value = ''
+  showCreateForm.value = true
+}
+
 async function handleCreate() {
+  const session = formSession
+  createError.value = ''
   try {
     newRule.value.eventTypes = eventTypesInput.value.split(',').map(s => s.trim()).filter(Boolean)
     await store.addRule(newRule.value)
+    if (session !== formSession) return
     showCreateForm.value = false
     newRule.value = { name: '', channelId: '', eventTypes: [], filters: {}, enabled: true }
     eventTypesInput.value = ''
   } catch (e) {
-    alert('Failed to create rule: ' + (e as Error).message)
+    const context = { action: 'Create rule', resource: 'Notification rule' }
+    if (session === formSession) {
+      // The form stays open and shows the failure. After the user left the page, the app notice does.
+      createError.value = store.rulesError || (e as Error)?.message || 'Failed to create rule'
+      reportLate(e, context)
+    } else {
+      // The form it was sent from is gone; a newer form that is open hides the table.
+      reportLate(e, context, showCreateForm.value)
+    }
   }
 }
 
@@ -118,12 +144,22 @@ async function handleDelete(id: string) {
   try {
     await store.removeRule(id)
   } catch (e) {
-    alert('Failed to delete rule: ' + (e as Error).message)
+    // The store keeps the failure in `rulesError`, which the table shows unless the page is gone
+    // or the create form covers it.
+    reportLate(e, { action: 'Delete rule', resource: 'Notification rule', resourceId: id }, showCreateForm.value)
   }
 }
 </script>
 
 <style scoped>
+.form-error {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  color: #b91c1c;
+  background: #fee2e2;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
 .badge {
   padding: 2px 8px;
   border-radius: 4px;

@@ -129,6 +129,8 @@
           The backend does not persist resolution notes.
         </p>
 
+        <p v-if="resolveError" class="dialog-error" role="alert" data-testid="drift-resolve-error">{{ resolveError }}</p>
+
         <div class="form-actions">
           <button type="button" class="btn" @click="closeResolveDialog">Cancel</button>
           <button type="button" class="btn primary" @click="handleResolve">
@@ -144,11 +146,15 @@
 import { ref, onMounted, computed } from 'vue'
 import { useDriftStore } from '@/stores/drift'
 import type { DriftTrend } from '@/api/drift'
+import { useLateFailure } from '@/composables/useNotice'
 
 const store = useDriftStore()
+const reportLate = useLateFailure()
 
 const resolvedFilter = ref('')
 const resolvingItem = ref<DriftTrend | null>(null)
+// The failure of this dialog's own submission. `store.error` may hold an older failure.
+const resolveError = ref('')
 
 const resolvedBoolean = computed<boolean | undefined>(() => {
   if (resolvedFilter.value === 'true') return true
@@ -162,6 +168,7 @@ function formatDate(dateStr?: string | null): string {
 }
 
 function openResolveDialog(item: DriftTrend) {
+  resolveError.value = ''
   resolvingItem.value = item
 }
 
@@ -171,11 +178,15 @@ function closeResolveDialog() {
 
 async function handleResolve() {
   if (!resolvingItem.value) return
+  const id = resolvingItem.value.id
+  resolveError.value = ''
   try {
-    await store.resolveTrend(resolvingItem.value.id)
+    await store.resolveTrend(id)
     closeResolveDialog()
-  } catch (e: any) {
-    alert(e?.message || 'Failed to resolve drift item')
+  } catch (e) {
+    // The dialog stays open and shows the failure. After the user left the page, the app notice does.
+    resolveError.value = store.error || (e as Error)?.message || 'Failed to resolve drift item'
+    reportLate(e, { action: 'Resolve drift item', resource: 'Drift item', resourceId: String(id) })
   }
 }
 
@@ -238,6 +249,15 @@ onMounted(() => {
   color: #b91c1c;
   background: #fee2e2;
   border-radius: 8px;
+}
+
+.dialog-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  color: #b91c1c;
+  background: #fee2e2;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
 }
 
 .empty p {

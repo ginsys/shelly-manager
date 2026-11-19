@@ -53,8 +53,10 @@
 import { ref, onMounted } from 'vue'
 import { useProvisioningStore } from '@/stores/provisioning'
 import DataTable from '@/components/DataTable.vue'
+import { useLateFailure } from '@/composables/useNotice'
 
 const store = useProvisioningStore()
+const reportLate = useLateFailure()
 const statusFilter = ref('')
 
 onMounted(() => {
@@ -71,7 +73,8 @@ async function handleCancel(id: string) {
   try {
     await store.cancelProvisioningTask(id)
   } catch (e) {
-    alert('Failed to cancel task: ' + (e as Error).message)
+    // The store keeps the failure in `tasksError`, which the table shows while the page is open.
+    reportLate(e, { action: 'Cancel task', resource: 'Provisioning task', resourceId: id })
   }
 }
 </script>

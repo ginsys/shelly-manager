@@ -25,6 +25,13 @@
         <button @click="handleExportPrometheus" class="btn btn-secondary">Export Prometheus</button>
         <button @click="handleTestAlert" class="btn btn-info">Send Test Alert</button>
       </div>
+      <p v-if="statusMessage" class="status-line" role="status" data-testid="metrics-status">{{ statusMessage }}</p>
+      <ErrorDisplay
+        :error="actionError"
+        :show-retry="false"
+        data-testid="metrics-action-error"
+        @dismiss="clearActionError"
+      />
     </section>
 
     <!-- Dashboard Summary -->
@@ -189,6 +196,8 @@
 import { onMounted, onUnmounted, computed, ref, defineAsyncComponent } from 'vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { useError } from '@/composables/useError'
+import { usePageError } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import {
   enableMetrics,
   disableMetrics,
@@ -230,6 +239,33 @@ const currentTime = ref(Date.now())
 // Error handling with structured context
 const { error: errorObj, setError, clearError } = useError()
 const error = computed(() => errorObj.value?.message || null)
+
+// What the collection controls did: one success line, or one failure panel, never both.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
+const statusMessage = ref('')
+
+// The number of the control used last. A control keeps the number it started with, and its success
+// is shown only if no newer control was used since: a slow refresh of an older one must not replace
+// the outcome of the newer one. A failure is always shown, because nothing else tells the user.
+let latestControl = 0
+
+// A control starts: the outcome of the one before it is obsolete.
+function startControl() {
+  clearActionError()
+  statusMessage.value = ''
+  return ++latestControl
+}
+
+function reportSuccess(message: string, control: number) {
+  if (control !== latestControl) return
+  clearActionError()
+  statusMessage.value = message
+}
+
+function reportFailure(e: unknown, action: string) {
+  statusMessage.value = ''
+  setActionError(e, { action, resource: 'Metrics' })
+}
 
 // Advanced metrics state
 const dashboardSummary = ref<DashboardMetrics | null>(null)
@@ -304,36 +340,40 @@ function reasonMessage(reason: unknown): string {
 
 // Collection controls
 async function handleEnableMetrics() {
+  const control = startControl()
   try {
     await enableMetrics()
     await store.fetchStatus()
-    alert('Metrics collection enabled')
-  } catch (e: any) {
-    alert(e?.message || 'Failed to enable metrics')
+    reportSuccess('Metrics collection enabled', control)
+  } catch (e) {
+    reportFailure(e, 'Enable metrics')
   }
 }
 
 async function handleDisableMetrics() {
+  const control = startControl()
   try {
     await disableMetrics()
     await store.fetchStatus()
-    alert('Metrics collection disabled')
-  } catch (e: any) {
-    alert(e?.message || 'Failed to disable metrics')
+    reportSuccess('Metrics collection disabled', control)
+  } catch (e) {
+    reportFailure(e, 'Disable metrics')
   }
 }
 
 async function handleCollectMetrics() {
+  const control = startControl()
   try {
     await collectMetrics()
     await fetchAdvancedMetrics()
-    alert('Metrics collection triggered')
-  } catch (e: any) {
-    alert(e?.message || 'Failed to trigger collection')
+    reportSuccess('Metrics collection triggered', control)
+  } catch (e) {
+    reportFailure(e, 'Trigger collection')
   }
 }
 
 async function handleExportPrometheus() {
+  startControl()
   try {
     const data = await getPrometheusMetrics()
     const blob = new Blob([data], { type: 'text/plain' })
@@ -343,21 +383,22 @@ async function handleExportPrometheus() {
     a.download = `prometheus-metrics-${Date.now()}.txt`
     a.click()
     URL.revokeObjectURL(url)
-  } catch (e: any) {
-    alert(e?.message || 'Failed to export Prometheus metrics')
+  } catch (e) {
+    reportFailure(e, 'Export Prometheus metrics')
   }
 }
 
 async function handleTestAlert() {
+  const control = startControl()
   try {
     const result = await sendTestAlert()
     if (result.status === 'sent') {
-      alert(`Success: ${result.message}`)
+      reportSuccess(`Test alert sent: ${result.message}`, control)
     } else {
-      alert(`Failed: ${result.message}`)
+      reportFailure(new Error(`Test alert failed: ${result.message}`), 'Send test alert')
     }
-  } catch (e: any) {
-    alert(e?.message || 'Failed to send test alert')
+  } catch (e) {
+    reportFailure(e, 'Send test alert')
   }
 }
 
@@ -550,6 +591,11 @@ function formatSeconds(seconds: number): string {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+
+.status-line {
+  margin: 12px 0 0;
+  color: #065f46;
 }
 
 .btn {

@@ -140,6 +140,8 @@
           </div>
         </div>
 
+        <p v-if="saveError" class="save-error" role="alert" data-testid="template-dialog-error">{{ saveError }}</p>
+
         <div class="modal-actions">
           <button class="btn" @click="closeDialog">Cancel</button>
           <button
@@ -169,8 +171,10 @@ import {
 } from '@/api/templates'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import { clone, sameValue, savedSecretBaseline, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
+import { useLateFailure } from '@/composables/useNotice'
 
 const store = useTemplatesStore()
+const reportLate = useLateFailure()
 
 const showDialog = ref(false)
 const editing = ref<ConfigTemplate | null>(null)
@@ -185,6 +189,9 @@ const form = ref<{ name: string; description?: string; scope: TemplateScope; dev
 const configBody = ref<ConfigBody>({})
 const configValid = ref(true)
 const saveErrors = ref<FieldError[]>([])
+// The store's own text for a save that failed for a reason other than a field list: the page's error card
+// sits behind the dialog, so the dialog shows it.
+const saveError = ref('')
 // The device type the form schema follows. It changes when the input is committed (change
 // event), not on each key, so a half-typed model does not load a schema.
 const schemaDeviceType = ref('')
@@ -267,6 +274,7 @@ function openCreate() {
   configBody.value = {}
   schemaDeviceType.value = ''
   saveErrors.value = []
+  saveError.value = ''
   showDialog.value = true
   void loadDeviceTypes()
 }
@@ -284,6 +292,7 @@ function openEdit(template: ConfigTemplate) {
   configBody.value = clone(template.config || {})
   schemaDeviceType.value = template.device_type || ''
   saveErrors.value = []
+  saveError.value = ''
   showDialog.value = true
 }
 
@@ -299,6 +308,7 @@ async function handleSave() {
   const parsedConfig = clone(configBody.value)
   const session = dialogSession
   saveErrors.value = []
+  saveError.value = ''
   saving.value = true
 
   try {
@@ -323,11 +333,13 @@ async function handleSave() {
     if (session === dialogSession) closeDialog()
     await store.fetchTemplates()
   } catch (e: any) {
+    // After the user left the page the dialog is gone: the app notice shows the failure instead.
+    reportLate(e, { action: 'Save template', resource: 'Template' })
     if (e instanceof TemplateSaveError) {
       if (session === dialogSession) saveErrors.value = e.fields
       return
     }
-    alert('Failed to save template: ' + (e?.message || 'Unknown error'))
+    if (session === dialogSession) saveError.value = store.error || e?.message || 'Failed to save template'
   } finally {
     saving.value = false
   }
@@ -339,8 +351,10 @@ async function handleDelete(id: number) {
 
   try {
     await store.remove(id)
-  } catch (e: any) {
-    alert('Failed to delete: ' + (e?.message || 'Unknown error'))
+  } catch (e) {
+    // The store keeps the failure in `store.error`, which the page shows as the error card unless the page
+    // is gone or the dialog covers it.
+    reportLate(e, { action: 'Delete template', resource: 'Template', resourceId: String(id) }, showDialog.value)
   }
 }
 
@@ -387,6 +401,7 @@ onMounted(() => {
 .form-group.disabled { opacity: 0.6; }
 .form-input { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
 .save-errors { margin: 4px 0 0; padding: 8px 12px 8px 28px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px; }
+.save-error { margin: 8px 0 0; padding: 8px 12px; background: #fee2e2; color: #991b1b; border-radius: 6px; font-size: 13px; overflow-wrap: anywhere; }
 .modal { max-height: calc(100vh - 32px); overflow-y: auto; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .hint { font-size: 12px; color: #64748b; }

@@ -68,9 +68,11 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProvisioningStore } from '@/stores/provisioning'
+import { useLateFailure } from '@/composables/useNotice'
 
 const route = useRoute()
 const store = useProvisioningStore()
+const reportLate = useLateFailure()
 
 const taskId = computed(() => route.params.id as string)
 const task = computed(() => store.currentTask)
@@ -95,7 +97,8 @@ async function handleCancel() {
     await store.cancelProvisioningTask(taskId.value)
     await store.fetchTask(taskId.value)
   } catch (e) {
-    alert('Failed to cancel task: ' + (e as Error).message)
+    // The store keeps the failure in `tasksError`, which the page shows while it is open.
+    reportLate(e, { action: 'Cancel task', resource: 'Provisioning task', resourceId: taskId.value })
   }
 }
 </script>
