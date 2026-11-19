@@ -35,7 +35,7 @@ func TestSQLiteOpenError_NamesTheParameterKeyNotItsValue(t *testing.T) {
 		// Two values of one key: the driver quotes both.
 		"vfs": {"vfs=" + leakWord + "&vfs=" + leakWord + "2", "vfs"},
 		// A value that is another key's name: the key the driver names is the first one.
-		"a value that is another key": {"_txlock=_time_format", "_txlock"},
+		"a value that is another key": {"_txlock=_other&_other=1", "_txlock"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			logged, err := connectSQLiteWithQuery(t, tc.query)
