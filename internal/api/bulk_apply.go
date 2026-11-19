@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -26,11 +27,24 @@ import (
 // Every selected device is checked against its own model before the first write, so a JSON that one
 // device cannot take is written to none. The call is not atomic after that: device 3 can be applied
 // while device 4 is refused, and nothing is rolled back. The overrides stay stored when the apply
-// does not succeed, and the entry says so.
+// does not succeed, and the entry says so. The call has a time limit (bulkApplyBudget): the devices
+// not started by then, or after the request ended, are skipped and not touched.
 
 // maxBulkApplyDevices is the most devices one bulk-apply names. A call lasts as long as its devices
 // do, so the cap bounds the time, not the size. It is a proposal, not a measurement.
 const maxBulkApplyDevices = 10
+
+// The call has a time limit of its own, because 10 devices written one after another outlast the 30 s
+// that every other protected route is given (ginsys/shelly-manager#725). The deadline is the route's
+// share of the request middleware, found by its name (routeDeadline). The budget is the part of it
+// the run may use: no device is started once it is spent, so the answer is written before the
+// deadline. A device that ignores its context can still run past it, and the 408 then means that the
+// outcome is unknown. Both are proposals, not measurements, like the cap. Variables so a test can
+// shorten them.
+var (
+	bulkApplyDeadline = 5 * time.Minute
+	bulkApplyBudget   = bulkApplyDeadline - time.Minute
+)
 
 // Entry statuses.
 const (
@@ -52,6 +66,7 @@ const (
 	reasonInvalid         = "the settings are not valid for this device model; nothing was stored or written"
 	reasonBlocked         = "not written: the settings are not valid for another selected device"
 	reasonStopped         = "not contacted: an earlier device did not end applied and stop_on_error is set"
+	reasonCallEnded       = "not contacted: the time limit of this call was reached or the request ended"
 	reasonPending         = "the desired configuration changed while it was applied; the device stays pending"
 	reasonUnconfirmed     = "the device stopped answering after a network change, so the write was not verified; the device stays pending"
 	reasonRefusedWrite    = "the device refused a write; the device stays pending"
@@ -122,7 +137,11 @@ func (h *Handler) BulkApplyConfigs(w http.ResponseWriter, r *http.Request) {
 	if blocked {
 		entries = bulkApplyBlocked(entries)
 	} else {
-		entries = h.bulkApplyRun(r.Context(), entries, req.Config, selection.StopOnError)
+		// The run's own context outlives the request: a client that leaves, or the deadline of the
+		// request, never cuts a device in the middle of a write. Only the budget does.
+		runCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), bulkApplyBudget)
+		defer cancel()
+		entries = h.bulkApplyRun(r.Context(), runCtx, entries, req.Config, selection.StopOnError)
 	}
 
 	result := bulkApplyResult{Total: len(entries), Results: entries}
@@ -141,6 +160,13 @@ func (h *Handler) BulkApplyConfigs(w http.ResponseWriter, r *http.Request) {
 		case bulkApplySkipped:
 			result.Skipped++
 		}
+	}
+	if r.Context().Err() != nil {
+		// Nobody reads this answer: the client left or the request deadline passed.
+		h.logger.WithFields(map[string]any{
+			"applied": result.Applied, "pending": result.Pending, "unconfirmed": result.Unconfirmed,
+			"refused": result.Refused, "failed": result.Failed, "skipped": result.Skipped,
+		}).Warn("The request ended before bulk-apply was answered; the devices were handled as counted")
 	}
 	rw.WriteSuccess(w, r, result)
 }
@@ -219,8 +245,10 @@ func bulkApplyBlocked(entries []bulkApplyEntry) []bulkApplyEntry {
 
 // bulkApplyRun is pass 2: for each device in order, store the patch as the device's overrides, then
 // apply. With stop_on_error, the first device that does not end applied ends the run and the
-// devices after it are skipped and not contacted.
-func (h *Handler) bulkApplyRun(ctx context.Context, entries []bulkApplyEntry, raw json.RawMessage, stopOnError bool) []bulkApplyEntry {
+// devices after it are skipped and not contacted. The run also ends when the request has ended or
+// the budget is spent: no later device is started, so none has its overrides stored, and the one
+// in flight finishes on runCtx.
+func (h *Handler) bulkApplyRun(reqCtx, runCtx context.Context, entries []bulkApplyEntry, raw json.RawMessage, stopOnError bool) []bulkApplyEntry {
 	stopped := false
 	for i, entry := range entries {
 		switch {
@@ -229,10 +257,14 @@ func (h *Handler) bulkApplyRun(ctx context.Context, entries []bulkApplyEntry, ra
 			entries[i] = bulkApplyStoredEntry(entry, bulkApplySkipped, false, reasonStopped)
 		case entry.Status != "":
 			// Refused in pass 1: not found or not readable. It keeps its entry.
+		case reqCtx.Err() != nil || runCtx.Err() != nil:
+			entries[i] = bulkApplyStoredEntry(entry, bulkApplySkipped, false, reasonCallEnded)
 		default:
-			entries[i] = h.bulkApplyDevice(ctx, entry, raw)
+			entries[i] = h.bulkApplyDevice(runCtx, entry, raw)
 		}
-		if stopOnError && entries[i].Status != bulkApplyApplied {
+		// A device not reached because the call ended is no earlier failure to stop on: the
+		// devices after it say the same thing.
+		if stopOnError && entries[i].Status != bulkApplyApplied && entries[i].Reason != reasonCallEnded {
 			stopped = true
 		}
 	}

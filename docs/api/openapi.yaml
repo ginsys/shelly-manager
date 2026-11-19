@@ -2456,7 +2456,9 @@ paths:
         every selected device; if any cannot take it, nothing is stored or written to any. The call
         is not atomic: it answers 200 with one entry per device, each with one of six statuses, and
         rolls nothing back. The overrides stay stored when the apply does not succeed. At most 10
-        devices per call.
+        devices per call. The call has a request deadline of 5 minutes, not the 30 seconds of the
+        other routes, and a run budget of 4 minutes: once the budget is spent or the client has
+        left, no later device is started and each is `skipped` with a reason that says so.
       operationId: bulkApplyConfigs
       security:
         - BearerAuth: []
@@ -2487,6 +2489,15 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '401':
           description: An admin key is configured and the request has none or a wrong one (UNAUTHORIZED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '408':
+          description: >-
+            The run passed the request deadline (REQUEST_TIMEOUT), which happens only when a device
+            ignores its context past the run budget. The outcome is unknown: devices may have been
+            written, so this never means that nothing was written.
           content:
             application/json:
               schema:
