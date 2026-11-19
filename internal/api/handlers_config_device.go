@@ -295,20 +295,32 @@ func (h *Handler) writeOverrideFieldErrors(rw *apiresp.ResponseWriter, w http.Re
 		rw.WriteInternalError(w, r, err)
 		return true
 	}
-	model := service.DeviceModel(device)
-	if model == "" {
-		// As GetConfigurationSchema does: a device without a model gets the unsupported-model schema.
-		model = "unknown"
-	}
-	encoded, err := json.Marshal(body)
+	fieldErrs, err := validateOverrideBody(service.DeviceModel(device), body)
 	if err != nil {
 		rw.WriteInternalError(w, r, err)
 		return true
 	}
+	if len(fieldErrs) == 0 {
+		return false
+	}
+	rw.WriteValidationError(w, r, map[string]any{"fields": fieldErrs})
+	return true
+}
+
+// validateOverrideBody is the check of writeOverrideFieldErrors without the response: the decoded
+// body against the schema of model. An empty model gets the unsupported-model schema, as
+// GetConfigurationSchema does. The bulk apply route runs it too, so the two cannot disagree.
+func validateOverrideBody(model string, body *configuration.DeviceConfiguration) ([]configuration.FieldError, error) {
+	if model == "" {
+		model = "unknown"
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
 	var fields map[string]interface{}
 	if err = json.Unmarshal(encoded, &fields); err != nil {
-		rw.WriteInternalError(w, r, err)
-		return true
+		return nil, err
 	}
 	// A section left empty holds no value to check. A PATCH that only nulls the values of a section
 	// the model lacks decodes to one, and removing them must stay possible.
@@ -317,12 +329,7 @@ func (h *Handler) writeOverrideFieldErrors(rw *apiresp.ResponseWriter, w http.Re
 			delete(fields, name)
 		}
 	}
-	fieldErrs := configuration.ValidateConfigBody(model, fields)
-	if len(fieldErrs) == 0 {
-		return false
-	}
-	rw.WriteValidationError(w, r, map[string]any{"fields": fieldErrs})
-	return true
+	return configuration.ValidateConfigBody(model, fields), nil
 }
 
 func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) {
