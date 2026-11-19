@@ -578,12 +578,16 @@ func parseApplicableDesiredConfig(raw string) (*DeviceConfiguration, error) {
 	return &config, nil
 }
 
-// CheckDesiredConfigComplete returns ErrUnsupportedSettings when a stored desired configuration holds
-// a field the typed configuration drops on decode. A read that hands the configuration out, such as a
-// download, calls it so a lossy decode is never presented as the whole configuration.
-func CheckDesiredConfigComplete(raw string) error {
-	_, err := parseApplicableDesiredConfig(raw)
-	return err
+// StoredDesiredConfig decodes the desired configuration stored with a device, for a read that hands
+// it out, such as a download. It returns ErrNoDesiredConfig when the device has none, and
+// ErrUnsupportedSettings when the typed configuration would drop a field on decode, so a lossy
+// decode is never presented as the whole configuration. It works on the value the caller already
+// read, so the answer and the configuration come from one snapshot.
+func StoredDesiredConfig(raw string) (*DeviceConfiguration, error) {
+	if !hasDesiredConfig(raw) {
+		return nil, ErrNoDesiredConfig
+	}
+	return parseApplicableDesiredConfig(raw)
 }
 
 func (s *ConfigurationService) RecomputeDesiredConfig(deviceID uint) error {

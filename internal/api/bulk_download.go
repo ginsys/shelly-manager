@@ -74,8 +74,10 @@ func (h *Handler) BulkDownloadConfigs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// bulkDownloadEntry reads one device. RequireDesiredConfig comes first, so a device with an empty
-// desired configuration is reported as having none and not as having no settings.
+// bulkDownloadEntry reads one device. Everything about its configuration is decided on the one
+// stored value read with the device: no desired configuration, a configuration the typed model would
+// truncate, and the configuration itself. A device with an empty desired configuration is reported
+// as having none and not as having no settings.
 func (h *Handler) bulkDownloadEntry(id uint) bulkDownloadEntry {
 	entry := bulkDownloadEntry{DeviceID: id, Status: bulkDownloadError}
 	device, err := h.Service.DB.GetDevice(id)
@@ -86,23 +88,15 @@ func (h *Handler) bulkDownloadEntry(id uint) bulkDownloadEntry {
 	entry.DeviceName = device.Name
 	entry.MAC = device.MAC
 
-	svc := h.ConfigService.ConfigurationSvc
-	if err = svc.RequireDesiredConfig(id); err != nil {
-		if errors.Is(err, configuration.ErrNoDesiredConfig) {
-			entry.Error = "no desired configuration is set for this device"
-			return entry
-		}
-		return h.bulkDownloadUnreadable(entry, err)
-	}
-	if err = configuration.CheckDesiredConfigComplete(device.DesiredConfig); err != nil {
-		if errors.Is(err, configuration.ErrUnsupportedSettings) {
-			entry.Error = "the stored configuration has settings this version does not know, so it cannot be downloaded completely"
-			return entry
-		}
-		return h.bulkDownloadUnreadable(entry, err)
-	}
-	config, _, err := svc.GetDesiredConfig(id)
-	if err != nil {
+	config, err := configuration.StoredDesiredConfig(device.DesiredConfig)
+	switch {
+	case errors.Is(err, configuration.ErrNoDesiredConfig):
+		entry.Error = "no desired configuration is set for this device"
+		return entry
+	case errors.Is(err, configuration.ErrUnsupportedSettings):
+		entry.Error = "the stored configuration has settings this version does not know, so it cannot be downloaded completely"
+		return entry
+	case err != nil:
 		return h.bulkDownloadUnreadable(entry, err)
 	}
 	maskSecrets(config)
