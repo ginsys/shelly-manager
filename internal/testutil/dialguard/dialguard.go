@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -37,9 +38,18 @@ func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	case "unix", "unixgram", "unixpacket":
 		return (&net.Dialer{}).DialContext(ctx, network, addr)
 	}
-	host, _, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr
+	}
+	if host == "localhost" && err == nil {
+		// Never hand the name to the resolver: with "hosts: dns files" it would ask DNS first and
+		// record a refusal. The loopback address is what /etc/hosts gives it anyway.
+		loopback := "127.0.0.1"
+		if strings.HasSuffix(network, "6") {
+			loopback = "::1"
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(loopback, port))
 	}
 	// netip accepts an IPv6 zone ("::1%lo"), which net.ParseIP does not.
 	if ip, parseErr := netip.ParseAddr(host); host == "localhost" || (parseErr == nil && ip.IsLoopback()) {
@@ -69,8 +79,8 @@ func refuse(msg string) error {
 func Install() {
 	netguard.Set(Dial)
 	http.DefaultTransport = &http.Transport{DialContext: Dial}
-	// PreferGo stays on: the Go resolver reads /etc/hosts before it dials a server, so localhost
-	// resolves without a query, while the cgo resolver would bypass Dial altogether.
+	// PreferGo stays on: the cgo resolver would bypass Dial altogether. A dial to localhost never
+	// reaches the resolver (see Dial).
 	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: resolve}
 }
 
