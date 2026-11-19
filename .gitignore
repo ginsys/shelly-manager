@@ -6,11 +6,12 @@ bin/
 *.so
 *.dylib
 
-# Build artifacts
+# Build artifacts. The binary names are anchored to the repository root: a bare name
+# would also match the cmd/<name>/ directories and ignore every new file in them.
 bin/
-shelly-manager
-shelly-provisioner
-shelly-test
+/shelly-manager
+/shelly-provisioner
+/shelly-test
 
 # Test binary, built with `go test -c`
 *.test
