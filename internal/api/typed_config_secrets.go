@@ -169,16 +169,17 @@ func keepOmittedRawSecrets(incoming, stored json.RawMessage) (json.RawMessage, e
 // client's own.
 func keepOmittedValue(in, stored map[string]any) error {
 	for k, sv := range stored {
-		cur, present := in[k]
+		// A key is present under any spelling that folds to it, as the restore reads it.
+		key, present := redact.MatchKey(in, k)
 		switch {
 		case !present:
 			if redact.HoldsSecret(k, sv) {
 				in[k] = sv
 			}
-		case cur == nil:
+		case in[key] == nil:
 			// null removes
 		default:
-			if err := keepOmittedIn(cur, sv); err != nil {
+			if err := keepOmittedIn(in[key], sv); err != nil {
 				return err
 			}
 		}
