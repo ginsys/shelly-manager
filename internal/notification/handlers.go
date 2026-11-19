@@ -254,10 +254,7 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A failed send's error quotes the destination, so cut the channel's credentials out of it
-	// before the channel's own config is masked.
 	for i := range history {
-		history[i].Error = scrubText(history[i].Error, history[i].Channel.Config)
 		history[i].Channel = maskedChannel(history[i].Channel)
 	}
 

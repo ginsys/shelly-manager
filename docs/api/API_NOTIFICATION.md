@@ -6,8 +6,8 @@ All endpoints return the standard API wrapper with `success|error`, `data`, opti
 
 **Admin key.** If the server has an admin key configured, every notification route needs it
 (`Authorization: Bearer <key>` or `X-API-Key: <key>`) and answers 401 `UNAUTHORIZED` without it. With no
-admin key configured the routes are open. Even with the key, a read never returns a stored credential (see
-"Secrets in a channel's config").
+admin key configured the routes are open. Even with the key, a read never returns a credential stored in a
+channel's config, with one limit for delivery error texts (see "Secrets in a channel's config").
 
 ## Endpoints
 
@@ -62,15 +62,16 @@ object under a secret name is secret as a whole.
   replaces the stored one. A credential left out is removed: an update replaces the whole config, as before.
   The placeholder is never stored: where nothing is stored for it, it is dropped, and a channel left without a
   required `url` or `webhook_url` is refused. A stored config with two keys that differ only in case
-  (`URL` and `url`) restores neither: send the value. A config that repeats a member and also carries
-  `********` is refused. A secret list (`"token_list": ["a", "b"]`) comes back whole only
+  (`URL` and `url`) restores neither: send the value. A config that repeats a member name, in any case
+  spelling and at any depth, is refused with 400 on create and on update, because the server reads such a text in
+  member order. A secret list (`"token_list": ["a", "b"]`) comes back whole only
   when every entry is `********` and the stored list has as many entries; any other `********` inside a list is
   dropped. To change one entry, send the whole list with its new values.
-- **Errors.** A failed delivery's error text quotes its destination. `GET /notifications/history` (`error`) and
-  `POST /notifications/channels/{id}/test` (the 500 message) show `********` where the text held a stored
-  credential, and `********` for the request URL of a failed request (`Post "<url>": ...`) whatever way Go
-  spelled it. An `error` stored before a channel's URL changed keeps the old URL in any other place the text
-  holds it, because the cut of stored values uses the current config.
+- **Limit: delivery errors.** A failed delivery's error text quotes the request URL, and that text is stored in
+  the history row (`error` in `GET /notifications/history`) and returned as the message of a failed
+  `POST /notifications/channels/{id}/test`. These texts are not masked yet, so a token that sits in the URL
+  stays readable there (the channel's own `config` is masked). Keeping the URL out of the stored text is
+  tracked in ginsys/shelly-manager#652.
 
 ## Rule object (selected fields)
 

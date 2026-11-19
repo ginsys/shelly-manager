@@ -56,7 +56,11 @@ func NewService(db *gorm.DB, logger *logging.Logger, emailConfig EmailSMTPConfig
 
 // CreateChannel creates a new notification channel
 func (s *Service) CreateChannel(channel *NotificationChannel) error {
-	channel.Config = restoreConfig(channel.Config, nil) // nothing is stored, so a placeholder is dropped
+	restored, err := restoreConfig(channel.Config, nil) // nothing is stored, so a placeholder is dropped
+	if err != nil {
+		return fmt.Errorf("invalid channel configuration: %w", err)
+	}
+	channel.Config = restored
 	if err := s.validateChannelConfig(channel); err != nil {
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
@@ -93,7 +97,11 @@ func (s *Service) UpdateChannel(channelID uint, updates *NotificationChannel) er
 	if err := s.db.First(&stored, channelID).Error; err != nil && err != gorm.ErrRecordNotFound {
 		return fmt.Errorf("failed to get channel: %w", err)
 	}
-	updates.Config = restoreConfig(updates.Config, stored.Config)
+	restored, err := restoreConfig(updates.Config, stored.Config)
+	if err != nil {
+		return fmt.Errorf("invalid channel configuration: %w", err)
+	}
+	updates.Config = restored
 
 	if err := s.validateChannelConfig(updates); err != nil {
 		return fmt.Errorf("invalid channel configuration: %w", err)
@@ -280,8 +288,7 @@ func (s *Service) TestChannel(ctx context.Context, channelID uint) error {
 		CreatedAt:   time.Now(),
 	}
 
-	// The failed send's error quotes the destination, and the handler returns it as its message.
-	return scrubError(s.deliverNotification(ctx, &channel, history), channel.Config)
+	return s.deliverNotification(ctx, &channel, history)
 }
 
 // validateChannelConfig validates channel configuration
