@@ -1,3 +1,4 @@
+import type { AxiosResponse } from 'axios'
 import api from './client'
 import { errorEnvelopeMessage } from './errorBody'
 import type { APIResponse, Metadata } from './types'
@@ -266,29 +267,16 @@ export async function downloadBackup(id: string): Promise<Blob> {
   return res.data
 }
 
-export async function downloadBackupWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
-  const res = await api.get(`/export/backup/${id}/download`, { responseType: 'blob' })
-  const cd = (res.headers?.['content-disposition'] || res.headers?.['Content-Disposition']) as string | undefined
-  let filename: string | undefined
-  if (cd) {
-    const match = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
-    filename = decodeURIComponent((match?.[1] || match?.[2] || '').trim()) || undefined
-  }
-  return { blob: res.data, filename }
-}
-
-// Generic export download (content or backup)
-export async function downloadExport(id: string): Promise<Blob> {
-  const res = await api.get(`/export/${id}/download`, { responseType: 'blob' })
-  return res.data
-}
-
-export async function downloadExportWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
+// A download with the file name the server sends. A blob request delivers the server's error envelope
+// as a Blob, so a failure shows that message and not the status text.
+// The caller makes the request, so each route stays a literal the route contract test can read.
+async function downloadBlobWithName(
+  request: () => Promise<AxiosResponse>,
+): Promise<{ blob: Blob; filename?: string }> {
   let res
   try {
-    res = await api.get(`/export/${id}/download`, { responseType: 'blob' })
+    res = await request()
   } catch (e: any) {
-    // a blob request delivers the server's error envelope as a Blob: show its message, not the status text
     const message = await errorEnvelopeMessage(e?.response?.data)
     if (message) throw new Error(message)
     throw e
@@ -300,6 +288,20 @@ export async function downloadExportWithName(id: string): Promise<{ blob: Blob; 
     filename = decodeURIComponent((match?.[1] || match?.[2] || '').trim()) || undefined
   }
   return { blob: res.data, filename }
+}
+
+export function downloadBackupWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
+  return downloadBlobWithName(() => api.get(`/export/backup/${id}/download`, { responseType: 'blob' }))
+}
+
+// Generic export download (content or backup)
+export async function downloadExport(id: string): Promise<Blob> {
+  const res = await api.get(`/export/${id}/download`, { responseType: 'blob' })
+  return res.data
+}
+
+export function downloadExportWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
+  return downloadBlobWithName(() => api.get(`/export/${id}/download`, { responseType: 'blob' }))
 }
 
 export async function listBackups(params: ListBackupsParams = {}): Promise<ListBackupsResult> {

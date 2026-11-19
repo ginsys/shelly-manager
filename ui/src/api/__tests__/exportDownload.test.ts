@@ -5,12 +5,16 @@ vi.mock('../client', () => ({
 }))
 
 import api from '../client'
-import { downloadExportWithName } from '../export'
+import { downloadBackupWithName, downloadExportWithName } from '../export'
 
 const envelope = (message: string) =>
   new Blob([JSON.stringify({ success: false, error: { code: 'UNAUTHORIZED', message } })])
 
-describe('downloadExportWithName', () => {
+// A content export and a backup download share one request shape and one failure shape.
+describe.each([
+  ['downloadExportWithName', downloadExportWithName, '/export/e1/download'],
+  ['downloadBackupWithName', downloadBackupWithName, '/export/backup/e1/download'],
+] as const)('%s', (_name, download, path) => {
   beforeEach(() => {
     ;(api.get as any).mockReset()
   })
@@ -21,8 +25,8 @@ describe('downloadExportWithName', () => {
       data: blob,
       headers: { 'content-disposition': 'attachment; filename="export-1.json"' },
     })
-    expect(await downloadExportWithName('e1')).toEqual({ blob, filename: 'export-1.json' })
-    expect(api.get).toHaveBeenCalledWith('/export/e1/download', { responseType: 'blob' })
+    expect(await download('e1')).toEqual({ blob, filename: 'export-1.json' })
+    expect(api.get).toHaveBeenCalledWith(path, { responseType: 'blob' })
   })
 
   it('throws the message of the server error envelope, which a blob request delivers as a Blob', async () => {
@@ -31,7 +35,7 @@ describe('downloadExportWithName', () => {
         response: { status: 401, data: envelope('Admin authorization required') },
       }),
     )
-    const err = await downloadExportWithName('e1').catch((e) => e)
+    const err = await download('e1').catch((e) => e)
     expect(err.message).toBe('Admin authorization required')
     expect(err.message).not.toContain('status code')
   })
@@ -39,12 +43,12 @@ describe('downloadExportWithName', () => {
   it('rethrows the original error when the body is not an error envelope', async () => {
     const original = Object.assign(new Error('Network Error'), { response: { data: new Blob(['not json']) } })
     ;(api.get as any).mockRejectedValue(original)
-    await expect(downloadExportWithName('e1')).rejects.toBe(original)
+    await expect(download('e1')).rejects.toBe(original)
   })
 
   it('rethrows the original error when there is no response', async () => {
     const original = new Error('Network Error')
     ;(api.get as any).mockRejectedValue(original)
-    await expect(downloadExportWithName('e1')).rejects.toBe(original)
+    await expect(download('e1')).rejects.toBe(original)
   })
 })
