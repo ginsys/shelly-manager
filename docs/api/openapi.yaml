@@ -72,6 +72,11 @@ components:
     # Common Response Wrapper
     APIResponse:
       type: object
+      description: >-
+        The envelope of a response. `success` and `timestamp` are always sent.
+        `data` is left out when a route has nothing to return, `error` is sent
+        on a failure only, and `meta` and `request_id` are optional.
+      required: [success, timestamp]
       properties:
         success:
           type: boolean
@@ -438,9 +443,8 @@ components:
         device_name:
           type: string
         last_synced:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: >-
             Always null: drift compares with the desired configuration, which
             has no sync time.
@@ -889,6 +893,7 @@ components:
     VersionInfo:
       type: object
       description: The `data` payload of the version response
+      required: [api_version, server_started_at]
       properties:
         api_version:
           type: string
@@ -1302,7 +1307,9 @@ paths:
           description: >-
             Normalized current device configuration. The read stores nothing:
             the stored configuration, its sync status and the history stay as
-            they were.
+            they were. An `id` that is not a number also answers HTTP 200, with
+            the body `{"success": false, "error": "Invalid device ID"}`: no
+            `timestamp`, and `error` is a string and not an `APIError`.
           content:
             application/json:
               schema:
@@ -3060,11 +3067,29 @@ paths:
         - ApiKeyAuth: []
       responses:
         '200':
-          description: Provisioning status
+          description: >-
+            Provisioning status. The body is this object itself, not the
+            `APIResponse` envelope, and it is a fixed placeholder today.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIResponse'
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: idle
+                  devices:
+                    type: array
+                    items:
+                      type: string
+                  last_run:
+                    type: [string, 'null']
+                    format: date-time
+                  next_run:
+                    type: [string, 'null']
+                    format: date-time
+                  auto_provision:
+                    type: boolean
 
   /api/v1/provisioning/provision:
     post:
@@ -3087,11 +3112,20 @@ paths:
                     type: integer
       responses:
         '200':
-          description: Provisioning result
+          description: >-
+            Provisioning result. The body is this object itself, not the
+            `APIResponse` envelope, and it is a fixed placeholder today: the
+            handler reads no request body and starts nothing.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIResponse'
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: provisioning_started
+                  message:
+                    type: string
 
   /api/v1/provisioner/agents:
     get:
@@ -3359,11 +3393,15 @@ paths:
         - ApiKeyAuth: []
       responses:
         '200':
-          description: DHCP reservations
+          description: >-
+            DHCP reservations. The body is a bare JSON array, not the
+            `APIResponse` envelope, and it is always empty today.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIResponse'
+                type: array
+                items:
+                  type: object
 
   # Admin Endpoints
   /api/v1/admin/rotate-admin-key:
