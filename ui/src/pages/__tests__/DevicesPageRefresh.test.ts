@@ -9,7 +9,6 @@ import type { Device } from '@/api/types'
 
 vi.mock('@/api/devices', () => ({
   listDevices: vi.fn(),
-  getDevice: vi.fn(),
   createDevice: vi.fn(),
   updateDevice: vi.fn(),
   deleteDevice: vi.fn(),

@@ -219,9 +219,16 @@ reachability from the route table (ginsys/shelly-manager#646).
   for it. Export to the device was retired in favour of apply (ginsys/shelly-manager#604).
 - **Bulk operations** work from the devices page: a select column, a select-all for the visible rows
   and a Bulk Operations button that opens the dialog for exactly the picked ids
-  (ginsys/shelly-manager#136). The selection is kept by device id across page changes.
-- **Devices list refresh:** a Refresh button and an `R` shortcut reload the list and keep the
-  selection; a list answer that a newer load has overtaken is dropped (ginsys/shelly-manager#80).
+  (ginsys/shelly-manager#136). The selection is kept by device id across page changes. Opening the
+  dialog checks the ticked devices that are not on the loaded page with one unpaged list request
+  (`page_size` 0) and drops those the server no longer lists, with one line under the selection
+  count. A failed request keeps every device. Ticked devices on the loaded page are not asked about:
+  the loaded rows are the truth for them (ginsys/shelly-manager#618).
+- **Devices list refresh:** a Refresh button and an `R` shortcut reload the list; the rows stay on
+  screen (dimmed, `aria-busy`) while it runs, and only the first load shows the loading text. The
+  selection is kept, and a refresh copies the new name and address into ticked devices that are on
+  the page. A list answer that a newer load has overtaken is dropped
+  (ginsys/shelly-manager#80, ginsys/shelly-manager#618).
 - **Device login:** the device page has a Device Login card for the device's own credentials
   (`PUT /devices/{id}/config/auth`).
 - **Metrics** use a WebSocket stream with a REST fallback; the message contract is typed in
@@ -261,7 +268,6 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 |-------|---------|
 | ginsys/shelly-manager#632 | Admin key dialog: a delayed 401 can reopen it after Cancel |
 | ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
-| ginsys/shelly-manager#618 | Keep rows while refreshing; reconcile the bulk selection with the refreshed list |
 | ginsys/shelly-manager#614 | Replace the remaining `alert()` calls with `useError` and `ErrorDisplay` |
 | ginsys/shelly-manager#646 | Move the route table out of `main.ts` so a test can check every route is reachable |
 | ginsys/shelly-manager#255 | Harden admin key rotation UX |
