@@ -549,12 +549,13 @@ The default limit counts every request of a client IP. A path limit counts only 
 own paths, per client IP, with its own one-hour window. `/devices/{id}/control` counts per device: 100
 calls an hour for each device id. Going over a path limit refuses the calls to that path until its
 window resets and blocks no other route. Going over the default limit refuses the client on every
-route for 15 minutes. Every refusal is `429 RATE_LIMIT_EXCEEDED` with `X-RateLimit-Remaining: 0`. A
-refusal by a path limit shows that limit in `X-RateLimit-Limit`, and its `X-RateLimit-Reset` (Unix
-seconds) and `meta.retry_after` (seconds) name the end of that path limit's window for the client. A
-refusal by the default limit shows the default limit, and both name a moment one window from now. A
-request that passes carries no `X-RateLimit-*` header. When several path patterns match, the longest
-wins.
+route for 15 minutes, and after that until its window resets. Every refusal is
+`429 RATE_LIMIT_EXCEEDED` with `X-RateLimit-Remaining: 0`. A refusal by a path limit shows that limit
+in `X-RateLimit-Limit`; a refusal by the default limit shows the default limit. In both,
+`X-RateLimit-Reset` (Unix seconds) and `meta.retry_after` (seconds) name the first whole second at
+which the client is let in again: after the path limit's window, or after the later of the default
+limit's window and the 15-minute block. A request that passes carries no `X-RateLimit-*` header. When
+several path patterns match, the longest wins.
 
 ### Client Requirements
 - Every request needs a `User-Agent` header. An empty one is treated as an
