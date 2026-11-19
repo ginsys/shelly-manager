@@ -232,6 +232,20 @@ describe('DeviceConfigPage shows no browser dialog', () => {
     expect(alertSpy).not.toHaveBeenCalled()
   })
 
+  it('shows the result of an apply that worked and the failed reload that follows as a load failure', async () => {
+    api.applyDeviceConfigNew.mockResolvedValue({ success: true, applied_count: 2, failed_count: 0 } as any)
+    const { wrapper } = await mountPage()
+    api.getConfigStatusNew.mockRejectedValue(new Error('status unavailable'))
+
+    await button(wrapper, 'Apply Config').trigger('click')
+    await flushPromises()
+
+    // The device was changed, so its result shows; the failed read after it is a failed load.
+    expect(wrapper.get('[data-testid="apply-result"]').text()).toContain('Applied successfully. 2 field(s) updated.')
+    expect(wrapper.find('[data-testid="config-action-error"]').exists()).toBe(false)
+    expect(wrapper.get('.card.state.error').text()).toContain('status unavailable')
+  })
+
   it('removes the result card with its Dismiss button', async () => {
     api.applyDeviceConfigNew.mockResolvedValue({ success: true, applied_count: 1, failed_count: 0 } as any)
     const { wrapper } = await mountPage()

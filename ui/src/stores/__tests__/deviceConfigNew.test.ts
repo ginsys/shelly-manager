@@ -181,7 +181,7 @@ describe('DeviceConfigNew Store', () => {
       })
     })
 
-    it('should handle errors when adding template', async () => {
+    it('should throw when adding a template fails, and leave the load error alone', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Template not found'
 
@@ -189,7 +189,8 @@ describe('DeviceConfigNew Store', () => {
 
       await expect(store.addTemplate(123, 999)).rejects.toThrow(errorMessage)
 
-      expect(store.error).toBe(errorMessage)
+      // The caller shows an action failure; `error` is for a load that failed.
+      expect(store.error).toBeNull()
       expect(store.loading).toBe(false)
     })
   })
@@ -211,7 +212,7 @@ describe('DeviceConfigNew Store', () => {
       expect(store.error).toBeNull()
     })
 
-    it('should handle errors when removing template', async () => {
+    it('should throw when removing a template fails, and set no store error', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Template not assigned'
 
@@ -219,7 +220,7 @@ describe('DeviceConfigNew Store', () => {
 
       await expect(store.removeTemplate(123, 999)).rejects.toThrow(errorMessage)
 
-      expect(store.error).toBe(errorMessage)
+      expect(store.error).toBeNull()
     })
   })
 
@@ -333,7 +334,7 @@ describe('DeviceConfigNew Store', () => {
       expect(store.desiredConfig).toEqual(result.desired_config)
     })
 
-    it('should handle errors when saving overrides', async () => {
+    it('should throw when saving overrides fails, and set no store error', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Validation failed'
 
@@ -341,7 +342,7 @@ describe('DeviceConfigNew Store', () => {
 
       await expect(store.saveOverrides(123, {})).rejects.toThrow(errorMessage)
 
-      expect(store.error).toBe(errorMessage)
+      expect(store.error).toBeNull()
     })
   })
 
@@ -359,7 +360,7 @@ describe('DeviceConfigNew Store', () => {
       expect(store.overrides).toEqual(patched)
     })
 
-    it('should handle errors when patching overrides', async () => {
+    it('should throw when patching overrides fails, and set no store error', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Invalid patch'
 
@@ -367,7 +368,7 @@ describe('DeviceConfigNew Store', () => {
 
       await expect(store.patchOverrides(123, {})).rejects.toThrow(errorMessage)
 
-      expect(store.error).toBe(errorMessage)
+      expect(store.error).toBeNull()
     })
   })
 
@@ -384,7 +385,7 @@ describe('DeviceConfigNew Store', () => {
       expect(store.overrides).toBeNull()
     })
 
-    it('should handle errors when clearing overrides', async () => {
+    it('should throw when clearing overrides fails, and set no store error', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Device not found'
 
@@ -392,7 +393,7 @@ describe('DeviceConfigNew Store', () => {
 
       await expect(store.clearOverrides(123)).rejects.toThrow(errorMessage)
 
-      expect(store.error).toBe(errorMessage)
+      expect(store.error).toBeNull()
     })
   })
 
@@ -450,22 +451,22 @@ describe('DeviceConfigNew Store', () => {
   })
 
   describe('apply', () => {
-    it('should apply config successfully', async () => {
+    it('should apply config and return the result, without reading the status itself', async () => {
       const store = useDeviceConfigNewStore()
 
       mockApi.applyDeviceConfigNew.mockResolvedValue(mockApplyData)
-      mockApi.getConfigStatusNew.mockResolvedValue(mockStatusData)
 
       const result = await store.apply(123)
 
       expect(mockApi.applyDeviceConfigNew).toHaveBeenCalledWith(123)
-      expect(mockApi.getConfigStatusNew).toHaveBeenCalledWith(123)
+      // The caller refreshes the page data after an apply; the store does not read the status twice.
+      expect(mockApi.getConfigStatusNew).not.toHaveBeenCalled()
       expect(store.lastApply).toEqual(mockApplyData)
-      expect(store.status).toEqual(mockStatusData)
+      expect(store.status).toBeNull()
       expect(result).toEqual(mockApplyData)
     })
 
-    it('should handle errors when applying config', async () => {
+    it('should throw when applying fails, and set no store error', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Apply failed'
 
@@ -473,7 +474,7 @@ describe('DeviceConfigNew Store', () => {
 
       await expect(store.apply(123)).rejects.toThrow(errorMessage)
 
-      expect(store.error).toBe(errorMessage)
+      expect(store.error).toBeNull()
     })
   })
 
@@ -508,7 +509,7 @@ describe('DeviceConfigNew Store', () => {
       expect(result.differences).toHaveLength(1)
     })
 
-    it('should handle errors when verifying config', async () => {
+    it('should throw when verifying fails, and set no store error', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Device unreachable'
 
@@ -516,7 +517,7 @@ describe('DeviceConfigNew Store', () => {
 
       await expect(store.verify(123)).rejects.toThrow(errorMessage)
 
-      expect(store.error).toBe(errorMessage)
+      expect(store.error).toBeNull()
     })
   })
 
@@ -632,15 +633,40 @@ describe('DeviceConfigNew Store', () => {
       expect(store.error).toBeNull()
     })
 
-    it('should preserve error message on failure', async () => {
+    it('should preserve the error message of a failed load', async () => {
       const store = useDeviceConfigNewStore()
       const errorMessage = 'Custom error message'
 
-      mockApi.addDeviceTemplateNew.mockRejectedValue(new Error(errorMessage))
+      mockApi.getDeviceTemplatesNew.mockRejectedValue(new Error(errorMessage))
 
-      await expect(store.addTemplate(123, 2)).rejects.toThrow()
+      await expect(store.refresh(123)).rejects.toThrow()
 
       expect(store.error).toBe(errorMessage)
+    })
+
+    it('should throw when setting templates fails, and set no store error', async () => {
+      const store = useDeviceConfigNewStore()
+
+      mockApi.setDeviceTemplatesNew.mockRejectedValue(new Error('Order refused'))
+
+      await expect(store.setTemplates(123, [2, 1])).rejects.toThrow('Order refused')
+
+      expect(store.error).toBeNull()
+    })
+
+    it('should clear a stale load error when an action starts, and keep a later failed load', async () => {
+      const store = useDeviceConfigNewStore()
+      store.error = 'Previous load error'
+      mockApi.verifyDeviceConfigNew.mockResolvedValue({ match: true } as any)
+
+      await store.verify(123)
+
+      expect(store.error).toBeNull()
+
+      mockApi.getConfigStatusNew.mockRejectedValue(new Error('status unavailable'))
+      await expect(store.fetchStatus(123)).rejects.toThrow('status unavailable')
+
+      expect(store.error).toBe('status unavailable')
     })
 
     it('should handle errors without message property', async () => {
