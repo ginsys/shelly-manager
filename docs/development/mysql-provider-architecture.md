@@ -242,7 +242,7 @@ User Config → DSN Validation → SSL Validation → Connection Pool Config →
 3. **SSL Configuration**: Validate SSL settings and certificates
 4. **DSN Construction**: Build complete DSN with security defaults
 5. **Connection Establishment**: Create GORM database instance
-6. **Pool Configuration**: Apply MySQL-specific connection pool settings
+6. **Pool Configuration**: Apply the configured connection pool settings
 7. **Health Check**: Verify connection with ping
 8. **Version Discovery**: Query MySQL version for metadata
 9. **Statistics Initialization**: Initialize performance tracking
@@ -440,11 +440,11 @@ func (m *MySQLProvider) Migrate(models ...interface{}) error {
 
 ### 1. Connection Pool Performance
 
-**Optimized for MySQL**
-- Conservative connection limits (20 max)
-- Frequent connection rotation (30 minutes)
+**Pool defaults** (from the config helper, when the settings are unset)
+- Conservative connection limits (25 max)
+- Regular connection rotation (5 minutes)
 - Minimal idle connections (5)
-- Fast idle timeout (5 minutes)
+- Fast idle timeout (10 minutes)
 
 ### 2. Query Performance
 
