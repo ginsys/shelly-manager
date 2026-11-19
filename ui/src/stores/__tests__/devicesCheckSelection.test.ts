@@ -308,6 +308,28 @@ describe('devices store, checkSelection', () => {
     expect(store.removedFromSelection).toBe(1)
   })
 
+  it('still drops a deleted device when the refresh that was running fails and the old rows stay', async () => {
+    const store = useDevicesStore()
+    vi.mocked(listDevices).mockResolvedValueOnce(answer([device(1, 'Alpha'), device(2, 'Bravo')]))
+    await store.fetchDevices()
+    store.toggleSelect(device(1, 'Alpha'))
+    const refresh = deferred<ReturnType<typeof answer>>()
+    vi.mocked(listDevices).mockReturnValueOnce(refresh.promise as any)
+    const loading = store.fetchDevices()
+    const probe = deferred<Device>()
+    vi.mocked(getDevice).mockReturnValue(probe.promise)
+    const check = store.checkSelection()
+
+    refresh.reject(new Error('boom')) // the old rows, which still list device 1, stay
+    await loading
+    probe.reject(notFound())
+    await check
+
+    expect(store.items.map((d) => d.id)).toEqual([1, 2])
+    expect(store.selectedIds).toEqual([])
+    expect(store.removedFromSelection).toBe(1)
+  })
+
   it('does not let a probe started before a load overwrite what the load put on the page', async () => {
     const store = useDevicesStore()
     vi.mocked(listDevices).mockResolvedValueOnce(answer([device(2, 'Bravo')]))
