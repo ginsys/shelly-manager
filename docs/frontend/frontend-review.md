@@ -237,6 +237,15 @@ reachability from the route table (ginsys/shelly-manager#646).
 - **Admin key:** `ui/src/api/client.ts` reads the admin key from `VITE_ADMIN_KEY` (set at build
   time) or `window.__ADMIN_KEY__`. A production build has no supported way to get it today
   (ginsys/shelly-manager#619).
+- **Admin key rotation:** the `/admin` page (`ui/src/pages/AdminSettingsPage.vue`) takes the new key
+  in two password fields and rotates only when both match. A key that starts or ends with a space is
+  refused on the page, because the key travels in a header that drops such spaces and the server
+  would store it as typed. After a rotation `rotateAdminKey` (`ui/src/api/admin.ts`) stores the new key as
+  the entered key, so this tab sends it at once, ahead of `VITE_ADMIN_KEY` and `window.__ADMIN_KEY__`.
+  The page says the change is in memory only: a server restart brings back the configured key, and
+  other clients keep failing until they are given the new key. The server has no rule about what
+  counts as a usable key, and making a rotation durable needs a storage decision that no ticket
+  carries yet.
 
 ---
 
@@ -267,11 +276,9 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 
 | Issue | Subject |
 |-------|---------|
-| ginsys/shelly-manager#632 | Admin key dialog: a delayed 401 can reopen it after Cancel |
 | ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
 | ginsys/shelly-manager#614 | Replace the remaining `alert()` calls with `useError` and `ErrorDisplay` |
 | ginsys/shelly-manager#646 | Move the route table out of `main.ts` so a test can check every route is reachable |
-| ginsys/shelly-manager#255 | Harden admin key rotation UX |
 | ginsys/shelly-manager#139 | Polish export/import detail pages |
 | ginsys/shelly-manager#134 | Metrics REST response-shape alignment |
 | ginsys/shelly-manager#290 | Design the plugin configuration model (plugins stay read-only until then) |
