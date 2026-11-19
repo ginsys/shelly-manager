@@ -247,34 +247,31 @@ RateLimitByPath: map[string]int{
 }
 ```
 
+A key matches a request when the path starts with it, and `{id}` stands for one path segment. When
+several keys match, the longest wins. A path limit counts only the requests to its own paths, per
+client IP, in its own `RateLimitWindow`. The device control limit counts per device (100 an hour for
+each device id). Going over a path limit refuses that path until its window resets and blocks no
+other route. The global limit still counts every request, including the refused ones.
+
 ### Implementation Details
 
-#### Token Bucket Algorithm
+#### Fixed-Window Counters
+Each client IP has one global counter and one counter per path rule it uses, each with its own
+fixed window. A counter starts at the first request and resets when `RateLimitWindow` has passed.
 ```go
 type clientInfo struct {
-    requests  int
+    requests  int                   // every request: the global limit counts these
     window    time.Time
     blocked   bool
     blockTime time.Time
-}
-
-func (rl *RateLimiter) Allow(clientIP, path string) bool {
-    // Sliding window rate limiting with burst handling
-    if now.Sub(client.window) > rl.config.RateLimitWindow {
-        client.requests = 1
-        client.window = now
-        return true
-    }
-    
-    client.requests++
-    return client.requests <= limit
+    paths     map[string]*pathCount // one counter per path rule (and device, for {id})
 }
 ```
 
 #### Automatic IP Blocking
 ```go
-// Aggressive rate limit violators get blocked
-if client.requests > limit {
+// Going over the global limit blocks the client on every route for 15 minutes
+if client.requests > rl.config.RateLimit {
     client.blocked = true
     client.blockTime = now
     return false

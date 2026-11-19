@@ -220,8 +220,9 @@ func TestSecurityFrameworkIntegration(t *testing.T) {
 		rr2 := httptest.NewRecorder()
 		router.ServeHTTP(rr2, req2)
 
-		// May be rate limited due to IP-based limiting, which is correct behavior
-		assert.True(t, rr2.Code == http.StatusOK || rr2.Code == http.StatusTooManyRequests, "Other endpoints should work or be rate limited")
+		// The control refusal is for the control rule only: it sets no block for other routes, and
+		// five requests are well under the global limit of 10.
+		assert.Equal(t, http.StatusOK, rr2.Code, "a path refusal must not block other endpoints")
 	})
 
 	t.Run("Content Validation Integration", func(t *testing.T) {

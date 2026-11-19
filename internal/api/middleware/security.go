@@ -104,10 +104,18 @@ type RateLimiter struct {
 }
 
 type clientInfo struct {
-	requests  int
+	requests  int // every request of the client in the window: the global limit counts these
 	window    time.Time
 	blocked   bool
 	blockTime time.Time
+	// paths holds one counter per path rule the client has used, keyed by the matched prefix of the
+	// path (see matchRule). A path limit counts only these, never the client's other traffic.
+	paths map[string]*pathCount
+}
+
+type pathCount struct {
+	requests int
+	window   time.Time
 }
 
 // NewRateLimiter creates a new rate limiter instance
@@ -134,12 +142,8 @@ func (rl *RateLimiter) Allow(clientIP, path string) bool {
 	client, exists := rl.clients[clientIP]
 
 	if !exists {
-		rl.clients[clientIP] = &clientInfo{
-			requests: 1,
-			window:   now,
-			blocked:  false,
-		}
-		return true
+		client = &clientInfo{window: now}
+		rl.clients[clientIP] = client
 	}
 
 	// Check if client is currently blocked
@@ -149,28 +153,14 @@ func (rl *RateLimiter) Allow(clientIP, path string) bool {
 
 	// Reset window if expired
 	if now.Sub(client.window) > rl.config.RateLimitWindow {
-		client.requests = 1
+		client.requests = 0
 		client.window = now
 		client.blocked = false
-		return true
 	}
 
-	// Check path-specific limits
-	limit := rl.config.RateLimit
-	for pathPrefix, pathLimit := range rl.config.RateLimitByPath {
-		if strings.Contains(path, strings.ReplaceAll(pathPrefix, "{id}", "")) {
-			if pathLimit < limit {
-				limit = pathLimit
-			}
-			break
-		}
-	}
-
-	// Increment request count
+	// The global limit counts every request of the client and blocks it on every route.
 	client.requests++
-
-	// Check if limit exceeded
-	if client.requests > limit {
+	if client.requests > rl.config.RateLimit {
 		client.blocked = true
 		client.blockTime = now
 
@@ -179,7 +169,7 @@ func (rl *RateLimiter) Allow(clientIP, path string) bool {
 				"client_ip":      clientIP,
 				"path":           path,
 				"requests":       client.requests,
-				"limit":          limit,
+				"limit":          rl.config.RateLimit,
 				"component":      "rate_limiter",
 				"security_event": "rate_limit_exceeded",
 			}).Warn("Rate limit exceeded")
@@ -188,7 +178,86 @@ func (rl *RateLimiter) Allow(clientIP, path string) bool {
 		return false
 	}
 
-	return true
+	return rl.allowPath(client, clientIP, path, now)
+}
+
+// allowPath applies the path rule that matches path, if any. The rule has its own counter and window
+// per client. Going over it refuses this rule's paths until its window resets, and blocks nothing
+// else. The request has already been counted by the global limit.
+func (rl *RateLimiter) allowPath(client *clientInfo, clientIP, path string, now time.Time) bool {
+	limit, key, ok := rl.matchRule(path)
+	if !ok {
+		return true
+	}
+
+	if client.paths == nil {
+		client.paths = make(map[string]*pathCount)
+	}
+	counter := client.paths[key]
+	if counter == nil || now.Sub(counter.window) > rl.config.RateLimitWindow {
+		counter = &pathCount{window: now}
+		client.paths[key] = counter
+	}
+
+	counter.requests++
+	if counter.requests <= limit {
+		return true
+	}
+
+	if rl.logger != nil && rl.config.LogSecurityEvents {
+		rl.logger.WithFields(map[string]any{
+			"client_ip":      clientIP,
+			"path":           path,
+			"rule":           key,
+			"requests":       counter.requests,
+			"limit":          limit,
+			"component":      "rate_limiter",
+			"security_event": "rate_limit_exceeded",
+		}).Warn("Path rate limit exceeded")
+	}
+	return false
+}
+
+// matchRule finds the RateLimitByPath rule for path. A rule matches when the path starts with its
+// key, where {id} stands for one non-empty path segment. The longest matching key wins (ties go to
+// the smaller key), so the result never depends on map order. counterKey is the matched part of the
+// path with the id filled in, for example /api/v1/devices/7/control: a rule with {id} counts per
+// device.
+func (rl *RateLimiter) matchRule(path string) (limit int, counterKey string, ok bool) {
+	bestKey := ""
+	for key, keyLimit := range rl.config.RateLimitByPath {
+		matched, found := matchPathKey(key, path)
+		if !found {
+			continue
+		}
+		if !ok || len(key) > len(bestKey) || (len(key) == len(bestKey) && key < bestKey) {
+			bestKey, limit, counterKey, ok = key, keyLimit, matched, true
+		}
+	}
+	return limit, counterKey, ok
+}
+
+// matchPathKey reports whether path starts with key, with {id} matching one non-empty segment, and
+// returns the matched part of path.
+func matchPathKey(key, path string) (string, bool) {
+	pos := 0
+	for i, part := range strings.Split(key, "{id}") {
+		if i > 0 {
+			segment := strings.IndexByte(path[pos:], '/')
+			if segment < 0 {
+				segment = len(path) - pos
+			}
+			if segment == 0 {
+				return "", false
+			}
+			pos += segment
+		}
+		if !strings.HasPrefix(path[pos:], part) {
+			return "", false
+		}
+		pos += len(part)
+	}
+	return path[:pos], true
 }
 
 // cleanup removes old client entries
