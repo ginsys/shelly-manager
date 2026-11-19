@@ -25,7 +25,7 @@
       </template>
       <template #row="{ row }">
         <td>{{ new Date(row.created_at).toLocaleString() }}</td>
-        <td>{{ row.export_id }}</td>
+        <td><router-link :to="`/export/${row.export_id}`">{{ row.export_id }}</router-link></td>
         <td>{{ row.plugin_name }}</td>
         <td>{{ row.format }}</td>
         <td>{{ row.success ? 'Yes':'No' }}</td>

@@ -1,0 +1,2 @@
+Added
+- The web UI top bar now reaches every page. New entries: Templates, and Drift, Notifications and Provisioning menus next to Export & Import, so 15 pages that could be opened only by typing the URL are one click away. The Export ID and Import ID in the history tables open the export and import detail pages. The menus work from the keyboard: a menu stays open while focus moves into its items, and Escape closes it and returns focus to its button (Tab used to close the Export & Import menu before any item could be reached). Fixes ginsys/shelly-manager#641.

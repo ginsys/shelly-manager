@@ -57,36 +57,57 @@ The Shelly Manager UI provides a comprehensive, user-friendly interface for mana
 
 ### Main Navigation
 
-The Shelly Manager UI follows a consistent navigation pattern:
+Every page is reached from the top bar, or from a page the top bar reaches. A menu opens on hover,
+or on a click or Enter on its button; Tab moves into its items, and Escape closes it and returns
+to its button.
 
 ```
-Header Navigation:
-├── Dashboard
-├── Devices
-├── Templates
-├── Export/Import ⭐ NEW
-│   ├── Export Operations
-│   ├── Import Operations
-│   ├── Plugin Management
-│   └── History & Statistics
-├── Metrics ⭐ NEW
-├── Notifications ⭐ NEW
-└── Settings
+Top bar:
+├── Devices                      /
+│   └── a device                 /devices/:id (from the list), with its configuration and history
+├── Templates                    /templates
+│   └── a template               /templates/:id (from the list)
+├── Drift ▼
+│   ├── Schedules                /drift/schedules
+│   ├── Reports                  /drift/reports
+│   └── Trends                   /drift/trends
+├── Notifications ▼
+│   ├── Channels                 /notifications/channels
+│   │   └── a channel            /notifications/channels/:id (Edit, from the list)
+│   ├── Rules                    /notifications/rules
+│   └── History                  /notifications/history
+├── Provisioning ▼
+│   ├── Dashboard                /provisioning
+│   ├── Tasks                    /provisioning/tasks
+│   │   └── a task               /provisioning/tasks/:id (View, from the list)
+│   └── Agents                   /provisioning/agents
+├── Export & Import ▼
+│   ├── Backup Management        /export/backup
+│   ├── GitOps Export            /export/gitops
+│   ├── Export History           /export/history
+│   │   └── an export            /export/:id (the Export ID, from the list)
+│   ├── Import History           /import/history
+│   │   └── an import            /import/:id (the Import ID, from the list)
+├── Plugins                      /plugins
+├── Metrics                      /dashboard
+└── Admin                        /admin
 ```
+
+The menus are listed in `ui/src/layouts/MainLayout.vue` and drawn by `ui/src/components/NavMenu.vue`.
+A new page needs an entry there, or a link from a page that has one.
 
 ### Export/Import Section
 
 #### Navigation Structure
-- **Export Operations**: Create and manage export operations
-- **Import Operations**: Upload and process import files
-- **Plugin Management**: Configure and manage export/import plugins
-- **History & Statistics**: View operation history and analytics
+- **Backup Management** and **GitOps Export**: create exports
+- **Export History** and **Import History**: past operations, with their statistics
+- **Plugin Management**: not in this menu; it is the top-level **Plugins** page
 
 #### Breadcrumb Navigation
 ```
-Home > Export/Import > Export Operations > Create Export
-Home > Export/Import > Import Operations > Upload File
-Home > Export/Import > Plugin Management > Configure Terraform
+Home > Export & Import > Backup Management
+Home > Export & Import > Export History > Export Details
+Home > Export & Import > Import History > Import Details
 ```
 
 ### Responsive Layout
