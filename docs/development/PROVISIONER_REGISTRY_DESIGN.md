@@ -317,12 +317,20 @@ Three details matter:
    claims tasks and receives their `config`. So the claim and the task status
    update add `AND EXISTS (SELECT 1 FROM provisioner_agents WHERE agent_id = ?
    AND token_hash = ?)` (skipped for a caller that holds the admin key), and a
-   token replaced a moment earlier updates zero rows. The discovered-devices
-   report inserts into a table that has no such link, so a request that passed
-   the check just before a replacement can still finish. That window is one
-   request long. The note states it as a change from today and does not close it. The number of tasks per poll is small. A
-   side effect: the database can order the result by `priority` and
-   `created_at`, where the map walk today is in random order.
+   token replaced a moment earlier updates zero rows. This **narrows the window
+   to one statement and does not close it**. On PostgreSQL the `EXISTS` reads a
+   statement snapshot, so a replacement that commits while the update runs can
+   still be missed. The discovered-devices report inserts into a table that has
+   no such link, so a request that passed the check just before a replacement
+   can still finish. So for the claim, the status update and the report, the
+   proposal changes today's behaviour: a request that began before a token was
+   replaced may finish after it, for the length of one request. Closing that
+   needs a row lock on the agent row shared by the register and the claim
+   (`SELECT ... FOR UPDATE`, which SQLite does not have, but SQLite has one
+   writer at a time). The note leaves that choice to the build plan.
+   The number of tasks per poll is small. A side effect: the database can order
+   the result by `priority` and `created_at`, where the map walk today is in
+   random order.
 3. **`last_seen` is written on every poll.** One agent polling every 30 seconds
    is 2,880 writes a day, and every 600 seconds is 144. For a few agents this is
    negligible, and the note does not propose a write throttle.
@@ -549,8 +557,16 @@ above.
 - A rolling update (`maxSurge: 1`, `maxUnavailable: 0` in the production
   overlay) runs old and new pods together. Requests that land on an old pod use
   its memory, and on a new pod use the database. During the roll an agent may
-  move between the two and register more than once. It settles when the last old
-  pod stops.
+  move between the two and register more than once. It can then be locked out:
+  it registers on the database, loses that token when a poll lands on an old
+  pod (the client clears the token on a 401 or 404, `api_client.go:180-188`) and
+  registers there instead. After the last old pod stops, its token from the old
+  pod's memory is unknown (401), and its next register finds the online
+  database row and gets 409 (`provisioner_handlers.go:153-157`). It then waits
+  for the rest of the 5 minutes since that row was last seen, plus up to one
+  poll interval for the retry (600 seconds in the shipped Kubernetes agent).
+  Slice 1 does not remove this wait, because the silence rule stays until
+  slice 3.
 - An old agent binary works with the new manager. A new agent binary works with
   an old manager. No API field changes.
 
