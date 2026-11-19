@@ -636,6 +636,12 @@ func (h *Handler) VerifyDeviceNewConfig(w http.ResponseWriter, r *http.Request) 
 
 	result, err := h.Service.VerifyDesiredConfig(r.Context(), uint(id))
 	if err != nil {
+		// Nothing to compare the device with: 404 with the reason, as the drift route answers.
+		// Handled here and not in writeConfigDeviceError, which the apply route shares.
+		if errors.Is(err, configuration.ErrNoDesiredConfig) {
+			rw.WriteError(w, r, http.StatusNotFound, apiresp.ErrCodeNotFound, err.Error(), nil)
+			return
+		}
 		h.writeConfigDeviceError(w, r, err)
 		return
 	}

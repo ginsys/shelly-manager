@@ -1628,7 +1628,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
         '404':
-          description: Device not found
+          description: >-
+            Device not found, or the device has no desired configuration (NOT_FOUND). With
+            nothing to compare the device with, verify does not answer match, and it does not
+            contact the device. The drift route answers the same way.
           content:
             application/json:
               schema:

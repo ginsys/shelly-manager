@@ -310,7 +310,8 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 		return nil, fmt.Errorf("failed to get device: %w", err)
 	}
 
-	result, err := s.ConfigurationSvc.DriftAgainstDesired(context.Background(), deviceID, client, DeviceModel(device.Settings, device.Type))
+	// The same comparison as verify, so a device that was just applied is not drifted.
+	result, err := s.ConfigurationSvc.VerifyDesiredConfig(context.Background(), deviceID, client, DeviceModel(device.Settings, device.Type))
 	if err != nil {
 		return nil, err
 	}

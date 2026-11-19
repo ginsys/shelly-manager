@@ -515,19 +515,12 @@ func (s *ConfigurationService) ApplyDesiredConfig(ctx context.Context, deviceID 
 }
 
 // VerifyDesiredConfig reads the live configuration from the device and
-// compares it with the desired configuration. It changes nothing on the device.
+// compares it with the desired configuration. It changes nothing on the device. The drift check is
+// this same comparison, so a device that was just applied is not drifted. A device with no desired
+// configuration has nothing to compare with, and "match" would read as a device that was checked
+// and found right, so it is refused with ErrNoDesiredConfig (ginsys/shelly-manager#636). The apply
+// flow does not come through here: it verifies with its own verifier after its writes.
 func (s *ConfigurationService) VerifyDesiredConfig(ctx context.Context, deviceID uint, client ShellyClient, deviceType string) (*VerifyResult, error) {
-	return s.verifyDesired(ctx, deviceID, client, deviceType, false)
-}
-
-// DriftAgainstDesired is the drift check: the same comparison as VerifyDesiredConfig, so a device
-// that was just applied is not drifted. A device with no desired configuration has nothing to
-// compare with, and verify would call it a match, so this refuses it with ErrNoDesiredConfig.
-func (s *ConfigurationService) DriftAgainstDesired(ctx context.Context, deviceID uint, client ShellyClient, deviceType string) (*VerifyResult, error) {
-	return s.verifyDesired(ctx, deviceID, client, deviceType, true)
-}
-
-func (s *ConfigurationService) verifyDesired(ctx context.Context, deviceID uint, client ShellyClient, deviceType string, requireDesired bool) (*VerifyResult, error) {
 	converter, _, err := s.applyPathFor(client, s.loginHooks != nil)
 	if err != nil {
 		return nil, err
@@ -537,7 +530,7 @@ func (s *ConfigurationService) verifyDesired(ctx context.Context, deviceID uint,
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDeviceNotFound, err)
 	}
-	if requireDesired && !hasDesiredConfig(device.DesiredConfig) {
+	if !hasDesiredConfig(device.DesiredConfig) {
 		return nil, ErrNoDesiredConfig
 	}
 	desired, err := parseApplicableDesiredConfig(device.DesiredConfig)

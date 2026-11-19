@@ -1160,6 +1160,12 @@ func (s *ShellyService) VerifyDesiredConfig(ctx context.Context, deviceID uint) 
 		return nil, fmt.Errorf("device not found: %w", err)
 	}
 
+	// A device with no desired configuration cannot be verified, whatever its login: say so before
+	// the device is contacted, as the drift check does.
+	if noDesired := s.ConfigSvc.ConfigurationSvc.RequireDesiredConfig(deviceID); errors.Is(noDesired, configuration.ErrNoDesiredConfig) {
+		return nil, noDesired
+	}
+
 	client, err := s.getClientWithAuthRetry(device)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
