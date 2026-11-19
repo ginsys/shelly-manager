@@ -47,8 +47,8 @@ func TestTestConfig(t *testing.T) {
 		t.Error("Expected discovery networks to be configured")
 	}
 
-	if cfg.Discovery.Networks[0] != "192.168.1.0/24" {
-		t.Errorf("Expected first network 192.168.1.0/24, got %s", cfg.Discovery.Networks[0])
+	if cfg.Discovery.Networks[0] != "127.0.0.0/30" {
+		t.Errorf("Expected first network 127.0.0.0/30, got %s", cfg.Discovery.Networks[0])
 	}
 
 	if cfg.Discovery.Interval != 300 {
@@ -59,8 +59,8 @@ func TestTestConfig(t *testing.T) {
 		t.Errorf("Expected discovery timeout 2, got %d", cfg.Discovery.Timeout)
 	}
 
-	if !cfg.Discovery.EnableMDNS {
-		t.Error("Expected mDNS to be enabled")
+	if cfg.Discovery.EnableMDNS {
+		t.Error("Expected mDNS to be disabled: a test config sends no multicast")
 	}
 
 	if !cfg.Discovery.EnableSSDP {
@@ -379,10 +379,10 @@ func TestCreateTestConfigFile(t *testing.T) {
 		"discovery:",
 		"enabled: true",
 		"networks:",
-		"- 192.168.1.0/24",
+		"- 127.0.0.0/30",
 		"interval: 300",
 		"timeout: 2",
-		"enable_mdns: true",
+		"enable_mdns: false",
 		"enable_ssdp: true",
 		"concurrent_scans: 10",
 	}
