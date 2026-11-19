@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -425,7 +426,10 @@ func tightenConfigTemplateColumn(db *gorm.DB, column string) (bool, error) {
 func configTemplateColumnNullable(db *gorm.DB, column string) (nullable, ok bool, err error) {
 	types, err := db.Migrator().ColumnTypes(&ConfigTemplate{})
 	if err != nil {
-		return false, false, fmt.Errorf("failed to inspect %s columns: %w", configTemplatesTable, err)
+		// The migrator returns rows.Close and rows.ColumnTypes errors as the driver
+		// gave them, past the sealed dialector, and the fixups run before the
+		// provider's Migrate.
+		return false, false, fmt.Errorf("failed to inspect %s columns: %w", configTemplatesTable, provider.SealOperationError(err))
 	}
 	for _, columnType := range types {
 		if !strings.EqualFold(columnType.Name(), column) {
