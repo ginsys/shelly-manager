@@ -532,8 +532,8 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 			"component":     "api",
 		}).Info("Starting device discovery")
 
-		// Discover devices
-		devices, err := h.Service.DiscoverDevices(network)
+		// Discover devices. The service stores each one, and says whether this pass added it.
+		devices, err := h.Service.DiscoverDevicesReport(network)
 		if err != nil {
 			h.logger.WithFields(map[string]any{
 				"error":     err.Error(),
@@ -547,38 +547,26 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 			"component":     "api",
 		}).Info("Discovery completed")
 
-		// Save discovered devices and import their configurations
+		// Count the devices this pass added and import the configuration of each device found
 		newDevices := 0
 		configsImported := 0
 
 		for _, device := range devices {
-			// Check if device already exists by MAC
-			if existing, known := h.refreshKnownDevice(device); known {
-				// Import config if requested
-				if req.ImportConfig {
-					if _, err := h.Service.ImportDeviceConfig(existing.ID); err == nil {
-						configsImported++
-					}
-				}
-			} else {
-				// Add new device
-				if err := h.DB.AddDevice(&device); err == nil {
-					newDevices++
-
-					// Import config for new device if requested
-					if req.ImportConfig && device.ID > 0 {
-						if _, err := h.Service.ImportDeviceConfig(device.ID); err == nil {
-							configsImported++
-						} else {
-							h.logger.WithFields(map[string]any{
-								"device_id": device.ID,
-								"device_ip": device.IP,
-								"error":     err.Error(),
-								"component": "api",
-							}).Warn("Failed to import config for new device")
-						}
-					}
-				}
+			if device.Added {
+				newDevices++
+			}
+			if !req.ImportConfig {
+				continue
+			}
+			if _, err := h.Service.ImportDeviceConfig(device.ID); err == nil {
+				configsImported++
+			} else if device.Added {
+				h.logger.WithFields(map[string]any{
+					"device_id": device.ID,
+					"device_ip": device.IP,
+					"error":     err.Error(),
+					"component": "api",
+				}).Warn("Failed to import config for new device")
 			}
 		}
 
@@ -594,23 +582,6 @@ func (h *Handler) DiscoverHandler(w http.ResponseWriter, r *http.Request) {
 		"status":  "discovery_started",
 		"message": "Device discovery has been initiated in background",
 	})
-}
-
-// refreshKnownDevice updates the device that a discovery found again. It reports false when the
-// database has no device with that MAC.
-func (h *Handler) refreshKnownDevice(found database.Device) (*database.Device, bool) {
-	existing, err := h.DB.GetDeviceByMAC(found.MAC)
-	if err != nil || existing == nil {
-		return nil, false
-	}
-	refreshed, err := h.Service.RefreshDiscoveredDevice(existing.ID, found.IP, found.Status, found.LastSeen, found.Firmware)
-	if err != nil && h.logger != nil {
-		h.logger.Error("Failed to update device during import", "error", err, "deviceID", existing.ID)
-	}
-	if refreshed == nil {
-		refreshed = existing
-	}
-	return refreshed, true
 }
 
 // GetProvisioningStatus handles GET /api/v1/provisioning/status

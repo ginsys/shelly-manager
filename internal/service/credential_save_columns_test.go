@@ -2,7 +2,6 @@ package service
 
 import (
 	"testing"
-	"time"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
@@ -136,28 +135,6 @@ func TestBackfillDiscoverySettings_KeepsTheOtherWritersColumns(t *testing.T) {
 	}
 	if device.ConfigApplied || device.DesiredConfig != racerDesired {
 		t.Errorf("the updated row is not the stored one: applied %v, desired %q", device.ConfigApplied, device.DesiredConfig)
-	}
-}
-
-func TestRefreshDiscoveredDevice_KeepsTheOtherWritersColumns(t *testing.T) {
-	service, device, _ := raceFixture(t)
-	real := service.DB
-	service.DB = &afterFirstReadDB{DatabaseInterface: real, hook: otherWriter(t, real, device.ID)}
-
-	seen := time.Now().Truncate(time.Second)
-	returned, err := service.RefreshDiscoveredDevice(device.ID, "192.0.2.50", "online", seen, "2.0")
-	if err != nil {
-		t.Fatalf("RefreshDiscoveredDevice failed: %v", err)
-	}
-
-	got := assertOtherWriterKept(t, real, device.ID)
-	if got.IP != "192.0.2.50" || got.Status != "online" || got.Firmware != "2.0" {
-		t.Errorf("the discovery fields were not stored: ip %q, status %q, firmware %q", got.IP, got.Status, got.Firmware)
-	}
-	// The returned row is read right after the save, so it carries the discovery fields. The other
-	// writer runs after that read, so its columns are checked on the stored row above.
-	if returned.IP != "192.0.2.50" || returned.Status != "online" || returned.Firmware != "2.0" {
-		t.Errorf("the returned row lacks the discovery fields: ip %q, status %q, firmware %q", returned.IP, returned.Status, returned.Firmware)
 	}
 }
 

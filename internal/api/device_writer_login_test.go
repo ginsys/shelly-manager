@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -189,28 +188,4 @@ func TestUpdateDevice_KeepsTheRequestsOtherSettings(t *testing.T) {
 	assert.Equal(t, "changed", settings["note"])
 	assert.Equal(t, "bee", settings["auth_user"])
 	assert.Equal(t, "beepw", settings["auth_pass"])
-}
-
-// The import refresh updates the address, status and firmware. It keeps a login saved after it
-// read the device.
-func TestRefreshKnownDevice_KeepsALoginSavedAfterItsRead(t *testing.T) {
-	handler, db, device := loginDeviceHandler(t)
-	handler.DB = &readHookDB{
-		DatabaseInterface:   db,
-		afterGetDeviceByMAC: func() { saveLogin(t, db, device.ID, "bee", "beepw") },
-	}
-
-	seen := time.Now().Add(time.Hour).Truncate(time.Second)
-	_, known := handler.refreshKnownDevice(database.Device{
-		MAC: device.MAC, IP: "127.0.0.1:2", Status: "offline", LastSeen: seen, Firmware: "2.0.0",
-	})
-	require.True(t, known)
-
-	stored, err := db.GetDevice(device.ID)
-	require.NoError(t, err)
-	assert.Equal(t, "127.0.0.1:2", stored.IP)
-	assert.Equal(t, "offline", stored.Status)
-	assert.Equal(t, "2.0.0", stored.Firmware)
-	assert.True(t, stored.LastSeen.Equal(seen), "last seen %v, want %v", stored.LastSeen, seen)
-	requireStoredLogin(t, db, device.ID, "bee", "beepw")
 }

@@ -22,36 +22,6 @@ func storedVersion(t *testing.T, db *database.Manager, id uint) time.Time {
 	return device.UpdatedAt
 }
 
-func TestRefreshDiscoveredDevice_VersionMovesOnlyOnAChange(t *testing.T) {
-	db := createTestDB(t)
-	service := NewService(db, createTestConfig())
-	device := createTestDevice(t, db, "192.0.2.20")
-	before := storedVersion(t, db, device.ID)
-	time.Sleep(5 * time.Millisecond)
-
-	got, err := service.RefreshDiscoveredDevice(device.ID, device.IP, "online", time.Now(), device.Firmware)
-	if err != nil {
-		t.Fatalf("RefreshDiscoveredDevice failed: %v", err)
-	}
-	if !got.UpdatedAt.Equal(before) {
-		t.Errorf("an unchanged refresh moved updated_at from %v to %v", before, got.UpdatedAt)
-	}
-	if got.Status != "online" {
-		t.Errorf("the refresh did not store the status: %q", got.Status)
-	}
-
-	got, err = service.RefreshDiscoveredDevice(device.ID, device.IP, "online", time.Now(), "1.15.0")
-	if err != nil {
-		t.Fatalf("RefreshDiscoveredDevice failed: %v", err)
-	}
-	if !got.UpdatedAt.After(before) {
-		t.Errorf("a refresh with a new firmware left updated_at at %v", got.UpdatedAt)
-	}
-	if got.Firmware != "1.15.0" {
-		t.Errorf("the refresh did not store the firmware: %q", got.Firmware)
-	}
-}
-
 // A full discovery pass also backfills the settings of the device. A pass over a device that
 // carries them already writes nothing that a client edits, so the version stays.
 func TestDiscoverDevices_VersionMovesOnlyOnAChange(t *testing.T) {
