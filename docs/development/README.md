@@ -90,8 +90,8 @@ This directory contains comprehensive documentation for the database provider im
 
 **MySQL & PostgreSQL Additional:**
 - ✅ SSL/TLS encryption with certificate validation
-- ✅ Multiple TLS modes (required, verify-ca, verify-identity)
-- ✅ Client certificate authentication support
+- ✅ MySQL TLS modes false, true, skip-verify and preferred (`true` verifies the chain and host name against the system trust store); a CA or client certificate by path is not supported
+- ✅ PostgreSQL `sslmode` values, including verify-ca and verify-full, with `sslrootcert`, `sslcert` and `sslkey`
 - ✅ Connection timeout and resource protection
 
 ### Performance Features

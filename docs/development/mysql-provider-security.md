@@ -24,7 +24,7 @@ The MySQL database provider implements a comprehensive security framework design
 ├─────────────────────────────────────────────────────────────┤
 │                   Transport Security Layer                 │
 │  • SSL/TLS Encryption        • Certificate Validation     │
-│  • Mutual Authentication     • Protocol Security          │
+│  • Host Name Verification    • Protocol Security          │
 ├─────────────────────────────────────────────────────────────┤
 │                  Connection Security Layer                 │
 │  • Connection Timeouts       • Resource Limits            │
@@ -48,20 +48,21 @@ The MySQL database provider implements a comprehensive security framework design
 
 ### Supported TLS Modes
 
-The MySQL provider supports all MySQL TLS modes with comprehensive validation:
+The MySQL provider accepts the four values the MySQL driver takes for `options.tls` and refuses any
+other there (a `tls=` written in the DSN itself goes to the driver unchecked):
 
 ```go
 validTLSModes := map[string]bool{
-    "false":           true, // Disable SSL (not recommended for production)
-    "true":            true, // Enable SSL without verification
-    "skip-verify":     true, // Enable SSL but skip certificate verification
-    "preferred":       true, // Prefer SSL, fallback to non-SSL (DEFAULT)
-    "custom":          true, // Use custom TLS config
-    "required":        true, // Require SSL connection
-    "verify-ca":       true, // Verify CA certificate
-    "verify-identity": true, // Verify CA certificate and server hostname
+    "false":       true, // no TLS (not recommended for production)
+    "true":        true, // TLS; the certificate chain and the host name are verified
+    "skip-verify": true, // TLS; the certificate is not verified
+    "preferred":   true, // TLS if the server offers it, plain otherwise (DEFAULT); not verified
 }
 ```
+
+`required`, `verify-ca`, `verify-identity` and `custom` are not modes of the driver: it would fail at
+connect time, so the provider refuses them first. The options `ca`, `cert`, `key` and `serverName` are
+refused as well ("custom TLS files are not supported"), because the driver has no such DSN parameter.
 
 ### Security Configuration Examples
 
@@ -71,11 +72,7 @@ database:
   provider: "mysql"
   dsn: "user:password@tcp(mysql.internal:3306)/shelly_manager"
   options:
-    tls: "verify-identity"
-    ca: "/etc/ssl/certs/mysql-ca.pem"
-    cert: "/etc/ssl/certs/mysql-client.pem" 
-    key: "/etc/ssl/private/mysql-client.key"
-    serverName: "mysql.internal"
+    tls: "true"
     timeout: "10s"
     readTimeout: "30s"
     writeTimeout: "30s"
@@ -97,62 +94,44 @@ database:
   provider: "mysql"
   dsn: "app:secure_password@tcp(mysql.secure.internal:3306)/production"
   options:
-    tls: "verify-identity"
-    ca: "/secrets/mysql/ca.pem"
-    cert: "/secrets/mysql/client.pem"
-    key: "/secrets/mysql/client.key"
-    serverName: "mysql.secure.internal"
+    tls: "true"
     charset: "utf8mb4"
     collation: "utf8mb4_unicode_ci"
 ```
 
 ### Certificate Management
 
-#### Certificate Validation Process
+#### What the provider does with certificates
+
+The provider validates the `tls` mode and the absence of `ca`, `cert`, `key` and `serverName`, and
+nothing else:
+
 ```go
 func (m *MySQLProvider) validateSSLConfig(options map[string]string) error {
-    tlsMode := options["tls"]
-    
-    // Validate certificate files for verification modes
-    if tlsMode == "custom" || tlsMode == "verify-ca" || tlsMode == "verify-identity" {
-        if ca, ok := options["ca"]; ok && ca != "" {
-            if _, err := os.Stat(ca); os.IsNotExist(err) {
-                return fmt.Errorf("CA certificate not found: %s", ca)
-            }
-        }
-        
-        if cert, ok := options["cert"]; ok && cert != "" {
-            if _, err := os.Stat(cert); os.IsNotExist(err) {
-                return fmt.Errorf("client certificate not found: %s", cert)
-            }
-        }
-        
-        if key, ok := options["key"]; ok && key != "" {
-            if _, err := os.Stat(key); os.IsNotExist(err) {
-                return fmt.Errorf("client key not found: %s", key)
-            }
+    for _, name := range []string{"ca", "cert", "key", "serverName"} {
+        if _, ok := options[name]; ok {
+            return fmt.Errorf("custom TLS files are not supported; use tls=preferred|true|skip-verify (option %q)", name)
         }
     }
-    return nil
+    // then: tls must be one of false, true, skip-verify, preferred
 }
 ```
 
+With `tls: "true"` the driver verifies the server certificate chain and host name against the system
+trust store of the machine or image that runs the application. A private CA has to be installed
+there. Client certificates (mutual TLS) and a CA given by path are not supported: that needs the
+provider to register a TLS config with the driver, which it does not do.
+
 #### Certificate Security Best Practices
 
-1. **Certificate Storage**:
-   - Store certificates in secure directories (e.g., `/etc/ssl/certs/`, `/secrets/`)
-   - Use appropriate file permissions (600 for private keys, 644 for certificates)
-   - Implement certificate rotation procedures
+1. **Server certificate**:
+   - Use `tls: "true"` for production, so the chain and the host name are checked
+   - Put the DSN host name in the certificate
+   - Monitor certificate expiration and rotate the server certificate before it ends
 
-2. **Certificate Validation**:
-   - Use `verify-identity` mode for production environments
-   - Validate server hostname matches certificate
-   - Implement certificate expiration monitoring
-
-3. **Mutual TLS Authentication**:
-   - Deploy client certificates for service authentication
-   - Use separate certificates for different environments
-   - Implement certificate-based access control
+2. **Trust store**:
+   - Install a private CA in the image's system trust store
+   - Use a separate CA or certificate for each environment
 
 ## Input Validation and Injection Prevention
 
@@ -374,21 +353,20 @@ The MySQL provider includes 65+ security-focused tests covering all attack vecto
 #### 1. SSL/TLS Validation Tests
 ```go
 func TestMySQLSecuritySSLValidation(t *testing.T) {
-    // Tests all valid TLS modes
-    validTLSModes := []string{"false", "true", "skip-verify", "preferred", 
-                             "custom", "required", "verify-ca", "verify-identity"}
+    // Tests the modes the driver takes
+    validTLSModes := []string{"false", "true", "skip-verify", "preferred"}
     
-    // Tests invalid TLS modes
-    invalidTLSModes := []string{"invalid", "wrong", "bad-mode"}
+    // Tests invalid TLS modes, among them the names the driver lacks
+    invalidTLSModes := []string{"invalid", "wrong", "bad-mode",
+                               "custom", "required", "verify-ca", "verify-identity"}
 }
 ```
 
-#### 2. Certificate Validation Tests
+#### 2. Certificate Option Tests
 ```go
 func TestMySQLSecuritySSLCertificateValidation(t *testing.T) {
-    // Tests certificate file validation
-    // Tests missing certificate scenarios
-    // Tests certificate permission scenarios
+    // Tests that ca, cert, key and serverName are each refused
+    // Tests that an option such as collation still passes
 }
 ```
 
@@ -433,8 +411,8 @@ go test ./internal/database/provider -v -run Security -cover
 ### 1. Production Deployment
 
 **Mandatory Security Settings:**
-- Use `tls: "verify-identity"` for production
-- Deploy proper CA and client certificates
+- Use `tls: "true"` for production (chain and host name verified against the system trust store)
+- Install a private CA in the image's system trust store
 - Configure appropriate timeouts (≤30s)
 - Use utf8mb4 charset for full Unicode support
 - Enable connection pool limits
@@ -445,11 +423,7 @@ database:
   provider: "mysql"
   dsn: "app_user:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/production"
   options:
-    tls: "verify-identity"
-    ca: "/etc/ssl/mysql-ca.pem"
-    cert: "/etc/ssl/mysql-client.pem"
-    key: "/etc/ssl/mysql-client.key"
-    serverName: "mysql.internal"
+    tls: "true"
     charset: "utf8mb4"
     collation: "utf8mb4_unicode_ci"
   max_open_conns: 20

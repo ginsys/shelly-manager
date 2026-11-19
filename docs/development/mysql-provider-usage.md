@@ -88,7 +88,7 @@ func main() {
         Provider: "mysql",
         DSN:      os.Getenv("MYSQL_DSN"),
         Options: map[string]string{
-            "tls":     "verify-identity",
+            "tls":     "true",
             "charset": "utf8mb4",
         },
         MaxOpenConns:       20,
@@ -128,10 +128,10 @@ The MySQL provider uses standard MySQL DSN format with security enhancements:
 user:password@tcp(localhost:3306)/shelly_manager
 
 # Remote connection with SSL
-app:secure_pass@tcp(mysql.internal:3306)/production?tls=required
+app:secure_pass@tcp(mysql.internal:3306)/production?tls=true
 
 # Complete production DSN
-app_user:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/shelly_manager?tls=verify-identity&charset=utf8mb4&timeout=10s
+app_user:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/shelly_manager?tls=true&charset=utf8mb4&timeout=10s
 ```
 
 ### Configuration Parameters
@@ -161,11 +161,12 @@ database:
     timeout: "10s"                     # Connection timeout (default: 10s)
     readTimeout: "30s"                 # Read timeout (default: 30s)  
     writeTimeout: "30s"                # Write timeout (default: 30s)
-    ca: "/path/to/ca.pem"              # CA certificate path (for TLS)
-    cert: "/path/to/client.pem"        # Client certificate path (for TLS)
-    key: "/path/to/client.key"         # Client key path (for TLS)
-    serverName: "mysql.example.com"    # Server name for TLS verification
 ```
+
+The provider has no option for a CA, a client certificate or a server name: `ca`, `cert`, `key` and
+`serverName` are refused with "custom TLS files are not supported". With `tls: "true"` the driver
+verifies the server against the system trust store, so a private CA must be installed there (for
+example in the container image).
 
 ### SSL/TLS Configuration
 
@@ -174,13 +175,15 @@ database:
 | Mode | Description | Security Level | Use Case |
 |------|-------------|----------------|----------|
 | `false` | Disable SSL | None | Development only |
-| `true` | Enable SSL without verification | Low | Testing |
-| `skip-verify` | SSL without certificate verification | Medium | Staging |
-| `preferred` | Prefer SSL, fallback to non-SSL | Medium | **Default** |
-| `required` | Require SSL connection | High | Production |
-| `verify-ca` | Verify CA certificate | High | Production |
-| `verify-identity` | Verify CA and hostname | **Highest** | Production |
-| `custom` | Custom TLS configuration | Variable | Advanced |
+| `true` | SSL; the certificate chain and the host name are verified | **Highest** | Production |
+| `skip-verify` | SSL without certificate verification | Low | Staging |
+| `preferred` | SSL if the server offers it, plain otherwise; no verification | Low | **Default** |
+
+These are the four values the provider accepts for `options.tls`, and each is a mode the MySQL
+driver has. The provider refuses any other value there (`required`, `verify-ca`, `verify-identity`
+and `custom` among them), because the driver has no such mode and would fail at connect time. The
+limit is on the options map only: a `tls=` parameter written in the DSN itself goes to the driver
+as it is, and the driver reads its own aliases (`1`, `0`, `TRUE`, `FALSE`) there.
 
 #### SSL Configuration Examples
 
@@ -199,11 +202,7 @@ database:
   provider: "mysql"
   dsn: "app:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/production"
   options:
-    tls: "verify-identity"
-    ca: "/etc/ssl/certs/mysql-ca.pem"
-    cert: "/etc/ssl/certs/mysql-client.pem"
-    key: "/etc/ssl/private/mysql-client.key"
-    serverName: "mysql.internal"
+    tls: "true"
 ```
 
 ##### High-Security Environment
@@ -212,11 +211,7 @@ database:
   provider: "mysql"
   dsn: "secure_app:${MYSQL_PASSWORD}@tcp(mysql.secure.internal:3306)/secure_db"
   options:
-    tls: "verify-identity"
-    ca: "/secrets/mysql/ca.pem"
-    cert: "/secrets/mysql/client.pem"
-    key: "/secrets/mysql/client.key"
-    serverName: "mysql.secure.internal"
+    tls: "true"
     charset: "utf8mb4"
     collation: "utf8mb4_unicode_ci"
     timeout: "5s"
@@ -296,8 +291,7 @@ database:
   provider: "mysql"
   dsn: "staging_app:${MYSQL_PASSWORD}@tcp(mysql.staging:3306)/shelly_staging"
   options:
-    tls: "required"
-    ca: "/etc/ssl/mysql-ca.pem" 
+    tls: "true"
     charset: "utf8mb4"
     collation: "utf8mb4_unicode_ci"
     timeout: "10s"
@@ -325,11 +319,7 @@ database:
   provider: "mysql"
   dsn: "prod_app:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/shelly_manager"
   options:
-    tls: "verify-identity"
-    ca: "/etc/ssl/certs/mysql-ca.pem"
-    cert: "/etc/ssl/certs/mysql-client.pem"
-    key: "/etc/ssl/private/mysql-client.key"
-    serverName: "mysql.internal"
+    tls: "true"
     charset: "utf8mb4"
     collation: "utf8mb4_unicode_ci"
     timeout: "10s"
@@ -407,10 +397,6 @@ services:
     environment:
       - SHELLY_DATABASE_PROVIDER=mysql
       - SHELLY_DATABASE_DSN=app_user:${MYSQL_PASSWORD}@tcp(mysql-primary:3306)/shelly_manager?tls=preferred
-    secrets:
-      - mysql_ca_cert
-      - mysql_client_cert
-      - mysql_client_key
     depends_on:
       - mysql-primary
     ports:
@@ -435,53 +421,25 @@ services:
     ports:
       - "3306:3306"
 
-secrets:
-  mysql_ca_cert:
-    file: ./ssl/ca.pem
-  mysql_client_cert:
-    file: ./ssl/client-cert.pem
-  mysql_client_key:
-    file: ./ssl/client-key.pem
-
 volumes:
   mysql_primary_data:
 ```
 
 ### Kubernetes Deployment
 
-#### Configuration and Secrets
+#### Secret
+The whole DSN, password included, goes in one Secret and reaches the application as
+`SHELLY_DATABASE_DSN`. A ConfigMap file does not do this: the application reads no file named
+`database.yaml`, and a value such as `$(MYSQL_PASSWORD)` in a file is not substituted.
 ```yaml
-# mysql-config.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: mysql-config
-data:
-  database.yaml: |
-    database:
-      provider: "mysql"
-      dsn: "app_user:$(MYSQL_PASSWORD)@tcp(mysql:3306)/shelly_manager"
-      options:
-        tls: "verify-identity"
-        ca: "/etc/ssl/mysql/ca.pem"
-        cert: "/etc/ssl/mysql/client.pem"
-        key: "/etc/ssl/mysql/client.key"
-        serverName: "mysql.default.svc.cluster.local"
-        charset: "utf8mb4"
-      max_open_conns: 25
-      max_idle_conns: 5
-      conn_max_lifetime: 3600
----
+# mysql-secret.yaml
 apiVersion: v1
 kind: Secret
 metadata:
   name: mysql-secret
 type: Opaque
-data:
-  password: $(echo -n "${MYSQL_PASSWORD}" | base64)
-  ca.pem: $(cat ssl/ca.pem | base64 -w 0)
-  client.pem: $(cat ssl/client.pem | base64 -w 0)
-  client.key: $(cat ssl/client.key | base64 -w 0)
+stringData:
+  dsn: "app_user:<password>@tcp(mysql:3306)/shelly_manager?tls=true&charset=utf8mb4"
 ```
 
 #### Application Deployment
@@ -505,19 +463,13 @@ spec:
       - name: shelly-manager
         image: shelly-manager:latest
         env:
-        - name: MYSQL_PASSWORD
+        - name: SHELLY_DATABASE_PROVIDER
+          value: "mysql"
+        - name: SHELLY_DATABASE_DSN
           valueFrom:
             secretKeyRef:
               name: mysql-secret
-              key: password
-        - name: SHELLY_DATABASE_PROVIDER
-          value: "mysql"
-        volumeMounts:
-        - name: mysql-ssl
-          mountPath: /etc/ssl/mysql
-          readOnly: true
-        - name: config
-          mountPath: /etc/shelly-manager
+              key: dsn
         resources:
           requests:
             memory: "256Mi"
@@ -525,21 +477,6 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-      volumes:
-      - name: mysql-ssl
-        secret:
-          secretName: mysql-secret
-          items:
-          - key: ca.pem
-            path: ca.pem
-          - key: client.pem
-            path: client.pem
-          - key: client.key
-            path: client.key
-            mode: 0600
-      - name: config
-        configMap:
-          name: mysql-config
 ```
 
 ## Performance Tuning
@@ -680,12 +617,14 @@ mysql -h mysql -u user -p database
 
 #### SSL/TLS Issues
 ```bash
-# Error: certificate verification failed
-# Solution: Validate certificate paths and permissions
-ls -la /etc/ssl/mysql/
-chmod 644 /etc/ssl/mysql/ca.pem
-chmod 644 /etc/ssl/mysql/client.pem  
-chmod 600 /etc/ssl/mysql/client.key
+# Error: certificate verification failed (with tls=true)
+# Cause: the server certificate is not signed by a CA in the system trust store, or its name does
+#        not match the host in the DSN.
+# Solution: install the CA in the system trust store of the image, and use the host name the
+#           certificate carries. tls=skip-verify encrypts without verifying: testing only.
+
+# Error: invalid TLS mode / custom TLS files are not supported
+# Solution: use tls=false, true, skip-verify or preferred, and remove ca, cert, key and serverName.
 ```
 
 #### Performance Issues

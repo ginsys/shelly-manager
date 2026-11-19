@@ -93,7 +93,7 @@ main_app:
 
 # API client settings (for provisioner agent mode)
 api:
-  url: "http://0.0.0.0:8080"    # API server URL
+  url: ""                   # the manager's base URL, e.g. http://manager:8080; read only by the provisioner agent (flag --api-url, or SHELLY_API_URL)
   key: ""                   # API authentication key
   timeout: 30               # Request timeout (seconds)
   retry_attempts: 3         # Number of retry attempts

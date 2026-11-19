@@ -45,13 +45,18 @@ func TestAPIURL_FileAndEnvStillSetIt(t *testing.T) {
 	}
 }
 
-// The sample provisioner config must not ship the address the default no longer holds.
+// A sample config must not ship the address the default no longer holds. Both samples carry an api
+// section, and the manager's copy is the one a person starts from.
 func TestAPIURL_SampleProvisionerConfigLeavesItEmpty(t *testing.T) {
-	cfg, err := Load("../../configs/shelly-provisioner.yaml")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.API.URL != "" {
-		t.Errorf("configs/shelly-provisioner.yaml sets api.url = %q, want it empty", cfg.API.URL)
+	for _, sample := range []string{"shelly-provisioner.yaml", "shelly-manager.yaml"} {
+		t.Run(sample, func(t *testing.T) {
+			cfg, err := Load("../../configs/" + sample)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.API.URL != "" {
+				t.Errorf("configs/%s sets api.url = %q, want it empty", sample, cfg.API.URL)
+			}
+		})
 	}
 }
