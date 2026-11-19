@@ -56,6 +56,7 @@ func NewService(db *gorm.DB, logger *logging.Logger, emailConfig EmailSMTPConfig
 
 // CreateChannel creates a new notification channel
 func (s *Service) CreateChannel(channel *NotificationChannel) error {
+	channel.Config = restoreConfig(channel.Config, nil) // nothing is stored, so a placeholder is dropped
 	if err := s.validateChannelConfig(channel); err != nil {
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
@@ -85,6 +86,15 @@ func (s *Service) GetChannels() ([]NotificationChannel, error) {
 
 // UpdateChannel updates an existing notification channel
 func (s *Service) UpdateChannel(channelID uint, updates *NotificationChannel) error {
+	// A client that read the config sends the placeholder for each credential it did not change:
+	// take the stored value back before validation, or the placeholder would pass it and be stored.
+	// A missing channel is reported below, after validation, as before.
+	var stored NotificationChannel
+	if err := s.db.First(&stored, channelID).Error; err != nil && err != gorm.ErrRecordNotFound {
+		return fmt.Errorf("failed to get channel: %w", err)
+	}
+	updates.Config = restoreConfig(updates.Config, stored.Config)
+
 	if err := s.validateChannelConfig(updates); err != nil {
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
@@ -270,7 +280,8 @@ func (s *Service) TestChannel(ctx context.Context, channelID uint) error {
 		CreatedAt:   time.Now(),
 	}
 
-	return s.deliverNotification(ctx, &channel, history)
+	// The failed send's error quotes the destination, and the handler returns it as its message.
+	return scrubError(s.deliverNotification(ctx, &channel, history), channel.Config)
 }
 
 // validateChannelConfig validates channel configuration

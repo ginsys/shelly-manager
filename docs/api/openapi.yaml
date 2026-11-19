@@ -704,6 +704,10 @@ components:
           type: boolean
         config:
           type: object
+          description: >-
+            The channel configuration. Every credential in it (url, webhook_url, every headers value,
+            and any key named like a secret) is sent as the placeholder ******** and never as the
+            stored value. The same applies to the channel inside a rule or a history entry.
         description:
           type: string
         created_at:
@@ -726,6 +730,10 @@ components:
           default: true
         config:
           type: object
+          description: >-
+            The channel configuration. On an update, a credential sent as the placeholder ********
+            keeps its stored value; any other value replaces it. A credential left out is removed,
+            because an update replaces the whole configuration.
         description:
           type: string
       required:

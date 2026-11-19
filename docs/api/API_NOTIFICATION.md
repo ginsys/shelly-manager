@@ -5,9 +5,9 @@ This document describes the Notification endpoints, standardized responses, and 
 All endpoints return the standard API wrapper with `success|error`, `data`, optional `meta`, `timestamp`, and `request_id`.
 
 **Admin key.** If the server has an admin key configured, every notification route needs it
-(`Authorization: Bearer <key>` or `X-API-Key: <key>`) and answers 401 `UNAUTHORIZED` without it. The reads
-return each channel's stored configuration (webhook URLs, headers, secret), which is why they are guarded
-too. With no admin key configured the routes are open.
+(`Authorization: Bearer <key>` or `X-API-Key: <key>`) and answers 401 `UNAUTHORIZED` without it. With no
+admin key configured the routes are open. Even with the key, a read never returns a stored credential (see
+"Secrets in a channel's config").
 
 ## Endpoints
 
@@ -44,6 +44,26 @@ Type-specific config examples:
 - Email: `{ "recipients": ["ops@example.com"], "subject": "...", "template": "..." }`
 - Webhook: `{ "url": "https://...", "method": "POST", "headers": {..}, "secret": "..." }`
 - Slack: `{ "webhook_url": "https://hooks.slack.com/...", "channel": "#alerts" }`
+
+## Secrets in a channel's config
+
+A channel's config holds credentials for its destination: a webhook `url` and `webhook_url` (a Slack or
+Discord webhook URL is the token), every value under `headers` (such as `Authorization`), and any key named
+like a secret (`secret`, `token`, `password`, `api_key`, ...).
+
+- **Reads.** `GET /notifications/channels`, `GET /notifications/rules`, `GET /notifications/history` and the
+  `POST /notifications/channels` response send `********` in place of each of these. The same holds for the
+  channel inside a rule or a history entry. Other fields (`recipients`, `method`, `channel`, `timeout`, ...) are
+  returned as stored.
+- **Saves.** `PUT /notifications/channels/{id}` takes the stored value back for a credential sent as `********`,
+  so a client that read the config can send it back with one field changed. Any other value is a new credential and
+  replaces the stored one. A credential left out is removed: an update replaces the whole config, as before.
+  The placeholder is never stored: where nothing is stored for it, it is dropped, and a channel left without a
+  required `url` or `webhook_url` is refused.
+- **Errors.** A failed delivery's error text quotes its destination. `GET /notifications/history` (`error`) and
+  `POST /notifications/channels/{id}/test` (the 500 message) show `********` where the text held a stored
+  credential. An `error` stored before a channel's URL changed keeps the old URL, because the cut uses the current
+  config.
 
 ## Rule object (selected fields)
 

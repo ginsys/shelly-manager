@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// Placeholder is what the API sends in place of a saved secret, and what a client sends back to say
+// "keep the saved one". One spelling, so every store that masks agrees.
+const Placeholder = "********"
+
 // IsKey reports whether a JSON key names a secret value: a name that contains pass, pwd, psk,
 // secret or token, or that ends in key. A key that merely looks like one is masked, and that costs
 // a masked display and nothing else.
