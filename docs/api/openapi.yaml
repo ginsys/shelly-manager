@@ -1307,9 +1307,13 @@ paths:
           description: >-
             Normalized current device configuration. The read stores nothing:
             the stored configuration, its sync status and the history stay as
-            they were. An `id` that is not a number also answers HTTP 200, with
-            the body `{"success": false, "error": "Invalid device ID"}`: no
-            `timestamp`, and `error` is a string and not an `APIError`.
+            they were.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: The `id` is not a number (BAD_REQUEST)
           content:
             application/json:
               schema:
@@ -3068,28 +3072,32 @@ paths:
       responses:
         '200':
           description: >-
-            Provisioning status. The body is this object itself, not the
-            `APIResponse` envelope, and it is a fixed placeholder today.
+            Provisioning status, under `data`. It is a fixed placeholder today.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: idle
-                  devices:
-                    type: array
-                    items:
-                      type: string
-                  last_run:
-                    type: [string, 'null']
-                    format: date-time
-                  next_run:
-                    type: [string, 'null']
-                    format: date-time
-                  auto_provision:
-                    type: boolean
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: idle
+                          devices:
+                            type: array
+                            items:
+                              type: string
+                          last_run:
+                            type: [string, 'null']
+                            format: date-time
+                          next_run:
+                            type: [string, 'null']
+                            format: date-time
+                          auto_provision:
+                            type: boolean
 
   /api/v1/provisioning/provision:
     post:
@@ -3113,19 +3121,23 @@ paths:
       responses:
         '200':
           description: >-
-            Provisioning result. The body is this object itself, not the
-            `APIResponse` envelope, and it is a fixed placeholder today: the
-            handler reads no request body and starts nothing.
+            Provisioning result, under `data`. It is a fixed placeholder today:
+            the handler reads no request body and starts nothing.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: provisioning_started
-                  message:
-                    type: string
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: provisioning_started
+                          message:
+                            type: string
 
   /api/v1/provisioner/agents:
     get:
@@ -3394,14 +3406,19 @@ paths:
       responses:
         '200':
           description: >-
-            DHCP reservations. The body is a bare JSON array, not the
-            `APIResponse` envelope, and it is always empty today.
+            DHCP reservations, a JSON array under `data`. It is always empty
+            today.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
 
   # Admin Endpoints
   /api/v1/admin/rotate-admin-key:

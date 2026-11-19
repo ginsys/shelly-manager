@@ -517,90 +517,8 @@ func TestDiscoverHandler(t *testing.T) {
 	}
 }
 
-func TestGetProvisioningStatus(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping network test in short mode")
-	}
-
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	svc := testShellyService(t, db)
-	notificationHandler := testNotificationHandler(t, db)
-	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
-
-	req := httptest.NewRequest("GET", "/api/v1/provisioning/status", nil)
-	w := httptest.NewRecorder()
-
-	// Execute
-	handler.GetProvisioningStatus(w, req)
-
-	// Assert
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
-		t.Fatalf("Expected application/json Content-Type, got %s", ct)
-	}
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	testutil.AssertNoError(t, err)
-
-	status, exists := response["status"]
-	if !exists || status != "idle" {
-		t.Errorf("Expected status 'idle', got %v", status)
-	}
-}
-
-func TestProvisionDevices(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	svc := testShellyService(t, db)
-	notificationHandler := testNotificationHandler(t, db)
-	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
-
-	req := httptest.NewRequest("POST", "/api/v1/provisioning/provision", nil)
-	w := httptest.NewRecorder()
-
-	// Execute
-	handler.ProvisionDevices(w, req)
-
-	// Assert
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	testutil.AssertNoError(t, err)
-
-	status, exists := response["status"]
-	if !exists || status != "provisioning_started" {
-		t.Errorf("Expected status 'provisioning_started', got %v", status)
-	}
-}
-
-func TestGetDHCPReservations(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	svc := testShellyService(t, db)
-	notificationHandler := testNotificationHandler(t, db)
-	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
-
-	req := httptest.NewRequest("GET", "/api/v1/dhcp/reservations", nil)
-	w := httptest.NewRecorder()
-
-	// Execute
-	handler.GetDHCPReservations(w, req)
-
-	// Assert
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
-
-	var response []map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	testutil.AssertNoError(t, err)
-
-	// Should return empty array for now
-	testutil.AssertEqual(t, 0, len(response))
-}
+// The provisioning status, provision and DHCP reservation routes are covered by
+// TestPlaceholderRoutesAnswerTheEnvelope in envelope_answers_test.go.
 
 // routerRequest builds a request for a test that drives the full router. The router's header
 // validation refuses a request with an empty User-Agent as suspicious on purpose
@@ -1430,30 +1348,6 @@ func TestNewHandler(t *testing.T) {
 	testutil.AssertNotNil(t, handler.DB)
 	testutil.AssertNotNil(t, handler.Service)
 	testutil.AssertNotNil(t, handler.ConfigService)
-}
-
-func TestGetProvisioningStatusNew(t *testing.T) {
-	db, cleanup := testutil.TestDatabase(t)
-	defer cleanup()
-	svc := testShellyService(t, db)
-	notificationHandler := testNotificationHandler(t, db)
-	handler := NewHandlerWithLogger(db, svc, notificationHandler, nil, logging.GetDefault())
-
-	req := httptest.NewRequest("GET", "/api/v1/provisioning/status", nil)
-	w := httptest.NewRecorder()
-
-	handler.GetProvisioningStatus(w, req)
-
-	testutil.AssertEqual(t, http.StatusOK, w.Code)
-	testutil.AssertEqual(t, "application/json", w.Header().Get("Content-Type"))
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	testutil.AssertNoError(t, err)
-
-	status, exists := response["status"]
-	testutil.AssertTrue(t, exists)
-	testutil.AssertEqual(t, "idle", status)
 }
 
 func TestGetDeviceEnergy_InvalidID(t *testing.T) {
