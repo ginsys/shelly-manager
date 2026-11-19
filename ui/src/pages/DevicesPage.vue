@@ -46,6 +46,8 @@
       </select>
     </div>
 
+    <ErrorDisplay :error="actionError" data-testid="devices-action-error" @dismiss="clearActionError" />
+
     <div class="card" data-testid="device-list">
       <div v-if="store.loading" class="state" data-testid="loading-state">Loading...</div>
 
@@ -177,11 +179,15 @@ import type { Device } from '../api/types'
 import { useDevicesStore } from '../stores/devices'
 import DeviceForm from '../components/devices/DeviceForm.vue'
 import ErrorState from '../components/shared/ErrorState.vue'
+import ErrorDisplay from '../components/shared/ErrorDisplay.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ColumnToggle from '../components/shared/ColumnToggle.vue'
 import BulkOperationsDialog from '../components/bulk/BulkOperationsDialog.vue'
+import { useError } from '../composables/useError'
 
 const store = useDevicesStore()
+// A failed delete or control command. The list load keeps its own ErrorState above.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = useError()
 const showBulkDialog = ref(false)
 const showCreateDialog = ref(false)
 const showEditDialog = ref(false)
@@ -317,23 +323,25 @@ async function handleFormSubmit(data: Partial<Device>) {
 
 async function handleDelete(id: number) {
   if (!confirm('Are you sure you want to delete this device?')) return
+  clearActionError()
   try {
     await deleteDevice(id)
     store.deselect([id])
     await store.fetchDevices()
   } catch (e: any) {
     if (isAbortError(e)) return
-    alert('Failed to delete device: ' + (e?.message || 'Unknown error'))
+    setActionError(e, { action: 'Delete device', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleControl(id: number, action: string) {
+  clearActionError()
   try {
     await controlDevice(id, { action: action as any })
     // Optionally refresh device status
     setTimeout(() => store.fetchDevices(), 500)
   } catch (e: any) {
-    alert('Failed to control device: ' + (e?.message || 'Unknown error'))
+    setActionError(e, { action: 'Control device', resource: 'Device', resourceId: id })
   }
 }
 

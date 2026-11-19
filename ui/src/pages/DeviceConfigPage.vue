@@ -15,8 +15,23 @@
       </button>
     </div>
 
+    <ErrorDisplay :error="actionError" data-testid="config-action-error" @dismiss="clearActionError" />
+
+    <div
+      v-if="applyNotice"
+      class="card apply-result"
+      :class="applyNotice.kind"
+      :data-kind="applyNotice.kind"
+      data-testid="apply-result"
+    >
+      <span>{{ applyNotice.deviceId !== String(deviceId) ? `Device ${applyNotice.deviceId}: ` : '' }}{{ applyNotice.text }}</span>
+      <button class="btn" data-testid="apply-result-dismiss" @click="applyNotice = null">Dismiss</button>
+    </div>
+
     <div v-if="store.loading" class="card state">Loading...</div>
-    <div v-else-if="store.error" class="card state error">{{ store.error }}</div>
+    <!-- The store also sets its error when an action fails. The error panel shows that failure with
+         its code, so this card shows only a load that failed. -->
+    <div v-else-if="store.error && !actionFailed" class="card state error">{{ store.error }}</div>
 
     <template v-else>
       <div v-if="store.status" class="card status-card">
@@ -164,19 +179,27 @@
       </div>
     </template>
 
-    <div v-if="showAddTemplate" class="modal-overlay" @click.self="showAddTemplate = false">
+    <div v-if="showAddTemplate" class="modal-overlay" @click.self="closeAddTemplate">
       <div class="modal">
         <h2>Add Template</h2>
+        <ErrorDisplay :error="addError" data-testid="add-template-error" @dismiss="clearAddError" />
         <div class="form-group">
           <label>Template ID *</label>
-          <input v-model.number="newTemplateId" type="number" class="form-input" placeholder="Enter template ID" />
+          <input
+            v-model.number="newTemplateId"
+            type="number"
+            class="form-input"
+            placeholder="Enter template ID"
+            @input="addIdError = ''"
+          />
+          <div v-if="addIdError" class="field-error" data-testid="add-template-id-error">{{ addIdError }}</div>
         </div>
         <div class="form-group">
           <label>Position (optional)</label>
           <input v-model.number="newTemplatePosition" type="number" class="form-input" placeholder="Leave empty to append" />
         </div>
         <div class="modal-actions">
-          <button class="btn" @click="showAddTemplate = false">Cancel</button>
+          <button class="btn" @click="closeAddTemplate">Cancel</button>
           <button class="btn primary" @click="handleAddTemplate">Add</button>
         </div>
       </div>
@@ -190,6 +213,8 @@ import { useRoute } from 'vue-router'
 import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { useError } from '@/composables/useError'
 import { getCurrentDeviceConfig } from '@/api/deviceConfig'
 import { nullRemovedSecrets } from '@/utils/config-form'
 import { TemplateSaveError, type FieldError } from '@/api/templates'
@@ -218,6 +243,30 @@ const newTemplatePosition = ref<number | null>(null)
 const liveConfig = ref<Record<string, any> | null>(null)
 const liveError = ref<string | null>(null)
 const liveLoading = ref(false)
+
+// A failed action shows as an error panel under the toolbar. A failed template add shows inside the
+// add-template dialog instead, which is open and covers the page when it happens.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = useError()
+const { error: addError, setError: setAddError, clearError: clearAddError } = useError()
+const addIdError = ref('')
+// The store sets its own error when an action fails and keeps it until its next call. The page error
+// card shows only a load that failed, so it stays off after an action failed, also when the panel was
+// dismissed: the card replaces the whole page body.
+const actionFailed = ref(false)
+
+function beginAction() {
+  actionFailed.value = false
+  clearActionError()
+}
+
+function failAction(e: unknown, context: { action: string; resource: string; resourceId: string | number }) {
+  actionFailed.value = true
+  setActionError(e, context)
+}
+// What the last apply came to. It is a result, not an error: an unconfirmed apply is neither a
+// failure nor a success, so it has its own card and does not go through ErrorDisplay.
+type ApplyNotice = { kind: 'success' | 'unconfirmed' | 'failed'; deviceId: string; text: string }
+const applyNotice = ref<ApplyNotice | null>(null)
 
 function loadOverrides(body: Record<string, any> | null | undefined) {
   overridesData.value = JSON.parse(JSON.stringify(body || {}))
@@ -285,11 +334,23 @@ async function handleLoadLive() {
   }
 }
 
+function closeAddTemplate() {
+  showAddTemplate.value = false
+  addIdError.value = ''
+  clearAddError()
+}
+
+// A failure or an apply result that arrives after the page moved to another device is still shown:
+// the apply changed a physical device. The error panel names its device in its context line, and the
+// result card names it when it is not the device on screen.
 async function handleAddTemplate() {
+  actionFailed.value = false
+  clearAddError()
   if (!newTemplateId.value) {
-    alert('Template ID is required')
+    addIdError.value = 'Template ID is required'
     return
   }
+  addIdError.value = ''
 
   const id = deviceId.value
   const generation = routeGeneration
@@ -306,13 +367,16 @@ async function handleAddTemplate() {
     newTemplateId.value = null
     newTemplatePosition.value = null
   } catch (e: any) {
-    alert('Failed to add template: ' + (e?.message || 'Unknown error'))
+    if (routeGeneration !== generation) return
+    actionFailed.value = true
+    setAddError(e, { action: 'Add template', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleRemoveTemplate(templateId: number) {
   if (!confirm('Remove this template from the device?')) return
 
+  beginAction()
   const id = deviceId.value
   const generation = routeGeneration
   try {
@@ -320,7 +384,7 @@ async function handleRemoveTemplate(templateId: number) {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    alert('Failed to remove template: ' + (e?.message || 'Unknown error'))
+    failAction(e, { action: 'Remove template', resource: 'Device', resourceId: id })
   }
 }
 
@@ -329,6 +393,7 @@ async function handleSaveOverrides() {
   const id = deviceId.value
   const generation = routeGeneration
   saveErrors.value = []
+  beginAction()
   try {
     await store.saveOverrides(id, nullRemovedSecrets(overridesData.value, overridesHeld.value, overridesEditor.value?.schema))
     if (routeGeneration !== generation) return
@@ -340,13 +405,14 @@ async function handleSaveOverrides() {
       if (routeGeneration === generation) saveErrors.value = e.fields
       return
     }
-    alert('Failed to save overrides: ' + (e?.message || 'Unknown error'))
+    failAction(e, { action: 'Save overrides', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleClearOverrides() {
   if (!confirm('Clear all device overrides?')) return
 
+  beginAction()
   const id = deviceId.value
   const generation = routeGeneration
   try {
@@ -354,13 +420,15 @@ async function handleClearOverrides() {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    alert('Failed to clear overrides: ' + (e?.message || 'Unknown error'))
+    failAction(e, { action: 'Clear overrides', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleApply() {
   if (!confirm('Apply this configuration to the device? This will modify the physical device.')) return
 
+  beginAction()
+  applyNotice.value = null
   const id = deviceId.value
   const generation = routeGeneration
   try {
@@ -368,27 +436,40 @@ async function handleApply() {
     if (result.unconfirmed) {
       // A Wi-Fi network change that the device stopped answering after. Not a failure and not a
       // success: the device stays pending until a later read confirms it.
-      alert(
-        'Applied, unconfirmed: the device may have changed network and has not answered since. ' +
+      applyNotice.value = {
+        kind: 'unconfirmed',
+        deviceId: String(id),
+        text:
+          'Applied, unconfirmed: the device may have changed network and has not answered since. ' +
           'Find the device on its new network, then verify it.',
-      )
+      }
     } else if (result.success) {
-      alert(`Applied successfully. ${result.applied_count} field(s) updated.`)
+      applyNotice.value = {
+        kind: 'success',
+        deviceId: String(id),
+        text: `Applied successfully. ${result.applied_count} field(s) updated.`,
+      }
     } else {
-      alert(`Apply completed with errors. ${result.failed_count} field(s) failed.`)
+      applyNotice.value = {
+        kind: 'failed',
+        deviceId: String(id),
+        text: `Apply completed with errors. ${result.failed_count} field(s) failed.`,
+      }
     }
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    alert('Failed to apply config: ' + (e?.message || 'Unknown error'))
+    failAction(e, { action: 'Apply configuration', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleVerify() {
+  beginAction()
+  const id = deviceId.value
   try {
-    await store.verify(deviceId.value)
+    await store.verify(id)
   } catch (e: any) {
-    alert('Failed to verify: ' + (e?.message || 'Unknown error'))
+    failAction(e, { action: 'Verify device', resource: 'Device', resourceId: id })
   }
 }
 
@@ -415,6 +496,10 @@ watch(deviceId, (next, previous) => {
   showAddTemplate.value = false
   newTemplateId.value = null
   newTemplatePosition.value = null
+  addIdError.value = ''
+  clearAddError()
+  beginAction()
+  applyNotice.value = null
   liveConfig.value = null
   liveError.value = null
   liveLoading.value = false
@@ -437,6 +522,12 @@ watch(deviceId, (next, previous) => {
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
 .state { text-align: center; color: #64748b; padding: 32px; }
 .state.error { color: #b91c1c; }
+
+.apply-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.apply-result.success { background: #f0fdf4; border-color: #86efac; color: #166534; }
+.apply-result.unconfirmed { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.apply-result.failed { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+.field-error { color: #b91c1c; font-size: 13px; margin-top: 4px; }
 
 .status-card { background: #f9fafb; }
 .status-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }

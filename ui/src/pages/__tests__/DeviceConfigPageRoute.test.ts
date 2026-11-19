@@ -88,7 +88,6 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
 
   it('applies to the device in the address bar after the route changes', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'alert').mockImplementation(() => {})
     api.getConfigStatusNew.mockImplementation(async () => ({ config_applied: false, pending_changes: true }) as any)
     api.applyDeviceConfigNew.mockResolvedValue({ success: true, applied_count: 1, failed_count: 0 } as any)
     const { wrapper, router } = await mountAt('/devices/7/config')
@@ -104,7 +103,6 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
 
   it('shows an unconfirmed apply as its own state, neither success nor failure', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     api.getConfigStatusNew.mockImplementation(async () => ({ config_applied: false, pending_changes: true }) as any)
     // A Wi-Fi network change that the device stopped answering after: the API says success=false
     // because nothing was verified, and unconfirmed=true because nothing failed either.
@@ -119,8 +117,9 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
     await buttonWithText(wrapper, 'Apply Config').trigger('click')
     await flushPromises()
 
-    expect(alertSpy).toHaveBeenCalledTimes(1)
-    const message = String(alertSpy.mock.calls[0][0])
+    const result = wrapper.get('[data-testid="apply-result"]')
+    expect(result.attributes('data-kind')).toBe('unconfirmed')
+    const message = result.text()
     expect(message).toContain('unconfirmed')
     expect(message).toContain('may have changed network')
     expect(message).not.toContain('Applied successfully')
@@ -152,9 +151,7 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
   })
 
   it('reports an apply as done when the route changes while its status loads', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
-    void confirmSpy
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     let releaseOldStatus: (value: any) => void = () => {}
     let oldStatusCalls = 0
     api.getConfigStatusNew.mockImplementation((id: any) => {
@@ -179,14 +176,15 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
     releaseOldStatus({ config_applied: false, pending_changes: true, owner: 'device-7' })
     await flushPromises()
 
-    expect(alertSpy).toHaveBeenCalledTimes(1)
-    expect(alertSpy.mock.calls[0][0]).toContain('Applied successfully')
+    // The apply changed device 7, so its result is still shown, and it names the device because the
+    // page now shows device 8. Device 8's status stays.
+    const result = wrapper.get('[data-testid="apply-result"]')
+    expect(result.text()).toContain('Device 7: Applied successfully')
     expect((store.status as any)?.owner).toBe('device-8')
   })
 
   it('does not load the status of the old device when its apply ends after the route changed', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    vi.spyOn(window, 'alert').mockImplementation(() => {})
     let releaseApply: (value: any) => void = () => {}
     api.applyDeviceConfigNew.mockImplementation(
       () =>
