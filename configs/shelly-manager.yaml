@@ -156,7 +156,7 @@ security:
     allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     allowed_headers: ["Content-Type", "Authorization", "X-Requested-With"]
     max_age: 86400
-  admin_api_key: ""                # Optional: when set, every /api/v1 route except GET /version and GET /metrics/prometheus needs it (the web UI needs it built in as VITE_ADMIN_KEY). Prefer env (SHELLY_SECURITY_ADMIN_API_KEY or _FILE).
+  admin_api_key: ""                # Optional: when set, every /api/v1 route except GET /version and GET /metrics/prometheus needs it (the five agent routes also take agent_api_key; the web UI needs it built in as VITE_ADMIN_KEY). Prefer env (SHELLY_SECURITY_ADMIN_API_KEY or _FILE).
   agent_api_key: ""                # The key the provisioner agent sends; opens only the five agent routes. Use a value different from the admin key; no effect while admin_api_key is empty. Prefer env (SHELLY_SECURITY_AGENT_API_KEY).
 
 # Export subsystem configuration (safe download base directory)
