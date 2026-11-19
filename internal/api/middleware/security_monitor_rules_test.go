@@ -145,6 +145,23 @@ func TestTrackingOneIPConcurrentlyIsRaceFree(t *testing.T) {
 	assert.True(t, monitor.IsIPBlocked(ip))
 }
 
+// A block made by direct violations must survive the hourly cleanup: the entry carries a LastSeen.
+func TestCleanupKeepsAnEntryBlockedByDirectViolations(t *testing.T) {
+	monitor := newRulesMonitor(t)
+	ip := "10.66.1.5"
+
+	for i := 0; i < 5; i++ {
+		monitor.TrackRateLimitViolation(rulesRequest(ip, "/api/v1/devices"))
+	}
+	require.True(t, monitor.IsIPBlocked(ip))
+
+	monitor.cleanupOldDataOnce(time.Now().Add(-24 * time.Hour))
+
+	_, kept := monitor.attackMap.Load(ip)
+	assert.True(t, kept, "a freshly blocked entry is not dropped by the cleanup")
+	assert.True(t, monitor.IsIPBlocked(ip))
+}
+
 func TestTrustedIPIsNeverTrackedForViolations(t *testing.T) {
 	monitor := newRulesMonitor(t)
 
