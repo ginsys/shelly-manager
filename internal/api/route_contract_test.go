@@ -688,6 +688,8 @@ func TestRouteContractFixtures(t *testing.T) {
 			"async bare":   use + "async error => api.request(error.config))",
 			"block":        use + "async (error) => { if (!error.config) { return Promise.reject(error) } return api.request(error.config) })",
 			"first of two": use + "(error, extra) => api.request(error.config))",
+			"comments":     use + "(error) => { // error.config = nothing\n/* const error */ return api.request(error.config) })",
+			"comparison":   use + "(error) => { if (error.config === undefined || error.status >= 500) { return Promise.reject(error) } return api.request(error.config) })",
 		} {
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": head + body + "\n"}, nil)
 			if len(errs) != 0 || len(calls) != 0 {
@@ -723,21 +725,28 @@ func TestRouteContractFixtures(t *testing.T) {
 		// The identifier must be the rejection handler's own parameter, and nothing may replace it or
 		// its config before the re-send. Each of these names a config that was never paired.
 		for name, body := range map[string]string{
-			"any identifier":       "const f = (anything) => api.request(anything.config)",
-			"free function":        "const f = (error) => api.request(error.config)",
-			"fabricated config":    "const error = { config: { url: '/missing' } }\napi.request(error.config)",
-			"after the handler":    use + "(error) => Promise.reject(error))\nconst g = (error) => api.request(error.config)",
-			"other parameter":      use + "(error) => api.request(other.config))",
-			"first argument":       "api.interceptors.response.use((r) => api.request(r.config), (error) => Promise.reject(error))",
-			"second parameter":     use + "(extra, error) => api.request(error.config))",
-			"not inline":           "api.interceptors.response.use((r) => r, onError)\nconst onError = (error) => api.request(error.config)",
-			"request interceptor":  "api.interceptors.request.use((c) => c, (error) => api.request(error.config))",
-			"config replaced":      use + "(error) => { error.config = { url: '/missing' }; return api.request(error.config) })",
-			"config or-assigned":   use + "(error) => { error.config ||= { url: '/missing' }; return api.request(error.config) })",
-			"config spaced":        use + "(error) => { error . config\n= { url: '/missing' }; return api.request(error.config) })",
-			"parameter replaced":   use + "(error) => { error = { config: { url: '/missing' } }; return api.request(error.config) })",
-			"parameter redeclared": use + "(error) => { { const error = { config: { url: '/missing' } }; return api.request(error.config) } })",
-			"parameter in a loop":  use + "(error) => { for (const error of [{ config: { url: '/missing' } }]) { return api.request(error.config) } })",
+			"any identifier":            "const f = (anything) => api.request(anything.config)",
+			"free function":             "const f = (error) => api.request(error.config)",
+			"fabricated config":         "const error = { config: { url: '/missing' } }\napi.request(error.config)",
+			"after the handler":         use + "(error) => Promise.reject(error))\nconst g = (error) => api.request(error.config)",
+			"other parameter":           use + "(error) => api.request(other.config))",
+			"first argument":            "api.interceptors.response.use((r) => api.request(r.config), (error) => Promise.reject(error))",
+			"second parameter":          use + "(extra, error) => api.request(error.config))",
+			"not inline":                "api.interceptors.response.use((r) => r, onError)\nconst onError = (error) => api.request(error.config)",
+			"request interceptor":       "api.interceptors.request.use((c) => c, (error) => api.request(error.config))",
+			"config replaced":           use + "(error) => { error.config = { url: '/missing' }; return api.request(error.config) })",
+			"config or-assigned":        use + "(error) => { error.config ||= { url: '/missing' }; return api.request(error.config) })",
+			"config spaced":             use + "(error) => { error . config\n= { url: '/missing' }; return api.request(error.config) })",
+			"parameter replaced":        use + "(error) => { error = { config: { url: '/missing' } }; return api.request(error.config) })",
+			"parameter redeclared":      use + "(error) => { { const error = { config: { url: '/missing' } }; return api.request(error.config) } })",
+			"comment in the assignment": use + "(error) => { error /* retry */ .config = { url: '/missing' }; return api.request(error.config) })",
+			"line comment in it":        use + "(error) => { error // retry\n.config = { url: '/missing' }; return api.request(error.config) })",
+			"bracket assignment":        use + "(error) => { error['config'] = { url: '/missing' }; return api.request(error.config) })",
+			"member of the config":      use + "(error) => { error.config.url = '/missing'; return api.request(error.config) })",
+			"destructured name":         use + "(error) => { { const { error } = { error: { config: { url: '/missing' } } }; return api.request(error.config) } })",
+			"catch clause":              use + "(error) => { try { throw 1 } catch (error) { return api.request(error.config) } })",
+			"call argument":             "const error = { config: { url: '/missing' } }\napi.interceptors.response.use((r) => r, (error, api.request(error.config)))",
+			"parameter in a loop":       use + "(error) => { for (const error of [{ config: { url: '/missing' } }]) { return api.request(error.config) } })",
 		} {
 			got, gotErrs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": head + body + "\n"}, nil)
 			if len(gotErrs) != 1 || !strings.Contains(gotErrs[0].Error(), "unsupported use of the axios instance") {
