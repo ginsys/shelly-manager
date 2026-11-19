@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"syscall"
 
 	"github.com/go-sql-driver/mysql"
@@ -71,6 +72,10 @@ const (
 	// error is of a type nobody listed.
 	kindStatement    = "the database rejected the statement"
 	kindUnclassified = "unclassified error"
+
+	// kindDSNParameter is a SQLite open the driver refused for one query key of
+	// the DSN; the key is the detail, never its value.
+	kindDSNParameter = "invalid DSN parameter"
 )
 
 // postgresStates names the SQLSTATE codes an operator meets most when a
@@ -106,7 +111,8 @@ var mysqlErrors = map[uint16]string{
 // classifyConnectError reads the type of err and never its text: the text is
 // what carries the configuration. A *pgconn.PgError or *mysql.MySQLError gives
 // its code only, because the server echoes the database and the user it was
-// sent in its message.
+// sent in its message. The one reader of the text is sealDSNParameterError, which
+// uses it to pick a key of the DSN and prints nothing of it.
 func classifyConnectError(err error) *connectFailure {
 	failure := &connectFailure{kind: kindOther, cause: err}
 
@@ -193,6 +199,67 @@ func sealError(err error) error {
 		return err
 	}
 	return classifyConnectError(err)
+}
+
+// sealDSNParameterError seals the error a SQLite open returns. The driver builds
+// that error from the DSN query it refuses (`unknown _txlock "<value>"`,
+// `conflicting vfs query parameters: [<values>]`), and glebarez/sqlite opens the
+// connection inside its dialector, so there is no connector to wrap as for the
+// other providers. The failure is classified by sealError. Where it is the
+// unclassified kind, the driver text is read once, to find which key of the DSN it
+// names, and the key is printed from the DSN: no character of the driver text is.
+// Text that names no key of the DSN (a bad escape, a database error) stays generic.
+func sealDSNParameterError(dsn string, err error) error {
+	sealed := sealError(err)
+	var failure *connectFailure
+	if !errors.As(sealed, &failure) || failure.kind != kindOther {
+		return sealed
+	}
+	if key := dsnKeyNamedBy(dsn, err.Error()); key != "" {
+		return &connectFailure{kind: kindDSNParameter, detail: key, cause: err}
+	}
+	return sealed
+}
+
+// dsnKeyNamedBy returns the key of the DSN query that text names as a whole token,
+// the one named first, or "". Only keys of letters, digits and underscores count.
+func dsnKeyNamedBy(dsn, text string) string {
+	_, query, found := strings.Cut(dsn, "?")
+	if !found {
+		return ""
+	}
+	best, bestAt := "", -1
+	for _, pair := range strings.Split(query, "&") {
+		key, _, _ := strings.Cut(pair, "=")
+		if key == "" || strings.Trim(key, wordChars) != "" {
+			continue
+		}
+		if at := wholeTokenIndex(text, key); at >= 0 && (bestAt < 0 || at < bestAt) {
+			best, bestAt = key, at
+		}
+	}
+	return best
+}
+
+const wordChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+
+// wholeTokenIndex returns the index of the first occurrence of token in text that is
+// not part of a longer word, or -1.
+func wholeTokenIndex(text, token string) int {
+	for from := 0; from <= len(text)-len(token); {
+		at := strings.Index(text[from:], token)
+		if at < 0 {
+			return -1
+		}
+		at += from
+		end := at + len(token)
+		if (at == 0 || !strings.ContainsRune(wordChars, rune(text[at-1]))) &&
+			(end == len(text) || !strings.ContainsRune(wordChars, rune(text[end]))) {
+			return at
+		}
+		from = at + 1
+	}
+	return -1
 }
 
 // sealedConnector wraps a driver.Connector so that every connection attempt of
