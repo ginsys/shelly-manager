@@ -161,6 +161,10 @@ its own identity with a token it receives when it registers.
 With no key set the routes are open. The web UI asks for the key in a dialog the first time the server answers 401,
 and keeps it for the browser tab (see `ui/README.md`); a build with `VITE_ADMIN_KEY` already holds one.
 
+Each secret also takes a `_FILE` form, for example `SHELLY_SECURITY_ADMIN_API_KEY_FILE=/run/secrets/admin_key`
+(see `docs/security/SECURITY_SECRETS.md`). A `_FILE` that names a file the process cannot read stops the start-up
+with an error that names the variable and the path, so a typo in the path cannot leave the routes open.
+
 The PostgreSQL credentials can stay out of the DSN: set `SHELLY_DATABASE_USERNAME` and
 `SHELLY_DATABASE_PASSWORD` (`database.username` and `database.password`) and give a DSN without them,
 for example `postgresql://db.example:5432/shelly`. The app puts them into the URL with the escaping a
