@@ -172,3 +172,107 @@ describe('app notice for failures the page cannot show (ginsys/shelly-manager#64
     expect(w.find('[data-testid="app-notice"] .error-display').exists()).toBe(false)
   })
 })
+
+// A request that answers when the test says so, with a result and not a failure.
+function holdApplyResult() {
+  let answer: (r: unknown) => void = () => {}
+  api.applyDeviceConfigNew.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve
+      }) as any,
+  )
+  return (r: unknown) => answer(r)
+}
+
+// ginsys/shelly-manager#660: Apply changes a physical device, so what it came to reaches the user
+// wherever they are, with a severity that says whether it is good, uncertain or partial.
+describe('app notice for the result of an apply after the user left the page (ginsys/shelly-manager#660)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.resetAllMocks()
+    answerReads()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    dismissNotice()
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    ['a success', { success: true, applied_count: 4, failed_count: 0 }, 'Applied successfully. 4 field(s) updated.', 'Notice'],
+    [
+      'an unconfirmed apply',
+      { success: false, unconfirmed: true, applied_count: 2, failed_count: 0 },
+      'Find the device on its new network',
+      'Warning',
+    ],
+    [
+      'an apply that completed with errors',
+      { success: false, applied_count: 1, failed_count: 2 },
+      'Apply completed with errors. 2 field(s) failed.',
+      'Warning',
+    ],
+  ])('shows %s in the notice, with its severity', async (_name, result, text, title) => {
+    const answer = holdApplyResult()
+    const { wrapper: w, router } = await mountConfigPage()
+
+    await buttonWithText(w, 'Apply Config').trigger('click')
+    await flushPromises() // the apply request is open
+    await router.push('/devices/7')
+    await flushPromises()
+    expect(w.find('[data-testid="app-notice"] .error-display').exists()).toBe(false)
+
+    answer(result)
+    await flushPromises()
+
+    const notice = w.get('[data-testid="app-notice"]')
+    expect(notice.text()).toContain(text)
+    expect(notice.find('.error-title').text()).toBe(title)
+    expect(notice.text()).toContain('Apply configuration')
+    expect(notice.text()).toContain('7')
+    expect(notice.find('.error-code').exists()).toBe(false)
+    expect(notice.find('.retry-button').exists()).toBe(false)
+  })
+
+  it('shows the result on the page, and not in the notice, while the page is open', async () => {
+    const answer = holdApplyResult()
+    const { wrapper: w } = await mountConfigPage()
+
+    await buttonWithText(w, 'Apply Config').trigger('click')
+    await flushPromises()
+    answer({ success: true, applied_count: 4, failed_count: 0 })
+    await flushPromises()
+
+    expect(w.get('[data-testid="apply-result"]').text()).toContain('Applied successfully')
+    expect(w.find('[data-testid="app-notice"] .error-display').exists()).toBe(false)
+  })
+
+  it('reads "Error" again for a failure that follows a late result', async () => {
+    const answer = holdApplyResult()
+    const { wrapper: w, router } = await mountConfigPage()
+
+    await buttonWithText(w, 'Apply Config').trigger('click')
+    await flushPromises()
+    await router.push('/devices/7')
+    await flushPromises()
+    answer({ success: true, applied_count: 4, failed_count: 0 })
+    await flushPromises()
+    expect(w.get('[data-testid="app-notice"] .error-title').text()).toBe('Notice')
+
+    const failApply = holdApply()
+    await router.push('/devices/7/config')
+    await flushPromises()
+    await buttonWithText(w, 'Apply Config').trigger('click')
+    await flushPromises()
+    await router.push('/devices/7')
+    await flushPromises()
+    failApply(new Error('device did not answer'))
+    await flushPromises()
+
+    expect(w.get('[data-testid="app-notice"] .error-title').text()).toBe('Error')
+  })
+})
