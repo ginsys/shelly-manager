@@ -23,7 +23,7 @@
       <button
         class="btn"
         :disabled="store.selectedCount === 0"
-        @click="showBulkDialog = true"
+        @click="openBulkDialog"
         data-testid="bulk-ops-btn"
       >
         {{ bulkButtonLabel }}
@@ -54,7 +54,8 @@
     />
 
     <div class="card" data-testid="device-list">
-      <div v-if="store.loading" class="state" data-testid="loading-state">Loading...</div>
+      <!-- A refresh keeps the rows on screen until the new answer lands; only a page with nothing yet says Loading. -->
+      <div v-if="store.loading && store.items.length === 0" class="state" data-testid="loading-state">Loading...</div>
 
       <ErrorState
         v-else-if="store.error"
@@ -77,7 +78,7 @@
         </template>
       </EmptyState>
 
-      <table v-else class="table" data-testid="devices-table">
+      <table v-else class="table" :class="{ busy: store.loading }" :aria-busy="store.loading" data-testid="devices-table">
         <thead>
           <tr>
             <th v-if="store.visibleColumns.select" class="select-col">
@@ -170,6 +171,8 @@
     <BulkOperationsDialog
       :isOpen="showBulkDialog"
       :selectedDevices="store.selectedDevices"
+      :checking="store.checkingSelection"
+      :removedCount="store.removedFromSelection"
       @close="showBulkDialog = false"
       @complete="store.fetchDevices()"
       @remove="store.deselect([$event])"
@@ -251,6 +254,13 @@ watch(() => store.pageSize, () => {
   store.setPageSize(store.pageSize)
   store.fetchDevices()
 })
+
+// The dialog is the one place the selection is sent, so it is checked against the server here: a
+// device deleted elsewhere is dropped before an operation can be started on it.
+function openBulkDialog() {
+  showBulkDialog.value = true
+  void store.checkSelection()
+}
 
 // Selection covers the devices ticked so far, also those on other pages. The header checkbox
 // acts on the rows shown, never on the whole fleet.
@@ -375,6 +385,7 @@ export default {
 .state { padding: 16px; text-align: center; color: #64748b; }
 .state.error { color: #b91c1c; }
 .table { width: 100%; border-collapse: collapse; }
+.table.busy { opacity: 0.6; }
 .table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
 .table th { background: #f8fafc; cursor: pointer; user-select: none; white-space: nowrap; }
 .table th.select-col, .table td.select-col { width: 32px; cursor: default; }

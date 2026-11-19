@@ -17,6 +17,16 @@
         <p class="selection-info">
           <strong>{{ selectedDevices.length }}</strong> device(s) selected
         </p>
+        <p v-if="checking" class="form-note" role="status" data-testid="bulk-checking">
+          Checking {{ selectedDevices.length }} {{ selectedDevices.length === 1 ? 'device' : 'devices' }}...
+        </p>
+        <p v-else-if="removedCount > 0" class="form-note" role="status" data-testid="bulk-removed">
+          {{
+            removedCount === 1
+              ? '1 selected device no longer exists and was removed'
+              : `${removedCount} selected devices no longer exist and were removed`
+          }}
+        </p>
 
         <ul class="picked-devices" data-testid="bulk-picked-devices">
           <li
@@ -45,7 +55,7 @@
         <div class="operation-cards">
           <button
             class="operation-card"
-            :disabled="selectedDevices.length === 0"
+            :disabled="selectedDevices.length === 0 || checking"
             data-testid="bulk-op-import"
             @click="operation = 'import'"
           >
@@ -56,7 +66,7 @@
 
           <button
             class="operation-card"
-            :disabled="selectedDevices.length === 0"
+            :disabled="selectedDevices.length === 0 || checking"
             data-testid="bulk-op-drift"
             @click="operation = 'drift'"
           >
@@ -67,7 +77,7 @@
 
           <button
             class="operation-card"
-            :disabled="selectedDevices.length === 0"
+            :disabled="selectedDevices.length === 0 || checking"
             data-testid="bulk-op-drift-enhanced"
             @click="operation = 'drift-enhanced'"
           >
@@ -231,9 +241,13 @@ interface Props {
   // The devices the operation runs on. The request carries exactly these ids and never
   // "every device": with none picked, nothing can be started.
   selectedDevices: SelectedDevice[]
+  // The page is asking the server whether the ticked devices still exist: nothing is sent meanwhile.
+  checking?: boolean
+  // How many ticked devices the last check removed because the server no longer has them.
+  removedCount?: number
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { checking: false, removedCount: 0 })
 const emit = defineEmits<{
   close: []
   complete: [result: BulkAnswer]
