@@ -14,6 +14,7 @@ import (
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/redact"
 )
 
 // Template CRUD request/response types
@@ -511,7 +512,7 @@ func hasAuthPassword(config *configuration.DeviceConfiguration) bool {
 
 // secretMask stands in for a secret that is set. It lets a client tell "has a password" from "has
 // none" (a form that requires one) without ever receiving the value.
-const secretMask = "********"
+const secretMask = redact.Placeholder
 
 // secretSlot reads and writes one secret of a configuration. Setting "" clears it.
 type secretSlot struct {

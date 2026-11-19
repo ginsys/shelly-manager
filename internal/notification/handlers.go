@@ -54,7 +54,7 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiresp.NewResponseWriter(h.logger).WriteCreated(w, r, channel)
+	apiresp.NewResponseWriter(h.logger).WriteCreated(w, r, maskedChannel(channel))
 }
 
 // GetChannels handles GET /api/v1/notifications/channels
@@ -67,6 +67,10 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 		}).Error("Failed to get notification channels")
 		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
 		return
+	}
+
+	for i := range channels {
+		channels[i] = maskedChannel(channels[i])
 	}
 
 	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]interface{}{
@@ -150,6 +154,7 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rule.Channel = maskedChannel(rule.Channel)
 	apiresp.NewResponseWriter(h.logger).WriteCreated(w, r, rule)
 }
 
@@ -163,6 +168,10 @@ func (h *Handler) GetRules(w http.ResponseWriter, r *http.Request) {
 		}).Error("Failed to get notification rules")
 		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
 		return
+	}
+
+	for i := range rules {
+		rules[i].Channel = maskedChannel(rules[i].Channel)
 	}
 
 	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]interface{}{
@@ -243,6 +252,13 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		}).Error("Failed to get notification history")
 		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
 		return
+	}
+
+	// A failed send's error quotes the destination, so cut the channel's credentials out of it
+	// before the channel's own config is masked.
+	for i := range history {
+		history[i].Error = scrubText(history[i].Error, history[i].Channel.Config)
+		history[i].Channel = maskedChannel(history[i].Channel)
 	}
 
 	// Translate limit/offset to pagination meta (1-based page)
