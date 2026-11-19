@@ -104,6 +104,12 @@ func TestDiscoverDevices_BackfillMovesTheVersionOnlyWhenTheSettingsChange(t *tes
 	db := createTestDB(t)
 	service := NewService(db, createTestConfig())
 	device := createTestDevice(t, db, "192.0.2.22")
+	// A discovery names the type of a model with discovery.GetDeviceType. Store that type, so that
+	// only the settings differ and the first pass moves the version through the backfill alone.
+	device.Type = discovery.GetDeviceType("SHSW-25")
+	if err := saveDevice(db, device); err != nil {
+		t.Fatal(err)
+	}
 	service.SetDiscoverFunc(func(context.Context, []string, time.Duration) ([]discovery.ShellyDevice, error) {
 		return []discovery.ShellyDevice{{
 			ID: "shelly1-3", MAC: device.MAC, Model: "SHSW-25", Generation: 1, Version: device.Firmware,
@@ -120,6 +126,9 @@ func TestDiscoverDevices_BackfillMovesTheVersionOnlyWhenTheSettingsChange(t *tes
 	first := storedVersion(t, db, device.ID)
 	if !first.After(before) {
 		t.Fatalf("a backfill that added settings left updated_at at %v", first)
+	}
+	if _, settings := storedLogin(t, service, device.ID); settings["auth_pass"] != "" {
+		t.Fatalf("the backfill did not store the missing auth_pass: %v", settings["auth_pass"])
 	}
 	time.Sleep(5 * time.Millisecond)
 
