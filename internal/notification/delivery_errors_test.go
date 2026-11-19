@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -128,6 +129,19 @@ func TestRequestError_KeepsNoURLText(t *testing.T) {
 		assertNoURLText(t, "dns", err)
 		// A sandbox without a resolver fails the lookup in another way or times out.
 		assert.Contains(t, []string{"request failed: Post host not found", "request failed: Post failed", "request failed: Post timed out"}, err.Error())
+	})
+
+	t.Run("a missing name is told from a failing resolver", func(t *testing.T) {
+		wrap := func(dns *net.DNSError) error {
+			return &url.Error{Op: "Post", URL: "http://h.example/" + urlToken, Err: &net.OpError{Op: "dial", Net: "tcp", Err: dns}}
+		}
+		missing := requestError("request failed", wrap(&net.DNSError{Err: "no such host", Name: "h.example", IsNotFound: true}))
+		assert.Equal(t, "request failed: Post host not found", missing.Error())
+
+		servfail := requestError("request failed", wrap(&net.DNSError{Err: "server misbehaving", Name: "h.example", Server: "10.0.0.1:53"}))
+		assert.Equal(t, "request failed: Post failed", servfail.Error())
+		assertNoURLText(t, "servfail", servfail)
+		assert.NotContains(t, servfail.Error(), "10.0.0.1")
 	})
 
 	t.Run("a redirect that cannot be followed quotes more URLs", func(t *testing.T) {
