@@ -146,7 +146,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/import/history` | Import history | 57 | top bar (Export & Import) |
 | `/import/:id` | Import result | 34 | Import history |
 | `/plugins` | Plugin management (read-only) | 565 | top bar |
-| `/dashboard` | Metrics dashboard | 661 | top bar |
+| `/dashboard` | Metrics dashboard | 667 | top bar |
 | `/admin` | Admin settings (admin key rotation) | 45 | top bar |
 | `/notifications/channels` | Notification channels | 197 | top bar (Notifications), Channel detail |
 | `/notifications/channels/:id` | Channel detail | 126 | Channels |
@@ -299,7 +299,7 @@ Found by reading the code at this commit; not a plan.
 1. **The route table is inline in `main.ts`** (section 3, ginsys/shelly-manager#646), so no unit test
    can check that every route is reachable; the end-to-end spec carries an explicit path list.
 2. **Quasar is a dependency nothing imports** (section 2).
-3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (661),
+3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (667),
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
