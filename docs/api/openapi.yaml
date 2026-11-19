@@ -566,7 +566,9 @@ components:
     ExportResult:
       type: object
       properties:
-        id:
+        success:
+          type: boolean
+        export_id:
           type: string
         plugin_name:
           type: string
@@ -574,17 +576,27 @@ components:
           type: string
         output_path:
           type: string
+        webhook_sent:
+          type: boolean
+        record_count:
+          type: integer
         file_size:
           type: integer
           format: int64
-        record_count:
-          type: integer
-        duration_ms:
+        checksum:
+          type: string
+        duration:
           type: integer
           format: int64
-        status:
-          type: string
-          enum: [pending, success, failed]
+          description: Duration in nanoseconds
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
         metadata:
           type: object
         created_at:
@@ -629,7 +641,9 @@ components:
     ImportResult:
       type: object
       properties:
-        id:
+        success:
+          type: boolean
+        import_id:
           type: string
         plugin_name:
           type: string
@@ -639,22 +653,24 @@ components:
           type: integer
         records_skipped:
           type: integer
-        records_deleted:
+        duration:
           type: integer
-        status:
-          type: string
-          enum: [success, partial, failed]
-        errors:
-          type: array
-          items:
-            type: string
+          format: int64
+          description: Duration in nanoseconds
         changes:
           type: array
           items:
             $ref: '#/components/schemas/ImportChange'
-        duration_ms:
-          type: integer
-          format: int64
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
         created_at:
           type: string
           format: date-time
@@ -665,14 +681,15 @@ components:
         type:
           type: string
           enum: [create, update, delete]
-        entity:
+        resource:
           type: string
-        id:
+          description: device, config or template
+        resource_id:
           type: string
-        before:
-          type: object
-        after:
-          type: object
+        field:
+          type: string
+        old_value: {}
+        new_value: {}
 
     BackupRequest:
       type: object
