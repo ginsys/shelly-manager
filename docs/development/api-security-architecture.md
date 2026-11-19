@@ -175,6 +175,24 @@ if monitor.IsIPBlocked(clientIP) {
 - **Implementation**: Statistical analysis of request patterns
 - **Metrics**: Attack frequency, source identification, threat classification
 
+**When the monitor blocks an IP.** It blocks a client IP (trusted IPs excepted) for one hour, on every
+route, as soon as one of these holds:
+
+| Rule | Threshold |
+|------|-----------|
+| Suspicious requests, in total | 10 |
+| Rate limit violations, in total | 5 |
+| Attack types seen | 3 |
+| Suspicious requests inside one rolling hour | more than 5 (the 6th inside the hour) |
+
+A response with status 400 or above counts as suspicious, except 404, 401, 408 and 429. A 429 counts
+once, as a rate limit violation (the rate limiter's refusals reach the monitor as 429 responses).
+Other signals on the same request, such as a missing User-Agent, still count it as suspicious.
+
+The totals never decay. After a block ends, the next tracked request blocks the IP again while a
+total rule still holds, so such an IP stays blocked until 24 hours pass with no tracked request, not
+one hour. Only the rolling-hour rule ages out during a block.
+
 #### Layer 4: Security Logging Middleware
 - **Purpose**: Comprehensive audit trail for security events
 - **Protection**: Forensic analysis, compliance reporting
