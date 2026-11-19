@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -15,22 +14,16 @@ import (
 
 // Helper functions are in ../testhelpers_test.go
 
-// isTestNetAddress validates that an address is in a safe TEST-NET range (RFC 5737)
-func isTestNetAddress(addr string) bool {
-	testNetPrefixes := []string{"192.0.2.", "198.51.100.", "203.0.113."}
-	for _, prefix := range testNetPrefixes {
-		if strings.HasPrefix(addr, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-// assertTestNetAddress fails the test if the address is not in TEST-NET range
-func assertTestNetAddress(t *testing.T, addr string) {
+// assertLoopbackAddress fails the test if the address (a host or a host:port) is not a loopback
+// address, so a test that must send nothing off this host cannot be pointed at another host.
+func assertLoopbackAddress(t *testing.T, addr string) {
 	t.Helper()
-	if !isTestNetAddress(addr) {
-		t.Fatalf("Address %s is not in TEST-NET range - tests should only use RFC 5737 TEST-NET addresses", addr)
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		t.Fatalf("Address %s is not a loopback address - tests must send nothing off this host", addr)
 	}
 }
 
@@ -734,10 +727,9 @@ func TestClient_GetEnergyData(t *testing.T) {
 
 // Test error cases
 func TestClient_ErrorHandling(t *testing.T) {
-	// Test with non-existent server using TEST-NET address
-	testAddr := "192.0.2.200"
-	assertTestNetAddress(t, testAddr)
-	t.Logf("Using safe TEST-NET address: %s (RFC 5737 - no real network traffic)", testAddr)
+	// A closed loopback port: the connection is refused at once and nothing leaves this host
+	testAddr := "127.0.0.1:1"
+	assertLoopbackAddress(t, testAddr)
 
 	client := NewClient(testAddr, WithTimeout(50*time.Millisecond))
 	ctx := context.Background()
@@ -753,9 +745,8 @@ func TestClient_ErrorHandling(t *testing.T) {
 }
 
 func TestClient_ContextCancellation(t *testing.T) {
-	testAddr := "192.0.2.200"
-	assertTestNetAddress(t, testAddr)
-	t.Logf("Using safe TEST-NET address: %s (RFC 5737 - no real network traffic)", testAddr)
+	testAddr := "127.0.0.1:1" // a closed loopback port; nothing leaves this host
+	assertLoopbackAddress(t, testAddr)
 
 	client := NewClient(testAddr, WithTimeout(50*time.Millisecond))
 

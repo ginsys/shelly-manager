@@ -2,8 +2,8 @@ package testutil
 
 import (
 	"context"
+	"net"
 	"os"
-	"strings"
 	"testing"
 	"time"
 )
@@ -75,49 +75,28 @@ func CreateNetworkTestContext(config NetworkTestConfig) (context.Context, contex
 	return context.WithTimeout(context.Background(), timeout)
 }
 
-// TestNetworkAddress returns safe test addresses for network tests
+// TestNetworkAddress returns an address that no device answers and that never leaves this host: a
+// closed port on the loopback, which refuses at once. A TEST-NET address (RFC 5737) is not safe for
+// this: the host still sends the packet to its default gateway.
 func TestNetworkAddress() string {
-	// Use TEST-NET-1 address range (RFC 3330) - guaranteed to be non-routable
-	return "192.0.2.1"
+	return "127.0.0.1:1"
 }
 
-// TestNetworkCIDR returns a safe CIDR range for network tests
-func TestNetworkCIDR() string {
-	// Use small TEST-NET-1 range for fast tests
-	return "192.0.2.0/30" // Only 4 addresses
-}
-
-// IsTestNetAddress validates that an address is in a safe TEST-NET range
-func IsTestNetAddress(addr string) bool {
-	// TEST-NET-1: 192.0.2.0/24
-	// TEST-NET-2: 198.51.100.0/24
-	// TEST-NET-3: 203.0.113.0/24
-	testNetPrefixes := []string{
-		"192.0.2.",
-		"198.51.100.",
-		"203.0.113.",
+// IsLoopbackAddress reports whether addr, a host or a host:port, is a loopback address.
+func IsLoopbackAddress(addr string) bool {
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
 	}
-
-	for _, prefix := range testNetPrefixes {
-		if strings.HasPrefix(addr, prefix) {
-			return true
-		}
-	}
-	return false
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
-// AssertTestNetAddress fails the test if the address is not in TEST-NET range
-func AssertTestNetAddress(t *testing.T, addr string) {
+// AssertLoopbackAddress fails the test if the address is not a loopback address, so a test that
+// must send nothing off this host cannot be pointed at another host by mistake.
+func AssertLoopbackAddress(t *testing.T, addr string) {
 	t.Helper()
-	if !IsTestNetAddress(addr) {
-		t.Fatalf("Address %s is not in TEST-NET range - tests should only use RFC 5737 TEST-NET addresses", addr)
-	}
-}
-
-// LogTestNetUsage logs that a test is using TEST-NET addresses for transparency
-func LogTestNetUsage(t *testing.T, addr string) {
-	t.Helper()
-	if IsTestNetAddress(addr) {
-		t.Logf("Using safe TEST-NET address: %s (RFC 5737 - no real network traffic)", addr)
+	if !IsLoopbackAddress(addr) {
+		t.Fatalf("Address %s is not a loopback address - tests must send nothing off this host", addr)
 	}
 }

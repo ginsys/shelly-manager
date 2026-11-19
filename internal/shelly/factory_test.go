@@ -219,7 +219,7 @@ func TestFactory_DetectGeneration_NetworkError(t *testing.T) {
 	factory := NewFactory()
 
 	ctx := context.Background()
-	generation, err := factory.DetectGeneration(ctx, "192.168.1.200") // Non-existent IP
+	generation, err := factory.DetectGeneration(ctx, "127.0.0.1:1") // A closed loopback port
 	assertError(t, err)
 	assertEqual(t, 0, generation)
 }

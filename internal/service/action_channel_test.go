@@ -67,7 +67,7 @@ func TestShellyService_ControlDevice_BadChannelIsRefusedBeforeAnyDeviceCall(t *t
 	db := createTestDB(t)
 	svc := NewService(db, createTestConfigBusiness())
 	device := &database.Device{
-		IP:       "192.0.2.1",
+		IP:       "127.0.0.1:1",
 		MAC:      "68C63A123470",
 		Type:     "SHSW-25",
 		Name:     "Unreachable",

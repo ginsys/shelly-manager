@@ -155,8 +155,8 @@ func TestPostgreSQLSecurityCredentialProtection(t *testing.T) {
 
 	testDSNs := []string{
 		"postgres://confidential_user:secret_password@localhost:5432/testdb",
-		"postgresql://admin:super_secret_key@192.168.1.100:5432/production",
-		"postgres://service:private_token@db.internal.com:5432/app_db",
+		"postgresql://admin:super_secret_key@127.0.0.1:1/production",
+		"postgres://service:private_token@127.0.0.1:2/app_db",
 	}
 
 	for i, dsn := range testDSNs {

@@ -96,7 +96,7 @@ func TestShellyService_ConfigHandling(t *testing.T) {
 			setupConfig: func() *config.Config {
 				cfg := &config.Config{}
 				cfg.Discovery.Enabled = true
-				cfg.Discovery.Networks = []string{"203.0.113.0/30"}
+				cfg.Discovery.Networks = []string{"127.0.0.0/30"}
 				cfg.Discovery.Timeout = 0
 				return cfg
 			},
@@ -106,7 +106,7 @@ func TestShellyService_ConfigHandling(t *testing.T) {
 			setupConfig: func() *config.Config {
 				cfg := &config.Config{}
 				cfg.Discovery.Enabled = false
-				cfg.Discovery.Networks = []string{"203.0.113.0/24"}
+				cfg.Discovery.Networks = []string{"127.0.0.0/30"}
 				cfg.Discovery.Timeout = 5
 				return cfg
 			},
@@ -439,7 +439,7 @@ func TestShellyService_InitializationEdgeCases(t *testing.T) {
 	extremeConfig.Discovery.Enabled = true
 	extremeConfig.Discovery.Networks = make([]string, 1000) // Very large network list
 	for i := range extremeConfig.Discovery.Networks {
-		extremeConfig.Discovery.Networks[i] = "203.0.113.0/30"
+		extremeConfig.Discovery.Networks[i] = "127.0.0.0/30"
 	}
 	extremeConfig.Discovery.Timeout = -1           // Negative timeout
 	extremeConfig.Discovery.ConcurrentScans = -100 // Negative concurrency

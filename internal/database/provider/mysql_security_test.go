@@ -183,10 +183,10 @@ func TestMySQLSecurityCredentialProtection(t *testing.T) {
 
 	testDSNs := []string{
 		"confidential_user:secret_password@tcp(localhost:3306)/testdb",
-		"admin:super_secret_key@tcp(192.168.1.100:3306)/production",
-		"service:private_token@tcp(db.internal.com:3306)/app_db",
+		"admin:super_secret_key@tcp(127.0.0.1:1)/production",
+		"service:private_token@tcp(127.0.0.1:2)/app_db",
 		"root:admin_pass@tcp(127.0.0.1:3306)/secure_db",
-		"user:db_secret@tcp(mysql.local:3306)/database",
+		"user:db_secret@tcp(127.0.0.1:3)/database",
 	}
 
 	for i, dsn := range testDSNs {
