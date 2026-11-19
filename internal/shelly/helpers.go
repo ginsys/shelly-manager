@@ -25,13 +25,19 @@ func DetectGeneration(ctx context.Context, ip string) (int, error) {
 	}
 
 	resp, err := httpClient.Do(req)
-	if err == nil && resp.StatusCode == http.StatusOK {
-		defer func() { _ = resp.Body.Close() }()
+	if err == nil {
+		// Close the body whatever the status: a redirect or an error answer is returned as is,
+		// and the fallback below overwrites resp.
 		var info struct {
 			ID  string `json:"id"`
 			Gen int    `json:"gen"`
 		}
-		if decodeErr := json.NewDecoder(resp.Body).Decode(&info); decodeErr == nil && info.Gen > 0 {
+		decodeErr := fmt.Errorf("status %d", resp.StatusCode)
+		if resp.StatusCode == http.StatusOK {
+			decodeErr = json.NewDecoder(resp.Body).Decode(&info)
+		}
+		_ = resp.Body.Close()
+		if decodeErr == nil && info.Gen > 0 {
 			return info.Gen, nil
 		}
 	}
