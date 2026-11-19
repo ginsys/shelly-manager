@@ -255,3 +255,15 @@ func TestCanonicalNumber_AgreesWithExactArithmetic(t *testing.T) {
 		}
 	}
 }
+
+func TestFoldKey(t *testing.T) {
+	key, ok := FoldKey(map[string]any{"Secret": 1, "name": 2}, "secret")
+	assert.True(t, ok)
+	assert.Equal(t, "Secret", key)
+
+	_, ok = FoldKey(map[string]any{"Secret": 1, "secret": 2}, "SECRET")
+	assert.False(t, ok, "two keys that fold together are ambiguous, whatever the map order")
+
+	_, ok = FoldKey(map[string]any{"name": 2}, "secret")
+	assert.False(t, ok, "no key folds to it")
+}

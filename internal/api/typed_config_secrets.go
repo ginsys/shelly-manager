@@ -174,8 +174,8 @@ func keepOmittedValue(in, stored map[string]any) error {
 		key, present := k, false
 		if _, ok := in[k]; ok {
 			present = true
-		} else if redact.FoldCount(stored, k) == 1 {
-			key, present = redact.MatchKey(in, k)
+		} else if _, unique := redact.FoldKey(stored, k); unique {
+			key, present = redact.FoldKey(in, k)
 		}
 		switch {
 		case !present:

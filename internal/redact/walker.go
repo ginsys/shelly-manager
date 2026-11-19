@@ -144,43 +144,28 @@ func maskNode(v any, slots Slots, top bool) {
 	}
 }
 
-// lookupFold returns the value stored under k, matching the key without regard to case. Two stored keys
-// that fold together ({"URL":..., "url":...}) are ambiguous, because decoding picks one by position and a
-// map has none: nothing is returned, so the placeholder is dropped and the client must send a value.
+// FoldKey returns the key of m that folds to k, matching without regard to case, and false unless exactly one
+// key does. Two keys that fold together ({"URL":..., "url":...}) are ambiguous, because decoding picks one by
+// position and a map has none.
+func FoldKey(m map[string]any, k string) (string, bool) {
+	var found string
+	n := 0
+	for key := range m {
+		if strings.EqualFold(key, k) {
+			found = key
+			n++
+		}
+	}
+	return found, n == 1
+}
+
+// lookupFold returns the value stored under k by FoldKey. Nothing is returned for an ambiguous key, so the
+// placeholder is dropped and the client must send a value.
 func lookupFold(m map[string]any, k string) any {
-	var found any
-	n := 0
-	for key, v := range m {
-		if strings.EqualFold(key, k) {
-			found = v
-			n++
-		}
+	if key, ok := FoldKey(m, k); ok {
+		return m[key]
 	}
-	if n != 1 {
-		return nil
-	}
-	return found
-}
-
-// MatchKey returns the key of m that folds to k, matching without regard to case, as lookupFold does.
-func MatchKey(m map[string]any, k string) (string, bool) {
-	for key := range m {
-		if strings.EqualFold(key, k) {
-			return key, true
-		}
-	}
-	return "", false
-}
-
-// FoldCount returns how many keys of m fold to k. More than one means a lookup by k is ambiguous.
-func FoldCount(m map[string]any, k string) int {
-	n := 0
-	for key := range m {
-		if strings.EqualFold(key, k) {
-			n++
-		}
-	}
-	return n
+	return nil
 }
 
 // savedSecret returns the stored value a placeholder under key k takes back, and false when there is none:
