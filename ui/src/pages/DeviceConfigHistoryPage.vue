@@ -8,7 +8,13 @@
     </div>
 
     <!-- A failed restore. While the viewer is open it covers the page, so the error shows in the viewer. -->
-    <ErrorDisplay v-if="!viewingConfig" :error="restoreError" data-testid="restore-error" @dismiss="clearRestoreError" />
+    <ErrorDisplay
+      v-if="!viewingConfig"
+      :error="restoreError"
+      :show-retry="false"
+      data-testid="restore-error"
+      @dismiss="clearRestoreError"
+    />
 
     <!-- Loading/Error states -->
     <div v-if="loading" class="card state">Loading...</div>
@@ -46,7 +52,12 @@
     <div v-if="viewingConfig" class="modal-overlay" @click.self="viewingConfig = null">
       <div class="modal">
         <h2>Configuration from {{ formatDate(viewingConfig.timestamp) }}</h2>
-        <ErrorDisplay :error="restoreError" data-testid="restore-error" @dismiss="clearRestoreError" />
+        <ErrorDisplay
+          :error="restoreError"
+          :show-retry="false"
+          data-testid="restore-error"
+          @dismiss="clearRestoreError"
+        />
         <pre class="config-view">{{ JSON.stringify(viewingConfig.config, null, 2) }}</pre>
         <div class="modal-actions">
           <button class="btn" @click="viewingConfig = null">Close</button>

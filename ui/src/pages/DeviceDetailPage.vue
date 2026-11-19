@@ -11,7 +11,12 @@
       <button class="btn" @click="refreshAll">Refresh</button>
     </div>
 
-    <ErrorDisplay :error="actionError" data-testid="device-action-error" @dismiss="clearActionError" />
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="device-action-error"
+      @dismiss="clearActionError"
+    />
 
     <div class="card" v-if="loading">
       <div class="state">Loading...</div>
@@ -148,7 +153,12 @@
           <button class="modal-close" @click="showEditDialog = false">✕</button>
         </div>
         <div class="modal-body">
-          <ErrorDisplay :error="saveError" data-testid="device-save-error" @dismiss="clearSaveError" />
+          <ErrorDisplay
+            :error="saveError"
+            :show-retry="false"
+            data-testid="device-save-error"
+            @dismiss="clearSaveError"
+          />
           <div class="form-group">
             <label>Device Name</label>
             <input v-model="editForm.name" type="text" class="form-input" placeholder="Device name" />

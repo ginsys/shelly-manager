@@ -12,7 +12,7 @@ const pages = import.meta.glob(
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
 
-// A word boundary before `alert`, so `window.alert(` and `alert (` match and `showAlert(` does not.
+// A word boundary before `alert`, so `window.alert(` and `alert (` match and `showalert(` does not.
 const ALERT_CALL = /\balert\s*\(/
 
 describe('device pages open no alert() dialog', () => {
@@ -20,7 +20,8 @@ describe('device pages open no alert() dialog', () => {
     expect(ALERT_CALL.test("window.alert('x')")).toBe(true)
     expect(ALERT_CALL.test("alert('x')")).toBe(true)
     expect(ALERT_CALL.test("alert ('x')")).toBe(true)
-    expect(ALERT_CALL.test("showAlert('x')")).toBe(false)
+    expect(ALERT_CALL.test("showalert('x')")).toBe(false)
+    expect(ALERT_CALL.test("alertCount(1)")).toBe(false)
   })
 
   it('reads all four pages', () => {
