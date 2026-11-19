@@ -6,6 +6,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
+	"github.com/ginsys/shelly-manager/internal/redact"
 )
 
 // The typed configuration shares its Wi-Fi, MQTT, authentication and network sections with
@@ -171,7 +172,7 @@ func keepOmittedValue(in, stored map[string]any) error {
 		cur, present := in[k]
 		switch {
 		case !present:
-			if holdsSecret(k, sv) {
+			if redact.HoldsSecret(k, sv) {
 				in[k] = sv
 			}
 		case cur == nil:
@@ -202,10 +203,10 @@ func keepOmittedIn(cur, stored any) error {
 			return nil
 		}
 		for i := range c {
-			if i >= len(s) || !sameWithoutSecrets(c[i], s[i]) {
+			if i >= len(s) || !redact.SameWithoutSecrets(c[i], s[i]) {
 				continue
 			}
-			if ambiguousEntry(c[i], s, true) {
+			if redact.AmbiguousEntry(c[i], s, true) {
 				return errAmbiguousEntry
 			}
 			if err := keepOmittedIn(c[i], s[i]); err != nil {
@@ -214,26 +215,6 @@ func keepOmittedIn(cur, stored any) error {
 		}
 	}
 	return nil
-}
-
-// holdsSecret reports whether a value under key is a secret or contains one.
-func holdsSecret(key string, v any) bool {
-	switch x := v.(type) {
-	case map[string]any:
-		for k, child := range x {
-			if holdsSecret(k, child) {
-				return true
-			}
-		}
-	case []any:
-		for _, child := range x {
-			if holdsSecret("", child) {
-				return true
-			}
-		}
-	}
-	// The mask is never a saved secret: a stored mask is dropped, not copied back.
-	return secretKey(key) && secretScalar(v) && v != secretMask
 }
 
 // storedTypedConfig returns the typed form of the configuration stored for a device, or nil when
