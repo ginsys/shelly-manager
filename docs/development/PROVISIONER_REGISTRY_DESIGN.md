@@ -72,15 +72,26 @@ The decisions that need an owner are at the end ("Decisions needed").
 ### What the agent does
 
 - The agent id is `provisioner-<hostname>-<pid>` (`generateAgentID`,
-  `cmd/shelly-provisioner/main.go:403`). On a host the pid changes on each
-  start, so a restarted agent has a new id. In a container the pid is usually 1
-  and the hostname is stable across a restart, so a restarted agent keeps its id.
+  `cmd/shelly-provisioner/main.go:403`), computed at each start. On a host the
+  pid changes on each start, so a restarted agent has a new id. In a container
+  the pid is usually 1 and the hostname is stable across a restart, so a
+  restarted agent keeps its id.
 - The token is kept in memory only (`internal/provisioning/api_client.go:25`).
   A restarted agent has no token.
-- The agent polls every 30 seconds (`main.go:130`). Before each poll it calls
-  `EnsureRegistered` (`main.go:447`; `api_client.go:171`). On a 401 or 404 from a
-  poll it drops its registration, so the next poll registers again
-  (`dropRegistration`, `api_client.go:180`, called at `:208`).
+- The agent polls every `provisioning.provision_interval` seconds
+  (`main.go:130-133`). The code falls back to 30 seconds only when that value is
+  zero or less. The configuration default is **600 seconds**
+  (`internal/config/config.go:276`), and the shipped Kubernetes agent sets 600
+  (`deploy/kubernetes/kustomize/base/deployment.yaml:183-184`). Only the shipped
+  agent config file sets 30 (`configs/shelly-provisioner.yaml:12`). Before each
+  poll the agent calls `EnsureRegistered` (`main.go:447`; `api_client.go:171`).
+  On a 401 or 404 from a poll it drops its registration, so the next poll
+  registers again (`dropRegistration`, `api_client.go:180`, called at `:208`).
+- **A 600-second agent is silent for longer than the 5-minute rule between two
+  polls.** At that interval the manager lists it as offline for about half of
+  each cycle, and the takeover rule (`:153`) allows a register of its id by any
+  agent-key holder for about half of each cycle. So for the shipped Kubernetes
+  agent, limit 3 is open most of the time, not only after an outage.
 - The agent sends the agent key as `Authorization: Bearer` and the token as
   `X-Agent-Token` (`api_client.go`, `makeRequest`).
 
@@ -88,8 +99,8 @@ The decisions that need an owner are at the end ("Decisions needed").
 
 | Event | What the agent sees | Wait |
 |---|---|---|
-| Manager restarts, one replica | Its next poll gets 401 (the registry is empty), it registers again at its next poll. No 409, because the manager has no record. `TestProvisionerClient_RegistersAgainAfterAManagerRestart` (`internal/api/provisioner_client_e2e_test.go:117`) proves this. | One poll interval (30 s by default). Tasks in memory are gone. |
-| Agent restarts and keeps its id (container), one replica | It has no token. It registers with the agent key only. The manager still holds the old record, which was seen less than 5 minutes ago, so the answer is 409. It retries at each poll. | The rest of the 5 minutes counted from its last poll before the restart: up to 5 minutes, plus up to one poll interval. Tasks assigned to the old process stay `assigned` and nobody polls them again. |
+| Manager restarts, one replica | Its next poll gets 401 (the registry is empty), it registers again at its next poll. No 409, because the manager has no record. `TestProvisionerClient_RegistersAgainAfterAManagerRestart` (`internal/api/provisioner_client_e2e_test.go:117`) proves this. | One poll interval (30 s in the shipped agent config, 600 s in the shipped Kubernetes agent). Tasks in memory are gone. |
+| Agent restarts and keeps its id (container), one replica | It has no token. It registers with the agent key only. If the manager's record was seen less than 5 minutes ago, the answer is 409. It retries at each poll. | The rest of the 5 minutes counted from its last poll before the restart, plus up to one poll interval for the retry. With a 600-second interval the record is often already more than 5 minutes old, and then there is no wait at all. Tasks assigned to the old process stay `assigned` and nobody polls them again. |
 | Agent restarts with a new id (host) | It registers a new id. No wait. The old row stays as an offline agent. | None. |
 | Agent holds the admin key | `holdsAdminKey` is true, so the 409 never applies (`:153`) and tokens are not checked. | None. This is the pre-token behaviour, and the reason the docs say to send the agent key and never the admin key (`docs/security/SECURITY_SECRETS.md:15`). |
 
@@ -159,7 +170,6 @@ public id (as `ExportHistory.ExportID` does).
 | `hostname`, `ip`, `version` | string | Not indexed. |
 | `capabilities`, `metadata` | `type:text` | JSON documents. No column default; seeded by `BeforeSave`. |
 | `token_hash` | string, `size:64`, unique index | Hex SHA-256 of the token. |
-| `previous_token_hash` | string, `size:64`, nullable | See "Rotation". |
 | `token_issued_at`, `registered_at`, `last_seen` | time; `last_seen` indexed | |
 
 `provisioning_tasks` (model `database.ProvisioningTask`):
@@ -170,23 +180,33 @@ public id (as `ExportHistory.ExportID` does).
 | `task_id` | string, `size:191`, unique index | Today `task_<unixnano>`, made in `CreateProvisioningTask` (`provisioner_handlers.go:337`). The API keeps its string id. |
 | `type`, `status` | string, `size:191`; `status` indexed | |
 | `device_mac`, `target_ssid` | string | |
-| `config` | `type:text` | JSON. See "Risk". |
+| `config` | text, size to decide | JSON. See "Column types" for the size, and "Risk". |
 | `agent_id` | string, `size:191`, index | No foreign key, as `DiscoveredDevice.AgentID`. |
 | `priority` | int | |
 | `created_at`, `updated_at` | time | |
 
 ### Column types on the three providers
 
-- `internal/database/models.go:11-15` records the two rules every model here
-  follows. An indexed string needs `size:191`, because MySQL cannot index an
-  unbounded text type. A JSON document column is `type:text` with **no column
-  default**, because MySQL rejects defaults on TEXT.
+- `internal/database/models.go:9-13` records the first rule every model here
+  follows: an indexed string needs `size:191`, because MySQL cannot index an
+  unbounded text type. `models.go:29-32` and `:45-47` record the second: a JSON
+  document column is `type:text` with **no column default**, because MySQL
+  rejects defaults on TEXT, and a `BeforeSave` hook seeds the empty value.
 - With those rules, every column above maps on SQLite, PostgreSQL and MySQL:
   strings become `varchar(191)` or `text`, times become the provider's
   timestamp, ints and bools are plain. **No provider lacks a column type this
   design needs**, so there is no stop point here.
-- `type:text` is `TEXT` on MySQL (64 KiB). A task `config` is a small JSON
-  document today. The build slice should say so next to the column.
+- **The task `config` needs a larger column than `type:text` on MySQL.**
+  `CreateProvisioningTask` accepts any `config` and checks only the task type
+  (`provisioner_handlers.go:338-354`). The request limit is 10 MiB
+  (`internal/api/middleware/security.go:80`). `TEXT` on MySQL holds about 64 KiB,
+  so a plain `type:text` column would reject a `config` that the API accepts
+  today. The build slice does one of two things, and says which: it sizes the
+  column for the request limit (`MEDIUMTEXT` or `LONGTEXT` on MySQL; `text` on
+  the other two providers already holds it) and proves it with a provider test
+  that stores and reads back a `config` near the limit; or it adds a smaller
+  validated limit on `config` and discloses it as a new restriction. This note
+  recommends the first.
 - The hash column is exactly 64 hex characters, so `size:64` is a hard fit and
   needs no 191 workaround.
 
@@ -203,9 +223,12 @@ So for slice 1:
 - Two new tables, no existing rows: **no fixup is needed**. Adding the two
   models to the list is the whole migration.
 - Later slices add columns to a table that then holds rows (slice 2 adds
-  enrolment state). Those columns **must be nullable** (or carry a Go-side
-  default), or the build slice must add a fixup. This is the one trap to name
-  in the slice 2 brief.
+  enrolment state). Those columns **must be nullable**, or the build slice must
+  add a fixup that adds the column nullable, backfills it, and then tightens it,
+  as the existing `config_templates` fixup does (`migrations.go:161-178`,
+  `:335-375`). A Go-side default is not enough: a `BeforeSave` hook runs on a
+  row operation and never touches the rows that already exist when `AutoMigrate`
+  runs. This is the one trap to name in the slice 2 brief.
 
 Tests the build slice adds:
 
@@ -228,32 +251,48 @@ agent, update a task's status, delete an agent.
 
 Three details matter:
 
-1. **The register is one conditional write.** The 409 rule and the token
-   replace must be atomic, because two replicas can register one id at the same
-   moment. Update the row `WHERE agent_id = ? AND (token_hash = ? OR last_seen <
-   now - 5 min)` and read the rows affected. Zero rows and an existing row is
-   the 409. A first register inserts, and the unique index on `agent_id` makes a
-   concurrent second insert fail; the loser retries as an update.
-   `clause.OnConflict` works on all three providers.
-2. **The claim is one conditional update per task.** The in-process mutex no
-   longer serialises replicas. Select the candidate ids, then `UPDATE
-   provisioning_tasks SET status = 'assigned', agent_id = ? WHERE id = ? AND
-   status = 'pending'` for each, and keep only the rows where the rows affected
-   is 1. A single-row conditional update is atomic on all three providers. The
-   number of tasks per poll is small. A side effect: the database can order the
-   result by `priority` and `created_at`, where the map walk today is in random
-   order.
+1. **The register is one conditional write, and keeps the admin path.** The 409
+   rule and the token replace must be atomic, because two replicas can register
+   one id at the same moment. Today the replace is allowed in three cases: the
+   caller holds the current token, the id has been silent for more than 5
+   minutes, or the caller holds the admin key (or no admin key is configured:
+   `holdsAdminKey`, `provisioner_handlers.go:77-80`, rule at `:153`). The store
+   operation takes the third case as an explicit "privileged" input from the
+   handler, so "same controls" stays true. For the first two, update the row
+   `WHERE agent_id = ? AND (token_hash = ? OR last_seen < now - 5 min)` and read
+   the rows affected. Zero rows and an existing row is the 409. A first register
+   inserts, and the unique index on `agent_id` makes a concurrent second insert
+   fail; the loser retries as an update. `clause.OnConflict` works on all three
+   providers.
+2. **The claim is one conditional update per task, with the owner check.**
+   `PollTasks` today tests both the owner and the status (`:254-255`), and the
+   status of a task can be set back to `pending` by `UpdateTaskStatus`, which
+   accepts any status string (`:317`). So the update keeps both tests. The
+   in-process mutex no longer serialises replicas. Select the candidate ids,
+   then `UPDATE provisioning_tasks SET status = 'assigned', agent_id = ? WHERE
+   id = ? AND status = 'pending' AND (agent_id = '' OR agent_id = ?)` for each,
+   and keep only the rows where the rows affected is 1. A single-row
+   conditional update is atomic on all three providers. Without the owner test,
+   a stale candidate list could take a task that another agent claimed and an
+   update then set back to `pending`. The number of tasks per poll is small. A
+   side effect: the database can order the result by `priority` and
+   `created_at`, where the map walk today is in random order.
 3. **`last_seen` is written on every poll.** One agent polling every 30 seconds
-   is 2,880 writes a day. For a few agents this is negligible, and the note does
-   not propose a write throttle.
+   is 2,880 writes a day, and every 600 seconds is 144. For a few agents this is
+   negligible, and the note does not propose a write throttle.
 
 The cost: the tests that today reset or fill `registry` directly
 (`internal/api/provisioner_client_e2e_test.go:23`,
 `internal/api/provisioner_discovered_devices_test.go`) move to the store. That
 is a test change of known size, in the files that already touch the global.
 
-SQLite runs in one process, so a SQLite deployment has one registry and one
-replica, as today. Replicas need PostgreSQL or MySQL, which the production and
+A SQLite database file is for one manager process, so a SQLite deployment has
+one registry, as today. That is a deployment requirement and not a guarantee:
+the development overlay sets one replica, but it inherits the base rolling
+update (`maxSurge: 1`, `maxUnavailable: 0`;
+`deploy/kubernetes/kustomize/base/deployment.yaml:9-14`,
+`overlays/development/kustomization.yaml:36-38`), so two manager pods overlap
+during an update. Replicas need PostgreSQL or MySQL, which the production and
 staging overlays already name.
 
 ## The slices, and the first one
@@ -317,15 +356,20 @@ need the current token.
 - Protects: limit 2. A new id needs an enrolment from the admin. The claim
   exposure falls with it, because only enrolled agents can claim.
 - Operator: one secret per agent, passed into the agent's secret store.
-- Agent: **must keep its token across restarts.** A used secret cannot be used
-  again. Without a kept token, each agent restart needs a new secret. So the
-  agent writes the token to a file (mode 0600) at a configured path. The agent
-  image already has `USER shellyuser` and `VOLUME ["/data"]`
-  (`deploy/docker/Dockerfile.provisioner:47`, `:50`), so a token file under
-  `/data` survives a container restart when `/data` is a volume.
-- Cost on a restart: with a kept token, none. Manager or replica restart: none
-  (slice 1). A container without a persistent volume costs one new secret per
-  restart.
+- Agent: **must keep its id and its token across restarts.** A used secret
+  cannot be used again, so without a kept token each agent restart needs a new
+  secret. The token belongs to one id. A host agent computes a new id on each
+  start, because the pid is in it (`generateAgentID`, `main.go:403`), so a kept
+  token alone would belong to an id the restarted agent no longer uses. So the
+  agent writes **the id and the token together** to a file (mode 0600) at a
+  configured path, and uses the stored id when the file exists. (A stable id set
+  in the agent's configuration is the other way. The recommendation is the
+  file.) The agent image already has `USER shellyuser` and `VOLUME ["/data"]`
+  (`deploy/docker/Dockerfile.provisioner:47`, `:50`), so a file under `/data`
+  survives a container restart when `/data` is a volume.
+- Cost on a restart: with a kept id and token, none. Manager or replica
+  restart: none (slice 1). A container without a persistent volume, or a host
+  agent that loses its file, costs one new secret per restart.
 - Does not solve: an agent host that is already enrolled and compromised. A leaked
   agent token still acts as that agent.
 
@@ -404,14 +448,17 @@ Storage makes a dead agent permanent. Today a restart forgets it. With slice 1
 every id ever registered stays in `provisioner_agents`, and a host agent that
 gets a new id on each start (pid in the id) leaves one row per start.
 
-Three things can remove a row:
+Two things can remove a row:
 
 1. **An admin delete route** (admin key). It frees an id and revokes its token.
    Needed for D in any case.
 2. **A purge of rows silent for N days**, with no non-terminal task. Proposed
-   N is 30. It runs in the manager, on one replica at a time by a
-   conditional `DELETE`.
-3. **The 5-minute silence rule.** Today it frees an id. D removes it.
+   N is 30. It runs in the manager, on any replica, as a conditional `DELETE`.
+
+The 5-minute silence rule removes no row. It lets a register **replace** the
+token of an existing row, which keeps the row and its `registered_at`
+(`provisioner_handlers.go:149-193`); the list only shows such a row as
+`offline` (`:211-215`). D removes that way of freeing an id.
 
 D and the cleanup interact. With D, only (1) and (2) free an id. An agent that
 lost its token waits for a purge or an admin. So D needs B or a kept token, as
@@ -448,8 +495,8 @@ above.
 
 ### Slice 3
 
-- Ships once `required` is the mode in use, or once the agent keeps its token.
-  Until then the 5-minute rule is the only way a lost token is recovered.
+- Ships once `required` is the mode in use, or once the agent keeps its id and
+  token. Until then the 5-minute rule is the only way a lost token is recovered.
 
 ## Risk
 
@@ -466,19 +513,29 @@ A token is a credential. These are the rules for it.
   list must not return the hash either, and the build slice adds a test that
   asserts it. TLS in front of the manager is required for this to hold
   (`docs/security/SECURITY_TLS_PROXY.md`).
-- **Rotation.** A register with the current token issues a new token and the
-  old one stops working. A lost response then strands the agent: it holds the
-  old token, which is now invalid. So the old hash is kept in
-  `previous_token_hash`, accepted for a register only, until the new token is
-  first used or for 10 minutes, whichever is first. This is a design detail,
-  not a loosening: the previous token opens no route except register.
-- **What a leaked token lets a holder do.** Act as that one agent: poll the
-  tasks assigned to it and the unassigned ones it claims, read their `config`
-  (which may hold Wi-Fi settings or device credentials), set the status of its
-  own tasks, and report discovered devices as that agent. The holder can also
-  register with the token and so **replace** it, which locks the real agent
-  out. It opens no admin route, and it cannot act for another agent. Revoking
-  needs an admin delete (slice 3 route) and a new enrolment.
+- **Rotation.** A register with the current token issues a new token, and the
+  old one stops working at once. This is how it works today (`:193`), and the
+  note keeps it. A lost response strands the agent with a dead token. The
+  note does **not** add a grace period for the previous token: a grace period
+  would let a token that leaked and was rotated away still register for a
+  while, which weakens revocation. Recovery from a lost response is the 5-minute
+  rule until D, and a new enrolment or an admin delete after D. That is
+  rare (the response is lost after the manager has committed the new token)
+  and the recovery is an operator step, not a loss of data.
+- **What a leaked token lets a holder do.** Every provisioner agent route first
+  needs the agent key or the admin key (`agentOrAdmin`,
+  `internal/api/router_routes.go:241-249`; `requireAgentOrAdmin`,
+  `handlers.go:122`), and the token is a second credential on top. So the
+  holder described here has the token **and** the agent key. That holder can act
+  as that one agent: poll the tasks assigned to it and the unassigned ones it
+  claims, read their `config` (which may hold Wi-Fi settings or device
+  credentials), set the status of its own tasks, and report discovered devices
+  as that agent. The holder can also register with the token and so **replace**
+  it, which locks the real agent out. It opens no admin route, and it cannot act
+  for another agent. Revoking needs an admin delete (slice 3 route) and a new
+  enrolment. A token alone, without the agent key, opens nothing. None of this
+  changes with the proposal: the shared key stays the outer control until the
+  operator chooses to retire it, which this note does not propose.
 - **A leaked agent key** is limit 2 and 3 until slice 2 and 3 land.
 - **What a database read leaks.** Hashes, which cannot be replayed as tokens,
   because the header carries the token and the manager hashes it. It also leaks
@@ -511,9 +568,10 @@ One recommendation per question.
    agent). C is the fallback. This **changes who may enrol an agent**: when
    required, only the admin key holder. It needs the lead's and Serge's
    decision before it is built.
-4. **Does the agent keep its token in a file?** Recommended: yes, opt-in by a
-   configured path, mode 0600, under `/data` in the image. Without it, B costs
-   one new secret per agent restart.
+4. **Does the agent keep its id and token in a file?** Recommended: yes, opt-in
+   by a configured path, mode 0600, under `/data` in the image, and the agent
+   uses the stored id. Without it, B costs one new secret per agent restart, and
+   a host agent (new id per start) cannot reuse a kept token.
 5. **Make `required` the only mode eventually, or keep `open`?** Recommended:
    keep `open` as the default until the operator turns on `required`, and refuse
    to start with `required` and no admin key.
@@ -522,8 +580,9 @@ One recommendation per question.
    id**.
 7. **Stale rows.** Recommended: an admin delete route, and a purge of rows
    silent for 30 days with no non-terminal task.
-8. **Rotation grace.** Recommended: keep the previous token for a register only,
-   until first use of the new token or 10 minutes.
+8. **Rotation grace for the previous token?** Recommended: no. A grace period
+   weakens revocation. A lost register response is recovered by a new
+   enrolment or an admin delete.
 9. **Unassigned tasks (E).** Recommended: leave claimable for now. Revisit after
    B, when only enrolled agents can claim.
 10. **Docs.** The build slice updates `docs/security/SECURITY_SECRETS.md:21`
