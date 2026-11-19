@@ -1,0 +1,2 @@
+Security
+- The manager's agent key now reads its `_FILE` form, `SHELLY_SECURITY_AGENT_API_KEY_FILE`, like the admin key, so Docker secrets users can mount it as a file. A plain variable that is set, even empty, still wins over its `_FILE` form, and the shipped Compose file sets both plain variables: the Compose comment and `docs/security/SECURITY_SECRETS.md` now say to use the file line instead of the plain one. Fixes ginsys/shelly-manager#623.

@@ -45,3 +45,69 @@ func TestApplyToConfig_OverridesFromEnvFile(t *testing.T) {
 		t.Fatalf("expected AdminAPIKey from file, got %q", cfg.Security.AdminAPIKey)
 	}
 }
+
+func writeKeyFile(t *testing.T, content string) string {
+	t.Helper()
+	fp := filepath.Join(t.TempDir(), "key")
+	if err := os.WriteFile(fp, []byte(content), 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+	return fp
+}
+
+// The agent key reads its _FILE form like the admin key does (ginsys/shelly-manager#623): the file is
+// read, one trailing newline is trimmed, and the admin key is left alone.
+func TestApplyToConfig_AgentKeyFromFile(t *testing.T) {
+	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY_FILE", writeKeyFile(t, "agentkey456\n"))
+
+	cfg := &config.Config{}
+	ApplyToConfig(cfg)
+
+	if cfg.Security.AgentAPIKey != "agentkey456" {
+		t.Fatalf("expected AgentAPIKey from file, got %q", cfg.Security.AgentAPIKey)
+	}
+	if cfg.Security.AdminAPIKey != "" {
+		t.Fatalf("the agent key file must not set the admin key, got %q", cfg.Security.AdminAPIKey)
+	}
+}
+
+func TestApplyToConfig_AgentKeyPlainVariableWinsOverFile(t *testing.T) {
+	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY", "from-env")
+	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY_FILE", writeKeyFile(t, "from-file\n"))
+
+	cfg := &config.Config{}
+	ApplyToConfig(cfg)
+
+	if cfg.Security.AgentAPIKey != "from-env" {
+		t.Fatalf("expected the plain variable to win, got %q", cfg.Security.AgentAPIKey)
+	}
+}
+
+func TestApplyToConfig_AgentKeyKeptWithoutVariable(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Security.AgentAPIKey = "from-config"
+	ApplyToConfig(cfg)
+
+	if cfg.Security.AgentAPIKey != "from-config" {
+		t.Fatalf("expected the configured key to stay, got %q", cfg.Security.AgentAPIKey)
+	}
+}
+
+// A secret variable that is set but empty counts as present and beats its _FILE form, so the shipped
+// compose file (it always sets both plain variables, empty by default) ignores a key file given beside
+// them. The docs say so (docs/security/SECURITY_SECRETS.md). ginsys/shelly-manager#672 changes this
+// and flips this test.
+func TestApplyToConfig_EmptyPlainVariableWinsOverFile(t *testing.T) {
+	t.Setenv("SHELLY_SECURITY_ADMIN_API_KEY", "")
+	t.Setenv("SHELLY_SECURITY_ADMIN_API_KEY_FILE", writeKeyFile(t, "adminkey123\n"))
+	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY", "")
+	t.Setenv("SHELLY_SECURITY_AGENT_API_KEY_FILE", writeKeyFile(t, "agentkey456\n"))
+
+	cfg := &config.Config{}
+	ApplyToConfig(cfg)
+
+	if cfg.Security.AdminAPIKey != "" || cfg.Security.AgentAPIKey != "" {
+		t.Fatalf("expected the empty plain variables to win, got admin %q and agent %q",
+			cfg.Security.AdminAPIKey, cfg.Security.AgentAPIKey)
+	}
+}

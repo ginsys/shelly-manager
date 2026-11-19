@@ -8,12 +8,15 @@ The app supports environment overrides via `SHELLY_` prefix and dot→underscore
 
 Supported secret keys (value or `_FILE`):
 - SHELLY_SECURITY_ADMIN_API_KEY
+- SHELLY_SECURITY_AGENT_API_KEY (the manager's agent key)
 - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD
 - SHELLY_OPNSENSE_API_KEY
 - SHELLY_OPNSENSE_API_SECRET
 - SHELLY_API_KEY (provisioner agent: send it the agent key, never the admin key)
 
-`SHELLY_SECURITY_AGENT_API_KEY` (the manager's agent key) is read from the environment only; it has no `_FILE` form yet. Kubernetes gets it through `secretKeyRef`.
+`SHELLY_SECURITY_AGENT_API_KEY` also takes the `_FILE` form. Kubernetes can keep using `secretKeyRef`.
+
+A plain variable that is set, even to the empty string, wins over its `_FILE` form, and the file is then never read. A Compose file that always sets `SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}` or `SHELLY_SECURITY_AGENT_API_KEY=${AGENT_API_KEY:-}` (the shipped one does) therefore needs the `_FILE` line instead of the plain line, not beside it. Left beside it, the key stays empty without a message: an empty admin key leaves every guarded route open, and an empty agent key leaves the agent routes to the admin key alone.
 
 Two keys, two jobs. The admin key opens every guarded route. The agent key opens only the five routes the provisioner agent calls (register, poll tasks, update task status, report discovered devices, health), so a leaked agent key cannot reach the admin-only configuration, device or admin routes, and cannot create tasks. On its own it opens register and health only: each agent gets its own token when it registers, and poll, task status and report need that token, so one agent cannot read another agent's tasks or mark them done. A holder of the agent key can still register a new agent id and claim tasks nobody was assigned, and can take over an id that has been silent for 5 minutes, so treat the agent key as a secret too: a task carries its configuration (any Wi-Fi settings or device credentials in it). Use two different values. The agent key has no effect while the admin key is empty.
 
@@ -54,6 +57,7 @@ environment:
   - SHELLY_OPNSENSE_API_KEY_FILE=/run/secrets/opnsense_key
   - SHELLY_OPNSENSE_API_SECRET_FILE=/run/secrets/opnsense_secret
   - SHELLY_SECURITY_ADMIN_API_KEY_FILE=/run/secrets/admin_key
+  - SHELLY_SECURITY_AGENT_API_KEY_FILE=/run/secrets/agent_api_key
 volumes:
   - ./secrets:/run/secrets:ro
 ```

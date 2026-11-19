@@ -43,6 +43,11 @@ services:
       # - SHELLY_OPNSENSE_API_KEY=${OPNSENSE_API_KEY:-}
       # - SHELLY_OPNSENSE_API_SECRET=${OPNSENSE_API_SECRET:-}
       # Or file-based:
+      # - SHELLY_SECURITY_ADMIN_API_KEY_FILE=/run/secrets/admin_key
+      # - SHELLY_SECURITY_AGENT_API_KEY_FILE=/run/secrets/agent_api_key
+      #   For these two keys use the file line INSTEAD OF the plain line above (delete that one): a plain
+      #   variable that is set, even empty, wins over its _FILE form, and the two plain lines above
+      #   always set it. Left beside it, the key stays empty and nothing says so.
       # - SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD_FILE=/run/secrets/smtp_password
       # - SHELLY_OPNSENSE_API_KEY_FILE=/run/secrets/opnsense_key
       # - SHELLY_OPNSENSE_API_SECRET_FILE=/run/secrets/opnsense_secret
