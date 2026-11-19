@@ -377,60 +377,59 @@ describe('MetricsDashboardPage', () => {
     })
   })
 
+  // ginsys/shelly-manager#614: the controls show their outcome on the page, never in a browser alert.
   describe('Collection Controls', () => {
+    let alertSpy: ReturnType<typeof vi.spyOn>
+
     beforeEach(async () => {
       await flushPromises()
-      // Mock window.alert to avoid test warnings
-      global.alert = vi.fn()
+      alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     })
 
-    it('enables metrics collection', async () => {
-      const enableButton = wrapper.findAll('button').find((b: any) =>
-        b.text().includes('Enable Collection')
-      )
+    afterEach(() => {
+      alertSpy.mockRestore()
+    })
 
-      await enableButton?.trigger('click')
+    const clickButton = async (label: string) => {
+      const button = wrapper.findAll('button').find((b: any) => b.text().includes(label))
+      await button?.trigger('click')
       await flushPromises()
+    }
+    const status = () => wrapper.find('[data-testid="metrics-status"]')
+    const actionError = () => wrapper.find('[data-testid="metrics-action-error"]')
+
+    it('enables metrics collection', async () => {
+      await clickButton('Enable Collection')
 
       expect(metricsApi.enableMetrics).toHaveBeenCalled()
-      expect(global.alert).toHaveBeenCalledWith('Metrics collection enabled')
+      expect(status().text()).toBe('Metrics collection enabled')
+      expect(actionError().exists()).toBe(false)
+      expect(alertSpy).not.toHaveBeenCalled()
     })
 
     it('disables metrics collection', async () => {
-      const disableButton = wrapper.findAll('button').find((b: any) =>
-        b.text().includes('Disable Collection')
-      )
-
-      await disableButton?.trigger('click')
-      await flushPromises()
+      await clickButton('Disable Collection')
 
       expect(metricsApi.disableMetrics).toHaveBeenCalled()
-      expect(global.alert).toHaveBeenCalledWith('Metrics collection disabled')
+      expect(status().text()).toBe('Metrics collection disabled')
+      expect(alertSpy).not.toHaveBeenCalled()
     })
 
     it('triggers manual collection', async () => {
-      const collectButton = wrapper.findAll('button').find((b: any) =>
-        b.text().includes('Trigger Collection')
-      )
-
-      await collectButton?.trigger('click')
-      await flushPromises()
+      await clickButton('Trigger Collection')
 
       expect(metricsApi.collectMetrics).toHaveBeenCalled()
-      expect(global.alert).toHaveBeenCalledWith('Metrics collection triggered')
+      expect(status().text()).toBe('Metrics collection triggered')
+      expect(alertSpy).not.toHaveBeenCalled()
     })
 
     it('sends test alert', async () => {
-      const testButton = wrapper.findAll('button').find((b: any) =>
-        b.text().includes('Send Test Alert')
-      )
-
-      await testButton?.trigger('click')
-      await flushPromises()
+      await clickButton('Send Test Alert')
 
       expect(metricsApi.sendTestAlert).toHaveBeenCalled()
-      expect(global.alert).toHaveBeenCalledWith('Success: Test alert sent at 10:00:00')
-      expect(global.alert).not.toHaveBeenCalledWith(expect.stringContaining('Failed'))
+      expect(status().text()).toBe('Test alert sent: Test alert sent at 10:00:00')
+      expect(actionError().exists()).toBe(false)
+      expect(alertSpy).not.toHaveBeenCalled()
     })
 
     it('reports a failure when the answer is not "sent"', async () => {
@@ -440,24 +439,135 @@ describe('MetricsDashboardPage', () => {
         message: 'No channel'
       })
 
-      const testButton = wrapper.findAll('button').find((b: any) =>
-        b.text().includes('Send Test Alert')
+      await clickButton('Send Test Alert')
+
+      expect(actionError().text()).toContain('Test alert failed: No channel')
+      expect(status().exists()).toBe(false)
+      expect(alertSpy).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['Enable Collection', 'enableMetrics', 'Enable metrics'],
+      ['Disable Collection', 'disableMetrics', 'Disable metrics'],
+      ['Trigger Collection', 'collectMetrics', 'Trigger collection'],
+      ['Send Test Alert', 'sendTestAlert', 'Send test alert']
+    ] as const)('shows the failure of "%s" in a panel and no success line', async (label, api, action) => {
+      vi.mocked(metricsApi[api]).mockRejectedValueOnce(new Error('backend said no'))
+
+      await clickButton(label)
+
+      expect(actionError().text()).toContain('backend said no')
+      expect(actionError().text()).toContain(action)
+      expect(status().exists()).toBe(false)
+      expect(alertSpy).not.toHaveBeenCalled()
+    })
+
+    it('replaces an earlier outcome with the next one', async () => {
+      vi.mocked(metricsApi.enableMetrics).mockRejectedValueOnce(new Error('backend said no'))
+      await clickButton('Enable Collection')
+      expect(actionError().exists()).toBe(true)
+
+      await clickButton('Disable Collection')
+
+      expect(actionError().exists()).toBe(false)
+      expect(status().text()).toBe('Metrics collection disabled')
+    })
+
+    // Review round 4: the status refresh of Enable can settle after Disable has finished.
+    it('keeps the outcome of the newest control when an older one settles later', async () => {
+      let finishRefresh!: () => void
+      vi.spyOn(store, 'fetchStatus').mockImplementationOnce(
+        () => new Promise<void>(resolve => { finishRefresh = resolve }) as any
       )
-      await testButton?.trigger('click')
+      await clickButton('Enable Collection')
+      await clickButton('Disable Collection')
+      expect(status().text()).toBe('Metrics collection disabled')
+
+      finishRefresh()
       await flushPromises()
 
-      expect(global.alert).toHaveBeenCalledWith('Failed: No channel')
+      expect(status().text()).toBe('Metrics collection disabled')
+    })
+
+    // Review round 5: a control that starts removes the outcome of the one before it.
+    it('removes the earlier success while the next control is running', async () => {
+      await clickButton('Enable Collection')
+      expect(status().text()).toBe('Metrics collection enabled')
+      vi.mocked(metricsApi.disableMetrics).mockImplementationOnce(() => new Promise<void>(() => {}) as any)
+
+      await clickButton('Disable Collection')
+
+      expect(status().exists()).toBe(false)
+    })
+
+    it('removes the earlier failure while the next control is running', async () => {
+      vi.mocked(metricsApi.enableMetrics).mockRejectedValueOnce(new Error('backend said no'))
+      await clickButton('Enable Collection')
+      expect(actionError().exists()).toBe(true)
+      vi.mocked(metricsApi.enableMetrics).mockImplementationOnce(() => new Promise<void>(() => {}) as any)
+
+      await clickButton('Enable Collection')
+
+      expect(actionError().exists()).toBe(false)
+    })
+
+    it('still shows the failure of an older control that settles after a newer success', async () => {
+      let failEnable!: (e: Error) => void
+      vi.mocked(metricsApi.enableMetrics).mockImplementationOnce(
+        () => new Promise<void>((_resolve, reject) => { failEnable = reject }) as any
+      )
+      await clickButton('Enable Collection')
+      await clickButton('Disable Collection')
+
+      failEnable(new Error('backend said no'))
+      await flushPromises()
+
+      expect(actionError().text()).toContain('backend said no')
+    })
+
+    it('removes the failure panel with its dismiss button', async () => {
+      vi.mocked(metricsApi.enableMetrics).mockRejectedValueOnce(new Error('backend said no'))
+      await clickButton('Enable Collection')
+
+      await wrapper.get('[data-testid="metrics-action-error"] .dismiss-button').trigger('click')
+
+      expect(actionError().exists()).toBe(false)
     })
   })
 
   describe('Prometheus Export', () => {
-    it('exports Prometheus metrics and downloads file', async () => {
-      global.alert = vi.fn()
+    let alertSpy: ReturnType<typeof vi.spyOn>
 
-      // Mock URL and DOM APIs
+    beforeEach(() => {
+      alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
       global.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
       global.URL.revokeObjectURL = vi.fn()
+    })
 
+    afterEach(() => {
+      alertSpy.mockRestore()
+    })
+
+    const clickExport = async () => {
+      const exportButton = wrapper.findAll('button').find((b: any) =>
+        b.text().includes('Export Prometheus')
+      )
+      await exportButton?.trigger('click')
+      await flushPromises()
+    }
+
+    it('shows the failure of the export in a panel', async () => {
+      vi.mocked(metricsApi.getPrometheusMetrics).mockRejectedValueOnce(new Error('no metrics yet'))
+
+      await clickExport()
+
+      const panel = wrapper.get('[data-testid="metrics-action-error"]')
+      expect(panel.text()).toContain('no metrics yet')
+      expect(panel.text()).toContain('Export Prometheus metrics')
+      expect(alertSpy).not.toHaveBeenCalled()
+    })
+
+    it('exports Prometheus metrics and downloads file', async () => {
       const mockClick = vi.fn()
       const mockCreateElement = vi.spyOn(document, 'createElement')
       mockCreateElement.mockReturnValue({
@@ -466,17 +576,13 @@ describe('MetricsDashboardPage', () => {
         download: ''
       } as any)
 
-      const exportButton = wrapper.findAll('button').find((b: any) =>
-        b.text().includes('Export Prometheus')
-      )
-
-      await exportButton?.trigger('click')
-      await flushPromises()
+      await clickExport()
 
       expect(metricsApi.getPrometheusMetrics).toHaveBeenCalled()
       expect(mockClick).toHaveBeenCalled()
       expect(global.URL.revokeObjectURL).toHaveBeenCalled()
     })
+
   })
 
   // NOTE: Tests skipped due to jsdom limitation with Vue scoped styles (el.setAttribute)

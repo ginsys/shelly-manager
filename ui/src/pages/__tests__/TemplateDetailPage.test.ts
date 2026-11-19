@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import type { ConfigSchema } from '@/api/typedConfig'
@@ -25,7 +25,14 @@ vi.mock('@/api/templates', async (importOriginal) => {
 })
 
 import { getConfigSchema } from '@/api/typedConfig'
-import { deleteTemplate, getTemplate, updateTemplate, TemplateSaveError } from '@/api/templates'
+import {
+  assignTemplateToDevice,
+  deleteTemplate,
+  getTemplate,
+  updateTemplate,
+  TemplateSaveError,
+} from '@/api/templates'
+import { dismissNotice, notice } from '@/composables/useNotice'
 import TemplateDetailPage from '../TemplateDetailPage.vue'
 
 const schema: ConfigSchema = {
@@ -118,7 +125,7 @@ describe('TemplateDetailPage template form', () => {
 
   // Save, then Cancel before the answer: the answer belongs to the cancelled edit. Edit stays off
   // until the save has settled, so no new edit can be open when the answer arrives.
-  it('a save error that arrives after the edit was cancelled shows nowhere', async () => {
+  it('a save refusal that arrives after the edit was cancelled leaves no field list behind', async () => {
     const pending = deferred<any>()
     vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
     const wrapper = mountPage()
@@ -254,5 +261,216 @@ describe('TemplateDetailPage template form', () => {
     await flushPromises()
     expect(editDisabled(wrapper)).toBe(false)
     alertSpy.mockRestore()
+  })
+})
+
+// ginsys/shelly-manager#614: every outcome shows on the page, never in a browser alert.
+describe('TemplateDetailPage outcomes of its actions', () => {
+  let alertSpy: ReturnType<typeof vi.spyOn>
+  const panel = (wrapper: ReturnType<typeof mountPage>) => wrapper.find('[data-testid="template-action-error"]')
+  const statusLine = (wrapper: ReturnType<typeof mountPage>) => wrapper.find('[data-testid="template-status"]')
+  const openAssign = async (wrapper: ReturnType<typeof mountPage>) => {
+    await wrapper.findAll('.header-row .btn').find(b => b.text() === 'Assign')!.trigger('click')
+  }
+  const submitAssign = async (wrapper: ReturnType<typeof mountPage>) => {
+    await wrapper.find('.modal-actions .btn.primary').trigger('click')
+    await flushPromises()
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.mocked(getConfigSchema).mockReset()
+    vi.mocked(getConfigSchema).mockResolvedValue(schema)
+    vi.mocked(getTemplate).mockReset()
+    vi.mocked(getTemplate).mockResolvedValue(stored as any)
+    vi.mocked(updateTemplate).mockReset()
+    vi.mocked(deleteTemplate).mockReset()
+    vi.mocked(assignTemplateToDevice).mockReset()
+    alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    dismissNotice()
+  })
+
+  afterEach(() => {
+    alertSpy.mockRestore()
+    vi.restoreAllMocks()
+  })
+
+  it('shows a save that fails for another reason than a refusal in a panel', async () => {
+    vi.mocked(updateTemplate).mockRejectedValue(new Error('server down'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+
+    expect(panel(wrapper).text()).toContain('server down')
+    expect(panel(wrapper).text()).toContain('Save template')
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
+  it('removes the failure of a save once the retry succeeds', async () => {
+    vi.mocked(updateTemplate).mockRejectedValueOnce(new Error('network down'))
+    vi.mocked(updateTemplate).mockResolvedValueOnce({ affected_devices: 0 } as any)
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+    expect(panel(wrapper).exists()).toBe(true)
+
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+
+    expect(panel(wrapper).exists()).toBe(false)
+  })
+
+  it('removes the failure of a copy once the retry succeeds', async () => {
+    const writeText = vi.fn().mockRejectedValueOnce(new Error('NotAllowedError')).mockResolvedValueOnce(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const wrapper = mountPage()
+    await flushPromises()
+    const copy = () => wrapper.findAll('.header-row .btn').find(b => b.text() === 'Copy')!.trigger('click')
+    await copy()
+    await flushPromises()
+    expect(panel(wrapper).exists()).toBe(true)
+
+    await copy()
+    await flushPromises()
+
+    expect(panel(wrapper).exists()).toBe(false)
+  })
+
+  it('shows a delete that fails in a panel', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(deleteTemplate).mockRejectedValue(new Error('template is in use'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.find('.btn.danger').trigger('click')
+    await flushPromises()
+
+    expect(panel(wrapper).text()).toContain('template is in use')
+    expect(panel(wrapper).text()).toContain('Delete template')
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
+  it('shows a copy that fails in a panel', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('NotAllowedError'))
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.header-row .btn').find(b => b.text() === 'Copy')!.trigger('click')
+    await flushPromises()
+
+    expect(panel(wrapper).text()).toContain('Copy config')
+    expect(panel(wrapper).text()).toContain('clipboard')
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
+  it('shows a refused assign in the app notice, over the open dialog', async () => {
+    vi.mocked(assignTemplateToDevice).mockRejectedValue(new Error('device not found'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await openAssign(wrapper)
+    await wrapper.find('.modal input[type="number"]').setValue('7')
+    await submitAssign(wrapper)
+
+    expect(notice.value?.message).toContain('device not found')
+    expect(notice.value?.context?.action).toBe('Assign template')
+    expect(panel(wrapper).exists()).toBe(false)
+    expect(wrapper.find('.modal-overlay').exists()).toBe(true)
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
+  it('asks for the device id in the app notice and sends nothing', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await openAssign(wrapper)
+    await submitAssign(wrapper)
+
+    expect(notice.value?.message).toContain('Device ID is required')
+    expect(assignTemplateToDevice).not.toHaveBeenCalled()
+    expect(wrapper.find('.modal-overlay').exists()).toBe(true)
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
+  // Review round 4: the refusal lists fields of the edit form, which the Assign dialog covers and a
+  // left page no longer shows. The failure then goes to the app notice.
+  it('shows a refused save in the app notice when the Assign dialog opened meanwhile', async () => {
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValue(save.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await openAssign(wrapper)
+    save.reject(refusal())
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('Validation failed')
+    expect(notice.value?.context?.action).toBe('Save template')
+    wrapper.unmount()
+  })
+
+  it('shows a refused save in the app notice when the page was left meanwhile', async () => {
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValue(save.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    wrapper.unmount()
+    save.reject(refusal())
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('Validation failed')
+  })
+
+  // Review round 5: the form is gone after Cancel, and the page is still open, so the page panel says it.
+  it('shows a refused save in the page panel when the edit was cancelled meanwhile', async () => {
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValue(save.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await toolbarButton(wrapper, 'Cancel').trigger('click')
+    save.reject(refusal())
+    await flushPromises()
+
+    expect(panel(wrapper).text()).toContain('Validation failed')
+    expect(panel(wrapper).text()).toContain('Save template')
+    expect(wrapper.find('[data-testid="template-save-errors"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps a refused save out of the app notice while its form is open', async () => {
+    vi.mocked(updateTemplate).mockRejectedValue(refusal())
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await flushPromises()
+
+    expect(notice.value).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('says on the page that the template was assigned, after the dialog closed', async () => {
+    vi.mocked(assignTemplateToDevice).mockResolvedValue(undefined as any)
+    const wrapper = mountPage()
+    await flushPromises()
+    await openAssign(wrapper)
+    await wrapper.find('.modal input[type="number"]').setValue('7')
+    await submitAssign(wrapper)
+
+    expect(wrapper.find('.modal-overlay').exists()).toBe(false)
+    expect(statusLine(wrapper).text()).toBe('Template assigned to the device')
+    expect(alertSpy).not.toHaveBeenCalled()
   })
 })
