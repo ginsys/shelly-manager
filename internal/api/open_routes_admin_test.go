@@ -55,7 +55,7 @@ var openByDesignRoutes = []struct{ method, path string }{
 }
 
 func TestOpenRoutes_RequireTheAdminKey(t *testing.T) {
-	router := guardWalkRouter(t, "admin-secret")
+	router := guardWalkRouter(t, "admin-secret", "")
 
 	for _, route := range adminGuardedOpenRoutes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestOpenRoutes_RequireTheAdminKey(t *testing.T) {
 }
 
 func TestOpenRoutes_StayOpenByDesign(t *testing.T) {
-	router := guardWalkRouter(t, "admin-secret")
+	router := guardWalkRouter(t, "admin-secret", "")
 
 	for _, route := range openByDesignRoutes {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestOpenRoutes_StayOpenByDesign(t *testing.T) {
 // With no admin key set the routes stay open, as every other admin-guarded route does: this change
 // does not turn the default closed.
 func TestOpenRoutes_AreOpenWithoutAnAdminKey(t *testing.T) {
-	router := guardWalkRouter(t, "")
+	router := guardWalkRouter(t, "", "")
 
 	for _, route := range adminGuardedOpenRoutes {
 		assert.NotEqual(t, http.StatusUnauthorized, serveGuardRoute(router, route.method, route.path, nil), "%s %s", route.method, route.path)
