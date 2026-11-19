@@ -88,14 +88,18 @@ func TestProvisionerClient_AgainstTheRealRouter(t *testing.T) {
 			require.NoError(t, client.UpdateTaskStatus(tasks[0].ID, "completed", map[string]interface{}{"ok": true}, ""))
 			_, body = adminCall(t, srv, tc.adminKey, "GET", "/api/v1/provisioner/tasks", "")
 			var listed struct {
-				Tasks []struct {
-					ID     string `json:"id"`
-					Status string `json:"status"`
-				} `json:"tasks"`
+				Success bool `json:"success"`
+				Data    struct {
+					Tasks []struct {
+						ID     string `json:"id"`
+						Status string `json:"status"`
+					} `json:"tasks"`
+				} `json:"data"`
 			}
 			require.NoError(t, json.Unmarshal([]byte(body), &listed))
-			require.Len(t, listed.Tasks, 1)
-			assert.Equal(t, "completed", listed.Tasks[0].Status, "the status the agent sent is stored")
+			assert.True(t, listed.Success, "the list answers in the envelope")
+			require.Len(t, listed.Data.Tasks, 1)
+			assert.Equal(t, "completed", listed.Data.Tasks[0].Status, "the status the agent sent is stored")
 
 			require.NoError(t, client.ReportDiscoveredDevices(tasks[0].ID, []*provisioning.DiscoveredDevice{{
 				MAC: "AA:BB:CC:DD:EE:02", SSID: "shelly1-DDEE02", Model: "SHSW-1", Generation: 1,

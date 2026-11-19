@@ -3121,9 +3121,14 @@ paths:
                   - type: object
                     properties:
                       data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/ProvisioningTask'
+                        type: object
+                        properties:
+                          tasks:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ProvisioningTask'
+                          count:
+                            type: integer
 
     post:
       tags: [Provisioning]
@@ -3149,7 +3154,15 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: '#/components/schemas/ProvisioningTask'
+                        type: object
+                        properties:
+                          task_id:
+                            type: string
+                          status:
+                            type: string
+                          created_at:
+                            type: string
+                            format: date-time
 
   /api/v1/provisioner/tasks/{id}/status:
     put:
