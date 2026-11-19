@@ -73,7 +73,7 @@ Comprehensive test suite for the MySQL database provider implementation, followi
   - Custom timeout handling
 - `TestMySQLSecurityResourceLimits`: Resource limit enforcement
   - Connection pool security limits
-  - MySQL-specific defaults (20 max open, 5 idle, 30min lifetime)
+  - Pool values set in a configuration are kept as given
 
 ### 2. `mysql_provider_test.go` (580 lines)
 **Primary Focus**: Functional testing of all interface methods
@@ -116,7 +116,7 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 
 **Performance and Concurrency**
 - `TestMySQLProviderConcurrentSafety`: Thread safety validation
-- `TestMySQLProviderConnectionPoolDefaults`: Connection pool defaults
+- `TestProvidersApplyThePoolAsGiven` (`pool_apply_test.go`): the provider applies the pool as configured and holds no default
 
 **Benchmark Tests**
 - `BenchmarkMySQLProviderGetStats`: ~20 ns/op
@@ -145,7 +145,7 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 ### MySQL-Specific Features
 ✅ **Character Set**: UTF8MB4 default, custom charset support
 ✅ **Timeouts**: Connection (10s), read (30s), write (30s) defaults
-✅ **Connection Pool**: MySQL-optimized defaults (20/5/30min/5min)
+✅ **Connection Pool**: applied as configured; the defaults (25/5/5min/10min) live in the config helper
 ✅ **DSN Format**: TCP protocol parsing, parameter handling
 ✅ **TLS Modes**: MySQL-specific TLS configuration options
 
