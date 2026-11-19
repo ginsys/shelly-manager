@@ -288,6 +288,63 @@ describe('devices store, checkSelection', () => {
     expect(store.removedFromSelection).toBe(0)
   })
 
+  it('does not trust the old rows while a load is running: a device deleted meanwhile is still dropped', async () => {
+    const store = useDevicesStore()
+    vi.mocked(listDevices).mockResolvedValueOnce(answer([device(1, 'Alpha'), device(2, 'Bravo')]))
+    await store.fetchDevices()
+    store.toggleSelect(device(1, 'Alpha'))
+    // Device 1 is deleted elsewhere; a refresh is on its way and the dialog is opened before it lands.
+    const refresh = deferred<ReturnType<typeof answer>>()
+    vi.mocked(listDevices).mockReturnValueOnce(refresh.promise as any)
+    const loading = store.fetchDevices()
+    vi.mocked(getDevice).mockRejectedValue(notFound())
+
+    const check = store.checkSelection()
+    refresh.resolve(answer([device(2, 'Bravo')]))
+    await Promise.all([loading, check])
+
+    expect(getDevice).toHaveBeenCalledWith(1)
+    expect(store.selectedIds).toEqual([])
+    expect(store.removedFromSelection).toBe(1)
+  })
+
+  it('does not let a probe started before a load overwrite what the load put on the page', async () => {
+    const store = useDevicesStore()
+    vi.mocked(listDevices).mockResolvedValueOnce(answer([device(2, 'Bravo')]))
+    await store.fetchDevices()
+    store.toggleSelect(device(7, 'Old', '10.0.0.7')) // ticked on another page
+    const probe = deferred<Device>()
+    vi.mocked(getDevice).mockReturnValue(probe.promise)
+    const check = store.checkSelection()
+
+    // A page change brings device 7 onto the page with a new name, then the older probe answers.
+    vi.mocked(listDevices).mockResolvedValueOnce(answer([device(7, 'New', '10.7.7.7')]))
+    await store.fetchDevices()
+    expect(store.selectedDevices).toEqual([{ id: 7, name: 'New', ip: '10.7.7.7' }])
+    probe.resolve(device(7, 'Old', '10.0.0.7'))
+    await check
+
+    expect(store.selectedDevices).toEqual([{ id: 7, name: 'New', ip: '10.7.7.7' }])
+  })
+
+  it('does not drop a device that a load has since put on the page, whatever the older probe said', async () => {
+    const store = useDevicesStore()
+    vi.mocked(listDevices).mockResolvedValueOnce(answer([device(2, 'Bravo')]))
+    await store.fetchDevices()
+    store.toggleSelect(device(7, 'Seven', '10.0.0.7'))
+    const probe = deferred<Device>()
+    vi.mocked(getDevice).mockReturnValue(probe.promise)
+    const check = store.checkSelection()
+
+    vi.mocked(listDevices).mockResolvedValueOnce(answer([device(7, 'Seven', '10.0.0.7')]))
+    await store.fetchDevices()
+    probe.reject(notFound())
+    await check
+
+    expect(store.selectedIds).toEqual([7])
+    expect(store.removedFromSelection).toBe(0)
+  })
+
   it('a load sends no probe and is not held by a running check', async () => {
     const store = await storeWithSelection()
     const gone = deferred<Device>()

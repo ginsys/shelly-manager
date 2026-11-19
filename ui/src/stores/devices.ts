@@ -233,8 +233,11 @@ export const useDevicesStore = defineStore('devices', {
     async checkSelection() {
       const mine = ++latestCheck
       this.removedFromSelection = 0
-      const onPage = new Set(this.items.map((d) => d.id))
-      const ids = [...this.selected.keys()].filter((id) => !onPage.has(id))
+      // The rows are the newest word only while no load is running: a load in flight may be about to
+      // drop a device, so then every ticked device is asked about, and the answer of a check never
+      // overrides a row that a load has put on the page since.
+      const pageIds = () => (this.loading ? new Set<number>() : new Set(this.items.map((d) => d.id)))
+      const ids = [...this.selected.keys()].filter((id) => !pageIds().has(id))
       if (ids.length === 0) {
         this.checkingSelection = false
         return
@@ -244,9 +247,10 @@ export const useDevicesStore = defineStore('devices', {
         const answers = await Promise.allSettled(ids.map((id) => getDevice(id)))
         if (mine !== latestCheck) return
         let removed = 0
+        const nowOnPage = pageIds()
         answers.forEach((answer, i) => {
           const id = ids[i]
-          if (!this.selected.has(id)) return
+          if (!this.selected.has(id) || nowOnPage.has(id)) return
           if (answer.status === 'fulfilled') {
             this.selected.set(id, { name: answer.value.name || '', ip: answer.value.ip || '' })
           } else if ((answer.reason as any)?.response?.status === 404) {
