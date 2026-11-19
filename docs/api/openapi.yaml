@@ -3070,6 +3070,8 @@ paths:
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentToken'
       requestBody:
         required: true
         content:
