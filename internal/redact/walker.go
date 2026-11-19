@@ -162,6 +162,16 @@ func lookupFold(m map[string]any, k string) any {
 	return found
 }
 
+// MatchKey returns the key of m that folds to k, matching without regard to case, as lookupFold does.
+func MatchKey(m map[string]any, k string) (string, bool) {
+	for key := range m {
+		if strings.EqualFold(key, k) {
+			return key, true
+		}
+	}
+	return "", false
+}
+
 // savedSecret returns the stored value a placeholder under key k takes back, and false when there is none:
 // nothing stored, an ambiguous key, an empty value, or a stored placeholder (which is never copied back).
 func savedSecret(old map[string]any, k string) (any, bool) {
@@ -187,11 +197,17 @@ func restoreNode(v, stored any, slots Slots, top bool) error {
 		for k, child := range x {
 			switch {
 			case isSecretSlot(k, top, slots):
-				if isPlaceholder(child) {
+				switch {
+				case isPlaceholder(child):
 					if prior, ok := savedSecret(old, k); ok {
 						x[k] = prior
 					} else {
 						delete(x, k)
+					}
+				case isContainer(child):
+					// A container read before it was masked whole still holds masked members.
+					if err := restoreNode(child, lookupFold(old, k), slots, false); err != nil {
+						return err
 					}
 				}
 			case isContainer(child):

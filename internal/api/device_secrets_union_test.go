@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,13 +52,40 @@ func TestDeviceWalker_ContainerUnderASecretKeyIsMaskedWhole(t *testing.T) {
 	assert.JSONEq(t, stored, back)
 }
 
+// A container read before D3 showed its members masked one by one. It comes back that way from a client
+// that read before the upgrade, and each inner mask still takes the stored value.
+func TestDeviceWalker_InnerMasksUnderASecretKeyStillRestore(t *testing.T) {
+	got, err := restoreMaskedText(`{"secret":{"password":"`+secretMask+`"}}`, `{"secret":{"password":"saved"}}`)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"secret":{"password":"saved"}}`, got)
+
+	got, err = restoreMaskedText(`{"secret":{"password":"`+secretMask+`"}}`, ``)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"secret":{}}`, got, "with nothing stored the mask is dropped, never stored")
+}
+
+// Restoring folds key names, so omission handling must too: a stored "Secret" is not left out by a body
+// that sends "secret", and nothing is copied back beside it.
+func TestDeviceWalker_TypedRawOmissionAgreesWithFoldedRestore(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	id := typedDevice(t, h, `{"wifi":{"enable":true,"ssid":"home"},"raw":{"Secret":"t7pe-saved"}}`)
+
+	body := `{"configuration":{"wifi":{"enable":true,"ssid":"home"},"raw":{"secret":"` + secretMask + `"}}}`
+	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, body)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	stored := storedConfig(t, h, id)
+	assert.Contains(t, stored, "t7pe-saved")
+	assert.Equal(t, 1, strings.Count(strings.ToLower(stored), `"secret"`), "one spelling stored: %s", stored)
+}
+
 // D4: a whole text that is the mask as a JSON string, plain or escaped, takes the stored text. Before,
 // it was stored as the text "********".
 func TestDeviceWalker_WholeMaskAsAJSONStringTakesTheStoredText(t *testing.T) {
 	const stored = `{"pass":"kept"}`
 	for name, incoming := range map[string]string{
 		"plain":   `"` + secretMask + `"`,
-		"escaped": `"` + `*` + `*******"`,
+		"escaped": `"********"`,
 	} {
 		got, err := restoreMaskedText(incoming, stored)
 		require.NoError(t, err, name)
