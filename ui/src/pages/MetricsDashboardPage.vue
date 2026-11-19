@@ -196,7 +196,7 @@
 import { onMounted, onUnmounted, computed, ref, defineAsyncComponent } from 'vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { useError } from '@/composables/useError'
-import { usePageError } from '@/composables/useNotice'
+import { useLateFailure, usePageError } from '@/composables/useNotice'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import {
   enableMetrics,
@@ -242,6 +242,7 @@ const error = computed(() => errorObj.value?.message || null)
 
 // What the collection controls did: one success line, or one failure panel, never both.
 const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
+const reportLate = useLateFailure()
 const statusMessage = ref('')
 
 // The number of the control used last. A control keeps the number it started with, and its success
@@ -321,7 +322,11 @@ async function fetchAdvancedMetrics() {
         : []
     )
     if (failures.length > 0) {
-      setError(new Error(failures.join('; ')), { action: 'Loading advanced metrics', resource: 'Dashboard metrics' })
+      const failure = new Error(failures.join('; '))
+      const context = { action: 'Loading advanced metrics', resource: 'Dashboard metrics' }
+      setError(failure, context)
+      // The banner is gone with the page: a refresh that fails after the user left goes to the app notice.
+      reportLate(failure, context)
     }
   } finally {
     loading.value = false
@@ -343,8 +348,13 @@ async function handleEnableMetrics() {
   const control = startControl()
   try {
     await enableMetrics()
-    await store.fetchStatus()
-    reportSuccess('Metrics collection enabled', control)
+    const refreshed = await store.fetchStatus()
+    reportSuccess(
+      refreshed
+        ? 'Metrics collection enabled'
+        : 'Metrics collection enabled, but its status could not be refreshed',
+      control
+    )
   } catch (e) {
     reportFailure(e, 'Enable metrics')
   }
@@ -354,8 +364,13 @@ async function handleDisableMetrics() {
   const control = startControl()
   try {
     await disableMetrics()
-    await store.fetchStatus()
-    reportSuccess('Metrics collection disabled', control)
+    const refreshed = await store.fetchStatus()
+    reportSuccess(
+      refreshed
+        ? 'Metrics collection disabled'
+        : 'Metrics collection disabled, but its status could not be refreshed',
+      control
+    )
   } catch (e) {
     reportFailure(e, 'Disable metrics')
   }

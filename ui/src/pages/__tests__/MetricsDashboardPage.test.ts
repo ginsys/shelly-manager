@@ -4,6 +4,7 @@ import { createTestingPinia } from '@pinia/testing'
 import MetricsDashboardPage from '../MetricsDashboardPage.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import * as metricsApi from '@/api/metrics'
+import { dismissNotice, notice } from '@/composables/useNotice'
 import type { SecurityMetrics, TestAlertResult } from '@/api/metrics'
 import type {
   DashboardMetrics,
@@ -415,6 +416,38 @@ describe('MetricsDashboardPage', () => {
       expect(alertSpy).not.toHaveBeenCalled()
     })
 
+    // ginsys/shelly-manager#701: the store swallows a failed status read, so the page asks for it.
+    it.each([
+      ['Enable Collection', 'Metrics collection enabled'],
+      ['Disable Collection', 'Metrics collection disabled']
+    ] as const)('says when "%s" worked but the status could not be refreshed', async (label, text) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.mocked(metricsApi.getMetricsStatus).mockRejectedValueOnce(new Error('status down'))
+
+      await clickButton(label)
+
+      expect(status().text()).toBe(`${text}, but its status could not be refreshed`)
+      expect(actionError().exists()).toBe(false)
+      warn.mockRestore()
+    })
+
+    it('shows the failed advanced metrics in the app notice when the page was left', async () => {
+      dismissNotice()
+      let failRefresh!: () => void
+      vi.mocked(metricsApi.getDashboardSummary).mockImplementationOnce(
+        () => new Promise((_, reject) => { failRefresh = () => reject(new Error('summary down')) }) as any
+      )
+      wrapper = mountPage()
+      await flushPromises()
+
+      wrapper.unmount()
+      failRefresh()
+      await flushPromises()
+
+      expect(notice.value?.message).toContain('summary down')
+      dismissNotice()
+    })
+
     it('triggers manual collection', async () => {
       await clickButton('Trigger Collection')
 
@@ -477,7 +510,7 @@ describe('MetricsDashboardPage', () => {
     it('keeps the outcome of the newest control when an older one settles later', async () => {
       let finishRefresh!: () => void
       vi.spyOn(store, 'fetchStatus').mockImplementationOnce(
-        () => new Promise<void>(resolve => { finishRefresh = resolve }) as any
+        () => new Promise<boolean>(resolve => { finishRefresh = () => resolve(true) }) as any
       )
       await clickButton('Enable Collection')
       await clickButton('Disable Collection')

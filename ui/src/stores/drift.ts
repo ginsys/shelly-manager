@@ -60,16 +60,15 @@ export const useDriftStore = defineStore('drift', () => {
     }
   }
 
+  // An action (remove, resolveTrend, generateReport) rethrows its failure and leaves `error` and the lists
+  // alone: `error` is the failure of the last list load, and the page that acted shows the failure of its
+  // own action (ginsys/shelly-manager#701).
   async function remove(id: number | string) {
     loading.value = true
-    error.value = null
     try {
       await deleteDriftSchedule(id)
       schedules.value = schedules.value.filter(s => s.id !== id)
       if (currentSchedule.value?.id === id) currentSchedule.value = null
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to delete drift schedule'
-      throw e
     } finally {
       loading.value = false
     }
@@ -106,7 +105,6 @@ export const useDriftStore = defineStore('drift', () => {
 
   async function resolveTrend(id: number) {
     loading.value = true
-    error.value = null
     try {
       await resolveDriftTrend(id)
       const index = trends.value.findIndex(t => t.id === id)
@@ -117,9 +115,6 @@ export const useDriftStore = defineStore('drift', () => {
           resolved_at: new Date().toISOString()
         }
       }
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to resolve drift item'
-      throw e
     } finally {
       loading.value = false
     }
@@ -127,14 +122,10 @@ export const useDriftStore = defineStore('drift', () => {
 
   async function generateReport(deviceId: number | string) {
     loading.value = true
-    error.value = null
     try {
       const report = await generateDeviceDriftReport(deviceId)
       reports.value = [report, ...reports.value]
       return report
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to generate device drift report'
-      throw e
     } finally {
       loading.value = false
     }

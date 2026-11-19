@@ -14,6 +14,13 @@
       <button class="secondary-button" @click="store.fetchTasks()">Refresh</button>
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="task-action-error"
+      @dismiss="clearActionError"
+    />
+
     <DataTable :rows="store.tasks" :loading="store.tasksLoading" :error="store.tasksError" :cols="6" :rowKey="row => row.id">
       <template #header>
         <th>Device</th>
@@ -53,10 +60,12 @@
 import { ref, onMounted } from 'vue'
 import { useProvisioningStore } from '@/stores/provisioning'
 import DataTable from '@/components/DataTable.vue'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { usePageError } from '@/composables/useNotice'
 
 const store = useProvisioningStore()
-const reportLate = useLateFailure()
+// The failure of a cancel, above the table. The store keeps no action failure (ginsys/shelly-manager#701).
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
 const statusFilter = ref('')
 
 onMounted(() => {
@@ -70,11 +79,11 @@ function applyFilter() {
 
 async function handleCancel(id: string) {
   if (!confirm('Cancel this task?')) return
+  clearActionError()
   try {
     await store.cancelProvisioningTask(id)
   } catch (e) {
-    // The store keeps the failure in `tasksError`, which the table shows while the page is open.
-    reportLate(e, { action: 'Cancel task', resource: 'Provisioning task', resourceId: id })
+    setActionError(e, { action: 'Cancel task', resource: 'Provisioning task', resourceId: id })
   }
 }
 </script>

@@ -12,8 +12,9 @@ import ProvisioningTasksPage from '../ProvisioningTasksPage.vue'
 import ProvisioningTaskDetailPage from '../ProvisioningTaskDetailPage.vue'
 import { useProvisioningStore } from '@/stores/provisioning'
 
-// ginsys/shelly-manager#614: a failed provisioning action shows the store's own error text, once, and
-// opens no alert(). The store sets `agentsError` / `tasksError` and rethrows.
+// ginsys/shelly-manager#614 and #701: a failed provisioning action shows the error text, once, and opens
+// no alert(). The store only rethrows: `agentsError` / `tasksError` stay the failure of the list load, and
+// the page holds the failure of its own action. The rows stay on the page.
 
 const RouterLinkStub = { props: ['to'], render(this: any) { return h('a', this.$slots.default?.()) } }
 
@@ -53,44 +54,43 @@ function mountWith(page: any, provisioning: Record<string, unknown>) {
 const count = (text: string, needle: string) => text.split(needle).length - 1
 
 describe('provisioning pages: a failed action', () => {
-  it('ProvisioningAgentsPage: refresh failure shows once, in the table, and raises no alert', async () => {
+  it('ProvisioningAgentsPage: refresh failure shows once, above the table, keeps the rows, raises no alert', async () => {
     const { wrapper, store } = mountWith(ProvisioningAgentsPage, { agents: [agent], agentsLoading: false, agentsError: '' })
-    vi.mocked(store.refreshAgentStatus).mockImplementation(async () => {
-      store.agentsError = 'Failed to refresh agent status'
-      throw new Error('Failed to refresh agent status')
-    })
+    vi.mocked(store.refreshAgentStatus).mockRejectedValue(new Error('Failed to refresh agent status'))
     await flushPromises()
     await wrapper.find('button.link-button').trigger('click')
     await flushPromises()
     expect(alertSpy).not.toHaveBeenCalled()
     expect(count(wrapper.text(), 'Failed to refresh agent status')).toBe(1)
+    expect(wrapper.find('[data-testid="agent-action-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Agent one')
+    expect(store.agentsError).toBe('')
   })
 
-  it('ProvisioningTasksPage: cancel failure shows once, in the table, and raises no alert', async () => {
+  it('ProvisioningTasksPage: cancel failure shows once, above the table, keeps the rows, raises no alert', async () => {
     const { wrapper, store } = mountWith(ProvisioningTasksPage, { tasks: [task], tasksLoading: false, tasksError: '' })
-    vi.mocked(store.cancelProvisioningTask).mockImplementation(async () => {
-      store.tasksError = 'Failed to cancel task'
-      throw new Error('Failed to cancel task')
-    })
+    vi.mocked(store.cancelProvisioningTask).mockRejectedValue(new Error('Failed to cancel task'))
     await flushPromises()
     await wrapper.find('button.text-red-600').trigger('click')
     await flushPromises()
     expect(alertSpy).not.toHaveBeenCalled()
     expect(count(wrapper.text(), 'Failed to cancel task')).toBe(1)
+    expect(wrapper.find('[data-testid="task-action-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('plug-1')
+    expect(store.tasksError).toBe('')
   })
 
-  it('ProvisioningTaskDetailPage: cancel failure shows once and raises no alert', async () => {
+  it('ProvisioningTaskDetailPage: cancel failure shows once, keeps the details, raises no alert', async () => {
     const { wrapper, store } = mountWith(ProvisioningTaskDetailPage, {
       currentTask: task, tasksLoading: false, tasksError: '',
     })
-    vi.mocked(store.cancelProvisioningTask).mockImplementation(async () => {
-      store.tasksError = 'Failed to cancel task'
-      throw new Error('Failed to cancel task')
-    })
+    vi.mocked(store.cancelProvisioningTask).mockRejectedValue(new Error('Failed to cancel task'))
     await flushPromises()
     await wrapper.find('.danger-button').trigger('click')
     await flushPromises()
     expect(alertSpy).not.toHaveBeenCalled()
     expect(count(wrapper.text(), 'Failed to cancel task')).toBe(1)
+    expect(wrapper.find('[data-testid="task-action-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('plug-1')
   })
 })

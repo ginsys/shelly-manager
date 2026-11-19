@@ -153,7 +153,7 @@ const reportLate = useLateFailure()
 
 const resolvedFilter = ref('')
 const resolvingItem = ref<DriftTrend | null>(null)
-// The failure of this dialog's own submission. `store.error` may hold an older failure.
+// The failure of this dialog's own submission. The store keeps no action failure (ginsys/shelly-manager#701).
 const resolveError = ref('')
 
 const resolvedBoolean = computed<boolean | undefined>(() => {
@@ -185,7 +185,7 @@ async function handleResolve() {
     closeResolveDialog()
   } catch (e) {
     // The dialog stays open and shows the failure. After the user left the page, the app notice does.
-    resolveError.value = store.error || (e as Error)?.message || 'Failed to resolve drift item'
+    resolveError.value = (e as Error)?.message || 'Failed to resolve drift item'
     reportLate(e, { action: 'Resolve drift item', resource: 'Drift item', resourceId: String(id) })
   }
 }

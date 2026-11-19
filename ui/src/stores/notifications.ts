@@ -75,16 +75,15 @@ export const useNotificationsStore = defineStore('notifications', {
       }
     },
 
+    // An action (add, modify, remove) rethrows its failure and leaves `channelsError` and the list alone:
+    // `channelsError` is the failure of the last list load, and the page that acted shows the failure of
+    // its own action (ginsys/shelly-manager#701).
     async addChannel(data: Partial<NotificationChannel>) {
       this.channelsLoading = true
-      this.channelsError = ''
       try {
         const newChannel = await createChannel(data)
         this.channels.push(newChannel)
         return newChannel
-      } catch (e: any) {
-        this.channelsError = e?.message || 'Failed to create channel'
-        throw e
       } finally {
         this.channelsLoading = false
       }
@@ -92,7 +91,6 @@ export const useNotificationsStore = defineStore('notifications', {
 
     async modifyChannel(id: string, data: Partial<NotificationChannel>) {
       this.channelsLoading = true
-      this.channelsError = ''
       try {
         const updated = await updateChannel(id, data)
         const index = this.channels.findIndex((c) => c.id === id)
@@ -103,9 +101,6 @@ export const useNotificationsStore = defineStore('notifications', {
           this.currentChannel = updated
         }
         return updated
-      } catch (e: any) {
-        this.channelsError = e?.message || 'Failed to update channel'
-        throw e
       } finally {
         this.channelsLoading = false
       }
@@ -113,16 +108,12 @@ export const useNotificationsStore = defineStore('notifications', {
 
     async removeChannel(id: string) {
       this.channelsLoading = true
-      this.channelsError = ''
       try {
         await deleteChannel(id)
         this.channels = this.channels.filter((c) => c.id !== id)
         if (this.currentChannel?.id === id) {
           this.currentChannel = null
         }
-      } catch (e: any) {
-        this.channelsError = e?.message || 'Failed to delete channel'
-        throw e
       } finally {
         this.channelsLoading = false
       }
@@ -141,16 +132,13 @@ export const useNotificationsStore = defineStore('notifications', {
       }
     },
 
+    // Like the channel actions: a failed action rethrows and leaves `rulesError` and the list alone.
     async addRule(data: Partial<NotificationRule>) {
       this.rulesLoading = true
-      this.rulesError = ''
       try {
         const newRule = await createRule(data)
         this.rules.push(newRule)
         return newRule
-      } catch (e: any) {
-        this.rulesError = e?.message || 'Failed to create rule'
-        throw e
       } finally {
         this.rulesLoading = false
       }
@@ -158,13 +146,9 @@ export const useNotificationsStore = defineStore('notifications', {
 
     async removeRule(id: string) {
       this.rulesLoading = true
-      this.rulesError = ''
       try {
         await deleteRule(id)
         this.rules = this.rules.filter((r) => r.id !== id)
-      } catch (e: any) {
-        this.rulesError = e?.message || 'Failed to delete rule'
-        throw e
       } finally {
         this.rulesLoading = false
       }

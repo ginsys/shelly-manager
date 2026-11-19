@@ -329,16 +329,23 @@ Found by reading the code at this commit; not a plan.
    is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
    stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
-   `ui/src/pages/__tests__/noAlertPages.test.ts` fails if one does. A page that gets its data
-   through a store shows the store's error where the user acted: in the list, or inside the dialog
-   that stays open. A page that calls the API itself (the metrics dashboard, the template detail)
-   shows a failure in an error panel, and a success in one status line. A failure that arrives after
-   the user left the page, or while a dialog covers the page panel, shows in one app notice
+   `ui/src/pages/__tests__/noAlertPages.test.ts` fails if one does. A store action (add, modify,
+   remove, cancel, resolve, refresh, bulk, create, update) only rethrows its failure and sets no
+   error field, so the store's error field (`channelsError`, `tasksError`, `error` and the like)
+   stays the failure of the last list load, and a failed delete or create no longer blanks the table
+   (ginsys/shelly-manager#701). The page that acted shows the failure of its own action: in an error
+   panel above the list (`usePageError`), or inside the dialog that stays open (a string the dialog
+   holds). A page that calls the API itself (the metrics dashboard, the template detail) shows a
+   failure in an error panel, and a success in one status line. A failure that arrives after the
+   user left the page, or while a dialog covers the page panel, shows in one app notice
    (ginsys/shelly-manager#648): such a page takes its error from `usePageError` instead of
-   `useError`, and a store-backed page calls `useLateFailure`, which shows the failure there only
-   when the page is already gone. The result of an Apply that the device configuration page shows in
-   a card goes to the same notice once the page is gone (`useLateResult`), as a notice for a success and as a warning for an
-   unconfirmed apply or one that completed with errors (ginsys/shelly-manager#660). Two things are left. A store action that fails replaces the whole list with the error
-   text, so a failed delete or create blanks the table (ginsys/shelly-manager#701). The guard reads
-   pages only: a component or a composable could still call `alert(`. Command:
+   `useError`, and a dialog calls `useLateFailure`, which shows the failure there only when the page
+   is already gone or the dialog is covered. The result of an Apply that the device configuration page
+   shows in a card goes to the same notice once the page is gone (`useLateResult`), as a notice for a
+   success and as a warning for an unconfirmed apply or one that completed with errors
+   (ginsys/shelly-manager#660). While an action runs, its store raises the same `loading` flag as a
+   list load, so the table shows "Loading…" until the action ends. The metrics store's
+   `fetchStatus()` returns whether the status was read, so the page can say a control worked and the
+   status could not be refreshed. The guard reads pages only: a component or a composable could still
+   call `alert(`. Command:
    `rg -n '\balert\(' ui/src --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**'`.

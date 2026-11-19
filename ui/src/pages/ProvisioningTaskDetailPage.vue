@@ -5,6 +5,13 @@
       <h1 style="margin:0">Task Details</h1>
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="task-action-error"
+      @dismiss="clearActionError"
+    />
+
     <div v-if="store.tasksLoading" style="color:#6b7280">Loading...</div>
     <div v-else-if="store.tasksError" class="error">{{ store.tasksError }}</div>
     <div v-else-if="!task" class="error">Task not found</div>
@@ -68,11 +75,13 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProvisioningStore } from '@/stores/provisioning'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { usePageError } from '@/composables/useNotice'
 
 const route = useRoute()
 const store = useProvisioningStore()
-const reportLate = useLateFailure()
+// The failure of a cancel, above the details. The store keeps no action failure (ginsys/shelly-manager#701).
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
 
 const taskId = computed(() => route.params.id as string)
 const task = computed(() => store.currentTask)
@@ -93,12 +102,13 @@ async function handleCancel() {
   if (!taskId.value) return
   if (!confirm('Cancel this task?')) return
 
+  clearActionError()
+  const id = taskId.value
   try {
-    await store.cancelProvisioningTask(taskId.value)
-    await store.fetchTask(taskId.value)
+    await store.cancelProvisioningTask(id)
+    await store.fetchTask(id)
   } catch (e) {
-    // The store keeps the failure in `tasksError`, which the page shows while it is open.
-    reportLate(e, { action: 'Cancel task', resource: 'Provisioning task', resourceId: taskId.value })
+    setActionError(e, { action: 'Cancel task', resource: 'Provisioning task', resourceId: id })
   }
 }
 </script>

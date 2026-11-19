@@ -53,6 +53,9 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
+  // An action (create, update, remove) rethrows its failure and leaves `error` and the list alone:
+  // `error` is the failure of the last list load, and the page that acted shows the failure of its own
+  // action (ginsys/shelly-manager#701).
   async function create(data: {
     name: string
     description?: string
@@ -61,15 +64,11 @@ export const useTemplatesStore = defineStore('templates', () => {
     config: Record<string, any>
   }) {
     pending.value++
-    error.value = null
 
     try {
       const created = await createTemplate(data)
       templates.value = [created, ...templates.value]
       return created
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to create template'
-      throw e
     } finally {
       pending.value--
     }
@@ -77,16 +76,12 @@ export const useTemplatesStore = defineStore('templates', () => {
 
   async function update(id: number | string, data: UpdateTemplateRequest) {
     pending.value++
-    error.value = null
 
     try {
       const updated = await updateTemplate(id, data)
       const index = templates.value.findIndex((t) => t.id === Number(id))
       if (index !== -1) templates.value[index] = updated.template
       return updated
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to update template'
-      throw e
     } finally {
       pending.value--
     }
@@ -94,14 +89,10 @@ export const useTemplatesStore = defineStore('templates', () => {
 
   async function remove(id: number | string) {
     pending.value++
-    error.value = null
 
     try {
       await deleteTemplate(id)
       templates.value = templates.value.filter((t) => t.id !== Number(id))
-    } catch (e: any) {
-      error.value = e?.message || 'Failed to delete template'
-      throw e
     } finally {
       pending.value--
     }

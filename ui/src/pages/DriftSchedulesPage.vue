@@ -15,6 +15,13 @@
       </p>
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="schedule-action-error"
+      @dismiss="clearActionError"
+    />
+
     <div v-if="store.loading" class="loading">Loading schedules...</div>
     <div v-else-if="store.error" class="error">{{ store.error }}</div>
 
@@ -98,10 +105,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useDriftStore } from '@/stores/drift'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { usePageError } from '@/composables/useNotice'
 
 const store = useDriftStore()
-const reportLate = useLateFailure()
+// The failure of a delete, above the list. The store keeps no action failure (ginsys/shelly-manager#701).
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
 
 const page = ref(1)
 const pageSize = ref(25)
@@ -132,11 +141,11 @@ async function handleDelete(id: number) {
   if (!confirm('Delete this stored schedule? This only removes persisted data.')) {
     return
   }
+  clearActionError()
   try {
     await store.remove(id)
   } catch (e) {
-    // The store keeps the failure in `store.error`, which the page shows above the list while it is open.
-    reportLate(e, { action: 'Delete drift schedule', resource: 'Drift schedule', resourceId: String(id) })
+    setActionError(e, { action: 'Delete drift schedule', resource: 'Drift schedule', resourceId: String(id) })
   }
 }
 

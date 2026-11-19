@@ -11,6 +11,13 @@
       </button>
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="rule-action-error"
+      @dismiss="clearActionError"
+    />
+
     <DataTable
       :rows="store.rules"
       :loading="store.rulesLoading"
@@ -81,12 +88,18 @@
 import { ref, computed, onMounted } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import DataTable from '@/components/DataTable.vue'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { useLateFailure, usePageError } from '@/composables/useNotice'
 
 const store = useNotificationsStore()
 const reportLate = useLateFailure()
 const showCreateForm = ref(false)
-// The failure of this form's own submission. The store's `rulesError` may hold an older failure.
+// The failure of a delete, above the table. The store keeps no action failure, so this panel is the only
+// place that holds it (ginsys/shelly-manager#701); the create form covers it, so it goes to the notice then.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError(
+  () => showCreateForm.value
+)
+// The failure of this form's own submission.
 const createError = ref('')
 const eventTypesInput = ref('')
 const newRule = ref({
@@ -130,7 +143,7 @@ async function handleCreate() {
     const context = { action: 'Create rule', resource: 'Notification rule' }
     if (session === formSession) {
       // The form stays open and shows the failure. After the user left the page, the app notice does.
-      createError.value = store.rulesError || (e as Error)?.message || 'Failed to create rule'
+      createError.value = (e as Error)?.message || 'Failed to create rule'
       reportLate(e, context)
     } else {
       // The form it was sent from is gone; a newer form that is open hides the table.
@@ -141,12 +154,11 @@ async function handleCreate() {
 
 async function handleDelete(id: string) {
   if (!confirm('Are you sure you want to delete this rule?')) return
+  clearActionError()
   try {
     await store.removeRule(id)
   } catch (e) {
-    // The store keeps the failure in `rulesError`, which the table shows unless the page is gone
-    // or the create form covers it.
-    reportLate(e, { action: 'Delete rule', resource: 'Notification rule', resourceId: id }, showCreateForm.value)
+    setActionError(e, { action: 'Delete rule', resource: 'Notification rule', resourceId: id })
   }
 }
 </script>

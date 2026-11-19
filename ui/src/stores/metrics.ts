@@ -234,11 +234,15 @@ export const useMetricsStore = defineStore('metrics', () => {
   }
 
   // --- REST fallback ---
-  async function fetchStatus() {
+  // Returns whether the status was read, so a caller that needs it (a control that just changed it) can say
+  // when it could not be refreshed. The failure itself stays a console warning (ginsys/shelly-manager#701).
+  async function fetchStatus(): Promise<boolean> {
     try {
       status.value = await getMetricsStatus()
+      return true
     } catch (e) {
       console.warn('Failed to fetch metrics status:', e)
+      return false
     }
   }
 

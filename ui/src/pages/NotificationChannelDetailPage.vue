@@ -6,6 +6,13 @@
 
     <h1>Channel Details</h1>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="channel-action-error"
+      @dismiss="clearActionError"
+    />
+
     <div v-if="store.channelsLoading">Loading...</div>
     <div v-else-if="store.channelsError" class="error">{{ store.channelsError }}</div>
     <div v-else-if="store.currentChannel" class="details">
@@ -51,11 +58,13 @@
 import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNotificationsStore } from '@/stores/notifications'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { usePageError } from '@/composables/useNotice'
 
 const route = useRoute()
 const store = useNotificationsStore()
-const reportLate = useLateFailure()
+// The failure of an update, above the details. The store keeps no action failure (ginsys/shelly-manager#701).
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
 
 onMounted(() => {
   const id = route.params.id as string
@@ -68,11 +77,11 @@ async function toggleEnabled() {
   if (!store.currentChannel) return
   // The channel can be deleted while the update is pending, so the id is read before the call.
   const { id, enabled } = store.currentChannel
+  clearActionError()
   try {
     await store.modifyChannel(id, { enabled: !enabled })
   } catch (e) {
-    // The store keeps the failure in `channelsError`, which the page shows while it is open.
-    reportLate(e, { action: 'Update channel', resource: 'Notification channel', resourceId: id })
+    setActionError(e, { action: 'Update channel', resource: 'Notification channel', resourceId: id })
   }
 }
 </script>
