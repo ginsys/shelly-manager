@@ -25,12 +25,12 @@ const (
 // secret masked (maskSecrets); an entry that could not be read carries a fixed Error text and no
 // Config, never the text of the underlying error.
 type bulkDownloadEntry struct {
-	DeviceID   uint                               `json:"device_id"`
-	DeviceName string                             `json:"device_name,omitempty"`
-	MAC        string                             `json:"mac,omitempty"`
-	Status     string                             `json:"status"`
-	Config     *configuration.DeviceConfiguration `json:"config,omitempty"`
-	Error      string                             `json:"error,omitempty"`
+	DeviceID   uint            `json:"device_id"`
+	DeviceName string          `json:"device_name,omitempty"`
+	MAC        string          `json:"mac,omitempty"`
+	Status     string          `json:"status"`
+	Config     json.RawMessage `json:"config,omitempty"`
+	Error      string          `json:"error,omitempty"`
 }
 
 type bulkDownloadFile struct {
@@ -99,8 +99,14 @@ func (h *Handler) bulkDownloadEntry(id uint) bulkDownloadEntry {
 		return h.bulkDownloadUnreadable(entry, err)
 	}
 	maskSecrets(config)
+	// Encoded here, per device: a stored value that decodes but cannot be encoded again (a time
+	// zone offset Go reads and refuses to write) fails this entry and not the whole file.
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		return h.bulkDownloadUnreadable(entry, err)
+	}
 	entry.Status = bulkDownloadOK
-	entry.Config = config
+	entry.Config = encoded
 	return entry
 }
 

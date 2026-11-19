@@ -125,6 +125,25 @@ func TestBulkDownload_AnUnreadableDeviceIsAnEntryNotAFailure(t *testing.T) {
 	assert.NotContains(t, w.Body.String(), storedBytes, "the stored bytes reached the file through an error text")
 }
 
+// A stored configuration that decodes but cannot be encoded again (a time zone offset Go reads and
+// refuses to write) is that device's error entry, never an empty file for every device.
+func TestBulkDownload_AnUnencodableConfigurationIsOneErrorEntry(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	fleet := bulkFleet(t, db, 2)
+	require.NoError(t, db.GetDB().Exec("UPDATE devices SET desired_config = ? WHERE id = ?",
+		`{"power_metering":{"energy_reset":"2026-01-01T00:00:00+24:00"}}`, fleet[0].device.ID).Error)
+
+	w := postDownload(handler, idsBody(fleet[0].device.ID, fleet[1].device.ID))
+	file := decodeDownload(t, w)
+
+	require.Len(t, file.Devices, 2)
+	assert.Equal(t, "error", file.Devices[0].Status)
+	assert.Equal(t, "the configuration could not be read", file.Devices[0].Error)
+	assert.Equal(t, "ok", file.Devices[1].Status)
+}
+
 // An empty desired configuration is "none", never an entry with no settings.
 func TestBulkDownload_AnEmptyDesiredConfigurationIsNotNoSettings(t *testing.T) {
 	for _, stored := range []string{"", "{}", "null"} {
