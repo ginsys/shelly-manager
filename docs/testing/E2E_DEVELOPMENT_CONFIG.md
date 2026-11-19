@@ -83,6 +83,11 @@ The following Phase 1 optimizations are active in both configurations:
 2. **Middleware Bypass**
    - Test mode router with minimal middleware
    - 50-70% reduction in request overhead
+   - Logs a `WARN` at startup (`TEST MODE ENABLED`) naming the protections it leaves out: IP
+     blocking, rate limiting, request validation and the rest. Never set
+     `SHELLY_SECURITY_VALIDATION_TEST_MODE` outside tests. `security.validation_test_mode` alone
+     keeps the production router and only skips the suspicious-header and suspicious-User-Agent
+     checks; it logs its own `WARN`.
    - FastHealthz endpoint for rapid health checks
 
 3. **Firefox Timeout Fix**
