@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Measured:** 2026-11-19 at commit 13e3038 (`main`); the counts table in section 1 and all of section 3 were re-measured at commit 0648bab
-**Status:** 113 of 117 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 at commit 3b1374d, and a unit test keeps them equal to the code (section 1)
+**Status:** 123 of 127 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -21,9 +21,19 @@ comment-only line) in another non-test file under `ui/src`. "Referenced" is not 
 path": a match can be an import that is never run, or a same-named local function. A function that is
 used only inside its own module counts as unreferenced. A line is skipped as a comment when its first
 characters are `//`, `*`, `/*` or `<!--`: code after a `/* ... */` on the same line is missed, and a
-bare name inside a multi-line comment whose lines do not start with `*` is counted. Some exported functions are helpers and not
+bare name inside a multi-line comment whose lines do not start with `*` is counted. A hidden file, and a
+file that a `.gitignore` excludes (a `coverage/` directory, a `*.log`), is not read: `rg` skips both, and
+the script asks git for its file list. Some exported functions are helpers and not
 HTTP calls (`isAbortError`, `toSaveError`, `assertNever`, `computeDailyAggregates`,
 `parseMetricsWsMessage`, `isDashboardMessage`).
+
+**The test.** `ui/src/__tests__/api-coverage.test.ts` runs in `make test-ci` and in the CI vitest job. It
+measures the tree with `ui/scripts/api-coverage/measure.mjs` (Node only, no `rg`; run
+`node ui/scripts/api-coverage/cli.mjs` to print the table), and fails when the Status line, a row of the
+table below or the Total row differs from the measurement, or when a module under `ui/src/api` has no row.
+The four controls below are test cases. The measurement is the command below, rewritten without `rg`: the
+two print the same table on this tree (checked at commit 3b1374d). The command stays here as the
+definition for a reader without Node.
 
 **Command** (run from the repository root; save it as a script, it is `bash`):
 
@@ -51,19 +61,23 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 - `bulkImport` (used by `components/bulk/BulkOperationsDialog.vue`) counts as referenced.
 - `rotateAdminKey` (used by `pages/AdminSettingsPage.vue`) counts as referenced.
 - `getBackupResult` (named only in its own module and in a test) counts as unreferenced.
-- A fixture tree with a name that appears only in a `//` line, a name only in a `/* */` line and a name
-  only in a test file reports all three as unreferenced and the one used name as referenced.
+- A fixture tree with a name that appears only in a `//` line, a name only in a `/* */` line, a name only
+  in a `*` line, a name only in a `<!--` line, a name only in test files, a name only in its own module
+  and a name only as the start of a longer name reports all seven as unreferenced and the used names
+  (plain and `async`) as referenced.
 
-**Result at 13e3038:**
+**Result at 3b1374d:**
 
 | Module | Functions | Referenced | Unreferenced |
 |--------|-----------|------------|--------------|
 | `admin.ts` | 1 | 1 | |
+| `adminKey.ts` | 8 | 8 | |
 | `bulk.ts` | 4 | 4 | |
 | `configNew.ts` (per-device templates, overrides, desired config, apply, verify) | 12 | 12 | |
 | `deviceConfig.ts` | 4 | 4 | |
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 8 | 8 | |
+| `errorBody.ts` | 2 | 2 | |
 | `export.ts` | 27 | 25 | `getBackupResult`, `getRestoreResult` |
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
@@ -73,7 +87,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **117** | **113** | **4** |
+| **Total** | **127** | **123** | **4** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -310,9 +324,9 @@ Found by reading the code at this commit; not a plan.
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
-5. **No generated API client and no checked coverage.** The 117 functions are written by hand, and
-   section 1 of this file is recomputed by hand. A script or CI check that regenerates it would stop
-   this file going stale again.
+5. **No generated API client.** The 127 functions are written by hand. The coverage figure in section 1
+   is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
+   stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
    `ui/src/pages/__tests__/noAlertPages.test.ts` fails if one does. A page that gets its data
    through a store shows the store's error where the user acted: in the list, or inside the dialog
