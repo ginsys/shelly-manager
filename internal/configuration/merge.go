@@ -393,7 +393,7 @@ func cloneValue(v reflect.Value) reflect.Value {
 }
 
 // isOpaqueStruct reports whether t is a struct with no exported field, such as time.Time. The merge
-// cannot set a field of one, so it takes the value whole.
+// cannot set a field of one and the comparator cannot read one, so both take the value whole.
 func isOpaqueStruct(t reflect.Type) bool {
 	if t.Kind() != reflect.Struct {
 		return false
