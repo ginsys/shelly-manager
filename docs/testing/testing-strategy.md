@@ -8,7 +8,7 @@ The project uses a comprehensive testing strategy that **does NOT connect to rea
 
 1. **Unit Tests**: Fast, isolated tests that don't require network access
 2. **Integration Tests**: Tests with mock servers and databases, no external network access
-3. **Network Tests**: Tests using non-routable TEST-NET addresses only
+3. **Network Tests**: Tests that dial a loopback address only (a closed port, a loopback range or a local test server)
 
 ### Network Test Controls
 
@@ -30,9 +30,9 @@ The project uses a comprehensive testing strategy that **does NOT connect to rea
 #### For Test Authors
 
 1. **Use Helper Functions**: Use `testutil.SkipNetworkTestIfNeeded()` instead of manual skipping
-2. **Safe Test Addresses**: Use `testutil.TestNetworkAddress()` for consistent test addresses
+2. **Safe Test Addresses**: Use `testutil.TestNetworkAddress()` (a closed loopback port) for an address that no device answers
 3. **Appropriate Timeouts**: Use `testutil.CreateNetworkTestContext()` for context with proper timeouts
-4. **Non-routable Addresses**: Always use TEST-NET addresses (192.0.2.x) for negative tests
+4. **Stay on the Host**: A test never dials an address off this host. A TEST-NET address (192.0.2.x, RFC 5737) is not safe: the host still sends the packet to its default gateway. Use `127.0.0.1:1` (refused at once) or an `httptest` server that holds the request. `testutil.AssertLoopbackAddress()` checks an address
 
 #### Example Usage
 
@@ -64,10 +64,11 @@ func TestNetworkOperation(t *testing.T) {
 
 ### No Real Device Connections
 - **Mock Servers**: All Shelly device interactions use `httptest.Server` mocks
-- **TEST-NET Addresses**: Network tests use non-routable RFC 5737 addresses:
-  - `192.0.2.x` (TEST-NET-1) 
-  - `203.0.113.x` (TEST-NET-3)
+- **Loopback Addresses**: Negative tests dial a closed loopback port (`127.0.0.1:1`) or a loopback
+  range (`127.0.0.0/30`), which never leave the host
 - **Localhost Only**: Real HTTP connections only to localhost mock servers
+- **No WiFi tool**: The `scan-ap` CLI test runs with a PATH that holds no `nmcli`, so it never
+  touches a real interface
 - **Database Isolation**: Tests use in-memory SQLite or temporary files
 
 ### Performance Optimizations (2024)
@@ -83,7 +84,7 @@ func TestNetworkOperation(t *testing.T) {
 
 - ✅ Helper functions created in `internal/testutil/network_test_helper.go`
 - ✅ Discovery tests updated to use new strategy with optimized timeouts
-- ✅ Service tests use TEST-NET addresses and short timeouts
+- ✅ Service tests use loopback addresses and short timeouts
 - ✅ Comprehensive mock servers for all Shelly device interactions
 - ✅ Test timing optimizations reduce execution time by ~70%
 
