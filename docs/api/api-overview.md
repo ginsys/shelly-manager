@@ -20,6 +20,13 @@ The five provisioner agent routes also accept the scoped agent key (`security.ag
 endpoint). The device and tag routes, the notification routes, the export plugin reads,
 `GET /api/v1/provisioning/status` and `GET /api/v1/dhcp/reservations` need the key too
 (ginsys/shelly-manager#611); they were open before. If no admin key is configured, every route is open.
+**A write request with no key at all is refused before its body is read.** With an admin key set, a `POST`, `PUT`,
+`PATCH` or `DELETE` that has a body and sends neither `Authorization: Bearer` nor `X-API-Key` answers 401
+`UNAUTHORIZED` ("Authorization required") at once, so a malformed JSON body no longer draws a 400 first
+(ginsys/shelly-manager#720). The limits: a request that sends a wrong key still has its JSON body checked before the
+route refuses it, as does a `GET` with a body, and the header, content-type and query checks still run first, so
+a request that fails one of them can still answer 400 without the key. Nothing changes when no admin key is
+configured.
 **The web UI sends the key only when it holds one** (entered in its key dialog and kept for the browser tab, a
 build-time `VITE_ADMIN_KEY`, or a `window.__ADMIN_KEY__` set by hand): with a key set on the server and none in the
 UI, the device list answers 401 and the UI opens the key dialog.
