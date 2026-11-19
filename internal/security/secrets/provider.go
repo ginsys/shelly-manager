@@ -21,11 +21,14 @@ type EnvProvider struct{}
 // NewEnvProvider creates a new EnvProvider.
 func NewEnvProvider() *EnvProvider { return &EnvProvider{} }
 
-// Get returns the value for ENV "key" if set; otherwise, if "key_FILE" is set,
-// reads and returns the file contents trimmed of a single trailing newline.
+// Get returns the value for ENV "key" if it is set and not empty; otherwise, if "key_FILE" names a
+// readable file, returns the file contents trimmed of trailing newlines. An empty value counts as
+// absent, for the variable and for the file content alike (viper treats an empty env value the same
+// way), so a Compose file that always sets the plain variable, empty by default, still reads the file,
+// and an unfilled key file never blanks a key set in the config file.
 func (p *EnvProvider) Get(key string) (string, bool) {
 	// Direct value takes precedence
-	if v, ok := os.LookupEnv(key); ok {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
 		return v, true
 	}
 	// "_FILE" indirection (Docker/K8s secrets convention)
@@ -36,9 +39,12 @@ func (p *EnvProvider) Get(key string) (string, bool) {
 			// indicate not found to allow fallbacks.
 			return "", false
 		}
-		// Trim a single trailing newline commonly present in secret files
+		// Trim the trailing newlines commonly present in secret files
 		s := string(b)
 		s = strings.TrimRight(s, "\n")
+		if s == "" {
+			return "", false
+		}
 		return s, true
 	}
 	return "", false
