@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -11,13 +13,14 @@ import (
 	"github.com/gorilla/mux"
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
+	"github.com/ginsys/shelly-manager/internal/database"
 )
 
-// UI-facing DTOs for the `/api/v1/provisioning/*` endpoints. Backend stores
-// tasks/agents in the in-memory `registry` (see provisioner_handlers.go) with
-// snake_case field names and agent-oriented status vocabulary; the UI expects
-// camelCase fields and a coarser status set. These DTOs + translators bridge
-// the two so the frontend contract stays stable.
+// UI-facing DTOs for the `/api/v1/provisioning/*` endpoints. The backend keeps
+// tasks/agents in the database (see provisioner_handlers.go) with snake_case
+// field names and agent-oriented status vocabulary; the UI expects camelCase
+// fields and a coarser status set. These DTOs + translators bridge the two so
+// the frontend contract stays stable.
 
 type uiProvisioningTask struct {
 	ID            string                 `json:"id"`
@@ -67,7 +70,7 @@ func mapInternalToUIStatus(internal string) string {
 
 // agentStatus derives the UI-facing agent status from LastSeen timestamp,
 // using the registry's freshness threshold, agentOfflineAfter.
-func agentStatus(agent *ProvisionerAgent) string {
+func agentStatus(agent *database.ProvisionerAgent) string {
 	if time.Since(agent.LastSeen) > agentOfflineAfter {
 		return "offline"
 	}
@@ -79,9 +82,9 @@ func agentStatus(agent *ProvisionerAgent) string {
 
 // toUITask translates an internal ProvisioningTask to its UI representation.
 // deviceName is resolved by MAC lookup when the task carries DeviceMAC.
-func (h *Handler) toUITask(task *ProvisioningTask) uiProvisioningTask {
+func (h *Handler) toUITask(task *database.ProvisioningTask) uiProvisioningTask {
 	out := uiProvisioningTask{
-		ID:            task.ID,
+		ID:            task.TaskID,
 		Status:        mapInternalToUIStatus(task.Status),
 		TaskType:      task.Type,
 		Configuration: task.Config,
@@ -106,13 +109,13 @@ func (h *Handler) toUITask(task *ProvisioningTask) uiProvisioningTask {
 	return out
 }
 
-func toUIAgent(agent *ProvisionerAgent) uiProvisioningAgent {
+func toUIAgent(agent *database.ProvisionerAgent) uiProvisioningAgent {
 	capabilities := agent.Capabilities
 	if capabilities == nil {
 		capabilities = []string{}
 	}
 	return uiProvisioningAgent{
-		ID:           agent.ID,
+		ID:           agent.AgentID,
 		Name:         agent.Hostname,
 		Status:       agentStatus(agent),
 		Version:      agent.Version,
@@ -146,20 +149,19 @@ func (h *Handler) ListProvisioningTasksUI(w http.ResponseWriter, r *http.Request
 
 	statusFilter := r.URL.Query().Get("status")
 
-	registry.mu.RLock()
-	tasks := make([]*ProvisioningTask, 0, len(registry.tasks))
-	for _, task := range registry.tasks {
-		tasks = append(tasks, task)
+	tasks, err := h.provisionerStore().ListTasks(r.Context())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
 	}
-	registry.mu.RUnlock()
 
 	sort.Slice(tasks, func(i, j int) bool {
 		return tasks[i].CreatedAt.After(tasks[j].CreatedAt)
 	})
 
 	uiTasks := make([]uiProvisioningTask, 0, len(tasks))
-	for _, t := range tasks {
-		ui := h.toUITask(t)
+	for i := range tasks {
+		ui := h.toUITask(&tasks[i])
 		if statusFilter != "" && ui.Status != statusFilter {
 			continue
 		}
@@ -178,16 +180,17 @@ func (h *Handler) GetProvisioningTaskUI(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	id := mux.Vars(r)["id"]
-	registry.mu.RLock()
-	task, ok := registry.tasks[id]
-	registry.mu.RUnlock()
-	if !ok {
+	task, err := h.provisionerStore().GetTask(r.Context(), mux.Vars(r)["id"])
+	if errors.Is(err, database.ErrTaskNotFound) {
 		h.responseWriter().WriteNotFoundError(w, r, "Provisioning task")
 		return
 	}
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
 
-	h.responseWriter().WriteSuccess(w, r, h.toUITask(task))
+	h.responseWriter().WriteSuccess(w, r, h.toUITask(&task))
 }
 
 // CreateProvisioningTaskUI handles POST /api/v1/provisioning/tasks
@@ -205,6 +208,9 @@ func (h *Handler) CreateProvisioningTaskUI(w http.ResponseWriter, r *http.Reques
 		h.responseWriter().WriteValidationError(w, r, "taskType is required")
 		return
 	}
+	if h.tooLongForRegistry(w, r, "taskType", req.TaskType) {
+		return
+	}
 
 	mac, err := h.resolveDeviceMAC(req.DeviceID)
 	if err != nil {
@@ -212,20 +218,22 @@ func (h *Handler) CreateProvisioningTaskUI(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	task := h.createTaskLocked(req.TaskType, mac, req.Configuration)
+	task, err := h.createTask(r.Context(), req.TaskType, mac, req.Configuration)
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
 	h.responseWriter().WriteCreated(w, r, h.toUITask(task))
 }
 
-// createTaskLocked builds and inserts a ProvisioningTask into the registry.
-// Separated so BulkProvisionUI can reuse the insertion logic.
-func (h *Handler) createTaskLocked(taskType, deviceMAC string, config map[string]interface{}) *ProvisioningTask {
-	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
+// createTask builds and stores a pending task. Separated so BulkProvisionUI can reuse it.
+func (h *Handler) createTask(ctx context.Context, taskType, deviceMAC string, config map[string]interface{}) (*database.ProvisioningTask, error) {
 	if config == nil {
 		config = map[string]interface{}{}
 	}
 	now := time.Now()
-	task := &ProvisioningTask{
-		ID:        taskID,
+	task := &database.ProvisioningTask{
+		TaskID:    fmt.Sprintf("task_%d", now.UnixNano()),
 		Type:      taskType,
 		DeviceMAC: deviceMAC,
 		Config:    config,
@@ -233,18 +241,18 @@ func (h *Handler) createTaskLocked(taskType, deviceMAC string, config map[string
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	registry.mu.Lock()
-	registry.tasks[taskID] = task
-	registry.mu.Unlock()
+	if err := h.provisionerStore().CreateTask(ctx, task); err != nil {
+		return nil, err
+	}
 
 	h.logger.WithFields(map[string]any{
-		"task_id":    taskID,
+		"task_id":    task.TaskID,
 		"task_type":  taskType,
 		"device_mac": deviceMAC,
 		"component":  "provisioning_ui",
 	}).Info("UI-initiated provisioning task created")
 
-	return task
+	return task, nil
 }
 
 // CancelProvisioningTaskUI handles POST /api/v1/provisioning/tasks/{id}/cancel
@@ -258,26 +266,17 @@ func (h *Handler) CancelProvisioningTaskUI(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	id := mux.Vars(r)["id"]
-	registry.mu.Lock()
-	task, ok := registry.tasks[id]
-	if !ok {
-		registry.mu.Unlock()
+	task, err := h.provisionerStore().CancelTask(r.Context(), mux.Vars(r)["id"], time.Now())
+	if errors.Is(err, database.ErrTaskNotFound) {
 		h.responseWriter().WriteNotFoundError(w, r, "Provisioning task")
 		return
 	}
-	if task.Status == "pending" || task.Status == "assigned" || task.Status == "in_progress" {
-		task.Status = "failed"
-		task.UpdatedAt = time.Now()
-		if task.Config == nil {
-			task.Config = map[string]interface{}{}
-		}
-		task.Config["_error"] = "canceled"
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
 	}
-	taskCopy := *task
-	registry.mu.Unlock()
 
-	h.responseWriter().WriteSuccess(w, r, h.toUITask(&taskCopy))
+	h.responseWriter().WriteSuccess(w, r, h.toUITask(&task))
 }
 
 // BulkProvisionUI handles POST /api/v1/provisioning/bulk
@@ -304,7 +303,11 @@ func (h *Handler) BulkProvisionUI(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("device %q: %s", devID, err.Error()), nil)
 			return
 		}
-		task := h.createTaskLocked("configure", mac, req.Configuration)
+		task, err := h.createTask(r.Context(), "configure", mac, req.Configuration)
+		if err != nil {
+			h.writeProvisionerError(w, r, err)
+			return
+		}
 		uiTasks = append(uiTasks, h.toUITask(task))
 	}
 
@@ -320,20 +323,15 @@ func (h *Handler) ListProvisioningAgentsUI(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	registry.mu.RLock()
-	agents := make([]*ProvisionerAgent, 0, len(registry.agents))
-	for _, a := range registry.agents {
-		agents = append(agents, a)
+	agents, err := h.provisionerStore().ListAgents(r.Context()) // by hostname
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
 	}
-	registry.mu.RUnlock()
-
-	sort.Slice(agents, func(i, j int) bool {
-		return agents[i].Hostname < agents[j].Hostname
-	})
 
 	uiAgents := make([]uiProvisioningAgent, 0, len(agents))
-	for _, a := range agents {
-		uiAgents = append(uiAgents, toUIAgent(a))
+	for i := range agents {
+		uiAgents = append(uiAgents, toUIAgent(&agents[i]))
 	}
 
 	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
@@ -348,14 +346,15 @@ func (h *Handler) GetProvisioningAgentStatusUI(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	id := mux.Vars(r)["id"]
-	registry.mu.RLock()
-	agent, ok := registry.agents[id]
-	registry.mu.RUnlock()
-	if !ok {
+	agent, err := h.provisionerStore().GetAgent(r.Context(), mux.Vars(r)["id"])
+	if errors.Is(err, database.ErrAgentNotFound) {
 		h.responseWriter().WriteNotFoundError(w, r, "Provisioning agent")
 		return
 	}
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
 
-	h.responseWriter().WriteSuccess(w, r, toUIAgent(agent))
+	h.responseWriter().WriteSuccess(w, r, toUIAgent(&agent))
 }

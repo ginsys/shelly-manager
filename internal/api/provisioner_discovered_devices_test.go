@@ -32,16 +32,7 @@ func TestReportDiscoveredDevicesDatabase(t *testing.T) {
 
 	t.Run("ValidDiscoveryReport", func(t *testing.T) {
 		// First register the agent
-		registry.mu.Lock()
-		registry.agents["test-agent-1"] = &ProvisionerAgent{
-			ID:           "test-agent-1",
-			Hostname:     "test-host",
-			IP:           "127.0.0.1",
-			Status:       "active",
-			LastSeen:     time.Now(),
-			RegisteredAt: time.Now(),
-		}
-		registry.mu.Unlock()
+		seedProvisionerAgent(t, dbManager, "test-agent-1")
 
 		requestBody := map[string]interface{}{
 			"agent_id": "test-agent-1",
@@ -166,13 +157,6 @@ func TestReportDiscoveredDevicesDatabase(t *testing.T) {
 		handler.ReportDiscoveredDevices(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	// Clean up registry
-	t.Cleanup(func() {
-		registry.mu.Lock()
-		delete(registry.agents, "test-agent-1")
-		registry.mu.Unlock()
 	})
 }
 
@@ -359,16 +343,7 @@ func TestDiscoveredDevicesDatabaseIntegration(t *testing.T) {
 	api.HandleFunc("/provisioner/discovered-devices", handler.GetDiscoveredDevices).Methods("GET")
 
 	// Register agent
-	registry.mu.Lock()
-	registry.agents["integration-agent"] = &ProvisionerAgent{
-		ID:           "integration-agent",
-		Hostname:     "integration-host",
-		IP:           "127.0.0.1",
-		Status:       "active",
-		LastSeen:     time.Now(),
-		RegisteredAt: time.Now(),
-	}
-	registry.mu.Unlock()
+	seedProvisionerAgent(t, dbManager, "integration-agent")
 
 	t.Run("FullWorkflow", func(t *testing.T) {
 		// Step 1: Report discovered devices
@@ -420,12 +395,5 @@ func TestDiscoveredDevicesDatabaseIntegration(t *testing.T) {
 		assert.Equal(t, "integration:device:1", device["mac"])
 		assert.Equal(t, "integration-agent", device["agent_id"])
 		assert.Equal(t, "integration-task", device["task_id"])
-	})
-
-	// Clean up registry
-	t.Cleanup(func() {
-		registry.mu.Lock()
-		delete(registry.agents, "integration-agent")
-		registry.mu.Unlock()
 	})
 }

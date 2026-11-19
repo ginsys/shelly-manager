@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
+	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
 // An agent proves who it is with the token the manager issued when it registered. These tests walk the three
@@ -94,43 +96,40 @@ func idTask(t *testing.T, srv *httptest.Server, agentID string) string {
 	return out.Data.TaskID
 }
 
-func idTaskStatus(t *testing.T, id string) string {
+func idTaskStatus(t *testing.T, db *database.Manager, id string) string {
 	t.Helper()
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-	task, ok := registry.tasks[id]
-	require.True(t, ok)
+	task, err := database.NewProvisionerStore(db.GetDB()).GetTask(registryDeadline(t), id)
+	require.NoError(t, err)
 	return task.Status
 }
 
-func idLastSeen(t *testing.T, id string) time.Time {
+func idLastSeen(t *testing.T, db *database.Manager, id string) time.Time {
 	t.Helper()
-	registry.mu.RLock()
-	defer registry.mu.RUnlock()
-	agent, ok := registry.agents[id]
-	require.True(t, ok)
+	agent, err := database.NewProvisionerStore(db.GetDB()).GetAgent(registryDeadline(t), id)
+	require.NoError(t, err)
 	return agent.LastSeen
 }
 
-func idSetLastSeen(t *testing.T, id string, at time.Time) {
+func idSetLastSeen(t *testing.T, db *database.Manager, id string, at time.Time) {
 	t.Helper()
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	agent, ok := registry.agents[id]
-	require.True(t, ok)
-	agent.LastSeen = at
+	res := db.GetDB().Model(&database.ProvisionerAgent{}).Where("agent_id = ?", id).Update("last_seen", at)
+	require.NoError(t, res.Error)
+	require.EqualValues(t, 1, res.RowsAffected)
 }
 
-func idServer(t *testing.T) *httptest.Server {
+// idServer starts the production routes on a fresh database and returns both, so a test can read and
+// move the rows the handlers wrote.
+func idServer(t *testing.T) (*httptest.Server, *database.Manager) {
 	t.Helper()
-	resetProvisionerRegistry(t)
-	srv := httptest.NewServer(configRoutesRouterKeys(t, idAdminKey, idAgentKey))
+	db, cleanup := testutil.TestDatabase(t)
+	t.Cleanup(cleanup)
+	srv := httptest.NewServer(configRoutesRouterOn(t, db, idAdminKey, idAgentKey))
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, db
 }
 
 func TestAgentIdentity_PollReturnsOnlyTheCallersOwnTasks(t *testing.T) {
-	srv := idServer(t)
+	srv, db := idServer(t)
 	tokenA := idMustRegister(t, srv, "agent-a")
 	tokenB := idMustRegister(t, srv, "agent-b")
 	taskA := idTask(t, srv, "agent-a")
@@ -139,7 +138,7 @@ func TestAgentIdentity_PollReturnsOnlyTheCallersOwnTasks(t *testing.T) {
 
 	code, _ := idCall(t, srv, "GET", pollA, "", idAgentHdr(tokenB))
 	assert.Equal(t, http.StatusForbidden, code, "agent B's token on agent A's path")
-	assert.Equal(t, "pending", idTaskStatus(t, taskA), "the refused poll did not hand A's task to anyone")
+	assert.Equal(t, "pending", idTaskStatus(t, db, taskA), "the refused poll did not hand A's task to anyone")
 
 	code, _ = idCall(t, srv, "GET", pollA, "", idAgentHdr(""))
 	assert.Equal(t, http.StatusUnauthorized, code, "the shared key alone names no agent")
@@ -153,7 +152,7 @@ func TestAgentIdentity_PollReturnsOnlyTheCallersOwnTasks(t *testing.T) {
 	code, body := idCall(t, srv, "GET", pollA, "", idAgentHdr(tokenA))
 	require.Equal(t, http.StatusOK, code, body)
 	assert.Contains(t, body, taskA, "A's own token gets A's task")
-	assert.Equal(t, "assigned", idTaskStatus(t, taskA))
+	assert.Equal(t, "assigned", idTaskStatus(t, db, taskA))
 
 	code, _ = idCall(t, srv, "GET", pollA, "", idAdminHdr())
 	assert.Equal(t, http.StatusOK, code, "the admin key still polls any agent")
@@ -162,7 +161,7 @@ func TestAgentIdentity_PollReturnsOnlyTheCallersOwnTasks(t *testing.T) {
 }
 
 func TestAgentIdentity_StatusOnlyOnTheCallersOwnTasks(t *testing.T) {
-	srv := idServer(t)
+	srv, db := idServer(t)
 	tokenA := idMustRegister(t, srv, "agent-a")
 	tokenB := idMustRegister(t, srv, "agent-b")
 	taskA := idTask(t, srv, "agent-a")
@@ -173,17 +172,17 @@ func TestAgentIdentity_StatusOnlyOnTheCallersOwnTasks(t *testing.T) {
 	}
 
 	assert.Equal(t, http.StatusForbidden, put(taskA, idAgentHdr(tokenB)), "B marks A's task, naming A in the body")
-	assert.Equal(t, "pending", idTaskStatus(t, taskA))
+	assert.Equal(t, "pending", idTaskStatus(t, db, taskA))
 	assert.Equal(t, http.StatusUnauthorized, put(taskA, idAgentHdr("")), "the shared key alone")
 	assert.Equal(t, http.StatusForbidden, put(unassigned, idAgentHdr(tokenA)), "a task nobody was assigned")
-	assert.Equal(t, "pending", idTaskStatus(t, unassigned))
+	assert.Equal(t, "pending", idTaskStatus(t, db, unassigned))
 	assert.Equal(t, http.StatusOK, put(taskA, idAgentHdr(tokenA)), "A marks its own task")
-	assert.Equal(t, "completed", idTaskStatus(t, taskA))
+	assert.Equal(t, "completed", idTaskStatus(t, db, taskA))
 	assert.Equal(t, http.StatusOK, put(unassigned, idAdminHdr()), "the admin key still marks any task")
 }
 
 func TestAgentIdentity_ReportIsFiledUnderTheCallersOwnId(t *testing.T) {
-	srv := idServer(t)
+	srv, db := idServer(t)
 	tokenA := idMustRegister(t, srv, "agent-a")
 	tokenB := idMustRegister(t, srv, "agent-b")
 	taskA := idTask(t, srv, "agent-a")
@@ -196,10 +195,10 @@ func TestAgentIdentity_ReportIsFiledUnderTheCallersOwnId(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, report("agent-a", "", idAgentHdr("")), "the shared key alone")
 
 	assert.Equal(t, http.StatusOK, report("agent-b", taskA, idAgentHdr(tokenB)), "B reports under its own id, naming A's task")
-	assert.Equal(t, "pending", idTaskStatus(t, taskA), "that report did not complete A's task")
+	assert.Equal(t, "pending", idTaskStatus(t, db, taskA), "that report did not complete A's task")
 
 	assert.Equal(t, http.StatusOK, report("agent-a", taskA, idAgentHdr(tokenA)))
-	assert.Equal(t, "completed", idTaskStatus(t, taskA), "A's own report completes A's task")
+	assert.Equal(t, "completed", idTaskStatus(t, db, taskA), "A's own report completes A's task")
 }
 
 func idReportBodyFor(agent, task string) string {
@@ -211,7 +210,7 @@ func idReportBodyFor(agent, task string) string {
 }
 
 func TestAgentIdentity_RegisterKeepsAnOnlineIdWithItsOwner(t *testing.T) {
-	srv := idServer(t)
+	srv, _ := idServer(t)
 	tokenA := idMustRegister(t, srv, "agent-a")
 
 	code, token, body := idRegister(t, srv, "agent-a", idAgentHdr(""))
@@ -232,14 +231,14 @@ func TestAgentIdentity_RegisterKeepsAnOnlineIdWithItsOwner(t *testing.T) {
 }
 
 func TestAgentIdentity_RegisterSucceedsOnceTheOldRecordIsOffline(t *testing.T) {
-	srv := idServer(t)
+	srv, db := idServer(t)
 	idMustRegister(t, srv, "agent-a")
 
-	idSetLastSeen(t, "agent-a", time.Now().Add(-4*time.Minute))
+	idSetLastSeen(t, db, "agent-a", time.Now().Add(-4*time.Minute))
 	code, _, body := idRegister(t, srv, "agent-a", idAgentHdr(""))
 	assert.Equal(t, http.StatusConflict, code, "silent for 4 minutes is still online: %s", body)
 
-	idSetLastSeen(t, "agent-a", time.Now().Add(-6*time.Minute))
+	idSetLastSeen(t, db, "agent-a", time.Now().Add(-6*time.Minute))
 	code, token, body := idRegister(t, srv, "agent-a", idAgentHdr(""))
 	require.Equal(t, http.StatusCreated, code, "silent for 6 minutes is offline: %s", body)
 	assert.NotEmpty(t, token)
@@ -248,11 +247,11 @@ func TestAgentIdentity_RegisterSucceedsOnceTheOldRecordIsOffline(t *testing.T) {
 // A refused call proves nothing about the agent, so it must not keep the record online: otherwise a holder of the
 // shared key could keep an id fresh with bad tokens and the real agent's register would be refused for good.
 func TestAgentIdentity_ARefusedCallDoesNotMoveLastSeen(t *testing.T) {
-	srv := idServer(t)
+	srv, db := idServer(t)
 	tokenB := idMustRegister(t, srv, "agent-b")
 	idMustRegister(t, srv, "agent-a")
 	old := time.Now().Add(-10 * time.Minute)
-	idSetLastSeen(t, "agent-a", old)
+	idSetLastSeen(t, db, "agent-a", old)
 
 	code, _ := idCall(t, srv, "GET", "/api/v1/provisioner/agents/agent-a/tasks", "", idAgentHdr(""))
 	require.Equal(t, http.StatusUnauthorized, code)
@@ -265,7 +264,7 @@ func TestAgentIdentity_ARefusedCallDoesNotMoveLastSeen(t *testing.T) {
 	code, _ = idCall(t, srv, "POST", "/api/v1/provisioner/discovered-devices", idReportBodyFor("agent-a", ""), idAgentHdr(tokenB))
 	require.Equal(t, http.StatusForbidden, code)
 
-	assert.True(t, idLastSeen(t, "agent-a").Equal(old), "no refused call moved agent A's LastSeen")
+	assert.True(t, idLastSeen(t, db, "agent-a").Equal(old), "no refused call moved agent A's LastSeen")
 
 	code, _, body := idRegister(t, srv, "agent-a", idAgentHdr(""))
 	assert.Equal(t, http.StatusCreated, code, "so the real agent can still register once it is 5 minutes silent: %s", body)
@@ -273,7 +272,7 @@ func TestAgentIdentity_ARefusedCallDoesNotMoveLastSeen(t *testing.T) {
 
 // The real client holds the token the real manager issued, so two real agents on one manager cannot read each other's tasks.
 func TestAgentIdentity_TwoRealClientsStayApart(t *testing.T) {
-	srv := idServer(t)
+	srv, db := idServer(t)
 	a := provisioning.NewAPIClient(srv.URL, idAgentKey, "agent-a", logging.GetDefault())
 	b := provisioning.NewAPIClient(srv.URL, idAgentKey, "agent-b", logging.GetDefault())
 	require.NoError(t, a.EnsureRegistered("host-a", nil, nil))
@@ -283,22 +282,22 @@ func TestAgentIdentity_TwoRealClientsStayApart(t *testing.T) {
 	tasksB, err := b.PollTasks()
 	require.NoError(t, err)
 	assert.Empty(t, tasksB, "B's own poll does not return A's task")
-	assert.Equal(t, "pending", idTaskStatus(t, taskA))
+	assert.Equal(t, "pending", idTaskStatus(t, db, taskA))
 	require.Error(t, b.UpdateTaskStatus(taskA, "completed", nil, ""), "B cannot mark A's task")
-	assert.Equal(t, "pending", idTaskStatus(t, taskA))
+	assert.Equal(t, "pending", idTaskStatus(t, db, taskA))
 	assert.True(t, b.IsRegistered(), "a 403 does not turn B into a re-registering loop")
 
 	tasksA, err := a.PollTasks()
 	require.NoError(t, err)
 	require.Len(t, tasksA, 1)
 	require.NoError(t, a.UpdateTaskStatus(taskA, "completed", nil, ""))
-	assert.Equal(t, "completed", idTaskStatus(t, taskA))
+	assert.Equal(t, "completed", idTaskStatus(t, db, taskA))
 }
 
 // A restarted agent keeps its id inside a container. The manager still holds the old record, so the new process is
 // refused until that record is 5 minutes silent, then registers and gets a new token.
 func TestAgentIdentity_ARestartedRealAgentWaitsForItsOldRecord(t *testing.T) {
-	srv := idServer(t)
+	srv, db := idServer(t)
 	old := provisioning.NewAPIClient(srv.URL, idAgentKey, "agent-a", logging.GetDefault())
 	require.NoError(t, old.EnsureRegistered("host-a", nil, nil))
 
@@ -307,7 +306,7 @@ func TestAgentIdentity_ARestartedRealAgentWaitsForItsOldRecord(t *testing.T) {
 	require.Error(t, err, "the old record is still online")
 	assert.False(t, fresh.IsRegistered())
 
-	idSetLastSeen(t, "agent-a", time.Now().Add(-6*time.Minute))
+	idSetLastSeen(t, db, "agent-a", time.Now().Add(-6*time.Minute))
 	require.NoError(t, fresh.EnsureRegistered("host-a", nil, nil))
 	_, err = fresh.PollTasks()
 	require.NoError(t, err)
@@ -316,20 +315,20 @@ func TestAgentIdentity_ARestartedRealAgentWaitsForItsOldRecord(t *testing.T) {
 }
 
 func TestAgentIdentity_AgentListNeverShowsTokens(t *testing.T) {
-	srv := idServer(t)
+	srv, _ := idServer(t)
 	token := idMustRegister(t, srv, "agent-a")
 
 	code, body := idCall(t, srv, "GET", "/api/v1/provisioner/agents", "", idAdminHdr())
 	require.Equal(t, http.StatusOK, code)
 	assert.Contains(t, body, "agent-a")
 	assert.NotContains(t, body, token, "the token is not in the agent list")
+	assert.NotContains(t, body, database.HashAgentToken(token), "nor is the hash the table keeps")
 	assert.NotContains(t, strings.ToLower(body), "token")
 }
 
 // With no admin key the manager is open by design (the default of every guarded route): nothing is enforced, but
 // registration still hands out a token so an agent that sends it works the same on a keyed manager.
 func TestAgentIdentity_NoAdminKeyKeepsTheRoutesOpen(t *testing.T) {
-	resetProvisionerRegistry(t)
 	srv := httptest.NewServer(configRoutesRouterKeys(t, "", ""))
 	defer srv.Close()
 

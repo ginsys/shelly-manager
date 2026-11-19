@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
@@ -89,6 +90,13 @@ func configRoutesRouterKeys(t *testing.T, adminKey, agentKey string) *mux.Router
 	t.Helper()
 	db, cleanup := testutil.TestDatabase(t)
 	t.Cleanup(cleanup)
+	return configRoutesRouterOn(t, db, adminKey, agentKey)
+}
+
+// configRoutesRouterOn builds the route table on a database the caller owns, so a test can put a second
+// handler on it and call that a manager restart.
+func configRoutesRouterOn(t *testing.T, db *database.Manager, adminKey, agentKey string) *mux.Router {
+	t.Helper()
 	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
 	t.Cleanup(handler.WaitBackground) // a request to POST /discover starts work; it ends before the database closes
 	if adminKey != "" {

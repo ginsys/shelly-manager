@@ -12,25 +12,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
+	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
 // The provisioner agent and the manager are two programs that share only a wire format. These tests run the
 // real provisioning.APIClient against the real router, so a change to either side that the other cannot read
 // fails here. The client's own tests use hand-written mocks and cannot catch that.
-
-func resetProvisionerRegistry(t *testing.T) {
-	t.Helper()
-	clear := func() {
-		registry.mu.Lock()
-		registry.agents = make(map[string]*ProvisionerAgent)
-		registry.tasks = make(map[string]*ProvisioningTask)
-		registry.mu.Unlock()
-	}
-	clear()
-	t.Cleanup(clear)
-}
 
 // adminCall sends one operator request (the admin key when the manager has one) and returns the body.
 func adminCall(t *testing.T, srv *httptest.Server, adminKey, method, path, body string) (int, string) {
@@ -61,7 +51,6 @@ func TestProvisionerClient_AgainstTheRealRouter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetProvisionerRegistry(t)
 			srv := httptest.NewServer(configRoutesRouterKeys(t, tc.adminKey, tc.agentKey))
 			defer srv.Close()
 
@@ -112,11 +101,13 @@ func TestProvisionerClient_AgainstTheRealRouter(t *testing.T) {
 	}
 }
 
-// A manager restart empties its in-memory registry. The agent's next poll is refused, it notices, registers again
-// and polls on.
-func TestProvisionerClient_RegistersAgainAfterAManagerRestart(t *testing.T) {
-	resetProvisionerRegistry(t)
-	srv := httptest.NewServer(configRoutesRouterKeys(t, "admin-secret", "agent-secret"))
+// A manager can lose an agent it knew: the database was restored from an older backup, or an operator removed
+// the row. The agent's next poll is refused, it notices, registers again and polls on. (A restart alone no
+// longer does this: the registry lives in the database.)
+func TestProvisionerClient_RegistersAgainWhenTheManagerForgetsIt(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	t.Cleanup(cleanup)
+	srv := httptest.NewServer(configRoutesRouterOn(t, db, "admin-secret", "agent-secret"))
 	defer srv.Close()
 	client := provisioning.NewAPIClient(srv.URL, "agent-secret", "e2e-agent", logging.GetDefault())
 
@@ -124,7 +115,7 @@ func TestProvisionerClient_RegistersAgainAfterAManagerRestart(t *testing.T) {
 	_, err := client.PollTasks()
 	require.NoError(t, err)
 
-	resetProvisionerRegistry(t) // the restart
+	require.NoError(t, db.GetDB().Where("1 = 1").Delete(&database.ProvisionerAgent{}).Error) // the manager forgets it
 
 	_, err = client.PollTasks()
 	require.Error(t, err, "the manager no longer knows the agent")
