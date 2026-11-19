@@ -81,11 +81,20 @@ func NewManagerWithLogger(config provider.DatabaseConfig, logger *logging.Logger
 		&configuration.ResolutionMetrics{},
 		&ConfigTemplate{},
 		&configuration.DbDeviceTag{},
+		&ProvisionerAgent{},
+		&ProvisioningTask{},
 	); err != nil {
 		if closeErr := dbProvider.Close(); closeErr != nil {
 			logger.WithFields(map[string]any{"closeError": closeErr}).Error("Failed to close database provider after migration error")
 		}
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
+	}
+
+	if err := useBinaryCollationMySQL(dbProvider.GetDB(), logger); err != nil {
+		if closeErr := dbProvider.Close(); closeErr != nil {
+			logger.WithFields(map[string]any{"closeError": closeErr}).Error("Failed to close database provider after provisioner table error")
+		}
+		return nil, fmt.Errorf("failed to prepare the provisioner tables: %w", err)
 	}
 
 	logger.WithFields(map[string]any{
@@ -693,61 +702,50 @@ func (m *Manager) GetDiscoveredDevices(agentID string) ([]DiscoveredDevice, erro
 // UpsertDiscoveredDevice creates or updates a discovered device (legacy compatibility)
 func (m *Manager) UpsertDiscoveredDevice(device *DiscoveredDevice) error {
 	start := time.Now()
-	var existing DiscoveredDevice
-
-	err := m.GetDB().Where("mac = ? AND agent_id = ?",
-		device.MAC, device.AgentID).First(&existing).Error
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// Create new record
-		err = m.GetDB().Create(device).Error
-		m.logger.WithFields(map[string]any{
-			"mac":       device.MAC,
-			"agent_id":  device.AgentID,
-			"model":     device.Model,
-			"operation": "create",
-			"duration":  time.Since(start),
-			"component": "database",
-		}).Info("Created new discovered device")
-	} else if err != nil {
-		// Database error
-		duration := time.Since(start)
+	created, err := upsertDiscoveredDevice(m.GetDB(), device)
+	if err != nil {
 		m.logger.WithFields(map[string]any{
 			"mac":       device.MAC,
 			"agent_id":  device.AgentID,
 			"error":     err.Error(),
-			"duration":  duration,
+			"duration":  time.Since(start),
 			"operation": "upsert",
 			"table":     "discovered_devices",
 			"component": "database",
 		}).Error("Database operation failed")
 		return err
-	} else {
-		// Update existing record
-		device.ID = existing.ID
-		device.CreatedAt = existing.CreatedAt
-		err = m.GetDB().Save(device).Error
-		m.logger.WithFields(map[string]any{
-			"mac":       device.MAC,
-			"agent_id":  device.AgentID,
-			"model":     device.Model,
-			"operation": "update",
-			"duration":  time.Since(start),
-			"component": "database",
-		}).Info("Updated existing discovered device")
 	}
 
-	duration := time.Since(start)
+	operation, message := "update", "Updated existing discovered device"
+	if created {
+		operation, message = "create", "Created new discovered device"
+	}
 	m.logger.WithFields(map[string]any{
 		"mac":       device.MAC,
 		"agent_id":  device.AgentID,
-		"duration":  duration,
-		"operation": "upsert",
-		"table":     "discovered_devices",
+		"model":     device.Model,
+		"operation": operation,
+		"duration":  time.Since(start),
 		"component": "database",
-	}).Debug("Discovered device upsert completed")
+	}).Info(message)
 
-	return err
+	return nil
+}
+
+// upsertDiscoveredDevice creates the discovered device, or updates the row with the same MAC and agent,
+// on db. db may be a transaction: the provisioner store reports devices inside one.
+func upsertDiscoveredDevice(db *gorm.DB, device *DiscoveredDevice) (created bool, err error) {
+	var existing DiscoveredDevice
+	err = db.Where("mac = ? AND agent_id = ?", device.MAC, device.AgentID).First(&existing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true, db.Create(device).Error
+	}
+	if err != nil {
+		return false, err
+	}
+	device.ID = existing.ID
+	device.CreatedAt = existing.CreatedAt
+	return false, db.Save(device).Error
 }
 
 // CleanupExpiredDiscoveredDevices removes expired discovered devices (legacy compatibility)
