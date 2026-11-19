@@ -313,6 +313,23 @@ func TestTimeoutWriter_AnswerAfterInformationalStatusStartsFromUpstreamHeaders(t
 	})
 }
 
+// After the middleware answered a panic with its own 500, finishing the
+// request must not reconcile the handler's trailers onto that answer.
+func TestTimeoutWriter_FinishAfterFailLeavesTheAnswerAlone(t *testing.T) {
+	sl := newStatusLog()
+	sl.h.Set("Trailer", "X-Result")
+	sl.h.Set("X-Result", "upstream")
+	tw := newTimeoutWriter(sl)
+	tw.Header().Set("X-Result", "changed")
+	tw.WriteHeader(http.StatusEarlyHints)
+
+	assert.True(t, tw.fail())
+	tw.finish()
+
+	assert.Equal(t, "upstream", sl.h.Get("X-Result"))
+	assert.Equal(t, []int{http.StatusEarlyHints, http.StatusInternalServerError}, sl.codes)
+}
+
 // A status code the real writer rejects (it panics) leaves the response not
 // started, so the panic can still be answered with the 500.
 func TestTimeoutWriter_RejectedStatusCanStillBeAnswered(t *testing.T) {

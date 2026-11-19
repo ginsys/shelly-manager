@@ -597,6 +597,7 @@ type timeoutWriter struct {
 	wroteHeader bool                // the handler's response has started (or the 500 went out)
 	timedOut    bool                // the timeout answer went out or was skipped for good
 	finished    bool                // the handler returned; net/http has taken the writer back
+	failed      bool                // the 500 after a handler panic went out: the response is ours, not the handler's
 }
 
 // errWriteAfterFinish is returned to a write that arrives after the handler
@@ -719,9 +720,12 @@ func (tw *timeoutWriter) finish() {
 // finishLocked is finish for a caller that holds mu. From here on the writer
 // belongs to net/http again, so every later write or answer is dropped.
 func (tw *timeoutWriter) finishLocked() {
-	if tw.wroteHeader {
+	switch {
+	case tw.failed:
+		// The 500 is ours: the handler's headers and trailers do not apply.
+	case tw.wroteHeader:
 		tw.copyTrailersLocked()
-	} else {
+	default:
 		tw.copyHeadersLocked()
 	}
 	tw.finished = true
@@ -760,6 +764,7 @@ func (tw *timeoutWriter) fail() bool {
 		return false
 	}
 	tw.wroteHeader = true
+	tw.failed = true
 	tw.resetHeadersLocked()
 	http.Error(tw.w, "Internal Server Error", http.StatusInternalServerError)
 	return true
