@@ -89,6 +89,28 @@ describe('DeviceDetailPage shows a failed action as an error panel', () => {
     expect(alertSpy).not.toHaveBeenCalled()
   })
 
+  it('inside the edit dialog when a control command fails while the dialog is open', async () => {
+    let rejectControl: (reason: any) => void = () => {}
+    vi.mocked(controlDevice).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectControl = reject
+        }) as any,
+    )
+    const wrapper = await openPage()
+    await wrapper.get('button[title="Turn On"]').trigger('click')
+    await flushPromises() // the command is open
+    await wrapper.get('button[title="Edit Device"]').trigger('click')
+
+    rejectControl(new Error('device is asleep'))
+    await flushPromises()
+
+    const panel = wrapper.get('.modal-dialog [data-testid="device-save-error"]')
+    expect(panel.text()).toContain('device is asleep')
+    expect(panel.text()).toContain('Control device')
+    expect(wrapper.find('[data-testid="device-action-error"]').exists()).toBe(false)
+  })
+
   it('under the toolbar when the dialog was closed while the save was still open', async () => {
     let rejectSave: (reason: any) => void = () => {}
     vi.mocked(updateDevice).mockImplementation(
