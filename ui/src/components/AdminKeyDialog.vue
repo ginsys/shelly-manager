@@ -6,8 +6,6 @@
     role="dialog"
     aria-modal="true"
     aria-labelledby="akd-title"
-    @keydown.escape="cancelAdminKeyPrompt"
-    @keydown.tab="trapTab"
   >
     <form ref="panel" class="akd-panel" @submit.prevent="submit">
       <h2 id="akd-title" class="akd-title">Admin key</h2>
@@ -71,20 +69,33 @@ function trapTab(event: KeyboardEvent) {
   }
 }
 
+// Keys are read at the document while the dialog is open: a keypress goes to the focused control and
+// bubbles through its own ancestors, so a handler on the backdrop never sees one from outside it.
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') cancelAdminKeyPrompt()
+  else if (event.key === 'Tab') trapTab(event)
+}
+
 // Each opening starts with an empty field: a refused key is never left in it.
 watch(promptOpen, (open) => {
   if (open) {
+    document.addEventListener('keydown', onKeydown)
     opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     focusField()
   } else {
+    document.removeEventListener('keydown', onKeydown)
     restoreFocus()
   }
 })
 onMounted(() => {
-  if (promptOpen.value) focusField()
+  if (promptOpen.value) {
+    document.addEventListener('keydown', onKeydown)
+    focusField()
+  }
 })
 // A dialog that goes away must not leave a request waiting for a key nobody can enter.
 onBeforeUnmount(() => {
+  document.removeEventListener('keydown', onKeydown)
   if (promptOpen.value) cancelAdminKeyPrompt()
 })
 
