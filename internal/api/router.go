@@ -275,7 +275,7 @@ var testModeDisabledProtections = []string{
 	"IP blocking", "security monitoring", "security logging", "security headers",
 	"request timeout", "rate limiting", "request size limit",
 	"request validation (headers, content type, query, JSON)",
-	"CORS restrictions (every origin is allowed)", "request logging",
+	"configured CORS methods and headers (fixed wildcard CORS instead)", "request logging",
 }
 
 // testModeCORSMiddleware provides minimal CORS middleware for test mode
