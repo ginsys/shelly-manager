@@ -142,7 +142,6 @@ func (h *Handler) GetProvisionerAgents(w http.ResponseWriter, r *http.Request) {
 		agents = append(agents, agent)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
 		"agents": agents,
 		"count":  len(agents),
@@ -240,7 +239,6 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	}).Info("Provisioning task status updated")
 
 	response := map[string]interface{}{
-		"success":    true,
 		"task_id":    taskID,
 		"status":     task.Status,
 		"updated_at": task.UpdatedAt,
@@ -300,13 +298,11 @@ func (h *Handler) CreateProvisioningTask(w http.ResponseWriter, r *http.Request)
 	}).Info("New provisioning task created")
 
 	response := map[string]interface{}{
-		"success":    true,
 		"task_id":    taskID,
 		"status":     "pending",
 		"created_at": task.CreatedAt,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	h.responseWriter().WriteCreated(w, r, response)
 }
 
@@ -320,8 +316,7 @@ func (h *Handler) GetProvisioningTasks(w http.ResponseWriter, r *http.Request) {
 		tasks = append(tasks, task)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	h.writeJSON(w, map[string]interface{}{
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
 		"tasks": tasks,
 		"count": len(tasks),
 	})
@@ -523,7 +518,6 @@ func (h *Handler) GetDiscoveredDevices(w http.ResponseWriter, r *http.Request) {
 	}).Info("Retrieved discovered devices")
 
 	response := map[string]interface{}{
-		"success":      true,
 		"devices":      devices,
 		"device_count": len(devices),
 		"filtered_by":  agentID,
