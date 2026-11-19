@@ -116,12 +116,12 @@ discovery:
 		}
 	})
 
+	// scan-ap lists WiFi networks by running the host's WiFi tool (nmcli on Linux), found through
+	// PATH. A PATH with no such tool makes the scan fail with "executable file not found" and
+	// report no devices, so the test never touches a real interface.
 	t.Run("scan-ap command", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping network-dependent test in short mode")
-		}
-
-		output, err := runCommand(t, binaryPath, "--config", configPath, "scan-ap")
+		emptyPath := t.TempDir()
+		output, err := runCommandWithEnv(t, 30*time.Second, []string{"PATH=" + emptyPath}, binaryPath, "--config", configPath, "scan-ap")
 		if err != nil {
 			t.Fatalf("Scan-AP command failed: %v", err)
 		}
@@ -129,6 +129,34 @@ discovery:
 		// Should complete and show scanning message
 		if !strings.Contains(output, "Scanning for Shelly devices") && !strings.Contains(output, "No unprovisioned") {
 			t.Errorf("Expected scanning message, got: %s", output)
+		}
+	})
+
+	// Control for the case above: with a stand-in nmcli on PATH, scan-ap calls it. That shows
+	// the PATH is what keeps the case above off the interface, and that the case above would
+	// notice a call if the manager made one.
+	t.Run("scan-ap command runs the WiFi tool found on PATH", func(t *testing.T) {
+		if runtime.GOOS != "linux" {
+			t.Skip("scan-ap runs nmcli on Linux only")
+		}
+
+		shimDir := t.TempDir()
+		callLog := filepath.Join(shimDir, "calls.log")
+		shim := "#!/bin/sh\necho \"$@\" >> " + strconv.Quote(callLog) + "\nexit 1\n"
+		if err := os.WriteFile(filepath.Join(shimDir, "nmcli"), []byte(shim), 0755); err != nil {
+			t.Fatalf("Failed to write nmcli stand-in: %v", err)
+		}
+
+		if _, err := runCommandWithEnv(t, 30*time.Second, []string{"PATH=" + shimDir}, binaryPath, "--config", configPath, "scan-ap"); err != nil {
+			t.Fatalf("Scan-AP command failed: %v", err)
+		}
+
+		calls, err := os.ReadFile(callLog)
+		if err != nil {
+			t.Fatalf("Expected scan-ap to call nmcli on PATH, but the stand-in logged nothing: %v", err)
+		}
+		if len(calls) == 0 {
+			t.Error("Expected scan-ap to call nmcli on PATH, but the stand-in log is empty")
 		}
 	})
 
@@ -458,6 +486,13 @@ func runCommand(t *testing.T, binary string, args ...string) (string, error) {
 
 func runCommandWithTimeout(t *testing.T, timeout time.Duration, binary string, args ...string) (string, error) {
 	t.Helper()
+	return runCommandWithEnv(t, timeout, nil, binary, args...)
+}
+
+// runCommandWithEnv runs the binary with extraEnv added after the caller's environment (a later
+// entry for the same variable wins).
+func runCommandWithEnv(t *testing.T, timeout time.Duration, extraEnv []string, binary string, args ...string) (string, error) {
+	t.Helper()
 
 	cmd := exec.Command(binary, args...)
 
@@ -468,6 +503,7 @@ func runCommandWithTimeout(t *testing.T, timeout time.Duration, binary string, a
 	// Set CGO_ENABLED for SQLite. The manager reads SHELLY_* variables over its config file, so
 	// pin mDNS off here: a variable in the caller's environment must not send multicast from a test.
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1", "SHELLY_DISCOVERY_ENABLE_MDNS=false")
+	cmd.Env = append(cmd.Env, extraEnv...)
 
 	done := make(chan error, 1)
 
