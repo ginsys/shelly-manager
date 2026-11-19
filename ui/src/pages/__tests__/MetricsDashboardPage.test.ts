@@ -537,15 +537,19 @@ describe('MetricsDashboardPage', () => {
 
   describe('Prometheus Export', () => {
     let alertSpy: ReturnType<typeof vi.spyOn>
+    // The shared setup's createElement. A test that replaces it gives it back in afterEach.
+    let sharedCreateElement: ((...args: any[]) => any) | undefined
 
     beforeEach(() => {
       alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+      sharedCreateElement = vi.mocked(document.createElement).getMockImplementation()
       global.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
       global.URL.revokeObjectURL = vi.fn()
     })
 
     afterEach(() => {
       alertSpy.mockRestore()
+      if (sharedCreateElement) vi.mocked(document.createElement).mockImplementation(sharedCreateElement)
     })
 
     const clickExport = async () => {
@@ -583,6 +587,13 @@ describe('MetricsDashboardPage', () => {
       expect(global.URL.revokeObjectURL).toHaveBeenCalled()
     })
 
+    // ginsys/shelly-manager#696: the test above replaces document.createElement for every tag. The
+    // next test, and the page's own timer, need a createElement that still builds real elements.
+    it('leaves document.createElement building real elements', () => {
+      const div = document.createElement('div')
+      expect(div).toBeInstanceOf(HTMLElement)
+      expect(typeof div.setAttribute).toBe('function')
+    })
   })
 
   // NOTE: Tests skipped due to jsdom limitation with Vue scoped styles (el.setAttribute)
