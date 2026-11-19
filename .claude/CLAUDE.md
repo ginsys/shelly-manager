@@ -12,7 +12,7 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 
 **Critical Assessment**:
 - ✅ **Backend Investment**: 138 API endpoints across 6 handler modules, 19 internal packages
-- ⚠️ **Frontend Progress**: ~17% of backend API endpoints exposed (23/138) - see [Frontend Review](../docs/frontend/frontend-review.md)
+- ⚠️ **Frontend Progress**: API coverage, unreachable pages and open frontend issues are measured in [Frontend Review](../docs/frontend/frontend-review.md)
 - ✅ **Metrics System**: Real-time WebSocket metrics with a contract-enforced Go/TS message protocol, a freshness watchdog (truthful "LIVE"), and REST fallback (#247)
 - ✅ **Export/Import**: Enhanced preview forms with schema-driven UX (100% API coverage)
 - ✅ **Strict SMA/Previews**: Registry-backed previews and closed SMA `2026.1`
@@ -43,7 +43,7 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 ### Phase 7: Backend-Frontend Integration ⚡ **READY TO BEGIN**
 **Business Impact**: Transform to comprehensive infrastructure platform
 
-See [Frontend Review](../docs/frontend/frontend-review.md) for detailed gap analysis, task list, and implementation order.
+See [Frontend Review](../docs/frontend/frontend-review.md) for the measured API coverage, the pages and open frontend work.
 
 ### Phase 8: Vue.js Frontend Modernization ⚡ **STRATEGIC PRIORITY**
 **Technical Impact**: 9,400+ → ~3,500 lines (63% reduction), <5% code duplication  
@@ -96,7 +96,7 @@ Project tracking is managed via **GitHub Issues**, **Milestones**, and **Project
 ## 🎯 Success Metrics & Targets
 
 ### Phase 7 Targets
-See [Frontend Review](../docs/frontend/frontend-review.md) Section 7 for detailed targets and success metrics.
+See [Frontend Review](../docs/frontend/frontend-review.md) for the current measured state (the old targets table was removed).
 
 ### Phase 8 Targets  
 - **Code Reduction**: 9,400+ → ~3,500 lines (63% reduction)
@@ -130,7 +130,7 @@ See [Frontend Review](../docs/frontend/frontend-review.md) Section 7 for detaile
 | Document | Purpose | Keep Updated |
 |----------|---------|--------------|
 | [API Overview](../docs/api/api-overview.md) | Backend API reference (112+ endpoints) | When API changes |
-| [Frontend Review](../docs/frontend/frontend-review.md) | Frontend architecture, API gap analysis, task list | After frontend work |
+| [Frontend Review](../docs/frontend/frontend-review.md) | Frontend architecture, measured API coverage, open work | After frontend work |
 | [GitHub Issues](https://github.com/ginsys/shelly-manager/issues) | Development task tracking | Continuously |
 | [Phase 8 Plan](../docs/development/PHASE_8_WEB_UI_PLAN.md) | Vue.js SPA modernization plan | On milestone completion |
 

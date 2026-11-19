@@ -1,594 +1,289 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Last Updated:** 2025-12-02
-**Status:** Production-ready for export/import/plugins/templates/typed-config/drift/bulk/metrics; overall API exposure ~54%
-**Next Review:** After Phase 7 completion
+**Measured:** 2026-11-19 at commit 13e3038 (`main`)
+**Status:** 113 of 117 exported API functions are referenced by the UI (97%). Fifteen of the 26 routed pages cannot be reached from the top bar by clicking.
+**Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
----
-
-> July 2026 update (#268): export preview now reads the live plugin registry
-> and recursive backend schemas; browser import preview is SMA-only and
-> registry-gated. The obsolete export scheduling page was removed. SMA uses
-> strict `2026.1`, and raw `vue-tsc` passes with a zero-error baseline.
+Every number below comes from a command in this file, run at the commit above. Re-run the command
+before you quote a number, and change the date and commit in this header when you refresh the file.
+Tool: ripgrep (`rg` 15.2.0). On this project's host `grep` may be another program; use `rg`.
 
 Preview captures: [registry-backed export](images/registry-export-preview.png)
 and [SMA browser import](images/sma-import-preview.png).
 
-## Executive Summary
+---
 
-The Shelly Manager frontend is a **Vue 3 + TypeScript** application built with Vite, featuring 41 Vue components (21 pages + 1 layout + 19 reusable components) and comprehensive API integration with the Go backend. The application exposes approximately 55% of backend API functionality (73/132 endpoints) through a well-organized, user-friendly interface.
+## 1. API coverage
 
-**Key Metrics:**
-- 41 Vue components (21 pages + 1 layout + 19 reusable components)
-- 14 API modules with 103 actively used endpoint functions
-- 9 Pinia stores for state management
-- ~6,400 lines in page components
-- TypeScript throughout with strong type safety
-- Real-time WebSocket metrics with REST polling fallback
-- Schema-driven configuration forms with validation
+**Definition.** A function is *defined* when `ui/src/api/*.ts` (tests excluded) has an `export function`
+or `export async function` for it. It is *referenced* when its name appears in code (not on a
+comment-only line) in another non-test file under `ui/src`. "Referenced" is not "called on a live
+path": a match can be an import that is never run, or a same-named local function. A function that is
+used only inside its own module counts as unreferenced. A line is skipped as a comment when its first
+characters are `//`, `*`, `/*` or `<!--`: code after a `/* ... */` on the same line is missed, and a
+bare name inside a multi-line comment whose lines do not start with `*` is counted. Some exported functions are helpers and not
+HTTP calls (`isAbortError`, `toSaveError`, `assertNever`, `computeDailyAggregates`,
+`parseMetricsWsMessage`, `isDashboardMessage`).
+
+**Command** (run from the repository root; save it as a script, it is `bash`):
+
+```bash
+cd "${REPO:-.}" || exit 1
+api=ui/src/api; src=ui/src
+notest=(--glob '!**/*.test.ts' --glob '!**/*.spec.ts' --glob '!**/__tests__/**' --glob '!**/test/**')
+comment='^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*|<!--)'
+total=0; used=0
+for f in $(rg -l '^export (async )?function ' "${notest[@]}" "$api" | sort); do
+  fn=0; fu=0; unused=()
+  for name in $(rg -o --no-filename '^export (async )?function \w+' "$f" | awk '{print $NF}'); do
+    fn=$((fn + 1))
+    if rg -nw "$name" "${notest[@]}" --glob "!$f" "$src" | rg -qv "$comment"; then
+      fu=$((fu + 1)); else unused+=("$name"); fi
+  done
+  printf '%s\t%d\t%d\t%s\n' "$(basename "$f")" "$fn" "$fu" "${unused[*]:-}"
+  total=$((total + fn)); used=$((used + fu))
+done
+printf 'TOTAL\t%d\t%d\n' "$total" "$used"
+```
+
+**Controls.** The count is trusted only if these hold. Each was checked at this commit:
+
+- `bulkImport` (used by `components/bulk/BulkOperationsDialog.vue`) counts as referenced.
+- `rotateAdminKey` (used by `pages/AdminSettingsPage.vue`) counts as referenced.
+- `getBackupResult` (named only in its own module and in a test) counts as unreferenced.
+- A fixture tree with a name that appears only in a `//` line, a name only in a `/* */` line and a name
+  only in a test file reports all three as unreferenced and the one used name as referenced.
+
+**Result at 13e3038:**
+
+| Module | Functions | Referenced | Unreferenced |
+|--------|-----------|------------|--------------|
+| `admin.ts` | 1 | 1 | |
+| `bulk.ts` | 4 | 4 | |
+| `configNew.ts` (per-device templates, overrides, desired config, apply, verify) | 12 | 12 | |
+| `deviceConfig.ts` | 4 | 4 | |
+| `devices.ts` | 10 | 10 | |
+| `drift.ts` | 8 | 8 | |
+| `export.ts` | 27 | 25 | `getBackupResult`, `getRestoreResult` |
+| `import.ts` | 4 | 4 | |
+| `metrics.ts` | 14 | 14 | |
+| `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
+| `notification.ts` | 9 | 9 | |
+| `plugin.ts` | 4 | 3 | `getPlugin` |
+| `provisioning.ts` | 7 | 7 | |
+| `templates.ts` | 8 | 8 | |
+| `typedConfig.ts` | 2 | 2 | |
+| **Total** | **117** | **113** | **4** |
+
+This measures what the UI uses, not what the backend offers. It does not count backend routes.
+ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
+functions, 44%) is out of date: it predates the work listed in section 6.
 
 ---
 
-## 1. General Code Review
-
-### 1.1 Technology Stack
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Vue | 3.5.25 | Core framework with Composition API |
-| TypeScript | 5.9.3 | Full type coverage |
-| Vue Router | 4.6.3 | Client-side routing with lazy-loading |
-| Pinia | 3.0.4 | State management |
-| Vite | 5.4.21 | Build tool with HMR |
-| axios | 1.12.0 | HTTP client with auth interceptors |
-| ECharts | 6.0.0 | Metrics visualization |
-| Quasar | 2.18.6 | UI component framework |
-| Playwright | 1.57.0 | E2E testing (195+ scenarios) |
-
-### 1.2 Project Structure
-
-```
-ui/
-├── src/
-│   ├── main.ts              # App initialization
-│   ├── App.vue              # Root component
-│   ├── pages/               # 13 page components (routed views)
-│   ├── layouts/
-│   │   └── MainLayout.vue   # Navigation, breadcrumbs, content area
-│   ├── components/          # 14 reusable components
-│   ├── api/                 # 9 API modules with typed endpoints
-│   ├── stores/              # 5 Pinia stores
-│   └── utils/               # SMA parser/generator utilities
-├── tests/e2e/               # Playwright tests
-├── vite.config.ts           # Build configuration
-└── package.json
-```
-
-### 1.3 Strengths
-
-1. **Strong TypeScript Usage** - All API modules export typed interfaces, correct use of generics
-2. **Composition API Best Practices** - Proper `<script setup>`, reactive refs, computed properties
-3. **API Layer Abstraction** - Each feature has dedicated API module with centralized axios client
-4. **State Management** - Clean Pinia stores with async action patterns
-5. **Build Optimization** - Manual chunk splitting, lazy-loaded pages, terser minification
-
-### 1.4 Areas of Concern
-
-| Issue | Impact | Files Affected |
-|-------|--------|----------------|
-| Large page components (1000+ lines) | Maintainability | BackupManagementPage (1,625), GitOpsExportPage (1,351), PluginManagementPage (1,151) |
-| Form component duplication | Code reuse | ExportPreviewForm, ImportPreviewForm, SMAConfigForm, GitOpsConfigForm |
-| Limited unit tests | Test coverage | Most page components lack isolated tests |
-| Generic error messages | User experience | "Failed to load devices" lacks context |
-| WebSocket coupling | Reusability | Metrics store tightly coupled, not reusable |
-
----
-
-## 2. User-Facing Overview
-
-### 2.1 Navigation Structure (Top Bar Menu)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Shelly Manager    Devices  Export & Import ▼  Plugins  Metrics │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ├── Backup Management
-                              ├── GitOps Export
-                              ├── Export History
-                              └── Import History
-```
-
-### 2.2 Pages & User Flows
-
-| Page | Route | Purpose | Status |
-|------|-------|---------|--------|
-| **Devices** | `/` | Main landing - list all managed devices | Active |
-| **Device Detail** | `/devices/{id}` | View individual device configuration | Stub |
-| **Backup Management** | `/export/backup` | Create backups, restore from backups | Active |
-| **GitOps Export** | `/export/gitops` | IaC exports (Terraform, Ansible, K8s) | Active |
-| **Export History** | `/export/history` | View past exports with filtering | Active |
-| **Import History** | `/import/history` | View past imports with filtering | Active |
-| **Plugins** | `/plugins` | Browse plugins and inspect schemas (read-only) | Active |
-| **Metrics Dashboard** | `/dashboard` | Real-time system metrics with WebSocket | Active |
-| **Stats** | `/stats` | Statistics view | **Unreachable** |
-| **Admin** | `/admin` | Admin key rotation | Active |
-
-### 2.3 Key User Flows
-
-**Device Management:**
-```
-Devices Page → Click device → Device Detail Page
-```
-
-**Export Flow:**
-```
-Select options → Preview → Create → Download from History
-```
-
-**Plugin Inspection (read-only, #264):**
-```
-Plugin List → Select plugin → View schema / Details
-```
-
-**Backup/Restore:**
-```
-Create Backup → Select devices/format → Preview → Create → (later) Restore → Preview → Confirm
-```
-
----
-
-## 3. Unreachable Pages & Components
-
-### 3.1 Orphaned Routes
-
-| Page | Route | Issue | Recommendation |
-|------|-------|-------|----------------|
-| **StatsPage.vue** | `/stats` | Route exists but no navigation link | Add to menu or remove |
-
-### 3.2 Component Status
-
-The unused `TypedConfigForm`, `ValidationResults` and `CapabilitiesViewer` components were removed (ginsys/shelly-manager#256). `components/bulk/BulkOperationsDialog.vue` is mounted on the devices page (ginsys/shelly-manager#136). `components/shared/ErrorDisplay.vue` is used by that dialog. The devices page has a Refresh button and an `R` shortcut that reload the list and keep the selection (ginsys/shelly-manager#80); the store drops a list answer that a newer load has overtaken.
-
----
-
-## 4. Backend API Inventory
-
-### 4.1 API Configuration
-
-- **Base URL:** `/api/v1`
-- **Auth:** Bearer token via `Authorization` header
-- **Timeout:** 10 seconds
-- **Response Format:** Standardized `APIResponse<T>` with success, data, error, meta, timestamp
-
-### 4.2 API Coverage Summary
-
-| Category | Total Endpoints | Used | Unused | Coverage |
-|----------|-----------------|------|--------|----------|
-| Device Management | 8 | 8 | 0 | 100% |
-| Device Configuration | 10 | 10 | 0 | 100% |
-| Device Login | 1 | 1 | 0 | 100% |
-| Configuration Templates | 8 | 8 | 0 | 100% |
-| Typed Configuration | 8 | 8 | 0 | 100% |
-| Bulk Operations | 3 | 3 | 0 | 100% |
-| Drift Detection Schedules | 7 | 7 | 0 | 100% |
-| Drift Reporting | 4 | 4 | 0 | 100% |
-| Export/Backup | 21 | 21 | 0 | 100% |
-| Import | 10 | 7 | 3 | 70% |
-| Plugins | 3 | 3 | 0 | 100% (read-only; config/test unbacked, see #264) |
-| Metrics | 15 | 15 | 0 | 100% |
-| Notifications | 8 | 0 | 8 | 0% |
-| Discovery & Provisioning | 3 | 0 | 3 | 0% |
-| Provisioner Agent | 9 | 0 | 9 | 0% |
-| DHCP | 1 | 0 | 1 | 0% |
-| Admin | 1 | 1 | 0 | 100% |
-| Health/Version | 3 | 1 | 2 | 33% |
-| **TOTAL** | **132** | **73** | **59** | **55%** |
-
-### 4.3 Used Endpoints (73 total)
-
-#### Devices (2 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/devices` | GET | List all devices with pagination |
-| `/devices/{id}` | GET | Get device details |
-
-#### Configuration Templates (8 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/config/templates` | GET | List all configuration templates |
-| `/config/templates/{id}` | GET | Get single template details |
-| `/config/templates` | POST | Create new template |
-| `/config/templates/{id}` | PUT | Update existing template |
-| `/config/templates/{id}` | DELETE | Delete template |
-| `/configuration/preview-template` | POST | Preview template rendering with variables |
-| `/configuration/validate-template` | POST | Validate template syntax |
-| `/configuration/template-examples` | GET | Get example templates |
-
-#### Typed Configuration (8 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/devices/{id}/config/typed` | GET | Get typed configuration for device |
-| `/devices/{id}/config/typed` | PUT | Update typed configuration |
-| `/devices/{id}/capabilities` | GET | Get device capabilities and supported features |
-| `/configuration/validate-typed` | POST | Validate typed configuration |
-| `/configuration/convert-to-typed` | POST | Convert raw config to typed format |
-| `/configuration/convert-to-raw` | POST | Convert typed config to raw format |
-| `/config/schema` | GET | Get configuration schema; with `?device_id=` the device override form (`ConfigEditor`) gets the schema of that device's model |
-| `/configuration/bulk-validate` | POST | Bulk validate multiple configurations |
-
-#### Drift Detection (11 endpoints)
-
-> **Fail-closed (#270):** drift schedules are stored but not executed in this
-> release. Create / update / toggle / runs return HTTP 501; the UI exposes
-> inspection and deletion only. Scheduled execution is tracked as #279.
->
-> ![Drift schedules fail-closed UI](images/drift-schedules-fail-closed.png)
->
-> The page shows a "not executed" notice, renders every schedule (including
-> `enabled=true` rows) as neutral "Stored (inactive)" with `device_filter` as
-> read-only JSON, labels run history unavailable, and offers deletion only.
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/config/drift-schedules` | GET | List drift detection schedules with pagination |
-| `/config/drift-schedules/{id}` | GET | Get single drift schedule details |
-| `/config/drift-schedules` | POST | ⛔ 501 — creation not implemented (#270) |
-| `/config/drift-schedules/{id}` | PUT | ⛔ 501 — update not implemented (#270) |
-| `/config/drift-schedules/{id}` | DELETE | Delete drift schedule |
-| `/config/drift-schedules/{id}/toggle` | POST | ⛔ 501 — toggle not implemented (#270) |
-| `/config/drift-schedules/{id}/runs` | GET | ⛔ 501 — run history not implemented (#270) |
-| `/config/drift-reports` | GET | Get drift reports with filtering |
-| `/config/drift-trends` | GET | Get drift trends over time period |
-| `/config/drift-trends/{id}/resolve` | POST | Resolve a drift report |
-| `/devices/{id}/drift-report` | POST | Generate drift report for a device |
-
-#### Bulk Operations (3 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/config/bulk-import` | POST | Read the live configuration of the named devices into the manager |
-| `/config/bulk-drift-detect` | POST | Compare stored and live configuration of the named devices |
-| `/config/bulk-drift-detect-enhanced` | POST | The same comparison, answered with the comprehensive report |
-
-All three take `{"device_ids": [...], "options": {"stop_on_error": false}}` and act on exactly those
-devices (`ui/src/api/bulk.ts` types the answers). The devices page mounts the dialog that calls
-them: a select column with a select-all for the visible rows, and a Bulk Operations button that
-stays disabled while nothing is picked. The selection is kept by device id in the devices store,
-so it survives a page change, and the dialog sends exactly the picked ids.
-
-#### Export - Backup (9 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/export/backup` | POST | Create full system backup |
-| `/export/backups` | GET | List all backups (paginated) |
-| `/export/backup/{id}` | GET | Get backup details |
-| `/export/backup/{id}/download` | GET | Download backup file |
-| `/export/backup/{id}` | DELETE | Delete backup |
-| `/export/backup-statistics` | GET | Backup stats |
-| `/import/restore-preview` | POST | Preview restore |
-| `/import/restore` | POST | Execute restore |
-| `/import/restore/{id}` | GET | Get restore result |
-
-#### Export - Generic (5 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/export/history` | GET | List all exports |
-| `/export/{id}` | GET | Get export result details |
-| `/export/{id}/download` | GET | Download export file |
-| `/export/statistics` | GET | Export stats by plugin |
-| `/export/preview` | POST | Preview export without executing |
-
-#### Export - Format-Specific (4 registered endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/export/json` | POST | Create JSON export |
-| `/export/yaml` | POST | Create YAML export |
-| `/export/sma` | POST | Create SMA export |
-| `/export/sma/{id}/download` | GET | Download SMA file |
-| ~~`/export/sma/{id}`~~ | GET | ❌ Not registered — generic `/export/{id}` covers result retrieval |
-| ~~`/export/sma-preview`~~ | POST | ❌ Not registered — use generic `/export/preview` |
-
-#### Export - GitOps (7 endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/export/gitops` | POST | Create GitOps export |
-| `/export/gitops` | GET | List GitOps exports |
-| `/export/gitops/{id}` | GET | Get GitOps export details |
-| `/export/gitops/{id}/download` | GET | Download GitOps files |
-| `/export/gitops/{id}` | DELETE | Delete GitOps export |
-| `/export/gitops-preview` | POST | Preview GitOps export |
-| `/export/gitops-statistics` | GET | GitOps stats |
-
-#### Import (5 registered endpoints)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/import` | POST | Generic import — SMA runs here with `plugin_name: "sma"` (preview writes nothing; a non-preview import restores records in one transaction, #284) |
-| `/import/preview` | POST | Preview import operation (same body, dry-run) |
-| `/import/history` | GET | List all imports |
-| `/import/{id}` | GET | Get import result |
-| `/import/statistics` | GET | Import stats |
-| ~~`/import/sma`~~ | POST | ❌ Not registered — use `POST /import` with `plugin_name: "sma"` |
-| ~~`/import/sma/{id}`~~ | GET | ❌ Not registered — use `GET /import/{id}` |
-| ~~`/import/sma-preview`~~ | POST | ❌ Not registered — use `POST /import/preview` |
-
-> Note: #268/#273 removed the frontend helpers that targeted the struck
-> `/import/sma*` paths. Browser SMA preview now uses the generic
-> `/import/preview` route with the registered `sma` plugin. A non-preview
-> `POST /import` restores devices, templates and discovered devices in one
-> transaction (#284); the browser has no restore UI yet.
-
-#### Plugins (3 real endpoints — read-only UI)
-
-> **Read-only (#264, #266).** The plugin UI is inspection-only: list, per-category
-> grouping, read-only **schema view**, and read-only details. There is **no
-> backend model** for stored plugin config or a plugin `Test()` — config lives on
-> individual export/import requests. The frontend previously called phantom
-> `/config` (GET/PUT) and `/test` routes and an enable/disable toggle built on
-> them; those functions, store actions, UI controls and `PluginConfigForm.vue`
-> were **removed** in #264 (no 501 stubs — the routes never existed). A real
-> product model for stored plugin configuration/testing/enablement is tracked as
-> a separate design vertical (#290).
->
-> Types (#266): the list endpoint and the detail endpoint return **different
-> shapes**, modelled as exact `Plugin` (list) and `PluginDetail = { info,
-> capabilities }`. Plugin `status` is backend-hardcoded, so a listed plugin is
-> presented as **"Registered"** only; the fictional status filter/sort/stats and
-> the `health` rendering were removed.
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/export/plugins` | GET | List all plugins by category |
-| `/export/plugins/{name}` | GET | Get plugin details (`{ info, capabilities }`) |
-| `/export/plugins/{name}/schema` | GET | Get plugin config schema (read-only viewer) |
-
-**Removed (unbacked, #264):** `GET/PUT /export/plugins/{name}/config`, `POST /export/plugins/{name}/test`, and the config/test/toggle UI.
-
-The remaining "View schema" action opens a read-only viewer:
-
-![Read-only plugin schema viewer](images/plugin-schema-viewer-readonly.png)
-
-#### Metrics (15 endpoints + WebSocket)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/metrics/status` | GET | Metrics system status |
-| `/metrics/health` | GET | Health status |
-| `/metrics/system` | GET | System metrics (CPU, memory, disk) |
-| `/metrics/devices` | GET | Device metrics |
-| `/metrics/drift` | GET | Configuration drift summary |
-| `/metrics/ws` | WebSocket | Real-time metrics stream |
-| `/metrics/prometheus` | GET | Prometheus-formatted metrics export |
-| `/metrics/enable` | POST | Enable metrics collection |
-| `/metrics/disable` | POST | Disable metrics collection |
-| `/metrics/collect` | POST | Trigger manual metrics collection |
-| `/metrics/dashboard` | GET | Dashboard summary (devices, exports, imports, drifts, notifications) |
-| `/metrics/test-alert` | POST | Send test notification alert |
-| `/metrics/notifications` | GET | Notification metrics (sent/failed by channel) |
-| `/metrics/resolution` | GET | Resolution metrics (by type and user) |
-| `/metrics/security` | GET | Security metrics (auth attempts, API calls, rate limiting) |
-
-#### Admin (1 endpoint)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/admin/rotate-admin-key` | POST | Rotate admin authentication key |
-
-#### Other (1 endpoint)
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/version` | GET | API/server version info |
-
-### 4.4 Unused Endpoints by Category (59 total)
-
-#### Device Management (6 unused)
-- `POST /api/v1/devices` - Create device
-- `PUT /api/v1/devices/{id}` - Update device
-- `DELETE /api/v1/devices/{id}` - Delete device
-- `POST /api/v1/devices/{id}/control` - Control device
-- `GET /api/v1/devices/{id}/status` - Get device status
-- `GET /api/v1/devices/{id}/energy` - Get energy metrics
-
-#### Device Configuration (10 used - Task 342 ✓)
-- `GET /api/v1/devices/{id}/config` - Get stored config
-- `PUT /api/v1/devices/{id}/config` - Update stored config
-- `GET /api/v1/devices/{id}/config/current` - Get live config
-- `GET /api/v1/devices/{id}/config/current/normalized` - Get normalized live config
-- `GET /api/v1/devices/{id}/config/typed/normalized` - Get typed normalized config
-- `POST /api/v1/devices/{id}/config/import` - Import config to device
-- `GET /api/v1/devices/{id}/config/status` - Get import status
-- `GET /api/v1/devices/{id}/config/drift` - Detect configuration drift
-- `POST /api/v1/devices/{id}/config/apply-template` - Apply template
-- `GET /api/v1/devices/{id}/config/history` - Get config history
-
-#### Device Login (1 used)
-- `PUT /api/v1/devices/{id}/config/auth` - Update device auth (used: the Device Login card on the device page)
-
-The four per-capability routes (relay, dimming, roller, power metering) were removed. They wrote a
-legacy stored key that apply and the override editor never read.
-
-#### Configuration Templates (8 unused)
-- `GET /api/v1/config/templates` - List templates
-- `POST /api/v1/config/templates` - Create template
-- `PUT /api/v1/config/templates/{id}` - Update template
-- `DELETE /api/v1/config/templates/{id}` - Delete template
-- `POST /api/v1/configuration/preview-template` - Preview template
-- `POST /api/v1/configuration/validate-template` - Validate template
-- `POST /api/v1/configuration/templates` - Save template
-- `GET /api/v1/configuration/template-examples` - Get examples
-
-#### Typed Configuration (8 unused)
-- `GET /api/v1/devices/{id}/config/typed` - Get typed config
-- `PUT /api/v1/devices/{id}/config/typed` - Update typed config
-- `GET /api/v1/devices/{id}/capabilities` - Get device capabilities
-- `POST /api/v1/configuration/validate-typed` - Validate typed config
-- `POST /api/v1/configuration/convert-to-typed` - Convert raw to typed
-- `POST /api/v1/configuration/convert-to-raw` - Convert typed to raw
-- `GET /api/v1/configuration/schema` - Get config schema
-- `POST /api/v1/configuration/bulk-validate` - Bulk validate
-
-#### Drift Detection Schedules — fail-closed (#270)
-Schedules are stored but never executed. The UI (`DriftSchedulesPage.vue`) wires
-list/detail/delete for inspection and cleanup only; the four execution-implying
-routes return HTTP 501. Real execution is #279.
-- `GET /api/v1/config/drift-schedules` - List schedules ✅
-- `POST /api/v1/config/drift-schedules` - Create schedule ⛔ 501
-- `GET /api/v1/config/drift-schedules/{id}` - Get schedule ✅
-- `PUT /api/v1/config/drift-schedules/{id}` - Update schedule ⛔ 501
-- `DELETE /api/v1/config/drift-schedules/{id}` - Delete schedule ✅
-- `POST /api/v1/config/drift-schedules/{id}/toggle` - Toggle schedule ⛔ 501
-- `GET /api/v1/config/drift-schedules/{id}/runs` - Get run history ⛔ 501
-
-#### Drift Reporting (4 unused)
-- `GET /api/v1/config/drift-reports` - Get all reports
-- `GET /api/v1/config/drift-trends` - Get drift trends
-- `POST /api/v1/config/drift-trends/{id}/resolve` - Mark resolved
-- `POST /api/v1/devices/{id}/drift-report` - Generate device report
-
-#### Notifications (8 unused)
-- `POST /api/v1/notifications/channels` - Create channel
-- `GET /api/v1/notifications/channels` - List channels
-- `PUT /api/v1/notifications/channels/{id}` - Update channel
-- `DELETE /api/v1/notifications/channels/{id}` - Delete channel
-- `POST /api/v1/notifications/channels/{id}/test` - Test channel
-- `POST /api/v1/notifications/rules` - Create rule
-- `GET /api/v1/notifications/rules` - List rules
-- `GET /api/v1/notifications/history` - Get history
-
-#### Discovery & Provisioning (3 unused)
-- `POST /api/v1/discover` - Discover devices
-- `GET /api/v1/provisioning/status` - Get status
-- `POST /api/v1/provisioning/provision` - Provision devices
-
-#### Provisioner Agent Management (9 unused)
-- `POST /api/v1/provisioner/agents/register` - Register agent
-- `GET /api/v1/provisioner/agents` - List agents
-- `GET /api/v1/provisioner/agents/{id}/tasks` - Poll tasks
-- `POST /api/v1/provisioner/tasks` - Create task
-- `GET /api/v1/provisioner/tasks` - List tasks
-- `PUT /api/v1/provisioner/tasks/{id}/status` - Update status
-- `POST /api/v1/provisioner/discovered-devices` - Report devices
-- `GET /api/v1/provisioner/discovered-devices` - Get devices
-- `GET /api/v1/provisioner/health` - Health check
-
-#### DHCP (1 unused)
-- `GET /api/v1/dhcp/reservations` - Get reservations
-
-#### Import Additional (3 unused)
-- `POST /api/v1/import/backup` - Restore from backup
-- `POST /api/v1/import/backup/validate` - Validate backup
-- `POST /api/v1/import/gitops` - Import GitOps config
-- `POST /api/v1/import/gitops/preview` - Preview GitOps import
-
-#### Health (2 unused)
-- `GET /healthz` - Liveness probe
-- `GET /readyz` - Readiness probe
-
----
-
-## 5. Technical Debt Summary
-
-### High Priority
-1. **Break up large page components** - Extract tabs/sections into child components
-2. **Add unit tests** - Especially for complex page components
-
-### Medium Priority
-3. **Create generic form wrapper** - Reduce duplication in preview/config forms
-4. **Extract WebSocket client** - Make real-time features reusable
-5. **Improve error messages** - Include error codes and context
-
-### Low Priority
-6. **Server-side search** - Current client-side filtering won't scale
-7. **API type generation** - Consider OpenAPI/TypeScript code generation
-8. **Complete stub pages** - DeviceDetailPage, StatsPage need implementation
-9. **Remove or link StatsPage** - Currently unreachable via navigation
-
----
-
-## 6. Recommendations for Phase 7
-
-Based on this analysis, the following API integrations should be prioritized:
-
-### Priority 1: Device Management Enhancement
-- Add device CRUD operations (create, update, delete)
-- Implement device control functionality
-- Add device status and energy metrics views
-
-### Priority 2: Device Configuration
-- Implement configuration management UI
-- Add template management
-- Enable bulk operations
-
-### Priority 3: Notification System
-- Build notification channel management
-- Add notification rules configuration
-- Display notification history
-
-### Priority 4: Discovery & Provisioning
-- Add device discovery UI
-- Implement provisioning workflow
-- Display discovered devices
-
----
-
-## 7. Development Tasks
-
-> **Note**: All tasks originally proposed in this section have been completed and archived. Project tracking has been migrated to [GitHub Issues](https://github.com/ginsys/shelly-manager/issues). The API coverage numbers and metrics below are stale and need a fresh audit — see Issue #84.
-
-### 7.1 Completed Work Summary
-
-The following categories of work were completed during Phase 7:
-
-- **API Integration**: Device management, configuration UI, templates, typed config, drift detection, bulk operations, advanced metrics (Issues #104-#110)
-- **Code Quality**: WebSocket client extraction, large component refactoring, schema-driven forms, error messages, unit tests (Issues #111-#114, #125)
-- **Navigation & UX**: StatsPage removal, DeviceDetailPage completion (Issues #126-#127)
-- **Related**: Notification UI, provisioning UI, devices UI refactor (Issues #101-#102, #115)
-
-### 7.2 Metrics (Stale — Needs Audit)
-
-These metrics were targets from the original review. Actual current coverage needs to be re-evaluated (see Issue #84).
-
-| Metric | Original Target |
-|--------|----------------|
-| API Coverage | 65%+ (90/138 endpoints) |
-| Lines per Page Component | <500 max |
-| Form Duplication | ~1,500 lines |
-| Page Component Test Coverage | ~80% |
-| Unreachable Routes | 0 |
-
----
-
-## Appendix: File Reference
-
-### Page Components
-| File | Lines | Purpose |
+## 2. Stack and structure
+
+Versions are the ranges declared in `ui/package.json`, not the installed ones.
+
+| Technology | Declared | Notes |
+|------------|----------|-------|
+| Vue | ^3.5.45 | Composition API, `<script setup>` |
+| TypeScript | ^5.9.3 | `npm run typecheck` is `vue-tsc --noEmit` |
+| Vue Router | ^5.5.0 | Routes in `ui/src/main.ts`, every page lazy-loaded |
+| Pinia | ^4.0.3 | State management |
+| Vite | ^8.3.8 | Build tool |
+| axios | ^1.21.1 | HTTP client in `ui/src/api/client.ts` |
+| ECharts | ^6.1.0 | Metrics charts |
+| Vitest | ^4.1.4 | Unit tests |
+| Playwright | ^1.65.0 | End-to-end tests |
+| Quasar | ^2.35.4 | **Declared but never imported in `ui/src`**; only `vite.config.ts` names it, in a chunk rule |
+
+Counts (commands, from the repository root):
+
+| What | Count | Command |
 |------|-------|---------|
-| BackupManagementPage.vue | 1,625 | Backup/restore operations |
-| GitOpsExportPage.vue | 1,351 | IaC export |
-| PluginManagementPage.vue | 1,151 | Plugin browser/config |
-| MetricsDashboardPage.vue | 281 | Real-time metrics |
-| ExportHistoryPage.vue | 70 | Export history |
-| ImportHistoryPage.vue | 57 | Import history |
-| AdminSettingsPage.vue | 45 | Admin functions |
-| ExportDetailPage.vue | 43 | Export details (stub) |
-| StatsPage.vue | 38 | Statistics (stub) |
-| DeviceDetailPage.vue | 34 | Device details (stub) |
+| Routed page components | 26 | `fd -e vue . ui/src/pages \| wc -l` |
+| Reusable components (excluding tests) | 38 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
+| Pinia stores (excluding tests) | 11 | `fd -e ts . ui/src/stores \| rg -v '\.test\.ts\|__tests__' \| wc -l` |
+| Composables | 2 | `fd -e ts . ui/src/composables \| rg -v __tests__ \| wc -l` |
+| Unit test files / `it`+`test` calls | 63 / 616 | `fd '\.test\.ts$' ui/src \| wc -l`; `rg --no-filename -c '^\s*(it\|test)\(' ui/src --glob '*.test.ts' \| awk '{s+=$1} END{print s}'` |
+| End-to-end spec files / `test` calls | 18 / 49 | `fd '\.spec\.ts$' ui/tests/e2e \| wc -l`; `rg --no-filename -c '^\s*test\(' ui/tests/e2e --glob '*.spec.ts' \| awk '{s+=$1} END{print s}'` |
 
-### API Modules
-| File | Functions | Purpose |
-|------|-----------|---------|
-| export.ts | 27 | Export/backup operations |
-| import.ts | 7 | Import operations |
-| schedule.ts | 6 | Schedule management |
-| plugin.ts | 6 | Plugin operations |
-| metrics.ts | 6 | Metrics & WebSocket |
-| devices.ts | 2 | Device listing |
-| admin.ts | 1 | Admin operations |
-| client.ts | - | Axios base client |
-| types.ts | - | TypeScript interfaces |
+The e2e figure counts `test(` calls once. Playwright runs each across the browsers its config lists,
+so the number of executed scenarios is higher.
 
-### Pinia Stores
-| Store | Purpose |
+---
+
+## 3. Pages and routes
+
+Lines are `wc -l` of the page file. "Linked from" is read from the output of the navigation-target
+command below; "none" means no nav item and no page links to that route.
+
+**Command:**
+
+```bash
+rg -n --no-heading -o '(to="[^"]+"|:to="[^"]+"|router\.(push|replace)\([^)]*\)|href="/[^"]*")' ui/src \
+  --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**' | sort -u
+```
+
+| Route | Page | Lines | Linked from |
+|-------|------|-------|-------------|
+| `/` | Devices | 388 | top bar, Device details |
+| `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | 452 | Devices, Device configuration, Drift reports, Task details |
+| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify) | 493 | Device details, Configuration history |
+| `/devices/:id/config/history` | Configuration history | 143 | Device details |
+| `/templates` | Configuration templates | 395 | its own detail page only |
+| `/templates/:id` | Template detail | 375 | Templates |
+| `/drift/schedules` | Drift schedules (inspect and delete only, see section 5) | 357 | **none** |
+| `/drift/reports` | Drift reports | 519 | **none** |
+| `/drift/trends` | Drift trends | 517 | **none** |
+| `/export/backup` | Backup management | 856 | top bar (Export & Import) |
+| `/export/gitops` | GitOps export | 577 | top bar (Export & Import) |
+| `/export/history` | Export history | 70 | top bar (Export & Import) |
+| `/export/:id` | Export result | 43 | **none** |
+| `/import/history` | Import history | 57 | top bar (Export & Import) |
+| `/import/:id` | Import result | 34 | **none** |
+| `/plugins` | Plugin management (read-only) | 565 | top bar |
+| `/dashboard` | Metrics dashboard | 649 | top bar |
+| `/admin` | Admin settings (admin key rotation) | 45 | top bar |
+| `/notifications/channels` | Notification channels | 197 | its own detail page only |
+| `/notifications/channels/:id` | Channel detail | 126 | Channels |
+| `/notifications/rules` | Notification rules | 199 | **none** |
+| `/notifications/history` | Notification history | 156 | **none** |
+| `/provisioning` | Provisioning dashboard | 86 | **none** |
+| `/provisioning/tasks` | Provisioning tasks | 92 | Provisioning dashboard, Task details |
+| `/provisioning/tasks/:id` | Task details | 124 | Tasks, dashboard |
+| `/provisioning/agents` | Provisioning agents | 95 | Provisioning dashboard |
+
+Any other path falls through to the Devices page.
+
+### Pages a user cannot reach by clicking
+
+A page is reachable when a chain of links leads to it from the top bar. The top bar links Devices,
+Export & Import (backup, GitOps, export history, import history), Plugins, Metrics and Admin.
+Eight routes have no inbound link at all: `/drift/schedules`, `/drift/reports`, `/drift/trends`,
+`/export/:id`, `/import/:id`, `/notifications/rules`, `/notifications/history` and `/provisioning`.
+Two more, `/templates` and `/notifications/channels`, are linked only from their own detail pages,
+and five pages are linked only from pages in that unreachable set (`/templates/:id`,
+`/notifications/channels/:id`, `/provisioning/tasks`, `/provisioning/tasks/:id`,
+`/provisioning/agents`). So 15 of the 26 pages work only when the URL is typed. The export and
+import detail pages are tracked in ginsys/shelly-manager#139; the whole navigation gap is
+ginsys/shelly-manager#641.
+
+---
+
+## 4. Components, stores and utilities
+
+- **Components** (`ui/src/components`): `backup/` (7), `bulk/` (the bulk dialog, 1), `charts/` (2),
+  `config/` (3), `devices/` (2), `gitops/` (5), `plugin/` (3), `provisioning/` (2), `shared/` (5), and
+  8 top-level files (`DataTable`, `FilterBar`, `PaginationBar`, `ExportPreviewForm`,
+  `ImportPreviewForm`, `GitOpsConfigForm`, `PluginDetailsView`, `PluginSchemaViewer`).
+- **Stores** (`ui/src/stores`): devices, deviceConfigNew, drift, export, import, metrics,
+  notifications, plugin, provisioning, templates, typedConfig.
+- **Composables:** `useError` (normalises an error into a message, suggestions and a retry flag)
+  and `useWebSocket`.
+- **Utilities** (`ui/src/utils`): SMA parser and generator, strict JSON, JCS and SHA-256 helpers for
+  the SMA integrity check, plugin schema helpers, config form helpers, a version banner.
+
+---
+
+## 5. Features whose state is not obvious
+
+- **Drift schedules are stored and never executed.** The create, update, toggle and run-history
+  routes answer HTTP 501 (ginsys/shelly-manager#270). The page shows a "not executed" notice, lists
+  every schedule as "Stored (inactive)" and offers deletion only. Real scheduling is
+  ginsys/shelly-manager#279, parked.
+
+  ![Drift schedules fail-closed UI](images/drift-schedules-fail-closed.png)
+
+- **Drift compares with the desired configuration**, the one apply writes and verify reads, and no
+  longer with the stored import record (ginsys/shelly-manager#606). A device with no desired
+  configuration cannot be checked: the drift route answers 404 and a bulk run marks it skipped.
+- **Plugins are read-only.** The plugin UI lists plugins, shows their schema and details. There is no
+  backend model for stored plugin configuration or a plugin test, so the config, test and toggle
+  calls were removed (ginsys/shelly-manager#264). The product model is
+  ginsys/shelly-manager#290.
+
+  ![Read-only plugin schema viewer](images/plugin-schema-viewer-readonly.png)
+
+- **Export and import.** Export preview reads the live plugin registry and the backend schemas;
+  browser import preview is SMA-only and registry-gated; SMA uses strict `2026.1`
+  (ginsys/shelly-manager#268). A non-preview `POST /import` restores devices, templates and
+  discovered devices in one transaction (ginsys/shelly-manager#284); the browser has no restore UI
+  for it. Export to the device was retired in favour of apply (ginsys/shelly-manager#604).
+- **Bulk operations** work from the devices page: a select column, a select-all for the visible rows
+  and a Bulk Operations button that opens the dialog for exactly the picked ids
+  (ginsys/shelly-manager#136). The selection is kept by device id across page changes.
+- **Devices list refresh:** a Refresh button and an `R` shortcut reload the list and keep the
+  selection; a list answer that a newer load has overtaken is dropped (ginsys/shelly-manager#80).
+- **Device login:** the device page has a Device Login card for the device's own credentials
+  (`PUT /devices/{id}/config/auth`).
+- **Metrics** use a WebSocket stream with a REST fallback; the message contract is typed in
+  `ui/src/api/metricsContract.ts`.
+- **Admin key:** `ui/src/api/client.ts` reads the admin key from `VITE_ADMIN_KEY` (set at build
+  time) or `window.__ADMIN_KEY__`. A production build has no supported way to get it today
+  (ginsys/shelly-manager#619).
+
+---
+
+## 6. Phase 7 API integration issues (ginsys/shelly-manager#128 to ginsys/shelly-manager#139)
+
+State read from GitHub on 2026-11-19 with `gh api graphql` (`closedByPullRequestsReferences`).
+
+| Issue | Subject | State | Closed by |
+|-------|---------|-------|-----------|
+| ginsys/shelly-manager#128 | Provisioning API | closed, completed 2026-04-14 | ginsys/shelly-manager#191 |
+| ginsys/shelly-manager#129 | Drift detection API | closed, completed 2026-04-14 | ginsys/shelly-manager#187 |
+| ginsys/shelly-manager#130 | Device config API | closed, completed 2026-04-13 | ginsys/shelly-manager#189 |
+| ginsys/shelly-manager#131 | Export system API | closed, not planned 2026-07-21 | no pull request |
+| ginsys/shelly-manager#132 | Device management CRUD | closed, completed 2026-04-13 | ginsys/shelly-manager#182 |
+| ginsys/shelly-manager#133 | Notification API | closed, not planned 2026-07-21 | no pull request |
+| ginsys/shelly-manager#134 | Metrics REST response-shape alignment | **open** | |
+| ginsys/shelly-manager#135 | Typed config | closed, not planned 2026-07-21 | no pull request |
+| ginsys/shelly-manager#136 | Bulk operations (selection and dialog) | closed, completed 2026-11-18 | ginsys/shelly-manager#613 |
+| ginsys/shelly-manager#137 | Capability-specific config UI | closed, completed 2026-11-12 | ginsys/shelly-manager#499 |
+| ginsys/shelly-manager#138 | Admin key rotation | closed, completed 2026-07-21 | no pull request recorded |
+| ginsys/shelly-manager#139 | Polish export/import detail pages | **open** | |
+
+---
+
+## 7. Open work
+
+Open frontend issues (label `area: frontend`) at 2026-11-19:
+
+| Issue | Subject |
 |-------|---------|
-| useDevicesStore | Device listing & pagination |
-| useMetricsStore | Real-time metrics & WebSocket |
-| useExportStore | Export history & SMA operations |
-| useImportStore | Import history & SMA operations |
-| usePluginStore | Plugin state management |
+| ginsys/shelly-manager#632 | Admin key dialog: a delayed 401 can reopen it after Cancel |
+| ginsys/shelly-manager#641 | 15 of 26 pages cannot be reached from the top bar |
+| ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
+| ginsys/shelly-manager#618 | Keep rows while refreshing; reconcile the bulk selection with the refreshed list |
+| ginsys/shelly-manager#614 | Replace the remaining `alert()` calls with `useError` and `ErrorDisplay` |
+| ginsys/shelly-manager#255 | Harden admin key rotation UX |
+| ginsys/shelly-manager#139 | Polish export/import detail pages |
+| ginsys/shelly-manager#134 | Metrics REST response-shape alignment |
+| ginsys/shelly-manager#290 | Design the plugin configuration model (plugins stay read-only until then) |
+| ginsys/shelly-manager#250 | Notification API contract mismatches and missing endpoints (**parked**) |
+
+Also parked, not frontend-labelled: ginsys/shelly-manager#249 (export/import routes the frontend
+calls that the backend does not have) and ginsys/shelly-manager#279 (the drift scheduler is never
+started). Parked issues are not next work.
+
+---
+
+## 8. Technical debt
+
+Found by reading the code at this commit; not a plan.
+
+1. **Fifteen pages are reachable only by typing the URL** (section 3,
+   ginsys/shelly-manager#641).
+2. **Quasar is a dependency nothing imports** (section 2).
+3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (649),
+   `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
+4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
+   `ImportPreviewForm` and `GitOpsConfigForm` do not.
+5. **No generated API client and no checked coverage.** The 117 functions are written by hand, and
+   section 1 of this file is recomputed by hand. A script or CI check that regenerates it would stop
+   this file going stale again.
+6. **44 `alert(` calls remain in 15 pages** where `useError` and `ErrorDisplay` should show the
+   error (ginsys/shelly-manager#614). Command:
+   `rg -n '\balert\(' ui/src --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**'`.
