@@ -44,7 +44,7 @@ describe('ImportDetailPage', () => {
   it('shows what the server returned', async () => {
     const w = mountPage()
     await flushPromises()
-    expect(w.find('[data-testid="result-status"]').text()).toContain('Succeeded')
+    expect(w.find('[data-testid="result-status"]').text()).toBe('Status: Succeeded')
     expect(w.find('[data-testid="result-duration"]').text()).toContain('42 ms')
     expect(w.find('[data-testid="result-created"]').text()).toContain(new Date(result.created_at).toLocaleString())
     expect(w.find('[data-testid="result-imported"]').text()).toContain('5')
