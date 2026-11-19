@@ -41,7 +41,7 @@ check_port() {
 }
 
 echo "Checking port availability..."
-check_port 8081 "Backend"
+check_port 8080 "Backend"
 check_port 5173 "Frontend"
 
 # Delete existing test database
@@ -62,9 +62,8 @@ SHELLY_DATABASE_PROVIDER=sqlite \
 SHELLY_DATABASE_PATH="/tmp/shelly_test_smoke.db" \
 SHELLY_LOGGING_LEVEL=error \
 SHELLY_DISCOVERY_ENABLED=false \
-SHELLY_PROVISIONING_AUTO=false \
-SHELLY_HTTP_PORT=8081 \
-GIN_MODE=release \
+SHELLY_PROVISIONING_AUTO_PROVISION=false \
+SHELLY_SERVER_PORT=8080 \
 ./bin/shelly-manager server > backend.log 2>&1 &
 
 BACKEND_PID=$!
@@ -93,7 +92,7 @@ trap cleanup EXIT
 # Wait for backend to be ready
 echo "Waiting for backend to start..."
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:8081/healthz >/dev/null 2>&1; then
+    if curl -sf http://localhost:8080/healthz >/dev/null 2>&1; then
         echo "Backend ready after $i seconds"
         break
     fi

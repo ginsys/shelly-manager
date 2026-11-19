@@ -49,9 +49,6 @@ USER shellyuser
 # Create volume for data persistence
 VOLUME ["/data"]
 
-# Set environment variables
-ENV GIN_MODE=release
-
 # Health check - provisioner status command
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ["./shelly-provisioner", "status"] || exit 1

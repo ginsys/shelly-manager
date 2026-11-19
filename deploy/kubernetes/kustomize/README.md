@@ -12,6 +12,7 @@ kustomize/
 │   ├── service.yaml       # Service definitions
 │   ├── ingress.yaml       # Ingress configuration
 │   ├── pvc.yaml          # Persistent volume claims
+│   ├── secrets.yaml      # Secret keys (empty; fill before a deploy)
 │   └── kustomization.yaml # Base kustomization
 ├── overlays/              # Environment-specific customizations
 │   ├── development/       # Development environment
@@ -20,14 +21,16 @@ kustomize/
 │   │   └── ingress-dev.yaml
 │   ├── staging/          # Staging environment
 │   │   ├── kustomization.yaml
-│   │   ├── configmap-staging.yaml
-│   │   └── replica-patch.yaml
+│   │   ├── ingress-staging.yaml
+│   │   ├── replica-patch.yaml
+│   │   └── resources-patch.yaml
 │   └── production/       # Production environment
 │       ├── kustomization.yaml
-│       ├── configmap-prod.yaml
+│       ├── hpa.yaml
+│       ├── ingress-production.yaml
 │       ├── replica-patch.yaml
 │       ├── resources-patch.yaml
-│       └── ingress-prod.yaml
+│       └── servicemonitor.yaml
 └── README.md             # This documentation
 ```
 
@@ -78,6 +81,7 @@ data:
   SHELLY_LOGGING_LEVEL: "info"
   SHELLY_LOGGING_FORMAT: "json"
   SHELLY_DATABASE_PROVIDER: "sqlite"
+  SHELLY_DATABASE_PATH: "/data/shelly.db"
   SHELLY_DISCOVERY_ENABLED: "true"
   # ... additional config
 ```
@@ -113,16 +117,22 @@ kind: Service
 metadata:
   name: shelly-manager
 spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
   selector:
     app: shelly-manager
-  ports:
-  - port: 80
-    targetPort: 8080
-    name: http
-  - port: 9090
-    targetPort: 9090
-    name: metrics
+    component: api-server
 ```
+
+The file holds a second Service, `shelly-provisioner`, for the provisioner's metrics port.
 
 ## 🎯 Environment Overlays
 
@@ -139,21 +149,41 @@ spec:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+metadata:
+  name: shelly-manager-development
+
 resources:
 - ../../base
 
+namePrefix: dev-
+namespace: shelly-dev
+
+commonLabels:
+  environment: development
+
 patchesStrategicMerge:
 - configmap-dev.yaml
+- ingress-dev.yaml
 
 configMapGenerator:
 - name: shelly-manager-config
   behavior: merge
   literals:
   - SHELLY_LOGGING_LEVEL=debug
+  - SHELLY_DATABASE_PATH=/tmp/shelly.db
+  - SHELLY_METRICS_ENABLE_DETAILED_TIMING=true
+  # The provisioner's URL for the manager: this overlay's prefix, the Service's port 80.
+  - SHELLY_API_URL=http://dev-shelly-manager:80
 
 images:
 - name: ghcr.io/ginsys/shelly-manager
   newTag: latest
+- name: ghcr.io/ginsys/shelly-provisioner
+  newTag: latest
+
+replicas:
+- name: shelly-manager
+  count: 1
 ```
 
 ### Staging Overlay
@@ -168,16 +198,47 @@ images:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+metadata:
+  name: shelly-manager-staging
+
 resources:
 - ../../base
 
+namePrefix: staging-
+namespace: shelly-staging
+
+commonLabels:
+  environment: staging
+
 patchesStrategicMerge:
 - replica-patch.yaml
-- configmap-staging.yaml
+- resources-patch.yaml
+- ingress-staging.yaml
+
+configMapGenerator:
+- name: shelly-manager-config
+  behavior: merge
+  literals:
+  - SHELLY_LOGGING_LEVEL=info
+  - SHELLY_DATABASE_PROVIDER=postgresql
+  # No credentials in the DSN: the app adds SHELLY_DATABASE_USERNAME and
+  # SHELLY_DATABASE_PASSWORD (the Secret) to it, with the escaping a password needs.
+  - SHELLY_DATABASE_DSN=postgresql://postgresql:5432/shelly
+  # Per replica: 24 connections at 2 replicas with maxSurge 1.
+  - SHELLY_DATABASE_MAX_OPEN_CONNS=8
+  - SHELLY_DATABASE_MAX_IDLE_CONNS=2
+  # The provisioner's URL for the manager: this overlay's prefix, the Service's port 80.
+  - SHELLY_API_URL=http://staging-shelly-manager:80
 
 images:
 - name: ghcr.io/ginsys/shelly-manager
   newTag: staging-latest
+- name: ghcr.io/ginsys/shelly-provisioner
+  newTag: staging-latest
+
+replicas:
+- name: shelly-manager
+  count: 2
 ```
 
 ### Production Overlay
@@ -193,14 +254,25 @@ images:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+metadata:
+  name: shelly-manager-production
+
 resources:
 - ../../base
+- servicemonitor.yaml
+- hpa.yaml
+
+namePrefix: prod-
+namespace: shelly-production
+
+commonLabels:
+  environment: production
+  version: v1.0.0
 
 patchesStrategicMerge:
 - replica-patch.yaml
 - resources-patch.yaml
-- configmap-prod.yaml
-- ingress-prod.yaml
+- ingress-production.yaml
 
 configMapGenerator:
 - name: shelly-manager-config
@@ -208,17 +280,26 @@ configMapGenerator:
   literals:
   - SHELLY_LOGGING_LEVEL=info
   - SHELLY_DATABASE_PROVIDER=postgresql
+  # No credentials in the DSN: the app adds SHELLY_DATABASE_USERNAME and
+  # SHELLY_DATABASE_PASSWORD (the Secret) to it, with the escaping a password needs.
   - SHELLY_DATABASE_DSN=postgresql://postgresql:5432/shelly
+  # Per replica. 80 connections at the HPA maximum of 10 replicas, 88 during a
+  # roll (maxSurge 1), against a PostgreSQL max_connections of 100 (the default).
   - SHELLY_DATABASE_MAX_OPEN_CONNS=8
   - SHELLY_DATABASE_MAX_IDLE_CONNS=2
+  - SHELLY_METRICS_RETENTION_DAYS=90
+  # The provisioner's URL for the manager: this overlay's prefix, the Service's port 80.
+  - SHELLY_API_URL=http://prod-shelly-manager:80
 
 images:
 - name: ghcr.io/ginsys/shelly-manager
-  newTag: v1.0.0  # Specific version tag
+  newTag: 20250825-143022-abc1234  # Specific production version
+- name: ghcr.io/ginsys/shelly-provisioner
+  newTag: 20250825-143022-abc1234
 
-commonLabels:
-  environment: production
-  version: v1.0.0
+replicas:
+- name: shelly-manager
+  count: 3
 ```
 
 ## 🔧 Configuration Management

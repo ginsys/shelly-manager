@@ -174,18 +174,23 @@ db := dbProvider.GetDB()
 
 ```bash
 # Development
-export DATABASE_PROVIDER=sqlite
-export DATABASE_DSN="/tmp/dev.db"
+export SHELLY_DATABASE_PROVIDER=sqlite
+export SHELLY_DATABASE_DSN="/tmp/dev.db"
 
-# Production MySQL
-export DATABASE_PROVIDER=mysql
-export DATABASE_DSN="app:${MYSQL_PASSWORD}@tcp(mysql:3306)/production"
-export MYSQL_TLS_MODE=verify-identity
+# Production MySQL (the MySQL provider takes its credentials in the DSN)
+export SHELLY_DATABASE_PROVIDER=mysql
+export SHELLY_DATABASE_DSN="app:${MYSQL_PASSWORD}@tcp(mysql:3306)/production"
 
-# Production PostgreSQL
-export DATABASE_PROVIDER=postgresql  
-export DATABASE_DSN="postgres://app:${PG_PASSWORD}@postgres:5432/production?sslmode=require"
+# Production PostgreSQL (credentials are kept out of the DSN)
+export SHELLY_DATABASE_PROVIDER=postgresql
+export SHELLY_DATABASE_DSN="postgres://postgres:5432/production?sslmode=require"
+export SHELLY_DATABASE_USERNAME=app
+export SHELLY_DATABASE_PASSWORD="${PG_PASSWORD}"
 ```
+
+The application reads `SHELLY_` plus the config key, with `.` written as `_`. `SHELLY_DATABASE_USERNAME`
+and `SHELLY_DATABASE_PASSWORD` cannot be combined with credentials in the DSN; the PostgreSQL provider refuses
+a start that does both. The MySQL provider refuses `username` and `password` and reads the DSN only.
 
 ## Migration Between Providers
 
@@ -244,8 +249,8 @@ services:
   app:
     image: shelly-manager:latest
     environment:
-      - DATABASE_PROVIDER=${DB_PROVIDER:-mysql}
-      - DATABASE_DSN=${DATABASE_DSN}
+      - SHELLY_DATABASE_PROVIDER=${DB_PROVIDER:-mysql}
+      - SHELLY_DATABASE_DSN=${DATABASE_DSN}
     depends_on:
       - database
 

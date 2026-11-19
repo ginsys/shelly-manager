@@ -94,7 +94,8 @@ Internal documentation for contributors:
 
 ### Database Providers
 - `mysql-provider-*.md` (4 files) - MySQL provider documentation
-- `postgresql-*.md` (7 files) - PostgreSQL provider documentation
+- `postgresql-*.md` (8 files) - PostgreSQL provider documentation
+- [`development/postgresql-api-reference.md`](development/postgresql-api-reference.md) - provider API and `DatabaseConfig`, including the `Username` and `Password` credential fields
 
 ### Planning
 - `PHASE_8_WEB_UI_PLAN.md` - Vue 3 SPA modernization roadmap

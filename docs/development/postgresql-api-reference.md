@@ -437,6 +437,10 @@ type DatabaseConfig struct {
     DSN      string            `mapstructure:"dsn"`      // Connection string
     Options  map[string]string `mapstructure:"options"`  // Provider-specific options
 
+    // Credentials kept out of the DSN
+    Username string `mapstructure:"username"`
+    Password string `mapstructure:"password"`
+
     // Connection Pool Settings
     MaxOpenConns    int           `mapstructure:"max_open_conns"`
     MaxIdleConns    int           `mapstructure:"max_idle_conns"`
@@ -448,6 +452,14 @@ type DatabaseConfig struct {
     LogLevel           string        `mapstructure:"log_level"`
 }
 ```
+
+**Credentials.** `Username` and `Password` are put into the connection URL with the escaping a password
+needs, so a password with `@` or `/` in it needs no hand-encoding. Set them or put credentials in the DSN,
+never both: a DSN that carries credentials together with `Username` is refused, and so is a `Password`
+without a `Username`. While `Username` or `Password` is set, the DSN query accepts only a fixed list of
+client options (`sslmode`, `sslcert`, `sslkey`, `sslrootcert` and similar); any other key is refused.
+The MySQL provider refuses both fields, and SQLite ignores them. From the environment they are
+`SHELLY_DATABASE_USERNAME` and `SHELLY_DATABASE_PASSWORD`.
 
 **Default Values** (filled by `Config.GetDatabaseConfig`; the provider applies the pool as given and an unset open or idle count is refused):
 - `MaxOpenConns`: 25

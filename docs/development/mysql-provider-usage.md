@@ -49,18 +49,19 @@ database:
 
 #### 2. Environment Variables
 
+The application reads `SHELLY_` plus the config key, with `.` written as `_`. The MySQL provider takes
+host, port, database, credentials and TLS mode from the DSN, and it refuses `database.username` and
+`database.password`.
+
 ```bash
 # Production environment variables
-export MYSQL_HOST=mysql.internal
-export MYSQL_PORT=3306
-export MYSQL_USER=shelly_app
-export MYSQL_PASSWORD=secure_password
-export MYSQL_DATABASE=shelly_manager
-export MYSQL_SSL_MODE=verify-identity
-export MYSQL_CA_CERT=/etc/ssl/mysql-ca.pem
-export MYSQL_CLIENT_CERT=/etc/ssl/mysql-client.pem  
-export MYSQL_CLIENT_KEY=/etc/ssl/mysql-client.key
+export SHELLY_DATABASE_PROVIDER=mysql
+export SHELLY_DATABASE_DSN="shelly_app:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/shelly_manager?tls=preferred"
 ```
+
+The DSN holds the password. The database keys take no `_FILE` form (only the secret keys listed in
+`docs/security/SECURITY_SECRETS.md` do), so set `SHELLY_DATABASE_DSN` from a Kubernetes Secret with
+`secretKeyRef`.
 
 #### 3. Code Integration
 
@@ -260,12 +261,8 @@ services:
   shelly-manager-dev:
     build: .
     environment:
-      - DATABASE_PROVIDER=mysql
-      - MYSQL_HOST=mysql-dev
-      - MYSQL_USER=dev
-      - MYSQL_PASSWORD=devpass
-      - MYSQL_DATABASE=shelly_dev
-      - MYSQL_SSL_MODE=preferred
+      - SHELLY_DATABASE_PROVIDER=mysql
+      - SHELLY_DATABASE_DSN=dev:devpass@tcp(mysql-dev:3306)/shelly_dev?tls=preferred
     depends_on:
       - mysql-dev
 
@@ -359,12 +356,8 @@ services:
   shelly-manager:
     image: shelly-manager:latest
     environment:
-      - DATABASE_PROVIDER=mysql
-      - MYSQL_HOST=mysql
-      - MYSQL_USER=shelly
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=shelly_manager
-      - MYSQL_SSL_MODE=required
+      - SHELLY_DATABASE_PROVIDER=mysql
+      - SHELLY_DATABASE_DSN=shelly:${MYSQL_PASSWORD}@tcp(mysql:3306)/shelly_manager?tls=preferred
     depends_on:
       mysql:
         condition: service_healthy
@@ -412,8 +405,8 @@ services:
         reservations:
           memory: 256M
     environment:
-      - DATABASE_PROVIDER=mysql
-      - MYSQL_DSN=app_user:${MYSQL_PASSWORD}@tcp(mysql-primary:3306)/shelly_manager?tls=verify-identity
+      - SHELLY_DATABASE_PROVIDER=mysql
+      - SHELLY_DATABASE_DSN=app_user:${MYSQL_PASSWORD}@tcp(mysql-primary:3306)/shelly_manager?tls=preferred
     secrets:
       - mysql_ca_cert
       - mysql_client_cert
@@ -517,7 +510,7 @@ spec:
             secretKeyRef:
               name: mysql-secret
               key: password
-        - name: DATABASE_PROVIDER
+        - name: SHELLY_DATABASE_PROVIDER
           value: "mysql"
         volumeMounts:
         - name: mysql-ssl
@@ -679,7 +672,7 @@ mysql -u user -p shelly_manager < converted_backup.sql
 ```bash
 # Error: failed to connect to MySQL database
 # Solution: Check DSN format and credentials
-export MYSQL_DSN="user:password@tcp(mysql:3306)/database?tls=preferred"
+export SHELLY_DATABASE_DSN="user:password@tcp(mysql:3306)/database?tls=preferred"
 
 # Test connection manually
 mysql -h mysql -u user -p database
