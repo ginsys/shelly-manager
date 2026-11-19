@@ -545,14 +545,16 @@ func (m *Manager) GetDeviceByMAC(mac string) (*Device, error) {
 	return &device, nil
 }
 
-// UpsertDeviceFromDiscovery updates or creates a device from discovery data (legacy compatibility)
-func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, initialName string) (*Device, error) {
+// UpsertDeviceFromDiscovery updates or creates a device from discovery data (legacy compatibility).
+// created is true when this call stored a new row and false when the device was already known.
+func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, initialName string) (*Device, bool, error) {
 	start := time.Now()
 	var device Device
+	created := false
 
 	db := m.GetDB()
 	if db == nil {
-		return nil, fmt.Errorf("database connection is nil")
+		return nil, false, fmt.Errorf("database connection is nil")
 	}
 
 	err := db.Where("mac = ?", mac).First(&device).Error
@@ -570,6 +572,7 @@ func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, 
 			Settings: "{}",
 		}
 		err = db.Create(&device).Error
+		created = err == nil
 		m.logger.WithFields(map[string]any{
 			"mac":       mac,
 			"ip":        update.IP,
@@ -588,7 +591,7 @@ func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, 
 			"table":     "devices",
 			"component": "database",
 		}).Error("Database operation failed")
-		return nil, err
+		return nil, false, err
 	} else {
 		// Update existing device: the discovery columns and no other, so a column that another
 		// writer committed after the read above is not written back (ginsys/shelly-manager#572).
@@ -615,7 +618,7 @@ func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, 
 		"component": "database",
 	}).Debug("Device upsert from discovery completed")
 
-	return &device, err
+	return &device, created, err
 }
 
 // AddDiscoveredDevice adds a new discovered device (legacy compatibility)

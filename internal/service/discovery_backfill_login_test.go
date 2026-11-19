@@ -17,13 +17,13 @@ type upsertHookDB struct {
 	afterUpsert func()
 }
 
-func (d *upsertHookDB) UpsertDeviceFromDiscovery(mac string, update database.DiscoveryUpdate, initialName string) (*database.Device, error) {
-	device, err := d.DatabaseInterface.UpsertDeviceFromDiscovery(mac, update, initialName)
+func (d *upsertHookDB) UpsertDeviceFromDiscovery(mac string, update database.DiscoveryUpdate, initialName string) (*database.Device, bool, error) {
+	device, created, err := d.DatabaseInterface.UpsertDeviceFromDiscovery(mac, update, initialName)
 	if hook := d.afterUpsert; hook != nil {
 		d.afterUpsert = nil
 		hook()
 	}
-	return device, err
+	return device, created, err
 }
 
 // A discovery backfills model, generation and the auth flag in the settings. It keeps a login

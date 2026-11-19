@@ -507,8 +507,9 @@ func TestManagerDeviceOperations(t *testing.T) {
 			LastSeen: time.Now(),
 		}
 
-		device, err := manager.UpsertDeviceFromDiscovery("discovery:create:mac", update, "Discovery Created Device")
+		device, created, err := manager.UpsertDeviceFromDiscovery("discovery:create:mac", update, "Discovery Created Device")
 		assert.NoError(t, err)
+		assert.True(t, created, "a MAC that was not stored is reported as created")
 		assert.NotNil(t, device)
 		assert.NotZero(t, device.ID)
 		assert.Equal(t, "Discovery Created Device", device.Name)
@@ -541,8 +542,9 @@ func TestManagerDeviceOperations(t *testing.T) {
 			LastSeen: time.Now(),
 		}
 
-		device, err := manager.UpsertDeviceFromDiscovery("discovery:update:mac", update, "Should Not Change Name")
+		device, created, err := manager.UpsertDeviceFromDiscovery("discovery:update:mac", update, "Should Not Change Name")
 		assert.NoError(t, err)
+		assert.False(t, created, "a MAC that was stored is reported as known")
 		assert.NotNil(t, device)
 		assert.Equal(t, originalID, device.ID) // Should preserve ID
 
@@ -591,7 +593,7 @@ func TestManagerErrorHandling(t *testing.T) {
 				LastSeen: time.Now(),
 			}
 
-			_, _ = manager.UpsertDeviceFromDiscovery("test:nil:db", update, "Test Device")
+			_, _, _ = manager.UpsertDeviceFromDiscovery("test:nil:db", update, "Test Device")
 		})
 	})
 }
