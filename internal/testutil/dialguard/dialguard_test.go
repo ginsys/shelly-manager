@@ -4,6 +4,7 @@ import (
 	"context"
 	"go/ast"
 	"go/build"
+	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"net"
@@ -99,8 +100,8 @@ func TestGuardAllowsLoopback(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close()
-	// A host name that /etc/hosts answers is loopback and needs no DNS: the replaced resolver
-	// keeps PreferGo, which reads the hosts file before it dials a server.
+	// The name localhost is dialled as a loopback address and never reaches the resolver, whatever
+	// order /etc/nsswitch.conf gives hosts.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -149,22 +150,52 @@ func TestPackagesWithoutMainReadsBothPackages(t *testing.T) {
 	write("ui/node_modules/x/x_test.go", "package x\n")
 	// The same text in a comment or a string is not a call.
 	write("internal/f/f_test.go", "package f\n// "+main+"var s = `"+main+"`\n")
-	// A file a build constraint excludes is not a test file of the build.
+	// A TestMain behind a build constraint, in a comment or in the file name, guards no build for
+	// certain: go test adds tags (race, -tags) that the checker does not see.
 	write("internal/g/g_test.go", "//go:build ignore\n\npackage g\n"+main)
 	write("internal/g/other_test.go", "package g\n")
+	write("internal/h/h_test.go", "//go:build !race\n\npackage h\n"+main)
+	write("internal/i/i_linux_test.go", "package i\n"+main)
+	// A constraint on another file of the directory leaves an unconstrained TestMain valid.
+	write("internal/j/j_test.go", "package j\n"+main)
+	write("internal/j/tagged_test.go", "//go:build integration\n\npackage j\n")
 	got := packagesWithoutMain(t, root)
-	if strings.Join(got, ",") != "internal/c,internal/d,internal/f,internal/g" {
+	if strings.Join(got, ",") != "internal/c,internal/d,internal/f,internal/g,internal/h,internal/i" {
 		t.Fatalf("got %v", got)
 	}
 }
 
+// isConstrained reports whether a build constraint, in a comment before the package clause or in
+// the file name (_linux_test.go), can leave the file out of a build. go test adds tags the checker
+// cannot know (-tags, race), so a TestMain behind any constraint guards no build for certain.
+func isConstrained(path string, file *ast.File) bool {
+	for _, group := range file.Comments {
+		if group.Pos() >= file.Package {
+			break
+		}
+		for _, c := range group.List {
+			if constraint.IsGoBuild(c.Text) || constraint.IsPlusBuild(c.Text) {
+				return true
+			}
+		}
+	}
+	// A context with an OS and architecture that no file name names: only a name suffix can fail it.
+	ctxt := build.Default
+	ctxt.GOOS, ctxt.GOARCH, ctxt.CgoEnabled = "zz", "zz", false
+	ok, err := ctxt.MatchFile(filepath.Dir(path), filepath.Base(path))
+	return err != nil || !ok
+}
+
 // declaresTestMainCallingGuard reports whether the file declares func TestMain whose body calls
-// dialguard.Main. It reads the syntax tree, so a comment or a string that holds the same text does
-// not count.
+// dialguard.Main, with no build constraint on the file. It reads the syntax tree, so a comment or a
+// string that holds the same text does not count.
 func declaresTestMainCallingGuard(path string) (bool, error) {
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution|parser.ParseComments)
 	if err != nil {
 		return false, err
+	}
+	if isConstrained(path, file) {
+		return false, nil
 	}
 	found := false
 	for _, decl := range file.Decls {
@@ -210,12 +241,6 @@ func packagesWithoutMain(t *testing.T, root string) []string {
 		dir, err := filepath.Rel(root, filepath.Dir(path))
 		if err != nil {
 			return err
-		}
-		// A file that a build constraint leaves out of the build holds no test at all.
-		if ok, matchErr := build.Default.MatchFile(filepath.Dir(path), filepath.Base(path)); matchErr != nil {
-			return matchErr
-		} else if !ok {
-			return nil
 		}
 		hasTests[dir] = true
 		callsMain, parseErr := declaresTestMainCallingGuard(path)
