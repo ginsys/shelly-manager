@@ -130,6 +130,71 @@ describe('AdminKeyDialog', () => {
     expect(promptOpen.value).toBe(false)
   })
 
+  function tab(shiftKey: boolean) {
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })
+    ;(document.activeElement ?? document.body).dispatchEvent(ev)
+    return ev
+  }
+  const btn = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement
+
+  it('Tab from the last control wraps to the field and Shift+Tab from the field wraps to the last', async () => {
+    mountDialog()
+    const p = requestAdminKey()
+    await flushPromises()
+    expect(document.activeElement).toBe(input())
+    btn('admin-key-submit').focus()
+    const forward = tab(false)
+    expect(forward.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(input())
+    const backward = tab(true)
+    expect(backward.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(btn('admin-key-submit'))
+    cancelAdminKeyPrompt()
+    await p
+  })
+
+  it('Tab between the controls inside the dialog is left to the browser', async () => {
+    mountDialog()
+    const p = requestAdminKey()
+    await flushPromises()
+    expect(tab(false).defaultPrevented).toBe(false)
+    btn('admin-key-cancel').focus()
+    expect(tab(true).defaultPrevented).toBe(false)
+    cancelAdminKeyPrompt()
+    await p
+  })
+
+  it('focus outside the dialog is pulled back in on Tab', async () => {
+    mountDialog()
+    const outside = document.createElement('button')
+    Element.prototype.appendChild.call(document.body, outside)
+    const p = requestAdminKey()
+    await flushPromises()
+    outside.focus()
+    expect(document.activeElement).toBe(outside)
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    dialog()!.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(input())
+    cancelAdminKeyPrompt()
+    await p
+    outside.remove()
+  })
+
+  it('gives focus back to the control that opened the dialog', async () => {
+    mountDialog()
+    const opener = document.createElement('button')
+    Element.prototype.appendChild.call(document.body, opener)
+    opener.focus()
+    openAdminKeyPrompt()
+    await flushPromises()
+    expect(document.activeElement).toBe(input())
+    click('admin-key-cancel')
+    await flushPromises()
+    expect(document.activeElement).toBe(opener)
+    opener.remove()
+  })
+
   it('opens by hand from the header route and never prints the key as text', async () => {
     mountDialog()
     openAdminKeyPrompt()
