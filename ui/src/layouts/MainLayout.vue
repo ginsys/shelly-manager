@@ -12,51 +12,23 @@
           Devices
         </router-link>
         
-        <div class="nav-dropdown">
-          <button
-            type="button"
-            class="nav-link dropdown-trigger"
-            :class="{ active: $route.meta.category === 'export' || $route.meta.category === 'import' }"
-            :aria-expanded="isDropdownOpen"
-            @click="toggleDropdown"
-            @keydown.escape="closeDropdown"
-            @blur="closeDropdown"
-          >
-            Export & Import
-          </button>
-          <div
-            class="dropdown-menu"
-            role="menu"
-            :aria-hidden="!isDropdownOpen"
-            v-show="isDropdownOpen"
-            @mouseleave="closeDropdown"
-          >
-            <div class="dropdown-section">
-              <div class="dropdown-section-title">Export</div>
-              <router-link class="dropdown-item" to="/export/backup" role="menuitem">
-                <span class="dropdown-icon" aria-hidden="true">💾</span>
-                Backup Management
-              </router-link>
-              <router-link class="dropdown-item" to="/export/gitops" role="menuitem">
-                <span class="dropdown-icon" aria-hidden="true">🔄</span>
-                GitOps Export
-              </router-link>
-              <router-link class="dropdown-item" to="/export/history" role="menuitem">
-                <span class="dropdown-icon" aria-hidden="true">📋</span>
-                Export History
-              </router-link>
-            </div>
-            <div class="dropdown-divider"></div>
-            <div class="dropdown-section">
-              <div class="dropdown-section-title">Import</div>
-              <router-link class="dropdown-item" to="/import/history" role="menuitem">
-                <span class="dropdown-icon" aria-hidden="true">📥</span>
-                Import History
-              </router-link>
-            </div>
-          </div>
-        </div>
-        
+        <router-link
+          class="nav-link"
+          to="/templates"
+          :class="{ active: $route.meta.category === 'templates' }"
+          :aria-current="$route.meta.category === 'templates' ? 'page' : undefined"
+        >
+          Templates
+        </router-link>
+
+        <NavMenu
+          v-for="menu in navMenus"
+          :key="menu.label"
+          :label="menu.label"
+          :sections="menu.sections"
+          :active="menu.categories.includes($route.meta.category as string)"
+        />
+
         <router-link
           class="nav-link"
           to="/plugins"
@@ -135,22 +107,74 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { hasSessionKey, openAdminKeyPrompt, forgetAdminKey } from '@/api/adminKey'
+import NavMenu, { type NavMenuSection } from '@/components/NavMenu.vue'
 
 const route = useRoute()
 
-// Dropdown state for accessibility
-const isDropdownOpen = ref(false)
-
-function toggleDropdown() {
-  isDropdownOpen.value = !isDropdownOpen.value
-}
-
-function closeDropdown() {
-  isDropdownOpen.value = false
-}
+// One menu per area. `categories` are the route.meta.category values that highlight the menu.
+// Detail pages (`:id`) are not listed: they are reached from their list page.
+const navMenus: { label: string; categories: string[]; sections: NavMenuSection[] }[] = [
+  {
+    label: 'Drift',
+    categories: ['drift'],
+    sections: [
+      {
+        items: [
+          { label: 'Schedules', to: '/drift/schedules', icon: '🗓️' },
+          { label: 'Reports', to: '/drift/reports', icon: '📊' },
+          { label: 'Trends', to: '/drift/trends', icon: '📈' },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Notifications',
+    categories: ['notifications'],
+    sections: [
+      {
+        items: [
+          { label: 'Channels', to: '/notifications/channels', icon: '📡' },
+          { label: 'Rules', to: '/notifications/rules', icon: '📏' },
+          { label: 'History', to: '/notifications/history', icon: '🕘' },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Provisioning',
+    categories: ['provisioning'],
+    sections: [
+      {
+        items: [
+          { label: 'Dashboard', to: '/provisioning', icon: '🧭' },
+          { label: 'Tasks', to: '/provisioning/tasks', icon: '🛠️' },
+          { label: 'Agents', to: '/provisioning/agents', icon: '🤖' },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Export & Import',
+    categories: ['export', 'import'],
+    sections: [
+      {
+        title: 'Export',
+        items: [
+          { label: 'Backup Management', to: '/export/backup', icon: '💾' },
+          { label: 'GitOps Export', to: '/export/gitops', icon: '🔄' },
+          { label: 'Export History', to: '/export/history', icon: '📋' },
+        ],
+      },
+      {
+        title: 'Import',
+        items: [{ label: 'Import History', to: '/import/history', icon: '📥' }],
+      },
+    ],
+  },
+]
 
 // Breadcrumb configuration
 const breadcrumbs = computed(() => {
@@ -268,10 +292,11 @@ const showBreadcrumb = computed(() => {
   align-items: center;
 }
 
-.nav-link { 
-  color: #cbd5e1; 
-  text-decoration: none; 
-  font-size: 14px; 
+/* :deep, because the menu triggers are rendered by NavMenu and carry the same link look */
+.nav :deep(.nav-link) {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 14px;
   font-weight: 500;
   padding: 8px 16px;
   border-radius: 6px;
@@ -279,13 +304,13 @@ const showBreadcrumb = computed(() => {
   position: relative;
 }
 
-.nav-link:hover, 
-.nav-link.active { 
-  color: #fff; 
+.nav :deep(.nav-link:hover),
+.nav :deep(.nav-link.active) {
+  color: #fff;
   background: rgba(255, 255, 255, 0.1);
 }
 
-.nav-link.router-link-active {
+.nav :deep(.nav-link.router-link-active) {
   color: #60a5fa;
   background: rgba(96, 165, 250, 0.1);
 }
@@ -311,121 +336,6 @@ const showBreadcrumb = computed(() => {
 .key-btn:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.1);
-}
-
-/* Dropdown Navigation */
-.nav-dropdown {
-  position: relative;
-  display: inline-block;
-}
-
-.dropdown-trigger {
-  /* Reset button styling for accessibility */
-  background: none;
-  border: none;
-  cursor: pointer;
-  font: inherit;
-  padding: 8px 16px;
-  display: flex;
-  align-items: center;
-  user-select: none;
-}
-
-.dropdown-trigger:after {
-  content: ' ▼';
-  font-size: 10px;
-  margin-left: 4px;
-  transition: transform 0.2s ease;
-}
-
-.nav-dropdown:hover .dropdown-trigger:after {
-  transform: rotate(180deg);
-}
-
-.dropdown-menu {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  min-width: 220px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  margin-top: 4px;
-  overflow: hidden;
-}
-
-/* Invisible bridge to maintain hover state */
-.dropdown-menu::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 0;
-  right: 0;
-  height: 8px;
-  background: transparent;
-}
-
-.nav-dropdown:hover .dropdown-menu,
-.dropdown-menu:hover {
-  display: block;
-  animation: fadeIn 0.15s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Dropdown Sections */
-.dropdown-section {
-  padding: 8px 0;
-}
-
-.dropdown-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 4px 16px;
-  margin-bottom: 4px;
-}
-
-.dropdown-divider {
-  height: 1px;
-  background: #f3f4f6;
-  margin: 4px 0;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  padding: 10px 16px;
-  color: #374151;
-  text-decoration: none;
-  font-size: 14px;
-  transition: all 0.15s ease;
-}
-
-.dropdown-item:hover {
-  background: #f8fafc;
-  color: #1f2937;
-}
-
-.dropdown-item.router-link-active {
-  background: #eff6ff;
-  color: #2563eb;
-  font-weight: 500;
-}
-
-.dropdown-icon {
-  margin-right: 8px;
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
 }
 
 /* Breadcrumb Navigation */
@@ -500,17 +410,11 @@ const showBreadcrumb = computed(() => {
     gap: 2px;
   }
   
-  .nav-link {
+  .nav :deep(.nav-link) {
     padding: 6px 12px;
     font-size: 13px;
   }
-  
-  .dropdown-menu {
-    min-width: 200px;
-    right: 0;
-    left: auto;
-  }
-  
+
   .content {
     padding: 16px 12px;
   }

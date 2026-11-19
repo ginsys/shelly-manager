@@ -38,14 +38,14 @@ const router = createRouter({
       path: '/templates',
       name: 'templates',
       component: () => import('./pages/TemplatesPage.vue'),
-      meta: { title: 'Configuration Templates' }
+      meta: { title: 'Configuration Templates', category: 'templates' }
     },
 
     {
       path: '/templates/:id',
       name: 'template-detail',
       component: () => import('./pages/TemplateDetailPage.vue'),
-      meta: { title: 'Template Details' }
+      meta: { title: 'Template Details', category: 'templates' }
     },
 
     // Drift Detection
