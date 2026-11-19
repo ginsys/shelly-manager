@@ -20,7 +20,7 @@ This note proposes three slices, each of which ships alone:
 
 | Slice | What it does | Fixes | Changes who may enrol an agent? |
 |---|---|---|---|
-| 1 | The whole registry moves to the database: agents, hashed tokens, tasks. | 1, 4, and the empty-registry window | No new right. It only closes a window (see "Slice 1 and the empty-registry window"). |
+| 1 | The whole registry moves to the database: agents, hashed tokens, tasks. | 1, 4, and the empty-registry window | No new right. It only closes a window (see "The empty-registry window"). |
 | 2 | Enrolment: an agent id can only be created by the admin key holder. | 2 | **Yes.** Today the agent key is enough. |
 | 3 | An id is no longer freed by 5 minutes of silence. Stale rows are removed on purpose. | 3 | **Yes.** Today the agent key frees an id after 5 minutes of silence. |
 
@@ -91,7 +91,7 @@ The decisions that need an owner are at the end ("Decisions needed").
   polls.** At that interval the manager lists it as offline for about half of
   each cycle, and the takeover rule (`:153`) allows a register of its id by any
   agent-key holder for about half of each cycle. So for the shipped Kubernetes
-  agent, limit 3 is open most of the time, not only after an outage.
+  agent, limit 3 is open for about half of the time, not only after an outage.
 - The agent sends the agent key as `Authorization: Bearer` and the token as
   `X-Agent-Token` (`api_client.go`, `makeRequest`).
 
@@ -144,7 +144,7 @@ Both tables are needed in slice 1.
 
 - **Agents, with the hash of the token.** This fixes limit 1 for agents, and it
   makes a token valid on every replica.
-- **Tasks.** Agents without tasks does not ship alone under replicas: a task
+- **Tasks.** Agents without tasks do not ship alone under replicas: a task
   created on replica A would still be claimable only on A, and a status report
   on B would still find no task. One registry split across two stores is worse
   than either.
@@ -166,9 +166,9 @@ public id (as `ExportHistory.ExportID` does).
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uint, primary key | |
-| `agent_id` | string, `size:191`, unique index | The id the agent chooses. |
+| `agent_id` | string, `size:191`, unique index, case-sensitive collation | The id the agent chooses. |
 | `hostname`, `ip`, `version` | string | Not indexed. |
-| `capabilities`, `metadata` | `type:text` | JSON documents. No column default; seeded by `BeforeSave`. |
+| `capabilities`, `metadata` | text, size to decide | JSON documents. No column default; seeded by `BeforeSave`. See "Column types". |
 | `token_hash` | string, `size:64`, unique index | Hex SHA-256 of the token. |
 | `token_issued_at`, `registered_at`, `last_seen` | time; `last_seen` indexed | |
 
@@ -196,17 +196,42 @@ public id (as `ExportHistory.ExportID` does).
   strings become `varchar(191)` or `text`, times become the provider's
   timestamp, ints and bools are plain. **No provider lacks a column type this
   design needs**, so there is no stop point here.
-- **The task `config` needs a larger column than `type:text` on MySQL.**
-  `CreateProvisioningTask` accepts any `config` and checks only the task type
-  (`provisioner_handlers.go:338-354`). The request limit is 10 MiB
-  (`internal/api/middleware/security.go:80`). `TEXT` on MySQL holds about 64 KiB,
-  so a plain `type:text` column would reject a `config` that the API accepts
-  today. The build slice does one of two things, and says which: it sizes the
-  column for the request limit (`MEDIUMTEXT` or `LONGTEXT` on MySQL; `text` on
-  the other two providers already holds it) and proves it with a provider test
-  that stores and reads back a `config` near the limit; or it adds a smaller
-  validated limit on `config` and discloses it as a new restriction. This note
-  recommends the first.
+- **A column must hold every value the API accepts today, or the build slice
+  says it adds a limit.** The handlers check very little. `RegisterAgent` checks
+  only that `id` and `hostname` are not empty (`provisioner_handlers.go:116-133`)
+  and `CreateProvisioningTask` checks only the task type (`:338-354`). The
+  request limit is 10 MiB (`internal/api/middleware/security.go:80`). Two kinds
+  of column follow from that:
+  - **Free text the client supplies**: task `config`, and agent `capabilities`
+    and `metadata`. `TEXT` on MySQL holds about 64 KiB, so a plain `type:text`
+    column rejects values the API accepts today (a 70 KiB `metadata`, for
+    example). The build slice sizes these for the request limit (`MEDIUMTEXT` or
+    `LONGTEXT` on MySQL; `text` on the other two providers already holds it) and
+    proves it with a provider test that stores and reads back a value near the
+    limit. The other unindexed strings (`hostname`, `ip`, `version`,
+    `device_mac`, `target_ssid`) use the GORM default for a string, which is an
+    unbounded text type on all three providers. This note recommends this over
+    adding limits.
+  - **Indexed strings** (`agent_id`, `task_id`, `token_hash`, and the task
+    `status`, `type` and `agent_id`): `size:191` is a real limit on MySQL, and
+    SQLite and PostgreSQL would accept longer values than it. These are **new
+    restrictions** on what today's handlers accept. The build slice validates
+    them (a 400 with a clear message for an id, task type or status longer than
+    191 characters) and lists them in the API doc change. A value that long is
+    not expected, but the restriction must be stated, not left to a database
+    error.
+- **Identity comparisons must be byte-exact on every provider.** Today the
+  handlers compare ids as Go strings (`provisioner_handlers.go:255`, and the map
+  key at `:149`), so `alpha` and `Alpha` are different agents. MySQL's default
+  collation compares case-insensitively, and the repository already documents
+  that hazard (`migrations.go:365-370`). With the proposed schema on MySQL,
+  agent `alpha` would match a task assigned to `Alpha`, and the unique index on
+  `agent_id` would reject `Alpha` after `alpha`. So `agent_id` (in both tables)
+  and `task_id` need a case-sensitive collation on MySQL (for example
+  `utf8mb4_bin`), and the provider test proves that `alpha` and `Alpha` are two
+  agents and that a task owned by one is not claimed by the other. The
+  `token_hash` is lowercase hex that the manager writes itself, so it needs the
+  same collation only for strictness.
 - The hash column is exactly 64 hex characters, so `size:64` is a hard fit and
   needs no 191 workaround.
 
@@ -263,7 +288,9 @@ Three details matter:
    the rows affected. Zero rows and an existing row is the 409. A first register
    inserts, and the unique index on `agent_id` makes a concurrent second insert
    fail; the loser retries as an update. `clause.OnConflict` works on all three
-   providers.
+   providers. `last_seen` and "now" come from the manager processes, so a clock
+   difference between replicas moves the 5-minute rule by that difference, which
+   is small next to 5 minutes on hosts that keep their clocks in sync.
 2. **The claim is one conditional update per task, with the owner check.**
    `PollTasks` today tests both the owner and the status (`:254-255`), and the
    status of a task can be set back to `pending` by `UpdateTaskStatus`, which
@@ -306,6 +333,18 @@ is unchanged. What changes for an operator:
   works. There is no re-register, no 409 wait and no lost task.
 - Every replica knows every token and every task. Limit 4 is closed.
 - The empty-registry window is closed for every id the manager has seen.
+
+**All three hold only while the database is durable.** That is a separate
+requirement from the slice. The shipped base overlay keeps SQLite on a volume
+(`SHELLY_DATABASE_PATH: "/data/shelly.db"`,
+`deploy/kubernetes/kustomize/base/configmap.yaml:20`; the `data` volume is a
+PersistentVolumeClaim, `base/deployment.yaml:119-121`). The shipped development
+overlay overrides the path to `/tmp/shelly.db`
+(`overlays/development/kustomization.yaml:25`), and `/tmp` is an `emptyDir`
+(`base/deployment.yaml:122-123`). A development pod that is replaced loses the
+registry, and the empty-registry window is open again, as it is today. The
+build slice states the durable database as a requirement in its docs and leaves
+the development overlay as it is.
 
 Why it ships alone: no route, no header and no field the agent sees changes.
 An old agent works with a new manager and the other way round.
@@ -353,6 +392,12 @@ with the secret. Its first register presents it (new header or body field), the
 manager marks it used and issues the agent token. Later registers of the same id
 need the current token.
 
+An enrolment may name an id that already exists. Redeeming it **replaces that
+id's token**. This is the admin-authorised reset: it is the route for an agent
+that lost its token or its rotation response, and it needs the admin key at
+creation, so it is no weaker than the admin delete followed by a new
+enrolment.
+
 - Protects: limit 2. A new id needs an enrolment from the admin. The claim
   exposure falls with it, because only enrolled agents can claim.
 - Operator: one secret per agent, passed into the agent's secret store.
@@ -376,14 +421,21 @@ need the current token.
 ### Option C: admin-approved registration
 
 An agent registers with the agent key. The manager creates a **pending** row and
-returns no token. The agent polls its register until an admin approves the id
-(admin-key route, or later a UI button). Then the next register returns the
-token.
+returns no token, but a **claim secret** (shown once, only its hash is stored).
+The agent keeps polling its register, presenting the claim secret, until an
+admin approves the id (admin-key route, or later a UI button). Then the next
+register that presents the claim secret returns the token. Without the claim
+secret, any agent-key holder who knows the id could win that request after the
+approval and collect the token meant for the original agent. So the claim
+secret is part of C, not an extra.
 
-- Protects: limit 2 for the claim. A pending agent claims nothing.
+- Protects: limit 2 for the claim. A pending agent claims nothing, and only the
+  applicant that holds the claim secret collects the token.
 - Operator: approve each new id. No secret to hand out.
-- Agent: handle a "pending" answer and retry. (It already retries a failed
-  register at each poll.)
+- Agent: handle a "pending" answer, keep the claim secret in memory while it
+  waits, and retry. (It already retries a failed register at each poll.) A
+  restart during the wait loses the claim secret, so the agent registers again
+  and the admin approves again.
 - Cost on a restart: an agent that lost its token registers again with an id
   that is already approved. It needs a rule, and the rule is the same as for
   B: an existing id needs its token, so the admin must reset it.
@@ -401,9 +453,9 @@ key frees an id: a new `DELETE` route, plus the cleanup in "Stale rows".
 - Protects: limit 3, and the empty-registry window for ids the manager knows.
 - Does not solve: limit 2. A new id is still free to anyone with the agent key.
 - Cost on a restart: an agent that lost its token (container without a volume)
-  can never register that id again until an admin deletes the row. So D is safe
-  only **with B** (a new secret re-enrols the agent), or with an agent that
-  keeps its token.
+  can never register that id again until an admin deletes the row or creates an
+  enrolment that names it (Option B). So D is safe only **with B**, or with an
+  agent that keeps its id and token.
 
 ### Option E: unassigned tasks are not claimable (smaller)
 
@@ -519,7 +571,8 @@ A token is a credential. These are the rules for it.
   note does **not** add a grace period for the previous token: a grace period
   would let a token that leaked and was rotated away still register for a
   while, which weakens revocation. Recovery from a lost response is the 5-minute
-  rule until D, and a new enrolment or an admin delete after D. That is
+  rule until D, and after D an enrolment that names the existing id (Option B,
+  which replaces its token) or an admin delete followed by a new enrolment. That is
   rare (the response is lost after the manager has committed the new token)
   and the recovery is an operator step, not a loss of data.
 - **What a leaked token lets a holder do.** Every provisioner agent route first
