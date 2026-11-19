@@ -144,6 +144,27 @@ func TestBulkDownload_AnUnencodableConfigurationIsOneErrorEntry(t *testing.T) {
 	assert.Equal(t, "ok", file.Devices[1].Status)
 }
 
+// A stored configuration with a field the typed configuration does not know (a legacy row restored
+// by an import) would decode with that field dropped. The download says so instead of reporting
+// the incomplete configuration as ok.
+func TestBulkDownload_AFieldTheDecoderWouldDropIsAnErrorEntry(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	fleet := bulkFleet(t, db, 2)
+	require.NoError(t, db.GetDB().Exec("UPDATE devices SET desired_config = ? WHERE id = ?",
+		`{"name":"tv-office","mqtt":{"user":"iot"}}`, fleet[0].device.ID).Error)
+
+	w := postDownload(handler, idsBody(fleet[0].device.ID, fleet[1].device.ID))
+	file := decodeDownload(t, w)
+
+	require.Len(t, file.Devices, 2)
+	assert.Equal(t, "error", file.Devices[0].Status)
+	assert.Equal(t, "the stored configuration has settings this version does not know, so it cannot be downloaded completely", file.Devices[0].Error)
+	assert.Empty(t, file.Devices[0].Config)
+	assert.Equal(t, "ok", file.Devices[1].Status)
+}
+
 // An empty desired configuration is "none", never an entry with no settings.
 func TestBulkDownload_AnEmptyDesiredConfigurationIsNotNoSettings(t *testing.T) {
 	for _, stored := range []string{"", "{}", "null"} {
