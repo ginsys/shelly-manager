@@ -220,6 +220,112 @@ func TestNotificationSecrets_TestSendErrorCarriesNoURL(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, code)
 }
 
+// A config key in another casing is read by validation and delivery, so it is a credential slot too.
+func TestNotificationSecrets_AnyKeyCasingIsMaskedAndRestored(t *testing.T) {
+	env := setupNotificationSecrets(t)
+	var got capturedRequest
+	srv := httptest.NewServer(http.HandlerFunc(got.handler))
+	t.Cleanup(srv.Close)
+
+	id, createResp := env.createChannel(t, map[string]any{
+		"name": "cased", "type": "webhook", "enabled": true,
+		"config": map[string]any{
+			"URL":     srv.URL + "/" + leakPath,
+			"Headers": map[string]string{"Authorization": leakBearer},
+			"Secret":  leakSecret,
+		},
+	})
+	assertNoLeaks(t, "the create response", createResp)
+	_, list := env.do(t, "GET", "/notifications/channels", nil)
+	assertNoLeaks(t, "the channel list", list)
+	assert.Contains(t, list, redact.Placeholder)
+
+	slackID, slackResp := env.createChannel(t, map[string]any{
+		"name": "cased-slack", "type": "slack", "enabled": true,
+		"config": map[string]any{"Webhook_URL": leakSlack},
+	})
+	assertNoLeaks(t, "the slack create response", slackResp)
+	_, list = env.do(t, "GET", "/notifications/channels", nil)
+	assertNoLeaks(t, "the channel list with the slack channel", list)
+	_ = slackID
+
+	// The client sends back the read, in the casing it read.
+	code, resp := env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{
+		"name": "cased", "type": "webhook",
+		"config": map[string]any{
+			"URL":     redact.Placeholder,
+			"Headers": map[string]string{"Authorization": redact.Placeholder},
+			"Secret":  redact.Placeholder,
+		},
+	})
+	require.Equal(t, http.StatusOK, code, resp)
+	assert.NotContains(t, fmt.Sprint(env.storedConfig(t, id)), redact.Placeholder)
+
+	require.NoError(t, env.svc.TestChannel(context.Background(), id))
+	got.mu.Lock()
+	defer got.mu.Unlock()
+	assert.Equal(t, leakBearer, got.headers.Get("Authorization"))
+	assert.Equal(t, "/"+leakPath, got.path)
+}
+
+// A stored URL that net/url refuses, or that it spells differently, still leaves the error text clean.
+func TestNotificationSecrets_TestSendErrorCarriesNoURLInAnySpelling(t *testing.T) {
+	env := setupNotificationSecrets(t)
+	port := closedPort(t)
+
+	for name, raw := range map[string]string{
+		"a control character": "http://127.0.0.1:1/" + leakPath + "?t=" + leakQuery + "\n",
+		"a non-ASCII path":    fmt.Sprintf("http://127.0.0.1:%d/%s/Ün?t=%s", port, leakPath, leakQuery),
+	} {
+		id, _ := env.createChannel(t, map[string]any{
+			"name": name, "type": "webhook", "enabled": true,
+			"config": map[string]any{"url": raw},
+		})
+		code, body := env.do(t, "POST", fmt.Sprintf("/notifications/channels/%d/test", id), nil)
+		require.Equal(t, http.StatusInternalServerError, code, "%s: %s", name, body)
+		assertNoLeaks(t, name, body)
+		assert.Contains(t, body, redact.Placeholder, name)
+	}
+}
+
+// A list of credentials is masked on read and comes back whole when the client sends the read back.
+func TestNotificationSecrets_ListOfSecretsRoundTrips(t *testing.T) {
+	env := setupNotificationSecrets(t)
+	id, createResp := env.createChannel(t, map[string]any{
+		"name": "listed", "type": "webhook", "enabled": true,
+		"config": map[string]any{"url": "http://h.example/x", "token_list": []string{"LEAKLIST1-620", "LEAKLIST2-620"}},
+	})
+	assert.NotContains(t, createResp, "LEAKLIST")
+
+	var wrap struct {
+		Data struct {
+			Channels []struct {
+				Config map[string]any `json:"config"`
+			} `json:"channels"`
+		} `json:"data"`
+	}
+	_, list := env.do(t, "GET", "/notifications/channels", nil)
+	assert.NotContains(t, list, "LEAKLIST")
+	require.NoError(t, json.Unmarshal([]byte(list), &wrap))
+	require.Len(t, wrap.Data.Channels, 1)
+	read := wrap.Data.Channels[0].Config
+	assert.Equal(t, []any{redact.Placeholder, redact.Placeholder}, read["token_list"])
+
+	code, resp := env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id),
+		map[string]any{"name": "listed", "type": "webhook", "config": read})
+	require.Equal(t, http.StatusOK, code, resp)
+	assert.Equal(t, []any{"LEAKLIST1-620", "LEAKLIST2-620"}, env.storedConfig(t, id)["token_list"])
+
+	// A list of another length takes nothing from the stored one, and no placeholder is stored.
+	code, resp = env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{
+		"name": "listed", "type": "webhook",
+		"config": map[string]any{"url": "http://h.example/x", "token_list": []string{redact.Placeholder, redact.Placeholder, redact.Placeholder}},
+	})
+	require.Equal(t, http.StatusOK, code, resp)
+	assert.NotContains(t, fmt.Sprint(env.storedConfig(t, id)), redact.Placeholder)
+	assert.NotContains(t, fmt.Sprint(env.storedConfig(t, id)), "LEAKLIST")
+}
+
 type capturedRequest struct {
 	mu      sync.Mutex
 	headers http.Header
