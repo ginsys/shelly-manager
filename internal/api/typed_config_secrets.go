@@ -169,8 +169,14 @@ func keepOmittedRawSecrets(incoming, stored json.RawMessage) (json.RawMessage, e
 // client's own.
 func keepOmittedValue(in, stored map[string]any) error {
 	for k, sv := range stored {
-		// A key is present under any spelling that folds to it, as the restore reads it.
-		key, present := redact.MatchKey(in, k)
+		// A key is present under its own spelling, or under another that folds to it when the stored name
+		// is unambiguous, as the restore reads it. Two stored names that fold together stay apart.
+		key, present := k, false
+		if _, ok := in[k]; ok {
+			present = true
+		} else if redact.FoldCount(stored, k) == 1 {
+			key, present = redact.MatchKey(in, k)
+		}
 		switch {
 		case !present:
 			if redact.HoldsSecret(k, sv) {

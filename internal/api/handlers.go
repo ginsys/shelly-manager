@@ -1187,7 +1187,7 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	// and the mask is never stored. A missing stored config is left to the service to report.
 	if stored, getErr := h.Service.GetDeviceConfig(uint(id)); getErr == nil {
 		old, _ := decodeDocument(string(stored.Config))
-		if restoreErr := redact.RestoreTree(configUpdate, old, nil); restoreErr != nil {
+		if restoreErr := redact.RestoreTreeInner(configUpdate, old, nil); restoreErr != nil {
 			h.responseWriter().WriteValidationError(w, r, restoreErr.Error())
 			return
 		}

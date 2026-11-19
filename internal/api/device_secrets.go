@@ -14,7 +14,7 @@ import (
 // these has the DeviceConfiguration shape (the live one is the device's own: Gen1 wifi_sta.key,
 // login.password, mqtt.pass), so the typed secret slots cannot reach them. These helpers walk the
 // document instead and decide by the key name, with the walker the notification channels use
-// (redact.MaskTree and redact.RestoreTree): the key rule is redact.SecretKey, so it agrees with the rule
+// (redact.MaskTree and redact.RestoreTreeInner): the key rule is redact.SecretKey, so it agrees with the rule
 // secret_invariant_test.go uses for the typed configuration. A key that merely looks like a secret is
 // masked on a read and restored by the stored value on a save, so a false match costs a masked display
 // and nothing else.
@@ -73,7 +73,7 @@ func restoreMaskedText(incoming, stored string) (string, error) {
 		return "", fmt.Errorf("device configuration text %w", redact.ErrRepeatedMember)
 	}
 	old, _ := decodeDocument(stored)
-	if err := redact.RestoreTree(doc, old, nil); err != nil {
+	if err := redact.RestoreTreeInner(doc, old, nil); err != nil {
 		return "", err
 	}
 	return encodeDocument(doc), nil
