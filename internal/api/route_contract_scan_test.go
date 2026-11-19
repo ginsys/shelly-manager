@@ -925,6 +925,11 @@ type routeScanner struct {
 	instance     map[string]bool // axios instances bound in the client module
 	bound        bool            // a binding for the next axios.create was recorded
 	created      bool            // the client module's axios instance was created
+	depth        int             // open ( [ { and ${ at this point
+	parens       []bool          // per open (, whether it heads an if, for, while or with
+	unsureAt     int             // the byte after the last } or control-header ), where a / is ambiguous; 0 for none
+	memberWord   bool            // prevWord was read as a member name (obj.if), not a keyword
+	beforeWord   string          // the word before prevWord, when no punctuation came between
 	retries      []retryHandler  // rejection handlers of <instance>.interceptors.response.use
 	calls        []routeContractCall
 	hits         []routeContractHit
@@ -1526,7 +1531,9 @@ func isBrowserTransport(name string) bool {
 
 func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	prev := s.prevWord
+	s.beforeWord = prev
 	s.prevWord = ident
+	s.memberWord = member
 	switch ident {
 	case "import":
 		if s.nextSignificant() == '.' {
@@ -1575,7 +1582,7 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	// handler of <name>.interceptors.response.use, and export default <name>;
 	// anything else could issue a request without yielding a pair.
 	if s.isClientFile && !member {
-		if (prev == "const" || prev == "let" || prev == "var") && s.bindsAxiosCreate() {
+		if (prev == "const" || prev == "let" || prev == "var") && s.depth == 0 && s.bindsAxiosCreate() {
 			s.instance[ident] = true
 			s.canRegex = false
 			return
@@ -1846,6 +1853,7 @@ func (s *routeScanner) tryClientCall(line int) bool {
 		return true
 	}
 	s.i++
+	s.openParen(false)
 	s.skipSpaceComments()
 	raw, ok := s.readPathArg()
 	if !ok {
@@ -1998,6 +2006,8 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 		}
 		atKey := keyPos && depth == 1 && cur.object
 		keyPos = false
+		member := w.member // the previous token was a member-access dot
+		w.member = false
 		// checkClientBase reads the raw baseURL: key; any other key form
 		// (quoted with escapes or line continuations, an accessor, a
 		// method, a number) could name baseURL again and override it.
@@ -2015,6 +2025,7 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 			}
 			w.canRegex = unaryKeyword(ident)
 			w.prevWord = ident
+			w.memberWord = member
 		case c >= '0' && c <= '9':
 			w.scanNumber()
 		case c == '\'' || c == '"':
@@ -2053,7 +2064,6 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 		default:
 			w.scanPunct(c)
 		}
-		w.member = false
 	}
 }
 
@@ -2221,6 +2231,7 @@ func (s *routeScanner) finishTransport(line int, kind string) {
 		return
 	}
 	s.i++
+	s.openParen(false)
 	s.skipSpaceComments()
 	hit := routeContractHit{File: s.file, Line: line, Kind: kind}
 	switch {
@@ -2522,6 +2533,8 @@ func (s *routeScanner) readSimpleInterp(b *strings.Builder) bool {
 func (s *routeScanner) scanInterp() bool {
 	saved := s.canRegex
 	s.canRegex = true
+	// The interpolation is a scope of its own, so a binding in it is never top level.
+	s.depth++
 	depth := 0
 	for !s.stop {
 		s.skipSpaceComments()
@@ -2531,12 +2544,14 @@ func (s *routeScanner) scanInterp() bool {
 		}
 		if s.peek('{') {
 			depth++
+			s.depth++
 			s.i++
 			s.canRegex = true
 			s.prevWord = ""
 			continue
 		}
 		if s.peek('}') {
+			s.depth--
 			if depth == 0 {
 				s.i++
 				s.canRegex = saved
@@ -2544,6 +2559,7 @@ func (s *routeScanner) scanInterp() bool {
 			}
 			depth--
 			s.i++
+			s.unsureAt = s.i
 			s.canRegex = true
 			s.prevWord = ""
 			continue
@@ -2822,15 +2838,31 @@ func isHex(c byte) bool {
 func (s *routeScanner) scanPunct(c byte) {
 	switch c {
 	case '(', '[', '{':
+		if c == '(' {
+			s.openParen(s.headsStatement())
+		} else {
+			s.depth++
+		}
 		s.i++
 		s.canRegex = true
 		s.prevWord = ""
 	case ')', ']':
+		heads := false
+		if c == ')' && len(s.parens) > 0 {
+			heads = s.parens[len(s.parens)-1]
+			s.parens = s.parens[:len(s.parens)-1]
+		}
+		s.depth--
 		s.i++
+		if heads {
+			s.unsureAt = s.i
+		}
 		s.canRegex = false
 		s.prevWord = ""
 	case '}':
+		s.depth--
 		s.i++
+		s.unsureAt = s.i
 		s.canRegex = true
 		s.prevWord = ""
 	case ',', ';', ':', '~':
@@ -3016,7 +3048,49 @@ func (s *routeScanner) scanDot() {
 	s.member = true
 }
 
+// headsStatement reports whether the ( just read opens the header of an if, for, while
+// or with (also for await), which a statement, possibly a regex, follows.
+func (s *routeScanner) headsStatement() bool {
+	if s.memberWord {
+		return false // obj.if(...) calls a method
+	}
+	switch s.prevWord {
+	case "if", "for", "while", "with":
+		return true
+	case "await":
+		return s.beforeWord == "for"
+	}
+	return false
+}
+
+// openParen records a ( for the depth and the control-header stack. A helper that reads a
+// ( itself calls it with false, so the ) that scanPunct reads later pops its own entry.
+func (s *routeScanner) openParen(heads bool) {
+	s.parens = append(s.parens, heads)
+	s.depth++
+}
+
+// followsUnsure reports whether only spaces and comments lie between the last } or
+// control-header ) and the / being read.
+func (s *routeScanner) followsUnsure() bool {
+	if s.unsureAt == 0 || s.unsureAt > s.i {
+		return false
+	}
+	w := s.probe()
+	w.i = s.unsureAt
+	w.skipSpaceComments()
+	return w.i == s.i && !w.stop
+}
+
 func (s *routeScanner) scanSlash() {
+	// After the } of a block or an object literal, or the ) of a control header, a / is a
+	// regex start or a division and the token before it does not say which. Reading it
+	// wrongly can hide code, so it is refused.
+	if s.followsUnsure() {
+		s.fail(s.line, "ambiguous /: after } or the ) of if, for, while or with it may start a regex or divide; add a ; or parentheses")
+		s.i++
+		return
+	}
 	if s.canRegex {
 		s.scanRegex()
 		return

@@ -869,6 +869,87 @@ func TestRouteContractFixtures(t *testing.T) {
 		}
 	})
 
+	// The lexer cannot always tell a regex from a division, or a nested binding from the
+	// module's own, so it refuses what it cannot classify (ginsys/shelly-manager#371).
+	t.Run("client module refuses what the lexer cannot classify", func(t *testing.T) {
+		const head = "import axios from 'axios'\n"
+		const create = "export const api = axios.create({ baseURL: '/api/v1' })\n"
+		const nested = "  const api = axios.create({ baseURL: '/api/v1' })\n"
+		const bind = "unsupported axios.create(); bind it as const <name> = axios.create(...)"
+		const slash = "ambiguous /"
+		for name, tc := range map[string]struct {
+			src  string
+			line int
+			msg  string
+		}{
+			"nested block":      {head + "const api = 0\n{\n" + nested + "}\nexport default api\n", 4, bind},
+			"function body":     {head + "const api = 0\nfunction f() {\n" + nested + "}\nexport default api\n", 4, bind},
+			"arrow body":        {head + "const api = 0\nconst f = () => {\n" + nested + "}\nexport default api\n", 4, bind},
+			"call callback":     {head + "const api = 0\nf(function () {\n" + nested + "})\nexport default api\n", 4, bind},
+			"template body":     {head + "const api = 0\nconst s = `${(() => {\n" + nested + "})()}`\nexport default api\n", 4, bind},
+			"template function": {head + "const api = 0\nconst s = `${function () {\n" + nested + "}}`\nexport default api\n", 4, bind},
+			"slash after {}":    {head + create + "const ratio = <any>{} / 1; export default 0; const value = 2 / 1;\n", 3, slash},
+			"slash after block": {head + create + "if (a) { b() }\n/x/.test(c)\n", 4, slash},
+			"slash in template": {head + create + "const s = `${ {} / 1 / 2 }`\n", 3, slash},
+			"slash after if":    {head + create + "if (a) /\"/.test(b); api.get('/hidden'); // \"\n", 3, slash},
+			"slash after for":   {head + create + "for (const x of y) /\"/.test(x); api.get('/hidden'); // \"\n", 3, slash},
+			"slash after while": {head + create + "while (a) /\"/.test(b); api.get('/hidden'); // \"\n", 3, slash},
+			"slash after with":  {head + create + "with (a) /\"/.test(b); api.get('/hidden'); // \"\n", 3, slash},
+			"for await":         {head + create + "for await (const x of y) /\"/.test(z); api.get('/x'); // \"\n", 3, slash},
+			"comment between":   {head + create + "if (a) /* c */ /\"/.test(b); api.get('/x'); // \"\n", 3, slash},
+		} {
+			_, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": tc.src}, nil)
+			want := fmt.Sprintf("ui/src/api/client.ts:%d:", tc.line)
+			if len(errs) == 0 || !strings.Contains(errs[0].Error(), want) || !strings.Contains(errs[0].Error(), tc.msg) {
+				t.Errorf("%s: want a first error at %s with %q, got %+v", name, want, tc.msg, errs)
+			}
+		}
+		// A division after a call, an index or a name, a regex after an operator, a comment
+		// after a } or a header ), a method named like a keyword, and a division after a
+		// template that holds a } are read as before.
+		for name, body := range map[string]string{
+			"divisions":        "const a = (b + c) / 2, d = e[0] / 2, f = g / 2, h = /x/.test(i), j = k ? /y/ : 0\n",
+			"line comment":     "if (a) { b() } // note\nconst c = 1\n",
+			"block comment":    "if (a) { b() } /* note */\nconst c = 1\n",
+			"header comment":   "if (a) // note\n  b()\n",
+			"keyword method":   "const o = { if: () => 4, for: () => 4, while: () => 4, with: () => 4 }\nconst n = o.if() / 2 + o.for() / 2 + o.while() / 2 + o.with() / 2\n",
+			"template with }":  "const n = +`${{}}` / 2\n",
+			"template in call": "const x = 2\nconst m = f(`${{} === {}}` + x / 2)\n",
+			"divides after )":  "const n = f(a) / 2 / 3\n",
+		} {
+			src := head + create + body
+			if _, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": src}, nil); len(errs) != 0 {
+				t.Errorf("%s: %s", name, joinRouteContractErrs(errs))
+			}
+		}
+		// A call the client opens or a transport call closes its own ( before the ) that
+		// ends an if header, so that header is still recognised, and a division after a
+		// call inside a header is still a division.
+		const use = "import api from '@/api/client'\n"
+		for name, body := range map[string]string{
+			"client call in header":   "if (api.get('/devices') !== null) /\"/.test(x); api.get('/hidden'); // \"\n",
+			"websocket in header":     "if (new WebSocket('/ws') !== null) /\"/.test(x); api.get('/hidden'); // \"\n",
+			"use websocket in header": "if (useWebSocket('/ws') !== null) /\"/.test(x); api.get('/hidden'); // \"\n",
+			"call in nested header":   "if (f(api.get('/devices'))) /\"/.test(x); api.get('/hidden'); // \"\n",
+		} {
+			_, errs := extractRouteContractSources(map[string]string{"ui/src/pages/Page.ts": use + "import { useWebSocket } from '@/composables/useWebSocket'\n" + body}, nil)
+			if len(errs) == 0 || !strings.Contains(errs[0].Error(), slash) {
+				t.Errorf("%s: want an error with %q, got %+v", name, slash, errs)
+			}
+		}
+		calls, errs := extractRouteContractSources(map[string]string{
+			"ui/src/pages/Page.ts": use + "const x = 2\nconst o = { if: () => 4 }\nconst n = f(a) / 2\nif (api.get('/devices')) n / 2\napi.post('/devices', `${{} === {}}` + x / 2)\napi.post('/devices', o.if() / 2)\n",
+		}, nil)
+		if len(errs) != 0 || len(calls) != 3 {
+			t.Errorf("divisions in a normal module: calls %+v errs %s", calls, joinRouteContractErrs(errs))
+		}
+		// The argument probes read a method named like a keyword as a method too.
+		opts := head + "const o = { if: () => 4 }\nexport const api = axios.create({ baseURL: '/api/v1', timeout: o.if() / 2 })\n"
+		if _, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": opts}, nil); len(errs) != 0 {
+			t.Errorf("keyword method in the create options: %s", joinRouteContractErrs(errs))
+		}
+	})
+
 	t.Run("client module is not a route", func(t *testing.T) {
 		src := "import axios from 'axios'\n" +
 			"const env: any = (import.meta as any)?.env || {}\n" +
