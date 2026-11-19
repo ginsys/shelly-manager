@@ -309,7 +309,18 @@ Three details matter:
    and keep only the rows where the rows affected is 1. A single-row
    conditional update is atomic on all three providers. Without the owner test,
    a stale candidate list could take a task that another agent claimed and an
-   update then set back to `pending`. The number of tasks per poll is small. A
+   update then set back to `pending`. **The token check goes into the same
+   statement.** Today one mutex covers the token check and the assignment
+   (`PollTasks` takes `registry.mu` at `:235` and `authorizeAgent` runs under it).
+   With replicas, a handler-side check followed by a task-only update leaves a
+   window in which another replica replaces the token, and the old request still
+   claims tasks and receives their `config`. So the claim and the task status
+   update add `AND EXISTS (SELECT 1 FROM provisioner_agents WHERE agent_id = ?
+   AND token_hash = ?)` (skipped for a caller that holds the admin key), and a
+   token replaced a moment earlier updates zero rows. The discovered-devices
+   report inserts into a table that has no such link, so a request that passed
+   the check just before a replacement can still finish. That window is one
+   request long. The note states it as a change from today and does not close it. The number of tasks per poll is small. A
    side effect: the database can order the result by `priority` and
    `created_at`, where the map walk today is in random order.
 3. **`last_seen` is written on every poll.** One agent polling every 30 seconds
