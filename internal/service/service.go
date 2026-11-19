@@ -70,7 +70,8 @@ type ShellyService struct {
 	clientOwner map[string]uint
 	clientAddr  map[uint]string
 
-	// discover runs the network discovery. Nil means discovery.CombinedDiscovery.
+	// discover runs the network discovery. Nil means discovery.CombinedDiscoveryWith, with mDNS
+	// as discovery.enable_mdns says.
 	discover DiscoverFunc
 
 	// probe reads one address for DiscoverHost. Nil means discovery.Scanner.ScanHost.
@@ -161,7 +162,7 @@ func (s *ShellyService) DiscoverDevices(network string) ([]database.Device, erro
 	if err != nil {
 		return nil, err
 	}
-	var devices []database.Device
+	devices := []database.Device{}
 	for _, d := range found {
 		devices = append(devices, d.Device)
 	}
@@ -202,7 +203,9 @@ func (s *ShellyService) DiscoverDevicesReport(network string) ([]DiscoveredDevic
 	// Perform combined discovery (HTTP + mDNS)
 	discover := s.discover
 	if discover == nil {
-		discover = discovery.CombinedDiscovery
+		discover = func(ctx context.Context, networks []string, timeout time.Duration) ([]discovery.ShellyDevice, error) {
+			return discovery.CombinedDiscoveryWith(ctx, networks, timeout, s.Config.Discovery.EnableMDNS)
+		}
 	}
 	shellyDevices, err := discover(ctx, networks, timeout)
 	if err != nil {

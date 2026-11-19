@@ -56,11 +56,13 @@ func TestConfig() *config.Config {
 			EnableSSDP      bool     `mapstructure:"enable_ssdp"`
 			ConcurrentScans int      `mapstructure:"concurrent_scans"`
 		}{
-			Enabled:         true,
-			Networks:        []string{"192.168.1.0/24"},
+			Enabled: true,
+			// A test config scans the loopback and sends no mDNS query, so a test that
+			// reaches discovery by mistake stays on this host.
+			Networks:        []string{"127.0.0.0/30"},
 			Interval:        300,
 			Timeout:         2,
-			EnableMDNS:      true,
+			EnableMDNS:      false,
 			EnableSSDP:      true,
 			ConcurrentScans: 10,
 		},
@@ -313,10 +315,10 @@ database:
 discovery:
   enabled: true
   networks:
-    - 192.168.1.0/24
+    - 127.0.0.0/30
   interval: 300
   timeout: 2
-  enable_mdns: true
+  enable_mdns: false
   enable_ssdp: true
   concurrent_scans: 10
 `

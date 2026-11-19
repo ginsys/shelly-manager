@@ -146,8 +146,19 @@ func (m *MDNSScanner) getBestIP(entry *mdns.ServiceEntry) string {
 	return ""
 }
 
+// mdnsDiscover is the mDNS step of CombinedDiscoveryWith. A test replaces it.
+var mdnsDiscover = func(ctx context.Context, timeout time.Duration) ([]ShellyDevice, error) {
+	return NewMDNSScanner(timeout).DiscoverDevices(ctx)
+}
+
 // CombinedDiscovery performs both HTTP scanning and mDNS discovery
 func CombinedDiscovery(ctx context.Context, networks []string, timeout time.Duration) ([]ShellyDevice, error) {
+	return CombinedDiscoveryWith(ctx, networks, timeout, true)
+}
+
+// CombinedDiscoveryWith performs HTTP scanning of the networks, and mDNS discovery when mdns is
+// true. With mdns false no multicast query leaves the host.
+func CombinedDiscoveryWith(ctx context.Context, networks []string, timeout time.Duration, mdns bool) ([]ShellyDevice, error) {
 	var allDevices []ShellyDevice
 	seen := make(map[string]bool)
 
@@ -170,9 +181,12 @@ func CombinedDiscovery(ctx context.Context, networks []string, timeout time.Dura
 		}
 	}
 
+	if !mdns {
+		return allDevices, nil
+	}
+
 	// mDNS discovery
-	mdnsScanner := NewMDNSScanner(timeout)
-	mdnsDevices, err := mdnsScanner.DiscoverDevices(ctx)
+	mdnsDevices, err := mdnsDiscover(ctx, timeout)
 	if err != nil {
 		fmt.Printf("mDNS discovery error: %v\n", err)
 	} else {

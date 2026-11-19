@@ -53,7 +53,7 @@ discovery:
     - "192.168.1.0/24"
   interval: 300             # Discovery interval (seconds)
   timeout: 5                # Discovery timeout per device (seconds)
-  enable_mdns: true         # Enable mDNS discovery
+  enable_mdns: true         # Send an mDNS multicast query during discovery; false keeps discovery to the HTTP scan of the networks
   enable_ssdp: true         # Enable SSDP discovery  
   concurrent_scans: 20      # Maximum concurrent device scans
 

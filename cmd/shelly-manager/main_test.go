@@ -45,8 +45,9 @@ database:
 
 discovery:
   enabled: true
+  enable_mdns: false
   networks:
-    - 192.168.1.0/30
+    - 127.0.0.0/30
   timeout: 1
   concurrent_scans: 2
 `
@@ -90,8 +91,9 @@ discovery:
 			t.Skip("Skipping network-dependent test in short mode")
 		}
 
-		// This should complete quickly since we're using a small network range
-		output, err := runCommandWithTimeout(t, 10*time.Second, binaryPath, "--config", configPath, "discover", "192.168.1.0/30")
+		// This scans the loopback only, and the config switches mDNS off: no packet leaves the host.
+		// The scan sends GET /shelly to any listener on port 80 of 127.0.0.0/30, on this host.
+		output, err := runCommandWithTimeout(t, 10*time.Second, binaryPath, "--config", configPath, "discover", "127.0.0.0/30")
 		if err != nil {
 			t.Fatalf("Discover command failed: %v", err)
 		}
@@ -361,9 +363,10 @@ database:
 
 discovery:
   enabled: true
+  enable_mdns: false
   timeout: 1
   networks:
-    - 192.168.1.0/30
+    - 127.0.0.0/30
 `
 
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
@@ -376,7 +379,7 @@ discovery:
 			t.Skip("Skipping network-dependent test in short mode")
 		}
 
-		output, err := runCommandWithTimeout(t, 10*time.Second, binaryPath, "--config", configPath, "discover", "192.168.1.0/30")
+		output, err := runCommandWithTimeout(t, 10*time.Second, binaryPath, "--config", configPath, "discover", "127.0.0.0/30")
 		if err != nil {
 			t.Fatalf("Discover command with network failed: %v", err)
 		}

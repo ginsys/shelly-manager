@@ -638,6 +638,10 @@ func TestShellyService_EdgeCases(t *testing.T) {
 		t.Error("Should return device slice even with large timeout")
 	}
 
+	// The large timeout runs each scan to the 30 s ceiling of DiscoverDevicesReport, and the
+	// concurrent step below waits 10 s for them. Go back to the short timeout of the test config.
+	cfg.Discovery.Timeout = 1
+
 	// Test multiple simultaneous discoveries (stress test)
 	done := make(chan bool, 3)
 	for i := 0; i < 3; i++ {
