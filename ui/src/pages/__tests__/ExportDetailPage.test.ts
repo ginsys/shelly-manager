@@ -133,12 +133,13 @@ describe('ExportDetailPage', () => {
   })
 
   it('shows the message when the download fails', async () => {
-    vi.mocked(downloadExportWithName).mockRejectedValue(new Error('Request failed with status code 401'))
+    // the API layer turns the server's error envelope into the message (api/__tests__/exportDownload.test.ts)
+    vi.mocked(downloadExportWithName).mockRejectedValue(new Error('Admin authorization required'))
     const w = mountPage()
     await flushPromises()
     await w.find('[data-testid="download-btn"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="download-error"]').text()).toContain('Request failed with status code 401')
+    expect(w.find('[data-testid="download-error"]').text()).toContain('Admin authorization required')
   })
 
   it('shows the message when the result cannot be loaded', async () => {

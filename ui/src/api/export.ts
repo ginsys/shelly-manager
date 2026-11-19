@@ -1,4 +1,5 @@
 import api from './client'
+import { errorEnvelopeMessage } from './errorBody'
 import type { APIResponse, Metadata } from './types'
 
 export interface ExportHistoryItem {
@@ -283,7 +284,15 @@ export async function downloadExport(id: string): Promise<Blob> {
 }
 
 export async function downloadExportWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
-  const res = await api.get(`/export/${id}/download`, { responseType: 'blob' })
+  let res
+  try {
+    res = await api.get(`/export/${id}/download`, { responseType: 'blob' })
+  } catch (e: any) {
+    // a blob request delivers the server's error envelope as a Blob: show its message, not the status text
+    const message = await errorEnvelopeMessage(e?.response?.data)
+    if (message) throw new Error(message)
+    throw e
+  }
   const cd = (res.headers?.['content-disposition'] || res.headers?.['Content-Disposition']) as string | undefined
   let filename: string | undefined
   if (cd) {
