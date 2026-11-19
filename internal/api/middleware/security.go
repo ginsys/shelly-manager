@@ -242,17 +242,12 @@ func (rl *RateLimiter) allowPath(client *clientInfo, clientIP, path string, now 
 		}).Warn("Path rate limit exceeded")
 	}
 
-	// The counter resets once more than a window has passed since it began, so its window ends at
-	// counter.window+RateLimitWindow. Round that instant up to the second: the Reset header is whole
-	// seconds, and a client that returns at the second named must not be refused again.
-	reset := counter.window.Add(rl.config.RateLimitWindow)
-	if reset.Nanosecond() != 0 {
-		reset = reset.Truncate(time.Second).Add(time.Second)
-	}
-	wait := reset.Sub(now)
-	if wait < 0 {
-		wait = 0
-	}
+	// The counter resets only once MORE than a window has passed since it began (the check above is a
+	// strict >), so the window's last instant is counter.window+RateLimitWindow and the first instant of
+	// the next window is after it. The Reset header is whole seconds: name the first whole second after
+	// that last instant, so a client that returns at the second named is not refused again.
+	reset := counter.window.Add(rl.config.RateLimitWindow).Truncate(time.Second).Add(time.Second)
+	wait := reset.Sub(now) // positive: the counter is still inside its window, so now is before reset
 	if rest := wait % time.Second; rest != 0 {
 		wait += time.Second - rest
 	}
