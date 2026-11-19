@@ -51,10 +51,8 @@ var legacyDeliveryErrorPrefixes = []string{
 // note, so a stored URL is no longer readable through the history. It matches the exact prefix and never
 // the URL, and keeps nothing of the old text. It returns the number of rows changed, and a second run
 // changes none. NewService runs it at every start: four LIKE scans of the history table are the cost.
+// A failure, a missing table included, is returned and never taken for "nothing to do".
 func RemoveLegacyDeliveryErrors(db *gorm.DB) (int64, error) {
-	if !db.Migrator().HasTable(&NotificationHistory{}) {
-		return 0, nil
-	}
 	var changed int64
 	for _, prefix := range legacyDeliveryErrorPrefixes {
 		note := prefix + " details removed"

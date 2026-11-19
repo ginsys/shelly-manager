@@ -85,6 +85,32 @@ func TestNewService_RewritesOldRowsAndLogsTheCount(t *testing.T) {
 	assert.NotContains(t, start(), "Rewrote old delivery error texts", "a second start changes nothing")
 }
 
+// A query that fails is reported, and NewService warns and carries on: a closed database stands for a lost
+// connection, a dropped table for a database that was never migrated.
+func TestRemoveLegacyDeliveryErrors_ReportsAFailedQuery(t *testing.T) {
+	_, db, cleanup := setupSimpleTestService(t)
+	defer cleanup()
+	logFile := filepath.Join(t.TempDir(), "notification.log")
+	logger, err := logging.New(logging.Config{Level: "debug", Format: "text", Output: logFile})
+	require.NoError(t, err)
+
+	require.NoError(t, db.Migrator().DropTable(&NotificationHistory{}))
+	changed, err := RemoveLegacyDeliveryErrors(db)
+	require.Error(t, err, "a missing table is an error, not nothing to do")
+	assert.EqualValues(t, 0, changed)
+
+	require.NotPanics(t, func() { NewService(db, logger, EmailSMTPConfig{}) })
+	logged, err := os.ReadFile(logFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(logged), "Could not rewrite old delivery error texts")
+
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+	_, err = RemoveLegacyDeliveryErrors(db)
+	require.Error(t, err, "a lost connection is an error")
+}
+
 // A successful webhook send logs the channel and the status, and no part of the URL that carries the token.
 func TestSendWebhook_SuccessLogCarriesNoURL(t *testing.T) {
 	_, db, cleanup := setupSimpleTestService(t)
