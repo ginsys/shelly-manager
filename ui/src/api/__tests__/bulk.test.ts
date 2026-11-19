@@ -17,7 +17,9 @@ import {
   bulkImport,
   bulkDriftDetect,
   bulkDriftDetectEnhanced,
+  bulkDownload,
   viewOf,
+  type BulkDownloadFile,
   type BulkRequest,
   type BulkConfigResult,
   type BulkDriftResult,
@@ -305,5 +307,85 @@ describe('Bulk Operations API', () => {
       expect(view.rows[0]).toMatchObject({ status: 'drift', tone: 'warning', message: '1 difference(s)' })
       expect(view.rows[1]).toMatchObject({ status: 'error', tone: 'failure' })
     })
+  })
+})
+
+// The file the route answers: the body itself, not the {success, data} envelope. A copy of what the
+// backend writes for one readable device and one that cannot be read (bulk_download.go), with the
+// secret already masked by the route.
+const downloadFile: BulkDownloadFile = {
+  generated_at: '2026-11-20T00:20:00Z',
+  devices: [
+    {
+      device_id: 4,
+      device_name: 'Kitchen',
+      mac: 'AA:BB:CC:DD:EE:01',
+      status: 'ok',
+      config: { mqtt: { pass: '********' } }
+    },
+    {
+      device_id: 9,
+      device_name: 'Garage',
+      status: 'error',
+      error: 'no desired configuration is set for this device'
+    }
+  ]
+}
+
+const blobOf = (value: unknown) => new Blob([typeof value === 'string' ? value : JSON.stringify(value)])
+
+describe('bulkDownload', () => {
+  beforeEach(() => {
+    ;(api.post as any).mockReset()
+  })
+
+  it('posts the ids to the route as a blob request and returns the file with the name the server sent', async () => {
+    const blob = blobOf(downloadFile)
+    ;(api.post as any).mockResolvedValue({
+      data: blob,
+      headers: { 'content-disposition': 'attachment; filename="shelly-configs-20261120-002000.json"' }
+    })
+
+    const answer = await bulkDownload({ device_ids: [4, 9] })
+
+    expect(api.post).toHaveBeenCalledWith('/config/bulk-download', { device_ids: [4, 9] }, { responseType: 'blob' })
+    expect(answer.blob).toBe(blob)
+    expect(answer.filename).toBe('shelly-configs-20261120-002000.json')
+    expect(answer.file).toEqual(downloadFile)
+  })
+
+  it('shows why the route refused: the details of its envelope, delivered as a Blob', async () => {
+    ;(api.post as any).mockRejectedValue(
+      Object.assign(new Error('Request failed with status code 400'), {
+        response: {
+          status: 400,
+          data: blobOf({
+            success: false,
+            error: {
+              code: 'VALIDATION_FAILED',
+              message: 'Validation failed',
+              details: 'bulk-download takes at most 10 devices, got 12'
+            }
+          })
+        }
+      })
+    )
+
+    const err = await bulkDownload({ device_ids: [1] }).catch((e) => e)
+
+    expect(err.message).toBe('bulk-download takes at most 10 devices, got 12')
+  })
+
+  it('rethrows the original error when the body is not an error envelope', async () => {
+    const original = Object.assign(new Error('Network Error'), { response: { data: blobOf('not json') } })
+    ;(api.post as any).mockRejectedValue(original)
+
+    await expect(bulkDownload({ device_ids: [1] })).rejects.toBe(original)
+  })
+
+  it('refuses an answer that is not the file', async () => {
+    ;(api.post as any).mockResolvedValue({ data: blobOf('<html>not the file</html>'), headers: {} })
+
+    await expect(bulkDownload({ device_ids: [1] })).rejects.toThrow(/not the configuration file/)
   })
 })

@@ -85,6 +85,17 @@
             <h3>Drift Report</h3>
             <p>The same comparison, with a comprehensive report</p>
           </button>
+
+          <button
+            class="operation-card"
+            :disabled="selectedDevices.length === 0 || checking"
+            data-testid="bulk-op-download"
+            @click="operation = 'download'"
+          >
+            <span class="operation-icon">💾</span>
+            <h3>Download Configuration</h3>
+            <p>Save the desired configuration of the selected devices as one file</p>
+          </button>
         </div>
       </div>
 
@@ -166,6 +177,54 @@
         </form>
       </div>
 
+      <!-- Download Configuration Form -->
+      <div v-else-if="operation === 'download' && !savedFile">
+        <h3>Download Configuration</h3>
+        <form @submit.prevent="handleDownload">
+          <p class="form-note">
+            Saves the desired configuration of each selected device (its templates and overrides
+            merged) as one JSON file. It is read from the manager's database: no device is
+            contacted. A device that cannot be read is listed with the reason and has no
+            configuration in the file.
+          </p>
+          <p class="form-note" data-testid="bulk-download-notice">{{ maskNotice }}</p>
+
+          <div class="form-actions">
+            <button type="button" class="btn" @click="operation = null">Back</button>
+            <button
+              type="submit"
+              class="btn primary"
+              :disabled="downloading"
+              data-testid="bulk-download-submit"
+            >
+              {{ downloading ? 'Preparing the file...' : 'Download' }}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Download Configuration Summary -->
+      <div v-else-if="operation === 'download' && savedFile" data-testid="bulk-download-saved">
+        <h3>Configuration downloaded</h3>
+        <p class="form-note">
+          Saved <strong>{{ savedFile.name }}</strong>: {{ savedFile.saved }} of
+          {{ savedFile.total }} configurations.
+        </p>
+        <p class="form-note">{{ maskNotice }}</p>
+        <div v-if="savedFile.failed.length > 0" data-testid="bulk-download-failed">
+          <h4>Not in the file with a configuration</h4>
+          <ul class="download-failed">
+            <li v-for="d in savedFile.failed" :key="d.id">
+              <strong>{{ d.name }}</strong
+              >: {{ d.error }}
+            </li>
+          </ul>
+        </div>
+        <div class="form-actions">
+          <button class="btn" data-testid="bulk-download-close" @click="close">Close</button>
+        </div>
+      </div>
+
       <!-- Processing State -->
       <div v-else-if="isProcessing" class="processing">
         <h3>Processing...</h3>
@@ -228,6 +287,7 @@ import {
   bulkImport,
   bulkDriftDetect,
   bulkDriftDetectEnhanced,
+  bulkDownload,
   viewOf,
   type BulkAnswer,
   type BulkRequest
@@ -256,7 +316,7 @@ const emit = defineEmits<{
 
 const { error, setError, clearError } = useError()
 
-type Operation = 'import' | 'drift' | 'drift-enhanced'
+type Operation = 'import' | 'drift' | 'drift-enhanced' | 'download'
 
 const operation = ref<Operation | null>(null)
 const isProcessing = ref(false)
@@ -274,6 +334,8 @@ function close() {
   currentRun++
   operation.value = null
   isProcessing.value = false
+  downloading.value = false
+  savedFile.value = null
   result.value = null
   clearError()
   emit('close')
@@ -308,17 +370,68 @@ const handleImport = () => run(bulkImport, 'Bulk import')
 const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection')
 const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report')
 
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function downloadResults() {
   if (!result.value) return
 
   const data = JSON.stringify(result.value, null, 2)
-  const blob = new Blob([data], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `bulk-${operation.value ?? 'operation'}-result.json`
-  a.click()
-  URL.revokeObjectURL(url)
+  saveBlob(new Blob([data], { type: 'application/json' }), `bulk-${operation.value ?? 'operation'}-result.json`)
+}
+
+// Download configuration: the desired configuration of the picked devices as one file. The request has no
+// options (the route refuses `stop_on_error`), and no device is contacted, so the page's list is not
+// refreshed. The file holds every secret masked, so it cannot restore a device; the dialog says so and
+// never shows a configuration itself.
+const maskNotice =
+  'Every secret in the file is masked as ******** and the real values are never included, so the file cannot restore a device.'
+
+const downloading = ref(false)
+const savedFile = ref<{
+  name: string
+  saved: number
+  total: number
+  failed: { id: number; name: string; error: string }[]
+} | null>(null)
+
+async function handleDownload() {
+  if (props.selectedDevices.length === 0) return
+  clearError()
+  const mine = ++currentRun
+  try {
+    downloading.value = true
+    const { blob, filename, file } = await bulkDownload({
+      device_ids: props.selectedDevices.map((d) => d.id)
+    })
+    // Closed meanwhile: nothing is saved for a dialog the user left.
+    if (mine !== currentRun) return
+    const name = filename || 'shelly-configs.json'
+    saveBlob(blob, name)
+    savedFile.value = {
+      name,
+      saved: file.devices.filter((d) => d.status === 'ok').length,
+      total: file.devices.length,
+      failed: file.devices
+        .filter((d) => d.status !== 'ok')
+        .map((d) => ({
+          id: d.device_id,
+          name: d.device_name || `Device ${d.device_id}`,
+          error: d.error || 'the configuration could not be read'
+        }))
+    }
+  } catch (e: unknown) {
+    if (mine !== currentRun) return
+    setError(e, { action: 'Bulk download', resource: 'Devices' })
+  } finally {
+    if (mine === currentRun) downloading.value = false
+  }
 }
 </script>
 

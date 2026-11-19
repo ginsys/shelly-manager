@@ -2,7 +2,7 @@
 // envelope. A request made with responseType 'blob' (the downloads) delivers even an error body as a
 // Blob, so a Blob is read as JSON text first. Anything that is not that envelope has no code or message.
 
-function blobText(blob: Blob): Promise<string> {
+export function blobText(blob: Blob): Promise<string> {
   if (typeof blob.text === 'function') return blob.text()
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -12,7 +12,7 @@ function blobText(blob: Blob): Promise<string> {
   })
 }
 
-async function errorEnvelope(data: unknown): Promise<{ code?: unknown; message?: unknown } | undefined> {
+async function errorEnvelope(data: unknown): Promise<{ code?: unknown; message?: unknown; details?: unknown } | undefined> {
   let body = data
   if (typeof Blob !== 'undefined' && data instanceof Blob) {
     try {
@@ -21,7 +21,14 @@ async function errorEnvelope(data: unknown): Promise<{ code?: unknown; message?:
       return undefined
     }
   }
-  return (body as { error?: { code?: unknown; message?: unknown } } | null | undefined)?.error ?? undefined
+  return (body as { error?: { code?: unknown; message?: unknown; details?: unknown } } | null | undefined)?.error ?? undefined
+}
+
+// The `details` of the envelope when it is a text. A validation refusal puts its reason there, and some
+// routes send a map, which is not a text and is left out.
+export async function errorEnvelopeDetails(data: unknown): Promise<string | undefined> {
+  const details = (await errorEnvelope(data))?.details
+  return typeof details === 'string' && details !== '' ? details : undefined
 }
 
 export async function errorEnvelopeCode(data: unknown): Promise<string | undefined> {

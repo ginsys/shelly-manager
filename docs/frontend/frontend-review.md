@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 at commit 3b1374d, and a unit test keeps them equal to the code (section 1)
-**Status:** 123 of 127 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595, and a unit test keeps them equal to the code (section 1)
+**Status:** 127 of 131 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -72,13 +72,13 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 |--------|-----------|------------|--------------|
 | `admin.ts` | 1 | 1 | |
 | `adminKey.ts` | 8 | 8 | |
-| `bulk.ts` | 4 | 4 | |
+| `bulk.ts` | 5 | 5 | |
 | `configNew.ts` (per-device templates, overrides, desired config, apply, verify) | 12 | 12 | |
 | `deviceConfig.ts` | 4 | 4 | |
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 8 | 8 | |
-| `errorBody.ts` | 2 | 2 | |
-| `export.ts` | 27 | 25 | `getBackupResult`, `getRestoreResult` |
+| `errorBody.ts` | 4 | 4 | |
+| `export.ts` | 28 | 26 | `getBackupResult`, `getRestoreResult` |
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
@@ -87,7 +87,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **127** | **123** | **4** |
+| **Total** | **131** | **127** | **4** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -248,7 +248,12 @@ page imports still counts. The Playwright spec is what proves the links are rend
   dialog checks the ticked devices that are not on the loaded page with one unpaged list request
   (`page_size` 0) and drops those the server no longer lists, with one line under the selection
   count. A failed request keeps every device. Ticked devices on the loaded page are not asked about:
-  the loaded rows are the truth for them (ginsys/shelly-manager#618).
+  the loaded rows are the truth for them (ginsys/shelly-manager#618). A fourth card, Download
+  Configuration, saves the desired configuration of the picked devices as one JSON file through
+  `POST /api/v1/config/bulk-download`. It reads the database and contacts no device, every secret in the
+  file is masked, and the dialog says so and never shows a configuration itself. A device that
+  cannot be read is listed with the reason. The route refuses more than 10 devices and the dialog shows
+  its text (ginsys/shelly-manager#595).
 - **Devices list refresh:** a Refresh button and an `R` shortcut reload the list; the rows stay on
   screen (dimmed, `aria-busy`) while it runs, and only the first load shows the loading text. The
   selection is kept, and a refresh copies the new name and address into ticked devices that are on
@@ -325,7 +330,7 @@ Found by reading the code at this commit; not a plan.
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
-5. **No generated API client.** The 127 functions are written by hand. The coverage figure in section 1
+5. **No generated API client.** The 131 functions are written by hand. The coverage figure in section 1
    is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
    stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
