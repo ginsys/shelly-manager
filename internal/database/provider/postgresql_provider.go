@@ -409,7 +409,9 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	if !strings.Contains(dsn, "sslmode=") {
 		sslMode := "require" // Default to requiring SSL
 		if mode, ok := options["sslmode"]; ok {
-			sslMode = mode
+			// Escaped: the query check above ran on baseDSN only, so a value holding "&"
+			// must not add a key (password, user) next to the configured credentials.
+			sslMode = url.QueryEscape(mode)
 		}
 
 		if strings.Contains(dsn, "?") {
@@ -423,7 +425,7 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	if !strings.Contains(dsn, "connect_timeout=") {
 		timeout := "10" // 10 seconds default
 		if t, ok := options["connect_timeout"]; ok {
-			timeout = t
+			timeout = url.QueryEscape(t)
 		}
 
 		if strings.Contains(dsn, "?") {

@@ -109,6 +109,32 @@ func TestPostgreSQLCredentials_BuildDSN(t *testing.T) {
 		assert.Equal(t, "x", u.Query().Get("application_name"))
 	})
 
+	// database.options.sslmode and database.options.connect_timeout are appended to the
+	// DSN after the query check ran, so a value holding "&" must stay one value.
+	for name, tc := range map[string]struct {
+		options map[string]string
+		key     string
+		want    string
+		bad     string
+	}{
+		"sslmode":         {map[string]string{"sslmode": "require&password=x"}, "sslmode", "require&password=x", "password"},
+		"connect_timeout": {map[string]string{"connect_timeout": "5&user=x"}, "connect_timeout", "5&user=x", "user"},
+	} {
+		t.Run("an option "+name+" holding a query separator cannot add a credential key", func(t *testing.T) {
+			p := newCredentialProvider(DatabaseConfig{Username: "shelly", Password: trickyPassword})
+
+			dsn, err := p.buildDSN("postgresql://db.example/shelly", tc.options)
+
+			require.NoError(t, err)
+			u, err := url.Parse(dsn)
+			require.NoError(t, err)
+			assert.False(t, u.Query().Has(tc.bad), "the value must not become a %s key", tc.bad)
+			assert.Equal(t, tc.want, u.Query().Get(tc.key), "the value stays whole")
+			got, _ := u.User.Password()
+			assert.Equal(t, trickyPassword, got)
+		})
+	}
+
 	// pgx reads user, password, passfile and service from the query and lets them
 	// win over the userinfo, and its key parsing differs from net/url's (padding,
 	// encoding, a '#'). So only a list of literal keys passes; every other shape
