@@ -360,6 +360,72 @@ eq "check: a release PR without the label fails (exit 1)" 1 "$RC"
 check HEAD_REF_NAME=chore/release PR_NO_CHANGELOG=true
 eq "check: a release PR with the label no-changelog skips (exit 0)" 0 "$RC"
 
+# A fragment the PR edits is validated like one it adds (ginsys/shelly-manager#608):
+# changelog-assemble.sh reads every fragment at release time, so an edit that
+# breaks one fails the release even when the PR also adds a valid fragment.
+# basefrag <file> <section> <bullet>: a fragment that already exists on origin/main.
+basefrag() {
+	frag "$@"
+	commit_all basefrag
+	(cd "$FX" && fxgit update-ref refs/remotes/origin/main main)
+}
+
+newfx check-modified-invalid
+basefrag 10-a.md Fixed '- Fix a. Fixes owner/repo#10.'
+prbranch fix/10-b
+frag 10-a.md Fix '- Fix a. Fixes owner/repo#10.'
+frag 10-b.md Fixed '- Fix b. Fixes owner/repo#10.'
+commit_all c
+check HEAD_REF_NAME=fix/10-b
+eq "check: an edit that breaks a fragment fails even with a valid one added (exit 1)" 1 "$RC"
+has "check: FAIL names the modified fragment" "10-a.md" "$OUT"
+
+newfx check-modified-valid
+basefrag 11-a.md Fixed '- Fix a. Fixes owner/repo#11.'
+prbranch fix/11-b
+frag 11-a.md Fixed '- Fix a, reworded. Fixes owner/repo#11.'
+frag 11-b.md Fixed '- Fix b. Fixes owner/repo#11.'
+commit_all c
+check HEAD_REF_NAME=fix/11-b
+eq "check: an edit that keeps the fragment valid passes (exit 0)" 0 "$RC"
+has "check: PASS counts the added fragment" "PASS 1 fragment(s) added, 1 modified" "$OUT"
+
+newfx check-modified-only
+basefrag 12-a.md Fixed '- Fix a. Fixes owner/repo#12.'
+prbranch fix/12-b
+frag 12-a.md Fixed '- Fix a, reworded. Fixes owner/repo#12.'
+commit_all c
+check HEAD_REF_NAME=fix/12-b
+eq "check: editing a fragment is not adding one (exit 1)" 1 "$RC"
+has "check: FAIL says no fragment added" "no fragment added" "$OUT"
+
+newfx check-deleted-bad
+basefrag 13-a.md Feature '- Bad section already on main.'
+prbranch fix/13-b
+(cd "$FX" && fxgit rm -q changelog.d/13-a.md)
+frag 13-b.md Fixed '- Fix b. Fixes owner/repo#13.'
+commit_all c
+check HEAD_REF_NAME=fix/13-b
+eq "check: a deleted fragment is not validated (exit 0)" 0 "$RC"
+
+newfx check-label-modified-invalid
+basefrag 14-a.md Fixed '- Fix a. Fixes owner/repo#14.'
+prbranch ci/14-b
+frag 14-a.md Fix '- Fix a. Fixes owner/repo#14.'
+commit_all c
+check HEAD_REF_NAME=ci/14-b PR_NO_CHANGELOG=true
+eq "check: the label no-changelog does not excuse an edit that breaks a fragment (exit 1)" 1 "$RC"
+has "check: FAIL names the modified fragment under the label" "14-a.md" "$OUT"
+
+newfx check-label-modified-valid
+basefrag 15-a.md Fixed '- Fix a. Fixes owner/repo#15.'
+prbranch ci/15-b
+frag 15-a.md Fixed '- Fix a, reworded. Fixes owner/repo#15.'
+commit_all c
+check HEAD_REF_NAME=ci/15-b PR_NO_CHANGELOG=true
+eq "check: the label with a valid edit still skips (exit 0)" 0 "$RC"
+has "check: SKIP line under the label" "SKIP label no-changelog" "$OUT"
+
 # ------------------------------------------------- the acceptance: two PRs
 
 newfx merge-either-order
