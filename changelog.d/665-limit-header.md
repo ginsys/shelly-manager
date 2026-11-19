@@ -1,0 +1,2 @@
+Fixed
+- A request refused by a path rate limit now reports that limit (ginsys/shelly-manager#665). The `429` showed the default limit in `X-RateLimit-Limit` and a reset one window from now whichever limit refused the request. It now shows the limit of the rule that refused, and `X-RateLimit-Reset` and `meta.retry_after` name the end of that rule's window for the client, as the same whole second. A refusal by the default limit and a request that passes are unchanged.
