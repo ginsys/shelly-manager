@@ -106,7 +106,8 @@ async function handleCancel() {
   const id = taskId.value
   try {
     await store.cancelProvisioningTask(id)
-    await store.fetchTask(id)
+    // The refresh follows the route, not the task cancelled: the page may show another task by now.
+    if (taskId.value) await store.fetchTask(taskId.value)
   } catch (e) {
     setActionError(e, { action: 'Cancel task', resource: 'Provisioning task', resourceId: id })
   }

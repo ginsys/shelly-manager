@@ -3,10 +3,14 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import { h } from 'vue'
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { id: 't-1' } }),
-}))
+const route = vi.hoisted(() => ({ params: { id: 't-1' } as { id: string } }))
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  const reactiveRoute = reactive(route)
+  return { useRoute: () => reactiveRoute }
+})
 
+import { useRoute } from 'vue-router'
 import ProvisioningAgentsPage from '../ProvisioningAgentsPage.vue'
 import ProvisioningTasksPage from '../ProvisioningTasksPage.vue'
 import ProvisioningTaskDetailPage from '../ProvisioningTaskDetailPage.vue'
@@ -78,6 +82,24 @@ describe('provisioning pages: a failed action', () => {
     expect(wrapper.find('[data-testid="task-action-error"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('plug-1')
     expect(store.tasksError).toBe('')
+  })
+
+  it('ProvisioningTaskDetailPage: a cancel that succeeds after the route moved refreshes the task now shown', async () => {
+    const liveRoute = useRoute() as unknown as { params: { id: string } }
+    liveRoute.params.id = 't-1'
+    const { wrapper, store } = mountWith(ProvisioningTaskDetailPage, {
+      currentTask: task, tasksLoading: false, tasksError: '',
+    })
+    let finish: () => void = () => {}
+    vi.mocked(store.cancelProvisioningTask).mockImplementation(() => new Promise<void>((res) => { finish = res }))
+    await flushPromises()
+    vi.mocked(store.fetchTask).mockClear()
+    await wrapper.find('.danger-button').trigger('click')
+    liveRoute.params.id = 't-2'
+    finish()
+    await flushPromises()
+    expect(vi.mocked(store.fetchTask).mock.calls.map((c) => c[0])).toEqual(['t-2'])
+    liveRoute.params.id = 't-1'
   })
 
   it('ProvisioningTaskDetailPage: cancel failure shows once, keeps the details, raises no alert', async () => {
