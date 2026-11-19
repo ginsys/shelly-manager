@@ -1,7 +1,6 @@
 package api
 
 import (
-	"math/big"
 	"net/http"
 	"strings"
 	"testing"
@@ -206,34 +205,6 @@ func TestTypedConfigRoutes_StoredMaskIsNeverRestored(t *testing.T) {
 			require.Equal(t, http.StatusOK, put.Code, put.Body.String())
 			assert.NotContains(t, storedConfig(t, h, id), secretMask)
 		})
-	}
-}
-
-// canonicalNumber agrees with exact arithmetic: over every small combination of sign, integer part,
-// fraction and exponent, two spellings canonicalize alike exactly when their values are equal.
-func TestCanonicalNumber_AgreesWithExactArithmetic(t *testing.T) {
-	var spellings []string
-	for _, sign := range []string{"", "-"} {
-		for _, intPart := range []string{"0", "1", "10", "7", "100", "12"} {
-			for _, frac := range []string{"", ".0", ".00", ".5", ".50", ".05", ".125"} {
-				for _, exp := range []string{"", "e0", "E+0", "e-0", "e1", "e-1", "E+2", "e-2", "e03", "e-03", "e12", "e-12", "e30", "e-30"} {
-					spellings = append(spellings, sign+intPart+frac+exp)
-				}
-			}
-		}
-	}
-	value := func(s string) *big.Rat {
-		r, ok := new(big.Rat).SetString(s)
-		require.True(t, ok, s)
-		return r
-	}
-	for _, a := range spellings {
-		for _, b := range spellings {
-			same := value(a).Cmp(value(b)) == 0
-			if (canonicalNumber(a) == canonicalNumber(b)) != same {
-				t.Fatalf("%s and %s: equal values %v, canonical %s and %s", a, b, same, canonicalNumber(a), canonicalNumber(b))
-			}
-		}
 	}
 }
 

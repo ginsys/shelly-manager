@@ -19,6 +19,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/metrics"
 	"github.com/ginsys/shelly-manager/internal/notification"
+	"github.com/ginsys/shelly-manager/internal/redact"
 	"github.com/ginsys/shelly-manager/internal/security/apikey"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/shelly"
@@ -1183,7 +1184,7 @@ func (h *Handler) UpdateDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	// and the mask is never stored. A missing stored config is left to the service to report.
 	if stored, getErr := h.Service.GetDeviceConfig(uint(id)); getErr == nil {
 		old, _ := decodeDocument(string(stored.Config))
-		if restoreErr := restoreValue(configUpdate, old); restoreErr != nil {
+		if restoreErr := redact.RestoreTree(configUpdate, old, nil); restoreErr != nil {
 			h.responseWriter().WriteValidationError(w, r, restoreErr.Error())
 			return
 		}
