@@ -54,8 +54,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useProvisioningStore } from '@/stores/provisioning'
+import { useLateFailure } from '@/composables/useNotice'
 
 const store = useProvisioningStore()
+const reportLate = useLateFailure()
 const showForm = ref(false)
 const deviceIdsInput = ref('')
 const configInput = ref('{\n  \n}')
@@ -103,6 +105,9 @@ async function handleSubmit() {
 
   } catch (e) {
     error.value = (e as Error).message
+    // The store keeps no action failure (ginsys/shelly-manager#701): a form closed with Cancel while the
+    // request ran, or a page that was left, says it in the app notice.
+    reportLate(e, { action: 'Create bulk tasks', resource: 'Provisioning task' }, !showForm.value)
   } finally {
     isSubmitting.value = false
   }

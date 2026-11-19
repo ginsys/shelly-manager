@@ -476,6 +476,51 @@ describe('TemplatesPage template form', () => {
     expect(wrapper.find('.modal').exists()).toBe(true)
   })
 
+  // ginsys/shelly-manager#701: the store no longer shows a failed save, so a dialog closed while the save
+  // runs must not lose its failure.
+  it.each([
+    ['an update', 'update'],
+    ['a create', 'create'],
+  ])('%s that fails after the dialog closed shows in the page panel', async (_name, kind) => {
+    vi.mocked(listTemplates).mockResolvedValue([plainTemplate(1, 'A')] as any)
+    const pending = deferred<any>()
+    if (kind === 'update') vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
+    else vi.mocked(createTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    if (kind === 'update') await clickEdit(wrapper, 0)
+    else {
+      await openCreate(wrapper)
+      await wrapper.find('.modal .form-input[type="text"]').setValue('first')
+    }
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await cancelDialog(wrapper)
+    pending.reject(new Error('server down'))
+    await flushPromises()
+
+    const panel = wrapper.find('[data-testid="template-action-error"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('server down')
+    expect(panel.text()).toContain('Save template')
+  })
+
+  it('a refresh that fails after a save was closed is shown once, as the list error', async () => {
+    vi.mocked(listTemplates).mockResolvedValueOnce([plainTemplate(1, 'A')] as any)
+      .mockRejectedValueOnce(new Error('list down'))
+    const pending = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValueOnce(pending.promise)
+    const wrapper = mountPage()
+    await flushPromises()
+    await clickEdit(wrapper, 0)
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await cancelDialog(wrapper)
+    pending.resolve({ template: plainTemplate(1, 'A') })
+    await flushPromises()
+
+    expect(wrapper.text().split('list down').length - 1).toBe(1)
+    expect(wrapper.find('[data-testid="template-action-error"]').exists()).toBe(false)
+  })
+
   it('a second Save click while a save is pending sends nothing', async () => {
     const pending = deferred<any>()
     vi.mocked(createTemplate).mockReturnValueOnce(pending.promise)

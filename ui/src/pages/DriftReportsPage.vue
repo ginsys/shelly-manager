@@ -14,6 +14,13 @@
       </div>
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="drift-action-error"
+      @dismiss="clearActionError"
+    />
+
     <div v-if="store.loading" class="loading">Loading drift items...</div>
     <div v-else-if="store.error" class="error">{{ store.error }}</div>
 
@@ -146,13 +153,19 @@
 import { ref, onMounted, computed } from 'vue'
 import { useDriftStore } from '@/stores/drift'
 import type { DriftTrend } from '@/api/drift'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { useLateFailure, usePageError } from '@/composables/useNotice'
 
 const store = useDriftStore()
 const reportLate = useLateFailure()
 
 const resolvedFilter = ref('')
 const resolvingItem = ref<DriftTrend | null>(null)
+// The failure of a resolve whose dialog was closed before the answer came. A dialog that is open covers the
+// panel, so the failure goes to the app notice then.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError(
+  () => resolvingItem.value !== null
+)
 // The failure of this dialog's own submission. The store keeps no action failure (ginsys/shelly-manager#701).
 const resolveError = ref('')
 
@@ -184,9 +197,15 @@ async function handleResolve() {
     await store.resolveTrend(id)
     closeResolveDialog()
   } catch (e) {
+    const context = { action: 'Resolve drift item', resource: 'Drift item', resourceId: String(id) }
+    if (resolvingItem.value?.id !== id) {
+      // The dialog it was sent from was closed: the page panel says it (the notice, if another dialog covers it).
+      setActionError(e, context)
+      return
+    }
     // The dialog stays open and shows the failure. After the user left the page, the app notice does.
     resolveError.value = (e as Error)?.message || 'Failed to resolve drift item'
-    reportLate(e, { action: 'Resolve drift item', resource: 'Drift item', resourceId: String(id) })
+    reportLate(e, context)
   }
 }
 

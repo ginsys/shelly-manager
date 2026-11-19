@@ -136,13 +136,13 @@ async function handleCreate() {
     newChannel.value = { name: '', type: 'email', enabled: true, config: {} }
   } catch (e) {
     const context = { action: 'Create channel', resource: 'Notification channel' }
-    if (session === formSession) {
+    if (session === formSession && showCreateForm.value) {
       // The form stays open and shows the failure. After the user left the page, the app notice does.
       createError.value = (e as Error)?.message || 'Failed to create channel'
       reportLate(e, context)
     } else {
-      // The form it was sent from is gone; a newer form that is open hides the table.
-      reportLate(e, context, showCreateForm.value)
+      // The form it was sent from is gone, so the page panel says it (the notice, if a newer form covers it).
+      setActionError(e, context)
     }
   }
 }
