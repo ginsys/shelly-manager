@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -147,7 +148,7 @@ func TestRateLimiterLongestMatchingRuleWins(t *testing.T) {
 	}
 }
 
-func TestRateLimitMiddlewareAnswersAPathRefusalLikeAGlobalOne(t *testing.T) {
+func TestRateLimitMiddlewareAnswersAPathRefusalWithTheRulesLimit(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	cfg.RateLimit = 100
 	cfg.RateLimitByPath = map[string]int{"/api/v1/config/bulk": 1}
@@ -165,7 +166,7 @@ func TestRateLimitMiddlewareAnswersAPathRefusalLikeAGlobalOne(t *testing.T) {
 	require.Equal(t, http.StatusOK, serve(bulkPath).Code)
 	rr := serve(bulkPath)
 	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
-	assert.Equal(t, "100", rr.Header().Get("X-RateLimit-Limit"), "the headers keep the global limit")
+	assert.Equal(t, "1", rr.Header().Get("X-RateLimit-Limit"), "the header shows the limit of the rule that refused")
 	assert.Equal(t, "0", rr.Header().Get("X-RateLimit-Remaining"))
 	assert.NotEmpty(t, rr.Header().Get("X-RateLimit-Reset"))
 	var body map[string]any
@@ -174,6 +175,94 @@ func TestRateLimitMiddlewareAnswersAPathRefusalLikeAGlobalOne(t *testing.T) {
 	assert.Equal(t, "RATE_LIMIT_EXCEEDED", body["error"].(map[string]any)["code"])
 
 	assert.Equal(t, http.StatusOK, serve(devicesPath).Code, "other routes are not blocked")
+}
+
+// A refusal tells the client which limit refused it and when to come back (ginsys/shelly-manager#665).
+
+type limitReply struct {
+	code       int
+	limit      string
+	remaining  string
+	reset      int64
+	retryAfter float64
+	rawHeaders http.Header
+}
+
+// limitServer serves GETs from one client IP through RateLimitMiddleware and reads each reply.
+func limitServer(t *testing.T, cfg *SecurityConfig, ip string) func(path string) limitReply {
+	t.Helper()
+	handler := RateLimitMiddleware(cfg, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	return func(path string) limitReply {
+		req := httptest.NewRequest("GET", path, nil)
+		req.RemoteAddr = ip + ":12345"
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		reply := limitReply{code: rr.Code, limit: rr.Header().Get("X-RateLimit-Limit"), remaining: rr.Header().Get("X-RateLimit-Remaining"), rawHeaders: rr.Header()}
+		if rr.Code == http.StatusTooManyRequests {
+			reset, err := strconv.ParseInt(rr.Header().Get("X-RateLimit-Reset"), 10, 64)
+			require.NoError(t, err)
+			reply.reset = reset
+			var body struct {
+				Meta struct {
+					RetryAfter float64 `json:"retry_after"`
+				} `json:"meta"`
+			}
+			require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
+			reply.retryAfter = body.Meta.RetryAfter
+		}
+		return reply
+	}
+}
+
+func TestRateLimitMiddlewarePathRefusalShowsTheRuleNotTheDefault(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	cfg.RateLimit = 100
+	cfg.RateLimitByPath = map[string]int{"/api/v1/config/bulk": 1}
+	serve := limitServer(t, cfg, "10.65.0.1")
+
+	before := time.Now()
+	first := serve(bulkPath)
+	after := time.Now()
+	require.Equal(t, http.StatusOK, first.code)
+	for _, h := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"} {
+		assert.Empty(t, first.rawHeaders.Get(h), "a request that passes carries no %s", h)
+	}
+
+	refused := serve(bulkPath)
+	now := time.Now()
+	require.Equal(t, http.StatusTooManyRequests, refused.code)
+	assert.Equal(t, "1", refused.limit, "the limit of the rule that refused, not the global 100")
+	assert.Equal(t, "0", refused.remaining)
+	// The rule's window began with the first bulk call and ends one window later, to the second above.
+	assert.GreaterOrEqual(t, refused.reset, before.Add(cfg.RateLimitWindow).Unix())
+	assert.LessOrEqual(t, refused.reset, after.Add(cfg.RateLimitWindow).Unix()+1)
+	assert.InDelta(t, float64(refused.reset-now.Unix()), refused.retryAfter, 2, "retry_after names the same moment as the reset header")
+}
+
+// A refusal by the default limit keeps its headers and body as they were: the global limit, remaining 0,
+// the reset one window from now, and retry_after the whole window. The second case is the 15-minute
+// block that follows the first refusal.
+func TestRateLimitMiddlewareGlobalRefusalKeepsTheDefaultLimit(t *testing.T) {
+	cfg := DefaultSecurityConfig()
+	cfg.RateLimit = 2
+	cfg.RateLimitByPath = nil
+	serve := limitServer(t, cfg, "10.65.0.4")
+	require.Equal(t, http.StatusOK, serve(devicesPath).code)
+	require.Equal(t, http.StatusOK, serve(devicesPath).code)
+
+	for _, name := range []string{"the request over the limit", "a request during the block"} {
+		before := time.Now()
+		refused := serve(devicesPath)
+		after := time.Now()
+		require.Equal(t, http.StatusTooManyRequests, refused.code, name)
+		assert.Equal(t, "2", refused.limit, name)
+		assert.Equal(t, "0", refused.remaining, name)
+		assert.GreaterOrEqual(t, refused.reset, before.Add(cfg.RateLimitWindow).Unix(), name)
+		assert.LessOrEqual(t, refused.reset, after.Add(cfg.RateLimitWindow).Unix(), name)
+		assert.Equal(t, cfg.RateLimitWindow.Seconds(), refused.retryAfter, name)
+	}
 }
 
 func TestRateLimiterMatchRule(t *testing.T) {

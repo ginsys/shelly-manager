@@ -133,8 +133,23 @@ func NewRateLimiter(config *SecurityConfig, logger *logging.Logger) *RateLimiter
 	return rl
 }
 
+// rateRefusal says which limit refused a request and when to come back: the limit that refused, the
+// end of that limit's window for the client (a whole second, rounded up, so a client that returns at
+// that second is not refused again) and the wait until then in whole seconds.
+type rateRefusal struct {
+	limit      int
+	reset      time.Time
+	retryAfter time.Duration
+}
+
 // Allow checks if a request should be allowed based on rate limiting
 func (rl *RateLimiter) Allow(clientIP, path string) bool {
+	return rl.check(clientIP, path) == nil
+}
+
+// check applies the rate limits to a request: nil when it is allowed, else the refusal. A refusal by the
+// global limit reports the global limit and a reset one window from now, as the middleware always did.
+func (rl *RateLimiter) check(clientIP, path string) *rateRefusal {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 
@@ -148,7 +163,7 @@ func (rl *RateLimiter) Allow(clientIP, path string) bool {
 
 	// Check if client is currently blocked
 	if client.blocked && now.Sub(client.blockTime) < time.Minute*15 {
-		return false
+		return rl.globalRefusal(now)
 	}
 
 	// Reset window if expired
@@ -175,19 +190,28 @@ func (rl *RateLimiter) Allow(clientIP, path string) bool {
 			}).Warn("Rate limit exceeded")
 		}
 
-		return false
+		return rl.globalRefusal(now)
 	}
 
 	return rl.allowPath(client, clientIP, path, now)
 }
 
-// allowPath applies the path rule that matches path, if any. The rule has its own counter and window
-// per client. Going over it refuses this rule's paths until its window resets, and blocks nothing
-// else. The request has already been counted by the global limit.
-func (rl *RateLimiter) allowPath(client *clientInfo, clientIP, path string, now time.Time) bool {
+// globalRefusal is the refusal by the global limit.
+func (rl *RateLimiter) globalRefusal(now time.Time) *rateRefusal {
+	return &rateRefusal{
+		limit:      rl.config.RateLimit,
+		reset:      now.Add(rl.config.RateLimitWindow),
+		retryAfter: rl.config.RateLimitWindow,
+	}
+}
+
+// allowPath applies the path rule that matches path, if any: nil when the request is allowed. The rule
+// has its own counter and window per client. Going over it refuses this rule's paths until its window
+// resets, and blocks nothing else. The request has already been counted by the global limit.
+func (rl *RateLimiter) allowPath(client *clientInfo, clientIP, path string, now time.Time) *rateRefusal {
 	limit, key, ok := rl.matchRule(path)
 	if !ok {
-		return true
+		return nil
 	}
 
 	if client.paths == nil {
@@ -201,7 +225,7 @@ func (rl *RateLimiter) allowPath(client *clientInfo, clientIP, path string, now 
 
 	counter.requests++
 	if counter.requests <= limit {
-		return true
+		return nil
 	}
 
 	if rl.logger != nil && rl.config.LogSecurityEvents {
@@ -215,7 +239,22 @@ func (rl *RateLimiter) allowPath(client *clientInfo, clientIP, path string, now 
 			"security_event": "rate_limit_exceeded",
 		}).Warn("Path rate limit exceeded")
 	}
-	return false
+
+	// The counter resets once more than a window has passed since it began, so its window ends at
+	// counter.window+RateLimitWindow. Round that instant up to the second: the Reset header is whole
+	// seconds, and a client that returns at the second named must not be refused again.
+	reset := counter.window.Add(rl.config.RateLimitWindow)
+	if reset.Nanosecond() != 0 {
+		reset = reset.Truncate(time.Second).Add(time.Second)
+	}
+	wait := reset.Sub(now)
+	if wait < 0 {
+		wait = 0
+	}
+	if rest := wait % time.Second; rest != 0 {
+		wait += time.Second - rest
+	}
+	return &rateRefusal{limit: limit, reset: reset, retryAfter: wait}
 }
 
 // matchRule finds the RateLimitByPath rule for path. A rule matches when the path starts with its
@@ -365,7 +404,7 @@ func RateLimitMiddleware(config *SecurityConfig, logger *logging.Logger) func(ht
 			clientIP := getClientIP(r)
 
 			// Check rate limit
-			if !rateLimiter.Allow(clientIP, r.URL.Path) {
+			if refusal := rateLimiter.check(clientIP, r.URL.Path); refusal != nil {
 				if logger != nil && config.LogSecurityEvents {
 					logger.WithFields(map[string]any{
 						"client_ip":      clientIP,
@@ -378,9 +417,10 @@ func RateLimitMiddleware(config *SecurityConfig, logger *logging.Logger) func(ht
 				}
 
 				// Return rate limit exceeded response
-				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", config.RateLimit))
+				// The limit that refused the request, not always the global one.
+				w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", refusal.limit))
 				w.Header().Set("X-RateLimit-Remaining", "0")
-				w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", time.Now().Add(config.RateLimitWindow).Unix()))
+				w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", refusal.reset.Unix()))
 
 				// Write standardized error response with timestamp
 				response := map[string]interface{}{
@@ -390,7 +430,7 @@ func RateLimitMiddleware(config *SecurityConfig, logger *logging.Logger) func(ht
 						"message": "Too many requests. Please try again later.",
 					},
 					"meta": map[string]interface{}{
-						"retry_after": config.RateLimitWindow.Seconds(),
+						"retry_after": refusal.retryAfter.Seconds(),
 					},
 					"timestamp": time.Now().UTC(),
 				}
