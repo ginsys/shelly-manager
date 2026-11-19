@@ -458,7 +458,7 @@ Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/pr
 
 | Method | Endpoint | Description | Input |
 |--------|----------|-------------|-------|
-| POST | `/api/v1/admin/rotate-admin-key` | Rotate API key | `{new_key}` |
+| POST | `/api/v1/admin/rotate-admin-key` | Rotate API key (`400` for a blank key or one that starts or ends with whitespace) | `{new_key}` |
 
 ---
 
