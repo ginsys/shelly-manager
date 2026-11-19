@@ -153,7 +153,8 @@ without the key gets 401 from the device list.
 
 ### Testing with curl
 ```bash
-# Without auth (only when no admin key is configured, and for /api/v1/version)
+# Without auth (only when no admin key is configured, and for /api/v1/version
+# and /api/v1/metrics/prometheus)
 curl http://localhost:8080/api/v1/version
 
 # With auth (every other /api/v1 route when an admin key is configured;
