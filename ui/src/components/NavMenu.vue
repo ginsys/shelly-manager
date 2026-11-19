@@ -4,6 +4,7 @@
     class="nav-dropdown"
     :class="{ open: isOpen }"
     @focusout="onFocusOut"
+    @keydown="openedByHover = false"
     @pointerdown="pressInside = true"
     @pointerup="pressInside = false"
     @pointercancel="pressInside = false"
@@ -100,6 +101,7 @@ function onTriggerClick() {
 // Leaving with the pointer keeps the menu open while keyboard focus is still inside it.
 function onPointerLeave(event: PointerEvent) {
   if (event.pointerType !== 'mouse') return
+  openedByHover.value = false
   if (root.value?.contains(document.activeElement)) return
   close()
 }
