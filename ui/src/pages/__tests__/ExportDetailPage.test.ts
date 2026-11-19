@@ -52,7 +52,7 @@ describe('ExportDetailPage', () => {
   it('shows what the server returned', async () => {
     const w = mountPage()
     await flushPromises()
-    expect(w.find('[data-testid="result-status"]').text()).toContain('Succeeded')
+    expect(w.find('[data-testid="result-status"]').text()).toBe('Status: Succeeded')
     expect(w.find('[data-testid="result-duration"]').text()).toContain('1.5 s')
     expect(w.find('[data-testid="result-created"]').text()).toContain(new Date(result.created_at).toLocaleString())
     const text = w.text()

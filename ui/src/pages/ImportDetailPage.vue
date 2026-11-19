@@ -12,8 +12,7 @@
         <div class="card"><strong>Plugin:</strong> {{ data.plugin_name }}</div>
         <div class="card"><strong>Format:</strong> {{ data.format }}</div>
         <div class="card" data-testid="result-status">
-          <strong>Status:</strong>
-          <span :class="data.success ? 'ok' : 'err'">{{ data.success ? 'Succeeded' : 'Failed' }}</span>
+          <strong>Status:</strong> <span :class="data.success ? 'ok' : 'err'">{{ data.success ? 'Succeeded' : 'Failed' }}</span>
         </div>
         <div class="card" data-testid="result-created"><strong>Created:</strong> {{ createdText }}</div>
         <div class="card" data-testid="result-duration"><strong>Duration:</strong> {{ formatDuration(data.duration) }}</div>
