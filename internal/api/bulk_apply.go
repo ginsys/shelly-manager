@@ -38,7 +38,7 @@ const maxBulkApplyDevices = 10
 // that every other protected route is given (ginsys/shelly-manager#725). The deadline is the route's
 // share of the request middleware, found by its name (routeDeadline). The budget is the part of it
 // the run may use: no device is started once it is spent, so the answer is written before the
-// deadline. A device that ignores its context can still run past it, and the 408 then means that the
+// deadline. A device that ignores its context, or a step before the first write that stalls, can still run past it, and the 408 then means that the
 // outcome is unknown. Both are proposals, not measurements, like the cap. Variables so a test can
 // shorten them.
 var (

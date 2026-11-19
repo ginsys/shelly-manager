@@ -2495,9 +2495,10 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '408':
           description: >-
-            The run passed the request deadline (REQUEST_TIMEOUT), which happens only when a device
-            ignores its context past the run budget. The outcome is unknown: devices may have been
-            written, so this never means that nothing was written.
+            The request passed its deadline (REQUEST_TIMEOUT), for example when a device ignores its
+            context past the run budget or a step before the first write stalls. The outcome is
+            unknown: devices may have been written, so this does not tell you that nothing was
+            written.
           content:
             application/json:
               schema:
