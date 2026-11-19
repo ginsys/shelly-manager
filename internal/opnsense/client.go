@@ -77,6 +77,10 @@ func NewClient(config ClientConfig, logger *logging.Logger) (*Client, error) {
 	transport := &http.Transport{DialContext: netguard.DialContext}
 	if config.UseHTTPS && config.InsecureSkipVerify {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	} else {
+		// A zero transport negotiates HTTP/2 by itself. A custom DialContext turns that off,
+		// so ask for it again to keep the wire behaviour as it was.
+		transport.ForceAttemptHTTP2 = true
 	}
 
 	httpClient := &http.Client{
