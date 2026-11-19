@@ -124,3 +124,22 @@ func TestProvisionerRegistry_RefusesValuesTheColumnsCannotHold(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, code, "a status over the limit: %s", body)
 	assert.Equal(t, "pending", idTaskStatus(t, db, taskID), "the refused status was not stored")
 }
+
+// A caller who is refused gets its 401 or 403, never the 400 for a long status.
+func TestProvisionerRegistry_LongStatusDoesNotReplaceAnIdentityRefusal(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	t.Cleanup(cleanup)
+	srv := httptest.NewServer(configRoutesRouterOn(t, db, idAdminKey, idAgentKey))
+	defer srv.Close()
+
+	idMustRegister(t, srv, "agent-a")
+	other := idMustRegister(t, srv, "agent-b")
+	taskID := idTask(t, srv, "agent-a")
+	path := "/api/v1/provisioner/tasks/" + taskID + "/status"
+	body := `{"status":"` + strings.Repeat("a", 192) + `"}`
+
+	code, got := idCall(t, srv, "PUT", path, body, idAgentHdr(""))
+	assert.Equal(t, http.StatusUnauthorized, code, "no agent token: %s", got)
+	code, got = idCall(t, srv, "PUT", path, body, idAgentHdr(other))
+	assert.Equal(t, http.StatusForbidden, code, "another agent's token: %s", got)
+}

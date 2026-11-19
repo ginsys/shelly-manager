@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -21,7 +22,13 @@ var (
 	ErrTaskNotFound    = errors.New("task not found")
 	ErrAgentIDRequired = errors.New("agent id required")
 	ErrNoDevices       = errors.New("at least one device is required")
+	// ErrStatusTooLong is a status longer than the status column holds. It is returned after the caller is
+	// authorized, so a refused caller never learns it from this answer.
+	ErrStatusTooLong = errors.New("task status is too long")
 )
+
+// MaxProvisionerValueLen is the longest id, type or status, in characters, that the registry columns hold.
+const MaxProvisionerValueLen = 191
 
 // ProvisionerActor is who calls: the admin key (Privileged), or the holder of an agent token. TokenHash
 // is HashAgentToken of the presented token, and is empty when none was presented.
@@ -232,6 +239,9 @@ func (s *ProvisionerStore) UpdateTaskStatus(ctx context.Context, actor Provision
 			return found.Error
 		case !actor.Privileged && task.AgentID != agentID:
 			return ErrForbidden
+		}
+		if utf8.RuneCountInString(status) > MaxProvisionerValueLen {
+			return ErrStatusTooLong
 		}
 		if err := tx.Model(&ProvisioningTask{}).Where("id = ?", task.ID).
 			Updates(map[string]interface{}{"status": status, "updated_at": now}).Error; err != nil {

@@ -27,7 +27,7 @@ const agentOfflineAfter = 5 * time.Minute
 
 // maxProvisionerValueLen is the longest agent id, task type, task status or task agent id the registry stores,
 // in characters: the indexed columns that hold them are 191 characters wide.
-const maxProvisionerValueLen = 191
+const maxProvisionerValueLen = database.MaxProvisionerValueLen
 
 const agentTokenHeader = "X-Agent-Token"
 
@@ -70,7 +70,8 @@ func (h *Handler) tooLongForRegistry(w http.ResponseWriter, r *http.Request, nam
 }
 
 // writeProvisionerError maps a store error to its response. A refused agent is a 401, which tells a real
-// agent to register again, or a 403 when the token belongs to another agent. Anything else is a 500.
+// agent to register again, or a 403 when the token belongs to another agent. An id in use is a 409, an
+// unknown agent or task a 404, a status over the column length a 400, and any other error a 500.
 func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, database.ErrUnauthorized):
@@ -83,6 +84,8 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 		h.responseWriter().WriteNotFoundError(w, r, "Agent")
 	case errors.Is(err, database.ErrTaskNotFound):
 		h.responseWriter().WriteNotFoundError(w, r, "Task")
+	case errors.Is(err, database.ErrStatusTooLong):
+		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Task status must be at most %d characters", maxProvisionerValueLen))
 	default:
 		h.responseWriter().WriteInternalError(w, r, err)
 	}
@@ -237,10 +240,9 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
 		return
 	}
-	if h.tooLongForRegistry(w, r, "Task status", req.Status) {
-		return
-	}
 
+	// The status length is checked by the store after it authorizes the caller, so a refused caller gets
+	// its 401 or 403 and never the 400.
 	// An agent may update only a task assigned to it. An unassigned or unknown task is nobody's, so an agent
 	// gets the same 403 for both and learns nothing about which task ids exist.
 	task, err := h.provisionerStore().UpdateTaskStatus(r.Context(), h.provisionerActor(r), taskID, req.Status, time.Now())
