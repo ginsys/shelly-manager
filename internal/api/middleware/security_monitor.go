@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -36,9 +37,10 @@ type AttackInfo struct {
 	Blocked             bool
 	BlockedUntil        time.Time
 
-	// mu guards the tracking and blocking fields against concurrent requests of one IP. It is taken
-	// by TrackRequest, TrackRateLimitViolation and IsIPBlocked; GetMetrics and the cleanup read
-	// without it.
+	// mu guards every field above and below against concurrent use of one IP's entry. Every reader and
+	// writer takes it: TrackRequest, TrackRateLimitViolation, IsIPBlocked, GetMetrics and the cleanup.
+	// Lock order: mu first, then SecurityStatistics.mutex (the writers take the statistics lock while
+	// holding mu), so nothing may take mu while holding the statistics lock.
 	mu sync.Mutex
 	// recent holds the times of the last suspiciousPerHour+1 suspicious requests (a ring), for the
 	// rolling-hour rule of shouldBlockIP. recentNext is the slot the next write replaces; recentCount
@@ -279,26 +281,6 @@ func (a *AttackInfo) suspiciousInLastHour(now time.Time) bool {
 	return now.Sub(a.recent[a.recentNext]) <= time.Hour
 }
 
-// TrackValidationFailure records a validation failure
-func (sm *SecurityMonitor) TrackValidationFailure(r *http.Request, validationType string) {
-	clientIP := getClientIP(r)
-
-	if isTrustedIP(clientIP, sm.config.TrustedIPs) {
-		return
-	}
-
-	if value, exists := sm.attackMap.Load(clientIP); exists {
-		attackInfo := value.(*AttackInfo)
-		attackInfo.ValidationFailures++
-	}
-
-	sm.statistics.mutex.Lock()
-	sm.statistics.ValidationFailures++
-	sm.statistics.mutex.Unlock()
-
-	sm.generateAlert(r, fmt.Sprintf("validation_failure_%s", validationType), clientIP, http.StatusBadRequest)
-}
-
 // IsIPBlocked checks if an IP is currently blocked
 func (sm *SecurityMonitor) IsIPBlocked(ip string) bool {
 	if value, exists := sm.attackMap.Load(ip); exists {
@@ -318,54 +300,52 @@ func (sm *SecurityMonitor) IsIPBlocked(ip string) bool {
 	return false
 }
 
-// GetMetrics returns current security metrics
+// GetMetrics returns a snapshot of the security metrics. Every map in it is a copy, because the caller
+// encodes the result after GetMetrics returns, while TrackRequest keeps writing the originals.
 func (sm *SecurityMonitor) GetMetrics() SecurityMetrics {
-	sm.statistics.mutex.RLock()
-	defer sm.statistics.mutex.RUnlock()
-
-	// Build top attacker IPs
+	// The per-IP pass takes each entry's lock and so must not run under the statistics lock: the
+	// writers take the entry's lock first and the statistics lock second.
 	topAttackers := make([]IPAttackSummary, 0)
-	sm.attackMap.Range(func(key, value interface{}) bool {
-		ip := key.(string)
-		info := value.(*AttackInfo)
-
-		if info.SuspiciousRequests > 0 {
-			topAttackers = append(topAttackers, IPAttackSummary{
-				IP:                 ip,
-				TotalRequests:      info.TotalRequests,
-				SuspiciousRequests: info.SuspiciousRequests,
-				AttackTypes:        info.AttackTypes,
-				FirstSeen:          info.FirstSeen,
-				LastSeen:           info.LastSeen,
-				Blocked:            info.Blocked,
-			})
-		}
-		return len(topAttackers) < 10 // Limit to top 10
-	})
-
-	// Count blocked IPs and active threats
 	blockedCount := 0
 	activeThreats := 0
 	sm.attackMap.Range(func(key, value interface{}) bool {
 		info := value.(*AttackInfo)
+		info.mu.Lock()
+		defer info.mu.Unlock()
+
 		if info.Blocked {
 			blockedCount++
 		}
-		if info.SuspiciousRequests > 0 && time.Since(info.LastSeen) < time.Hour {
-			activeThreats++
+		if info.SuspiciousRequests > 0 {
+			if time.Since(info.LastSeen) < time.Hour {
+				activeThreats++
+			}
+			if len(topAttackers) < 10 { // Limit to top 10
+				topAttackers = append(topAttackers, IPAttackSummary{
+					IP:                 key.(string),
+					TotalRequests:      info.TotalRequests,
+					SuspiciousRequests: info.SuspiciousRequests,
+					AttackTypes:        maps.Clone(info.AttackTypes),
+					FirstSeen:          info.FirstSeen,
+					LastSeen:           info.LastSeen,
+					Blocked:            info.Blocked,
+				})
+			}
 		}
 		return true
 	})
 
+	sm.statistics.mutex.RLock()
+	defer sm.statistics.mutex.RUnlock()
 	return SecurityMetrics{
 		TotalRequests:       sm.statistics.TotalRequests,
 		BlockedRequests:     sm.statistics.BlockedRequests,
 		SuspiciousRequests:  sm.statistics.SuspiciousRequests,
 		RateLimitViolations: sm.statistics.RateLimitViolations,
 		ValidationFailures:  sm.statistics.ValidationFailures,
-		AttacksByType:       sm.statistics.AttacksByType,
+		AttacksByType:       maps.Clone(sm.statistics.AttacksByType),
 		TopAttackerIPs:      topAttackers,
-		AlertsByLevel:       sm.statistics.AlertsByLevel,
+		AlertsByLevel:       maps.Clone(sm.statistics.AlertsByLevel),
 		LastUpdated:         sm.statistics.LastUpdated,
 		BlockedIPs:          blockedCount,
 		ActiveThreats:       activeThreats,
@@ -671,6 +651,8 @@ func (sm *SecurityMonitor) cleanupOldDataOnce(cutoff time.Time) {
 
 		// Remove any entries whose last activity is before the cutoff,
 		// regardless of current blocked state.
+		info.mu.Lock()
+		defer info.mu.Unlock()
 		if info.LastSeen.Before(cutoff) {
 			sm.attackMap.Delete(ip)
 		}

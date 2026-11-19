@@ -452,33 +452,6 @@ func TestRateLimitViolationTracking(t *testing.T) {
 	}
 }
 
-func TestValidationFailureTracking(t *testing.T) {
-	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
-	config := DefaultSecurityConfig()
-	monitor := NewSecurityMonitor(config, logger)
-	defer monitor.Close()
-
-	req := httptest.NewRequest("POST", "/api/v1/test", nil)
-	req.RemoteAddr = "10.0.0.100:12345"
-
-	// Track validation failure
-	monitor.TrackValidationFailure(req, "headers")
-
-	// Verify metrics
-	metrics := monitor.GetMetrics()
-	assert.Equal(t, int64(1), metrics.ValidationFailures, "Validation failures should be tracked")
-
-	// Verify alert is generated
-	alerts := monitor.GetAlerts()
-	select {
-	case alert := <-alerts:
-		assert.Equal(t, "validation_failure_headers", alert.Type, "Should generate validation failure alert")
-		assert.Equal(t, "MEDIUM", alert.Level, "Validation failure should be MEDIUM level")
-	case <-time.After(time.Millisecond * 100):
-		t.Fatal("Expected validation failure alert was not received")
-	}
-}
-
 func TestConcurrentSecurityMonitoring(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
 	config := DefaultSecurityConfig()
@@ -938,20 +911,5 @@ func TestTrackRequestLocalhostExemption(t *testing.T) {
 
 		metrics := monitor.GetMetrics()
 		assert.Equal(t, int64(0), metrics.RateLimitViolations, "Localhost rate limit violations should not be tracked")
-	})
-
-	t.Run("TrackValidationFailure localhost exempt", func(t *testing.T) {
-		config := DefaultSecurityConfig()
-		monitor := NewSecurityMonitor(config, logger)
-		defer monitor.Close()
-
-		for i := 0; i < 10; i++ {
-			req := httptest.NewRequest("POST", "/api/v1/test", nil)
-			req.RemoteAddr = "127.0.0.1:12345"
-			monitor.TrackValidationFailure(req, "headers")
-		}
-
-		metrics := monitor.GetMetrics()
-		assert.Equal(t, int64(0), metrics.ValidationFailures, "Localhost validation failures should not be tracked")
 	})
 }
