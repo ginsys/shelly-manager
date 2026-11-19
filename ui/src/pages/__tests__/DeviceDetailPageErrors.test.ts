@@ -18,6 +18,7 @@ vi.mock('../../api/typedConfig', () => ({ getDeviceCapabilities: vi.fn() }))
 import { getDevice, getDeviceStatus, getDeviceEnergy, controlDevice, updateDevice } from '../../api/devices'
 import { detectConfigDrift } from '../../api/deviceConfig'
 import { getDeviceCapabilities } from '../../api/typedConfig'
+import { notice, dismissNotice } from '../../composables/useNotice'
 
 const device = {
   id: 7,
@@ -148,5 +149,63 @@ describe('DeviceDetailPage shows a failed action as an error panel', () => {
     await wrapper.get('button[title="Edit Device"]').trigger('click')
 
     expect(wrapper.find('[data-testid="device-save-error"]').exists()).toBe(false)
+  })
+})
+
+// ginsys/shelly-manager#648: a failure that arrives after the page was left goes to the app notice.
+describe('DeviceDetailPage failures after the page was left', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    vi.mocked(getDevice).mockImplementation(async () => ({ ...device }))
+    vi.mocked(getDeviceStatus).mockRejectedValue(new Error('offline'))
+    vi.mocked(getDeviceEnergy).mockRejectedValue(new Error('offline'))
+    vi.mocked(detectConfigDrift).mockRejectedValue(new Error('none'))
+    vi.mocked(getDeviceCapabilities).mockRejectedValue(new Error('none'))
+    dismissNotice()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('shows a control command that fails after the page was left in the notice', async () => {
+    let rejectControl: (reason: any) => void = () => {}
+    vi.mocked(controlDevice).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectControl = reject
+        }) as any,
+    )
+    const wrapper = await openPage()
+    await wrapper.get('button[title="Turn On"]').trigger('click')
+    await flushPromises() // the command is open
+    wrapper.unmount()
+
+    rejectControl(new Error('device is asleep'))
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('device is asleep')
+    expect(notice.value?.context?.action).toBe('Control device')
+  })
+
+  it('shows a save that fails after the page was left with the dialog open in the notice', async () => {
+    let rejectSave: (reason: any) => void = () => {}
+    vi.mocked(updateDevice).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectSave = reject
+        }) as any,
+    )
+    const wrapper = await openPage()
+    await wrapper.get('button[title="Edit Device"]').trigger('click')
+    await wrapper.get('.modal-dialog .btn-primary').trigger('click')
+    await flushPromises() // the save is open
+    wrapper.unmount()
+
+    rejectSave(new Error('the device changed meanwhile'))
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('the device changed meanwhile')
+    expect(notice.value?.context?.action).toBe('Save device')
   })
 })
