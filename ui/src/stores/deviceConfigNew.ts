@@ -19,7 +19,7 @@ import {
   type ConfigVerifyData,
   verifyDeviceConfigNew,
 } from '@/api/configNew'
-import { TemplateSaveError, type ConfigTemplate } from '@/api/templates'
+import type { ConfigTemplate } from '@/api/templates'
 
 export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
   const templates = ref<ConfigTemplate[]>([])
@@ -79,7 +79,10 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
 
   // The actions below share one shape. They remember the epoch when they start. If a reset ran
   // meanwhile, the store holds another device: the caller still gets the answer, or the error, but
-  // the store keeps its own state.
+  // the store keeps its own state. An action that fails throws and sets no `error`: the caller
+  // knows what it was doing and shows the failure where it happened. `error` is for a load that
+  // failed (`refresh`, `fetchDesired`, `fetchStatus`), which leaves the page without its data.
+  // An action still clears a stale `error` when it starts.
   async function addTemplate(deviceId: number | string, templateId: number | string, position?: number) {
     const epoch = deviceEpoch
     loading.value = true
@@ -90,9 +93,6 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       if (epoch !== deviceEpoch) return
       templates.value = updated
       templateIds.value = updated.map((t) => t.id)
-    } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to add template'
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }
@@ -108,9 +108,6 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       if (epoch !== deviceEpoch) return
       templates.value = updated
       templateIds.value = updated.map((t) => t.id)
-    } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to remove template'
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }
@@ -130,9 +127,6 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       if (result.sources) sources.value = result.sources
       if (result.inherited !== undefined) inherited.value = result.inherited
       if (result.inherited_sources) inheritedSources.value = result.inherited_sources
-    } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to set templates'
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }
@@ -148,13 +142,6 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       if (epoch !== deviceEpoch) return
       overrides.value = result.overrides
       if (result.desired_config !== undefined) desiredConfig.value = result.desired_config
-    } catch (e: any) {
-      // A refused value is shown on the form by the caller. Setting `error` would replace the
-      // whole page with an error card and throw the edit away.
-      if (epoch === deviceEpoch && !(e instanceof TemplateSaveError)) {
-        error.value = e?.message || 'Failed to save overrides'
-      }
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }
@@ -169,11 +156,6 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       const result = await patchDeviceOverridesNew(deviceId, patch)
       if (epoch !== deviceEpoch) return
       overrides.value = result
-    } catch (e: any) {
-      if (epoch === deviceEpoch && !(e instanceof TemplateSaveError)) {
-        error.value = e?.message || 'Failed to patch overrides'
-      }
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }
@@ -188,9 +170,6 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       await deleteDeviceOverridesNew(deviceId)
       if (epoch !== deviceEpoch) return
       overrides.value = null
-    } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to clear overrides'
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }
@@ -240,16 +219,12 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
     error.value = null
 
     try {
-      // The caller gets the answer of this apply, whatever happens to the store while the status loads.
+      // The caller gets the answer of this apply, whatever happens to the store meanwhile. The caller
+      // reloads the page data after an apply, so the status is not read a second time here: a failed
+      // read must not make an apply that changed the device look like a failed apply.
       const result = await applyDeviceConfigNew(deviceId)
-      if (epoch === deviceEpoch) {
-        lastApply.value = result
-        await fetchStatus(deviceId)
-      }
+      if (epoch === deviceEpoch) lastApply.value = result
       return result
-    } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to apply config'
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }
@@ -264,9 +239,6 @@ export const useDeviceConfigNewStore = defineStore('deviceConfigNew', () => {
       const result = await verifyDeviceConfigNew(deviceId)
       if (epoch === deviceEpoch) lastVerify.value = result
       return result
-    } catch (e: any) {
-      if (epoch === deviceEpoch) error.value = e?.message || 'Failed to verify config'
-      throw e
     } finally {
       if (epoch === deviceEpoch) loading.value = false
     }

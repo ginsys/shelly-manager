@@ -34,9 +34,8 @@
     </div>
 
     <div v-if="store.loading" class="card state">Loading...</div>
-    <!-- The store also sets its error when an action fails. The error panel shows that failure with
-         its code, so this card shows only a load that failed. -->
-    <div v-else-if="store.error && !actionFailed" class="card state error">{{ store.error }}</div>
+    <!-- The store sets its error only when a load fails; an action failure shows in the error panel above. -->
+    <div v-else-if="store.error" class="card state error">{{ store.error }}</div>
 
     <template v-else>
       <div v-if="store.status" class="card status-card">
@@ -259,24 +258,6 @@ const liveLoading = ref(false)
 const { error: actionError, setError: setActionError, clearError: clearActionError } = useError()
 const { error: addError, setError: setAddError, clearError: clearAddError } = useError()
 const addIdError = ref('')
-// The store sets its own error when an action fails and keeps it until its next call. The page error
-// card shows only a load that failed, so it stays off after an action on this device failed, also when
-// the panel was dismissed: the card replaces the whole page body. A refresh, or the next action, resets
-// it. A failure for a device the page has left never sets it: the store ignores such a failure too.
-const actionFailed = ref(false)
-
-function beginAction() {
-  actionFailed.value = false
-  clearActionError()
-}
-
-type FailureContext = { action: string; resource: string; resourceId: string | number }
-
-function failAction(e: unknown, context: FailureContext, generation: number) {
-  if (routeGeneration === generation) actionFailed.value = true
-  setActionError(e, context)
-}
-
 // What the last apply came to. It is a result, not an error: an unconfirmed apply is neither a
 // failure nor a success, so it has its own card and does not go through ErrorDisplay.
 type ApplyNotice = { kind: 'success' | 'unconfirmed' | 'failed'; deviceId: string; text: string }
@@ -315,7 +296,6 @@ let routeGeneration = 0
 async function handleRefresh() {
   const id = deviceId.value
   const generation = routeGeneration
-  actionFailed.value = false
   try {
     await store.refresh(id)
     if (routeGeneration !== generation) return
@@ -376,7 +356,6 @@ async function handleAddTemplate() {
     return
   }
   addIdError.value = ''
-  actionFailed.value = false
 
   const id = deviceId.value
   const generation = routeGeneration
@@ -398,10 +377,9 @@ async function handleAddTemplate() {
     if (routeGeneration !== generation || !showAddTemplate.value) {
       // The dialog was closed (cancelled, or left with the old device): nothing shows its panel, so
       // the failure goes to the page panel, which names the device.
-      failAction(e, context, generation)
+      setActionError(e, context)
       return
     }
-    actionFailed.value = true
     setAddError(e, context)
   } finally {
     if (routeGeneration === generation) addingTemplate.value = false
@@ -411,7 +389,7 @@ async function handleAddTemplate() {
 async function handleRemoveTemplate(templateId: number) {
   if (!confirm('Remove this template from the device?')) return
 
-  beginAction()
+  clearActionError()
   const id = deviceId.value
   const generation = routeGeneration
   try {
@@ -419,7 +397,7 @@ async function handleRemoveTemplate(templateId: number) {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    failAction(e, { action: 'Remove template', resource: 'Device', resourceId: id }, generation)
+    setActionError(e, { action: 'Remove template', resource: 'Device', resourceId: id })
   }
 }
 
@@ -428,7 +406,7 @@ async function handleSaveOverrides() {
   const id = deviceId.value
   const generation = routeGeneration
   saveErrors.value = []
-  beginAction()
+  clearActionError()
   try {
     await store.saveOverrides(id, nullRemovedSecrets(overridesData.value, overridesHeld.value, overridesEditor.value?.schema))
     if (routeGeneration !== generation) return
@@ -440,14 +418,14 @@ async function handleSaveOverrides() {
       if (routeGeneration === generation) saveErrors.value = e.fields
       return
     }
-    failAction(e, { action: 'Save overrides', resource: 'Device', resourceId: id }, generation)
+    setActionError(e, { action: 'Save overrides', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleClearOverrides() {
   if (!confirm('Clear all device overrides?')) return
 
-  beginAction()
+  clearActionError()
   const id = deviceId.value
   const generation = routeGeneration
   try {
@@ -455,14 +433,14 @@ async function handleClearOverrides() {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    failAction(e, { action: 'Clear overrides', resource: 'Device', resourceId: id }, generation)
+    setActionError(e, { action: 'Clear overrides', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleApply() {
   if (!confirm('Apply this configuration to the device? This will modify the physical device.')) return
 
-  beginAction()
+  clearActionError()
   applyNotice.value = null
   const id = deviceId.value
   const generation = routeGeneration
@@ -494,18 +472,17 @@ async function handleApply() {
     if (routeGeneration !== generation) return
     await handleRefresh()
   } catch (e: any) {
-    failAction(e, { action: 'Apply configuration', resource: 'Device', resourceId: id }, generation)
+    setActionError(e, { action: 'Apply configuration', resource: 'Device', resourceId: id })
   }
 }
 
 async function handleVerify() {
-  beginAction()
+  clearActionError()
   const id = deviceId.value
-  const generation = routeGeneration
   try {
     await store.verify(id)
   } catch (e: any) {
-    failAction(e, { action: 'Verify device', resource: 'Device', resourceId: id }, generation)
+    setActionError(e, { action: 'Verify device', resource: 'Device', resourceId: id })
   }
 }
 
@@ -535,7 +512,7 @@ watch(deviceId, (next, previous) => {
   newTemplatePosition.value = null
   addIdError.value = ''
   clearAddError()
-  beginAction()
+  clearActionError()
   applyNotice.value = null
   liveConfig.value = null
   liveError.value = null

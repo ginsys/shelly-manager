@@ -150,30 +150,29 @@ describe('DeviceConfigPage follows the route (ginsys/shelly-manager#400)', () =>
     expect(store.loading).toBe(false)
   })
 
-  it('reports an apply as done when the route changes while its status loads', async () => {
+  it('reports an apply as done when the route changes while the apply request is open', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    let releaseOldStatus: (value: any) => void = () => {}
-    let oldStatusCalls = 0
-    api.getConfigStatusNew.mockImplementation((id: any) => {
-      if (String(id) === '7') {
-        oldStatusCalls++
-        if (oldStatusCalls === 1) return Promise.resolve({ config_applied: false, pending_changes: true }) as any
-        return new Promise((resolve) => {
-          releaseOldStatus = resolve
-        }) as any
-      }
-      return Promise.resolve({ config_applied: true, pending_changes: false, owner: 'device-8' }) as any
-    })
-    api.applyDeviceConfigNew.mockResolvedValue({ success: true, applied_count: 1, failed_count: 0 } as any)
+    let releaseApply: (value: any) => void = () => {}
+    api.applyDeviceConfigNew.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseApply = resolve
+        }) as any,
+    )
+    api.getConfigStatusNew.mockImplementation(async (id: any) => ({
+      config_applied: String(id) === '8',
+      pending_changes: String(id) === '7',
+      owner: `device-${id}`,
+    }) as any)
     const { wrapper, router } = await mountAt('/devices/7/config')
     const store = useDeviceConfigNewStore()
 
     await buttonWithText(wrapper, 'Apply Config').trigger('click')
-    await flushPromises() // the apply is done, the status of device 7 is still loading
+    await flushPromises() // the apply request of device 7 is still open
 
     await router.push('/devices/8/config')
     await flushPromises()
-    releaseOldStatus({ config_applied: false, pending_changes: true, owner: 'device-7' })
+    releaseApply({ success: true, applied_count: 1, failed_count: 0 })
     await flushPromises()
 
     // The apply changed device 7, so its result is still shown, and it names the device because the
