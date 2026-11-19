@@ -13,6 +13,7 @@ import (
 // - SHELLY_OPNSENSE_API_KEY
 // - SHELLY_OPNSENSE_API_SECRET
 // - SHELLY_SECURITY_ADMIN_API_KEY
+// - SHELLY_SECURITY_AGENT_API_KEY
 // - SHELLY_API_KEY (used by provisioner agent config)
 //
 // Note: Viper already supports direct env overrides (SHELLY_*). This function
@@ -42,6 +43,12 @@ func ApplyToConfig(cfg *config.Config) {
 	cfg.Security.AdminAPIKey = OverrideIfPresent(
 		cfg.Security.AdminAPIKey,
 		"SHELLY_SECURITY_ADMIN_API_KEY",
+	)
+
+	// Agent API key (the manager's key for the provisioner agent routes)
+	cfg.Security.AgentAPIKey = OverrideIfPresent(
+		cfg.Security.AgentAPIKey,
+		"SHELLY_SECURITY_AGENT_API_KEY",
 	)
 
 	// Provisioner/Agent API key (when running provisioner binary)
