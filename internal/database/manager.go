@@ -363,10 +363,28 @@ func (m *Manager) UpdateDeviceSettings(id uint, settings string) error {
 // UpdateDeviceDiscovery stores what a discovery found again about a known device (address, type,
 // firmware, status and last seen time) and no other column. It is the one discovery writer: the
 // service, the discovery upsert and the CLI all call it (ginsys/shelly-manager#572). An empty
-// update.Type means the discovery could not name the model, and the stored type stays. Like
-// UpdateDeviceSettings it moves updated_at, because the address, the type and the firmware are
-// fields a client edits. It reports gorm.ErrRecordNotFound when no device has that id.
+// update.Type means the discovery could not name the model, and the stored type stays. It moves
+// updated_at only when the address, the type or the firmware changed, because those are fields a
+// client edits; otherwise it writes the status and the last seen time as RecordDeviceSeen does, and
+// no other column (ginsys/shelly-manager#583). It reports gorm.ErrRecordNotFound when no device has
+// that id.
 func (m *Manager) UpdateDeviceDiscovery(id uint, update DiscoveryUpdate) error {
+	var stored Device
+	if err := m.GetDB().Select("ip", "type", "firmware").Where("id = ?", id).First(&stored).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			m.logger.WithFields(map[string]any{
+				"device_id": id,
+				"error":     err.Error(),
+				"operation": "update-discovery",
+				"table":     "devices",
+				"component": "database",
+			}).Error("Database operation failed")
+		}
+		return err
+	}
+	if stored.IP == update.IP && stored.Firmware == update.Firmware && (update.Type == "" || stored.Type == update.Type) {
+		return m.RecordDeviceSeen(id, update.Status, update.LastSeen)
+	}
 	columns := map[string]any{
 		"ip": update.IP, "status": update.Status, "last_seen": update.LastSeen, "firmware": update.Firmware,
 	}
@@ -583,7 +601,6 @@ func (m *Manager) UpsertDeviceFromDiscovery(mac string, update DiscoveryUpdate, 
 			"mac":       mac,
 			"ip":        update.IP,
 			"operation": "update",
-			"columns":   "ip,type,firmware,status,last_seen",
 			"duration":  time.Since(start),
 			"component": "database",
 		}).Info("Updated existing device from discovery")

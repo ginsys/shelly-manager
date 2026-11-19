@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -173,6 +174,13 @@ func (s *ShellyService) backfillDiscoverySettings(device *database.Device, model
 	if decodeErr != nil {
 		settings = map[string]any{}
 	}
+	// The text as stored, in the form that json.Marshal writes it: a pass that changes no key and
+	// no value writes nothing, so it leaves updated_at, the version of the device PUT, alone
+	// (ginsys/shelly-manager#583). A text that does not parse never equals the new one.
+	var unchanged []byte
+	if decodeErr == nil {
+		unchanged, _ = json.Marshal(settings)
+	}
 	settings["model"] = model
 	settings["gen"] = generation
 	settings["auth_enabled"] = authEnabled
@@ -185,6 +193,10 @@ func (s *ShellyService) backfillDiscoverySettings(device *database.Device, model
 	updated, err := json.Marshal(settings)
 	if err != nil {
 		return err
+	}
+	if decodeErr == nil && bytes.Equal(unchanged, updated) {
+		*device = *record
+		return nil
 	}
 	if err = s.DB.UpdateDeviceSettings(record.ID, string(updated)); err != nil {
 		return err
