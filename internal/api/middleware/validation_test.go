@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -925,19 +924,15 @@ func TestValidateJSONMiddleware_InvalidJSONNoBodyRestoration(t *testing.T) {
 	assert.False(t, handlerCalled, "Handler should not be called for invalid JSON")
 }
 
-// TestValidateJSONMiddleware_BodyRestorationPerformance tests that body restoration
-// doesn't significantly impact performance
-func TestValidateJSONMiddleware_BodyRestorationPerformance(t *testing.T) {
+// TestValidateJSONMiddleware_BodyRestored tests that the middleware, which reads the
+// body to validate it, hands the next handler the whole body again. Timing is not
+// asserted here: a wall-clock bound on one call measures the host, not the code; the
+// cost lives in BenchmarkValidationMiddleware.
+func TestValidateJSONMiddleware_BodyRestored(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "error", Format: "text", Output: "stdout"})
 	config := DefaultValidationConfig()
 
 	middleware := ValidateJSONMiddleware(config, logger)
-
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate reading the body
-		_, _ = io.ReadAll(r.Body)
-		w.WriteHeader(http.StatusOK)
-	})
 
 	// Test with different body sizes
 	bodySizes := []int{100, 1000, 10000, 100000}
@@ -946,7 +941,11 @@ func TestValidateJSONMiddleware_BodyRestorationPerformance(t *testing.T) {
 		t.Run(fmt.Sprintf("BodySize_%d", size), func(t *testing.T) {
 			jsonData := `{"data": "` + strings.Repeat("x", size-15) + `"}`
 
-			start := time.Now()
+			var got []byte
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got, _ = io.ReadAll(r.Body)
+				w.WriteHeader(http.StatusOK)
+			})
 
 			req := httptest.NewRequest("POST", "/api/v1/test", strings.NewReader(jsonData))
 			req.Header.Set("Content-Type", "application/json")
@@ -954,11 +953,8 @@ func TestValidateJSONMiddleware_BodyRestorationPerformance(t *testing.T) {
 			rr := httptest.NewRecorder()
 			middleware(handler).ServeHTTP(rr, req)
 
-			duration := time.Since(start)
-
 			assert.Equal(t, http.StatusOK, rr.Code, "Request should succeed")
-			assert.Less(t, duration.Milliseconds(), int64(100),
-				"Body restoration should complete within 100ms for size %d", size)
+			assert.Equal(t, jsonData, string(got), "The handler should read the whole body again for size %d", size)
 		})
 	}
 }
