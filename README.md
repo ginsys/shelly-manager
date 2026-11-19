@@ -156,7 +156,8 @@ SHELLY_SECURITY_AGENT_API_KEY=a-different-key-for-the-provisioner-agent
 
 When an admin key is set, every `/api/v1` route needs it (`Authorization: Bearer <key>` or `X-API-Key: <key>`),
 including the device and notification routes, except `GET /api/v1/version` and `GET /api/v1/metrics/prometheus`.
-The five provisioner agent routes also accept the scoped agent key (`SHELLY_SECURITY_AGENT_API_KEY`).
+The five provisioner agent routes also accept the scoped agent key (`SHELLY_SECURITY_AGENT_API_KEY`); each agent proves
+its own identity with a token it receives when it registers.
 With no key set the routes are open. The web UI sends the key only if it was built with `VITE_ADMIN_KEY`, so give
 it that key or its device list answers 401 (see `ui/README.md`). Entering the key in a production UI is tracked in
 [ginsys/shelly-manager#619](https://github.com/ginsys/shelly-manager/issues/619).
@@ -201,7 +202,7 @@ discovery:
 
 security:
   admin_api_key: "${ADMIN_API_KEY}"
-  agent_api_key: "${AGENT_API_KEY}"   # opens only the five provisioner agent routes
+  agent_api_key: "${AGENT_API_KEY}"   # accepted only on the five provisioner agent routes
   use_proxy_headers: true
   trusted_proxies:
     - 10.0.0.0/8

@@ -238,18 +238,18 @@ func TestRouteTable_EveryRouteRequiresTheAdminKey(t *testing.T) {
 	t.Logf("walked %d route+method pairs: %d refused, %d listed open", len(routes), refused, listed)
 }
 
-// agentRouteKeys are the five routes the provisioner agent calls, the only routes the agent key opens.
+// agentRouteKeys are the two routes the shared agent key opens: enrolment and the pre-registration
+// connectivity check. Poll, task status and report act for one agent and need the token issued at
+// registration, so the agent key alone is refused there.
 var agentRouteKeys = map[string]bool{
-	"POST /api/v1/provisioner/agents/register":    true,
-	"GET /api/v1/provisioner/agents/{id}/tasks":   true,
-	"PUT /api/v1/provisioner/tasks/{id}/status":   true,
-	"POST /api/v1/provisioner/discovered-devices": true,
-	"GET /api/v1/provisioner/health":              true,
+	"POST /api/v1/provisioner/agents/register": true,
+	"GET /api/v1/provisioner/health":           true,
 }
 
-// The agent key opens the five agent routes and nothing else: every other route of the table answers
-// 401 to a request that carries only the agent key, except the routes listed as open, which answer
-// anyone. Export, import and metrics keep their own copy of the admin key and never see the agent key.
+// The agent key opens the two agent routes above and nothing else: every other route of the table
+// answers 401 to a request that carries only the agent key, except the routes listed as open, which
+// answer anyone. Export, import and metrics keep their own copy of the admin key and never see the
+// agent key.
 func TestRouteTable_AgentKeyOpensOnlyTheAgentRoutes(t *testing.T) {
 	router := guardWalkRouter(t, "admin-secret", "agent-secret")
 	routes := walkGuardRoutes(t, router)

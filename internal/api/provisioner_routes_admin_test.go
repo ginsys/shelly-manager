@@ -51,7 +51,15 @@ func serveRoute(router *mux.Router, rc routeCase, header http.Header) int {
 	return w.Code
 }
 
-// The agent routes accept the agent key in both header forms, the admin key too, and refuse the rest.
+// agentTokenBound reports the agent routes that act for one agent (poll, task status, report): the agent
+// key alone does not open them, the token issued at registration does (provisioner_identity_test.go).
+// Register and health are what the shared agent key opens.
+func agentTokenBound(rc routeCase) bool {
+	return rc.path != "/api/v1/provisioner/agents/register" && rc.path != "/api/v1/provisioner/health"
+}
+
+// The agent routes accept the agent key in both header forms where it is enough (register, health), the admin
+// key everywhere, and refuse the rest.
 func TestProvisionerAgentRoutes_AcceptTheAgentKey(t *testing.T) {
 	router := configRoutesRouterKeys(t, "admin-secret", "agent-secret")
 
@@ -60,9 +68,13 @@ func TestProvisionerAgentRoutes_AcceptTheAgentKey(t *testing.T) {
 			assert.Equal(t, http.StatusUnauthorized, serveRoute(router, rc, nil), "no credentials")
 			assert.Equal(t, http.StatusUnauthorized,
 				serveRoute(router, rc, http.Header{"Authorization": {"Bearer wrong"}}), "wrong key")
-			assert.NotEqual(t, http.StatusUnauthorized,
+			agentKeyCheck := assert.NotEqual
+			if agentTokenBound(rc) {
+				agentKeyCheck = assert.Equal
+			}
+			agentKeyCheck(t, http.StatusUnauthorized,
 				serveRoute(router, rc, http.Header{"Authorization": {"Bearer agent-secret"}}), "agent key, bearer")
-			assert.NotEqual(t, http.StatusUnauthorized,
+			agentKeyCheck(t, http.StatusUnauthorized,
 				serveRoute(router, rc, http.Header{"X-Api-Key": {"agent-secret"}}), "agent key, X-API-Key")
 			assert.NotEqual(t, http.StatusUnauthorized,
 				serveRoute(router, rc, http.Header{"Authorization": {"Bearer admin-secret"}}), "admin key")

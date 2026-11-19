@@ -20,6 +20,9 @@ type APIClient struct {
 	logger     *logging.Logger
 	agentID    string
 	registered bool
+	// agentToken is the identity the manager issued at registration. It is kept in memory only: a restarted agent
+	// registers again and gets a new one. An older manager issues none, and nothing is sent then.
+	agentToken string
 }
 
 // AgentRegistrationRequest represents the agent registration payload
@@ -45,6 +48,7 @@ func (e *HTTPError) Error() string {
 // AgentRegistrationResponse is the `data` of the API response for agent registration
 type AgentRegistrationResponse struct {
 	AgentID      string    `json:"agent_id"`
+	AgentToken   string    `json:"agent_token,omitempty"`
 	RegisteredAt time.Time `json:"registered_at"`
 	Status       string    `json:"status"`
 	Message      string    `json:"message"`
@@ -152,6 +156,7 @@ func (c *APIClient) RegisterAgent(hostname string, capabilities []string, metada
 	}
 
 	c.registered = true
+	c.agentToken = response.AgentToken
 	c.logger.WithFields(map[string]any{
 		"agent_id":      response.AgentID,
 		"status":        response.Status,
@@ -180,6 +185,7 @@ func (c *APIClient) dropRegistration(err error, statuses ...int) {
 	for _, s := range statuses {
 		if httpErr.StatusCode == s {
 			c.registered = false
+			c.agentToken = ""
 			c.logger.WithFields(map[string]any{
 				"agent_id":    c.agentID,
 				"status_code": s,
@@ -361,6 +367,9 @@ func (c *APIClient) makeRequest(method, endpoint string, requestBody interface{}
 
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	if c.agentToken != "" {
+		req.Header.Set("X-Agent-Token", c.agentToken)
 	}
 
 	// Make the request
