@@ -1219,9 +1219,8 @@ paths:
             configuration record as `data`; its `config` member holds the
             settings read from the device. The read stores nothing: the
             stored configuration, its sync status and the history stay as they
-            were, so drift detection keeps its baseline (use
-            POST /api/v1/devices/{id}/config/import to accept the device's
-            state as the stored configuration). The record is returned as it
+            were (use POST /api/v1/devices/{id}/config/import to store the
+            device's state as the stored configuration). The record is returned as it
             is: this route does not mask secrets (tracked in
             ginsys/shelly-manager#436).
           content:
@@ -1642,6 +1641,10 @@ paths:
     get:
       tags: [Drift]
       summary: Detect configuration drift
+      description: >-
+        Compares the live device with its desired configuration, the one
+        apply writes and verify reads. The stored configuration is not
+        consulted and nothing is written.
       operationId: detectConfigDrift
       security:
         - BearerAuth: []
@@ -1664,6 +1667,10 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/ConfigDrift'
+        '404':
+          description: >-
+            The device has no desired configuration, so there is nothing to
+            compare it with (this is never reported as "no drift").
 
   /api/v1/devices/{id}/config/apply-template:
     post:

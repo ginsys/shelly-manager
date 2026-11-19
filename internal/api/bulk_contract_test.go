@@ -54,13 +54,16 @@ func countingDevice(t *testing.T, mac string) (addr string, hits *atomic.Int32) 
 	return strings.TrimPrefix(server.URL, "http://"), hits
 }
 
-// bulkFleet stores n devices, each at its own counting fake.
+// bulkFleet stores n devices, each at its own counting fake and each with a desired configuration,
+// which a drift check needs before it contacts the device.
 func bulkFleet(t *testing.T, db *database.Manager, n int) []fleetDevice {
 	t.Helper()
 	fleet := make([]fleetDevice, 0, n)
 	for i := 0; i < n; i++ {
 		addr, hits := countingDevice(t, fmt.Sprintf("A4CF123456%02X", i))
 		device := deviceAt(t, db, addr, fmt.Sprintf("A4:CF:12:34:56:%02X", i))
+		require.NoError(t, db.GetDB().Model(&database.Device{}).Where("id = ?", device.ID).
+			Update("desired_config", `{"system":{"device":{"name":"fleet"}}}`).Error)
 		fleet = append(fleet, fleetDevice{device: device, hits: hits})
 	}
 	return fleet

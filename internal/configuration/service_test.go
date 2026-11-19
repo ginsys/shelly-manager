@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -226,39 +225,6 @@ func TestNewService(t *testing.T) {
 	db.Table("config_histories").Count(&tableCount)
 }
 
-func TestDetectDrift_NotifierCalled(t *testing.T) {
-	service, db := setupTestService(t)
-
-	notified := false
-	var notedDeviceID uint
-	var notedDiff int
-	service.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
-		notified = true
-		notedDeviceID = deviceID
-		notedDiff = differenceCount
-	})
-
-	// Insert a device and stored config
-	device := Device{IP: "192.168.1.10", MAC: "00:11:22:33:44:55", Type: "Relay", Name: "Unit Test Device"}
-	require.NoError(t, db.Create(&device).Error)
-
-	tSync := time.Now().Add(-time.Hour)
-	stored := DeviceConfig{DeviceID: device.ID, Config: json.RawMessage(`{"wifi":{"ssid":"A"}}`), LastSynced: &tSync, SyncStatus: "synced"}
-	require.NoError(t, db.Create(&stored).Error)
-
-	// Mock client returns different config to force drift
-	mc := &mockShellyClient{}
-	mc.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{Generation: 2, Model: "mock"}, nil)
-	mc.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{Raw: json.RawMessage(`{"wifi":{"ssid":"B"}}`)}, nil)
-
-	drift, err := service.DetectDrift(device.ID, mc)
-	require.NoError(t, err)
-	require.NotNil(t, drift)
-	require.True(t, notified)
-	require.Equal(t, device.ID, notedDeviceID)
-	require.Greater(t, notedDiff, 0)
-}
-
 func TestImportFromDevice_Gen1(t *testing.T) {
 	service, db := setupTestService(t)
 	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
@@ -471,175 +437,6 @@ func TestImportFromDevice_Errors(t *testing.T) {
 	}
 }
 
-func TestDetectDrift_MinimalDrift(t *testing.T) {
-	service, db := setupTestService(t)
-	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
-
-	// First import a configuration to establish baseline
-	mockClient := new(mockShellyClient)
-
-	deviceInfo := &shelly.DeviceInfo{
-		ID:         "shelly1-123456",
-		Generation: 1,
-		Model:      "SHSW-1",
-	}
-	deviceConfig := &shelly.DeviceConfig{
-		Name: "shelly1-123456",
-		WiFi: &shelly.WiFiConfig{
-			Enable: true,
-			SSID:   "TestNetwork",
-			IP:     "192.168.1.100",
-		},
-		Raw: json.RawMessage(`{"name":"shelly1-123456","wifi":{"enable":true,"ssid":"TestNetwork","ip":"192.168.1.100"}}`),
-	}
-
-	// A drift on a truly-in-sync device must NOT fire a notification.
-	notifierCalls := 0
-	service.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
-		notifierCalls++
-	})
-
-	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
-	mockClient.On("GetConfig", mock.Anything).Return(deviceConfig, nil)
-
-	// Import to establish baseline
-	importedConfig, err := service.ImportFromDevice(1, mockClient)
-	require.NoError(t, err)
-	require.NotNil(t, importedConfig)
-
-	// Re-checking the same device data must report no drift: the only thing that changes
-	// between imports is volatile bookkeeping metadata (_metadata.imported_at), which drift
-	// detection ignores. This must hold regardless of whether the two imports straddle a
-	// one-second boundary (the source of the former flake).
-	drift, err := service.DetectDrift(1, mockClient)
-
-	require.NoError(t, err)
-	require.Nil(t, drift, "in-sync device (metadata-only delta) must not report drift")
-
-	// Stored status stays synced and no drift notification is emitted.
-	var stored DeviceConfig
-	require.NoError(t, db.Where("device_id = ?", 1).First(&stored).Error)
-	assert.Equal(t, "synced", stored.SyncStatus)
-	assert.Equal(t, 0, notifierCalls, "no drift notification for an in-sync device")
-
-	mockClient.AssertExpectations(t)
-}
-
-func TestDetectDrift_WithDrift(t *testing.T) {
-	service, db := setupTestService(t)
-	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
-
-	// Create stored config
-	now := time.Now()
-	storedConfig := &DeviceConfig{
-		DeviceID:   1,
-		Config:     json.RawMessage(`{"name": "old-name", "wifi_sta": {"ssid": "OldNetwork"}}`),
-		SyncStatus: "synced",
-		LastSynced: &now,
-	}
-	err := db.Create(storedConfig).Error
-	require.NoError(t, err)
-
-	mockClient := new(mockShellyClient)
-
-	// Setup mock to return different config
-	deviceInfo := &shelly.DeviceInfo{
-		ID:         "new-name",
-		Generation: 1,
-	}
-	deviceConfig := &shelly.DeviceConfig{
-		Name: "new-name",
-		WiFi: &shelly.WiFiConfig{
-			Enable: true,
-			SSID:   "NewNetwork",
-			IP:     "192.168.1.200",
-		},
-		Raw: json.RawMessage(`{"name":"new-name","wifi":{"enable":true,"ssid":"NewNetwork","ip":"192.168.1.200"}}`),
-	}
-
-	mockClient.On("GetInfo", mock.Anything).Return(deviceInfo, nil)
-	mockClient.On("GetConfig", mock.Anything).Return(deviceConfig, nil)
-
-	// Test drift detection
-	drift, err := service.DetectDrift(1, mockClient)
-
-	require.NoError(t, err)
-	assert.NotNil(t, drift)
-	assert.Equal(t, uint(1), drift.DeviceID)
-	assert.Equal(t, "Test Device", drift.DeviceName)
-	assert.True(t, drift.RequiresAction)
-	assert.NotEmpty(t, drift.Differences)
-
-	// Verify status changed to drift
-	var config DeviceConfig
-	db.Where("device_id = ?", 1).First(&config)
-	assert.Equal(t, "drift", config.SyncStatus)
-
-	mockClient.AssertExpectations(t)
-}
-
-func TestDetectDrift_NoStoredConfig(t *testing.T) {
-	service, db := setupTestService(t)
-	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
-
-	mockClient := new(mockShellyClient)
-
-	drift, err := service.DetectDrift(1, mockClient)
-
-	assert.Nil(t, drift)
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrStoredConfigNotFound)
-
-	mockClient.AssertNotCalled(t, "GetInfo")
-}
-
-// TestDetectDrift_MetadataOnly is a timing-independent end-to-end regression for the flake that
-// turned main red: a stored baseline whose _metadata.imported_at is an old, fixed timestamp is
-// compared against a fresh re-import (which re-stamps imported_at). Drift detection must ignore
-// the volatile metadata delta and report no drift, without depending on the two imports landing
-// in the same wall-clock second.
-func TestDetectDrift_MetadataOnly(t *testing.T) {
-	service, db := setupTestService(t)
-	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
-
-	notifierCalls := 0
-	service.SetDriftNotifier(func(ctx context.Context, deviceID uint, deviceName string, differenceCount int) {
-		notifierCalls++
-	})
-
-	// Stored baseline: real config plus metadata subtrees whose values differ from what a fresh
-	// import will produce (old imported_at, stale device_info). Only metadata differs.
-	stored := DeviceConfig{
-		DeviceID: 1,
-		Config: json.RawMessage(`{
-			"name": "shelly1-123456",
-			"wifi": {"enable": true, "ssid": "TestNetwork", "ip": "192.168.1.100"},
-			"_metadata": {"imported_at": "2020-01-01T00:00:00Z", "import_source": "device"},
-			"device_info": {"id": "shelly1-123456", "firmware": "old-fw"}
-		}`),
-		SyncStatus: "synced",
-	}
-	require.NoError(t, db.Create(&stored).Error)
-
-	mockClient := new(mockShellyClient)
-	mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
-		ID:         "shelly1-123456",
-		Generation: 1,
-		Model:      "SHSW-1",
-		FW:         "new-fw",
-	}, nil)
-	mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
-		Raw: json.RawMessage(`{"name":"shelly1-123456","wifi":{"enable":true,"ssid":"TestNetwork","ip":"192.168.1.100"}}`),
-	}, nil)
-
-	drift, err := service.DetectDrift(1, mockClient)
-	require.NoError(t, err)
-	require.Nil(t, drift, "metadata-only delta must not report drift")
-	assert.Equal(t, 0, notifierCalls, "no drift notification for a metadata-only delta")
-
-	mockClient.AssertExpectations(t)
-}
-
 // driftCheckState is what a drift check must leave alone: the stored row and its history.
 type driftCheckState struct {
 	row       DeviceConfig
@@ -666,229 +463,8 @@ func requireBaselineUntouched(t *testing.T, before, after driftCheckState, wantS
 	assert.Equal(t, before.histories, after.histories, "a drift check appended a history row")
 }
 
-// TestDetectDrift_WritesNothingButStatus pins the read-only contract: a drift check reads the
-// device and compares, and the only thing it may store is the sync status.
-func TestDetectDrift_WritesNothingButStatus(t *testing.T) {
-	service, db := setupTestService(t)
-	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
-
-	synced := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	stored := DeviceConfig{
-		DeviceID:   1,
-		Config:     json.RawMessage(`{"name":"old-name","wifi":{"enable":true,"ssid":"OldNetwork"}}`),
-		LastSynced: &synced,
-		SyncStatus: "synced",
-	}
-	require.NoError(t, db.Create(&stored).Error)
-	before := readDriftCheckState(t, db, 1)
-
-	mockClient := new(mockShellyClient)
-	mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{ID: "dev", Generation: 1, Model: "SHSW-1"}, nil)
-	mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
-		Raw: json.RawMessage(`{"name":"new-name","wifi":{"enable":true,"ssid":"NewNetwork"}}`),
-	}, nil)
-
-	drift, err := service.DetectDrift(1, mockClient)
-	require.NoError(t, err)
-	require.NotNil(t, drift, "the changed device must show drift")
-	requireBaselineUntouched(t, before, readDriftCheckState(t, db, 1), "drift")
-
-	// The baseline stays, so a second check against the same device reports the same drift.
-	drift, err = service.DetectDrift(1, mockClient)
-	require.NoError(t, err)
-	require.NotNil(t, drift, "the baseline must survive a drift check")
-	requireBaselineUntouched(t, before, readDriftCheckState(t, db, 1), "drift")
-}
-
-// TestDetectDrift_InSyncWritesNothing covers the other branch: a device that matches its baseline
-// leaves the row and the history alone, and a stale drift mark is cleared without a re-stamp.
-func TestDetectDrift_InSyncWritesNothing(t *testing.T) {
-	service, db := setupTestService(t)
-	createTestDevice(t, db, 1, "Test Device", "SHSW-1")
-
-	synced := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	stored := DeviceConfig{
-		DeviceID:   1,
-		Config:     json.RawMessage(`{"name":"dev","_metadata":{"imported_at":"2020-01-01T00:00:00Z"}}`),
-		LastSynced: &synced,
-		SyncStatus: "drift",
-	}
-	require.NoError(t, db.Create(&stored).Error)
-	before := readDriftCheckState(t, db, 1)
-
-	mockClient := new(mockShellyClient)
-	mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{ID: "dev", Generation: 1, Model: "SHSW-1"}, nil)
-	mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
-		Raw: json.RawMessage(`{"name":"dev"}`),
-	}, nil)
-
-	drift, err := service.DetectDrift(1, mockClient)
-	require.NoError(t, err)
-	require.Nil(t, drift)
-	requireBaselineUntouched(t, before, readDriftCheckState(t, db, 1), "synced")
-}
-
-// TestCompareConfigurationsForDrift_IgnoresMetadataSubtrees confirms the drift comparator drops
-// added/removed/modified _metadata and device_info subtrees at the raw-key level.
-func TestCompareConfigurationsForDrift_IgnoresMetadataSubtrees(t *testing.T) {
-	service, _ := setupTestService(t)
-
-	base := json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2020-01-01T00:00:00Z"}, "device_info": {"firmware": "a"}}`)
-
-	cases := map[string]json.RawMessage{
-		"modified metadata":      json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2025-01-01T00:00:00Z"}, "device_info": {"firmware": "a"}}`),
-		"modified device_info":   json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2020-01-01T00:00:00Z"}, "device_info": {"firmware": "b"}}`),
-		"removed metadata trees": json.RawMessage(`{"name": "dev"}`),
-		"added metadata trees":   json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2020-01-01T00:00:00Z"}, "device_info": {"firmware": "a"}, "extra_meta_ignored": false}`),
-	}
-	// The "added" case intentionally adds a non-metadata key too, so assert per-case below.
-
-	for name, current := range cases {
-		t.Run(name, func(t *testing.T) {
-			diffs := service.compareConfigurationsForDrift(base, current)
-			for _, d := range diffs {
-				assert.NotContains(t, d.Path, "_metadata", "metadata subtree should be filtered")
-				assert.NotContains(t, d.Path, "device_info", "device_info subtree should be filtered")
-			}
-		})
-	}
-
-	// Metadata-only change → zero differences.
-	metaOnly := json.RawMessage(`{"name": "dev", "_metadata": {"imported_at": "2099-01-01T00:00:00Z"}, "device_info": {"firmware": "z"}}`)
-	assert.Empty(t, service.compareConfigurationsForDrift(base, metaOnly))
-}
-
-// TestCompareConfigurationsForDrift_KeepsMetadataLikeKeys proves the raw-key exact match keeps
-// real fields that merely resemble metadata keys, including a single JSON key that itself
-// contains a dot (which a path-splitting filter would wrongly hide).
-func TestCompareConfigurationsForDrift_KeepsMetadataLikeKeys(t *testing.T) {
-	service, _ := setupTestService(t)
-
-	cases := map[string][2]json.RawMessage{
-		"device_info_enabled": {
-			json.RawMessage(`{"device_info_enabled": true}`),
-			json.RawMessage(`{"device_info_enabled": false}`),
-		},
-		"custom_metadata": {
-			json.RawMessage(`{"custom_metadata": "a"}`),
-			json.RawMessage(`{"custom_metadata": "b"}`),
-		},
-		"dotted key vendor._metadata": {
-			json.RawMessage(`{"vendor._metadata": 1}`),
-			json.RawMessage(`{"vendor._metadata": 2}`),
-		},
-	}
-
-	for name, pair := range cases {
-		t.Run(name, func(t *testing.T) {
-			diffs := service.compareConfigurationsForDrift(pair[0], pair[1])
-			assert.NotEmpty(t, diffs, "metadata-like key must still produce drift")
-		})
-	}
-}
-
-// TestCompareConfigurationsForDrift_IgnoresRootMeters uses a Gen1 plug (SHPLG-S) settings
-// document, which embeds live meter readings under "meters". A fresh import must not look
-// drifted because the reading moved, while a real setting change must still be reported.
-func TestCompareConfigurationsForDrift_IgnoresRootMeters(t *testing.T) {
-	service, _ := setupTestService(t)
-
-	plug := func(name string, power float64, ts int64) json.RawMessage {
-		doc := map[string]interface{}{
-			"name":   name,
-			"mqtt":   map[string]interface{}{"enable": true},
-			"meters": []interface{}{map[string]interface{}{"power": power, "is_valid": true, "timestamp": ts, "total": 0}},
-		}
-		raw, err := json.Marshal(doc)
-		require.NoError(t, err)
-		return raw
-	}
-
-	stored := plug("tv", 0, 1794127877)
-
-	assert.Empty(t, service.compareConfigurationsForDrift(stored, plug("tv", 41.5, 1794127999)),
-		"a moved meter reading is telemetry, not drift")
-
-	diffs := service.compareConfigurationsForDrift(stored, plug("renamed", 41.5, 1794127999))
-	require.Len(t, diffs, 1, "a real setting change is still drift")
-	assert.Equal(t, "name", diffs[0].Path)
-
-	// The audit comparator keeps reporting everything.
-	assert.NotEmpty(t, service.compareConfigurations(stored, plug("tv", 41.5, 1794127999)))
-}
-
-// TestCompareConfigurationsForDrift_IgnoresDeviceClock loads a real Gen1 settings document twice,
-// with only the device clock changed: root "time" and "unixtime" move on every read, so they
-// are not drift.
-func TestCompareConfigurationsForDrift_IgnoresDeviceClock(t *testing.T) {
-	service, _ := setupTestService(t)
-
-	fixture, err := os.ReadFile("testdata/shplg_s_settings.json")
-	require.NoError(t, err)
-
-	withClock := func(clock string, unix int) json.RawMessage {
-		var doc map[string]interface{}
-		require.NoError(t, json.Unmarshal(fixture, &doc))
-		require.Contains(t, doc, "time", "the fixture must carry the device clock")
-		require.Contains(t, doc, "unixtime", "the fixture must carry the device clock")
-		doc["time"] = clock
-		doc["unixtime"] = unix
-		raw, err := json.Marshal(doc)
-		require.NoError(t, err)
-		return raw
-	}
-
-	stored := withClock("12:34", 1673456789)
-	current := withClock("12:41", 1673457209)
-
-	assert.Empty(t, service.compareConfigurationsForDrift(stored, current),
-		"a moved device clock is not drift")
-	// The audit comparator still reports both clock keys, and nothing else moved.
-	audit := service.compareConfigurations(stored, current)
-	paths := make([]string, 0, len(audit))
-	for _, diff := range audit {
-		paths = append(paths, diff.Path)
-	}
-	assert.ElementsMatch(t, []string{"time", "unixtime"}, paths,
-		"the audit comparator reports exactly the two clock keys")
-}
-
-// TestCompareConfigurationsForDrift_KeepsNestedAndEnergyMeterKeys proves the telemetry filter
-// is root-only: "emeters" holds real configuration on energy-meter models, and a nested key
-// named "meters" is not the root telemetry block.
-func TestCompareConfigurationsForDrift_KeepsNestedAndEnergyMeterKeys(t *testing.T) {
-	service, _ := setupTestService(t)
-
-	cases := map[string][2]json.RawMessage{
-		"emeters config": {
-			json.RawMessage(`{"emeters": [{"max_power": 100}]}`),
-			json.RawMessage(`{"emeters": [{"max_power": 200}]}`),
-		},
-		"nested meters": {
-			json.RawMessage(`{"power_metering": {"meters": 1}}`),
-			json.RawMessage(`{"power_metering": {"meters": 2}}`),
-		},
-	}
-
-	for name, pair := range cases {
-		t.Run(name, func(t *testing.T) {
-			assert.NotEmpty(t, service.compareConfigurationsForDrift(pair[0], pair[1]))
-		})
-	}
-}
-
-// TestDropRootKeys_NonObjectIsUnchanged keeps the comparator's old behaviour for input that
-// is not a JSON object.
-func TestDropRootKeys_NonObjectIsUnchanged(t *testing.T) {
-	in := json.RawMessage(`not json`)
-	assert.Equal(t, in, dropRootKeys(in, driftTelemetryRootKeys))
-	arr := json.RawMessage(`[1,2]`)
-	assert.Equal(t, arr, dropRootKeys(arr, driftTelemetryRootKeys))
-}
-
-// TestCompareConfigurations_ReportsMetadata locks in the audit/drift split: the unfiltered
-// comparator (used by createHistory) still reports a metadata-only change, while the
-// drift-specific comparator ignores that same change.
+// TestCompareConfigurations_ReportsMetadata locks in that the audit comparator (used by
+// createHistory) reports a metadata-only change.
 func TestCompareConfigurations_ReportsMetadata(t *testing.T) {
 	service, _ := setupTestService(t)
 
@@ -898,9 +474,6 @@ func TestCompareConfigurations_ReportsMetadata(t *testing.T) {
 	audit := service.compareConfigurations(stored, current)
 	require.Len(t, audit, 1, "audit comparison must still report the metadata change")
 	assert.Contains(t, audit[0].Path, "_metadata")
-
-	assert.Empty(t, service.compareConfigurationsForDrift(stored, current),
-		"drift comparison must ignore the same metadata change")
 }
 
 func TestApplyTemplate(t *testing.T) {
@@ -1421,49 +994,16 @@ func TestBulkDetectDrift(t *testing.T) {
 	require.NoError(t, db.Create(device1).Error)
 	require.NoError(t, db.Create(device2).Error)
 
-	// Create test device configurations
-	device1Config := DeviceConfig{
-		ID:         1,
-		DeviceID:   1,
-		Config:     []byte(`{"name": "Device1", "wifi": {"enable": true, "ssid": "TestNetwork"}}`),
-		SyncStatus: "synced",
-	}
-	device2Config := DeviceConfig{
-		ID:         2,
-		DeviceID:   2,
-		Config:     []byte(`{"name": "Device2", "relay": {"enabled": true}}`),
-		SyncStatus: "synced",
-	}
-	db.Create(&device1Config)
-	db.Create(&device2Config)
+	// Drift compares with the desired configuration, which this package's devices table does not
+	// hold, so a mock repository serves it.
+	repo := newMockRepository()
+	repo.devices[1] = &ServiceDevice{ID: 1, MAC: "AA:BB:CC:DD:EE:01", DesiredConfig: desiredNamed(t, "Device1")}
+	repo.devices[2] = &ServiceDevice{ID: 2, MAC: "AA:BB:CC:DD:EE:02", DesiredConfig: desiredNamed(t, "Device2")}
+	service.ConfigurationSvc = NewConfigurationService(repo, nil, nil)
 
-	// Create mock clients
-	mockClient1 := &mockShellyClient{}
-	mockClient2 := &mockShellyClient{}
-
-	// Device 1: No drift (same config)
-	mockClient1.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
-		ID:         "device1",
-		Model:      "SHSW-1",
-		Generation: 1,
-		MAC:        "AABBCCDDEE01",
-		Version:    "20210101-000000",
-	}, nil)
-	mockClient1.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
-		Raw: []byte(`{"name": "Device1", "wifi": {"enable": true, "ssid": "TestNetwork"}}`),
-	}, nil)
-
-	// Device 2: Drift detected (different relay state)
-	mockClient2.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
-		ID:         "device2",
-		Model:      "SHSW-1",
-		Generation: 1,
-		MAC:        "AABBCCDDEE02",
-		Version:    "20210101-000000",
-	}, nil)
-	mockClient2.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
-		Raw: []byte(`{"name": "Device2", "relay": {"enabled": false}}`), // Different state
-	}, nil)
+	// Device 1 holds its desired configuration; device 2 was renamed after the apply.
+	mockClient1 := driftClient("Device1", "AA:BB:CC:DD:EE:01")
+	mockClient2 := driftClient("Renamed", "AA:BB:CC:DD:EE:02")
 
 	// Client getter function
 	clientGetter := func(deviceID uint) (shelly.Client, error) {
@@ -1484,12 +1024,12 @@ func TestBulkDetectDrift(t *testing.T) {
 
 	// Verify results
 	assert.Equal(t, 2, result.Total)
-	assert.Equal(t, 1, result.InSync)  // Device 1 unchanged (metadata-only delta is ignored)
-	assert.Equal(t, 1, result.Drifted) // Device 2 has a real relay-state change
+	assert.Equal(t, 1, result.InSync)  // Device 1 holds its desired configuration
+	assert.Equal(t, 1, result.Drifted) // Device 2 left it
 	assert.Equal(t, 0, result.Errors)
 	assert.Len(t, result.Results, 2)
 
-	// Check device 1 result (in sync: only volatile metadata differs, which drift ignores)
+	// Check device 1 result (in sync)
 	device1Result := result.Results[0]
 	assert.Equal(t, uint(1), device1Result.DeviceID)
 	assert.Equal(t, "synced", device1Result.Status)
@@ -1524,31 +1064,16 @@ func TestBulkDetectDrift_WithErrors(t *testing.T) {
 	}
 	require.NoError(t, db.Create(device1).Error)
 
-	// Create one valid device configuration
-	deviceConfig := DeviceConfig{
-		ID:         1,
-		DeviceID:   1,
-		Config:     []byte(`{"name": "Device1"}`),
-		SyncStatus: "synced",
-	}
-	db.Create(&deviceConfig)
+	repo := newMockRepository()
+	repo.devices[1] = &ServiceDevice{ID: 1, MAC: "AA:BB:CC:DD:EE:03", DesiredConfig: desiredNamed(t, "Device1")}
+	service.ConfigurationSvc = NewConfigurationService(repo, nil, nil)
 
 	// Client getter that returns errors for some devices
 	clientGetter := func(deviceID uint) (shelly.Client, error) {
 		switch deviceID {
 		case 1:
 			// Valid client
-			mockClient := &mockShellyClient{}
-			mockClient.On("GetInfo", mock.Anything).Return(&shelly.DeviceInfo{
-				ID:         "device1",
-				Model:      "SHSW-1",
-				Generation: 1,
-				MAC:        "AABBCCDDEE01",
-			}, nil)
-			mockClient.On("GetConfig", mock.Anything).Return(&shelly.DeviceConfig{
-				Raw: []byte(`{"name": "Device1"}`),
-			}, nil)
-			return mockClient, nil
+			return driftClient("Device1", "AA:BB:CC:DD:EE:03"), nil
 		case 2:
 			// Client creation error
 			return nil, fmt.Errorf("client creation failed")
@@ -1567,12 +1092,12 @@ func TestBulkDetectDrift_WithErrors(t *testing.T) {
 
 	// Verify error handling
 	assert.Equal(t, 3, result.Total)
-	assert.Equal(t, 1, result.InSync)  // Device 1 unchanged (metadata-only delta is ignored)
-	assert.Equal(t, 0, result.Drifted) // No real drift
+	assert.Equal(t, 1, result.InSync)  // Device 1 holds its desired configuration
+	assert.Equal(t, 0, result.Drifted) // No drift
 	assert.Equal(t, 2, result.Errors)  // Devices 2 and 999 failed
 	assert.Len(t, result.Results, 3)
 
-	// Check successful device (in sync: only volatile metadata differs)
+	// Check successful device (in sync)
 	successResult := result.Results[0]
 	assert.Equal(t, uint(1), successResult.DeviceID)
 	assert.Equal(t, "synced", successResult.Status)
@@ -1603,6 +1128,12 @@ func TestBulkDetectDrift_StopOnErrorSkipsTheRest(t *testing.T) {
 			MAC:  fmt.Sprintf("AA:BB:CC:DD:EE:%02d", 10+id),
 		}).Error)
 	}
+
+	// Both devices have a desired configuration, so each one's client is asked for.
+	repo := newMockRepository()
+	repo.devices[1] = &ServiceDevice{ID: 1, MAC: "AA:BB:CC:DD:EE:11", DesiredConfig: desiredNamed(t, "Device1")}
+	repo.devices[2] = &ServiceDevice{ID: 2, MAC: "AA:BB:CC:DD:EE:12", DesiredConfig: desiredNamed(t, "Device2")}
+	service.ConfigurationSvc = NewConfigurationService(repo, nil, nil)
 
 	var asked []uint
 	clientGetter := func(deviceID uint) (shelly.Client, error) {

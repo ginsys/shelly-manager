@@ -62,8 +62,10 @@ config, err := configService.ImportFromDevice(deviceID)
 
 ### Detect Drift
 ```go
-// Check if device configuration matches database
-drift, err := configService.DetectDrift(deviceID)
+// Compare the live device with its desired configuration (the one apply
+// writes and verify reads). A device with no desired configuration returns
+// ErrNoDesiredConfig; the stored device_configs row is not consulted.
+drift, err := configService.DetectDrift(deviceID, client)
 ```
 
 ### Apply Template

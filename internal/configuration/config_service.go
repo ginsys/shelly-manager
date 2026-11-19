@@ -13,13 +13,15 @@ import (
 )
 
 var (
-	ErrTemplateNotFound     = errors.New("template not found")
-	ErrTemplateAssigned     = errors.New("template is assigned to devices")
-	ErrDeviceNotFound       = errors.New("device not found")
-	ErrInvalidScope         = errors.New("invalid scope: must be 'global', 'group', or 'device_type'")
-	ErrDeviceTypeRequired   = errors.New("device_type required when scope is 'device_type'")
-	ErrTemplateIDsNotFound  = errors.New("one or more template IDs not found")
-	ErrStoredConfigNotFound = errors.New("no stored configuration found for device")
+	ErrTemplateNotFound    = errors.New("template not found")
+	ErrTemplateAssigned    = errors.New("template is assigned to devices")
+	ErrDeviceNotFound      = errors.New("device not found")
+	ErrInvalidScope        = errors.New("invalid scope: must be 'global', 'group', or 'device_type'")
+	ErrDeviceTypeRequired  = errors.New("device_type required when scope is 'device_type'")
+	ErrTemplateIDsNotFound = errors.New("one or more template IDs not found")
+	// ErrNoDesiredConfig is what a drift check answers for a device that has no desired
+	// configuration: there is nothing to compare the device with, which is not the same as no drift.
+	ErrNoDesiredConfig = errors.New("no desired configuration is set for this device, so there is nothing to compare it with")
 )
 
 type ServiceConfigTemplate struct {
@@ -519,6 +521,37 @@ func parseDesiredConfig(raw string) (*DeviceConfiguration, error) {
 		return nil, fmt.Errorf("failed to unmarshal desired config: %w", err)
 	}
 	return &config, nil
+}
+
+// hasDesiredConfig reports whether a device has a desired configuration at all: an empty value,
+// null and an empty object, however it is spelled, all mean none. A value that is not valid JSON
+// counts as set, so the parse that follows reports it.
+func hasDesiredConfig(raw string) bool {
+	if strings.TrimSpace(raw) == "" {
+		return false
+	}
+	var v any
+	if err := json.Unmarshal([]byte(raw), &v); err != nil {
+		return true
+	}
+	if object, ok := v.(map[string]any); ok {
+		return len(object) > 0
+	}
+	return v != nil
+}
+
+// RequireDesiredConfig returns ErrNoDesiredConfig when the device has no desired configuration. A
+// drift run calls it before it contacts the device, so a device that cannot be checked is never
+// asked for a client or a login.
+func (s *ConfigurationService) RequireDesiredConfig(deviceID uint) error {
+	device, err := s.repo.GetDevice(deviceID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrDeviceNotFound, err)
+	}
+	if !hasDesiredConfig(device.DesiredConfig) {
+		return ErrNoDesiredConfig
+	}
+	return nil
 }
 
 // parseApplicableDesiredConfig decodes a stored desired configuration for apply and verify.

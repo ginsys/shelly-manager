@@ -21,6 +21,21 @@ func (Device) TableName() string {
 	return "devices"
 }
 
+// DeviceModel returns the model identifier the configuration converters match on (for example
+// "SHPLG-S"). Discovery stores it in the device settings; the device type holds a display label such
+// as "Smart Plug", so it is only a fallback for records that have no stored model.
+func DeviceModel(settings, deviceType string) string {
+	var stored struct {
+		Model string `json:"model"`
+	}
+	if settings != "" {
+		if err := json.Unmarshal([]byte(settings), &stored); err == nil && stored.Model != "" {
+			return stored.Model
+		}
+	}
+	return deviceType
+}
+
 // ConfigLevel represents the configuration hierarchy level
 type ConfigLevel int
 
@@ -98,7 +113,7 @@ type ConfigDrift struct {
 // ConfigDifference represents a single configuration difference
 type ConfigDifference struct {
 	Path        string      `json:"path"`        // JSON path to the difference
-	Expected    interface{} `json:"expected"`    // Value in database
+	Expected    interface{} `json:"expected"`    // Value in the desired configuration
 	Actual      interface{} `json:"actual"`      // Value on device
 	Type        string      `json:"type"`        // "added", "removed", "modified"
 	Severity    string      `json:"severity"`    // "critical", "warning", "info"

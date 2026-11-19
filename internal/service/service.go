@@ -1147,18 +1147,9 @@ func (s *ShellyService) ApplyDesiredConfig(ctx context.Context, deviceID uint) (
 }
 
 // DeviceModel returns the model identifier the configuration converters match on (for example
-// "SHPLG-S"). Discovery stores it in the device settings; device.Type holds a display label such
-// as "Smart Plug", so it is only a fallback for records that have no stored model.
+// "SHPLG-S"); see configuration.DeviceModel.
 func DeviceModel(device *database.Device) string {
-	var settings struct {
-		Model string `json:"model"`
-	}
-	if device.Settings != "" {
-		if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil && settings.Model != "" {
-			return settings.Model
-		}
-	}
-	return device.Type
+	return configuration.DeviceModel(device.Settings, device.Type)
 }
 
 // VerifyDesiredConfig compares the device's desired configuration with the
@@ -1270,6 +1261,12 @@ func (s *ShellyService) DetectConfigDrift(deviceID uint) (*configuration.ConfigD
 
 	if device.Status == "offline" {
 		return nil, ErrDeviceOffline
+	}
+
+	// A device with no desired configuration cannot be checked, whatever its login: say so before
+	// the device is contacted, so a login failure does not hide it.
+	if noDesired := s.ConfigSvc.ConfigurationSvc.RequireDesiredConfig(deviceID); errors.Is(noDesired, configuration.ErrNoDesiredConfig) {
+		return nil, noDesired
 	}
 
 	// Get or create client with auth retry

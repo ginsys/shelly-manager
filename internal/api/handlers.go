@@ -940,11 +940,11 @@ func (h *Handler) DetectConfigDrift(w http.ResponseWriter, r *http.Request) {
 			h.responseWriter().WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
 			return
 		}
-		if errors.Is(err, configuration.ErrStoredConfigNotFound) {
+		if errors.Is(err, configuration.ErrNoDesiredConfig) {
 			h.logger.WithFields(map[string]any{
 				"device_id": id,
-			}).Warn("No stored configuration found for drift detection")
-			h.responseWriter().WriteNotFoundError(w, r, "Stored configuration")
+			}).Warn("No desired configuration for drift detection")
+			h.responseWriter().WriteError(w, r, http.StatusNotFound, apiresp.ErrCodeNotFound, err.Error(), nil)
 			return
 		}
 		h.logger.WithFields(map[string]any{

@@ -1017,8 +1017,8 @@ func TestGetCurrentDeviceConfigEnvelope(t *testing.T) {
 	}
 }
 
-// driftedDevice is a device whose stored configuration differs from what the
-// device now reports, with the stored record already marked "drift".
+// driftedDevice is a device whose desired configuration differs from what the
+// device now reports.
 type driftedDevice struct {
 	handler *Handler
 	svc     *service.ShellyService
@@ -1056,14 +1056,16 @@ func newDriftedDevice(t *testing.T) driftedDevice {
 	device.MAC = "68C63A123456"
 	device.Type = "SHSW-25"
 	device.Settings = `{"model":"SHSW-25","gen":1,"auth_enabled":false}`
+	// Drift compares the device with this desired configuration, never with the stored record.
+	device.DesiredConfig = `{"system":{"device":{"name":"Name At Import"}}}`
 	testutil.AssertNoError(t, db.AddDevice(device))
 
 	svc := testShellyService(t, db)
-	// The stored baseline is what the device reported at import time.
+	// The stored record is what the device reported at import time.
 	_, err := svc.ImportDeviceConfig(device.ID)
 	testutil.AssertNoError(t, err)
 
-	// The device then changes, and a drift check marks the stored record.
+	// The device then changes and a drift check reports it, writing nothing.
 	name.Store("Name Changed On Device")
 	drift, err := svc.DetectConfigDrift(device.ID)
 	testutil.AssertNoError(t, err)
@@ -1072,7 +1074,6 @@ func newDriftedDevice(t *testing.T) driftedDevice {
 	}
 	stored, err := svc.GetDeviceConfig(device.ID)
 	testutil.AssertNoError(t, err)
-	testutil.AssertEqual(t, "drift", stored.SyncStatus)
 
 	return driftedDevice{
 		handler: NewHandlerWithLogger(db, svc, testNotificationHandler(t, db), nil, logging.GetDefault()),
@@ -1088,7 +1089,7 @@ func (d driftedDevice) requireBaselineKept(t *testing.T) {
 	t.Helper()
 	after, err := d.svc.GetDeviceConfig(d.id)
 	testutil.AssertNoError(t, err)
-	testutil.AssertEqual(t, "drift", after.SyncStatus)
+	testutil.AssertEqual(t, d.stored.SyncStatus, after.SyncStatus)
 	testutil.AssertEqual(t, string(d.stored.Config), string(after.Config))
 	if !after.UpdatedAt.Equal(d.stored.UpdatedAt) {
 		t.Errorf("stored record was written: updated_at %v -> %v", d.stored.UpdatedAt, after.UpdatedAt)
@@ -1129,6 +1130,27 @@ func TestGetCurrentDeviceConfigNormalizedKeepsDriftBaseline(t *testing.T) {
 
 	testutil.AssertEqual(t, http.StatusOK, w.Code)
 	d.requireBaselineKept(t)
+}
+
+// A device with no desired configuration has nothing to compare with: the drift route answers 404
+// with the reason, never "no drift".
+func TestDetectConfigDrift_NoDesiredConfigIsNotFound(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	addr, hits := countingDevice(t, "A4CF12345600")
+	device := deviceAt(t, db, addr, "A4:CF:12:34:56:00")
+
+	req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/devices/%d/config/drift", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+	w := httptest.NewRecorder()
+	handler.DetectConfigDrift(w, req)
+
+	testutil.AssertEqual(t, http.StatusNotFound, w.Code)
+	if !strings.Contains(w.Body.String(), "no desired configuration") {
+		t.Errorf("the answer must name the reason: %s", w.Body.String())
+	}
+	testutil.AssertEqual(t, int32(0), hits.Load())
 }
 
 func TestWriteDeviceReadError(t *testing.T) {
