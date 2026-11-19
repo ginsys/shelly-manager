@@ -223,10 +223,11 @@ func (h *Handler) bulkApplyRun(ctx context.Context, entries []bulkApplyEntry, ra
 	stopped := false
 	for i, entry := range entries {
 		switch {
+		case stopped:
+			// After the stop nothing is contacted, a device refused in pass 1 included.
+			entries[i] = bulkApplyStoredEntry(entry, bulkApplySkipped, false, reasonStopped)
 		case entry.Status != "":
 			// Refused in pass 1: not found or not readable. It keeps its entry.
-		case stopped:
-			entries[i] = bulkApplyStoredEntry(entry, bulkApplySkipped, false, reasonStopped)
 		default:
 			entries[i] = h.bulkApplyDevice(ctx, entry, raw)
 		}
