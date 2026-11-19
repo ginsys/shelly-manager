@@ -93,7 +93,7 @@ components:
           type: string
 
     # Bulk configuration routes (bulk-import, bulk-drift-detect,
-    # bulk-drift-detect-enhanced) act on the named devices only.
+    # bulk-drift-detect-enhanced, bulk-download) act on the named devices only.
     BulkDeviceRequest:
       type: object
       additionalProperties: false
@@ -151,6 +151,42 @@ components:
                 enum: [success, failed, skipped]
               error:
                 type: string
+
+    BulkDownloadFile:
+      type: object
+      description: >-
+        The file bulk-download answers. It is the body itself, not the `{success, data}` envelope.
+      required: [generated_at, devices]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        devices:
+          type: array
+          description: One entry per named device, in request order.
+          items:
+            type: object
+            required: [device_id, status]
+            properties:
+              device_id:
+                type: integer
+              device_name:
+                type: string
+              mac:
+                type: string
+              status:
+                type: string
+                enum: [ok, error]
+              config:
+                type: object
+                description: >-
+                  The desired configuration (templates and overrides merged), with every secret that
+                  is set replaced by the mask `********`. Present when `status` is `ok`.
+              error:
+                type: string
+                description: >-
+                  A fixed text when `status` is `error`: `device not found`, `no desired
+                  configuration is set for this device` or `the configuration could not be read`.
 
     BulkDriftResult:
       type: object
@@ -2223,6 +2259,52 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '400':
           description: No body, invalid JSON, no `device_ids`, a non-positive id, or a field or option the server does not read (VALIDATION_FAILED); no device is contacted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/config/bulk-download:
+    post:
+      tags: [Configuration]
+      summary: Download the desired configuration of several devices
+      description: >-
+        Answers one JSON file (`Content-Disposition: attachment`) with an entry per named device,
+        in request order, holding the desired configuration with every secret masked. It reads the
+        database and never contacts a device. A device that cannot be read is an entry with
+        `status: error` and a fixed text, and the call still answers 200. At most 10 devices per
+        call. The request is the one of the other bulk routes, except that `options.stop_on_error`
+        is refused.
+      operationId: bulkDownloadConfigs
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkDeviceRequest'
+      responses:
+        '200':
+          description: The file; the body is a BulkDownloadFile
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: '`attachment; filename="shelly-configs-<UTC date and time>.json"`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkDownloadFile'
+        '400':
+          description: No body, invalid JSON, no `device_ids`, a non-positive id, more than 10 devices, `options.stop_on_error`, or a field the server does not read (VALIDATION_FAILED); nothing is read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '401':
+          description: An admin key is configured and the request has none or a wrong one (UNAUTHORIZED)
           content:
             application/json:
               schema:

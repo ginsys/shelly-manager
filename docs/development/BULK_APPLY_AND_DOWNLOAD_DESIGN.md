@@ -270,7 +270,8 @@ patch succeeded; the last row is the case where it did not. For each outcome:
 
 For the last row the route never reports the device as pending or applied. The operator re-reads the
 overrides and the status route, and sends the call again; a repeat patch of the same JSON rewrites all
-three values. This is rare (a database error) and the note proposes no repair for it.
+three values. This is rare (a database error) and the note proposes no repair for it. The third-write
+case is tracked in ginsys/shelly-manager#716.
 
 Option 1 (recommended): **keep the new overrides stored** and report `stored: true`. They are the
 operator's intent. The device shows as pending in the status route
@@ -509,7 +510,9 @@ build.
 - It does not make a bulk write atomic, and it does not roll back devices already written.
 - It does not close the open admin-key gap: with no key set, every route in this note is open.
 - It does not change the second masking rule, the apply lock or any authorization.
-- It does not test that every route the download reads masks every secret; decision 12 proposes the
-  test.
+- It does not repair the last write of `RecomputeDesiredConfig` failing after the overrides and the
+  desired configuration were stored (ginsys/shelly-manager#716).
+- It does not test that every route the download reads masks every secret; decision 12 proposed the
+  test, and the download slice added it (`TestBulkDownload_ReturnsNoSecretValue`).
 - It does not evaluate the SMA archive or a ZIP format.
 - It builds nothing. ginsys/shelly-manager#594 and ginsys/shelly-manager#595 stay open until built.

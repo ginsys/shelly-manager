@@ -1,0 +1,116 @@
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/ginsys/shelly-manager/internal/configuration"
+)
+
+// maxBulkDownloadDevices is the most devices one bulk-download names. The file is built in memory
+// from the database, so the cap bounds the answer, not device contact. It is a proposal, not a
+// measurement: raise it where an operator has a real fleet to download.
+const maxBulkDownloadDevices = 10
+
+// Entry statuses of the downloaded file.
+const (
+	bulkDownloadOK    = "ok"
+	bulkDownloadError = "error"
+)
+
+// bulkDownloadEntry is one device of the file. Config is the desired configuration with every
+// secret masked (maskSecrets); an entry that could not be read carries a fixed Error text and no
+// Config, never the text of the underlying error.
+type bulkDownloadEntry struct {
+	DeviceID   uint                               `json:"device_id"`
+	DeviceName string                             `json:"device_name,omitempty"`
+	MAC        string                             `json:"mac,omitempty"`
+	Status     string                             `json:"status"`
+	Config     *configuration.DeviceConfiguration `json:"config,omitempty"`
+	Error      string                             `json:"error,omitempty"`
+}
+
+type bulkDownloadFile struct {
+	GeneratedAt time.Time           `json:"generated_at"`
+	Devices     []bulkDownloadEntry `json:"devices"`
+}
+
+// BulkDownloadConfigs handles POST /api/v1/config/bulk-download. It answers one JSON file with the
+// desired configuration of each named device, secrets masked. It reads the database and never
+// contacts a device.
+func (h *Handler) BulkDownloadConfigs(w http.ResponseWriter, r *http.Request) {
+	// Admin before any parsing or read.
+	if !h.requireAdmin(w, r) {
+		return
+	}
+	selection, ok := h.decodeBulkRequest(w, r)
+	if !ok {
+		return
+	}
+	rw := h.responseWriter()
+	if selection.StopOnError {
+		rw.WriteValidationError(w, r, "options.stop_on_error does not apply to bulk-download: a device that cannot be read is an entry, not a stop")
+		return
+	}
+	if len(selection.IDs) > maxBulkDownloadDevices {
+		rw.WriteValidationError(w, r, fmt.Sprintf("bulk-download takes at most %d devices, got %d", maxBulkDownloadDevices, len(selection.IDs)))
+		return
+	}
+
+	now := time.Now().UTC()
+	file := bulkDownloadFile{GeneratedAt: now, Devices: make([]bulkDownloadEntry, 0, len(selection.IDs))}
+	for _, id := range selection.IDs {
+		file.Devices = append(file.Devices, h.bulkDownloadEntry(id))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"shelly-configs-%s.json\"", now.Format("20060102-150405")))
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(file); err != nil {
+		h.logger.WithFields(map[string]any{"error": err.Error()}).Warn("Failed to write the bulk-download file")
+	}
+}
+
+// bulkDownloadEntry reads one device. RequireDesiredConfig comes first, so a device with an empty
+// desired configuration is reported as having none and not as having no settings.
+func (h *Handler) bulkDownloadEntry(id uint) bulkDownloadEntry {
+	entry := bulkDownloadEntry{DeviceID: id, Status: bulkDownloadError}
+	device, err := h.Service.DB.GetDevice(id)
+	if err != nil {
+		entry.Error = "device not found"
+		return entry
+	}
+	entry.DeviceName = device.Name
+	entry.MAC = device.MAC
+
+	svc := h.ConfigService.ConfigurationSvc
+	if err = svc.RequireDesiredConfig(id); err != nil {
+		if errors.Is(err, configuration.ErrNoDesiredConfig) {
+			entry.Error = "no desired configuration is set for this device"
+			return entry
+		}
+		return h.bulkDownloadUnreadable(entry, err)
+	}
+	config, _, err := svc.GetDesiredConfig(id)
+	if err != nil {
+		return h.bulkDownloadUnreadable(entry, err)
+	}
+	maskSecrets(config)
+	entry.Status = bulkDownloadOK
+	entry.Config = config
+	return entry
+}
+
+// bulkDownloadUnreadable gives an entry the fixed text. The error may quote the stored bytes, so it
+// goes to the log and not to the file.
+func (h *Handler) bulkDownloadUnreadable(entry bulkDownloadEntry, err error) bulkDownloadEntry {
+	h.logger.WithFields(map[string]any{
+		"device_id": entry.DeviceID,
+		"error":     err.Error(),
+	}).Warn("Failed to read the desired configuration for bulk-download")
+	entry.Error = "the configuration could not be read"
+	return entry
+}
