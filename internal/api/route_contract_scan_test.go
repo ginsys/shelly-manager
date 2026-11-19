@@ -925,6 +925,7 @@ type routeScanner struct {
 	instance     map[string]bool // axios instances bound in the client module
 	bound        bool            // a binding for the next axios.create was recorded
 	created      bool            // the client module's axios instance was created
+	retries      []retryHandler  // rejection handlers of <instance>.interceptors.response.use
 	calls        []routeContractCall
 	hits         []routeContractHit
 	errs         []routeContractError
@@ -1036,13 +1037,126 @@ func (s *routeScanner) probe() *routeScanner {
 	}
 }
 
-// instanceRetry consumes .request(<ident>.config) after the axios instance in the
+// retryHandler is the rejection handler (the second argument) of an
+// <instance>.interceptors.response.use call: its byte span and the name of its
+// first parameter, the one place a retry may take its config from.
+type retryHandler struct {
+	param      string
+	start, end int
+}
+
+var (
+	// An assignment to the parameter or to its config, in any operator form.
+	retryAssignRe = func(param string) *regexp.Regexp {
+		p := regexp.QuoteMeta(param)
+		return regexp.MustCompile(`(^|[^.\w$])` + p + `\s*(\??\.\s*config\s*)?(\*\*|&&|\|\||\?\?|<<|>>>?|[-+*/%&|^])?=([^=>]|$)`)
+	}
+	// A declaration of the parameter's name inside the handler.
+	retryDeclRe = func(param string) *regexp.Regexp {
+		return regexp.MustCompile(`(^|[^.\w$])(const|let|var)\s+` + regexp.QuoteMeta(param) + `([^\w$]|$)`)
+	}
+)
+
+// recordRetryHandler is called with the axios instance just read, followed by
+// .interceptors. If the call is .response.use(<fulfilled>, <rejected>) and the
+// rejected handler is a function with a named first parameter, the handler is
+// recorded. Anything else records nothing, so a retry in it is refused. The
+// position is unchanged.
+func (s *routeScanner) recordRetryHandler() {
+	mark := s.mark()
+	defer s.restore(mark)
+	for _, name := range []string{"interceptors", "response", "use"} {
+		if !s.consumeDot() {
+			return
+		}
+		s.skipSpaceComments()
+		if !s.consumeWord(name) {
+			return
+		}
+	}
+	s.skipSpaceComments()
+	args, _, ok := s.callArgs()
+	if !ok || len(args) < 2 {
+		return
+	}
+	param := s.handlerParam(args[1].start)
+	if param == "" {
+		return
+	}
+	body := string(s.src[args[1].start:args[1].end])
+	if retryAssignRe(param).MatchString(body) || retryDeclRe(param).MatchString(body) {
+		return // fail closed: a false positive is a refusal, never a pass
+	}
+	s.retries = append(s.retries, retryHandler{param: param, start: args[1].start, end: args[1].end})
+}
+
+// handlerParam returns the first parameter of the function that starts at
+// start, in the forms async? (p) => ..., async? p => ... and
+// function name? (p ...) {...}, with an optional type annotation, or "".
+func (s *routeScanner) handlerParam(start int) string {
+	w := s.probe()
+	w.i = start
+	w.skipSpaceComments()
+	if w.peekIdent("async") {
+		mark := w.mark()
+		w.readIdent()
+		w.skipSpaceComments()
+		if w.peek('=') { // async => ...: a parameter named async
+			w.restore(mark)
+		}
+	}
+	w.skipSpaceComments()
+	isFunction := w.consumeWord("function")
+	if isFunction {
+		w.skipSpaceComments()
+		w.readIdent()
+		w.skipSpaceComments()
+	}
+	paren := w.peek('(')
+	if paren {
+		w.i++
+		w.skipSpaceComments()
+	} else if isFunction {
+		return ""
+	}
+	name, _ := w.readIdent()
+	if name == "" {
+		return ""
+	}
+	w.skipSpaceComments()
+	if !paren {
+		if w.peek('=') && w.peekN(1) == '>' {
+			return name
+		}
+		return ""
+	}
+	if w.peek(')') || w.peek(',') || w.peek(':') || w.peek('?') {
+		return name
+	}
+	return ""
+}
+
+// retryParam reports whether ident is the first parameter of a rejection
+// handler whose span holds the current position.
+func (s *routeScanner) retryParam(ident string) bool {
+	for _, r := range s.retries {
+		if s.i > r.start && s.i <= r.end && r.param == ident {
+			return true
+		}
+	}
+	return false
+}
+
+// instanceRetry consumes .request(<param>.config) after the axios instance in the
 // client module: the re-send of a request that already went through the client,
-// which was paired when it was first issued. Any other argument (an object
-// literal, a call, another member, a second argument) could name a route that
-// was never paired, so it reports false, unchanged, and the caller fails. The
-// scanner tracks no scopes, so it cannot tell that <ident> is an interceptor's
-// error parameter; any <ident>.config passes (pinned by a fixture).
+// which was paired when it was first issued. It is accepted only inside the
+// rejection handler of <instance>.interceptors.response.use, where <param> is
+// the handler's first parameter and the handler assigns neither it nor its
+// config (recordRetryHandler). Any other argument (an object literal, a call,
+// another member, a second argument) or place could name a route that was never
+// paired, so it reports false, unchanged, and the caller fails. The scanner
+// tracks no scopes: a function nested in the handler whose own parameter has
+// the same name still passes (pinned by a fixture).
 func (s *routeScanner) instanceRetry() bool {
 	mark := s.mark()
 	if s.consumeDot() {
@@ -1052,7 +1166,7 @@ func (s *routeScanner) instanceRetry() bool {
 			if s.peek('(') {
 				s.i++
 				s.skipSpaceComments()
-				if arg, _ := s.readIdent(); arg != "" && s.consumeDot() {
+				if arg, _ := s.readIdent(); arg != "" && s.retryParam(arg) && s.consumeDot() {
 					s.skipSpaceComments()
 					if s.consumeWord("config") {
 						s.skipSpaceComments()
@@ -1390,8 +1504,9 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 	}
 	// Inside the client module the axios instance is bound as
 	// const <name> = axios.create(...). Its supported uses there are
-	// <name>.interceptors..., <name>.request(<ident>.config) and export default
-	// <name>; anything else could issue a request without yielding a pair.
+	// <name>.interceptors..., <name>.request(<param>.config) inside the rejection
+	// handler of <name>.interceptors.response.use, and export default <name>;
+	// anything else could issue a request without yielding a pair.
 	if s.isClientFile && !member {
 		if (prev == "const" || prev == "let" || prev == "var") && s.bindsAxiosCreate() {
 			s.instance[ident] = true
@@ -1399,7 +1514,9 @@ func (s *routeScanner) afterIdent(ident string, line int, member bool) {
 			return
 		}
 		if s.instance[ident] {
-			if !s.peekMember("interceptors") && !s.instanceRetry() {
+			if s.peekMember("interceptors") {
+				s.recordRetryHandler()
+			} else if !s.instanceRetry() {
 				s.fail(line, "unsupported use of the axios instance %q in the api client module", ident)
 				return
 			}
@@ -1732,6 +1849,7 @@ func (s *routeScanner) checkCallConfig(method string) string {
 }
 
 type callArg struct {
+	start, end int  // the argument's byte span in the source, up to its delimiter
 	spreadArg  bool // the argument is spread (...xs) into several
 	closed     bool // a bracket opened at the argument's top level just closed
 	object     bool // the argument is an object literal and nothing else
@@ -1779,6 +1897,9 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 			c = ','
 		}
 		if depth == 0 && (c == ')' || c == ',') {
+			if cur != nil {
+				cur.end = w.i
+			}
 			w.i++
 			if c == ')' {
 				return args, w.mark(), true
@@ -1793,6 +1914,7 @@ func (s *routeScanner) walkArgs(open bool) ([]callArg, scanMark, bool) {
 				return args, w.mark(), true // trailing comma
 			}
 			args = append(args, callArg{
+				start:     w.i,
 				object:    w.peek('{'),
 				spreadArg: w.peek('.') && w.peekN(1) == '.' && w.peekN(2) == '.',
 			})
