@@ -163,10 +163,11 @@ components:
         device_ids:
           type: array
           minItems: 1
-          maxItems: 10
           description: >-
             The devices to download. Each id is a positive integer; a repeated id counts once, in
-            first-seen order. More than 10 distinct ids are refused, and nothing is read.
+            first-seen order. More than 10 distinct ids are refused, and nothing is read. The limit
+            is on distinct ids, so the schema has no `maxItems`: it would refuse a list that
+            repeats an id.
           items:
             type: integer
             minimum: 1

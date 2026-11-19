@@ -164,6 +164,10 @@ func TestBulkDownload_RefusesMoreThanTheCapBeforeAnyRead(t *testing.T) {
 	// Exactly the cap is accepted.
 	at := postDownload(handler, idsBody(ids[:maxBulkDownloadDevices]...))
 	assert.Len(t, decodeDownload(t, at).Devices, maxBulkDownloadDevices)
+
+	// The cap counts distinct ids: a repeat of one of them is not an eleventh device.
+	repeat := postDownload(handler, idsBody(append(append([]uint{}, ids[:maxBulkDownloadDevices]...), ids[0])...))
+	assert.Len(t, decodeDownload(t, repeat).Devices, maxBulkDownloadDevices)
 }
 
 // The request contract of the other bulk routes holds, and stop_on_error, which a read has no use
