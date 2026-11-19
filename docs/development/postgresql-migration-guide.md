@@ -506,39 +506,29 @@ database:
 
 #### Development Environment
 ```bash
-# Remove SQLite variables
-unset SQLITE_DB_PATH
-unset SQLITE_JOURNAL_MODE
+# Remove the SQLite variable
+unset SHELLY_DATABASE_PATH
 
-# Add PostgreSQL variables
-export DATABASE_PROVIDER="postgresql"
-export POSTGRES_HOST="localhost"
-export POSTGRES_PORT="5432"
-export POSTGRES_USER="shelly"
-export POSTGRES_PASSWORD="development_password"
-export POSTGRES_DB="shelly_manager_dev"
-export POSTGRES_SSL_MODE="prefer"
-export POSTGRES_MAX_OPEN_CONNS="10"
-export POSTGRES_MAX_IDLE_CONNS="2"
+# Add PostgreSQL variables (host, port, database and SSL mode are in the DSN)
+export SHELLY_DATABASE_PROVIDER="postgresql"
+export SHELLY_DATABASE_DSN="postgres://localhost:5432/shelly_manager_dev?sslmode=prefer"
+export SHELLY_DATABASE_USERNAME="shelly"
+export SHELLY_DATABASE_PASSWORD="development_password"
+export SHELLY_DATABASE_MAX_OPEN_CONNS="10"
+export SHELLY_DATABASE_MAX_IDLE_CONNS="2"
 ```
 
 #### Production Environment
 ```bash
 # PostgreSQL production configuration
-export DATABASE_PROVIDER="postgresql"
-export POSTGRES_HOST="postgres-prod.internal"
-export POSTGRES_PORT="5432"
-export POSTGRES_USER="shelly_prod"
-export POSTGRES_PASSWORD="$(cat /secrets/postgres-password)"
-export POSTGRES_DB="shelly_manager"
-export POSTGRES_SSL_MODE="require"
-export POSTGRES_SSL_CERT="/certs/client.crt"
-export POSTGRES_SSL_KEY="/certs/client.key"
-export POSTGRES_SSL_ROOT_CERT="/certs/ca.crt"
-export POSTGRES_MAX_OPEN_CONNS="50"
-export POSTGRES_MAX_IDLE_CONNS="10"
-export POSTGRES_CONN_MAX_LIFETIME="2h"
-export POSTGRES_CONN_MAX_IDLE_TIME="15m"
+export SHELLY_DATABASE_PROVIDER="postgresql"
+export SHELLY_DATABASE_DSN="postgres://postgres-prod.internal:5432/shelly_manager?sslmode=require&sslcert=/certs/client.crt&sslkey=/certs/client.key&sslrootcert=/certs/ca.crt"
+export SHELLY_DATABASE_USERNAME="shelly_prod"
+export SHELLY_DATABASE_PASSWORD="$(cat /secrets/postgres-password)"
+export SHELLY_DATABASE_MAX_OPEN_CONNS="50"
+export SHELLY_DATABASE_MAX_IDLE_CONNS="10"
+export SHELLY_DATABASE_CONN_MAX_LIFETIME="7200"
+export SHELLY_DATABASE_CONN_MAX_IDLE_TIME="900"
 ```
 
 ### Docker Compose Updates
@@ -551,8 +541,8 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - DATABASE_PROVIDER=sqlite
-      - SQLITE_DB_PATH=/app/data/shelly.db
+      - SHELLY_DATABASE_PROVIDER=sqlite
+      - SHELLY_DATABASE_PATH=/app/data/shelly.db
 ```
 
 #### After (PostgreSQL)
@@ -561,12 +551,11 @@ services:
   shelly-manager:
     image: shelly-manager:latest
     environment:
-      - DATABASE_PROVIDER=postgresql
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=shelly
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=shelly_manager
-      - POSTGRES_SSL_MODE=require
+      - SHELLY_DATABASE_PROVIDER=postgresql
+      # The postgres service below has no TLS: use sslmode=require against a server that has certificates
+      - SHELLY_DATABASE_DSN=postgres://postgres:5432/shelly_manager?sslmode=prefer
+      - SHELLY_DATABASE_USERNAME=shelly
+      - SHELLY_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
       - postgres
 

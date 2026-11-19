@@ -158,12 +158,11 @@ services:
   shelly-manager:
     image: shelly-manager:latest
     environment:
-      - DATABASE_PROVIDER=postgresql
-      - POSTGRES_HOST=postgres
-      - POSTGRES_USER=shelly
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=shelly_manager
-      - POSTGRES_SSL_MODE=require
+      - SHELLY_DATABASE_PROVIDER=postgresql
+      # The postgres service below has no TLS: use sslmode=require against a server that has certificates
+      - SHELLY_DATABASE_DSN=postgres://postgres:5432/shelly_manager?sslmode=prefer
+      - SHELLY_DATABASE_USERNAME=shelly
+      - SHELLY_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
     depends_on:
       - postgres
 

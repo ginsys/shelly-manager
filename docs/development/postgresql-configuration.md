@@ -282,30 +282,30 @@ database:
 
 ### Standard Environment Variables
 
+The application reads `SHELLY_` plus the config key, with `.` written as `_`. Host, port, database
+name and SSL settings go in the DSN. The user name and the password have their own keys, so they stay
+out of the DSN (the provider refuses a start that sets both).
+
 ```bash
-# Database connection
-export POSTGRES_HOST="localhost"
-export POSTGRES_PORT="5432"
-export POSTGRES_USER="shelly"
-export POSTGRES_PASSWORD="secure_password"
-export POSTGRES_DB="shelly_manager"
+# Database connection: host, port, database and SSL settings are in the DSN
+export SHELLY_DATABASE_PROVIDER="postgresql"
+export SHELLY_DATABASE_DSN="postgres://localhost:5432/shelly_manager?sslmode=require&sslcert=/certs/client.crt&sslkey=/certs/client.key&sslrootcert=/certs/ca.crt"
+export SHELLY_DATABASE_USERNAME="shelly"
+export SHELLY_DATABASE_PASSWORD="secure_password"
 
-# SSL configuration
-export POSTGRES_SSL_MODE="require"
-export POSTGRES_SSL_CERT="/certs/client.crt"
-export POSTGRES_SSL_KEY="/certs/client.key"
-export POSTGRES_SSL_ROOT_CERT="/certs/ca.crt"
+# Connection pool (the two lifetimes are in seconds)
+export SHELLY_DATABASE_MAX_OPEN_CONNS="25"
+export SHELLY_DATABASE_MAX_IDLE_CONNS="5"
+export SHELLY_DATABASE_CONN_MAX_LIFETIME="3600"
+export SHELLY_DATABASE_CONN_MAX_IDLE_TIME="600"
 
-# Connection pool
-export POSTGRES_MAX_OPEN_CONNS="25"
-export POSTGRES_MAX_IDLE_CONNS="5"
-export POSTGRES_CONN_MAX_LIFETIME="1h"
-export POSTGRES_CONN_MAX_IDLE_TIME="10m"
-
-# Performance
-export POSTGRES_SLOW_QUERY_THRESHOLD="200ms"
-export POSTGRES_LOG_LEVEL="warn"
+# Performance (slow query time is in milliseconds)
+export SHELLY_DATABASE_SLOW_QUERY_TIME="200"
+export SHELLY_DATABASE_LOG_LEVEL="warn"
 ```
+
+The database keys take no `_FILE` form. Only the secret keys listed in `docs/security/SECURITY_SECRETS.md`
+do, so set `SHELLY_DATABASE_PASSWORD` from a Kubernetes Secret with `secretKeyRef`.
 
 ### Docker Environment Variables
 
@@ -314,15 +314,13 @@ export POSTGRES_LOG_LEVEL="warn"
 services:
   shelly-manager:
     environment:
-      - DATABASE_PROVIDER=postgresql
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=shelly
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=shelly_manager
-      - POSTGRES_SSL_MODE=require
-      - POSTGRES_MAX_OPEN_CONNS=25
-      - POSTGRES_MAX_IDLE_CONNS=5
+      - SHELLY_DATABASE_PROVIDER=postgresql
+      # The postgres service below has no TLS: use sslmode=require against a server that has certificates
+      - SHELLY_DATABASE_DSN=postgres://postgres:5432/shelly_manager?sslmode=prefer
+      - SHELLY_DATABASE_USERNAME=shelly
+      - SHELLY_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - SHELLY_DATABASE_MAX_OPEN_CONNS=25
+      - SHELLY_DATABASE_MAX_IDLE_CONNS=5
     depends_on:
       - postgres
 
@@ -348,18 +346,15 @@ kind: ConfigMap
 metadata:
   name: shelly-manager-config
 data:
-  DATABASE_PROVIDER: "postgresql"
-  POSTGRES_HOST: "postgres-service"
-  POSTGRES_PORT: "5432"
-  POSTGRES_USER: "shelly"
-  POSTGRES_DB: "shelly_manager"
-  POSTGRES_SSL_MODE: "require"
-  POSTGRES_MAX_OPEN_CONNS: "50"
-  POSTGRES_MAX_IDLE_CONNS: "10"
-  POSTGRES_CONN_MAX_LIFETIME: "2h"
-  POSTGRES_CONN_MAX_IDLE_TIME: "15m"
-  POSTGRES_SLOW_QUERY_THRESHOLD: "500ms"
-  POSTGRES_LOG_LEVEL: "warn"
+  SHELLY_DATABASE_PROVIDER: "postgresql"
+  SHELLY_DATABASE_DSN: "postgres://postgres-service:5432/shelly_manager?sslmode=require"
+  SHELLY_DATABASE_USERNAME: "shelly"
+  SHELLY_DATABASE_MAX_OPEN_CONNS: "50"
+  SHELLY_DATABASE_MAX_IDLE_CONNS: "10"
+  SHELLY_DATABASE_CONN_MAX_LIFETIME: "7200"
+  SHELLY_DATABASE_CONN_MAX_IDLE_TIME: "900"
+  SHELLY_DATABASE_SLOW_QUERY_TIME: "500"
+  SHELLY_DATABASE_LOG_LEVEL: "warn"
 ```
 
 **File: `k8s/secret.yaml`**
@@ -370,7 +365,7 @@ metadata:
   name: shelly-manager-db-secret
 type: Opaque
 data:
-  POSTGRES_PASSWORD: <base64-encoded-password>
+  SHELLY_DATABASE_PASSWORD: <base64-encoded-password>
 ```
 
 ## Configuration Validation

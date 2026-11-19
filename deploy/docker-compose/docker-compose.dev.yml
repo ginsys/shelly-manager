@@ -7,7 +7,6 @@ services:
     environment:
       - SHELLY_LOGGING_LEVEL=debug
       - SHELLY_LOGGING_FORMAT=text
-      - GIN_MODE=debug
       # Security & Export (optional for local development)
       - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - SHELLY_EXPORT_OUTPUT_DIRECTORY=${EXPORT_OUTPUT_DIR:-}
@@ -30,6 +29,5 @@ services:
     environment:
       - SHELLY_LOGGING_LEVEL=debug
       - SHELLY_LOGGING_FORMAT=text
-      - GIN_MODE=debug
     volumes:
       - ../../configs:/app/configs:ro

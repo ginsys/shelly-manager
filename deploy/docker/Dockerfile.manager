@@ -52,8 +52,7 @@ EXPOSE 8080
 VOLUME ["/data"]
 
 # Set environment variables
-ENV SHELLY_DATABASE_PATH=/data/shelly.db \
-    GIN_MODE=release
+ENV SHELLY_DATABASE_PATH=/data/shelly.db
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

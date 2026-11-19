@@ -329,7 +329,7 @@ services:
       - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.redirect-https.redirectscheme.permanent=true"
     environment:
-      - SHELLY_HTTP_PORT=8080
+      - SHELLY_SERVER_PORT=8080
       - SHELLY_SECURITY_ADMIN_API_KEY=${ADMIN_API_KEY}
     volumes:
       - ./config.yaml:/etc/shelly-manager/config.yaml:ro
