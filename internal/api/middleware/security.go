@@ -679,38 +679,10 @@ func (tw *timeoutWriter) resetHeadersLocked() {
 	}
 }
 
-// copyTrailersLocked makes the trailer values on the real writer equal to the
-// handler's, once the handler returned after its response had started. The
-// trailers are the names declared in the Trailer header that was sent with the
-// response (now in the real writer's map) and keys with http.TrailerPrefix:
-// values the handler set are copied, values it deleted are removed. The caller
-// holds mu.
-func (tw *timeoutWriter) copyTrailersLocked() {
-	dst := tw.w.Header()
-	names := map[string]bool{}
-	for _, declared := range dst["Trailer"] {
-		for _, name := range strings.Split(declared, ",") {
-			names[http.CanonicalHeaderKey(strings.TrimSpace(name))] = true
-		}
-	}
-	for _, m := range []http.Header{dst, tw.h} {
-		for k := range m {
-			if strings.HasPrefix(k, http.TrailerPrefix) {
-				names[k] = true
-			}
-		}
-	}
-	for name := range names {
-		if v, ok := tw.h[name]; ok {
-			dst[name] = slices.Clone(v)
-		} else {
-			delete(dst, name)
-		}
-	}
-}
-
 // finish runs after the handler returned. A handler that set headers and
-// wrote nothing still gets them sent with net/http's implicit 200.
+// wrote nothing still gets them sent with net/http's implicit 200, and
+// trailer values it set after its response started reach net/http, which reads
+// them from the real writer's header map when the handler returns.
 func (tw *timeoutWriter) finish() {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
@@ -720,12 +692,8 @@ func (tw *timeoutWriter) finish() {
 // finishLocked is finish for a caller that holds mu. From here on the writer
 // belongs to net/http again, so every later write or answer is dropped.
 func (tw *timeoutWriter) finishLocked() {
-	switch {
-	case tw.failed:
-		// The 500 is ours: the handler's headers and trailers do not apply.
-	case tw.wroteHeader:
-		tw.copyTrailersLocked()
-	default:
+	// The 500 after a panic is ours: the handler's headers and trailers do not apply.
+	if !tw.failed {
 		tw.copyHeadersLocked()
 	}
 	tw.finished = true
