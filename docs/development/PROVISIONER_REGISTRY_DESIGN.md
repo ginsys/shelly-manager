@@ -121,7 +121,13 @@ Each replica has its own `registry`. With more than one replica:
 
 - A token is valid only on the replica that issued it. A poll that lands on
   another replica gets 401 or 404, the agent drops its registration and
-  registers again there. Nothing is lost, but the agent churns.
+  registers again there. The agent churns, and a discovery result can be lost:
+  a discovery task claimed on replica A and reported to replica B is refused
+  with 401, the client drops its registration
+  (`api_client.go:311-321`), and the agent logs the failed report and goes on
+  without retrying it (`cmd/shelly-provisioner/main.go:655-672`). The
+  discovered devices of that task are discarded, and the task status update
+  cannot run while the agent is unregistered.
 - A task created on replica A is visible and claimable only by polls that land
   on A. A status report that lands on replica B finds no task.
 - The wait in the table above shows only when the register request lands on the
@@ -647,8 +653,13 @@ A token is a credential. These are the rules for it.
   credentials), set the status of its own tasks, and report discovered devices
   as that agent. The holder can also register with the token and so **replace**
   it, which locks the real agent out. It opens no admin route, and it cannot act
-  for another agent. Revoking needs an admin delete (slice 3 route) and a new
-  enrolment. A token alone, without the agent key, opens nothing. None of this
+  for another agent. Revoking the leaked token already works today: a register
+  by the admin key replaces the token without presenting the current one
+  (`provisioner_handlers.go:153-157`, `:193`), and the proposal keeps that path.
+  That revokes the token only. Restoring the legitimate agent's credentials is
+  a separate step: the agent registers again (today) or an enrolment that names
+  its id is redeemed (Option B). The admin delete route is for freeing an id,
+  not for revocation. A token alone, without the agent key, opens nothing. None of this
   changes with the proposal: the shared key stays the outer control until the
   operator chooses to retire it, which this note does not propose.
 - **A leaked agent key** is limit 2 and 3 until slice 2 and 3 land.
