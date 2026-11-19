@@ -172,8 +172,12 @@ ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
 Linked is not the same as working: the Channel detail page has no matching `GET` route on the server
 (ginsys/shelly-manager#250), the Drift schedules page says its schedules are not executed
 (ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
-server process still holds in memory (ginsys/shelly-manager#647). Their layout is tracked in
-ginsys/shelly-manager#139. The routes are still inline in `ui/src/main.ts`, so a test cannot check
+server process still holds in memory (ginsys/shelly-manager#647). Both pages show every field the
+server returns for a result (status, created time, duration, errors, warnings, and for an import the
+changes by type, never their values; ginsys/shelly-manager#139). The export page downloads the file
+through the API client, because a plain link sends no admin key; an import has no download because the
+API has no such route. The import history page shows the statistics, and both history pages show the
+error of a failed statistics request instead of zeros. The routes are still inline in `ui/src/main.ts`, so a test cannot check
 reachability from the route table (ginsys/shelly-manager#646).
 
 ---
@@ -269,7 +273,7 @@ State read from GitHub on 2026-11-19 with `gh api graphql` (`closedByPullRequest
 | ginsys/shelly-manager#136 | Bulk operations (selection and dialog) | closed, completed 2026-11-18 | ginsys/shelly-manager#613 |
 | ginsys/shelly-manager#137 | Capability-specific config UI | closed, completed 2026-11-12 | ginsys/shelly-manager#499 |
 | ginsys/shelly-manager#138 | Admin key rotation | closed, completed 2026-07-21 | no pull request recorded |
-| ginsys/shelly-manager#139 | Polish export/import detail pages | **open** | |
+| ginsys/shelly-manager#139 | Polish export/import detail pages | closed, completed 2026-11-19 | the pull request that carries this line |
 
 ---
 
@@ -282,7 +286,6 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 | ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
 | ginsys/shelly-manager#614 | Replace the remaining `alert()` calls with `useError` and `ErrorDisplay` |
 | ginsys/shelly-manager#646 | Move the route table out of `main.ts` so a test can check every route is reachable |
-| ginsys/shelly-manager#139 | Polish export/import detail pages |
 | ginsys/shelly-manager#290 | Design the plugin configuration model (plugins stay read-only until then) |
 | ginsys/shelly-manager#250 | Notification API contract mismatches and missing endpoints (**parked**) |
 

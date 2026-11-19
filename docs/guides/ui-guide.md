@@ -100,7 +100,10 @@ A new page needs an entry there, or a link from a page that has one.
 
 #### Navigation Structure
 - **Backup Management** and **GitOps Export**: create exports
-- **Export History** and **Import History**: past operations, with their statistics
+- **Export History** and **Import History**: past operations, with their statistics (Total, Success, Failure). A statistics request that fails shows its error in place of the numbers.
+- **Export details**: status, created time, duration, record count, file size, checksum, and the errors and warnings of the run. **Download** fetches the file with the admin key and saves it under the name the server gives it. A link back leads to the history.
+- **Import details**: status, created time, duration, records imported and skipped, the errors and warnings, and the changes: counts by type (create, update, delete) and the resource, ID and field of each. The old and new values of a change are never shown. An import has no download, because the API has no such route.
+- Both detail pages show only results the server process still holds in memory; an older history row answers "not found" (ginsys/shelly-manager#647).
 - **Plugin Management**: not in this menu; it is the top-level **Plugins** page
 
 #### Breadcrumb Navigation
