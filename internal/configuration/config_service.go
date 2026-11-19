@@ -19,8 +19,9 @@ var (
 	ErrInvalidScope        = errors.New("invalid scope: must be 'global', 'group', or 'device_type'")
 	ErrDeviceTypeRequired  = errors.New("device_type required when scope is 'device_type'")
 	ErrTemplateIDsNotFound = errors.New("one or more template IDs not found")
-	// ErrNoDesiredConfig is what a drift check answers for a device that has no desired
-	// configuration: there is nothing to compare the device with, which is not the same as no drift.
+	// ErrNoDesiredConfig is what a drift check and a verify answer for a device that has no desired
+	// configuration: there is nothing to compare the device with, which is not the same as no drift
+	// or a match.
 	ErrNoDesiredConfig = errors.New("no desired configuration is set for this device, so there is nothing to compare it with")
 )
 

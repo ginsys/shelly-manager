@@ -1173,6 +1173,31 @@ func TestGenerateDeviceDriftReport_NoDesiredConfigIsNotFound(t *testing.T) {
 	testutil.AssertEqual(t, int32(0), hits.Load())
 }
 
+// Verify answers like drift for a device that has no desired configuration: 404 with the reason, the
+// device never contacted. It used to answer match: true, so a device that was never configured read
+// as verified (ginsys/shelly-manager#636).
+func TestVerifyDeviceNewConfig_NoDesiredConfigIsNotFound(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	addr, hits := countingDevice(t, "A4CF12345600")
+	device := deviceAt(t, db, addr, "A4:CF:12:34:56:00")
+
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/devices/%d/config/new/verify", device.ID), nil)
+	req = mux.SetURLVars(req, map[string]string{"id": strconv.Itoa(int(device.ID))})
+	w := httptest.NewRecorder()
+	handler.VerifyDeviceNewConfig(w, req)
+
+	testutil.AssertEqual(t, http.StatusNotFound, w.Code)
+	if !strings.Contains(w.Body.String(), "no desired configuration") {
+		t.Errorf("the answer must name the reason: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "NOT_FOUND") {
+		t.Errorf("the answer must carry the NOT_FOUND code, as the drift route does: %s", w.Body.String())
+	}
+	testutil.AssertEqual(t, int32(0), hits.Load())
+}
+
 func TestWriteDeviceReadError(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()

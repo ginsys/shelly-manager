@@ -64,7 +64,7 @@ config, err := configService.ImportFromDevice(deviceID)
 ```go
 // Compare the live device with its desired configuration (the one apply
 // writes and verify reads). A device with no desired configuration returns
-// ErrNoDesiredConfig; the stored device_configs row is not consulted.
+// ErrNoDesiredConfig, as verify does; the stored device_configs row is not consulted.
 drift, err := configService.DetectDrift(deviceID, client)
 ```
 
