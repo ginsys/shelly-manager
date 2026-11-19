@@ -85,6 +85,11 @@ func TestDeviceWalker_RepeatedMemberIsRefused(t *testing.T) {
 	put := serve(handler.UpdateDevice, "PUT", "/api/v1/devices/1", idString(device), string(body))
 	assert.Equal(t, http.StatusBadRequest, put.Code, put.Body.String())
 	assert.Contains(t, put.Body.String(), "device configuration text repeats a member name: send each name once")
+
+	// A new device has nothing stored, and the text is refused all the same.
+	add := serve(handler.AddDevice, "POST", "/api/v1/devices", "", `{"name":"y","ip":"10.0.0.9","mac":"AA:BB:CC:00:00:09","type":"x","settings":"{\"pass\":\"s\",\"pass\":\"\"}"}`)
+	assert.Equal(t, http.StatusBadRequest, add.Code, add.Body.String())
+	assert.Contains(t, add.Body.String(), "device configuration text repeats a member name: send each name once")
 }
 
 // D6: list entries pair when only a container under a secret key differs, so such an entry gets its
