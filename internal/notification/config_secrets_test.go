@@ -274,6 +274,84 @@ func TestScrubText_QuotedAndNormalizedSpellings(t *testing.T) {
 	})
 }
 
+// Round 2 of the review: each case below came from a way the first repair still leaked or corrupted.
+
+// encoding/json folds U+017F (long s) to s and U+212A (Kelvin) to k when it matches a field name, so
+// delivery reads these keys as "secret" and "..key".
+func TestMaskConfig_FoldedUnicodeKeys(t *testing.T) {
+	var cfg struct {
+		Secret string `json:"secret"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(`{"ſecret":"credential"}`), &cfg))
+	require.Equal(t, "credential", cfg.Secret, "the premise: the decoder reads the key as secret")
+
+	m := decodeMap(t, maskConfig(json.RawMessage(`{"url":"http://h.example","ſecret":"credential","apiKey":"k1"}`)))
+	assert.Equal(t, ph, m["ſecret"])
+	assert.Equal(t, ph, m["apiKey"])
+}
+
+// Three "*" credentials made four identical spellings each, and every replacement expanded the stars an
+// earlier one had written.
+func TestScrubText_PlaceholderIsNeverScrubbedAgain(t *testing.T) {
+	cfg := json.RawMessage(`{"headers":{"a":"*","b":"*","c":"*"}}`)
+	assert.Equal(t, strings.Repeat(ph, 3), scrubText("***", cfg))
+	assert.Equal(t, ph+" and "+ph, scrubText("* and *", cfg))
+}
+
+// http.NewRequest drops an empty port, so the text holds a URL the stored one does not match.
+func TestScrubText_URLErrorWhateverItsSpelling(t *testing.T) {
+	stored := "nosuch://h.example:/LEAKPATH620?t=LEAKQUERY620"
+	_, err := http.Post(stored, "application/json", nil) //nolint:gosec // unsupported scheme: nothing is dialed
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "nosuch://h.example/LEAKPATH620", "net/http wrote the URL without the empty port")
+	require.NotContains(t, err.Error(), stored)
+
+	cfg, jerr := json.Marshal(map[string]any{"url": stored})
+	require.NoError(t, jerr)
+	text := scrubText("failed to send webhook: "+err.Error(), cfg)
+	assert.NotContains(t, text, "LEAKPATH620")
+	assert.NotContains(t, text, "LEAKQUERY620")
+	assert.Contains(t, text, `Post "`+ph+`": `)
+	assert.Contains(t, text, "unsupported protocol scheme", "the rest of the error stays")
+
+	// A URL that does not parse is cut the same way, and an error with no URL is left as it is.
+	assert.Equal(t, `failed to create request: parse "`+ph+`": bad`, scrubText(`failed to create request: parse "http://x/%zz": bad`, json.RawMessage(`{"secret":"s3cret"}`)))
+	assert.Equal(t, "dial tcp 10.0.0.1:443: connect: refused", scrubText("dial tcp 10.0.0.1:443: connect: refused", cfg))
+}
+
+// Trimming the quotes of a quoted credential that ends in a quote cut one quote too many.
+func TestScrubText_CredentialEndingInAQuote(t *testing.T) {
+	cfg := json.RawMessage(`{"secret":"abc\""}`)
+	assert.Equal(t, `abc\xyz`, scrubText(`abc\xyz`, cfg), "text that holds no credential is not changed")
+	assert.Equal(t, ph, scrubText(`abc\"`, cfg), "the %q spelling of the credential is cut")
+	assert.Equal(t, ph, scrubText(`abc"`, cfg), "the stored spelling is cut")
+}
+
+// A JSON escape of the first star decodes to the placeholder, and a save of it must restore like the
+// plain spelling. The backslash is joined at run time so the text is a real JSON escape.
+func TestRestoreConfig_EscapedPlaceholder(t *testing.T) {
+	escaped := `\` + `u002a*******`
+	require.NotContains(t, escaped, ph, "the premise: the bytes do not hold the placeholder")
+	stored := json.RawMessage(`{"url":"https://h.example/hook","secret":"s3"}`)
+	m := decodeMap(t, restoreConfig(json.RawMessage(`{"url":"`+escaped+`","secret":"`+escaped+`"}`), stored))
+	assert.Equal(t, "https://h.example/hook", m["url"])
+	assert.Equal(t, "s3", m["secret"])
+
+	assert.Equal(t, string(stored), string(restoreConfig(json.RawMessage(`"`+escaped+`"`), stored)), "the whole text, escaped")
+
+	untouched := json.RawMessage(`{ "url": "u",  "secret": "x" }`)
+	assert.Equal(t, string(untouched), string(restoreConfig(untouched, stored)), "no placeholder: the client's bytes come back")
+}
+
+// Two stored keys that fold together name one decoded field by position, which a map does not keep.
+// The placeholder takes neither, so a save cannot move the destination.
+func TestRestoreConfig_AmbiguousFoldedKeys(t *testing.T) {
+	stored := json.RawMessage(`{"URL":"https://a.example","url":"https://b.example"}`)
+	m := decodeMap(t, restoreConfig(json.RawMessage(`{"Url":"`+ph+`"}`), stored))
+	assert.NotContains(t, m, "Url", "an ambiguous placeholder is dropped")
+	assert.NotContains(t, string(restoreConfig(json.RawMessage(`{"Url":"`+ph+`"}`), stored)), "example")
+}
+
 func TestScrubText_SecretInsideAList(t *testing.T) {
 	cfg := json.RawMessage(`{"token_list":["tok-one","tok-two"],"recipients":["a@example.com"]}`)
 	assert.Equal(t, ph+" "+ph+" a@example.com", scrubText("tok-one tok-two a@example.com", cfg))

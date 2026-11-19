@@ -61,14 +61,15 @@ object under a secret name is secret as a whole.
   so a client that read the config can send it back with one field changed. Any other value is a new credential and
   replaces the stored one. A credential left out is removed: an update replaces the whole config, as before.
   The placeholder is never stored: where nothing is stored for it, it is dropped, and a channel left without a
-  required `url` or `webhook_url` is refused. A secret list (`"token_list": ["a", "b"]`) comes back whole only
+  required `url` or `webhook_url` is refused. A stored config with two keys that differ only in case
+  (`URL` and `url`) restores neither: send the value. A secret list (`"token_list": ["a", "b"]`) comes back whole only
   when every entry is `********` and the stored list has as many entries; any other `********` inside a list is
   dropped. To change one entry, send the whole list with its new values.
 - **Errors.** A failed delivery's error text quotes its destination. `GET /notifications/history` (`error`) and
   `POST /notifications/channels/{id}/test` (the 500 message) show `********` where the text held a stored
-  credential, in the spelling it was stored in and in the spelling Go writes for it (percent-encoded, or with
-  control characters escaped). An `error` stored before a channel's URL changed keeps the old URL, because the cut uses the current
-  config.
+  credential, and `********` for the request URL of a failed request (`Post "<url>": ...`) whatever way Go
+  spelled it. An `error` stored before a channel's URL changed keeps the old URL in any other place the text
+  holds it, because the cut of stored values uses the current config.
 
 ## Rule object (selected fields)
 
