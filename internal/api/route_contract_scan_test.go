@@ -1046,11 +1046,16 @@ type retryHandler struct {
 }
 
 var (
-	// An assignment to the parameter or to anything under it (error = ...,
-	// error.config = ..., error['config'] ||= ...), in any operator form.
+	// An assignment to the parameter or to a member path under it (error = ...,
+	// error.config = ..., error.config.url ||= ...), in any operator form.
 	retryAssignRe = func(param string) *regexp.Regexp {
 		p := regexp.QuoteMeta(param)
-		return regexp.MustCompile(`(^|[^.\w$])` + p + `(\s*(\??\.\s*[\w$]+|\[[^\]]*\]))*\s*(\*\*|&&|\|\||\?\?|<<|>>>?|[-+*/%&|^])?=([^=>]|$)`)
+		return regexp.MustCompile(`(^|[^.\w$])` + p + `(\s*\??\.\s*[\w$]+)*\s*(\*\*|&&|\|\||\?\?|<<|>>>?|[-+*/%&|^])?=([^=>]|$)`)
+	}
+	// An index on the parameter (error[...], error?.[...]): its target can be
+	// computed, so the handler is refused whatever it assigns.
+	retryIndexRe = func(param string) *regexp.Regexp {
+		return regexp.MustCompile(`(^|[^.\w$])` + regexp.QuoteMeta(param) + `\s*(\?\.)?\s*\[`)
 	}
 	// A declaration that binds the parameter's name again inside the handler:
 	// const|let|var with the name before the next = or ; (so a destructuring
@@ -1128,7 +1133,7 @@ func (s *routeScanner) recordRetryHandler() {
 		return
 	}
 	body := maskComments(string(s.src[args[1].start:args[1].end]))
-	if retryAssignRe(param).MatchString(body) || retryDeclRe(param).MatchString(body) {
+	if retryAssignRe(param).MatchString(body) || retryIndexRe(param).MatchString(body) || retryDeclRe(param).MatchString(body) {
 		return // fail closed: a false positive is a refusal, never a pass
 	}
 	s.retries = append(s.retries, retryHandler{param: param, start: args[1].start, end: args[1].end})
@@ -1214,8 +1219,11 @@ func (s *routeScanner) retryParam(ident string) bool {
 // config (recordRetryHandler). Any other argument (an object literal, a call,
 // another member, a second argument) or place could name a route that was never
 // paired, so it reports false, unchanged, and the caller fails. The scanner
-// tracks no scopes: a function nested in the handler whose own parameter has
-// the same name still passes (pinned by a fixture).
+// tracks no scopes and reads the handler as text, so it is a guard against a
+// slip and not against a handler written to evade it. Three limits are pinned
+// by fixtures: a function nested in the handler whose own parameter has the
+// same name, a destructuring with a default that binds the name again, and a
+// comment inside a template's ${...} that hides an assignment.
 func (s *routeScanner) instanceRetry() bool {
 	mark := s.mark()
 	if s.consumeDot() {

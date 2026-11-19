@@ -741,6 +741,7 @@ func TestRouteContractFixtures(t *testing.T) {
 			"parameter redeclared":      use + "(error) => { { const error = { config: { url: '/missing' } }; return api.request(error.config) } })",
 			"comment in the assignment": use + "(error) => { error /* retry */ .config = { url: '/missing' }; return api.request(error.config) })",
 			"line comment in it":        use + "(error) => { error // retry\n.config = { url: '/missing' }; return api.request(error.config) })",
+			"nested index":              use + "(error) => { error[['config'][0]] = { url: '/missing' }; return api.request(error.config) })",
 			"bracket assignment":        use + "(error) => { error['config'] = { url: '/missing' }; return api.request(error.config) })",
 			"member of the config":      use + "(error) => { error.config.url = '/missing'; return api.request(error.config) })",
 			"destructured name":         use + "(error) => { { const { error } = { error: { config: { url: '/missing' } } }; return api.request(error.config) } })",
@@ -753,14 +754,19 @@ func TestRouteContractFixtures(t *testing.T) {
 				t.Fatalf("%s: calls %+v errs: %+v", name, got, gotErrs)
 			}
 		}
-		// Known limit, pinned so a tightening is a decision: the scanner tracks one handler's
-		// parameter, not scopes, so a function nested in the handler whose own parameter is named like
-		// the handler's still passes.
-		calls, errs := extractRouteContractSources(map[string]string{
-			"ui/src/api/client.ts": head + use + "(error) => { const f = (error) => api.request(error.config); return Promise.reject(error) })\n",
-		}, nil)
-		if len(errs) != 0 || len(calls) != 0 {
-			t.Fatalf("limit: calls %+v errs: %s", calls, joinRouteContractErrs(errs))
+		// Known limits, pinned so a tightening is a decision: the scanner tracks one handler's
+		// parameter and reads the handler as text, not scopes. A function nested in the handler whose
+		// own parameter is named like the handler's, a destructuring with a default that binds the
+		// name again, and a comment inside a template's ${...} that hides an assignment all pass.
+		for name, body := range map[string]string{
+			"nested parameter":     use + "(error) => { const f = (error) => api.request(error.config); return Promise.reject(error) })",
+			"destructured default": use + "(error) => { { const { x = 0, error } = { error: { config: { url: '/missing' } } }; return api.request(error.config) } })",
+			"template comment":     use + "(error) => { `${error /* c */ .config = { url: '/missing' }}`; return api.request(error.config) })",
+		} {
+			got, gotErrs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": head + body + "\n"}, nil)
+			if len(gotErrs) != 0 || len(got) != 0 {
+				t.Fatalf("limit %s: calls %+v errs: %s", name, got, joinRouteContractErrs(gotErrs))
+			}
 		}
 	})
 
