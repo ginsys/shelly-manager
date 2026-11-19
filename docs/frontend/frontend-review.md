@@ -89,7 +89,7 @@ Versions are the ranges declared in `ui/package.json`, not the installed ones.
 |------------|----------|-------|
 | Vue | ^3.5.45 | Composition API, `<script setup>` |
 | TypeScript | ^5.9.3 | `npm run typecheck` is `vue-tsc --noEmit` |
-| Vue Router | ^5.5.0 | Routes in `ui/src/main.ts`, every page lazy-loaded |
+| Vue Router | ^5.5.0 | Routes in `ui/src/router/routes.ts` (`main.ts` builds the router from it), every page lazy-loaded |
 | Pinia | ^4.0.3 | State management |
 | Vite | ^8.3.8 | Build tool |
 | axios | ^1.21.1 | HTTP client in `ui/src/api/client.ts` |
@@ -178,8 +178,12 @@ type, never their values; ginsys/shelly-manager#139). They do not show the expor
 `webhook_sent` and `metadata`, nor the import `metadata`. The export page downloads the file
 through the API client, because a plain link sends no admin key; an import has no download because the
 API has no such route. The import history page shows the statistics, and both history pages show the
-error of a failed statistics request instead of zeros. The routes are still inline in `ui/src/main.ts`, so a test cannot check
-reachability from the route table (ginsys/shelly-manager#646).
+error of a failed statistics request instead of zeros. The routes live in `ui/src/router/routes.ts`, and the unit
+test `ui/src/__tests__/route-reachability.test.ts` fails when a route with no `:` in its path has no top-bar entry and
+no link from another page (ginsys/shelly-manager#646). It does not check the pages with a path parameter (the `:id`
+pages, which include the two device configuration pages); the Playwright spec walks those. The unit test
+reads source text, not the rendered page: it ignores comments and `<style>` blocks, but a link in a file that no
+page imports still counts. The Playwright spec is what proves the links are rendered.
 
 ---
 
@@ -285,7 +289,6 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 | Issue | Subject |
 |-------|---------|
 | ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
-| ginsys/shelly-manager#646 | Move the route table out of `main.ts` so a test can check every route is reachable |
 | ginsys/shelly-manager#290 | Design the plugin configuration model (plugins stay read-only until then) |
 | ginsys/shelly-manager#250 | Notification API contract mismatches and missing endpoints (**parked**) |
 
@@ -299,8 +302,9 @@ started). Parked issues are not next work.
 
 Found by reading the code at this commit; not a plan.
 
-1. **The route table is inline in `main.ts`** (section 3, ginsys/shelly-manager#646), so no unit test
-   can check that every route is reachable; the end-to-end spec carries an explicit path list.
+1. **The end-to-end reachability spec keeps its own path list** (section 3). The unit test reads the
+   route table (`ui/src/router/routes.ts`); the Playwright spec does not, so a new `:id` page is
+   checked only if someone adds it to the spec.
 2. **Quasar is a dependency nothing imports** (section 2).
 3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (697),
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
