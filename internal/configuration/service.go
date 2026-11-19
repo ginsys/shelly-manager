@@ -3,6 +3,7 @@ package configuration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -293,80 +294,48 @@ func (s *Service) GetImportStatus(deviceID uint) (*ImportStatus, error) {
 	return status, nil
 }
 
-// DetectDrift checks for configuration differences between database and device
+// DetectDrift compares the live device with its desired configuration, the one apply writes and
+// verify reads, and returns the differences, or nil when the device holds it. It reads the device
+// and stores nothing. A device with no desired configuration has no baseline: that is
+// ErrNoDesiredConfig, never "no drift".
 func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift, error) {
-	// Get stored configuration
-	var storedConfig DeviceConfig
-	if err := s.db.Where("device_id = ?", deviceID).First(&storedConfig).Error; err != nil {
+	var device Device
+	if err := s.db.First(&device, deviceID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("%w: device %d", ErrStoredConfigNotFound, deviceID)
+			return nil, fmt.Errorf("%w: device %d", ErrDeviceNotFound, deviceID)
 		}
-		return nil, fmt.Errorf("failed to get stored config: %w", err)
+		return nil, fmt.Errorf("failed to get device: %w", err)
 	}
 
-	// Read the current configuration from the device. This stores nothing: the stored row is the
-	// baseline and stays as it is until a real import or export replaces it.
-	currentConfig, err := s.readDeviceConfigData(deviceID, client)
+	result, err := s.ConfigurationSvc.DriftAgainstDesired(context.Background(), deviceID, client, DeviceModel(device.Settings, device.Type))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read current config: %w", err)
+		return nil, err
 	}
-
-	// Compare configurations, ignoring volatile bookkeeping metadata (_metadata, device_info)
-	// that reading the device re-stamps every time.
-	differences := s.compareConfigurationsForDrift(storedConfig.Config, currentConfig)
-
-	if len(differences) == 0 {
-		// No drift detected
-		s.markSyncStatus(&storedConfig, "synced")
+	if result.Match {
 		return nil, nil
 	}
-
-	// Drift detected
-	s.markSyncStatus(&storedConfig, "drift")
-
-	// Get device name
-	var device Device
-	s.db.First(&device, deviceID)
 
 	drift := &ConfigDrift{
 		DeviceID:       deviceID,
 		DeviceName:     device.Name,
-		LastSynced:     storedConfig.LastSynced,
 		DriftDetected:  time.Now(),
-		Differences:    differences,
+		Differences:    result.Differences,
 		RequiresAction: true,
 	}
 
 	s.logger.WithFields(map[string]any{
 		"device_id":   deviceID,
-		"differences": len(differences),
+		"differences": len(result.Differences),
 		"component":   "configuration",
 	}).Warn("Configuration drift detected")
 
 	// Emit notification if configured
 	if s.driftNotifier != nil {
 		ctx := context.Background()
-		s.driftNotifier(ctx, deviceID, device.Name, len(differences))
+		s.driftNotifier(ctx, deviceID, device.Name, len(result.Differences))
 	}
 
 	return drift, nil
-}
-
-// markSyncStatus stores the result of a drift check on the stored row. It writes the status column
-// and nothing else, and only when the value changes, so the check leaves the config, the sync
-// time, updated_at and the history alone. A failed write is logged: the check itself still holds.
-func (s *Service) markSyncStatus(stored *DeviceConfig, status string) {
-	if stored.SyncStatus == status {
-		return
-	}
-	if err := s.db.Model(stored).UpdateColumn("sync_status", status).Error; err != nil {
-		s.logger.WithFields(map[string]any{
-			"device_id": stored.DeviceID,
-			"status":    status,
-			"error":     err.Error(),
-			"component": "configuration",
-		}).Warn("Failed to store the drift check status")
-	}
 }
 
 // BulkDetectDrift checks for configuration drift across the given devices, in order. With
@@ -407,6 +376,18 @@ func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (she
 		} else {
 			driftResult.DeviceName = device.Name
 			driftResult.DeviceIP = device.IP
+
+			// A device with no desired configuration is skipped before its client is asked for: a
+			// login failure on a device that cannot be checked is not an error of this run, so
+			// stopOnError does not skip the rest because of it, and the report leaves it out of its
+			// totals. Any other read error is left to DetectDrift to report.
+			if noDesired := s.ConfigurationSvc.RequireDesiredConfig(deviceID); errors.Is(noDesired, ErrNoDesiredConfig) {
+				driftResult.Status = BulkStatusSkipped
+				driftResult.Error = noDesired.Error()
+				result.Skipped++
+				result.Results = append(result.Results, driftResult)
+				continue
+			}
 
 			// Get client for this device
 			client, err := clientGetter(deviceID)
@@ -636,54 +617,6 @@ func (s *Service) GetConfigHistory(deviceID uint, limit int) ([]ConfigHistory, e
 // It reports every difference, including bookkeeping metadata subtrees; use it for
 // audit-history change tracking where metadata changes are meaningful.
 func (s *Service) compareConfigurations(stored, current json.RawMessage) []ConfigDifference {
-	return s.compareConfigurationsFiltered(stored, current, nil)
-}
-
-// compareConfigurationsForDrift compares two JSON configurations for drift detection,
-// ignoring volatile bookkeeping subtrees (_metadata, device_info) that ImportFromDevice
-// adds on every import. Without this, a re-import's re-stamped _metadata.imported_at would
-// register as drift on any check whose second differs from the stored baseline.
-//
-// It also ignores live telemetry that a device embeds in its settings document (see
-// driftTelemetryRootKeys). Without this, a device that was just imported would report
-// itself as drifted because its power reading and timestamp moved.
-func (s *Service) compareConfigurationsForDrift(stored, current json.RawMessage) []ConfigDifference {
-	return s.compareConfigurationsFiltered(
-		dropRootKeys(stored, driftTelemetryRootKeys),
-		dropRootKeys(current, driftTelemetryRootKeys),
-		isDriftMetadataKey,
-	)
-}
-
-// driftTelemetryRootKeys are top-level keys of a device settings document that carry live
-// readings, not configuration. Gen1 plugs put "meters" (power, counters, timestamp) in
-// /settings, and every Gen1 device reports its clock as "time" and "unixtime", which move on
-// every read. They are dropped at the document root only: "emeters" is deliberately absent
-// because on energy-meter models it holds real configuration (appliance type, max power),
-// and a nested key that happens to share a name must still be compared.
-var driftTelemetryRootKeys = []string{"meters", "time", "unixtime"}
-
-// dropRootKeys returns doc without the given top-level keys. A document that is not a JSON
-// object is returned unchanged, so the comparison treats it exactly as before.
-func dropRootKeys(doc json.RawMessage, keys []string) json.RawMessage {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(doc, &fields); err != nil {
-		return doc
-	}
-	for _, key := range keys {
-		delete(fields, key)
-	}
-	out, err := json.Marshal(fields)
-	if err != nil {
-		return doc
-	}
-	return out
-}
-
-// compareConfigurationsFiltered unmarshals both configs and compares them recursively.
-// When skipKey is non-nil, any map key it matches is excluded from the comparison at every
-// depth. A nil skipKey compares everything (the audit-history behavior).
-func (s *Service) compareConfigurationsFiltered(stored, current json.RawMessage, skipKey func(string) bool) []ConfigDifference {
 	var differences []ConfigDifference
 
 	var storedMap, currentMap map[string]interface{}
@@ -694,34 +627,15 @@ func (s *Service) compareConfigurationsFiltered(stored, current json.RawMessage,
 		currentMap = make(map[string]interface{})
 	}
 
-	// Compare maps recursively
-	s.compareMapsFiltered("", storedMap, currentMap, &differences, skipKey)
+	s.compareMaps("", storedMap, currentMap, &differences)
 
 	return differences
 }
 
-// isDriftMetadataKey reports whether a raw map key names a volatile bookkeeping subtree that
-// drift detection should ignore. It matches the key exactly (not as a substring) so real
-// fields such as device_info_enabled or a key literally named "vendor._metadata" are kept.
-func isDriftMetadataKey(key string) bool {
-	return key == "_metadata" || key == "device_info"
-}
-
-// compareMaps recursively compares two maps, reporting all differences (no filtering).
+// compareMaps recursively compares two maps, reporting all differences.
 func (s *Service) compareMaps(path string, expected, actual map[string]interface{}, differences *[]ConfigDifference) {
-	s.compareMapsFiltered(path, expected, actual, differences, nil)
-}
-
-// compareMapsFiltered recursively compares two maps. When skipKey is non-nil, keys it matches
-// are skipped at every level, so entire metadata subtrees are excluded without splitting the
-// flattened path (which would misclassify JSON keys that themselves contain dots).
-func (s *Service) compareMapsFiltered(path string, expected, actual map[string]interface{}, differences *[]ConfigDifference, skipKey func(string) bool) {
 	// Check for removed keys
 	for key, expectedValue := range expected {
-		if skipKey != nil && skipKey(key) {
-			continue
-		}
-
 		currentPath := path
 		if currentPath != "" {
 			currentPath += "."
@@ -746,7 +660,7 @@ func (s *Service) compareMapsFiltered(path string, expected, actual map[string]i
 			actualMap, actualIsMap := actualValue.(map[string]interface{})
 
 			if expectedIsMap && actualIsMap {
-				s.compareMapsFiltered(currentPath, expectedMap, actualMap, differences, skipKey)
+				s.compareMaps(currentPath, expectedMap, actualMap, differences)
 			} else {
 				*differences = append(*differences, ConfigDifference{
 					Path:     currentPath,
@@ -760,10 +674,6 @@ func (s *Service) compareMapsFiltered(path string, expected, actual map[string]i
 
 	// Check for added keys
 	for key, actualValue := range actual {
-		if skipKey != nil && skipKey(key) {
-			continue
-		}
-
 		currentPath := path
 		if currentPath != "" {
 			currentPath += "."

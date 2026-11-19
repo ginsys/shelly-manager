@@ -670,17 +670,21 @@ func TestForcedImportReleasesAMatchedDeviceOnlyOnce(t *testing.T) {
 	assert.Equal(t, map[string]string{"aabbccdd0001": "192.0.2.11"}, f.deviceIPs(t))
 }
 
-// replayClient answers the two device calls the configuration service makes with a fixed configuration.
-// The embedded interface is nil on purpose: any other call panics, so the test notices if the service starts
-// reaching for the device elsewhere.
+// replayClient answers the device calls a drift check makes (identity, generation, address, configuration) with a
+// fixed Gen1 configuration. The embedded interface is nil on purpose: any other call panics, so the test
+// notices if the service starts reaching for the device elsewhere.
 type replayClient struct {
 	shelly.Client
 	raw json.RawMessage
 }
 
 func (c replayClient) GetInfo(context.Context) (*shelly.DeviceInfo, error) {
-	return &shelly.DeviceInfo{Generation: 2, Model: "SHPLG-S"}, nil
+	return &shelly.DeviceInfo{MAC: "aabbccddeeff", Generation: 1, Model: "SHPLG-S"}, nil
 }
+
+func (c replayClient) GetGeneration() int { return 1 }
+
+func (c replayClient) GetIP() string { return "192.0.2.10" }
 
 func (c replayClient) GetConfig(context.Context) (*shelly.DeviceConfig, error) {
 	return &shelly.DeviceConfig{Raw: c.raw}, nil
@@ -715,7 +719,9 @@ func TestRestoredDeviceConfigurationIsReadableAndDriftCheckable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "pending", status.Status, "a restored configuration has not reached the device")
 
-	drift, err := service.DetectDrift(device.ID, replayClient{raw: json.RawMessage(persistDesiredConfig)})
+	// Drift compares with the desired configuration the restore wrote to the device row.
+	live := json.RawMessage(`{"name":"tv-office","mqtt":{"enable":true,"server":"broker.local:1883"}}`)
+	drift, err := service.DetectDrift(device.ID, replayClient{raw: live})
 	require.NoError(t, err, "drift detection was disabled after a restore")
 	assert.Nil(t, drift, "a device that still runs the restored configuration has not drifted")
 }
