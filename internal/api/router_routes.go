@@ -105,6 +105,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/config/bulk-drift-detect", handler.BulkDetectConfigDrift).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect-enhanced", handler.EnhancedBulkDetectConfigDrift).Methods("POST")
 	api.HandleFunc("/config/bulk-download", handler.BulkDownloadConfigs).Methods("POST")
+	api.HandleFunc("/config/bulk-apply", handler.BulkApplyConfigs).Methods("POST")
 
 	// Drift detection schedule routes
 	api.HandleFunc("/config/drift-schedules", admin(handler.GetDriftSchedules)).Methods("GET")

@@ -93,7 +93,7 @@ components:
           type: string
 
     # Bulk configuration routes (bulk-import, bulk-drift-detect,
-    # bulk-drift-detect-enhanced, bulk-download) act on the named devices only.
+    # bulk-drift-detect-enhanced, bulk-download, bulk-apply) act on the named devices only.
     BulkDeviceRequest:
       type: object
       additionalProperties: false
@@ -219,6 +219,109 @@ components:
                   field the typed configuration would drop, such as a legacy row restored by an
                   import: the entry is refused rather than returned incomplete) or `the
                   configuration could not be read`.
+
+    BulkApplyRequest:
+      type: object
+      description: >-
+        The request of bulk-apply: the bulk request with a cap of 10 devices and a `config`.
+      additionalProperties: false
+      required: [device_ids, config]
+      properties:
+        device_ids:
+          type: array
+          minItems: 1
+          description: >-
+            The devices to apply to. Each id is a positive integer; a repeated id counts once, in
+            first-seen order. More than 10 distinct ids are refused, and nothing is read or written.
+            The limit is on distinct ids, so the schema has no `maxItems`: it would refuse a list
+            that repeats an id.
+          items:
+            type: integer
+            minimum: 1
+        config:
+          type: object
+          minProperties: 1
+          description: >-
+            A partial device configuration, the body of `PATCH /api/v1/devices/{id}/overrides/new`:
+            stored as each named device's overrides (never as a template), omitted fields stay, a
+            field sent as `null` removes its override, a secret sent as the mask `********` keeps
+            the stored one. A field the typed configuration does not know is refused with 400. It
+            is checked against the model of every selected device before the first write.
+        options:
+          type: object
+          additionalProperties: false
+          properties:
+            stop_on_error:
+              type: boolean
+              default: false
+              description: >-
+                After the first device that does not end `applied`, the remaining devices are
+                reported `skipped` and are not contacted. Devices already written stay written.
+
+    BulkApplyResult:
+      type: object
+      description: Answer of bulk-apply, in the `data` member. The call is not atomic and rolls nothing back.
+      required: [total, applied, pending, unconfirmed, refused, failed, skipped, results]
+      properties:
+        total:
+          type: integer
+        applied:
+          type: integer
+        pending:
+          type: integer
+        unconfirmed:
+          type: integer
+        refused:
+          type: integer
+        failed:
+          type: integer
+        skipped:
+          type: integer
+        results:
+          type: array
+          description: One entry per named device, in request order.
+          items:
+            type: object
+            required: [device_id, status, stored, requires_reboot]
+            properties:
+              device_id:
+                type: integer
+              device_name:
+                type: string
+              device_ip:
+                type: string
+              status:
+                type: string
+                enum: [applied, pending, unconfirmed, refused, failed, skipped]
+                description: >-
+                  `applied`: written and read back equal. `pending`: written and read back equal,
+                  but the desired configuration changed while it ran, so the device stays pending.
+                  `unconfirmed`: written, then the device stopped answering after a network change,
+                  so it is not verified; it stays pending. `refused`: nothing was written to the
+                  device. `failed`: the call did not end in a recorded, verified write. `skipped`:
+                  not contacted.
+              stored:
+                type: boolean
+                nullable: true
+                description: >-
+                  Whether the new overrides are stored. `null` where the storage call failed part
+                  way and it is not known. A `refused` entry with `stored: true` was refused by the
+                  apply after the overrides were stored: the device was not written to, and it
+                  stays pending.
+              reason:
+                type: string
+                description: >-
+                  One fixed text per cause. It names what happened and never a value or the text of
+                  a device error.
+              failures:
+                type: array
+                description: >-
+                  Settings by path only, such as `mqtt.server: the device holds a different value`.
+                  No value is in the list.
+                items:
+                  type: string
+              requires_reboot:
+                type: boolean
 
     BulkDriftResult:
       type: object
@@ -2331,6 +2434,53 @@ paths:
                 $ref: '#/components/schemas/BulkDownloadFile'
         '400':
           description: No body, invalid JSON, no `device_ids`, a non-positive id, more than 10 devices, `options.stop_on_error`, or a field the server does not read (VALIDATION_FAILED); nothing is read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '401':
+          description: An admin key is configured and the request has none or a wrong one (UNAUTHORIZED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/config/bulk-apply:
+    post:
+      tags: [Configuration]
+      summary: Apply one partial configuration to several devices
+      description: >-
+        Stores `config` as the overrides of each named device (PATCH rules, never a template) and
+        applies it through the per-device apply, the only call that reaches a device, so no device
+        that is not named is written. Before the first write `config` is checked against the model of
+        every selected device; if any cannot take it, nothing is stored or written to any. The call
+        is not atomic: it answers 200 with one entry per device, each with one of six statuses, and
+        rolls nothing back. The overrides stay stored when the apply does not succeed. At most 10
+        devices per call.
+      operationId: bulkApplyConfigs
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkApplyRequest'
+      responses:
+        '200':
+          description: Per-device results, in the `data` member
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BulkApplyResult'
+        '400':
+          description: No body, invalid JSON, no `device_ids`, a non-positive id, more than 10 devices, a missing or empty `config`, a field the server does not read in the request or in `config` (VALIDATION_FAILED); nothing is read or written
           content:
             application/json:
               schema:

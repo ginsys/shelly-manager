@@ -64,12 +64,14 @@ func TestBulkConfigEndpoints_RequireAdmin(t *testing.T) {
 	api.HandleFunc("/config/bulk-drift-detect", h.BulkDetectConfigDrift).Methods("POST")
 	api.HandleFunc("/config/bulk-drift-detect-enhanced", h.EnhancedBulkDetectConfigDrift).Methods("POST")
 	api.HandleFunc("/config/bulk-download", h.BulkDownloadConfigs).Methods("POST")
+	api.HandleFunc("/config/bulk-apply", h.BulkApplyConfigs).Methods("POST")
 
 	routes := []string{
 		"/api/v1/config/bulk-import",
 		"/api/v1/config/bulk-drift-detect",
 		"/api/v1/config/bulk-drift-detect-enhanced",
 		"/api/v1/config/bulk-download",
+		"/api/v1/config/bulk-apply",
 	}
 
 	// 1) Unauthenticated -> 401 for every route.

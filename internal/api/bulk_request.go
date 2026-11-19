@@ -47,17 +47,31 @@ func (h *Handler) decodeBulkRequest(w http.ResponseWriter, r *http.Request) (bul
 
 func parseBulkRequest(body io.Reader) (bulkSelection, error) {
 	var req bulkRequestBody
+	if err := decodeBulkJSON(body, &req); err != nil {
+		return bulkSelection{}, err
+	}
+	return req.selection()
+}
+
+// decodeBulkJSON reads the one JSON object of a bulk request into into, refusing a field it does not
+// have and anything after the object.
+func decodeBulkJSON(body io.Reader, into any) error {
 	dec := json.NewDecoder(body)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
+	if err := dec.Decode(into); err != nil {
 		if errors.Is(err, io.EOF) {
-			return bulkSelection{}, errors.New(`a JSON body naming the devices is required, e.g. {"device_ids":[1,2]}`)
+			return errors.New(`a JSON body naming the devices is required, e.g. {"device_ids":[1,2]}`)
 		}
-		return bulkSelection{}, fmt.Errorf("invalid request body: %w", err)
+		return fmt.Errorf("invalid request body: %w", err)
 	}
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return bulkSelection{}, errors.New("invalid request body: more than one JSON value")
+		return errors.New("invalid request body: more than one JSON value")
 	}
+	return nil
+}
+
+// selection validates the device list: at least one positive id, each device once, in request order.
+func (req bulkRequestBody) selection() (bulkSelection, error) {
 	if len(req.DeviceIDs) == 0 {
 		return bulkSelection{}, errors.New("device_ids must name at least one device")
 	}
