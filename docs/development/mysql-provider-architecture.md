@@ -189,44 +189,32 @@ type DatabaseStats struct {
 
 ### 3. SSL/TLS Security Architecture
 
-**Comprehensive TLS Mode Support**
+**TLS Mode Validation**
 ```go
 validTLSModes := map[string]bool{
-    "false":           true, // Disable SSL
-    "true":            true, // Enable SSL without verification
-    "skip-verify":     true, // Enable SSL but skip certificate verification
-    "preferred":       true, // Prefer SSL, fallback to non-SSL
-    "custom":          true, // Use custom TLS config
-    "required":        true, // Require SSL connection
-    "verify-ca":       true, // Verify CA certificate
-    "verify-identity": true, // Verify CA certificate and server hostname
+    "false":       true, // no TLS
+    "true":        true, // TLS; the certificate chain and the host name are verified
+    "skip-verify": true, // TLS; the certificate is not verified
+    "preferred":   true, // TLS if the server offers it, plain otherwise
 }
 ```
 
 **Decision Rationale:**
-- Supports all MySQL TLS modes for flexibility
+- Accepts for `options.tls` only values that are go-sql-driver/mysql modes; any other value there would fail at connect time (a `tls=` written in the DSN itself goes to the driver unchecked)
 - Default to "preferred" for security with compatibility
-- Validates certificate files for verification modes
 
-**Certificate Validation**
+**Certificate Options**
 ```go
 func (m *MySQLProvider) validateSSLConfig(options map[string]string) error {
-    // Validate TLS mode and certificate file existence
-    if tlsMode == "custom" || tlsMode == "verify-ca" || tlsMode == "verify-identity" {
-        if ca, ok := options["ca"]; ok && ca != "" {
-            if _, err := os.Stat(ca); os.IsNotExist(err) {
-                return fmt.Errorf("CA certificate not found: %s", ca)
-            }
-        }
-        // ... additional certificate validation
-    }
+    // ca, cert, key and serverName are refused:
+    // "custom TLS files are not supported; use tls=preferred|true|skip-verify"
+    // then the tls mode is checked against the four values above
 }
 ```
 
 **Decision Rationale:**
-- Ensures certificate files exist before connection attempts
-- Provides clear error messages for configuration issues
-- Supports mutual TLS authentication
+- The driver has no `ca`, `cert`, `key` or `serverName` DSN parameter and keeps an unknown one as a session variable, which the server refuses, so the provider refuses the option first with a clear message
+- A CA by path or a client certificate needs a TLS config registered with the driver; the provider does not do that yet
 
 ## Data Flow and Processing
 

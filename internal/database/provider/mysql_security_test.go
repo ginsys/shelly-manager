@@ -3,13 +3,11 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
@@ -19,8 +17,9 @@ func TestMySQLSecuritySSLValidation(t *testing.T) {
 	logger := logging.GetDefault()
 	provider := NewMySQLProvider(logger)
 
-	// Test all valid TLS modes for MySQL
-	validTLSModes := []string{"false", "true", "skip-verify", "preferred", "custom", "required", "verify-ca", "verify-identity"}
+	// The modes go-sql-driver/mysql takes for `tls=`; any other value is a registered config name, and
+	// this provider registers none.
+	validTLSModes := []string{"false", "true", "skip-verify", "preferred"}
 
 	for _, mode := range validTLSModes {
 		t.Run(fmt.Sprintf("ValidTLSMode_%s", mode), func(t *testing.T) {
@@ -30,8 +29,12 @@ func TestMySQLSecuritySSLValidation(t *testing.T) {
 		})
 	}
 
-	// Test invalid TLS modes
-	invalidTLSModes := []string{"invalid", "wrong", "bad-mode", "ssl", "disabled", "enabled"}
+	// Test invalid TLS modes. "custom", "required", "verify-ca" and "verify-identity" are names the driver
+	// refuses at connect time ("invalid value / unknown config name"), so the validator refuses them first.
+	invalidTLSModes := []string{
+		"invalid", "wrong", "bad-mode", "ssl", "disabled", "enabled",
+		"custom", "required", "verify-ca", "verify-identity",
+	}
 
 	for _, mode := range invalidTLSModes {
 		t.Run(fmt.Sprintf("InvalidTLSMode_%s", mode), func(t *testing.T) {
@@ -39,26 +42,19 @@ func TestMySQLSecuritySSLValidation(t *testing.T) {
 			err := provider.validateSSLConfig(options)
 			assert.Error(t, err, "TLS mode %s should be invalid", mode)
 			assert.Contains(t, err.Error(), "invalid TLS mode")
+			assert.Contains(t, err.Error(), "skip-verify", "the error names the modes the driver takes")
 		})
 	}
 }
 
-// TestMySQLSecuritySSLCertificateValidation tests SSL certificate validation
+// TestMySQLSecuritySSLCertificateValidation tests the options that go with a TLS mode. The driver has
+// no `ca`, `cert`, `key` or `serverName` DSN parameter: it would keep each as a session variable and
+// the connection would fail, so the provider refuses them and says what to use instead.
 func TestMySQLSecuritySSLCertificateValidation(t *testing.T) {
 	logger := logging.GetDefault()
 	provider := NewMySQLProvider(logger)
 
-	// Create temporary certificate files for testing
-	tmpDir := t.TempDir()
-	validCertPath := tmpDir + "/valid.crt"
-	validKeyPath := tmpDir + "/valid.key"
-	validCaPath := tmpDir + "/ca.crt"
-
-	// Create dummy certificate files
-	for _, path := range []string{validCertPath, validKeyPath, validCaPath} {
-		err := os.WriteFile(path, []byte("dummy certificate content"), 0644)
-		require.NoError(t, err)
-	}
+	const unsupported = "custom TLS files are not supported; use tls=preferred|true|skip-verify"
 
 	testCases := []struct {
 		name        string
@@ -67,66 +63,51 @@ func TestMySQLSecuritySSLCertificateValidation(t *testing.T) {
 		errorText   string
 	}{
 		{
-			name: "verify-ca with valid root cert",
-			options: map[string]string{
-				"tls": "verify-ca",
-				"ca":  validCaPath,
-			},
-			expectError: false,
-		},
-		{
-			name: "verify-identity with all valid certs",
-			options: map[string]string{
-				"tls":  "verify-identity",
-				"ca":   validCaPath,
-				"cert": validCertPath,
-				"key":  validKeyPath,
-			},
-			expectError: false,
-		},
-		{
-			name: "custom with all valid certs",
-			options: map[string]string{
-				"tls":  "custom",
-				"ca":   validCaPath,
-				"cert": validCertPath,
-				"key":  validKeyPath,
-			},
-			expectError: false,
-		},
-		{
-			name: "verify-ca with missing root cert",
-			options: map[string]string{
-				"tls": "verify-ca",
-				"ca":  "/nonexistent/ca.crt",
-			},
+			name:        "ca is refused",
+			options:     map[string]string{"tls": "true", "ca": "/etc/ssl/ca.pem"},
 			expectError: true,
-			errorText:   "CA certificate not found",
+			errorText:   unsupported,
 		},
 		{
-			name: "verify-identity with missing client cert",
-			options: map[string]string{
-				"tls":  "verify-identity",
-				"cert": "/nonexistent/client.crt",
-			},
+			name:        "cert is refused",
+			options:     map[string]string{"tls": "true", "cert": "/etc/ssl/client.pem"},
 			expectError: true,
-			errorText:   "client certificate not found",
+			errorText:   unsupported,
 		},
 		{
-			name: "custom with missing client key",
-			options: map[string]string{
-				"tls": "custom",
-				"key": "/nonexistent/client.key",
-			},
+			name:        "key is refused",
+			options:     map[string]string{"tls": "true", "key": "/etc/ssl/client.key"},
 			expectError: true,
-			errorText:   "client key not found",
+			errorText:   unsupported,
 		},
 		{
-			name: "required mode without certificates (should be valid)",
-			options: map[string]string{
-				"tls": "required",
-			},
+			name:        "serverName is refused",
+			options:     map[string]string{"tls": "true", "serverName": "mysql.internal"},
+			expectError: true,
+			errorText:   unsupported,
+		},
+		{
+			name:        "a certificate option is refused with no tls option too",
+			options:     map[string]string{"ca": "/etc/ssl/ca.pem"},
+			expectError: true,
+			errorText:   unsupported,
+		},
+		{
+			name:        "an empty certificate option is refused too (an empty ca= fails at connect as well)",
+			options:     map[string]string{"tls": "true", "ca": ""},
+			expectError: true,
+			errorText:   unsupported,
+		},
+		{
+			name:        "an option other than the four still passes (collation)",
+			options:     map[string]string{"tls": "true", "collation": "utf8mb4_unicode_ci"},
 			expectError: false,
+		},
+		{
+			name:        "a verify mode the driver lacks is refused",
+			options:     map[string]string{"tls": "verify-identity"},
+			expectError: true,
+			errorText:   "invalid TLS mode: verify-identity",
 		},
 		{
 			name: "true mode without certificates (should be valid)",

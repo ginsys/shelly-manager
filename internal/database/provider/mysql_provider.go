@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -444,7 +443,7 @@ func (m *MySQLProvider) buildDSN(baseDSN string, options map[string]string) (str
 		}
 
 		switch key {
-		case "ca", "cert", "key", "serverName", "collation", "loc", "maxAllowedPacket":
+		case "collation", "loc", "maxAllowedPacket":
 			if !strings.Contains(dsn, key+"=") {
 				if strings.Contains(dsn, "?") {
 					dsn += "&" + key + "=" + url.QueryEscape(value)
@@ -555,48 +554,32 @@ func (m *MySQLProvider) updateStats() {
 	}
 }
 
-// validateSSLConfig validates SSL certificate configuration for MySQL
+// validateSSLConfig validates the TLS mode for MySQL. The driver takes these four values for `tls=`,
+// or the name of a config registered with it, and this provider registers none, so any other value
+// would fail at connect time with "invalid value / unknown config name". The driver also has no `ca`,
+// `cert`, `key` or `serverName` parameter and would keep each as a session variable, which the server
+// refuses, so those options are refused here with a message that says what to use.
 func (m *MySQLProvider) validateSSLConfig(options map[string]string) error {
+	for _, name := range []string{"ca", "cert", "key", "serverName"} {
+		if _, ok := options[name]; ok {
+			return fmt.Errorf("custom TLS files are not supported; use tls=preferred|true|skip-verify (option %q)", name)
+		}
+	}
+
 	tlsMode, hasTlsMode := options["tls"]
 	if !hasTlsMode {
 		return nil // Default TLS mode will be applied
 	}
 
-	// Validate TLS mode
 	validTLSModes := map[string]bool{
-		"false":           true, // Disable SSL
-		"true":            true, // Enable SSL without verification
-		"skip-verify":     true, // Enable SSL but skip certificate verification
-		"preferred":       true, // Prefer SSL, fallback to non-SSL
-		"custom":          true, // Use custom TLS config
-		"required":        true, // Require SSL connection
-		"verify-ca":       true, // Verify CA certificate
-		"verify-identity": true, // Verify CA certificate and server hostname
+		"false":       true, // no TLS
+		"true":        true, // TLS; the certificate chain and the host name are verified
+		"skip-verify": true, // TLS; the certificate is not verified
+		"preferred":   true, // TLS if the server offers it, plain otherwise; not verified
 	}
 
 	if !validTLSModes[tlsMode] {
-		return fmt.Errorf("invalid TLS mode: %s", tlsMode)
-	}
-
-	// If using custom TLS or verification modes, ensure certificate files exist
-	if tlsMode == "custom" || tlsMode == "verify-ca" || tlsMode == "verify-identity" {
-		if ca, ok := options["ca"]; ok && ca != "" {
-			if _, err := os.Stat(ca); os.IsNotExist(err) {
-				return fmt.Errorf("CA certificate not found: %s", ca)
-			}
-		}
-
-		if cert, ok := options["cert"]; ok && cert != "" {
-			if _, err := os.Stat(cert); os.IsNotExist(err) {
-				return fmt.Errorf("client certificate not found: %s", cert)
-			}
-		}
-
-		if key, ok := options["key"]; ok && key != "" {
-			if _, err := os.Stat(key); os.IsNotExist(err) {
-				return fmt.Errorf("client key not found: %s", key)
-			}
-		}
+		return fmt.Errorf("invalid TLS mode: %s (the driver takes false, true, skip-verify or preferred)", tlsMode)
 	}
 
 	return nil

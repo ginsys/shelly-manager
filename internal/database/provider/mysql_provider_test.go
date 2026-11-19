@@ -275,14 +275,14 @@ func TestMySQLProviderBuildDSN(t *testing.T) {
 			name:    "DSN with custom options",
 			baseDSN: "user:pass@tcp(localhost:3306)/testdb",
 			options: map[string]string{
-				"tls":          "required",
+				"tls":          "skip-verify",
 				"timeout":      "5s",
 				"readTimeout":  "15s",
 				"writeTimeout": "15s",
 				"charset":      "latin1",
 			},
 			expectedSub: []string{
-				"tls=required",
+				"tls=skip-verify",
 				"timeout=5s",
 				"readTimeout=15s",
 				"writeTimeout=15s",
@@ -368,7 +368,7 @@ func TestMySQLProviderValidateSSLConfig(t *testing.T) {
 
 	// These tests are covered in detail in the security tests,
 	// but we'll include basic validation here
-	validModes := []string{"false", "true", "skip-verify", "preferred", "custom", "required", "verify-ca", "verify-identity"}
+	validModes := []string{"false", "true", "skip-verify", "preferred"}
 	for _, mode := range validModes {
 		t.Run(fmt.Sprintf("ValidMode_%s", mode), func(t *testing.T) {
 			err := provider.validateSSLConfig(map[string]string{"tls": mode})
@@ -376,7 +376,9 @@ func TestMySQLProviderValidateSSLConfig(t *testing.T) {
 		})
 	}
 
-	invalidModes := []string{"invalid", "wrong"}
+	// The driver also takes `1`, `0` and any letter case of these names; the validator never accepted
+	// them, so refusing them is not new.
+	invalidModes := []string{"invalid", "wrong", "required", "verify-ca", "verify-identity", "custom"}
 	for _, mode := range invalidModes {
 		t.Run(fmt.Sprintf("InvalidMode_%s", mode), func(t *testing.T) {
 			err := provider.validateSSLConfig(map[string]string{"tls": mode})

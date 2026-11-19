@@ -227,11 +227,8 @@ func TestMySQLProviderStatisticsTracking(t *testing.T) {
 func TestMySQLSecuritySSLValidation(t *testing.T) {
     provider := NewMySQLProvider(logging.GetDefault())
     
-    // Test all valid TLS modes for MySQL
-    validTLSModes := []string{
-        "false", "true", "skip-verify", "preferred", 
-        "custom", "required", "verify-ca", "verify-identity",
-    }
+    // Test the TLS modes the MySQL driver takes
+    validTLSModes := []string{"false", "true", "skip-verify", "preferred"}
     
     for _, mode := range validTLSModes {
         t.Run(fmt.Sprintf("ValidTLSMode_%s", mode), func(t *testing.T) {
@@ -262,18 +259,6 @@ func TestMySQLSecuritySSLValidation(t *testing.T) {
 func TestMySQLSecuritySSLCertificateValidation(t *testing.T) {
     provider := NewMySQLProvider(logging.GetDefault())
     
-    // Create temporary certificate files for testing
-    tmpDir := t.TempDir()
-    validCertPath := tmpDir + "/valid.crt"
-    validKeyPath := tmpDir + "/valid.key"
-    validCaPath := tmpDir + "/ca.crt"
-    
-    // Create dummy certificate files
-    for _, path := range []string{validCertPath, validKeyPath, validCaPath} {
-        err := os.WriteFile(path, []byte("dummy certificate content"), 0644)
-        require.NoError(t, err)
-    }
-    
     testCases := []struct {
         name        string
         options     map[string]string
@@ -281,32 +266,20 @@ func TestMySQLSecuritySSLCertificateValidation(t *testing.T) {
         errorText   string
     }{
         {
-            name: "verify-ca with valid root cert",
-            options: map[string]string{
-                "tls": "verify-ca",
-                "ca":  validCaPath,
-            },
-            expectError: false,
-        },
-        {
-            name: "verify-ca with missing root cert",
-            options: map[string]string{
-                "tls": "verify-ca",
-                "ca":  "/nonexistent/ca.crt",
-            },
+            name:        "ca is refused",
+            options:     map[string]string{"tls": "true", "ca": "/etc/ssl/ca.pem"},
             expectError: true,
-            errorText:   "CA certificate not found",
+            errorText:   "custom TLS files are not supported; use tls=preferred|true|skip-verify",
         },
-        // ... more certificate validation scenarios
+        // ... cert, key and serverName, an empty ca, and collation, which still passes
     }
 }
 ```
 
 **SSL Features Tested:**
-- All MySQL TLS modes validation
-- Certificate file existence checking
-- Certificate permission validation
-- SSL configuration combinations
+- The four TLS modes the driver takes, and the names it lacks, which are refused
+- The `ca`, `cert`, `key` and `serverName` options, which are refused
+- An option the DSN builder still passes through (`collation`)
 
 ### Credential Protection Tests
 
@@ -626,17 +599,14 @@ func TestMySQLProviderIntegrationSSL(t *testing.T) {
     
     provider := NewMySQLProvider(logging.GetDefault())
     
-    sslModes := []string{"required", "verify-ca", "verify-identity"}
+    sslModes := []string{"true", "skip-verify", "preferred"}
     
     for _, mode := range sslModes {
         t.Run(fmt.Sprintf("SSL_%s", mode), func(t *testing.T) {
             config := DatabaseConfig{
                 Provider: "mysql",
                 DSN:      os.Getenv("MYSQL_SSL_TEST_DSN"),
-                Options: map[string]string{
-                    "tls": mode,
-                    "ca":  os.Getenv("MYSQL_CA_CERT"),
-                },
+                Options:  map[string]string{"tls": mode},
             }
             
             err := provider.Connect(config)
