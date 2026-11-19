@@ -290,8 +290,9 @@ func setDefaults() {
 	viper.SetDefault("main_app.url", "http://localhost:8080")
 	viper.SetDefault("main_app.enabled", true)
 
-	// API defaults (for provisioner agent mode)
-	viper.SetDefault("api.url", "http://0.0.0.0:8080")
+	// API defaults (for provisioner agent mode). Only the provisioner reads api.url, and it needs the
+	// manager's real address, so there is no default: agent mode stops when none is set.
+	viper.SetDefault("api.url", "")
 	viper.SetDefault("api.key", "")
 	viper.SetDefault("api.timeout", 30)
 	viper.SetDefault("api.retry_attempts", 3)
