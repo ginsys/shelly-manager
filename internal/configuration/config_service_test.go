@@ -23,6 +23,7 @@ type mockRepository struct {
 	deleteErr      error
 
 	pendingRebootErr error // fails SetDevicePendingReboot
+	setAppliedErr    error // fails SetDeviceConfigApplied only
 	getDeviceCalls   int
 	afterGetDevice   func(call int) // runs after each GetDevice, to simulate a concurrent edit
 }
@@ -160,7 +161,7 @@ func (m *mockRepository) UpdateDeviceOverrides(deviceID uint, overrides json.Raw
 	return nil
 }
 
-func (m *mockRepository) UpdateDeviceDesiredConfig(deviceID uint, config json.RawMessage) error {
+func (m *mockRepository) SetDeviceDesiredConfigPending(deviceID uint, config json.RawMessage) error {
 	if m.updateErr != nil {
 		return m.updateErr
 	}
@@ -168,6 +169,7 @@ func (m *mockRepository) UpdateDeviceDesiredConfig(deviceID uint, config json.Ra
 		return ErrDeviceNotFound
 	}
 	m.devices[deviceID].DesiredConfig = string(config)
+	m.devices[deviceID].ConfigApplied = false
 	m.devices[deviceID].UpdatedAt = time.Now()
 	return nil
 }
@@ -175,6 +177,9 @@ func (m *mockRepository) UpdateDeviceDesiredConfig(deviceID uint, config json.Ra
 func (m *mockRepository) SetDeviceConfigApplied(deviceID uint, applied bool) error {
 	if m.updateErr != nil {
 		return m.updateErr
+	}
+	if m.setAppliedErr != nil {
+		return m.setAppliedErr
 	}
 	if _, ok := m.devices[deviceID]; !ok {
 		return ErrDeviceNotFound
@@ -605,6 +610,35 @@ func TestConfigurationService_RecomputeDesiredConfig(t *testing.T) {
 	var desired DeviceConfiguration
 	_ = json.Unmarshal([]byte(device.DesiredConfig), &desired)
 	assert.Equal(t, "global.broker", *desired.MQTT.Server)
+}
+
+// A recompute that changes the desired configuration must never leave an applied device reading
+// applied against it, whichever of its writes fails (ginsys/shelly-manager#716).
+func TestConfigurationService_RecomputeDesiredConfig_FailedFlagWriteLeavesNoAppliedDevice(t *testing.T) {
+	repo := newMockRepository()
+	repo.addDevice(1)
+	svc := NewConfigurationService(repo, Engine{}, nil)
+
+	template := &ServiceConfigTemplate{
+		Name:   "Global MQTT",
+		Scope:  "global",
+		Config: json.RawMessage(`{"mqtt":{"server":"first.broker"}}`),
+	}
+	require.NoError(t, svc.CreateTemplate(template))
+	require.NoError(t, svc.SetDeviceTemplates(1, []uint{template.ID}))
+	before := repo.devices[1].DesiredConfig
+
+	// The device was applied against that configuration, then the template changes, and the write
+	// that clears the flag fails.
+	repo.devices[1].ConfigApplied = true
+	repo.templates[template.ID].Config = json.RawMessage(`{"mqtt":{"server":"second.broker"}}`)
+	repo.setAppliedErr = errors.New("flag write failed")
+
+	_ = svc.RecomputeDesiredConfig(1)
+
+	device := repo.devices[1]
+	require.NotEqual(t, before, device.DesiredConfig, "the desired configuration changed, or this proves nothing")
+	assert.False(t, device.ConfigApplied, "an applied device must not read applied against a changed desired configuration")
 }
 
 func TestConfigurationService_GetDesiredConfig(t *testing.T) {
