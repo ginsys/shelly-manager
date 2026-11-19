@@ -146,6 +146,6 @@ curl -X POST http://localhost:8080/api/v1/admin/rotate-admin-key \
 
 Notes:
 - Requires current admin key via `Authorization: Bearer ...` or `X-API-Key`.
-- Rotates key for protected HTTP routes and the metrics WebSocket.
+- Rotates key for protected HTTP routes and the metrics WebSocket. All of them share one key, so the switch is a single step: from the moment the call returns, the old key is refused everywhere and the new one is accepted everywhere. A request that runs during the switch sees either the old key or the new one, never a mix.
 - For persistence across restarts, update your secret source (K8s Secret, Docker secret, `.env`).
 - The agent key is not touched by this call, so agents keep working. There is no API to rotate it: change the secret source and restart the manager and the agents.

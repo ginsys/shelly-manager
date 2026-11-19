@@ -19,7 +19,7 @@ type ImportHandlers struct {
 	syncEngine *sync.SyncEngine
 	logger     *logging.Logger
 
-	adminAPIKey string
+	adminKey apikey.Key
 }
 
 // NewImportHandlers creates new import handlers
@@ -32,14 +32,15 @@ func NewImportHandlers(syncEngine *sync.SyncEngine, logger *logging.Logger) *Imp
 
 // SetAdminAPIKey sets an optional admin API key for RBAC guarding of sensitive endpoints.
 func (ih *ImportHandlers) SetAdminAPIKey(key string) {
-	ih.adminAPIKey = key
+	ih.adminKey.Set(key)
 }
 
 func (ih *ImportHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if ih.adminAPIKey == "" {
+	key := ih.adminKey.Get()
+	if key == "" {
 		return true
 	}
-	if !apikey.Authorized(r, ih.adminAPIKey) {
+	if !apikey.Authorized(r, key) {
 		apiresp.NewResponseWriter(ih.logger).WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "Admin authorization required", nil)
 		return false
 	}

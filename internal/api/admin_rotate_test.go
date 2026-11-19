@@ -52,6 +52,7 @@ func TestRotateAdminKey_AuthAndPropagation(t *testing.T) {
 	h := NewHandlerWithLogger(db, nil, nil, mhandler, logger)
 	h.ExportHandlers = exp
 	h.ImportHandlers = imp
+	h.ShareAdminKey()
 
 	// Initial admin key
 	initialKey := "old-secret"
