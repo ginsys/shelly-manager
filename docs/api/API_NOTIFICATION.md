@@ -48,25 +48,24 @@ Type-specific config examples:
 ## Secrets in a channel's config
 
 A channel's config holds credentials for its destination: a webhook `url` and `webhook_url` (a Slack or
-Discord webhook URL is the token), every value under `headers` (such as `Authorization`), and any key named
-like a secret (`secret`, `token`, `password`, `api_key`, ...). Key names are matched without regard to case
-(`URL` and `Headers` are accepted by the server, so they are credentials too). A key that holds a list or an
-object under a secret name is secret as a whole.
+Discord webhook URL is the token), `headers` (such as `Authorization`), and any key named like a secret
+(`secret`, `token`, `password`, `api_key`, ...). Key names are matched without regard to case (`URL` and
+`Headers` are accepted by the server, so they are credentials too). The value under such a key is one
+credential, whatever its type: a string, a number, an object (`headers`) or a list (`"token_list": ["a", "b"]`).
 
 - **Reads.** `GET /notifications/channels`, `GET /notifications/rules`, `GET /notifications/history` and the
-  `POST /notifications/channels` response send `********` in place of each of these. The same holds for the
-  channel inside a rule or a history entry. Other fields (`recipients`, `method`, `channel`, `timeout`, ...) are
-  returned as stored.
-- **Saves.** `PUT /notifications/channels/{id}` takes the stored value back for a credential sent as `********`,
-  so a client that read the config can send it back with one field changed. Any other value is a new credential and
-  replaces the stored one. A credential left out is removed: an update replaces the whole config, as before.
-  The placeholder is never stored: where nothing is stored for it, it is dropped, and a channel left without a
-  required `url` or `webhook_url` is refused. A stored config with two keys that differ only in case
-  (`URL` and `url`) restores neither: send the value. A config that repeats a member name, in any case
-  spelling and at any depth, is refused with 400 on create and on update, because the server reads such a text in
-  member order. A secret list (`"token_list": ["a", "b"]`) comes back whole only
-  when every entry is `********` and the stored list has as many entries; any other `********` inside a list is
-  dropped. To change one entry, send the whole list with its new values.
+  `POST /notifications/channels` response send `********` in place of that whole value (`"headers": "********"`).
+  The same holds for the channel inside a rule or a history entry. Other fields (`recipients`, `method`,
+  `channel`, `timeout`, ...) are returned as stored. An empty value stays empty.
+- **Saves.** `PUT /notifications/channels/{id}` takes the stored value back for a credential key sent as
+  `********`, so a client that read the config can send it back with one field changed. Any other value is a new
+  credential and replaces the stored one: to change one header or one list entry, send the whole new object or
+  list. A credential left out is removed: an update replaces the whole config, as before.
+  The placeholder is never stored in place of a missing value: where nothing is stored for it, the key is
+  dropped, and a channel left without a required `url` or `webhook_url` is refused. A stored config with two keys
+  that differ only in case (`URL` and `url`) restores neither: send the value. A config that repeats a member
+  name, with names matched the way the server's JSON decoder matches them and at any depth, is refused with 400
+  on create and on update, because the server reads such a text in member order.
 - **Limit: delivery errors.** A failed delivery's error text quotes the request URL, and that text is stored in
   the history row (`error` in `GET /notifications/history`) and returned as the message of a failed
   `POST /notifications/channels/{id}/test`. These texts are not masked yet, so a token that sits in the URL

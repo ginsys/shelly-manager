@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"unicode"
 
 	"github.com/ginsys/shelly-manager/internal/redact"
 )
@@ -14,32 +15,31 @@ import (
 // their place and a save that sends the placeholder back keeps the stored value. The key rule is the
 // shared one (redact.IsKey: secret, token, password, ... or a name ending in key). A channel adds
 // three slots that rule cannot see: the top-level url and webhook_url, because a webhook URL carries
-// its token in the path, the query or the userinfo (a Slack or Discord webhook is the token), and every
-// value under headers, because Authorization and custom auth headers do not look like secrets.
+// its token in the path, the query or the userinfo (a Slack or Discord webhook is the token), and
+// headers, because Authorization and custom auth headers do not look like secrets.
 // Keys are compared without regard to case, because encoding/json accepts "URL" and "Headers" for the
 // fields validation and delivery read.
 //
-// A key that holds an object or a list is secret as a whole, so every scalar below it is a credential.
-// secret says that an enclosing key already made the node secret; top says the object is the root.
+// The value under such a key is masked whole, whatever its JSON type: a string or a number becomes the
+// placeholder, and so does an object or a list (headers, a list of tokens). Nothing below a secret key
+// is walked, so no shape under it can keep a credential in view.
 
-func isURLKey(k string) bool {
-	return strings.EqualFold(k, "url") || strings.EqualFold(k, "webhook_url")
+// secretKey reports whether the value under key k is a credential. top says the object is the root.
+func secretKey(k string, top bool) bool {
+	return redact.IsKey(strings.ToLower(strings.ToUpper(k))) ||
+		(top && (strings.EqualFold(k, "url") || strings.EqualFold(k, "webhook_url") || strings.EqualFold(k, "headers")))
 }
 
-// secretName is redact.IsKey on a key folded the way encoding/json folds field names: it reads the
-// long s (U+017F) as s and the Kelvin sign (U+212A) as k, which a plain lower-casing does not.
-func secretName(k string) bool {
-	return redact.IsKey(strings.ToLower(strings.ToUpper(k)))
-}
-
-// holdsAll reports whether every scalar below the entry (k, container) is a credential.
-func holdsAll(k string, top, secret bool) bool {
-	return secret || secretName(k) || (top && strings.EqualFold(k, "headers"))
-}
-
-// isSlot reports whether the scalar entry k holds a credential.
-func isSlot(k string, top, secret bool) bool {
-	return secret || secretName(k) || (top && isURLKey(k))
+// holdsValue reports whether v is a value worth masking: a non-empty scalar, or an object or list
+// with something in it. An empty secret stays empty, and a number is a secret too ({"api_key": 12345678}).
+func holdsValue(v any) bool {
+	switch x := v.(type) {
+	case map[string]any:
+		return len(x) > 0
+	case []any:
+		return len(x) > 0
+	}
+	return redact.IsScalar(v)
 }
 
 func isContainer(v any) bool {
@@ -78,25 +78,23 @@ func quotedPlaceholder() json.RawMessage {
 	return quoted
 }
 
-// maskNode replaces, in place, every credential scalar below v with the placeholder. An empty secret
-// stays empty, and a number is a secret too ({"api_key": 12345678}).
-func maskNode(v any, top, secret bool) {
+// maskNode replaces, in place, the value under every secret key below v with the placeholder.
+func maskNode(v any, top bool) {
 	switch x := v.(type) {
 	case map[string]any:
 		for k, child := range x {
-			if isContainer(child) {
-				maskNode(child, false, holdsAll(k, top, secret))
-			} else if isSlot(k, top, secret) && redact.IsScalar(child) {
-				x[k] = redact.Placeholder
+			switch {
+			case secretKey(k, top):
+				if holdsValue(child) {
+					x[k] = redact.Placeholder
+				}
+			case isContainer(child):
+				maskNode(child, false)
 			}
 		}
 	case []any:
-		for i, e := range x {
-			if isContainer(e) {
-				maskNode(e, false, secret)
-			} else if secret && redact.IsScalar(e) {
-				x[i] = redact.Placeholder
-			}
+		for _, e := range x {
+			maskNode(e, false)
 		}
 	}
 }
@@ -112,7 +110,7 @@ func maskConfig(raw json.RawMessage) json.RawMessage {
 	if !ok {
 		return quotedPlaceholder()
 	}
-	maskNode(doc, true, false)
+	maskNode(doc, true)
 	return encodeDocument(doc)
 }
 
@@ -134,69 +132,42 @@ func lookupFold(m map[string]any, k string) any {
 	return found
 }
 
-// kept reports whether stored is a credential that can stand in for a placeholder.
-func kept(stored any) bool {
-	if s, isString := stored.(string); isString && s == redact.Placeholder {
-		return false
-	}
-	return redact.IsScalar(stored)
+func isPlaceholder(v any) bool {
+	s, isString := v.(string)
+	return isString && s == redact.Placeholder
 }
 
-// restoreNode answers a client that sends back what maskNode gave it. A credential that arrives as the
-// placeholder becomes the stored value at the same key, or is dropped when none is stored: the placeholder
-// is never stored. Any other value is a new credential and stays as sent. A credential the client leaves
-// out stays out, so a save replaces the config as it always did.
+// restoreNode answers a client that sends back what maskNode gave it. A secret key whose value arrives
+// as the placeholder gets the stored value at the same key, or loses the key when none is stored: the
+// placeholder is never stored in its place. Any other value under a secret key is a new credential and
+// stays as sent, whatever its type. A credential the client leaves out stays out, so a save replaces the
+// config as it always did.
 //
-// A list has no key to pair its entries by, and pairing by position would give an entry another entry's
-// credential after a reorder. So a secret list comes back whole only when every entry is the placeholder
-// and the stored list has as many entries; any other placeholder in a list is dropped.
-func restoreNode(v, stored any, top, secret bool) any {
+// A list has no key to pair its entries by, so the objects in a list are restored against nothing: a
+// placeholder inside them is dropped.
+func restoreNode(v, stored any, top bool) {
 	switch x := v.(type) {
 	case map[string]any:
 		old, _ := stored.(map[string]any)
 		for k, child := range x {
-			if isContainer(child) {
-				x[k] = restoreNode(child, lookupFold(old, k), false, holdsAll(k, top, secret))
-				continue
-			}
-			if s, isString := child.(string); isString && s == redact.Placeholder && isSlot(k, top, secret) {
-				if prior := lookupFold(old, k); kept(prior) {
-					x[k] = prior
-				} else {
-					delete(x, k)
+			switch {
+			case secretKey(k, top):
+				if isPlaceholder(child) {
+					if prior := lookupFold(old, k); holdsValue(prior) && !isPlaceholder(prior) {
+						x[k] = prior
+					} else {
+						delete(x, k)
+					}
 				}
+			case isContainer(child):
+				restoreNode(child, lookupFold(old, k), false)
 			}
 		}
-		return x
 	case []any:
-		if secret {
-			if whole, ok := restoreWholeList(x, stored); ok {
-				return whole
-			}
-		}
-		out := make([]any, 0, len(x))
 		for _, e := range x {
-			if s, isString := e.(string); isString && s == redact.Placeholder && secret {
-				continue
-			}
-			out = append(out, restoreNode(e, nil, false, secret))
-		}
-		return out
-	}
-	return v
-}
-
-func restoreWholeList(incoming []any, stored any) ([]any, bool) {
-	old, isList := stored.([]any)
-	if !isList || len(old) != len(incoming) || len(incoming) == 0 {
-		return nil, false
-	}
-	for i, e := range incoming {
-		if s, isString := e.(string); !isString || s != redact.Placeholder || !kept(old[i]) {
-			return nil, false
+			restoreNode(e, nil, false)
 		}
 	}
-	return old, true
 }
 
 // errRepeatedMember refuses a config in which a member name appears twice. encoding/json reads such a
@@ -213,7 +184,7 @@ func restoreConfig(incoming, stored json.RawMessage) (json.RawMessage, error) {
 	if !ok {
 		return incoming, nil // not ours to read: validation decides
 	}
-	if s, isString := doc.(string); isString && s == redact.Placeholder {
+	if isPlaceholder(doc) {
 		return stored, nil // the whole malformed text, masked
 	}
 	m, isMap := doc.(map[string]any)
@@ -228,11 +199,32 @@ func restoreConfig(incoming, stored json.RawMessage) (json.RawMessage, error) {
 		old = storedDoc
 	}
 	before := encodeDocument(m)
-	restored := encodeDocument(restoreNode(m, old, true, false))
+	restoreNode(m, old, true)
+	restored := encodeDocument(m)
 	if bytes.Equal(before, restored) {
 		return incoming, nil // nothing to restore: keep the client's own bytes
 	}
 	return restored, nil
+}
+
+// foldName returns a name folded the way encoding/json folds it when it matches a JSON member to a
+// struct field: every rune becomes the smallest rune of its unicode.SimpleFold set, so two names fold
+// together exactly when strings.EqualFold says they are equal. (U+0131 and U+0130 fold to nothing
+// else, so "id" and "ıd" stay two names.)
+func foldName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		for {
+			next := unicode.SimpleFold(r)
+			if next <= r {
+				r = next
+				break
+			}
+			r = next
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // repeatsMember reports whether any object in raw holds two members whose names fold together (the
@@ -259,7 +251,7 @@ func repeatsMember(raw []byte) bool {
 				if nameErr != nil || !isName {
 					return false, false
 				}
-				folded := strings.ToLower(strings.ToUpper(name))
+				folded := foldName(name)
 				if seen[folded] {
 					return true, true
 				}

@@ -705,9 +705,10 @@ components:
         config:
           type: object
           description: >-
-            The channel configuration. Every credential in it (url, webhook_url, every headers value,
-            and any key named like a secret) is sent as the placeholder ******** and never as the
-            stored value. The same applies to the channel inside a rule or a history entry.
+            The channel configuration. The value under every credential key in it (url, webhook_url,
+            headers, and any key named like a secret), whatever its type, is sent as the placeholder
+            ******** and never as the stored value. The same applies to the channel inside a rule or a
+            history entry.
         description:
           type: string
         created_at:
@@ -731,9 +732,9 @@ components:
         config:
           type: object
           description: >-
-            The channel configuration. On an update, a credential sent as the placeholder ********
-            keeps its stored value; any other value replaces it. A credential left out is removed,
-            because an update replaces the whole configuration.
+            The channel configuration. On an update, a credential key sent as the placeholder ********
+            keeps its stored value; any other value (a string, an object or a list) replaces it. A
+            credential left out is removed, because an update replaces the whole configuration.
         description:
           type: string
       required:

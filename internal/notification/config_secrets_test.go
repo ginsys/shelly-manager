@@ -2,6 +2,7 @@ package notification
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,8 +38,8 @@ func TestMaskConfig_MasksEveryChannelSlot(t *testing.T) {
 	assert.Equal(t, ph, m["url"])
 	assert.Equal(t, ph, m["secret"])
 	assert.Equal(t, ph, m["api_key"], "a number under a secret key is masked too")
-	assert.Equal(t, []any{ph, ph}, m["token_list"], "a secret key that holds a list is secret as a whole")
-	assert.Equal(t, map[string]any{"Authorization": ph, "X-Env": ph}, m["headers"], "every header value is a credential")
+	assert.Equal(t, ph, m["token_list"], "a secret key that holds a list is masked whole")
+	assert.Equal(t, ph, m["headers"], "headers hold credentials, so the object is masked whole")
 	assert.Equal(t, map[string]any{"password": ph, "name": "n"}, m["opts"])
 	assert.Equal(t, "POST", m["method"])
 	assert.EqualValues(t, 5, m["timeout"])
@@ -69,7 +70,7 @@ func TestRestoreConfig(t *testing.T) {
 	stored := json.RawMessage(`{"url":"https://h.example/hook?t=tok","secret":"s3","headers":{"Authorization":"Bearer b"},"timeout":5}`)
 
 	t.Run("a placeholder takes the stored value, a plain field is as sent", func(t *testing.T) {
-		incoming := json.RawMessage(`{"url":"` + ph + `","secret":"` + ph + `","headers":{"Authorization":"` + ph + `"},"timeout":9}`)
+		incoming := json.RawMessage(`{"url":"` + ph + `","secret":"` + ph + `","headers":"` + ph + `","timeout":9}`)
 		m := decodeMap(t, mustRestore(t, incoming, stored))
 		assert.Equal(t, "https://h.example/hook?t=tok", m["url"])
 		assert.Equal(t, "s3", m["secret"])
@@ -77,16 +78,17 @@ func TestRestoreConfig(t *testing.T) {
 		assert.EqualValues(t, 9, m["timeout"])
 	})
 
-	t.Run("a new value replaces the stored one", func(t *testing.T) {
-		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"https://new.example","secret":"`+ph+`"}`), stored))
+	t.Run("a new value replaces the stored one, whatever its type", func(t *testing.T) {
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"https://new.example","secret":"`+ph+`","headers":{"X":"1"}}`), stored))
 		assert.Equal(t, "https://new.example", m["url"])
 		assert.Equal(t, "s3", m["secret"])
+		assert.Equal(t, map[string]any{"X": "1"}, m["headers"], "a new headers object is as sent")
 	})
 
 	t.Run("a placeholder with nothing stored is dropped", func(t *testing.T) {
-		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"u","secret":"`+ph+`","headers":{"X":"`+ph+`"}}`), nil))
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"url":"u","secret":"`+ph+`","headers":"`+ph+`"}`), nil))
 		assert.NotContains(t, m, "secret")
-		assert.Equal(t, map[string]any{}, m["headers"])
+		assert.NotContains(t, m, "headers")
 	})
 
 	t.Run("a secret left out stays out", func(t *testing.T) {
@@ -115,7 +117,7 @@ func TestMaskConfig_AnyKeyCasing(t *testing.T) {
 	assert.Equal(t, ph, m["URL"])
 	assert.Equal(t, ph, m["Webhook_URL"])
 	assert.Equal(t, ph, m["Secret"])
-	assert.Equal(t, map[string]any{"Authorization": ph}, m["Headers"])
+	assert.Equal(t, ph, m["Headers"])
 	assert.Equal(t, "POST", m["Method"])
 
 	// Only the top level has url and headers slots: a nested "url" is a plain field.
@@ -125,42 +127,36 @@ func TestMaskConfig_AnyKeyCasing(t *testing.T) {
 
 func TestRestoreConfig_AnyKeyCasing(t *testing.T) {
 	stored := json.RawMessage(`{"URL":"https://h.example/SECRET","Headers":{"Authorization":"Bearer b"},"Secret":"s3"}`)
-	incoming := json.RawMessage(`{"url":"` + ph + `","HEADERS":{"authorization":"` + ph + `"},"secret":"` + ph + `"}`)
+	incoming := json.RawMessage(`{"url":"` + ph + `","HEADERS":"` + ph + `","secret":"` + ph + `"}`)
 
 	m := decodeMap(t, mustRestore(t, incoming, stored))
 
 	assert.Equal(t, "https://h.example/SECRET", m["url"])
-	assert.Equal(t, map[string]any{"authorization": "Bearer b"}, m["HEADERS"])
+	assert.Equal(t, map[string]any{"Authorization": "Bearer b"}, m["HEADERS"])
 	assert.Equal(t, "s3", m["secret"])
 }
 
-// A list has no key to pair its entries by. The list comes back whole when the client sent the
-// placeholder for every entry of a stored list of the same length; any other placeholder in a list is
-// dropped, and a plain entry is a new credential.
-func TestRestoreConfig_Lists(t *testing.T) {
-	stored := json.RawMessage(`{"token_list":["a","b"],"opts":{"keys":["x","y","z"]},"name":"n"}`)
+// A secret key that holds a list or an object is one credential: it is masked whole, and the
+// placeholder alone brings the stored value back. Anything else under that key is a new value.
+func TestRestoreConfig_ContainersUnderSecretKeys(t *testing.T) {
+	stored := json.RawMessage(`{"token_list":["a","b"],"opts":{"keys":["x","y","z"],"token":{"a":1}},"name":"n"}`)
 
 	t.Run("the masked read comes back whole", func(t *testing.T) {
 		masked := maskConfig(stored)
 		require.Contains(t, string(masked), ph)
-		m := decodeMap(t, mustRestore(t, masked, stored))
-		assert.Equal(t, []any{"a", "b"}, m["token_list"])
-		assert.Equal(t, map[string]any{"keys": []any{"x", "y", "z"}}, m["opts"])
-		assert.NotContains(t, string(mustRestore(t, masked, stored)), ph)
+		out := mustRestore(t, masked, stored)
+		assert.JSONEq(t, string(stored), string(out))
+		assert.NotContains(t, string(out), ph)
 	})
 
-	t.Run("a different length takes nothing from the stored list", func(t *testing.T) {
-		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"token_list":["`+ph+`","`+ph+`","`+ph+`"]}`), stored))
-		assert.Equal(t, []any{}, m["token_list"])
-	})
-
-	t.Run("a mixed list keeps the new entry and drops the placeholder", func(t *testing.T) {
-		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"token_list":["`+ph+`","fresh"]}`), stored))
+	t.Run("a new list or object is as sent", func(t *testing.T) {
+		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"token_list":["fresh"],"opts":{"token":["n"]}}`), stored))
 		assert.Equal(t, []any{"fresh"}, m["token_list"])
+		assert.Equal(t, map[string]any{"token": []any{"n"}}, m["opts"])
 	})
 
-	t.Run("nothing stored drops every placeholder", func(t *testing.T) {
-		out := mustRestore(t, json.RawMessage(`{"token_list":["`+ph+`"],"x":{"password":["`+ph+`"]}}`), nil)
+	t.Run("nothing stored drops the placeholder", func(t *testing.T) {
+		out := mustRestore(t, json.RawMessage(`{"token_list":"`+ph+`","x":{"password":"`+ph+`"}}`), nil)
 		assert.NotContains(t, string(out), ph)
 	})
 
@@ -168,6 +164,83 @@ func TestRestoreConfig_Lists(t *testing.T) {
 		m := decodeMap(t, mustRestore(t, json.RawMessage(`{"recipients":["`+ph+`","b@example.com"]}`), stored))
 		assert.Equal(t, []any{ph, "b@example.com"}, m["recipients"])
 	})
+
+	t.Run("an object in a list is restored against nothing", func(t *testing.T) {
+		out := mustRestore(t, json.RawMessage(`{"targets":[{"secret":"`+ph+`","name":"n"}]}`), stored)
+		assert.JSONEq(t, `{"targets":[{"name":"n"}]}`, string(out))
+	})
+}
+
+// Any value under a secret key is masked whole, whatever its JSON type, and nothing under it is walked:
+// the url keys of a channel that ignores them (an email channel passes validation with a url list) are
+// the case that put a token in view.
+func TestMaskConfig_AnyValueUnderASecretKeyIsMaskedWhole(t *testing.T) {
+	raw := json.RawMessage(`{"recipients":["ops@example.com"],"url":["https://hook.example/SECRET620"],` +
+		`"webhook_url":{"a":{"b":"https://hook.example/S2"}},"Headers":[{"Authorization":"Bearer b"}],` +
+		`"secret":{"k":["v"]},"api_key":[1,2],"empty":{},"token":[],"password":{}}`)
+
+	out := maskConfig(raw)
+
+	assert.NotContains(t, string(out), "SECRET620")
+	assert.NotContains(t, string(out), "S2")
+	assert.NotContains(t, string(out), "Bearer")
+	m := decodeMap(t, out)
+	assert.Equal(t, ph, m["url"])
+	assert.Equal(t, ph, m["webhook_url"])
+	assert.Equal(t, ph, m["Headers"])
+	assert.Equal(t, ph, m["secret"])
+	assert.Equal(t, ph, m["api_key"])
+	assert.Equal(t, []any{}, m["token"], "an empty list holds nothing and stays empty")
+	assert.Equal(t, map[string]any{}, m["password"], "an empty object stays empty")
+	assert.Equal(t, []any{"ops@example.com"}, m["recipients"])
+}
+
+func TestRestoreConfig_UrlKeysHoldingContainers(t *testing.T) {
+	stored := json.RawMessage(`{"recipients":["ops@example.com"],"url":["https://hook.example/SECRET620"]}`)
+	out := mustRestore(t, maskConfig(stored), stored)
+	assert.JSONEq(t, string(stored), string(out))
+}
+
+// encoding/json matches a member to a field by unicode.SimpleFold, so the dotless i (U+0131) and the
+// dotted capital I (U+0130) are not "i": {"id":1,"ıd":2} repeats nothing.
+func TestRestoreConfig_NamesThatOnlyLookAlikeAreNotRepeated(t *testing.T) {
+	stored := json.RawMessage(`{"url":"https://h.example/stored"}`)
+	for name, incoming := range map[string]string{
+		"dotless i":          "{\"url\":\"u\",\"opts\":{\"id\":1,\"ıd\":2}}",
+		"dotted capital I":   "{\"url\":\"u\",\"opts\":{\"id\":1,\"İd\":2}}",
+		"sharp s":            "{\"url\":\"u\",\"opts\":{\"ss\":1,\"ß\":2}}",
+		"long s with itself": "{\"url\":\"u\",\"opts\":{\"s\":1,\"ſ\":2}}",
+	} {
+		_, err := restoreConfig(json.RawMessage(incoming), stored)
+		if name == "long s with itself" {
+			require.ErrorIs(t, err, errRepeatedMember, name+": the decoder folds U+017F to s, so this is a repeat")
+			continue
+		}
+		require.NoError(t, err, name)
+	}
+}
+
+// foldName is the fold encoding/json applies to member names: two names fold together exactly when
+// strings.EqualFold says they are equal.
+func TestFoldName_AgreesWithEqualFold(t *testing.T) {
+	names := []string{"", "id", "ID", "Id", "ıd", "İd", "ss", "SS", "ß", "s", "S", "ſ", "k", "K", "K",
+		"secret", "SECRET", "ſecret", "api_key", "API_KEY", "σ", "ς", "Σ", "straße", "STRASSE"}
+	for _, a := range names {
+		for _, b := range names {
+			assert.Equal(t, strings.EqualFold(a, b), foldName(a) == foldName(b), "%q vs %q", a, b)
+		}
+	}
+}
+
+// A decoder reads the key the same way: the premise of the tests above.
+func TestFoldName_MatchesWhatTheDecoderDoes(t *testing.T) {
+	var v struct {
+		ID int `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte("{\"ıd\":7}"), &v))
+	assert.Equal(t, 0, v.ID, "the decoder does not read the dotless i as i")
+	require.NoError(t, json.Unmarshal([]byte(`{"ID":7}`), &v))
+	assert.Equal(t, 7, v.ID)
 }
 
 // encoding/json folds U+017F (long s) to s and U+212A (Kelvin) to k when it matches a field name, so

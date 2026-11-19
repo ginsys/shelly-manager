@@ -252,7 +252,7 @@ func TestNotificationSecrets_AnyKeyCasingIsMaskedAndRestored(t *testing.T) {
 		"name": "cased", "type": "webhook",
 		"config": map[string]any{
 			"URL":     redact.Placeholder,
-			"Headers": map[string]string{"Authorization": redact.Placeholder},
+			"Headers": redact.Placeholder,
 			"Secret":  redact.Placeholder,
 		},
 	})
@@ -298,7 +298,7 @@ func TestNotificationSecrets_RepeatedMembersAreRefusedOnSave(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(list, `"name"`), "no channel was created by a refused save")
 }
 
-// A list of credentials is masked on read and comes back whole when the client sends the read back.
+// A list of credentials is one masked value on read and comes back whole when the client sends the read back.
 func TestNotificationSecrets_ListOfSecretsRoundTrips(t *testing.T) {
 	env := setupNotificationSecrets(t)
 	id, createResp := env.createChannel(t, map[string]any{
@@ -319,21 +319,43 @@ func TestNotificationSecrets_ListOfSecretsRoundTrips(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(list), &wrap))
 	require.Len(t, wrap.Data.Channels, 1)
 	read := wrap.Data.Channels[0].Config
-	assert.Equal(t, []any{redact.Placeholder, redact.Placeholder}, read["token_list"])
+	assert.Equal(t, redact.Placeholder, read["token_list"])
 
 	code, resp := env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id),
 		map[string]any{"name": "listed", "type": "webhook", "config": read})
 	require.Equal(t, http.StatusOK, code, resp)
 	assert.Equal(t, []any{"LEAKLIST1-620", "LEAKLIST2-620"}, env.storedConfig(t, id)["token_list"])
 
-	// A list of another length takes nothing from the stored one, and no placeholder is stored.
+	// A new list replaces the stored one as sent.
 	code, resp = env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{
 		"name": "listed", "type": "webhook",
-		"config": map[string]any{"url": "http://h.example/x", "token_list": []string{redact.Placeholder, redact.Placeholder, redact.Placeholder}},
+		"config": map[string]any{"url": "http://h.example/x", "token_list": []string{"NEWLIST-620"}},
 	})
 	require.Equal(t, http.StatusOK, code, resp)
-	assert.NotContains(t, fmt.Sprint(env.storedConfig(t, id)), redact.Placeholder)
-	assert.NotContains(t, fmt.Sprint(env.storedConfig(t, id)), "LEAKLIST")
+	assert.Equal(t, []any{"NEWLIST-620"}, env.storedConfig(t, id)["token_list"])
+}
+
+// A list or an object under a url key is masked as one value, even on a channel type that never
+// reads the key: the config still holds it and the read must not return it.
+func TestNotificationSecrets_ContainerUnderURLKeyIsMasked(t *testing.T) {
+	env := setupNotificationSecrets(t)
+	id, createResp := env.createChannel(t, map[string]any{
+		"name": "mail", "type": "email", "enabled": true,
+		"config": map[string]any{
+			"recipients":  []string{"ops@example.com"},
+			"url":         []string{"https://hook.example/SECRET620"},
+			"webhook_url": map[string]any{"a": map[string]any{"b": "https://hook.example/S2-620"}},
+		},
+	})
+	assertNoLeaks(t, "the create response", createResp)
+	assert.NotContains(t, createResp, "SECRET620")
+	assert.NotContains(t, createResp, "S2-620")
+
+	_, list := env.do(t, "GET", "/notifications/channels", nil)
+	assert.NotContains(t, list, "SECRET620")
+	assert.NotContains(t, list, "S2-620")
+	assert.Contains(t, list, "ops@example.com")
+	assert.Contains(t, fmt.Sprint(env.storedConfig(t, id)), "SECRET620", "the stored row keeps the value")
 }
 
 type capturedRequest struct {
@@ -372,7 +394,7 @@ func TestNotificationSecrets_SaveKeepsStoredValueBehindThePlaceholder(t *testing
 	// restore on its own.
 	cfg := map[string]any{
 		"url":     redact.Placeholder,
-		"headers": map[string]string{"Authorization": redact.Placeholder, "X-Env": redact.Placeholder},
+		"headers": redact.Placeholder,
 		"secret":  redact.Placeholder,
 		"timeout": 9,
 	}
@@ -385,7 +407,7 @@ func TestNotificationSecrets_SaveKeepsStoredValueBehindThePlaceholder(t *testing
 	assert.Equal(t, srv.URL+"/"+leakPath, stored["url"], "the url stays")
 	headers := stored["headers"].(map[string]any)
 	assert.Equal(t, leakBearer, headers["Authorization"])
-	assert.Equal(t, "prod", headers["X-Env"], "every header value is a slot, so the placeholder restored it too")
+	assert.Equal(t, "prod", headers["X-Env"], "the headers object comes back whole")
 	assert.EqualValues(t, 9, stored["timeout"], "the plain field changed")
 	assert.NotContains(t, fmt.Sprint(stored), redact.Placeholder, "the placeholder is never stored")
 
@@ -420,7 +442,7 @@ func TestNotificationSecrets_SaveReplacesAndDrops(t *testing.T) {
 		"name": "swap", "type": "webhook",
 		"config": map[string]any{
 			"url":     "http://new.example/hook",
-			"headers": map[string]string{"X-Auth": redact.Placeholder},
+			"headers": redact.Placeholder,
 		},
 	})
 	require.Equal(t, http.StatusOK, code, resp)
