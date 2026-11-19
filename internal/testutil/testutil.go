@@ -146,10 +146,11 @@ func TestDatabaseMemory(t *testing.T) (*database.Manager, func()) {
 	return dbManager, cleanup
 }
 
-// TestDevice creates a test device
+// TestDevice creates a test device. Its address is a closed loopback port, so a test that calls the
+// device gets an immediate refusal and sends nothing off this host.
 func TestDevice() *database.Device {
 	return &database.Device{
-		IP:       "192.168.1.100",
+		IP:       "127.0.0.1:1",
 		MAC:      "A4:CF:12:34:56:78",
 		Type:     "Smart Plug",
 		Name:     "Test Device",

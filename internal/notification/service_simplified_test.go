@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -204,8 +205,14 @@ func TestNotificationService_TestChannel(t *testing.T) {
 	service, _, cleanup := setupSimpleTestService(t)
 	defer cleanup()
 
+	// A loopback receiver stands in for the webhook target, so the test sends nothing off this host.
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer receiver.Close()
+
 	t.Run("Test Valid Channel", func(t *testing.T) {
-		config, _ := json.Marshal(WebhookConfig{URL: "https://httpbin.org/post"})
+		config, _ := json.Marshal(WebhookConfig{URL: receiver.URL + "/post"})
 		channel := &NotificationChannel{
 			Name:    "Test Webhook",
 			Type:    "webhook",
@@ -215,15 +222,14 @@ func TestNotificationService_TestChannel(t *testing.T) {
 		err := service.CreateChannel(channel)
 		require.NoError(t, err)
 
-		// Test the channel - this might fail due to network, but structure should be valid
+		// Only that the call returns without panicking is asserted: the delivery result is
+		// not part of this test.
 		err = service.TestChannel(context.Background(), channel.ID)
-		// We don't assert NoError here since it might fail due to network issues in CI
-		// Just test that we can call the method without panicking
 		_ = err
 	})
 
 	t.Run("Test Disabled Channel", func(t *testing.T) {
-		config, _ := json.Marshal(WebhookConfig{URL: "https://example.com/webhook"})
+		config, _ := json.Marshal(WebhookConfig{URL: receiver.URL + "/webhook"})
 		channel := &NotificationChannel{
 			Name:    "Disabled Channel",
 			Type:    "webhook",

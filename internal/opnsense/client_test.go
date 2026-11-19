@@ -223,8 +223,8 @@ func TestClientTestConnection(t *testing.T) {
 
 	t.Run("Connection Failure - Server Not Reachable", func(t *testing.T) {
 		config := ClientConfig{
-			Host:      "192.0.2.1", // TEST-NET-1 - guaranteed unreachable
-			Port:      443,
+			Host:      "127.0.0.1", // loopback, closed port 1: refused at once, nothing leaves this host
+			Port:      1,
 			UseHTTPS:  true,
 			APIKey:    "test-key",
 			APISecret: "test-secret",
@@ -384,8 +384,8 @@ func TestClientMakeRequest(t *testing.T) {
 
 	t.Run("Network Error", func(t *testing.T) {
 		config := ClientConfig{
-			Host:      "192.0.2.1", // TEST-NET-1 - unreachable
-			Port:      443,
+			Host:      "127.0.0.1", // loopback, closed port 1: refused at once, nothing leaves this host
+			Port:      1,
 			UseHTTPS:  true,
 			APIKey:    "api-key",
 			APISecret: "api-secret",

@@ -121,8 +121,8 @@ func TestTestDevice(t *testing.T) {
 	}
 
 	// Verify device properties
-	if device.IP != "192.168.1.100" {
-		t.Errorf("Expected IP 192.168.1.100, got %s", device.IP)
+	if device.IP != "127.0.0.1:1" {
+		t.Errorf("Expected IP 127.0.0.1:1, got %s", device.IP)
 	}
 
 	if device.MAC != "A4:CF:12:34:56:78" {
@@ -585,7 +585,7 @@ func TestTestutilConcurrency(t *testing.T) {
 			if cfg.Server.Port != 8080 {
 				t.Errorf("Concurrent TestConfig %d failed", id)
 			}
-			if device.IP != "192.168.1.100" {
+			if device.IP != "127.0.0.1:1" {
 				t.Errorf("Concurrent TestDevice %d failed", id)
 			}
 			if tempDir == "" {
@@ -606,48 +606,41 @@ func TestTestutilConcurrency(t *testing.T) {
 	}
 }
 
-// Test TEST-NET validation functions
-func TestTestNetAddressValidation(t *testing.T) {
+// Test loopback validation functions
+func TestLoopbackAddressValidation(t *testing.T) {
 	testCases := []struct {
 		address  string
 		expected bool
 		desc     string
 	}{
-		{"192.0.2.1", true, "TEST-NET-1"},
-		{"192.0.2.255", true, "TEST-NET-1 boundary"},
-		{"198.51.100.1", true, "TEST-NET-2"},
-		{"203.0.113.1", true, "TEST-NET-3"},
+		{"127.0.0.1", true, "Loopback"},
+		{"127.0.0.1:1", true, "Loopback with port"},
+		{"127.0.0.3", true, "Loopback range"},
+		{"[::1]:80", true, "IPv6 loopback with port"},
+		{"192.0.2.1", false, "TEST-NET-1 still leaves the host"},
+		{"203.0.113.1", false, "TEST-NET-3 still leaves the host"},
 		{"192.168.1.1", false, "Private network"},
 		{"8.8.8.8", false, "Public address"},
-		{"127.0.0.1", false, "Loopback"},
-		{"10.0.0.1", false, "Private network"},
+		{"localhost", false, "A name is not an address"},
+		{"", false, "Empty"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			result := IsTestNetAddress(tc.address)
+			result := IsLoopbackAddress(tc.address)
 			if result != tc.expected {
-				t.Errorf("IsTestNetAddress(%s) = %v, expected %v", tc.address, result, tc.expected)
+				t.Errorf("IsLoopbackAddress(%s) = %v, expected %v", tc.address, result, tc.expected)
 			}
 		})
 	}
 }
 
-func TestAssertTestNetAddress(t *testing.T) {
-	// Test valid TEST-NET address (should not fail)
-	t.Run("valid TEST-NET", func(t *testing.T) {
-		AssertTestNetAddress(t, "192.0.2.1") // Should pass
+func TestAssertLoopbackAddress(t *testing.T) {
+	// A loopback address must not fail, and the shared test address is one.
+	t.Run("loopback", func(t *testing.T) {
+		AssertLoopbackAddress(t, TestNetworkAddress())
 	})
 
-	// Note: We can't easily test the failure case of AssertTestNetAddress
+	// Note: We can't easily test the failure case of AssertLoopbackAddress
 	// because it calls t.Fatalf which terminates the test.
-}
-
-func TestLogTestNetUsage(t *testing.T) {
-	// Test that logging works for TEST-NET addresses
-	LogTestNetUsage(t, "192.0.2.1")
-	LogTestNetUsage(t, "203.0.113.100")
-
-	// Should not log for non-TEST-NET addresses
-	LogTestNetUsage(t, "192.168.1.1")
 }

@@ -2,6 +2,8 @@ package discovery
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -65,7 +67,7 @@ func TestScanHost_Gen1Device(t *testing.T) {
 		t.Fatalf("Failed to parse server URL: %v", err)
 	}
 
-	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout for TEST-NET scanning
+	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout
 	ctx := context.Background()
 
 	device, err := scanner.ScanHost(ctx, serverURL.Host)
@@ -110,7 +112,7 @@ func TestScanHost_Gen2Device(t *testing.T) {
 		t.Fatalf("Failed to parse server URL: %v", err)
 	}
 
-	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout for TEST-NET scanning
+	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout
 	ctx := context.Background()
 
 	device, err := scanner.ScanHost(ctx, serverURL.Host)
@@ -149,9 +151,9 @@ func TestScanHost_NoDevice(t *testing.T) {
 	ctx, cancel := testutil.CreateNetworkTestContext(config)
 	defer cancel()
 
-	// Try to scan a non-routable address (TEST-NET-1 range)
+	// Scan an address that nothing answers: a closed loopback port
 	testAddr := testutil.TestNetworkAddress()
-	testutil.AssertTestNetAddress(t, testAddr) // Verify we're using TEST-NET
+	testutil.AssertLoopbackAddress(t, testAddr) // Verify the scan stays on this host
 	device, err := scanner.ScanHost(ctx, testAddr)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -170,9 +172,17 @@ func TestScanHost_Timeout(t *testing.T) {
 	scanner := NewScanner(10*time.Millisecond, 1) // Very short timeout
 	ctx := context.Background()
 
-	// Try to scan a non-routable address (TEST-NET-2 range)
-	testAddr := "198.51.100.1"
-	testutil.AssertTestNetAddress(t, testAddr)     // Verify we're using TEST-NET
+	// A loopback server that holds every request past the scanner's timeout. A closed port
+	// would refuse at once and test nothing about the timeout.
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	defer server.Close()
+	defer close(release) // runs first: frees the held requests so server.Close returns
+
+	testAddr := strings.TrimPrefix(server.URL, "http://")
+	testutil.AssertLoopbackAddress(t, testAddr)    // Verify the scan stays on this host
 	device, err := scanner.ScanHost(ctx, testAddr) // Will timeout
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -305,10 +315,9 @@ func TestScanNetwork_SmallRange(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	// Test with a small range in TEST-NET-3 that won't find anything
-	// (since our mock server is on localhost, not in a real network range)
-	testCIDR := "203.0.113.0/30"                    // Only 4 IPs in TEST-NET-3
-	testutil.AssertTestNetAddress(t, "203.0.113.1") // Verify CIDR is in TEST-NET
+	// Scan a small loopback range on the default port: nothing listens there, so no device is
+	// found, and the scan sends nothing off this host.
+	testCIDR := "127.0.0.0/30" // Only 4 IPs
 	devices, err := scanner.ScanNetwork(ctx, testCIDR)
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
@@ -337,7 +346,7 @@ func TestGetDeviceStatus_Gen1(t *testing.T) {
 		t.Fatalf("Failed to parse server URL: %v", err)
 	}
 
-	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout for TEST-NET scanning
+	scanner := NewScanner(100*time.Millisecond, 1) // Short timeout
 	ctx := context.Background()
 
 	// Test Gen1 device status

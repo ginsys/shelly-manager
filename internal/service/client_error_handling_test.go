@@ -20,7 +20,7 @@ func TestGetClient_EmptySettings(t *testing.T) {
 	// Create device with empty settings
 	device := &database.Device{
 		ID:       1,
-		IP:       "192.0.2.100", // TEST-NET address
+		IP:       "127.0.0.1:1", // loopback, closed port: refuses at once
 		MAC:      "AA:BB:CC:DD:EE:FF",
 		Type:     "Test Device",
 		Name:     "Test",
@@ -50,7 +50,7 @@ func TestGetClient_InvalidSettings(t *testing.T) {
 	// Create device with invalid JSON settings
 	device := &database.Device{
 		ID:       2,
-		IP:       "192.0.2.101", // TEST-NET address
+		IP:       "127.0.0.1:1", // loopback, closed port: refuses at once
 		MAC:      "AA:BB:CC:DD:EE:F0",
 		Type:     "Test Device",
 		Name:     "Test",
@@ -81,7 +81,7 @@ func TestGetClient_ValidSettings(t *testing.T) {
 	// Create device with valid settings
 	device := &database.Device{
 		ID:       3,
-		IP:       "192.0.2.102", // TEST-NET address
+		IP:       "127.0.0.1:1", // loopback, closed port: refuses at once
 		MAC:      "AA:BB:CC:DD:EE:F1",
 		Type:     "Test Device",
 		Name:     "Test",
@@ -111,7 +111,7 @@ func TestGetClient_AuthEnabledSettings(t *testing.T) {
 	// Create device with auth enabled
 	device := &database.Device{
 		ID:       4,
-		IP:       "192.0.2.103", // TEST-NET address
+		IP:       "127.0.0.1:1", // loopback, closed port: refuses at once
 		MAC:      "AA:BB:CC:DD:EE:F2",
 		Type:     "Test Device",
 		Name:     "Test",

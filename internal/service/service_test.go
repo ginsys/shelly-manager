@@ -72,7 +72,7 @@ func createTestDBNoCleanup(t *testing.T) *database.Manager {
 func createTestConfig() *config.Config {
 	cfg := &config.Config{}
 	cfg.Discovery.Enabled = true
-	cfg.Discovery.Networks = []string{"203.0.113.0/30"} // TEST-NET-3 range for testing
+	cfg.Discovery.Networks = []string{"127.0.0.0/30"} // loopback: a scan reaches no other host
 	cfg.Discovery.Interval = 60
 	cfg.Discovery.Timeout = 1 // Short timeout for tests
 	cfg.Discovery.EnableMDNS = false
@@ -281,8 +281,8 @@ func TestShellyService_DiscoverDevices_SpecificNetwork(t *testing.T) {
 
 	service := NewServiceWithLogger(db, cfg, logger)
 
-	// Test with specific network parameter (TEST-NET-3 range)
-	testNetwork := "203.0.113.0/30"
+	// Test with specific network parameter (loopback)
+	testNetwork := "127.0.0.0/30"
 	devices, err := service.DiscoverDevices(testNetwork)
 
 	// Should complete without error
@@ -345,7 +345,7 @@ func TestShellyService_DiscoverDevices_ZeroTimeout(t *testing.T) {
 	// Create config with zero timeout (should use default)
 	cfg := &config.Config{}
 	cfg.Discovery.Enabled = true
-	cfg.Discovery.Networks = []string{"203.0.113.0/30"} // TEST-NET-3
+	cfg.Discovery.Networks = []string{"127.0.0.0/30"} // loopback
 	cfg.Discovery.Interval = 60
 	cfg.Discovery.Timeout = 0 // Zero timeout - should use default
 	cfg.Discovery.EnableMDNS = false
@@ -357,7 +357,7 @@ func TestShellyService_DiscoverDevices_ZeroTimeout(t *testing.T) {
 	service := NewServiceWithLogger(db, cfg, logger)
 
 	// Test discovery with zero timeout
-	devices, err := service.DiscoverDevices("203.0.113.0/30")
+	devices, err := service.DiscoverDevices("127.0.0.0/30")
 
 	// Should complete (should use default timeout of 2 seconds)
 	if err != nil {
@@ -389,7 +389,7 @@ func TestShellyService_DiscoverDevices_CancelledContext(t *testing.T) {
 	// Try discovery with cancelled context
 	// Note: DiscoverDevices creates its own context with timeout, so this test
 	// verifies that the service can still function even if the main context is cancelled
-	devices, err := service.DiscoverDevices("203.0.113.0/30")
+	devices, err := service.DiscoverDevices("127.0.0.0/30")
 
 	// Should still work since DiscoverDevices uses its own context
 	if err != nil {
@@ -419,7 +419,7 @@ func TestShellyService_DiscoverDevices_DeviceConversion(t *testing.T) {
 	service := NewServiceWithLogger(db, cfg, logger)
 
 	// Run discovery
-	devices, err := service.DiscoverDevices("203.0.113.0/30")
+	devices, err := service.DiscoverDevices("127.0.0.0/30")
 
 	if err != nil {
 		t.Logf("Discovery returned error: %v", err)
@@ -460,7 +460,7 @@ func TestShellyService_MultipleOperations(t *testing.T) {
 
 	// Test multiple discovery operations
 	for i := 0; i < 3; i++ {
-		devices, err := service.DiscoverDevices("203.0.113.0/30")
+		devices, err := service.DiscoverDevices("127.0.0.0/30")
 
 		if err != nil {
 			t.Logf("Discovery iteration %d returned error: %v", i+1, err)
@@ -477,7 +477,7 @@ func TestShellyService_MultipleOperations(t *testing.T) {
 	service.Stop()
 
 	// Verify service can still perform operations after stop
-	devices, err := service.DiscoverDevices("203.0.113.0/30")
+	devices, err := service.DiscoverDevices("127.0.0.0/30")
 
 	if err != nil {
 		t.Logf("Discovery after stop returned error: %v", err)
@@ -532,7 +532,7 @@ func TestShellyService_WithDatabaseIntegration(t *testing.T) {
 	}
 
 	// Now run discovery (won't find the test device we added, but should work)
-	discoveredDevices, err := service.DiscoverDevices("203.0.113.0/30")
+	discoveredDevices, err := service.DiscoverDevices("127.0.0.0/30")
 
 	if err != nil {
 		t.Logf("Discovery returned error: %v", err)
@@ -596,7 +596,7 @@ func BenchmarkShellyService_DiscoverDevices(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = service.DiscoverDevices("203.0.113.0/30")
+		_, _ = service.DiscoverDevices("127.0.0.0/30")
 	}
 }
 
@@ -630,7 +630,7 @@ func TestShellyService_EdgeCases(t *testing.T) {
 
 	// Test with very large timeout (should be handled gracefully)
 	cfg.Discovery.Timeout = 999999
-	devices, err = service.DiscoverDevices("203.0.113.0/30")
+	devices, err = service.DiscoverDevices("127.0.0.0/30")
 	if err != nil {
 		t.Logf("Discovery with large timeout returned error: %v", err)
 	}
@@ -647,7 +647,7 @@ func TestShellyService_EdgeCases(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
-			devices, err := service.DiscoverDevices("203.0.113.0/30")
+			devices, err := service.DiscoverDevices("127.0.0.0/30")
 			if err != nil {
 				t.Logf("Concurrent discovery %d returned error: %v", id, err)
 			}

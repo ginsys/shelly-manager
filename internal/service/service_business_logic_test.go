@@ -717,7 +717,7 @@ func TestShellyService_ControlDevice_OfflineDevice_Force(t *testing.T) {
 	svc := NewService(db, cfg)
 
 	device := &database.Device{
-		IP:       "192.168.1.100",
+		IP:       "127.0.0.1:1", // loopback, closed port: the forced call fails at once, off no host
 		MAC:      "68C63A123461",
 		Type:     "SHSW-25",
 		Name:     "Offline Device Force",
