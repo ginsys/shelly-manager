@@ -133,6 +133,63 @@ func (e *SyncEngine) GetImportResult(id string) (*ImportResult, bool) {
 	return res, ok
 }
 
+// FindExportResult returns the result of an export: the one the engine still holds in memory, or
+// else the one its history record describes (the memory is empty after a restart, and is reset
+// when it grows past a limit). A record holds fewer fields than a result, so the fields it lacks
+// stay empty. It returns nil and no error when neither source knows the id.
+func (e *SyncEngine) FindExportResult(ctx context.Context, id string) (*ExportResult, error) {
+	if res, ok := e.GetExportResult(id); ok && res != nil {
+		return res, nil
+	}
+	rec, err := e.GetExportHistory(ctx, id)
+	if err != nil || rec == nil {
+		return nil, err
+	}
+	return &ExportResult{
+		Success:     rec.Success,
+		ExportID:    rec.ExportID,
+		PluginName:  rec.PluginName,
+		Format:      rec.Format,
+		OutputPath:  rec.FilePath,
+		RecordCount: rec.RecordCount,
+		FileSize:    rec.FileSize,
+		Duration:    time.Duration(rec.DurationMs) * time.Millisecond,
+		Errors:      recordedErrors(rec.ErrorMessage),
+		CreatedAt:   rec.CreatedAt,
+	}, nil
+}
+
+// FindImportResult is FindExportResult for an import: the in-memory result, or else the one its
+// history record describes, without the change list and the warnings the record never held.
+func (e *SyncEngine) FindImportResult(ctx context.Context, id string) (*ImportResult, error) {
+	if res, ok := e.GetImportResult(id); ok && res != nil {
+		return res, nil
+	}
+	rec, err := e.GetImportHistory(ctx, id)
+	if err != nil || rec == nil {
+		return nil, err
+	}
+	return &ImportResult{
+		Success:         rec.Success,
+		ImportID:        rec.ImportID,
+		PluginName:      rec.PluginName,
+		Format:          rec.Format,
+		RecordsImported: rec.RecordsImported,
+		RecordsSkipped:  rec.RecordsSkipped,
+		Duration:        time.Duration(rec.DurationMs) * time.Millisecond,
+		Errors:          recordedErrors(rec.ErrorMessage),
+		CreatedAt:       rec.CreatedAt,
+	}, nil
+}
+
+// recordedErrors turns the one error message a history record keeps into the list a result has.
+func recordedErrors(message string) []string {
+	if message == "" {
+		return nil
+	}
+	return []string{message}
+}
+
 // NewExportEngine creates a new export engine (backward compatibility)
 func NewExportEngine(dbManager DatabaseManagerInterface, logger *logging.Logger) *ExportEngine {
 	return (*ExportEngine)(NewSyncEngine(dbManager, logger))

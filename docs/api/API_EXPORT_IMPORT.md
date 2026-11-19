@@ -20,7 +20,10 @@ This document describes the Export/Import endpoints, request/response schemas an
 - Plugin schema: `GET /api/v1/export/plugins/{name}/schema`
 - Generic export: `POST /api/v1/export`
 - Preview export: `POST /api/v1/export/preview`
-- Get result: `GET /api/v1/export/{id}`
+- Get result: `GET /api/v1/export/{id}` (and `GET /api/v1/export/backup/{id}`). The server keeps a
+  result in memory, and after a restart the answer comes from the history record instead, with
+  the same fields but no `checksum`, `warnings` or `metadata`, only the first error, and the
+  time the record was saved as `created_at`. An id with no result and no record answers `404`.
 - Download: `GET /api/v1/export/{id}/download`
 - History: `GET /api/v1/export/history` (pagination: `page`, `page_size`; filters: `plugin`, `success`)
 - History item: `GET /api/v1/export/history/{export_id}`
@@ -127,7 +130,9 @@ POST /api/v1/export/preview
 
 - Generic import: `POST /api/v1/import`
 - Preview import: `POST /api/v1/import/preview`
-- Get result: `GET /api/v1/import/{id}`
+- Get result: `GET /api/v1/import/{id}`. After a restart the answer comes from the history record,
+  with the same fields but no `changes`, `warnings` or `metadata`, only the first error, and the
+  time the record was saved as `created_at`. An id with no result and no record answers `404`.
 - Backup restore: `POST /api/v1/import/backup`
 - Backup validate: `POST /api/v1/import/backup/validate`
 - GitOps import: `POST /api/v1/import/gitops`
