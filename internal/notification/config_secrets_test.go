@@ -352,6 +352,54 @@ func TestRestoreConfig_AmbiguousFoldedKeys(t *testing.T) {
 	assert.NotContains(t, string(restoreConfig(json.RawMessage(`{"Url":"`+ph+`"}`), stored)), "example")
 }
 
+// Round 3 of the review.
+
+// The method is configurable and Go accepts every HTTP token, a digit included; the failed send names
+// it as the Op of the url.Error.
+func TestScrubText_AnyMethodToken(t *testing.T) {
+	stored := "nosuch://user:pass@h.example/LEAKPATH620?t=LEAKQUERY620"
+	for _, method := range []string{"POST", "X1", "M-SEARCH", "v.2"} {
+		req, err := http.NewRequest(method, stored, nil)
+		require.NoError(t, err, method)
+		_, err = http.DefaultClient.Do(req) //nolint:gosec // unsupported scheme: nothing is dialed
+		require.Error(t, err, method)
+		require.Contains(t, err.Error(), "user:***@", "net/http writes the password as ***")
+
+		cfg, jerr := json.Marshal(map[string]any{"url": stored, "method": method})
+		require.NoError(t, jerr)
+		text := scrubText("failed to send webhook: "+err.Error(), cfg)
+		assert.NotContains(t, text, "LEAKPATH620", method)
+		assert.NotContains(t, text, "LEAKQUERY620", method)
+		assert.Contains(t, text, `"`+ph+`": `, method)
+	}
+}
+
+// A repeated member is read one way by the generic decode (the last wins) and another by the struct
+// decode validation uses (a null is ignored), so a text that repeats a member is always re-encoded.
+func TestRestoreConfig_RepeatedMembers(t *testing.T) {
+	stored := json.RawMessage(`{"url":"https://h.example/stored"}`)
+	for name, incoming := range map[string]string{
+		"null after":       `{"url":"` + ph + `","url":null}`,
+		"folded null":      `{"URL":"` + ph + `","url":null}`,
+		"nested":           `{"headers":{"A":"` + ph + `","A":null},"url":"u"}`,
+		"in a list":        `{"opts":[{"x":1,"x":2}],"url":"` + ph + `"}`,
+		"plain repetition": `{"url":"u","url":"v"}`,
+	} {
+		out := restoreConfig(json.RawMessage(incoming), stored)
+		assert.NotContains(t, string(out), ph, name)
+		assert.NotEqual(t, incoming, string(out), name)
+		var cfg struct {
+			URL string `json:"url"`
+		}
+		require.NoError(t, json.Unmarshal(out, &cfg), name)
+		assert.NotEqual(t, ph, cfg.URL, "%s: the struct decode never sees the placeholder", name)
+	}
+
+	// A config with no repeated member keeps the client's bytes.
+	same := json.RawMessage(`{ "url": "u", "headers": {"A": "b"}, "opts": [{"x": 1}, {"x": 2}] }`)
+	assert.Equal(t, string(same), string(restoreConfig(same, stored)))
+}
+
 func TestScrubText_SecretInsideAList(t *testing.T) {
 	cfg := json.RawMessage(`{"token_list":["tok-one","tok-two"],"recipients":["a@example.com"]}`)
 	assert.Equal(t, ph+" "+ph+" a@example.com", scrubText("tok-one tok-two a@example.com", cfg))
