@@ -36,7 +36,8 @@ type ProvisionerActor struct {
 // Locking: each operation that authorizes an agent runs in one transaction that locks the agent row
 // (SELECT ... FOR UPDATE) before it reads or writes anything of that agent, so a register that replaces
 // a token waits for the requests already in flight under the old one. Register is the one operation
-// whose first statement is an INSERT, see RegisterAgent. SQLite has one connection and drops the lock
+// whose first statement is an INSERT, see RegisterAgent. A task row is locked after the agent row, never
+// before it, so two operations cannot wait on each other. SQLite has one connection and drops the lock
 // clause, so there a transaction is the lock.
 //
 // Never call the database through another handle while a store transaction is open, and never from
@@ -213,7 +214,8 @@ func (s *ProvisionerStore) UpdateTaskStatus(ctx context.Context, actor Provision
 			}
 			agentID = agent.AgentID
 		}
-		found := tx.Where("task_id = ?", taskID).First(&task)
+		// The task row is locked too, so the agent it belongs to cannot change between this read and the write.
+		found := tx.Clauses(forUpdate()).Where("task_id = ?", taskID).First(&task)
 		switch {
 		case errors.Is(found.Error, gorm.ErrRecordNotFound) && actor.Privileged:
 			return ErrTaskNotFound
@@ -224,13 +226,9 @@ func (s *ProvisionerStore) UpdateTaskStatus(ctx context.Context, actor Provision
 		case !actor.Privileged && task.AgentID != agentID:
 			return ErrForbidden
 		}
-		res := tx.Model(&ProvisioningTask{}).Where("id = ? AND agent_id = ?", task.ID, task.AgentID).
-			Updates(map[string]interface{}{"status": status, "updated_at": now})
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected != 1 {
-			return ErrTaskNotFound
+		if err := tx.Model(&ProvisioningTask{}).Where("id = ?", task.ID).
+			Updates(map[string]interface{}{"status": status, "updated_at": now}).Error; err != nil {
+			return err
 		}
 		task.Status, task.UpdatedAt = status, now
 		return nil
