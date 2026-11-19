@@ -289,8 +289,9 @@ func TestFactory_EdgeCases(t *testing.T) {
 	assertError(t, err)
 	assertEqual(t, 0, generation)
 
-	// Test with invalid IP format
-	generation, err = factory.DetectGeneration(ctx, "invalid-ip")
+	// Test with invalid IP format: a space is not valid in a host, so no request is built and
+	// nothing is dialled (a plain name would be resolved through DNS).
+	generation, err = factory.DetectGeneration(ctx, "not an ip")
 	assertError(t, err)
 	assertEqual(t, 0, generation)
 }

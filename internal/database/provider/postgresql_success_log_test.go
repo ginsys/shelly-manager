@@ -115,7 +115,8 @@ func serveFakePostgres(conn net.Conn, resetOnQuery bool, failFrom int32, queries
 	}
 }
 
-// pgx skips an unresolvable first host and connects to the next, but keeps the
+// pgx skips a first host it cannot reach (here a socket directory that does not
+// exist, so no name is resolved) and connects to the next, but keeps the
 // first in its parsed config. The success log must not print that field: a
 // password typed into a host list lands there.
 func TestPostgreSQLConnect_SuccessLogHoldsNoDSNText(t *testing.T) {
@@ -127,7 +128,7 @@ func TestPostgreSQLConnect_SuccessLogHoldsNoDSNText(t *testing.T) {
 	err := p.Connect(DatabaseConfig{
 		Provider: "postgresql",
 		DSN: "postgresql://app@127.0.0.1:" + strconv.Itoa(port) +
-			"/shelly?host=" + leakWord + ".invalid,127.0.0.1&sslmode=disable&connect_timeout=2",
+			"/shelly?host=/" + leakWord + "-missing,127.0.0.1&sslmode=disable&connect_timeout=2",
 		LogLevel: "info",
 	})
 
