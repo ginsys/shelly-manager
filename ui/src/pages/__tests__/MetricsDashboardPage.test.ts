@@ -4,6 +4,12 @@ import { createTestingPinia } from '@pinia/testing'
 import MetricsDashboardPage from '../MetricsDashboardPage.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import * as metricsApi from '@/api/metrics'
+import type { SecurityMetrics, TestAlertResult } from '@/api/metrics'
+import type {
+  DashboardMetrics,
+  NotificationMetrics,
+  ResolutionMetrics
+} from '@/api/metricsContract'
 
 // Mock the API module
 vi.mock('@/api/metrics', () => ({
@@ -28,36 +34,78 @@ describe('MetricsDashboardPage', () => {
   let wrapper: any
   let store: any
 
-  // Mock data
-  const mockDashboardSummary = {
-    devices: { total: 10, online: 8, offline: 2 },
-    exports: { total: 5, recent: 2 },
-    imports: { total: 3, recent: 1 },
-    drifts: { total: 7, unresolved: 2 },
-    notifications: { sent: 15, failed: 1 }
+  // Mock data, shaped like the Go answers: the field names and nesting of
+  // internal/metrics/websocket.go (DashboardMetrics and its parts),
+  // internal/metrics/handlers.go (SendTestAlert) and
+  // internal/api/middleware/security_monitor.go (SecurityMetrics).
+  const mockNotificationMetrics: NotificationMetrics = {
+    total_sent: 15,
+    total_failed: 1,
+    channel_breakdown: { email: 10, slack: 6 },
+    alert_level_breakdown: { info: 12, critical: 4 },
+    average_latency_seconds: 0
   }
 
-  const mockNotificationMetrics = {
-    totalSent: 15,
-    totalFailed: 1,
-    byChannel: {
-      email: { sent: 10, failed: 0 },
-      slack: { sent: 5, failed: 1 }
+  const mockResolutionMetrics: ResolutionMetrics = {
+    total_resolutions: 5,
+    auto_fix_success_rate: { drift: 0.8 },
+    resolutions_by_category: { drift: 3, error: 2 },
+    average_review_time_seconds: 120
+  }
+
+  const mockDashboardSummary: DashboardMetrics = {
+    system_status: {
+      uptime_seconds: 3600,
+      metrics_enabled: true,
+      last_collection_time: '2026-01-01T00:00:00Z',
+      total_devices: 10,
+      online_devices: 8,
+      devices_with_drift: 2
     },
-    recentNotifications: []
+    device_metrics: [],
+    drift_metrics: {
+      total_drift_issues: 7,
+      severity_distribution: { high: 2, low: 5 },
+      category_distribution: {},
+      trend_analysis: []
+    },
+    notification_metrics: mockNotificationMetrics,
+    resolution_metrics: mockResolutionMetrics
   }
 
-  const mockResolutionMetrics = {
-    totalResolved: 5,
-    averageResolutionTime: 120,
-    byType: { drift: 3, error: 2 },
-    byUser: { admin: 5 }
+  const mockSecurityMetrics: SecurityMetrics = {
+    total_requests: 500,
+    blocked_requests: 7,
+    suspicious_requests: 11,
+    rate_limit_violations: 3,
+    validation_failures: 4,
+    attacks_by_type: { sql_injection: 2 },
+    top_attacker_ips: null,
+    alerts_by_level: {},
+    last_updated: '2026-01-01T00:00:00Z',
+    blocked_ips: 1,
+    active_threats: 2
   }
 
-  const mockSecurityMetrics = {
-    authAttempts: { successful: 100, failed: 2 },
-    apiCalls: { total: 500, errors: 5 },
-    rateLimit: { triggered: 1, blocked: 0 }
+  const mockTestAlert: TestAlertResult = {
+    status: 'sent',
+    alert_type: 'test',
+    message: 'Test alert sent at 10:00:00',
+    severity: 'info'
+  }
+
+  const panel = (name: string) => wrapper.find(`[data-testid="panel-${name}"]`)
+
+  function mountPage() {
+    return mount(MetricsDashboardPage, {
+      global: {
+        plugins: [createTestingPinia({ stubActions: false })],
+        stubs: {
+          LineChart: { template: '<div class="line-chart-stub"></div>' },
+          BarChart: { template: '<div class="bar-chart-stub"></div>' }
+        }
+      }
+    })
   }
 
   beforeEach(() => {
@@ -69,7 +117,7 @@ describe('MetricsDashboardPage', () => {
     vi.mocked(metricsApi.enableMetrics).mockResolvedValue({ success: true })
     vi.mocked(metricsApi.disableMetrics).mockResolvedValue({ success: true })
     vi.mocked(metricsApi.collectMetrics).mockResolvedValue({ success: true })
-    vi.mocked(metricsApi.sendTestAlert).mockResolvedValue({ success: true, message: 'Alert sent' })
+    vi.mocked(metricsApi.sendTestAlert).mockResolvedValue(mockTestAlert)
     vi.mocked(metricsApi.getPrometheusMetrics).mockResolvedValue('# Prometheus metrics')
 
     // Store-level API mocks
@@ -158,30 +206,56 @@ describe('MetricsDashboardPage', () => {
     it('displays dashboard summary after loading', async () => {
       await flushPromises()
 
-      expect(wrapper.text()).toContain('Total: 10')
-      expect(wrapper.text()).toContain('Online: 8')
-      expect(wrapper.text()).toContain('Offline: 2')
+      const text = panel('summary').text()
+      expect(text).toContain('Total: 10')
+      expect(text).toContain('Online: 8')
+      expect(text).toContain('Offline: 2')
+      expect(text).toContain('With drift: 2')
+      expect(text).toContain('Issues: 7')
+      expect(text).toContain('Sent: 15')
+      expect(text).toContain('Failed: 1')
     })
 
     it('displays notification metrics', async () => {
       await flushPromises()
 
-      expect(wrapper.text()).toContain('Sent: 15')
-      expect(wrapper.text()).toContain('Failed: 1')
+      const text = panel('notifications').text()
+      expect(text).toContain('Total Sent: 15')
+      expect(text).toContain('Total Failed: 1')
+      expect(text).toContain('email: 10')
+      expect(text).toContain('critical: 4')
     })
 
     it('displays resolution metrics', async () => {
       await flushPromises()
 
-      expect(wrapper.text()).toContain('Total Resolved: 5')
-      expect(wrapper.text()).toContain('Avg Resolution Time: 2m 0s')
+      const text = panel('resolution').text()
+      expect(text).toContain('Total Resolved: 5')
+      expect(text).toContain('Avg Review Time: 2m 0s')
+      expect(text).toContain('drift: 3')
+      expect(text).toContain('drift: 0.8')
     })
 
     it('displays security metrics', async () => {
       await flushPromises()
 
-      expect(wrapper.text()).toContain('Successful: 100')
-      expect(wrapper.text()).toContain('Failed: 2')
+      const text = panel('security').text()
+      expect(text).toContain('Total: 500')
+      expect(text).toContain('Blocked: 7')
+      expect(text).toContain('Suspicious: 11')
+      expect(text).toContain('Rate limit: 3')
+      expect(text).toContain('Validation failures: 4')
+      expect(text).toContain('Blocked IPs: 1')
+      expect(text).toContain('Active threats: 2')
+    })
+
+    it('shows no card for a field the server does not send', async () => {
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('Recent Notifications')
+      expect(wrapper.text()).not.toContain('By User')
+      expect(wrapper.text()).not.toContain('Exports')
+      expect(wrapper.text()).not.toContain('Imports')
     })
   })
 
@@ -228,6 +302,67 @@ describe('MetricsDashboardPage', () => {
       await flushPromises()
 
       expect(wrapper.text()).not.toContain('Network error')
+      expect(panel('summary').exists()).toBe(true)
+    })
+
+    it('renders the other three panels when one call fails', async () => {
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(
+        new Error('Request failed with status code 404')
+      )
+
+      wrapper = mountPage()
+      await flushPromises()
+
+      expect(panel('summary').exists()).toBe(true)
+      expect(panel('notifications').exists()).toBe(true)
+      expect(panel('resolution').exists()).toBe(true)
+      expect(panel('security').exists()).toBe(false)
+      expect(wrapper.text()).toContain('Security metrics: Request failed with status code 404')
+    })
+
+    it('names every failed panel and renders none when all four calls fail', async () => {
+      vi.mocked(metricsApi.getDashboardSummary).mockRejectedValue(new Error('boom 1'))
+      vi.mocked(metricsApi.getNotificationMetrics).mockRejectedValue(new Error('boom 2'))
+      vi.mocked(metricsApi.getResolutionMetrics).mockRejectedValue(new Error('boom 3'))
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(new Error('boom 4'))
+
+      wrapper = mountPage()
+      await flushPromises()
+
+      for (const name of ['summary', 'notifications', 'resolution', 'security']) {
+        expect(panel(name).exists()).toBe(false)
+      }
+      const text = wrapper.text()
+      expect(text).toContain('Dashboard summary: boom 1')
+      expect(text).toContain('Notification metrics: boom 2')
+      expect(text).toContain('Resolution metrics: boom 3')
+      expect(text).toContain('Security metrics: boom 4')
+    })
+
+    it('empties a panel whose refresh fails instead of keeping stale numbers', async () => {
+      await flushPromises()
+      expect(panel('security').exists()).toBe(true)
+
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(new Error('gone'))
+      await wrapper.vm.fetchAdvancedMetrics()
+      await flushPromises()
+
+      expect(panel('security').exists()).toBe(false)
+      expect(panel('summary').exists()).toBe(true)
+    })
+
+    it('fills the panel again once its call succeeds', async () => {
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValueOnce(new Error('gone'))
+
+      wrapper = mountPage()
+      await flushPromises()
+      expect(panel('security').exists()).toBe(false)
+
+      await wrapper.vm.fetchAdvancedMetrics()
+      await flushPromises()
+
+      expect(panel('security').exists()).toBe(true)
+      expect(wrapper.text()).not.toContain('gone')
     })
   })
 
@@ -283,7 +418,24 @@ describe('MetricsDashboardPage', () => {
       await flushPromises()
 
       expect(metricsApi.sendTestAlert).toHaveBeenCalled()
-      expect(global.alert).toHaveBeenCalledWith('Success: Alert sent')
+      expect(global.alert).toHaveBeenCalledWith('Success: Test alert sent at 10:00:00')
+      expect(global.alert).not.toHaveBeenCalledWith(expect.stringContaining('Failed'))
+    })
+
+    it('reports a failure when the answer is not "sent"', async () => {
+      vi.mocked(metricsApi.sendTestAlert).mockResolvedValue({
+        ...mockTestAlert,
+        status: 'error',
+        message: 'No channel'
+      })
+
+      const testButton = wrapper.findAll('button').find((b: any) =>
+        b.text().includes('Send Test Alert')
+      )
+      await testButton?.trigger('click')
+      await flushPromises()
+
+      expect(global.alert).toHaveBeenCalledWith('Failed: No channel')
     })
   })
 

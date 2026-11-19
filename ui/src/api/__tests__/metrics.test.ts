@@ -24,12 +24,19 @@ import {
   getResolutionMetrics,
   getSecurityMetrics,
   type MetricsStatus,
-  type DashboardSummary,
-  type NotificationMetrics,
-  type ResolutionMetrics,
   type SecurityMetrics,
   type TestAlertResult
 } from '../metrics'
+import type {
+  DashboardMetrics,
+  NotificationMetrics,
+  ResolutionMetrics
+} from '../metricsContract'
+
+// The fixtures below copy the Go answers (the field names and nesting of
+// internal/metrics/websocket.go, internal/metrics/handlers.go and
+// internal/api/middleware/security_monitor.go), typed as the contract types so
+// vue-tsc rejects a field the server does not send.
 
 describe('Advanced Metrics API', () => {
   beforeEach(() => {
@@ -164,12 +171,44 @@ shelly_exports_total 123`
 
   describe('getDashboardSummary', () => {
     it('returns dashboard summary', async () => {
-      const summary: DashboardSummary = {
-        devices: { total: 100, online: 85, offline: 15 },
-        exports: { total: 250, recent: 10 },
-        imports: { total: 180, recent: 5 },
-        drifts: { total: 30, unresolved: 8 },
-        notifications: { sent: 500, failed: 12 }
+      const summary: DashboardMetrics = {
+        system_status: {
+          uptime_seconds: 7200,
+          metrics_enabled: true,
+          last_collection_time: '2023-01-01T00:00:00Z',
+          total_devices: 100,
+          online_devices: 85,
+          devices_with_drift: 8
+        },
+        device_metrics: [
+          {
+            id: '1',
+            name: 'Kitchen',
+            type: 'SHSW-1',
+            status: 'online',
+            config_synced: true,
+            last_seen: '2023-01-01T00:00:00Z'
+          }
+        ],
+        drift_metrics: {
+          total_drift_issues: 30,
+          severity_distribution: { high: 10, low: 20 },
+          category_distribution: { wifi: 30 },
+          trend_analysis: []
+        },
+        notification_metrics: {
+          total_sent: 500,
+          total_failed: 12,
+          channel_breakdown: { email: 500 },
+          alert_level_breakdown: { info: 500 },
+          average_latency_seconds: 0
+        },
+        resolution_metrics: {
+          total_resolutions: 4,
+          auto_fix_success_rate: {},
+          resolutions_by_category: { drift: 4 },
+          average_review_time_seconds: 0
+        }
       }
       ;(api.get as any).mockResolvedValue({
         data: { success: true, data: summary, timestamp: new Date().toISOString() }
@@ -178,8 +217,8 @@ shelly_exports_total 123`
       const result = await getDashboardSummary()
 
       expect(result).toEqual(summary)
-      expect(result.devices.total).toBe(100)
-      expect(result.devices.online).toBe(85)
+      expect(result.system_status.total_devices).toBe(100)
+      expect(result.system_status.online_devices).toBe(85)
       expect(api.get).toHaveBeenCalledWith('/metrics/dashboard')
     })
 
@@ -198,10 +237,12 @@ shelly_exports_total 123`
 
   describe('sendTestAlert', () => {
     it('sends test alert successfully', async () => {
+      // What SendTestAlert in handlers.go answers: status "sent" inside the envelope.
       const result: TestAlertResult = {
-        success: true,
-        message: 'Test alert sent successfully',
-        timestamp: '2023-01-01T00:00:00Z'
+        status: 'sent',
+        alert_type: 'test',
+        message: 'Test alert sent at 10:00:00',
+        severity: 'info'
       }
       ;(api.post as any).mockResolvedValue({
         data: { success: true, data: result, timestamp: new Date().toISOString() }
@@ -210,24 +251,8 @@ shelly_exports_total 123`
       const response = await sendTestAlert()
 
       expect(response).toEqual(result)
-      expect(response.success).toBe(true)
+      expect(response.status).toBe('sent')
       expect(api.post).toHaveBeenCalledWith('/metrics/test-alert')
-    })
-
-    it('returns failure result when alert fails', async () => {
-      const result: TestAlertResult = {
-        success: false,
-        message: 'No notification channels configured',
-        timestamp: '2023-01-01T00:00:00Z'
-      }
-      ;(api.post as any).mockResolvedValue({
-        data: { success: true, data: result, timestamp: new Date().toISOString() }
-      })
-
-      const response = await sendTestAlert()
-
-      expect(response.success).toBe(false)
-      expect(response.message).toContain('No notification channels')
     })
 
     it('throws error when API call fails', async () => {
@@ -246,17 +271,11 @@ shelly_exports_total 123`
   describe('getNotificationMetrics', () => {
     it('returns notification metrics', async () => {
       const metrics: NotificationMetrics = {
-        totalSent: 1500,
-        totalFailed: 45,
-        byChannel: {
-          email: { sent: 800, failed: 20 },
-          slack: { sent: 500, failed: 15 },
-          webhook: { sent: 200, failed: 10 }
-        },
-        recentNotifications: [
-          { timestamp: '2023-01-01T00:00:00Z', channel: 'email', status: 'sent' },
-          { timestamp: '2023-01-01T00:01:00Z', channel: 'slack', status: 'failed' }
-        ]
+        total_sent: 1500,
+        total_failed: 45,
+        channel_breakdown: { email: 800, slack: 500, webhook: 200 },
+        alert_level_breakdown: { info: 1400, critical: 100 },
+        average_latency_seconds: 0
       }
       ;(api.get as any).mockResolvedValue({
         data: { success: true, data: metrics, timestamp: new Date().toISOString() }
@@ -265,17 +284,19 @@ shelly_exports_total 123`
       const result = await getNotificationMetrics()
 
       expect(result).toEqual(metrics)
-      expect(result.totalSent).toBe(1500)
-      expect(result.byChannel.email.sent).toBe(800)
+      expect(result.total_sent).toBe(1500)
+      expect(result.channel_breakdown.email).toBe(800)
       expect(api.get).toHaveBeenCalledWith('/metrics/notifications')
     })
 
     it('handles empty metrics', async () => {
+      // The Go collector makes every map, so an empty one arrives as {}.
       const metrics: NotificationMetrics = {
-        totalSent: 0,
-        totalFailed: 0,
-        byChannel: {},
-        recentNotifications: []
+        total_sent: 0,
+        total_failed: 0,
+        channel_breakdown: {},
+        alert_level_breakdown: {},
+        average_latency_seconds: 0
       }
       ;(api.get as any).mockResolvedValue({
         data: { success: true, data: metrics, timestamp: new Date().toISOString() }
@@ -283,8 +304,8 @@ shelly_exports_total 123`
 
       const result = await getNotificationMetrics()
 
-      expect(result.totalSent).toBe(0)
-      expect(Object.keys(result.byChannel)).toHaveLength(0)
+      expect(result.total_sent).toBe(0)
+      expect(Object.keys(result.channel_breakdown)).toHaveLength(0)
     })
 
     it('throws error when metrics fail', async () => {
@@ -303,17 +324,10 @@ shelly_exports_total 123`
   describe('getResolutionMetrics', () => {
     it('returns resolution metrics', async () => {
       const metrics: ResolutionMetrics = {
-        totalResolved: 250,
-        averageResolutionTime: 3600,
-        byType: {
-          drift: 150,
-          config: 80,
-          error: 20
-        },
-        byUser: {
-          admin: 180,
-          operator: 70
-        }
+        total_resolutions: 250,
+        auto_fix_success_rate: { drift: 0.9 },
+        resolutions_by_category: { drift: 150, config: 80, error: 20 },
+        average_review_time_seconds: 3600
       }
       ;(api.get as any).mockResolvedValue({
         data: { success: true, data: metrics, timestamp: new Date().toISOString() }
@@ -322,18 +336,18 @@ shelly_exports_total 123`
       const result = await getResolutionMetrics()
 
       expect(result).toEqual(metrics)
-      expect(result.totalResolved).toBe(250)
-      expect(result.averageResolutionTime).toBe(3600)
-      expect(result.byType.drift).toBe(150)
+      expect(result.total_resolutions).toBe(250)
+      expect(result.average_review_time_seconds).toBe(3600)
+      expect(result.resolutions_by_category.drift).toBe(150)
       expect(api.get).toHaveBeenCalledWith('/metrics/resolution')
     })
 
-    it('handles zero resolution time', async () => {
+    it('handles zero review time', async () => {
       const metrics: ResolutionMetrics = {
-        totalResolved: 0,
-        averageResolutionTime: 0,
-        byType: {},
-        byUser: {}
+        total_resolutions: 0,
+        auto_fix_success_rate: {},
+        resolutions_by_category: {},
+        average_review_time_seconds: 0
       }
       ;(api.get as any).mockResolvedValue({
         data: { success: true, data: metrics, timestamp: new Date().toISOString() }
@@ -341,8 +355,8 @@ shelly_exports_total 123`
 
       const result = await getResolutionMetrics()
 
-      expect(result.totalResolved).toBe(0)
-      expect(result.averageResolutionTime).toBe(0)
+      expect(result.total_resolutions).toBe(0)
+      expect(result.average_review_time_seconds).toBe(0)
     })
 
     it('throws error when metrics fail', async () => {
@@ -361,9 +375,27 @@ shelly_exports_total 123`
   describe('getSecurityMetrics', () => {
     it('returns security metrics', async () => {
       const metrics: SecurityMetrics = {
-        authAttempts: { successful: 5000, failed: 120 },
-        apiCalls: { total: 50000, errors: 250 },
-        rateLimit: { triggered: 15, blocked: 8 }
+        total_requests: 50000,
+        blocked_requests: 250,
+        suspicious_requests: 120,
+        rate_limit_violations: 15,
+        validation_failures: 8,
+        attacks_by_type: { sql_injection: 3 },
+        top_attacker_ips: [
+          {
+            ip: '203.0.113.9',
+            total_requests: 90,
+            suspicious_requests: 40,
+            attack_types: { sql_injection: 3 },
+            first_seen: '2023-01-01T00:00:00Z',
+            last_seen: '2023-01-01T01:00:00Z',
+            blocked: true
+          }
+        ],
+        alerts_by_level: { high: 1 },
+        last_updated: '2023-01-01T01:00:00Z',
+        blocked_ips: 1,
+        active_threats: 1
       }
       ;(api.get as any).mockResolvedValue({
         data: { success: true, data: metrics, timestamp: new Date().toISOString() }
@@ -372,18 +404,27 @@ shelly_exports_total 123`
       const result = await getSecurityMetrics()
 
       expect(result).toEqual(metrics)
-      expect(result.authAttempts.successful).toBe(5000)
-      expect(result.authAttempts.failed).toBe(120)
-      expect(result.apiCalls.total).toBe(50000)
-      expect(result.rateLimit.triggered).toBe(15)
+      expect(result.total_requests).toBe(50000)
+      expect(result.blocked_requests).toBe(250)
+      expect(result.rate_limit_violations).toBe(15)
+      expect(result.top_attacker_ips?.[0].ip).toBe('203.0.113.9')
       expect(api.get).toHaveBeenCalledWith('/metrics/security')
     })
 
-    it('handles zero security events', async () => {
+    it('handles zero security events and a nil attacker list', async () => {
+      // A Go nil slice marshals to null.
       const metrics: SecurityMetrics = {
-        authAttempts: { successful: 0, failed: 0 },
-        apiCalls: { total: 0, errors: 0 },
-        rateLimit: { triggered: 0, blocked: 0 }
+        total_requests: 0,
+        blocked_requests: 0,
+        suspicious_requests: 0,
+        rate_limit_violations: 0,
+        validation_failures: 0,
+        attacks_by_type: {},
+        top_attacker_ips: null,
+        alerts_by_level: {},
+        last_updated: '2023-01-01T00:00:00Z',
+        blocked_ips: 0,
+        active_threats: 0
       }
       ;(api.get as any).mockResolvedValue({
         data: { success: true, data: metrics, timestamp: new Date().toISOString() }
@@ -391,8 +432,8 @@ shelly_exports_total 123`
 
       const result = await getSecurityMetrics()
 
-      expect(result.authAttempts.failed).toBe(0)
-      expect(result.rateLimit.triggered).toBe(0)
+      expect(result.blocked_requests).toBe(0)
+      expect(result.top_attacker_ips).toBeNull()
     })
 
     it('throws error when metrics fail', async () => {
