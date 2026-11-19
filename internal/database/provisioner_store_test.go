@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -183,6 +184,10 @@ func checkProvisionerStore(t *testing.T, manager *Manager) {
 		task, err = s.UpdateTaskStatus(ctx, adminActor, "st-free", "failed", now.Add(time.Second))
 		require.NoError(t, err)
 		assert.Equal(t, "failed", task.Status)
+		// An update that changes no column reports 0 affected rows on MySQL: it is still an update of an existing task.
+		task, err = s.UpdateTaskStatus(ctx, adminActor, "st-free", "failed", now.Add(time.Second))
+		require.NoError(t, err)
+		assert.Equal(t, "failed", task.Status)
 	})
 
 	t.Run("a report upserts devices and completes only its own task", func(t *testing.T) {
@@ -286,6 +291,11 @@ func checkProvisionerStore(t *testing.T, manager *Manager) {
 	t.Run("an admin poll takes the agent lock too", func(t *testing.T) {
 		checkReplaceWaitsForRequestInFlight(t, manager, "flight-admin", true)
 	})
+
+	t.Run("twenty registers of one new id: one wins", func(t *testing.T) { checkRegisterRace(t, manager) })
+
+	// Last: see checkClaimOnce.
+	t.Run("two agents poll one task: it is claimed once", func(t *testing.T) { checkClaimOnce(t, manager) })
 }
 
 // checkReplaceWaitsForRequestInFlight holds a poll between "I hold the agent's lock" and "I read my
@@ -368,10 +378,12 @@ func TestProvisionerStore_SQLite(t *testing.T) {
 	checkProvisionerStore(t, manager)
 }
 
-// Twenty callers register one new id with no token: one gets the id and the others find it in use.
-func TestProvisionerStore_RegisterRace(t *testing.T) {
-	manager, cleanup := setupTestManager(t)
-	defer cleanup()
+// checkRegisterRace has twenty callers register one new id with no token: one gets the id and the others
+// find it in use. Any other error, a database deadlock included, fails the test by name. On SQLite the
+// pool has one connection and the callers run one after another; only PostgreSQL and MySQL prove that the
+// insert-first register does not deadlock.
+func checkRegisterRace(t *testing.T, manager *Manager) {
+	t.Helper()
 	ctx := provisionerCtx(t)
 	now := time.Now()
 
@@ -384,25 +396,25 @@ func TestProvisionerStore_RegisterRace(t *testing.T) {
 			defer wg.Done()
 			s := NewProvisionerStore(manager.GetDB())
 			_, _, err := s.RegisterAgent(ctx, ProvisionerActor{}, agentRow("race", fmt.Sprintf("tok-race-%d", i), now), testOfflineAfter)
-			switch err {
-			case nil:
+			switch {
+			case err == nil:
 				wins.Add(1)
-			case ErrAgentInUse:
+			case errors.Is(err, ErrAgentInUse):
 				inUse.Add(1)
 			default:
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("a concurrent register failed with a database error (a deadlock fails here): %v", err)
 			}
 		}()
 	}
 	wg.Wait()
-	assert.EqualValues(t, 1, wins.Load())
-	assert.EqualValues(t, callers-1, inUse.Load())
+	assert.EqualValues(t, 1, wins.Load(), "exactly one register gets the id")
+	assert.EqualValues(t, callers-1, inUse.Load(), "every other register finds it in use")
 }
 
-// Two agents poll one unassigned task at once: exactly one gets it.
-func TestProvisionerStore_ClaimOnce(t *testing.T) {
-	manager, cleanup := setupTestManager(t)
-	defer cleanup()
+// checkClaimOnce has two agents poll one unassigned task at once, twenty times: exactly one gets it each
+// time. Run it last: every task it creates ends assigned, so it leaves nothing for another case to claim.
+func checkClaimOnce(t *testing.T, manager *Manager) {
+	t.Helper()
 	ctx := provisionerCtx(t)
 	now := time.Now()
 	s := NewProvisionerStore(manager.GetDB())
@@ -410,7 +422,7 @@ func TestProvisionerStore_ClaimOnce(t *testing.T) {
 	register(t, s, adminActor, "claim-b", "tok-claim-b", now)
 
 	for round := 0; round < 20; round++ {
-		taskID := "once-" + time.Now().Format("150405.000000000")
+		taskID := fmt.Sprintf("once-%d", round)
 		require.NoError(t, s.CreateTask(ctx, newTask(taskID, "pending", "", 0, now)))
 		var claimed atomic.Int32
 		var wg sync.WaitGroup
@@ -420,7 +432,7 @@ func TestProvisionerStore_ClaimOnce(t *testing.T) {
 				defer wg.Done()
 				tasks, err := NewProvisionerStore(manager.GetDB()).ClaimTasks(ctx, tokenActor(who.token), who.id, now)
 				if err != nil {
-					t.Errorf("claim: %v", err)
+					t.Errorf("a concurrent claim failed with a database error: %v", err)
 					return
 				}
 				for _, task := range tasks {
