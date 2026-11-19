@@ -308,7 +308,7 @@ Every typed-configuration route answers with the standard envelope, on success a
 | GET | `/api/v1/export/gitops/{id}/download` | Download GitOps export |
 | POST | `/api/v1/export` | Generic export |
 | POST | `/api/v1/export/preview` | Preview export |
-| GET | `/api/v1/export/{id}` | Get export result |
+| GET | `/api/v1/export/{id}` | Get export result (from the history record after a restart) |
 | GET | `/api/v1/export/{id}/download` | Download export |
 | GET | `/api/v1/export/history` | List export history |
 | GET | `/api/v1/export/history/{id}` | Get history item |
@@ -348,7 +348,7 @@ Every typed-configuration route answers with the standard envelope, on success a
 | GET | `/api/v1/import/statistics` | Get import statistics |
 | POST | `/api/v1/import` | Generic import |
 | POST | `/api/v1/import/preview` | Preview import |
-| GET | `/api/v1/import/{id}` | Get import result |
+| GET | `/api/v1/import/{id}` | Get import result (from the history record after a restart) |
 
 **Import Options:**
 ```json

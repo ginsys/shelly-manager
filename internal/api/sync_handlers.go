@@ -609,7 +609,12 @@ func (eh *SyncHandlers) GetExportResult(w http.ResponseWriter, r *http.Request) 
 	vars := mux.Vars(r)
 	exportID := vars["id"]
 
-	if res, ok := eh.syncEngine.GetExportResult(exportID); ok {
+	res, err := eh.syncEngine.FindExportResult(r.Context(), exportID)
+	if err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		return
+	}
+	if res != nil {
 		apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, res)
 		return
 	}
@@ -759,21 +764,6 @@ func (eh *SyncHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	)
 
 	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
-}
-
-// GetImportResult returns the result of an import operation
-func (eh *SyncHandlers) GetImportResult(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	vars := mux.Vars(r)
-	importID := vars["id"]
-
-	if res, ok := eh.syncEngine.GetImportResult(importID); ok {
-		apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, res)
-		return
-	}
-	apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, "Import result")
 }
 
 // Utility functions

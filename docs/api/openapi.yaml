@@ -2411,7 +2411,9 @@ paths:
             pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       responses:
         '200':
-          description: Export result
+          description: >-
+            Export result. After a server restart it comes from the history record: no checksum,
+            warnings or metadata, only the first error, and the time the record was saved as created_at.
           content:
             application/json:
               schema:
@@ -2421,6 +2423,8 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/ExportResult'
+        '404':
+          description: No result and no history record for this id
 
   /api/v1/export/{id}/download:
     get:
@@ -2603,7 +2607,9 @@ paths:
             type: string
       responses:
         '200':
-          description: Import result
+          description: >-
+            Import result. After a server restart it comes from the history record: no changes,
+            warnings or metadata, only the first error, and the time the record was saved as created_at.
           content:
             application/json:
               schema:
@@ -2613,6 +2619,8 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/ImportResult'
+        '404':
+          description: No result and no history record for this id
 
   /api/v1/import/history:
     get:

@@ -370,7 +370,12 @@ func (ih *ImportHandlers) GetImportResult(w http.ResponseWriter, r *http.Request
 	vars := mux.Vars(r)
 	importID := vars["id"]
 
-	if res, ok := ih.syncEngine.GetImportResult(importID); ok {
+	res, err := ih.syncEngine.FindImportResult(r.Context(), importID)
+	if err != nil {
+		apiresp.NewResponseWriter(ih.logger).WriteInternalError(w, r, err)
+		return
+	}
+	if res != nil {
 		apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, res)
 		return
 	}
