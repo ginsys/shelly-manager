@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,20 +32,30 @@ func fakePostgres(t *testing.T) (port int) {
 // is the version probe, after startup and the pings have completed.
 func serveFakePostgresOn(t *testing.T, listener net.Listener, resetOnQuery bool) {
 	t.Helper()
+	serveFakePostgresWith(t, listener, resetOnQuery, 0)
+}
+
+// serveFakePostgresWith is serveFakePostgresOn with failFrom: where it is above
+// zero, the failFrom-th simple query the server receives, counted over every
+// connection, and every later one is answered with an error. The pings of a pgx
+// pool are simple queries, so 2 lets the first ping pass and fails the next.
+func serveFakePostgresWith(t *testing.T, listener net.Listener, resetOnQuery bool, failFrom int32) {
+	t.Helper()
 	t.Cleanup(func() { _ = listener.Close() })
 
+	var queries atomic.Int32
 	go func() {
 		for {
 			conn, acceptErr := listener.Accept()
 			if acceptErr != nil {
 				return
 			}
-			go serveFakePostgres(conn, resetOnQuery)
+			go serveFakePostgres(conn, resetOnQuery, failFrom, &queries)
 		}
 	}()
 }
 
-func serveFakePostgres(conn net.Conn, resetOnQuery bool) {
+func serveFakePostgres(conn net.Conn, resetOnQuery bool, failFrom int32, queries *atomic.Int32) {
 	defer func() { _ = conn.Close() }()
 
 	// startup message: int32 length (self included), then the payload
@@ -79,6 +90,10 @@ func serveFakePostgres(conn net.Conn, resetOnQuery bool) {
 		case 'X':
 			return
 		case 'Q':
+			if failFrom > 0 && queries.Add(1) >= failFrom {
+				reply = append(message('E', []byte("SERROR\x00C57P01\x00Mdown for the test\x00\x00")...), ready...)
+				break
+			}
 			reply = append(message('I'), ready...)
 		case 'S': // Sync ends an extended-protocol batch
 			reply = ready
