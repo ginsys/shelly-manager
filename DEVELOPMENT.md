@@ -140,7 +140,8 @@ VITE_ADMIN_KEY=dev-admin-key-12345  # Must match backend!
 
 ### Protected Endpoints
 When `security.admin_api_key` is set, every `/api/v1` route requires the admin API key, except
-`GET /api/v1/version` and `GET /api/v1/metrics/prometheus`. That includes:
+`GET /api/v1/version` and `GET /api/v1/metrics/prometheus`. The five provisioner agent routes also accept
+the scoped agent key (`security.agent_api_key`). That includes:
 - `/api/v1/devices/*` and `/api/v1/tags/*` - Devices and tags
 - `/api/v1/notifications/*` - Notification channels, rules and history
 - `/api/v1/export/*` - All export endpoints

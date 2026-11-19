@@ -41,7 +41,7 @@ Manual fallback (if not using the provided proxy)
 
 Admin key in a production build
 - When the server has `security.admin_api_key` set, every `/api/v1` route except `GET /api/v1/version` and
-  `GET /api/v1/metrics/prometheus` answers 401 without the key (ginsys/shelly-manager#611). The UI sends the key
+  `GET /api/v1/metrics/prometheus` answers 401 without the key (ginsys/shelly-manager#611); the five provisioner agent routes also accept the agent key, which the UI never uses. The UI sends the key
   only when it has one: `VITE_ADMIN_KEY` at build time (in `ui/.env.local` for `make ui-dev`; in a production build
   the key then sits in the public bundle) or a `window.__ADMIN_KEY__` set by hand in the browser. The Go server's
   dev-only `/app-config.js` exposes the key, but `ui/index.html` does not load that script, so it does not reach the

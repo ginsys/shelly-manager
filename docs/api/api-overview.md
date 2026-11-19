@@ -16,7 +16,7 @@ The Shelly Manager exposes **112+ REST API endpoints** organized across 6 handle
 
 **Admin key.** If the server has an admin key configured (`security.admin_api_key`), every `/api/v1` route
 (the CORS `OPTIONS` preflight answer aside) needs it, as `Authorization: Bearer <key>` or `X-API-Key: <key>`, and answers 401 `UNAUTHORIZED` without it.
-Two routes stay open by design: `GET /api/v1/version` and `GET /api/v1/metrics/prometheus` (the scrape
+The five provisioner agent routes also accept the scoped agent key (`security.agent_api_key`), described with them below. Two routes stay open by design: `GET /api/v1/version` and `GET /api/v1/metrics/prometheus` (the scrape
 endpoint). The device and tag routes, the notification routes, the export plugin reads,
 `GET /api/v1/provisioning/status` and `GET /api/v1/dhcp/reservations` need the key too
 (ginsys/shelly-manager#611); they were open before. If no admin key is configured, every route is open.

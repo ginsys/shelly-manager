@@ -435,7 +435,7 @@ func startServer() {
 <style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;color:#0f172a}a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}.note{color:#475569}</style>
 </head><body>
 <h1>Shelly Manager</h1>
-<p>API is running. Explore <a href="/api/v1/version">/api/v1/version</a> or see docs under <code>docs/</code> in the repo. When an admin key is configured, the other API routes need it.</p>
+<p>API is running. Explore <a href="/api/v1/version">/api/v1/version</a> or see docs under <code>docs/</code> in the repo. When an admin key is configured, the other API routes need a key.</p>
 <p class="note">UI note: Run the SPA with <code>make ui-dev</code> (Vite) or build with <code>make ui-build</code> to serve <code>ui/dist</code> from the Go server.</p>
 </body></html>`)
 		}).Methods("GET")
