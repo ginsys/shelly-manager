@@ -128,9 +128,9 @@ func (h *Handler) RotateAdminKey(w http.ResponseWriter, r *http.Request) {
 		h.responseWriter().WriteValidationError(w, r, "new_key is required")
 		return
 	}
-	// A header value loses leading and trailing whitespace, so such a key could
-	// never be presented again. Refuse it; never trim, so the stored key is the
-	// one the operator typed.
+	// Header handling drops trailing whitespace, and leading whitespace in
+	// X-API-Key, so such a key cannot be presented reliably. Refuse it; never
+	// trim, so the stored key is the one the operator typed.
 	if body.NewKey != strings.TrimSpace(body.NewKey) {
 		h.responseWriter().WriteValidationError(w, r, "new_key must not start or end with whitespace")
 		return
