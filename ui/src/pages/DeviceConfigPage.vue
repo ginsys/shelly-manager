@@ -256,10 +256,13 @@ const liveLoading = ref(false)
 
 // A failed action shows as an error panel under the toolbar. A failed template add shows inside the
 // add-template dialog instead, which is open and covers the page when it happens.
-// A failure after the page was left goes to the app notice. No dialog of this page can open over a
-// pending action (the body shows "Loading..." meanwhile), so no panel is ever covered. `addError`
-// stays page-local: once the page is left, `handleAddTemplate` sends its failure here instead.
-const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
+// A failure goes to the app notice after the page was left, or while the Add Template dialog covers
+// the panel: a device change in this page instance drops the loading state of an action that is
+// still open, so its failure can arrive with the dialog open. `addError` stays page-local: once the
+// page is left, `handleAddTemplate` sends its failure here instead.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError(
+  () => showAddTemplate.value
+)
 const { error: addError, setError: setAddError, clearError: clearAddError } = useError()
 const addIdError = ref('')
 // What the last apply came to. It is a result, not an error: an unconfirmed apply is neither a
