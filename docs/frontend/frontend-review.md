@@ -134,7 +134,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | 452 | Devices, Device configuration, Drift reports, Task details |
 | `/devices/:id/config` | Device configuration (templates, overrides, apply, verify) | 493 | Device details, Configuration history |
 | `/devices/:id/config/history` | Configuration history | 143 | Device details |
-| `/templates` | Configuration templates | 395 | top bar |
+| `/templates` | Configuration templates | 395 | top bar, Template detail |
 | `/templates/:id` | Template detail | 375 | Templates |
 | `/drift/schedules` | Drift schedules (inspect and delete only, see section 5) | 357 | top bar (Drift) |
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
@@ -148,7 +148,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/plugins` | Plugin management (read-only) | 565 | top bar |
 | `/dashboard` | Metrics dashboard | 649 | top bar |
 | `/admin` | Admin settings (admin key rotation) | 45 | top bar |
-| `/notifications/channels` | Notification channels | 197 | top bar (Notifications) |
+| `/notifications/channels` | Notification channels | 197 | top bar (Notifications), Channel detail |
 | `/notifications/channels/:id` | Channel detail | 126 | Channels |
 | `/notifications/rules` | Notification rules | 199 | top bar (Notifications) |
 | `/notifications/history` | Notification history | 156 | top bar (Notifications) |
