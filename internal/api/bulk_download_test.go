@@ -196,6 +196,18 @@ func TestBulkDownload_RefusesABadRequest(t *testing.T) {
 	}
 }
 
+// An explicit stop_on_error false is the same as leaving the option out: only true is refused.
+func TestBulkDownload_AcceptsStopOnErrorFalse(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	fleet := bulkFleet(t, db, 1)
+
+	w := postDownload(handler, fmt.Sprintf(`{"device_ids":[%d],"options":{"stop_on_error":false}}`, fleet[0].device.ID))
+
+	assert.Len(t, decodeDownload(t, w).Devices, 1)
+}
+
 // A repeated id is one entry, as on the other bulk routes.
 func TestBulkDownload_ARepeatedIDIsOneEntry(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
