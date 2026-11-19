@@ -348,9 +348,14 @@ async function handleSave() {
     if (session === dialogSession) closeDialog()
     await store.fetchTemplates()
   } catch (e: any) {
+    if (saved) {
+      // The save worked and only the refresh after it failed. The list card shows that failure while the page
+      // is open; once the page is gone or a dialog covers the card, the notice says it, and never as a failed save.
+      reportLate(e, { action: 'Load templates', resource: 'Template' }, showDialog.value)
+      return
+    }
     const context = { action: 'Save template', resource: 'Template' }
-    // A failed refresh after the save shows as the list-load error, so only the save itself is reported here.
-    if (!saved && session !== dialogSession) {
+    if (session !== dialogSession) {
       // The dialog it was sent from is gone, so the page panel says it (the notice, if a newer dialog covers it).
       setActionError(e, context)
       return
