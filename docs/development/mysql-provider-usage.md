@@ -553,13 +553,14 @@ spec:
 
 ### Connection Pool Optimization
 
-#### Default MySQL Settings (Recommended)
+#### Default MySQL Settings
+What a configuration gets when these keys are unset or 0 (the durations are in seconds):
 ```yaml
 database:
-  max_open_conns: 20      # Conservative for MySQL
+  max_open_conns: 25      # Conservative for MySQL
   max_idle_conns: 5       # Minimal idle connections
-  conn_max_lifetime: "30m" # Frequent rotation
-  conn_max_idle_time: "5m" # Quick cleanup
+  conn_max_lifetime: 300  # Rotate connections every 5 minutes
+  conn_max_idle_time: 600 # Close idle connections after 10 minutes
 ```
 
 #### High-Load Environment
