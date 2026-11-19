@@ -155,11 +155,6 @@ func (m *Manager) GetProviderDetails(providerType string) (*provider.ProviderInf
 	return m.factory.GetProviderInfo(providerType)
 }
 
-// GetDefaultConfig returns default configuration for a provider
-func (m *Manager) GetDefaultConfig(providerType string) provider.DatabaseConfig {
-	return m.factory.GetDefaultConfig(providerType)
-}
-
 // MigrateProvider helps migrate from one database provider to another
 func (m *Manager) MigrateProvider(targetConfig provider.DatabaseConfig) error {
 	// This would be implemented as part of the migration system
@@ -781,9 +776,8 @@ func NewManagerFromPathWithLogger(dbPath string, logger *logging.Logger) (*Manag
 	config := provider.DatabaseConfig{
 		Provider: "sqlite",
 		DSN:      dbPath,
-		// SQLite defaults optimized for Shelly Manager
-		MaxOpenConns:       1,
-		MaxIdleConns:       1,
+		// SQLite defaults optimized for Shelly Manager. The pool is not set here: the SQLite provider
+		// always runs one connection.
 		SlowQueryThreshold: 500 * time.Millisecond,
 		LogLevel:           "warn",
 		Options: map[string]string{

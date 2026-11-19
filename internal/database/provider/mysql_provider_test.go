@@ -471,31 +471,6 @@ func TestMySQLProviderStatisticsTracking(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, stats.AverageLatency)
 }
 
-// TestMySQLProviderConnectionPoolDefaults tests connection pool default values
-func TestMySQLProviderConnectionPoolDefaults(t *testing.T) {
-	logger := logging.GetDefault()
-	provider := NewMySQLProvider(logger)
-
-	// Test that defaults are applied correctly in configuration
-	config := DatabaseConfig{
-		Provider: "mysql",
-		DSN:      "user:pass@tcp(localhost:3306)/testdb",
-		// Leave pool settings empty to test defaults
-		Options: map[string]string{"tls": "false"},
-	}
-
-	provider.config = config
-
-	// These values should match the MySQL-specific defaults
-	// MaxOpenConns: 20 (MySQL default conservative setting)
-	// MaxIdleConns: 5
-	// ConnMaxLifetime: 30 * time.Minute (MySQL connections should be rotated more frequently)
-	// ConnMaxIdleTime: 5 * time.Minute
-
-	assert.Equal(t, 0, config.MaxOpenConns) // Should be 0 initially (will be set to 20 in configureConnectionPool)
-	assert.Equal(t, 0, config.MaxIdleConns) // Should be 0 initially (will be set to 5 in configureConnectionPool)
-}
-
 // TestMySQLProviderConcurrentSafety tests thread safety of public methods
 func TestMySQLProviderConcurrentSafety(t *testing.T) {
 	logger := logging.GetDefault()

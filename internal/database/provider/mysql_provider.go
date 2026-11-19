@@ -465,36 +465,18 @@ func (m *MySQLProvider) configureConnectionPool() error {
 		return fmt.Errorf("failed to get underlying SQL DB: %w", err)
 	}
 
-	// Set connection pool parameters with MySQL-appropriate defaults
-	maxOpenConns := m.config.MaxOpenConns
-	if maxOpenConns == 0 {
-		maxOpenConns = 20 // MySQL default conservative setting
-	}
-	sqlDB.SetMaxOpenConns(maxOpenConns)
-
-	maxIdleConns := m.config.MaxIdleConns
-	if maxIdleConns == 0 {
-		maxIdleConns = 5
-	}
-	sqlDB.SetMaxIdleConns(maxIdleConns)
-
-	connMaxLifetime := m.config.ConnMaxLifetime
-	if connMaxLifetime == 0 {
-		connMaxLifetime = 30 * time.Minute // MySQL connections should be rotated more frequently
-	}
-	sqlDB.SetConnMaxLifetime(connMaxLifetime)
-
-	connMaxIdleTime := m.config.ConnMaxIdleTime
-	if connMaxIdleTime == 0 {
-		connMaxIdleTime = 5 * time.Minute
-	}
-	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
+	// Apply the pool as configured. The defaults live in the config helper (Config.GetDatabaseConfig),
+	// and the factory refuses an unset open or idle count before this provider is built.
+	sqlDB.SetMaxOpenConns(m.config.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(m.config.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(m.config.ConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(m.config.ConnMaxIdleTime)
 
 	m.logger.WithFields(map[string]any{
-		"max_open_conns":     maxOpenConns,
-		"max_idle_conns":     maxIdleConns,
-		"conn_max_lifetime":  connMaxLifetime,
-		"conn_max_idle_time": connMaxIdleTime,
+		"max_open_conns":     m.config.MaxOpenConns,
+		"max_idle_conns":     m.config.MaxIdleConns,
+		"conn_max_lifetime":  m.config.ConnMaxLifetime,
+		"conn_max_idle_time": m.config.ConnMaxIdleTime,
 	}).Debug("Configured MySQL connection pool")
 
 	return nil

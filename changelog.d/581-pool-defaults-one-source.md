@@ -1,0 +1,2 @@
+Changed
+- The database pool defaults now live in one place. The PostgreSQL and MySQL providers carried fallbacks of their own that no running path could reach and that disagreed with each other and with the configuration (lifetime 1h and 30m against 5m, MySQL open connections 20 against 25), and a default-config function only tests called. Those are deleted: the config helper holds the defaults, and the providers apply the pool they are given. A configuration the helper already fills behaves exactly as before. Fixes ginsys/shelly-manager#581.

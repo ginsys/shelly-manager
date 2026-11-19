@@ -218,12 +218,6 @@ func TestManagerCoreMethods(t *testing.T) {
 		assert.Nil(t, details)
 	})
 
-	t.Run("GetDefaultConfig", func(t *testing.T) {
-		config := manager.GetDefaultConfig("sqlite")
-		assert.Equal(t, "sqlite", config.Provider)
-		assert.NotEmpty(t, config.DSN)
-	})
-
 	t.Run("GetStats", func(t *testing.T) {
 		stats := manager.GetStats()
 		assert.NotNil(t, stats)

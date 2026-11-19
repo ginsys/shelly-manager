@@ -245,9 +245,9 @@ func setDefaults() {
 	// registered so SHELLY_DATABASE_MAX_OPEN_CONNS and _MAX_IDLE_CONNS unmarshal.
 	viper.SetDefault("database.max_open_conns", 0)
 	viper.SetDefault("database.max_idle_conns", 0)
-	viper.SetDefault("database.conn_max_lifetime", 300)  // 5 minutes
-	viper.SetDefault("database.conn_max_idle_time", 600) // 10 minutes
-	viper.SetDefault("database.slow_query_time", 500)    // 500ms
+	viper.SetDefault("database.conn_max_lifetime", int(defaultConnMaxLifetime.Seconds()))
+	viper.SetDefault("database.conn_max_idle_time", int(defaultConnMaxIdleTime.Seconds()))
+	viper.SetDefault("database.slow_query_time", 500) // 500ms
 	viper.SetDefault("database.log_level", "warn")
 	viper.SetDefault("database.options", map[string]string{
 		"foreign_keys": "true",

@@ -254,31 +254,3 @@ func TestProviderInfo(t *testing.T) {
 		})
 	}
 }
-
-func TestDefaultConfig(t *testing.T) {
-	factory := NewFactory(logging.GetDefault())
-
-	tests := []string{"sqlite", "postgresql", "mysql"}
-
-	for _, providerType := range tests {
-		t.Run(providerType, func(t *testing.T) {
-			config := factory.GetDefaultConfig(providerType)
-
-			if config.Provider != providerType {
-				t.Errorf("Expected provider '%s', got '%s'", providerType, config.Provider)
-			}
-
-			if config.DSN == "" {
-				t.Errorf("Default config has empty DSN")
-			}
-
-			if config.SlowQueryThreshold == 0 {
-				t.Errorf("Default config has zero slow query threshold")
-			}
-
-			if config.MaxOpenConns <= 0 {
-				t.Errorf("Default config has invalid MaxOpenConns: %d", config.MaxOpenConns)
-			}
-		})
-	}
-}
