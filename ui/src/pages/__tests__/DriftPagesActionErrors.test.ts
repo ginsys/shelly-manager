@@ -68,6 +68,24 @@ describe('DriftReportsPage resolve failure', () => {
     expect(inDialog.text()).toBe('Failed to resolve drift item')
   })
 
+  // ginsys/shelly-manager#701: a dialog closed while the resolve runs must not lose its failure.
+  it('shows the failure in the page panel when the dialog was closed meanwhile', async () => {
+    const { wrapper, store } = mountWith(DriftReportsPage, { trends: [trend], loading: false, error: null })
+    let fail: (e: Error) => void = () => {}
+    vi.mocked(store.resolveTrend).mockImplementation(() => new Promise((_r, reject) => { fail = reject }) as any)
+    await flushPromises()
+    await wrapper.find('.btn-small').trigger('click')
+    await wrapper.find('.form-actions .btn.primary').trigger('click')
+    await wrapper.find('.form-actions .btn:not(.primary)').trigger('click')
+    expect(wrapper.find('.modal').exists()).toBe(false)
+    fail(new Error('Failed to resolve drift item'))
+    await flushPromises()
+    const panel = wrapper.find('[data-testid="drift-action-error"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('Failed to resolve drift item')
+    expect(alertSpy).not.toHaveBeenCalled()
+  })
+
   it('shows no error text in the dialog when nothing failed', async () => {
     const { wrapper } = mountWith(DriftReportsPage, { trends: [trend], loading: false, error: null })
     await flushPromises()

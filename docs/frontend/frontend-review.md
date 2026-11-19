@@ -335,7 +335,9 @@ Found by reading the code at this commit; not a plan.
    stays the failure of the last list load, and a failed delete or create no longer blanks the table
    (ginsys/shelly-manager#701). The page that acted shows the failure of its own action: in an error
    panel above the list (`usePageError`), or inside the dialog that stays open (a string the dialog
-   holds). A page that calls the API itself (the metrics dashboard, the template detail) shows a
+   holds). A dialog closed with Cancel while its request runs hands the failure to the page panel
+   (or to the app notice when another dialog covers the panel), so a failure is never left in a
+   dialog nobody sees. A page that calls the API itself (the metrics dashboard, the template detail) shows a
    failure in an error panel, and a success in one status line. A failure that arrives after the
    user left the page, or while a dialog covers the page panel, shows in one app notice
    (ginsys/shelly-manager#648): such a page takes its error from `usePageError` instead of

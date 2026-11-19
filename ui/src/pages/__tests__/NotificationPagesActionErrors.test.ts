@@ -201,6 +201,24 @@ describe.each([
     wrapper.unmount()
   })
 
+  // ginsys/shelly-manager#701: the store no longer shows the failure of a create, so a form closed while
+  // the request runs must not lose it.
+  it('shows the failure of a create whose form was cancelled in the page panel', async () => {
+    const { wrapper, store } = mountWith(page, state)
+    const fail = deferredAction(store, addName)
+    await flushPromises()
+    await wrapper.find('.primary-button').trigger('click')
+    await wrapper.find('form').trigger('submit')
+    await wrapper.find('.secondary-button').trigger('click')
+    expect(wrapper.find('.modal').exists()).toBe(false)
+    fail(new Error('Failed to create'))
+    await flushPromises()
+    const panel = wrapper.find('[data-testid$="-action-error"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('Failed to create')
+    wrapper.unmount()
+  })
+
   it('keeps the failure of a cancelled submission out of the dialog that was opened again', async () => {
     const { wrapper, store } = mountWith(page, state)
     const fail = deferredAction(store, addName)

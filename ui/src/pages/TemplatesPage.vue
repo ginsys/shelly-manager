@@ -323,6 +323,7 @@ async function handleSave() {
   saveErrors.value = []
   saveError.value = ''
   saving.value = true
+  let saved = false
 
   try {
     if (editing.value) {
@@ -343,11 +344,19 @@ async function handleSave() {
       })
     }
 
+    saved = true
     if (session === dialogSession) closeDialog()
     await store.fetchTemplates()
   } catch (e: any) {
+    const context = { action: 'Save template', resource: 'Template' }
+    // A failed refresh after the save shows as the list-load error, so only the save itself is reported here.
+    if (!saved && session !== dialogSession) {
+      // The dialog it was sent from is gone, so the page panel says it (the notice, if a newer dialog covers it).
+      setActionError(e, context)
+      return
+    }
     // After the user left the page the dialog is gone: the app notice shows the failure instead.
-    reportLate(e, { action: 'Save template', resource: 'Template' })
+    reportLate(e, context)
     if (e instanceof TemplateSaveError) {
       if (session === dialogSession) saveErrors.value = e.fields
       return
