@@ -208,7 +208,7 @@ func TestDecodeAndEncodeJSON(t *testing.T) {
 // foldName is the fold encoding/json applies to member names: two names fold together exactly when
 // strings.EqualFold says they are equal.
 func TestFoldName_AgreesWithEqualFold(t *testing.T) {
-	names := []string{"", "id", "ID", "Id", "ıd", "İd", "ss", "SS", "ß", "s", "S", "ſ", "k", "K", "K",
+	names := []string{"", "id", "ID", "Id", "ıd", "İd", "ss", "SS", "ß", "s", "S", "ſ", "k", "K", "K",
 		"secret", "SECRET", "ſecret", "api_key", "API_KEY", "σ", "ς", "Σ", "straße", "STRASSE"}
 	for _, a := range names {
 		for _, b := range names {

@@ -2,7 +2,6 @@ package notification
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -218,29 +217,6 @@ func TestRestoreConfig_NamesThatOnlyLookAlikeAreNotRepeated(t *testing.T) {
 		}
 		require.NoError(t, err, name)
 	}
-}
-
-// foldName is the fold encoding/json applies to member names: two names fold together exactly when
-// strings.EqualFold says they are equal.
-func TestFoldName_AgreesWithEqualFold(t *testing.T) {
-	names := []string{"", "id", "ID", "Id", "ıd", "İd", "ss", "SS", "ß", "s", "S", "ſ", "k", "K", "K",
-		"secret", "SECRET", "ſecret", "api_key", "API_KEY", "σ", "ς", "Σ", "straße", "STRASSE"}
-	for _, a := range names {
-		for _, b := range names {
-			assert.Equal(t, strings.EqualFold(a, b), foldName(a) == foldName(b), "%q vs %q", a, b)
-		}
-	}
-}
-
-// A decoder reads the key the same way: the premise of the tests above.
-func TestFoldName_MatchesWhatTheDecoderDoes(t *testing.T) {
-	var v struct {
-		ID int `json:"id"`
-	}
-	require.NoError(t, json.Unmarshal([]byte("{\"ıd\":7}"), &v))
-	assert.Equal(t, 0, v.ID, "the decoder does not read the dotless i as i")
-	require.NoError(t, json.Unmarshal([]byte(`{"ID":7}`), &v))
-	assert.Equal(t, 7, v.ID)
 }
 
 // encoding/json folds U+017F (long s) to s and U+212A (Kelvin) to k when it matches a field name, so
