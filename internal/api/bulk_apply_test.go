@@ -511,3 +511,19 @@ func TestBulkApply_ADesiredConfigurationThatMovesMeanwhileIsPending(t *testing.T
 	assert.Contains(t, e.Reason, "stays pending")
 	assert.Equal(t, 1, res.Pending)
 }
+
+// After the stop nothing is contacted, a device that was not found included: it is skipped like the
+// others, so the totals say what the run did.
+func TestBulkApply_StopOnErrorSkipsALaterMissingDeviceToo(t *testing.T) {
+	handler, _, fleet := applyFleet(t, 1)
+
+	res := decodeApply(t, postApply(handler, applyBody(applyNamePatch, true, 9001, 9002, fleet[0].device.ID)))
+
+	require.Len(t, res.Results, 3)
+	assert.Equal(t, bulkApplyRefused, res.Results[0].Status)
+	assert.Equal(t, bulkApplySkipped, res.Results[1].Status)
+	assert.Equal(t, bulkApplySkipped, res.Results[2].Status)
+	assert.Equal(t, 1, res.Refused)
+	assert.Equal(t, 2, res.Skipped)
+	assert.Zero(t, fleet[0].hits.Load())
+}
