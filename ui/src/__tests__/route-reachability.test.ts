@@ -23,11 +23,21 @@ const linkRe = /(?:\bto="|\bto: '|\bhref="|\brouter\.(?:push|replace)\(\s*')(\/[
 // pattern), an HTML or block comment, and a `//` comment, whole line or trailing (a `//` that does not
 // follow a `:`, so the `//` of `https://` stays).
 function withoutNonCode(text: string): string {
-  return text
-    .replace(/<style[\s\S]*?<\/style>/g, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+  // Removing a match can join the text around it into a new match, so each removal runs until the
+  // text stops changing.
+  const strip = (input: string, pattern: RegExp): string => {
+    let previous: string
+    let current = input
+    do {
+      previous = current
+      current = current.replace(pattern, '')
+    } while (current !== previous)
+    return current
+  }
+  return strip(strip(strip(text, /<style[\s\S]*?<\/style>/g), /<!--[\s\S]*?-->/g), /\/\*[\s\S]*?\*\//g).replace(
+    /(^|[^:])\/\/.*$/gm,
+    '$1',
+  )
 }
 
 /**
@@ -113,8 +123,10 @@ describe('unlinkedRoutes (the checker)', () => {
       { file: 'pages/Q.vue', text: '/* router.push(\'/c\') */\n  // <router-link to="/d">d</router-link>' },
       { file: 'pages/R.vue', text: "const ready = true // router.push('/e')" },
       { file: 'pages/S.vue', text: "const ready = true;// router.push('/f')" },
+      // A removal that joins its neighbours into a new comment: the inner one goes, then the outer.
+      { file: 'pages/T.vue', text: '<!<!-- x -->-- <router-link to="/g">g</router-link> -->' },
     ]
-    expect(unlinkedRoutes(['/a', '/b', '/c', '/d', '/e', '/f'], notLinks, {})).toEqual(['/a', '/b', '/c', '/d', '/e', '/f'])
+    expect(unlinkedRoutes(['/a', '/b', '/c', '/d', '/e', '/f', '/g'], notLinks, {})).toEqual(['/a', '/b', '/c', '/d', '/e', '/f', '/g'])
     // The same text outside the comments and the style block is a link.
     const links: Source[] = [{ file: 'layouts/L.vue', text: '<router-link to="/a">a</router-link>\n<style>\n.x {}\n</style>' }]
     expect(unlinkedRoutes(['/a'], links, {})).toEqual([])
