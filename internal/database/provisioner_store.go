@@ -37,8 +37,14 @@ type ProvisionerActor struct {
 // (SELECT ... FOR UPDATE) before it reads or writes anything of that agent, so a register that replaces
 // a token waits for the requests already in flight under the old one. Register is the one operation
 // whose first statement is an INSERT, see RegisterAgent. A task row is locked after the agent row, never
-// before it, so two operations cannot wait on each other. SQLite has one connection and drops the lock
-// clause, so there a transaction is the lock.
+// before it, so the two kinds of row cannot be locked in opposite orders. SQLite has one connection and
+// drops the lock clause, so there a transaction is the lock.
+//
+// One cycle remains on MySQL: a register that replaces a token locks the agent row by its id, and a
+// request that presents the old token locks the same row through the token's index entry, which the
+// register then needs to replace. InnoDB detects the cycle and aborts one of the two with a deadlock
+// error. Nothing is authorized or written by the aborted one, so the outcome is a failed request that
+// the agent repeats, never a wrong answer.
 //
 // Never call the database through another handle while a store transaction is open, and never from
 // inside one: on SQLite that call waits for the one connection for ever. Resolve everything the store
