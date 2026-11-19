@@ -1,0 +1,2 @@
+Fixed
+- A request refused by the default rate limit now reports when the client is let in again (ginsys/shelly-manager#677). The `429` always showed a reset one window from now, whatever the client's real return moment. `X-RateLimit-Reset` and `meta.retry_after` now name the first whole second after the later of the client's window end and its 15-minute block end, the same way a path limit's refusal does. When a request is refused, the limit and the block are unchanged.

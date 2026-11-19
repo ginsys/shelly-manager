@@ -241,27 +241,31 @@ func TestRateLimitMiddlewarePathRefusalShowsTheRuleNotTheDefault(t *testing.T) {
 	assert.InDelta(t, float64(refused.reset-now.Unix()), refused.retryAfter, 2, "retry_after names the same moment as the reset header")
 }
 
-// A refusal by the default limit keeps its headers and body as they were: the global limit, remaining 0,
-// the reset one window from now, and retry_after the whole window. The second case is the 15-minute
-// block that follows the first refusal.
+// A refusal by the default limit keeps the global limit and remaining 0, and now names the second the
+// client is let in again (ginsys/shelly-manager#677): for a client that began its window just now, that
+// is the first whole second after one window, the same for the request over the limit and for a request
+// during the 15-minute block that follows it.
 func TestRateLimitMiddlewareGlobalRefusalKeepsTheDefaultLimit(t *testing.T) {
 	cfg := DefaultSecurityConfig()
 	cfg.RateLimit = 2
 	cfg.RateLimitByPath = nil
 	serve := limitServer(t, cfg, "10.65.0.4")
+	windowFrom := time.Now() // the client's window begins with its first request, after this
 	require.Equal(t, http.StatusOK, serve(devicesPath).code)
 	require.Equal(t, http.StatusOK, serve(devicesPath).code)
+	windowTo := time.Now() // and before this
 
 	for _, name := range []string{"the request over the limit", "a request during the block"} {
-		before := time.Now()
 		refused := serve(devicesPath)
-		after := time.Now()
+		now := time.Now()
 		require.Equal(t, http.StatusTooManyRequests, refused.code, name)
 		assert.Equal(t, "2", refused.limit, name)
 		assert.Equal(t, "0", refused.remaining, name)
-		assert.GreaterOrEqual(t, refused.reset, before.Add(cfg.RateLimitWindow).Unix(), name)
-		assert.LessOrEqual(t, refused.reset, after.Add(cfg.RateLimitWindow).Unix(), name)
-		assert.Equal(t, cfg.RateLimitWindow.Seconds(), refused.retryAfter, name)
+		assert.Greater(t, refused.reset, windowFrom.Add(cfg.RateLimitWindow).Unix(), name)
+		assert.LessOrEqual(t, refused.reset, windowTo.Add(cfg.RateLimitWindow).Unix()+1, name)
+		assert.InDelta(t, float64(refused.reset-now.Unix()), refused.retryAfter, 2, "retry_after names the same moment as the reset header: "+name)
+		assert.Greater(t, refused.retryAfter, cfg.RateLimitWindow.Seconds()-5, name)
+		assert.LessOrEqual(t, refused.retryAfter, cfg.RateLimitWindow.Seconds()+1, name)
 	}
 }
 

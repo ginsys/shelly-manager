@@ -135,9 +135,13 @@ func NewRateLimiter(config *SecurityConfig, logger *logging.Logger) *RateLimiter
 	return rl
 }
 
+// globalBlock is how long going over the global limit blocks a client on every route.
+const globalBlock = 15 * time.Minute
+
 // rateRefusal says which limit refused a request and when to come back: the limit that refused, the
-// end of that limit's window for the client (a whole second, rounded up, so a client that returns at
-// that second is not refused again) and the wait until then in whole seconds.
+// first whole second at which the client is let in again (a whole second after the last instant it is
+// refused, so a client that returns at that second is not refused again) and the wait until then in
+// whole seconds. Both kinds of refusal, global and path, report it the same way.
 type rateRefusal struct {
 	limit      int
 	reset      time.Time
@@ -150,7 +154,7 @@ func (rl *RateLimiter) Allow(clientIP, path string) bool {
 }
 
 // check applies the rate limits to a request: nil when it is allowed, else the refusal. A refusal by the
-// global limit reports the global limit and a reset one window from now, as the middleware always did.
+// global limit reports the global limit and the second the client is let in again.
 func (rl *RateLimiter) check(clientIP, path string) *rateRefusal {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
@@ -164,8 +168,8 @@ func (rl *RateLimiter) check(clientIP, path string) *rateRefusal {
 	}
 
 	// Check if client is currently blocked
-	if client.blocked && now.Sub(client.blockTime) < time.Minute*15 {
-		return rl.globalRefusal(now)
+	if client.blocked && now.Sub(client.blockTime) < globalBlock {
+		return rl.globalRefusal(client, now)
 	}
 
 	// Reset window if expired
@@ -192,19 +196,34 @@ func (rl *RateLimiter) check(clientIP, path string) *rateRefusal {
 			}).Warn("Rate limit exceeded")
 		}
 
-		return rl.globalRefusal(now)
+		return rl.globalRefusal(client, now)
 	}
 
 	return rl.allowPath(client, clientIP, path, now)
 }
 
-// globalRefusal is the refusal by the global limit.
-func (rl *RateLimiter) globalRefusal(now time.Time) *rateRefusal {
-	return &rateRefusal{
-		limit:      rl.config.RateLimit,
-		reset:      now.Add(rl.config.RateLimitWindow),
-		retryAfter: rl.config.RateLimitWindow,
+// globalRefusal is the refusal by the global limit. A client over the limit is refused while its block
+// lasts and, after that, until its window resets (it is counted over the limit until then and blocked
+// again), so it is let in after the later of the two ends.
+func (rl *RateLimiter) globalRefusal(client *clientInfo, now time.Time) *rateRefusal {
+	end := client.window.Add(rl.config.RateLimitWindow)
+	if blockEnd := client.blockTime.Add(globalBlock); blockEnd.After(end) {
+		end = blockEnd
 	}
+	return newRateRefusal(rl.config.RateLimit, end, now)
+}
+
+// newRateRefusal builds the refusal of a client that is refused up to and including end: the reset is
+// the first whole second after end (the Reset header is whole seconds, and a client that returns at it
+// is not refused again) and retry_after is the wait to it rounded up to whole seconds. end is after
+// now, because the client is still inside its window or block.
+func newRateRefusal(limit int, end, now time.Time) *rateRefusal {
+	reset := end.Truncate(time.Second).Add(time.Second)
+	wait := reset.Sub(now)
+	if rest := wait % time.Second; rest != 0 {
+		wait += time.Second - rest
+	}
+	return &rateRefusal{limit: limit, reset: reset, retryAfter: wait}
 }
 
 // allowPath applies the path rule that matches path, if any: nil when the request is allowed. The rule
@@ -243,15 +262,8 @@ func (rl *RateLimiter) allowPath(client *clientInfo, clientIP, path string, now 
 	}
 
 	// The counter resets only once MORE than a window has passed since it began (the check above is a
-	// strict >), so the window's last instant is counter.window+RateLimitWindow and the first instant of
-	// the next window is after it. The Reset header is whole seconds: name the first whole second after
-	// that last instant, so a client that returns at the second named is not refused again.
-	reset := counter.window.Add(rl.config.RateLimitWindow).Truncate(time.Second).Add(time.Second)
-	wait := reset.Sub(now) // positive: the counter is still inside its window, so now is before reset
-	if rest := wait % time.Second; rest != 0 {
-		wait += time.Second - rest
-	}
-	return &rateRefusal{limit: limit, reset: reset, retryAfter: wait}
+	// strict >), so the client is refused up to the window's last instant, counter.window+RateLimitWindow.
+	return newRateRefusal(limit, counter.window.Add(rl.config.RateLimitWindow), now)
 }
 
 // matchRule finds the RateLimitByPath rule for path. A rule matches when the path starts with its
