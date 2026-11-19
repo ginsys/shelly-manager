@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"sync"
 	"testing"
@@ -40,7 +41,8 @@ func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	if err != nil {
 		host = addr
 	}
-	if ip := net.ParseIP(host); host == "localhost" || (ip != nil && ip.IsLoopback()) {
+	// netip accepts an IPv6 zone ("::1%lo"), which net.ParseIP does not.
+	if ip, parseErr := netip.ParseAddr(host); host == "localhost" || (parseErr == nil && ip.IsLoopback()) {
 		return (&net.Dialer{}).DialContext(ctx, network, addr)
 	}
 	return nil, refuse(fmt.Sprintf("dialguard: a test dialled %s %s; tests must send nothing off this host", network, addr))

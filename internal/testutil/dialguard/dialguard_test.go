@@ -2,6 +2,10 @@ package dialguard_test
 
 import (
 	"context"
+	"go/ast"
+	"go/build"
+	"go/parser"
+	"go/token"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +76,20 @@ func TestGuardNamesTheAddress(t *testing.T) {
 	}
 }
 
+// A loopback address with an IPv6 zone is still loopback. The dial itself may fail (nothing
+// listens, or the host has no IPv6): the test is that the guard does not refuse it.
+func TestGuardAllowsScopedIPv6Loopback(t *testing.T) {
+	got := dialguard.Capture()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if conn, err := dialguard.Dial(ctx, "tcp6", "[::1%lo]:1"); err == nil {
+		_ = conn.Close()
+	}
+	if r := got(); len(r) != 0 {
+		t.Fatalf("scoped loopback refused: %v", r)
+	}
+}
+
 func TestGuardAllowsLoopback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	defer srv.Close()
@@ -129,10 +147,45 @@ func TestPackagesWithoutMainReadsBothPackages(t *testing.T) {
 	write("internal/d/d_test.go", "package d\nfunc TestMain(m *testing.M) { os.Exit(m.Run()) }\n")
 	write("internal/e/e.go", "package e\n")
 	write("ui/node_modules/x/x_test.go", "package x\n")
+	// The same text in a comment or a string is not a call.
+	write("internal/f/f_test.go", "package f\n// "+main+"var s = `"+main+"`\n")
+	// A file a build constraint excludes is not a test file of the build.
+	write("internal/g/g_test.go", "//go:build ignore\n\npackage g\n"+main)
+	write("internal/g/other_test.go", "package g\n")
 	got := packagesWithoutMain(t, root)
-	if strings.Join(got, ",") != "internal/c,internal/d" {
+	if strings.Join(got, ",") != "internal/c,internal/d,internal/f,internal/g" {
 		t.Fatalf("got %v", got)
 	}
+}
+
+// declaresTestMainCallingGuard reports whether the file declares func TestMain whose body calls
+// dialguard.Main. It reads the syntax tree, so a comment or a string that holds the same text does
+// not count.
+func declaresTestMainCallingGuard(path string) (bool, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	if err != nil {
+		return false, err
+	}
+	found := false
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil || fn.Name.Name != "TestMain" || fn.Body == nil {
+			continue
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Main" {
+				if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dialguard" {
+					found = true
+				}
+			}
+			return true
+		})
+	}
+	return found, nil
 }
 
 // packagesWithoutMain lists the directories under root that hold a _test.go file and no
@@ -158,12 +211,18 @@ func packagesWithoutMain(t *testing.T, root string) []string {
 		if err != nil {
 			return err
 		}
-		hasTests[dir] = true
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return err
+		// A file that a build constraint leaves out of the build holds no test at all.
+		if ok, matchErr := build.Default.MatchFile(filepath.Dir(path), filepath.Base(path)); matchErr != nil {
+			return matchErr
+		} else if !ok {
+			return nil
 		}
-		if strings.Contains(string(src), "func TestMain(") && strings.Contains(string(src), "dialguard.Main(") {
+		hasTests[dir] = true
+		callsMain, parseErr := declaresTestMainCallingGuard(path)
+		if parseErr != nil {
+			return parseErr
+		}
+		if callsMain {
 			hasMain[dir] = true
 		}
 		return nil
