@@ -62,10 +62,11 @@ export interface ImportResult {
   format: string
   records_imported?: number
   records_skipped?: number
-  duration?: string
+  duration?: number // nanoseconds (a Go time.Duration)
   changes?: ImportChange[]
   errors?: string[]
   warnings?: string[]
+  created_at?: string
 }
 
 export interface ImportChange {
