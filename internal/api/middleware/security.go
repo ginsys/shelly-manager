@@ -553,14 +553,27 @@ func SecurityLoggingMiddleware(config *SecurityConfig, logger *logging.Logger) f
 
 // TimeoutMiddleware implements request timeout protection
 func TimeoutMiddleware(config *SecurityConfig, logger *logging.Logger) func(http.Handler) http.Handler {
+	return TimeoutMiddlewareFor(config, logger, nil)
+}
+
+// TimeoutMiddlewareFor is TimeoutMiddleware where override may give one request a deadline of its
+// own. A request that override answers false for gets config.RequestTimeout, as does every request
+// when override is nil. A config that turns the timeout off turns it off for every request.
+func TimeoutMiddlewareFor(config *SecurityConfig, logger *logging.Logger, override func(*http.Request) (time.Duration, bool)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if config.RequestTimeout <= 0 {
 				next.ServeHTTP(w, r)
 				return
 			}
+			timeout := config.RequestTimeout
+			if override != nil {
+				if d, ok := override(r); ok && d > 0 {
+					timeout = d
+				}
+			}
 
-			ctx, cancel := context.WithTimeout(r.Context(), config.RequestTimeout)
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
 			defer cancel()
 
 			r = r.WithContext(ctx)
@@ -602,7 +615,7 @@ func TimeoutMiddleware(config *SecurityConfig, logger *logging.Logger) func(http
 						"method":           r.Method,
 						"path":             r.URL.Path,
 						"client_ip":        getClientIP(r),
-						"timeout":          config.RequestTimeout,
+						"timeout":          timeout,
 						"response_started": started,
 						"component":        "security_timeout",
 						"security_event":   "request_timeout",

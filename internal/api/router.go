@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -29,6 +30,19 @@ func httpMetricsMiddleware() func(http.Handler) http.Handler {
 		httpMetricsMW = imetrics.NewHTTPMetrics(nil).HTTPMiddleware()
 	})
 	return httpMetricsMW
+}
+
+// bulkApplyRouteName is the name of the one route that has a request deadline of its own.
+const bulkApplyRouteName = "bulk-apply"
+
+// routeDeadline is the request deadline of the route the request matched, where it has one of its
+// own: only a route that carries bulkApplyRouteName, set in registerAPIRoutes. Every other route
+// gets the default of the security configuration.
+func routeDeadline(r *http.Request) (time.Duration, bool) {
+	if route := mux.CurrentRoute(r); route != nil && route.GetName() == bulkApplyRouteName {
+		return bulkApplyDeadline, true
+	}
+	return 0, false
 }
 
 // SetupRoutes configures all API routes
@@ -118,7 +132,7 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	protected.Use(middleware.SecurityHeadersMiddleware(securityConfig, logger))
 
 	// 6. Request timeout middleware (prevent resource exhaustion)
-	protected.Use(middleware.TimeoutMiddleware(securityConfig, logger))
+	protected.Use(middleware.TimeoutMiddlewareFor(securityConfig, logger, routeDeadline))
 
 	// 7. Rate limiting middleware (prevent DoS attacks)
 	protected.Use(middleware.RateLimitMiddleware(securityConfig, logger))
