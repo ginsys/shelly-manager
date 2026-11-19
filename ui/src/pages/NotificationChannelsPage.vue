@@ -11,6 +11,13 @@
       </button>
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="channel-action-error"
+      @dismiss="clearActionError"
+    />
+
     <DataTable
       :rows="store.channels"
       :loading="store.channelsLoading"
@@ -85,12 +92,18 @@
 import { ref, onMounted } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import DataTable from '@/components/DataTable.vue'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { useLateFailure, usePageError } from '@/composables/useNotice'
 
 const store = useNotificationsStore()
 const reportLate = useLateFailure()
 const showCreateForm = ref(false)
-// The failure of this form's own submission. The store's `channelsError` may hold an older failure.
+// The failure of a delete, above the table. The store keeps no action failure, so this panel is the only
+// place that holds it (ginsys/shelly-manager#701); the create form covers it, so it goes to the notice then.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError(
+  () => showCreateForm.value
+)
+// The failure of this form's own submission.
 const createError = ref('')
 const newChannel = ref({
   name: '',
@@ -125,7 +138,7 @@ async function handleCreate() {
     const context = { action: 'Create channel', resource: 'Notification channel' }
     if (session === formSession) {
       // The form stays open and shows the failure. After the user left the page, the app notice does.
-      createError.value = store.channelsError || (e as Error)?.message || 'Failed to create channel'
+      createError.value = (e as Error)?.message || 'Failed to create channel'
       reportLate(e, context)
     } else {
       // The form it was sent from is gone; a newer form that is open hides the table.
@@ -136,12 +149,11 @@ async function handleCreate() {
 
 async function handleDelete(id: string) {
   if (!confirm('Are you sure you want to delete this channel?')) return
+  clearActionError()
   try {
     await store.removeChannel(id)
   } catch (e) {
-    // The store keeps the failure in `channelsError`, which the table shows unless the page is gone
-    // or the create form covers it.
-    reportLate(e, { action: 'Delete channel', resource: 'Notification channel', resourceId: id }, showCreateForm.value)
+    setActionError(e, { action: 'Delete channel', resource: 'Notification channel', resourceId: id })
   }
 }
 </script>

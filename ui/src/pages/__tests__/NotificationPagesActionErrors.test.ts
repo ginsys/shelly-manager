@@ -13,8 +13,9 @@ import NotificationChannelDetailPage from '../NotificationChannelDetailPage.vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import { dismissNotice, notice } from '@/composables/useNotice'
 
-// ginsys/shelly-manager#614: a failed notification action shows the store's own error text, once, where
-// the user acted, and opens no alert(). The store sets `channelsError` / `rulesError` and rethrows.
+// ginsys/shelly-manager#614 and #701: a failed notification action shows the error text, once, where the
+// user acted, and opens no alert(). The store only rethrows: `channelsError` / `rulesError` stay the failure
+// of the list load, and the page holds the failure of its own action. The rows stay on the page.
 
 const RouterLinkStub = { props: ['to'], render(this: any) { return h('a', this.$slots.default?.()) } }
 
@@ -56,10 +57,7 @@ const count = (text: string, needle: string) => text.split(needle).length - 1
 describe('NotificationChannelsPage', () => {
   it('shows the create failure inside the open modal and raises no alert', async () => {
     const { wrapper, store } = mountWith(NotificationChannelsPage, { channels: [channel], channelsError: '' })
-    vi.mocked(store.addChannel).mockImplementation(async () => {
-      store.channelsError = 'Failed to create channel'
-      throw new Error('Failed to create channel')
-    })
+    vi.mocked(store.addChannel).mockRejectedValue(new Error('Failed to create channel'))
     await flushPromises()
     await wrapper.find('.primary-button').trigger('click')
     await wrapper.find('form').trigger('submit')
@@ -85,27 +83,32 @@ describe('NotificationChannelsPage', () => {
     expect(wrapper.find('[data-testid="channel-create-error"]').exists()).toBe(false)
   })
 
-  it('shows the delete failure once, in the table, and raises no alert', async () => {
+  it('shows the delete failure once, above the table, keeps the rows and raises no alert', async () => {
     const { wrapper, store } = mountWith(NotificationChannelsPage, { channels: [channel], channelsError: '' })
-    vi.mocked(store.removeChannel).mockImplementation(async () => {
-      store.channelsError = 'Failed to delete channel'
-      throw new Error('Failed to delete channel')
-    })
+    vi.mocked(store.removeChannel).mockRejectedValue(new Error('Failed to delete channel'))
     await flushPromises()
     await wrapper.find('button.text-red-600').trigger('click')
     await flushPromises()
     expect(alertSpy).not.toHaveBeenCalled()
     expect(count(wrapper.text(), 'Failed to delete channel')).toBe(1)
+    expect(wrapper.find('[data-testid="channel-action-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Ops mail')
+  })
+
+  it('keeps the list-load error apart from a delete failure', async () => {
+    const { wrapper, store } = mountWith(NotificationChannelsPage, { channels: [channel], channelsError: '' })
+    vi.mocked(store.removeChannel).mockRejectedValue(new Error('Failed to delete channel'))
+    await flushPromises()
+    await wrapper.find('button.text-red-600').trigger('click')
+    await flushPromises()
+    expect(store.channelsError).toBe('')
   })
 })
 
 describe('NotificationRulesPage', () => {
   it('shows the create failure inside the open modal and raises no alert', async () => {
     const { wrapper, store } = mountWith(NotificationRulesPage, { rules: [rule], channels: [channel], rulesError: '' })
-    vi.mocked(store.addRule).mockImplementation(async () => {
-      store.rulesError = 'Failed to create rule'
-      throw new Error('Failed to create rule')
-    })
+    vi.mocked(store.addRule).mockRejectedValue(new Error('Failed to create rule'))
     await flushPromises()
     await wrapper.find('.primary-button').trigger('click')
     await wrapper.find('form').trigger('submit')
@@ -124,17 +127,17 @@ describe('NotificationRulesPage', () => {
     expect(wrapper.find('[data-testid="rule-create-error"]').exists()).toBe(false)
   })
 
-  it('shows the delete failure once, in the table, and raises no alert', async () => {
+  it('shows the delete failure once, above the table, keeps the rows and raises no alert', async () => {
     const { wrapper, store } = mountWith(NotificationRulesPage, { rules: [rule], channels: [channel], rulesError: '' })
-    vi.mocked(store.removeRule).mockImplementation(async () => {
-      store.rulesError = 'Failed to delete rule'
-      throw new Error('Failed to delete rule')
-    })
+    vi.mocked(store.removeRule).mockRejectedValue(new Error('Failed to delete rule'))
     await flushPromises()
     await wrapper.find('button.text-red-600').trigger('click')
     await flushPromises()
     expect(alertSpy).not.toHaveBeenCalled()
     expect(count(wrapper.text(), 'Failed to delete rule')).toBe(1)
+    expect(wrapper.find('[data-testid="rule-action-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Offline')
+    expect(store.rulesError).toBe('')
   })
 })
 
@@ -143,15 +146,15 @@ describe('NotificationChannelDetailPage', () => {
     const { wrapper, store } = mountWith(NotificationChannelDetailPage, {
       currentChannel: channel, channelsLoading: false, channelsError: '',
     })
-    vi.mocked(store.modifyChannel).mockImplementation(async () => {
-      store.channelsError = 'Failed to update channel'
-      throw new Error('Failed to update channel')
-    })
+    vi.mocked(store.modifyChannel).mockRejectedValue(new Error('Failed to update channel'))
     await flushPromises()
     await wrapper.find('.primary-button').trigger('click')
     await flushPromises()
     expect(alertSpy).not.toHaveBeenCalled()
     expect(count(wrapper.text(), 'Failed to update channel')).toBe(1)
+    expect(wrapper.find('[data-testid="channel-action-error"]').exists()).toBe(true)
+    // the details stay while the failure shows
+    expect(wrapper.text()).toContain('Ops mail')
   })
 
   // Review round 2: the channel can be deleted, and the page left, while the update is pending.

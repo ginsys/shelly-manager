@@ -229,6 +229,9 @@ async function load() {
     }
   } catch (e: any) {
     error.value = e?.message || 'Failed to load template'
+    // A save that worked and whose refresh failed leaves the page showing this error. The Assign dialog
+    // hides it, and a user who left the page never sees it: then the app notice says it.
+    reportLate(e, { action: 'Load template', resource: 'Template' }, showAssignDialog.value)
   } finally {
     loading.value = false
   }

@@ -78,16 +78,15 @@ export const useProvisioningStore = defineStore('provisioning', {
       }
     },
 
+    // An action (add, cancel, bulk) rethrows its failure and leaves `tasksError` and the list alone:
+    // `tasksError` is the failure of the last list load, and the page that acted shows the failure of its
+    // own action (ginsys/shelly-manager#701).
     async addTask(data: Partial<ProvisioningTask>) {
       this.tasksLoading = true
-      this.tasksError = ''
       try {
         const newTask = await createTask(data)
         this.tasks.unshift(newTask)
         return newTask
-      } catch (e: any) {
-        this.tasksError = e?.message || 'Failed to create task'
-        throw e
       } finally {
         this.tasksLoading = false
       }
@@ -95,7 +94,6 @@ export const useProvisioningStore = defineStore('provisioning', {
 
     async cancelProvisioningTask(id: string) {
       this.tasksLoading = true
-      this.tasksError = ''
       try {
         await cancelTask(id)
         const task = this.tasks.find((t) => t.id === id)
@@ -105,9 +103,6 @@ export const useProvisioningStore = defineStore('provisioning', {
         if (this.currentTask?.id === id) {
           this.currentTask.status = 'failed'
         }
-      } catch (e: any) {
-        this.tasksError = e?.message || 'Failed to cancel task'
-        throw e
       } finally {
         this.tasksLoading = false
       }
@@ -115,14 +110,10 @@ export const useProvisioningStore = defineStore('provisioning', {
 
     async createBulkTasks(request: BulkProvisionRequest) {
       this.tasksLoading = true
-      this.tasksError = ''
       try {
         const newTasks = await bulkProvision(request)
         this.tasks.unshift(...newTasks)
         return newTasks
-      } catch (e: any) {
-        this.tasksError = e?.message || 'Failed to create bulk tasks'
-        throw e
       } finally {
         this.tasksLoading = false
       }
@@ -141,9 +132,9 @@ export const useProvisioningStore = defineStore('provisioning', {
       }
     },
 
+    // Like the task actions: a failed refresh rethrows and leaves `agentsError` and the list alone.
     async refreshAgentStatus(id: string) {
       this.agentsLoading = true
-      this.agentsError = ''
       try {
         const updatedAgent = await getAgentStatus(id)
         const index = this.agents.findIndex((a) => a.id === id)
@@ -151,9 +142,6 @@ export const useProvisioningStore = defineStore('provisioning', {
           this.agents[index] = updatedAgent
         }
         return updatedAgent
-      } catch (e: any) {
-        this.agentsError = e?.message || 'Failed to refresh agent status'
-        throw e
       } finally {
         this.agentsLoading = false
       }

@@ -7,6 +7,13 @@
       <button class="secondary-button" @click="store.fetchAgents()">Refresh</button>
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="agent-action-error"
+      @dismiss="clearActionError"
+    />
+
     <DataTable :rows="store.agents" :loading="store.agentsLoading" :error="store.agentsError" :cols="6" :rowKey="row => row.id">
       <template #header>
         <th>Name</th>
@@ -48,10 +55,12 @@
 import { onMounted } from 'vue'
 import { useProvisioningStore } from '@/stores/provisioning'
 import DataTable from '@/components/DataTable.vue'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { usePageError } from '@/composables/useNotice'
 
 const store = useProvisioningStore()
-const reportLate = useLateFailure()
+// The failure of a status refresh, above the table. The store keeps no action failure (ginsys/shelly-manager#701).
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
 
 onMounted(() => {
   store.fetchAgents()
@@ -74,11 +83,11 @@ function formatLastSeen(dateStr: string): string {
 }
 
 async function handleRefreshAgent(id: string) {
+  clearActionError()
   try {
     await store.refreshAgentStatus(id)
   } catch (e) {
-    // The store keeps the failure in `agentsError`, which the table shows while the page is open.
-    reportLate(e, { action: 'Refresh agent status', resource: 'Provisioning agent', resourceId: id })
+    setActionError(e, { action: 'Refresh agent status', resource: 'Provisioning agent', resourceId: id })
   }
 }
 </script>

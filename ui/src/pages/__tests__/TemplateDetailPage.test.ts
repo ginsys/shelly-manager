@@ -414,6 +414,25 @@ describe('TemplateDetailPage outcomes of its actions', () => {
     wrapper.unmount()
   })
 
+  // ginsys/shelly-manager#701: the save worked and the refresh after it failed behind the Assign dialog.
+  it('shows a failed refresh after a save in the app notice when the Assign dialog opened meanwhile', async () => {
+    const save = deferred<any>()
+    vi.mocked(updateTemplate).mockReturnValue(save.promise)
+    vi.mocked(getTemplate).mockResolvedValueOnce(stored as any).mockRejectedValueOnce(new Error('refresh down'))
+    const wrapper = mountPage()
+    await flushPromises()
+    await toolbarButton(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-testid="save-template"]').trigger('click')
+    await openAssign(wrapper)
+    save.resolve({ template: stored, affected_devices: 0 })
+    await flushPromises()
+
+    expect(notice.value?.message).toContain('refresh down')
+    expect(notice.value?.context?.action).toBe('Load template')
+    wrapper.unmount()
+  })
+
   it('shows a refused save in the app notice when the page was left meanwhile', async () => {
     const save = deferred<any>()
     vi.mocked(updateTemplate).mockReturnValue(save.promise)

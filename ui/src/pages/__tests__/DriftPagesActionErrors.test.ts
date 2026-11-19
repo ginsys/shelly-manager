@@ -6,8 +6,9 @@ import DriftReportsPage from '../DriftReportsPage.vue'
 import DriftSchedulesPage from '../DriftSchedulesPage.vue'
 import { useDriftStore } from '@/stores/drift'
 
-// ginsys/shelly-manager#614: a failed drift action shows the store's own error text, once, and opens no
-// alert(). The store sets `error` and rethrows; the page shows that text where the user acted.
+// ginsys/shelly-manager#614 and #701: a failed drift action shows the error text, once, and opens no
+// alert(). The store only rethrows, so `error` stays the failure of the list load; the page shows the
+// failure of its own action where the user acted, and keeps its rows.
 
 const RouterLinkStub = { props: ['to'], render(this: any) { return h('a', this.$slots.default?.()) } }
 
@@ -53,12 +54,9 @@ function mountWith(page: any, drift: Record<string, unknown>) {
 }
 
 describe('DriftReportsPage resolve failure', () => {
-  it('shows the store error inside the resolve dialog and raises no alert', async () => {
+  it('shows the failure inside the resolve dialog and raises no alert', async () => {
     const { wrapper, store } = mountWith(DriftReportsPage, { trends: [trend], loading: false, error: null })
-    vi.mocked(store.resolveTrend).mockImplementation(async () => {
-      store.error = 'Failed to resolve drift item'
-      throw new Error('Failed to resolve drift item')
-    })
+    vi.mocked(store.resolveTrend).mockRejectedValue(new Error('Failed to resolve drift item'))
     await flushPromises()
     await wrapper.find('.btn-small').trigger('click')
     await wrapper.find('.form-actions .btn.primary').trigger('click')
@@ -79,18 +77,18 @@ describe('DriftReportsPage resolve failure', () => {
 })
 
 describe('DriftSchedulesPage delete failure', () => {
-  it('shows the store error once on the page and raises no alert', async () => {
+  it('shows the failure once above the list, keeps the rows and raises no alert', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { wrapper, store } = mountWith(DriftSchedulesPage, { schedules: [schedule], loading: false, error: null })
-    vi.mocked(store.remove).mockImplementation(async () => {
-      store.error = 'Failed to delete drift schedule'
-      throw new Error('Failed to delete drift schedule')
-    })
+    vi.mocked(store.remove).mockRejectedValue(new Error('Failed to delete drift schedule'))
     await flushPromises()
     await wrapper.find('button.btn-icon.danger').trigger('click')
     await flushPromises()
     expect(alertSpy).not.toHaveBeenCalled()
     expect(wrapper.text().split('Failed to delete drift schedule').length - 1).toBe(1)
+    expect(wrapper.find('[data-testid="schedule-action-error"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Nightly drift')
+    expect(store.error).toBeNull()
     confirmSpy.mockRestore()
   })
 })

@@ -24,6 +24,13 @@
       <input v-model="store.searchFilter" type="text" class="search" placeholder="Search by name..." />
     </div>
 
+    <ErrorDisplay
+      :error="actionError"
+      :show-retry="false"
+      data-testid="template-action-error"
+      @dismiss="clearActionError"
+    />
+
     <div v-if="store.loading" class="card state">Loading...</div>
     <div v-else-if="store.error" class="card state error">{{ store.error }}</div>
 
@@ -171,12 +178,18 @@ import {
 } from '@/api/templates'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import { clone, sameValue, savedSecretBaseline, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
-import { useLateFailure } from '@/composables/useNotice'
+import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import { useLateFailure, usePageError } from '@/composables/useNotice'
 
 const store = useTemplatesStore()
 const reportLate = useLateFailure()
 
 const showDialog = ref(false)
+// The failure of a delete, above the list. The store keeps no action failure, so this panel is the only
+// place that holds it (ginsys/shelly-manager#701); the dialog covers it, so it goes to the notice then.
+const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError(
+  () => showDialog.value
+)
 const editing = ref<ConfigTemplate | null>(null)
 
 const form = ref<{ name: string; description?: string; scope: TemplateScope; device_type?: string }>({
@@ -339,7 +352,7 @@ async function handleSave() {
       if (session === dialogSession) saveErrors.value = e.fields
       return
     }
-    if (session === dialogSession) saveError.value = store.error || e?.message || 'Failed to save template'
+    if (session === dialogSession) saveError.value = e?.message || 'Failed to save template'
   } finally {
     saving.value = false
   }
@@ -349,12 +362,11 @@ async function handleDelete(id: number) {
   if (busy.value) return
   if (!confirm('Delete this template? This will fail if assigned to devices.')) return
 
+  clearActionError()
   try {
     await store.remove(id)
   } catch (e) {
-    // The store keeps the failure in `store.error`, which the page shows as the error card unless the page
-    // is gone or the dialog covers it.
-    reportLate(e, { action: 'Delete template', resource: 'Template', resourceId: String(id) }, showDialog.value)
+    setActionError(e, { action: 'Delete template', resource: 'Template', resourceId: String(id) })
   }
 }
 
