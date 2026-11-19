@@ -81,8 +81,8 @@ opnsense:
   enabled: false            # Enable OPNSense integration
   host: ""                  # OPNSense host/IP
   port: 443                 # OPNSense API port
-  api_key: ""              # OPNSense API key (prefer env/Sec: SHELLY_OPNSENSE_API_KEY or _FILE)
-  api_secret: ""           # OPNSense API secret (SHELLY_OPNSENSE_API_SECRET or _FILE)
+  api_key: ""              # OPNSense API key (prefer env/Sec: SHELLY_OPNSENSE_API_KEY or _FILE; a _FILE that cannot be read stops start-up)
+  api_secret: ""           # OPNSense API secret (SHELLY_OPNSENSE_API_SECRET or _FILE; a _FILE that cannot be read stops start-up)
   auto_apply: false        # Automatically apply firewall changes
 
 # Main application settings (for agent mode)
@@ -108,7 +108,7 @@ notifications:
     smtp_host: ""           # SMTP server host
     smtp_port: 587          # SMTP server port
     smtp_user: ""           # SMTP username
-    smtp_password: ""       # SMTP password (SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD or _FILE)
+    smtp_password: ""       # SMTP password (SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD or _FILE; a _FILE that cannot be read stops start-up)
     from_address: ""        # From email address
     tls: true              # Use TLS encryption
   
@@ -156,8 +156,8 @@ security:
     allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     allowed_headers: ["Content-Type", "Authorization", "X-Requested-With"]
     max_age: 86400
-  admin_api_key: ""                # Optional: when set, every /api/v1 route except GET /version and GET /metrics/prometheus needs it (the five agent routes also take agent_api_key; the web UI asks for it in a dialog, or takes it built in as VITE_ADMIN_KEY). Prefer env (SHELLY_SECURITY_ADMIN_API_KEY or _FILE).
-  agent_api_key: ""                # The key the provisioner agent sends; accepted only on the five agent routes (poll, status and report also need the agent's own token). Use a value different from the admin key; no effect while admin_api_key is empty. Prefer env (SHELLY_SECURITY_AGENT_API_KEY or _FILE).
+  admin_api_key: ""                # Optional: when set, every /api/v1 route except GET /version and GET /metrics/prometheus needs it (the five agent routes also take agent_api_key; the web UI asks for it in a dialog, or takes it built in as VITE_ADMIN_KEY). Prefer env (SHELLY_SECURITY_ADMIN_API_KEY or _FILE; a _FILE that cannot be read stops start-up, so a typo in the path cannot leave the routes open).
+  agent_api_key: ""                # The key the provisioner agent sends; accepted only on the five agent routes (poll, status and report also need the agent's own token). Use a value different from the admin key; no effect while admin_api_key is empty. Prefer env (SHELLY_SECURITY_AGENT_API_KEY or _FILE; a _FILE that cannot be read stops start-up).
 
 # Export subsystem configuration (safe download base directory)
 export:
