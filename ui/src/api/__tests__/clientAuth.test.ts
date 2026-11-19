@@ -60,6 +60,28 @@ describe('client admin-key handling', () => {
     expect(calls[0].auth).toBe('Bearer abc')
   })
 
+  // The rotation call goes through the real client: the request that rotates carries the old key, and
+  // every request after it carries the new one, whichever development source held the old key.
+  it.each([
+    ['VITE_ADMIN_KEY', () => vi.stubEnv('VITE_ADMIN_KEY', 'old-key')],
+    ['window.__ADMIN_KEY__', () => ((window as any).__ADMIN_KEY__ = 'old-key')],
+  ])('after a rotation the next request sends the new key, not the one from %s', async (_name, setOldKey) => {
+    setOldKey()
+    const { api, calls, setAnswer } = await load()
+    const { rotateAdminKey } = await import('../admin')
+    setAnswer((_auth, url) =>
+      url === '/admin/rotate-admin-key' ? { status: 200, body: { success: true, data: { rotated: true } } } : ok,
+    )
+
+    await rotateAdminKey('fresh')
+    await api.get('/devices')
+
+    expect(calls.map((c) => [c.url, c.auth])).toEqual([
+      ['/admin/rotate-admin-key', 'Bearer old-key'],
+      ['/devices', 'Bearer fresh'],
+    ])
+  })
+
   it('opens the prompt on the first admin 401 and retries once with the entered key', async () => {
     const { api, key, calls, setAnswer } = await load()
     setAnswer((auth) => (auth === 'Bearer good' ? ok : unauthorized))
