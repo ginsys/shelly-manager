@@ -313,8 +313,11 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// A mask in the body has nothing stored to take its place: it is dropped, never stored.
-	// With nothing stored no entry can be ambiguous, so the error cannot occur here.
-	_ = restoreDeviceSecrets(&device, nil)
+	// With nothing stored no entry can be ambiguous, but a text that repeats a member name is refused.
+	if err := restoreDeviceSecrets(&device, nil); err != nil {
+		h.responseWriter().WriteValidationError(w, r, err.Error())
+		return
+	}
 
 	// Validate and normalize device settings
 	if err := h.validateDeviceSettings(&device); err != nil {

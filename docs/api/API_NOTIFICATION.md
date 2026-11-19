@@ -66,6 +66,10 @@ credential, whatever its type: a string, a number, an object (`headers`) or a li
   that differ only in case (`URL` and `url`) restores neither: send the value. A config that repeats a member
   name, with names matched the way the server's JSON decoder matches them and at any depth, is refused with 400
   on create and on update, because the server reads such a text in member order.
+  An object inside a list gets its credentials back from the stored entry that equals it except for its
+  credentials, and from no other; where it matches more than one stored entry that disagree at a credential
+  it needs, the update is refused with 400 and asks for the value. The same walker masks and restores the device
+  routes' secrets (`docs/api/api-overview.md`).
 - **Delivery errors.** The error text of a failed delivery (`error` in `GET /notifications/history`, the message
   of a failed `POST /notifications/channels/{id}/test`, the log lines) names the operation and the failure class
   only, for example `webhook request failed: Post timed out`. It never carries the request URL, which holds the
