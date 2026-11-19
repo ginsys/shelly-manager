@@ -669,16 +669,25 @@ func TestRouteContractFixtures(t *testing.T) {
 	})
 
 	// The client module may re-send a request that already went through the client, by its config:
-	// <instance>.request(<ident>.config). The re-sent config was paired when it was first issued, so
-	// the closed-world rule keeps its meaning. Every other use of .request stays refused.
+	// <instance>.request(<param>.config), inside the rejection handler of
+	// <instance>.interceptors.response.use (its second argument), where <param> is that handler's
+	// parameter and the handler does not replace it or its config. The re-sent config was paired when
+	// it was first issued, so the closed-world rule keeps its meaning. Every other use of .request
+	// stays refused.
 	t.Run("client module retry", func(t *testing.T) {
 		const head = "import axios from 'axios'\n" +
 			"export const api = axios.create({ baseURL: '/api/v1' })\n"
+		const use = "api.interceptors.response.use((r) => r, "
 		for name, body := range map[string]string{
-			"handler":  "api.interceptors.response.use(r => r, error => api.request(error.config))",
-			"return":   "const f = (error) => { return api.request(error.config) }",
-			"spaced":   "const f = (e) => api . request ( e /* c */ . config )",
-			"optional": "const f = (e) => api?.request(e?.config)",
+			"handler":      "api.interceptors.response.use(r => r, error => api.request(error.config))",
+			"return":       use + "(error) => { return api.request(error.config) })",
+			"spaced":       use + "(e) => api . request ( e /* c */ . config ))",
+			"optional":     use + "(e) => api?.request(e?.config))",
+			"function":     use + "function (error) { return api.request(error.config) })",
+			"typed":        use + "async (error: AxiosError) => api.request(error.config))",
+			"async bare":   use + "async error => api.request(error.config))",
+			"block":        use + "async (error) => { if (!error.config) { return Promise.reject(error) } return api.request(error.config) })",
+			"first of two": use + "(error, extra) => api.request(error.config))",
 		} {
 			calls, errs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": head + body + "\n"}, nil)
 			if len(errs) != 0 || len(calls) != 0 {
@@ -711,10 +720,35 @@ func TestRouteContractFixtures(t *testing.T) {
 		if len(errs) != 1 || !strings.Contains(errs[0].Error(), "ui/src/api/fixture.ts:2:") {
 			t.Fatalf("outside the client module: errs: %+v", errs)
 		}
-		// Known limit, pinned so a tightening is a decision: the scanner does not track scopes, so it
-		// cannot tell that the identifier is an interceptor's error parameter. Any <ident>.config passes.
+		// The identifier must be the rejection handler's own parameter, and nothing may replace it or
+		// its config before the re-send. Each of these names a config that was never paired.
+		for name, body := range map[string]string{
+			"any identifier":       "const f = (anything) => api.request(anything.config)",
+			"free function":        "const f = (error) => api.request(error.config)",
+			"fabricated config":    "const error = { config: { url: '/missing' } }\napi.request(error.config)",
+			"after the handler":    use + "(error) => Promise.reject(error))\nconst g = (error) => api.request(error.config)",
+			"other parameter":      use + "(error) => api.request(other.config))",
+			"first argument":       "api.interceptors.response.use((r) => api.request(r.config), (error) => Promise.reject(error))",
+			"second parameter":     use + "(extra, error) => api.request(error.config))",
+			"not inline":           "api.interceptors.response.use((r) => r, onError)\nconst onError = (error) => api.request(error.config)",
+			"request interceptor":  "api.interceptors.request.use((c) => c, (error) => api.request(error.config))",
+			"config replaced":      use + "(error) => { error.config = { url: '/missing' }; return api.request(error.config) })",
+			"config or-assigned":   use + "(error) => { error.config ||= { url: '/missing' }; return api.request(error.config) })",
+			"config spaced":        use + "(error) => { error . config\n= { url: '/missing' }; return api.request(error.config) })",
+			"parameter replaced":   use + "(error) => { error = { config: { url: '/missing' } }; return api.request(error.config) })",
+			"parameter redeclared": use + "(error) => { { const error = { config: { url: '/missing' } }; return api.request(error.config) } })",
+			"parameter in a loop":  use + "(error) => { for (const error of [{ config: { url: '/missing' } }]) { return api.request(error.config) } })",
+		} {
+			got, gotErrs := extractRouteContractSources(map[string]string{"ui/src/api/client.ts": head + body + "\n"}, nil)
+			if len(gotErrs) != 1 || !strings.Contains(gotErrs[0].Error(), "unsupported use of the axios instance") {
+				t.Fatalf("%s: calls %+v errs: %+v", name, got, gotErrs)
+			}
+		}
+		// Known limit, pinned so a tightening is a decision: the scanner tracks one handler's
+		// parameter, not scopes, so a function nested in the handler whose own parameter is named like
+		// the handler's still passes.
 		calls, errs := extractRouteContractSources(map[string]string{
-			"ui/src/api/client.ts": head + "const f = (anything) => api.request(anything.config)\n",
+			"ui/src/api/client.ts": head + use + "(error) => { const f = (error) => api.request(error.config); return Promise.reject(error) })\n",
 		}, nil)
 		if len(errs) != 0 || len(calls) != 0 {
 			t.Fatalf("limit: calls %+v errs: %s", calls, joinRouteContractErrs(errs))
