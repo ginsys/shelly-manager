@@ -339,6 +339,24 @@ describe('MetricsDashboardPage', () => {
       expect(text).toContain('Security metrics: boom 4')
     })
 
+    it("shows the server's own error message, not the bare axios text", async () => {
+      // What axios rejects with for a 401 carrying the backend error envelope.
+      const unauthorized = Object.assign(new Error('Request failed with status code 401'), {
+        response: {
+          status: 401,
+          data: { success: false, error: { code: 'UNAUTHORIZED', message: 'Admin authorization required' } }
+        }
+      })
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(unauthorized)
+
+      wrapper = mountPage()
+      await flushPromises()
+
+      const text = wrapper.text()
+      expect(text).toContain('Security metrics: Admin authorization required')
+      expect(text).not.toContain('status code 401')
+    })
+
     it.each([
       ['summary', 'getDashboardSummary'],
       ['notifications', 'getNotificationMetrics'],
