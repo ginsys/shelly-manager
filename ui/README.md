@@ -27,7 +27,7 @@ Dev runtime config (served by `make run`, not loaded by the UI)
   - `window.__API_BASE__ = '/api/v1'`
   - `window.__ADMIN_KEY__ = '<security.admin_api_key from config>'` when set
 - `ui/index.html` does not load `/app-config.js` today, so the Axios client does not pick it up: set `VITE_ADMIN_KEY` in `ui/.env.local` (see "Admin key in a production build" below).
-- Safety: the admin key is only exposed when `SHELLY_DEV_EXPOSE_ADMIN_KEY` is set (dev only). Do not enable this in production.
+- Safety: the admin key is only exposed when `SHELLY_DEV_EXPOSE_ADMIN_KEY` is set (dev only). Do not enable this in production; use the key dialog (see "Admin key in a production build" below) instead.
 
 How to run the SPA (development)
 - Backend: run `make run` in project root (serves API on :8080 and `/app-config.js`).
@@ -35,8 +35,7 @@ How to run the SPA (development)
 - Optional: You can also run directly from `ui/` with `npm run dev`.
 
 Manual fallback (if not using the provided proxy)
-- If you choose not to use the Vite proxy, set at runtime in console:
-  - `window.__ADMIN_KEY__ = 'your_key'`
+- If you choose not to use the Vite proxy, set the API base at runtime in the console (enter the admin key in the key dialog, or set `window.__ADMIN_KEY__` before the app loads):
   - `window.__API_BASE__ = 'http://localhost:8080/api/v1'`
 
 Admin key in a production build
@@ -45,13 +44,21 @@ Admin key in a production build
   only when it has one: `VITE_ADMIN_KEY` at build time (in `ui/.env.local` for `make ui-dev`; in a production build
   the key then sits in the public bundle) or a `window.__ADMIN_KEY__` set by hand in the browser. The Go server's
   dev-only `/app-config.js` exposes the key, but `ui/index.html` does not load that script, so it does not reach the
-  UI by itself. A build with no key gets 401 on the device list and on every configuration page. There is no
-  supported production way to give the UI its key yet (ginsys/shelly-manager#619). With no admin key on the
-  server, nothing changes.
+  UI by itself. A build with no key gets 401 on the device list and on every configuration page until the operator
+  enters the key in the key dialog (below). With no admin key on the server, nothing changes.
+
+The key dialog
+- The first request the server refuses with `401 UNAUTHORIZED` opens the "Admin key" dialog by itself, and the header's "Admin key" button opens it at any time.
+- The key is kept in `sessionStorage` for this browser tab only. It is gone when the tab closes, it is never written to `localStorage` and it is never part of the built bundle. A reload of the tab keeps it. "Forget key" in the header clears it.
+- After you enter a key, the request that was refused is sent again once. If the server refuses that key too, the UI forgets it, shows "That key was not accepted." and opens the dialog again; reload the page or press Refresh after you enter the right key. Cancel closes the dialog and leaves later refused requests quiet until you open it again from the header.
+- A key you enter in the dialog wins over `VITE_ADMIN_KEY`, and that wins over `window.__ADMIN_KEY__`. `VITE_ADMIN_KEY` is read at build time and ends up in the bundle, so set it for local builds only.
+- The metrics WebSocket sends the same key as `?token=`, because a browser cannot set headers on a socket. A socket that the server refuses at the handshake shows no 401 to the page, so open the dialog from the header on the Metrics page if it stays offline.
+- Each tab asks once: `sessionStorage` is not shared between tabs. This is an interim route; a login with a session token is tracked in ginsys/shelly-manager#82.
+- After you rotate the key on the Admin page, the new key replaces the one kept for the tab.
 
 Production-like run
 - Build the SPA: `make ui-build` (writes to `ui/dist`).
-- The Go server will auto-serve `ui/dist` at `/` if it exists (no separate web server needed). Use `make run` and open `http://localhost:8080`.
+- The Go server will auto-serve `ui/dist` at `/` if it exists (no separate web server needed). Use `make run` and open `http://localhost:8080`. With an admin key configured, the UI asks for it in the key dialog.
 
 ## Configuration
 
