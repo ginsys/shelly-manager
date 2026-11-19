@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/ginsys/shelly-manager/internal/database"
 )
@@ -143,19 +142,6 @@ func (s *ShellyService) UpdateDeviceKeepingLogin(basis, incoming *database.Devic
 	}
 	*incoming = *saved
 	return nil
-}
-
-// RefreshDiscoveredDevice stores what a discovery found again about a known device: address,
-// status, last seen time and firmware. It changes nothing else in the row.
-func (s *ShellyService) RefreshDiscoveredDevice(id uint, ip, status string, lastSeen time.Time, firmware string) (*database.Device, error) {
-	s.clientMu.Lock()
-	defer s.clientMu.Unlock()
-
-	err := s.DB.UpdateDeviceDiscovery(id, database.DiscoveryUpdate{IP: ip, Firmware: firmware, Status: status, LastSeen: lastSeen})
-	if err != nil {
-		return nil, err
-	}
-	return s.DB.GetDevice(id)
 }
 
 // backfillDiscoverySettings stores the model, generation and auth flag that a discovery found in
