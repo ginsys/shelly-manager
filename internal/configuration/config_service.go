@@ -64,7 +64,10 @@ type ConfigRepository interface {
 	GetDevices() ([]ServiceDevice, error)
 	UpdateDeviceTemplates(deviceID uint, templateIDs []uint) error
 	UpdateDeviceOverrides(deviceID uint, overrides json.RawMessage) error
-	UpdateDeviceDesiredConfig(deviceID uint, config json.RawMessage) error
+	// SetDeviceDesiredConfigPending stores the desired configuration and clears the applied flag
+	// in one write, so no failure or concurrent apply can leave the flag true against a changed
+	// configuration.
+	SetDeviceDesiredConfigPending(deviceID uint, config json.RawMessage) error
 	SetDeviceConfigApplied(deviceID uint, applied bool) error
 	// SetDeviceConfigAppliedIfDesired sets the applied flag only while the stored desired
 	// configuration still equals desiredConfig. It reports whether the flag was set.
@@ -625,12 +628,8 @@ func (s *ConfigurationService) RecomputeDesiredConfig(deviceID uint) error {
 		return fmt.Errorf("failed to marshal desired config: %w", err)
 	}
 
-	if err := s.repo.UpdateDeviceDesiredConfig(deviceID, desiredJSON); err != nil {
-		return fmt.Errorf("failed to update desired config: %w", err)
-	}
-
-	if err := s.repo.SetDeviceConfigApplied(deviceID, false); err != nil {
-		return fmt.Errorf("failed to mark config as pending: %w", err)
+	if err := s.repo.SetDeviceDesiredConfigPending(deviceID, desiredJSON); err != nil {
+		return fmt.Errorf("failed to store desired config as pending: %w", err)
 	}
 
 	return nil

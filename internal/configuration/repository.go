@@ -252,9 +252,15 @@ func (r *GormConfigRepository) UpdateDeviceOverrides(deviceID uint, overrides js
 	return nil
 }
 
-func (r *GormConfigRepository) UpdateDeviceDesiredConfig(deviceID uint, config json.RawMessage) error {
-	if err := r.db.Model(&DbDevice{}).Where("id = ?", deviceID).Update("desired_config", string(config)).Error; err != nil {
-		return fmt.Errorf("failed to update device desired config: %w", err)
+// SetDeviceDesiredConfigPending stores a new desired configuration and marks the device pending in
+// one UPDATE. Two statements would leave a window in which the flag still reads applied against a
+// changed configuration, after a failed second write or while an apply's compare-and-set
+// (SetDeviceConfigAppliedIfDesired) lands between them. The map form writes config_applied even
+// though false is its zero value.
+func (r *GormConfigRepository) SetDeviceDesiredConfigPending(deviceID uint, config json.RawMessage) error {
+	updates := map[string]any{"desired_config": string(config), "config_applied": false}
+	if err := r.db.Model(&DbDevice{}).Where("id = ?", deviceID).Updates(updates).Error; err != nil {
+		return fmt.Errorf("failed to store device desired config as pending: %w", err)
 	}
 	return nil
 }
