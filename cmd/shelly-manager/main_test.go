@@ -142,12 +142,15 @@ discovery:
 
 		shimDir := t.TempDir()
 		callLog := filepath.Join(shimDir, "calls.log")
-		shim := "#!/bin/sh\necho \"$@\" >> " + strconv.Quote(callLog) + "\nexit 1\n"
+		// The log path goes in through the environment: a path put into the script text would be
+		// read as shell code.
+		shim := "#!/bin/sh\necho \"$@\" >> \"$NMCLI_CALL_LOG\"\nexit 1\n"
 		if err := os.WriteFile(filepath.Join(shimDir, "nmcli"), []byte(shim), 0755); err != nil {
 			t.Fatalf("Failed to write nmcli stand-in: %v", err)
 		}
 
-		if _, err := runCommandWithEnv(t, 30*time.Second, []string{"PATH=" + shimDir}, binaryPath, "--config", configPath, "scan-ap"); err != nil {
+		env := []string{"PATH=" + shimDir, "NMCLI_CALL_LOG=" + callLog}
+		if _, err := runCommandWithEnv(t, 30*time.Second, env, binaryPath, "--config", configPath, "scan-ap"); err != nil {
 			t.Fatalf("Scan-AP command failed: %v", err)
 		}
 
