@@ -167,6 +167,28 @@ test.describe('navigation reachability', () => {
     await expect(trigger).toBeFocused()
   })
 
+  test('Escape hides a menu the pointer is over, and the pointer leaving keeps a menu that holds focus', async ({ page }) => {
+    await page.goto('/')
+    const trigger = page.getByRole('button', { name: 'Notifications' })
+    const panel = page.locator('.nav-dropdown', { has: trigger }).locator('.dropdown-menu')
+
+    await trigger.hover()
+    await expect(panel).toBeVisible()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await page.keyboard.press('Escape')
+    await expect(panel).toBeHidden()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    // Opened by click, focus moved into an item: moving the mouse away must not hide it.
+    await trigger.click()
+    await page.keyboard.press('Tab')
+    const first = panel.locator('.dropdown-item').first()
+    await expect(first).toBeFocused()
+    await page.mouse.move(5, 400)
+    await expect(panel).toBeVisible()
+    await expect(first).toBeFocused()
+  })
+
   test('the top bar fits on one line at 1280 px', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/')
