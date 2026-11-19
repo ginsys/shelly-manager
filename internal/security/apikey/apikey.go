@@ -38,19 +38,32 @@ func Equal(presented, key string) bool {
 	return subtle.ConstantTimeCompare(mac(presented), mac(key)) == 1
 }
 
+// presented returns the non-empty credential values of the request: `Authorization: Bearer <key>` (the
+// "Bearer " prefix is matched exactly) and `X-API-Key: <key>`. These are the only two channels.
+func presented(r *http.Request) []string {
+	var values []string
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		if v := strings.TrimPrefix(auth, "Bearer "); v != "" {
+			values = append(values, v)
+		}
+	}
+	if x := r.Header.Get("X-API-Key"); x != "" {
+		values = append(values, x)
+	}
+	return values
+}
+
+// Presents reports whether the request carries any credential at all, right or wrong. It decides
+// nothing about the key: a caller that must refuse a request with no credential, before it knows which
+// key the route takes, asks this.
+func Presents(r *http.Request) bool { return len(presented(r)) > 0 }
+
 // Authorized reports whether the request carries one of keys, as `Authorization: Bearer <key>` or
 // `X-API-Key: <key>`. The "Bearer " prefix is matched exactly. Unset (empty) keys are skipped.
 func Authorized(r *http.Request, keys ...string) bool {
-	var presented []string
-	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-		presented = append(presented, strings.TrimPrefix(auth, "Bearer "))
-	}
-	if x := r.Header.Get("X-API-Key"); x != "" {
-		presented = append(presented, x)
-	}
 	// Test every presented value against every key: no early exit on the first match.
 	ok := false
-	for _, p := range presented {
+	for _, p := range presented(r) {
 		for _, k := range keys {
 			if Equal(p, k) {
 				ok = true

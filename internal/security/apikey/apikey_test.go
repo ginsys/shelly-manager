@@ -68,3 +68,32 @@ func TestAuthorized(t *testing.T) {
 		})
 	}
 }
+
+// Presents answers "is any credential there", right or wrong, over the same two channels Authorized reads.
+func TestPresents(t *testing.T) {
+	both := request("Authorization", "Bearer a")
+	both.Header.Set("X-API-Key", "b")
+	cases := []struct {
+		name string
+		r    *http.Request
+		want bool
+	}{
+		{"bearer", request("Authorization", "Bearer anything"), true},
+		{"x-api-key", request("X-API-Key", "anything"), true},
+		{"both", both, true},
+		{"no credential", request("", ""), false},
+		{"lowercase bearer prefix", request("Authorization", "bearer admin"), false},
+		{"basic", request("Authorization", "Basic dXNlcjpwYXNz"), false},
+		{"empty bearer", request("Authorization", "Bearer "), false},
+		{"empty x-api-key", request("X-API-Key", ""), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, Presents(c.r))
+			// A request that Authorized accepts always Presents a credential.
+			if Authorized(c.r, "a", "b", "anything", "admin") {
+				assert.True(t, Presents(c.r))
+			}
+		})
+	}
+}

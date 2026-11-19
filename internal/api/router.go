@@ -130,6 +130,10 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	protected.Use(middleware.ValidateHeadersMiddleware(validationConfig, logger))
 	protected.Use(middleware.ValidateContentTypeMiddleware(validationConfig, logger))
 	protected.Use(middleware.ValidateQueryParamsMiddleware(validationConfig, logger))
+	// A request with no credential is refused before ValidateJSON reads its body.
+	if handler != nil {
+		protected.Use(handler.refuseKeylessBeforeBody(securityConfig))
+	}
 	protected.Use(middleware.ValidateJSONMiddleware(validationConfig, logger))
 
 	// 10. Enhanced CORS middleware (security-aware CORS handling)
@@ -154,47 +158,56 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	return r
 }
 
+// setCORSHeaders sets Vary and, for an allowed origin, the Access-Control-* headers on w, and returns
+// the origin it allowed ("" when it refused one). The CORS middleware and the step that answers a
+// request with no credential before its body is read (refuseKeylessBeforeBody) both call it.
+func setCORSHeaders(w http.ResponseWriter, r *http.Request, config *middleware.SecurityConfig) string {
+	origin := r.Header.Get("Origin")
+	w.Header().Set("Vary", "Origin")
+
+	// No allowlist, or no Origin header: "*". With an allowlist, an Origin
+	// outside it is refused (allowedOrigin ""): it gets no Access-Control-*
+	// header, so a browser blocks its preflight and will not let the page read
+	// the response. The request itself is still served.
+	allowedOrigin := "*"
+	if config != nil && len(config.CORSAllowedOrigins) > 0 && origin != "" {
+		allowedOrigin = ""
+		for _, ao := range config.CORSAllowedOrigins {
+			if ao == "*" || ao == origin {
+				allowedOrigin = origin
+				break
+			}
+		}
+	}
+
+	if allowedOrigin != "" {
+		methods := "GET, POST, PUT, DELETE, OPTIONS"
+		if config != nil && len(config.CORSAllowedMethods) > 0 {
+			methods = strings.Join(config.CORSAllowedMethods, ", ")
+		}
+		headers := "Content-Type, Authorization, X-Requested-With"
+		if config != nil && len(config.CORSAllowedHeaders) > 0 {
+			headers = strings.Join(config.CORSAllowedHeaders, ", ")
+		}
+		maxAge := "86400"
+		if config != nil && config.CORSMaxAge > 0 {
+			maxAge = strconv.Itoa(config.CORSMaxAge)
+		}
+		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		w.Header().Set("Access-Control-Allow-Methods", methods)
+		w.Header().Set("Access-Control-Allow-Headers", headers)
+		w.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset")
+		w.Header().Set("Access-Control-Max-Age", maxAge)
+	}
+	return allowedOrigin
+}
+
 // enhancedCORSMiddleware provides security-aware CORS handling
 func enhancedCORSMiddleware(logger *logging.Logger, config *middleware.SecurityConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			w.Header().Set("Vary", "Origin")
-
-			// No allowlist, or no Origin header: "*". With an allowlist, an Origin
-			// outside it is refused (allowedOrigin ""): it gets no Access-Control-*
-			// header, so a browser blocks its preflight and will not let the page read
-			// the response. The request itself is still served.
-			allowedOrigin := "*"
-			if config != nil && len(config.CORSAllowedOrigins) > 0 && origin != "" {
-				allowedOrigin = ""
-				for _, ao := range config.CORSAllowedOrigins {
-					if ao == "*" || ao == origin {
-						allowedOrigin = origin
-						break
-					}
-				}
-			}
-
-			if allowedOrigin != "" {
-				methods := "GET, POST, PUT, DELETE, OPTIONS"
-				if config != nil && len(config.CORSAllowedMethods) > 0 {
-					methods = strings.Join(config.CORSAllowedMethods, ", ")
-				}
-				headers := "Content-Type, Authorization, X-Requested-With"
-				if config != nil && len(config.CORSAllowedHeaders) > 0 {
-					headers = strings.Join(config.CORSAllowedHeaders, ", ")
-				}
-				maxAge := "86400"
-				if config != nil && config.CORSMaxAge > 0 {
-					maxAge = strconv.Itoa(config.CORSMaxAge)
-				}
-				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-				w.Header().Set("Access-Control-Allow-Methods", methods)
-				w.Header().Set("Access-Control-Allow-Headers", headers)
-				w.Header().Set("Access-Control-Expose-Headers", "X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset")
-				w.Header().Set("Access-Control-Max-Age", maxAge)
-			}
+			allowedOrigin := setCORSHeaders(w, r, config)
 
 			// Log CORS requests for security monitoring
 			if origin != "" {
