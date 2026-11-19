@@ -35,7 +35,22 @@ type AttackInfo struct {
 	AttackTypes         map[string]int // attack type -> count
 	Blocked             bool
 	BlockedUntil        time.Time
+
+	// mu guards the tracking and blocking fields against concurrent requests of one IP. It is taken
+	// by TrackRequest, TrackRateLimitViolation and IsIPBlocked; GetMetrics and the cleanup read
+	// without it.
+	mu sync.Mutex
+	// recent holds the times of the last suspiciousPerHour+1 suspicious requests (a ring), for the
+	// rolling-hour rule of shouldBlockIP. recentNext is the slot the next write replaces; recentCount
+	// is how many slots are filled.
+	recent      [suspiciousPerHour + 1]time.Time
+	recentNext  int
+	recentCount int
 }
+
+// suspiciousPerHour is the rate rule's limit: more than this many suspicious requests inside one
+// hour blocks the IP.
+const suspiciousPerHour = 5
 
 // SecurityAlert represents a security alert
 type SecurityAlert struct {
@@ -140,25 +155,24 @@ func (sm *SecurityMonitor) TrackRequest(r *http.Request, statusCode int, duratio
 		return
 	}
 
-	// Load or create attack info
-	var attackInfo *AttackInfo
-	if value, exists := sm.attackMap.Load(clientIP); exists {
-		attackInfo = value.(*AttackInfo)
-	} else {
-		attackInfo = &AttackInfo{
-			IP:          clientIP,
-			FirstSeen:   time.Now(),
-			AttackTypes: make(map[string]int),
-		}
-		sm.attackMap.Store(clientIP, attackInfo)
-	}
+	attackInfo := sm.attackInfoFor(clientIP)
+	attackInfo.mu.Lock()
+	defer attackInfo.mu.Unlock()
 
-	attackInfo.LastSeen = time.Now()
+	now := time.Now()
+	attackInfo.LastSeen = now
 	attackInfo.TotalRequests++
+
+	// A 429 is a rate limit violation and counts once, as that: isSuspiciousRequest leaves its status
+	// out. The limiter's 429 reaches the monitor here, through MonitoringMiddleware.
+	if statusCode == http.StatusTooManyRequests {
+		sm.recordRateLimitViolation(attackInfo, r, clientIP)
+	}
 
 	// Detect suspicious patterns
 	if sm.isSuspiciousRequest(r, statusCode) {
 		attackInfo.SuspiciousRequests++
+		attackInfo.recordSuspiciousTime(now)
 		sm.statistics.mutex.Lock()
 		sm.statistics.SuspiciousRequests++
 		sm.statistics.mutex.Unlock()
@@ -189,12 +203,15 @@ func (sm *SecurityMonitor) TrackRequest(r *http.Request, statusCode int, duratio
 	}
 
 	// Check if IP should be blocked
-	if sm.shouldBlockIP(attackInfo) && !attackInfo.Blocked {
+	if sm.shouldBlockIP(attackInfo, now) && !attackInfo.Blocked {
 		sm.blockIP(attackInfo, clientIP)
 	}
 }
 
-// TrackRateLimitViolation records a rate limit violation
+// TrackRateLimitViolation records one rate limit violation for a refusal that MonitoringMiddleware
+// does not see. A 429 that passes MonitoringMiddleware is already counted by TrackRequest: calling
+// this for it as well would count the refusal twice and block the IP at the 3rd one. Nothing in
+// production calls it today.
 func (sm *SecurityMonitor) TrackRateLimitViolation(r *http.Request) {
 	clientIP := getClientIP(r)
 
@@ -202,16 +219,58 @@ func (sm *SecurityMonitor) TrackRateLimitViolation(r *http.Request) {
 		return
 	}
 
-	if value, exists := sm.attackMap.Load(clientIP); exists {
-		attackInfo := value.(*AttackInfo)
-		attackInfo.RateLimitViolations++
+	attackInfo := sm.attackInfoFor(clientIP)
+	attackInfo.mu.Lock()
+	defer attackInfo.mu.Unlock()
+
+	sm.recordRateLimitViolation(attackInfo, r, clientIP)
+	if sm.shouldBlockIP(attackInfo, time.Now()) && !attackInfo.Blocked {
+		sm.blockIP(attackInfo, clientIP)
 	}
+}
+
+// recordRateLimitViolation counts one rate limit violation. The caller holds attackInfo.mu.
+func (sm *SecurityMonitor) recordRateLimitViolation(attackInfo *AttackInfo, r *http.Request, clientIP string) {
+	attackInfo.RateLimitViolations++
 
 	sm.statistics.mutex.Lock()
 	sm.statistics.RateLimitViolations++
 	sm.statistics.mutex.Unlock()
 
 	sm.generateAlert(r, "rate_limit_violation", clientIP, http.StatusTooManyRequests)
+}
+
+// attackInfoFor returns the tracking entry of an IP and creates it on first sight.
+func (sm *SecurityMonitor) attackInfoFor(clientIP string) *AttackInfo {
+	if value, exists := sm.attackMap.Load(clientIP); exists {
+		return value.(*AttackInfo)
+	}
+	value, _ := sm.attackMap.LoadOrStore(clientIP, &AttackInfo{
+		IP:          clientIP,
+		FirstSeen:   time.Now(),
+		AttackTypes: make(map[string]int),
+	})
+	return value.(*AttackInfo)
+}
+
+// recordSuspiciousTime notes when a suspicious request came, keeping the last suspiciousPerHour+1.
+// The caller holds attackInfo.mu.
+func (a *AttackInfo) recordSuspiciousTime(now time.Time) {
+	a.recent[a.recentNext] = now
+	a.recentNext = (a.recentNext + 1) % len(a.recent)
+	if a.recentCount < len(a.recent) {
+		a.recentCount++
+	}
+}
+
+// suspiciousInLastHour reports whether more than suspiciousPerHour suspicious requests came inside
+// the hour up to now. The caller holds attackInfo.mu.
+func (a *AttackInfo) suspiciousInLastHour(now time.Time) bool {
+	if a.recentCount < len(a.recent) {
+		return false
+	}
+	// The ring is full, so recentNext is the slot of the oldest of the last suspiciousPerHour+1 times.
+	return now.Sub(a.recent[a.recentNext]) <= time.Hour
 }
 
 // TrackValidationFailure records a validation failure
@@ -238,6 +297,8 @@ func (sm *SecurityMonitor) TrackValidationFailure(r *http.Request, validationTyp
 func (sm *SecurityMonitor) IsIPBlocked(ip string) bool {
 	if value, exists := sm.attackMap.Load(ip); exists {
 		attackInfo := value.(*AttackInfo)
+		attackInfo.mu.Lock()
+		defer attackInfo.mu.Unlock()
 		if attackInfo.Blocked {
 			if time.Now().Before(attackInfo.BlockedUntil) {
 				return true
@@ -329,7 +390,9 @@ func (sm *SecurityMonitor) isSuspiciousRequest(r *http.Request, statusCode int) 
 	// Exclude 404 (not found), 401 (unauthorized), and 408 (request timeout)
 	// as these are normal operational responses, not attack indicators.
 	// Timeouts (408) commonly occur when communicating with offline devices.
-	if statusCode >= 400 && statusCode != 404 && statusCode != 401 && statusCode != 408 {
+	// Exclude 429 too: TrackRequest counts it once, as a rate limit violation.
+	if statusCode >= 400 && statusCode != 404 && statusCode != 401 && statusCode != 408 &&
+		statusCode != http.StatusTooManyRequests {
 		return true
 	}
 
@@ -455,7 +518,8 @@ func (sm *SecurityMonitor) detectAttackType(r *http.Request) string {
 	return "general_suspicious"
 }
 
-func (sm *SecurityMonitor) shouldBlockIP(attackInfo *AttackInfo) bool {
+// shouldBlockIP applies the block rules. The caller holds attackInfo.mu.
+func (sm *SecurityMonitor) shouldBlockIP(attackInfo *AttackInfo, now time.Time) bool {
 	// Block if too many suspicious requests
 	if attackInfo.SuspiciousRequests >= 10 {
 		return true
@@ -471,9 +535,8 @@ func (sm *SecurityMonitor) shouldBlockIP(attackInfo *AttackInfo) bool {
 		return true
 	}
 
-	// Block if high attack rate
-	timeDiff := time.Since(attackInfo.FirstSeen)
-	if timeDiff > 0 && float64(attackInfo.SuspiciousRequests)/timeDiff.Hours() > 5 {
+	// Block if more than suspiciousPerHour suspicious requests came inside the last hour
+	if attackInfo.suspiciousInLastHour(now) {
 		return true
 	}
 

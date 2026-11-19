@@ -246,12 +246,9 @@ func TestIPBlocking(t *testing.T) {
 			monitor.TrackRateLimitViolation(req)
 		}
 
-		// Create attack info to trigger blocking check
-		req := httptest.NewRequest("GET", "/api/v1/test", nil)
-		req.RemoteAddr = fmt.Sprintf("%s:12345", attackerIP2)
-		monitor.TrackRequest(req, http.StatusOK, time.Millisecond*10)
-
-		// IP should be blocked
+		// The 5th violation blocked the IP inside TrackRateLimitViolation. (Before
+		// ginsys/shelly-manager#666 these violations were dropped, because the IP had no entry yet, and
+		// the block came from the empty User-Agent of a trailing request.)
 		assert.True(t, monitor.IsIPBlocked(attackerIP2), "IP should be blocked after excessive rate limit violations")
 	})
 

@@ -1,0 +1,2 @@
+Fixed
+- The security monitor no longer blocks a client IP on its first 4xx response (ginsys/shelly-manager#666). The "more than 5 suspicious requests an hour" rule divided by the time since the client's first request, so one bad request was enough to block every route for an hour. It now counts the suspicious requests inside the last hour, and blocks at the 6th. A rate limiter 429 now counts once, as a rate limit violation, and blocks at 5 of them, not as a suspicious request. The thresholds of the other rules and the one-hour block are unchanged.
