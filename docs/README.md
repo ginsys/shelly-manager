@@ -31,7 +31,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
-| [frontend-review.md](frontend/frontend-review.md) | Frontend architecture, API gap analysis, and development tasks |
+| [frontend-review.md](frontend/frontend-review.md) | Frontend architecture, measured API coverage, and open frontend work |
 
 ---
 
