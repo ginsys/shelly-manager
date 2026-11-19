@@ -13,14 +13,14 @@ async function load() {
   vi.resetModules()
   const key = await import('../adminKey')
   const { api } = await import('../client')
-  const calls: { auth: string | undefined; url: string | undefined; data: unknown }[] = []
+  const calls: { auth: string | undefined; url: string | undefined; data: unknown; responseType?: string }[] = []
   let answer: (auth: string | undefined, url: string | undefined) => Answer | Promise<Answer> = () => ({
     status: 200,
     body: { success: true },
   })
   api.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
     const auth = (config.headers as any)?.Authorization as string | undefined
-    calls.push({ auth, url: config.url, data: config.data })
+    calls.push({ auth, url: config.url, data: config.data, responseType: config.responseType })
     const a = await answer(auth, config.url)
     const response = { data: a.body, status: a.status, statusText: '', headers: {}, config } as any
     if (a.status >= 200 && a.status < 300) return response
@@ -85,6 +85,91 @@ describe('client admin-key handling', () => {
     // the retry carries the same body as the first attempt
     expect(JSON.parse(calls[0].data as string)).toEqual({ name: 'x' })
     expect(calls[1].data).toBe(calls[0].data)
+  })
+
+  it('a stale 401 from a request sent without the new key retries with it and opens no dialog', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    setAnswer(async (auth, url) => {
+      if (auth === 'Bearer good') return ok
+      if (url === '/b') await gate // /b was sent without a key and is refused late
+      return unauthorized
+    })
+
+    const a = api.get('/a')
+    const b = api.get('/b')
+    await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+    key.submitAdminKey('good')
+    await a
+    expect(key.promptOpen.value).toBe(false)
+
+    release() // /b's 401 arrives after the key was entered and /a already retried with it
+    const res = await b
+    expect(res.data.data.ok).toBe(true)
+    expect(key.promptOpen.value).toBe(false)
+    expect(calls.filter((c) => c.url === '/b').map((c) => c.auth)).toEqual([undefined, 'Bearer good'])
+  })
+
+  it('a stale 401 retries once: a refused newer key still forgets it and asks again', async () => {
+    const { api, key, calls, setAnswer } = await load()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    setAnswer(async (auth) => {
+      if (auth === undefined) await gate // sent with no key, refused late
+      return unauthorized
+    })
+    const pending = api.get('/old').catch((e) => e)
+    await vi.waitFor(() => expect(calls).toHaveLength(1))
+    key.setAdminKey('newer') // entered while the request was in flight
+    release()
+    const err: any = await pending
+
+    // the current key is the one retry; it is refused too, so it is forgotten and the dialog asks again
+    expect(err.response.status).toBe(401)
+    expect(calls.map((c) => c.auth)).toEqual([undefined, 'Bearer newer'])
+    expect(key.getAdminKey()).toBeUndefined()
+    expect(key.promptOpen.value).toBe(true)
+    expect(key.promptMessage.value).toBe('That key was not accepted.')
+  })
+
+  describe('a blob response (downloads)', () => {
+    const blobOf = (text: string) => new Blob([text], { type: 'application/json' })
+    const adminBlob = () => ({ status: 401, body: blobOf(JSON.stringify(unauthorized.body)) })
+
+    it('reads the admin 401 from a JSON blob, prompts and retries with the same response type', async () => {
+      const { api, key, calls, setAnswer } = await load()
+      setAnswer((auth) => (auth === 'Bearer good' ? { status: 200, body: blobOf('file') } : adminBlob()))
+      const pending = api.get('/export/1/download', { responseType: 'blob' })
+      await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+      key.submitAdminKey('good')
+      await pending
+      expect(calls.map((c) => [c.auth, c.responseType])).toEqual([
+        [undefined, 'blob'],
+        ['Bearer good', 'blob'],
+      ])
+    })
+
+    it('does not prompt for a blob that is not the admin envelope', async () => {
+      const { api, key, setAnswer } = await load()
+      for (const text of ['plain text', '{"success":false,"error":{"code":"DEVICE_AUTH"}}', '']) {
+        setAnswer(() => ({ status: 401, body: blobOf(text) }))
+        await expect(api.get('/export/1/download', { responseType: 'blob' })).rejects.toMatchObject({
+          response: { status: 401 },
+        })
+        expect(key.promptOpen.value).toBe(false)
+      }
+    })
+
+    it('hands the caller the original blob when the operator cancels', async () => {
+      const { api, key, setAnswer } = await load()
+      setAnswer(() => adminBlob())
+      const settled = api.get('/export/1/download', { responseType: 'blob' }).catch((e) => e)
+      await vi.waitFor(() => expect(key.promptOpen.value).toBe(true))
+      key.cancelAdminKeyPrompt()
+      const err: any = await settled
+      expect(err.response.data).toBeInstanceOf(Blob)
+    })
   })
 
   it('a slow refusal of a wrong key does not delete the key typed after it', async () => {
