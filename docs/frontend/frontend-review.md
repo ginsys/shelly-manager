@@ -184,8 +184,8 @@ pages and the device configuration pages) is linked from its list page. This was
 ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
 (`ui/tests/e2e/nav-reachability.spec.ts`) walks the links.
 
-Linked is not the same as working: the export and import detail pages answer only for results the
-server process still holds in memory (ginsys/shelly-manager#647). Both pages show the main fields
+Linked is not the same as working: the export and import detail pages answer from the
+engine's memory, or else from the stored history record, which lacks the warnings of an export and the changes and warnings of an import (ginsys/shelly-manager#647). Both pages show the main fields
 of a result (status, created time, duration, errors, warnings, and for an import the changes by
 type, never their values; ginsys/shelly-manager#139). They do not show the export `output_path`,
 `webhook_sent` and `metadata`, nor the import `metadata`. The export page downloads the file
