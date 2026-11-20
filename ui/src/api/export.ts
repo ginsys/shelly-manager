@@ -418,10 +418,7 @@ export function previewGitOpsExport(o: GitOpsExportOptions): Promise<ExportPrevi
 
 // Removes the history record only. The exported files stay where the export wrote them.
 export async function deleteGitOpsExport(id: string): Promise<void> {
-  const res = await api.delete(`/export/gitops/${id}`)
-  if (res.status < 200 || res.status >= 300) {
-    throw new Error('Failed to delete GitOps export')
-  }
+  await api.delete(`/export/gitops/${id}`) // the client throws on a non-2xx answer
 }
 
 // The history response has no total, but its page count at one item per page is the item count
