@@ -191,6 +191,43 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
+    it('reads the status after a timeout answer, since the stage may have gone on', async () => {
+      vi.mocked(api.post as any).mockImplementation((path: string) =>
+        path === '/import/restore' ? Promise.reject(refused(408, 'Request processing timeout')) : Promise.resolve(checkAnswer('b', 2048)),
+      )
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await openChecked(wrapper)
+      const before = restoreStatusCalls()
+      restoreStatus = statusAnswer({ pending: { backup_id: 'b', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })
+
+      await wrapper.get('.restore-modal .stage-button').trigger('click')
+      await flushPromises()
+
+      const text = wrapper.get('.restore-modal').text()
+      expect(text).toContain('not known whether the restore was staged')
+      expect(text).not.toContain('Nothing was staged')
+      expect(restoreStatusCalls()).toBe(before + 1)
+      expect(wrapper.find('[data-testid="restore-cancel"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('reads the restore status again when the page is refreshed', async () => {
+      restoreStatus = statusAnswer({ pending: { backup_id: 'a', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
+      // The server was restarted meanwhile and applied the restore.
+      restoreStatus = statusAnswer({ pending: null, last_result: { status: 'applied', backup_id: 'a', at: '2026-11-20T19:00:00Z' } })
+
+      await wrapper.get('.refresh-button').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="restore-last-result"]').text()).toContain('applied')
+      wrapper.unmount()
+    })
+
     it('learns from a 501 on the stage call that the database is not SQLite', async () => {
       restoreStatus = () => Promise.reject(refused(500, 'Internal error'))
       vi.mocked(api.post as any).mockImplementation((path: string) =>

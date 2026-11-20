@@ -26,7 +26,7 @@
         </div>
 
         <div v-if="!restoreSupported" class="form-error" data-testid="restore-sqlite-only">
-          Restore is only available for SQLite. The check below still works.
+          {{ RESTORE_SQLITE_ONLY }}. The check below still works.
         </div>
 
         <div v-if="preview" class="restore-preview">
@@ -94,7 +94,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { BackupItem, RestorePreview } from '@/api/export'
+import { RESTORE_SQLITE_ONLY, type BackupItem, type RestorePreview } from '@/api/export'
 
 interface Props {
   show: boolean

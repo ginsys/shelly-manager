@@ -331,6 +331,26 @@ describe('backup api', () => {
       expect(refusedStage.answered).toBe(true)
     })
 
+    it.each([408, 500, 502, 503, 504])(
+      'does not take a %i for proof that nothing was staged: the handler may have gone on',
+      async (status) => {
+        ;(api.post as any).mockRejectedValue(refused(status, 'Request processing timeout'))
+
+        const err = await stageRestore('b1').catch((e) => e)
+
+        expect(err.answered).toBe(false)
+      },
+    )
+
+    it.each([400, 404, 422, 501])('takes a %i for a refusal that staged nothing', async (status) => {
+      ;(api.post as any).mockRejectedValue(refused(status, 'Refused'))
+
+      const err = await stageRestore('b1').catch((e) => e)
+
+      expect(err.answered).toBe(true)
+      expect(err.status).toBe(status)
+    })
+
     it('reads the pending restore and the last result', async () => {
       ;(api.get as any).mockResolvedValue({
         data: {
