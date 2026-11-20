@@ -101,6 +101,7 @@ Internal documentation for contributors:
 - `PHASE_8_WEB_UI_PLAN.md` - Vue 3 SPA modernization roadmap
 - [`development/BULK_APPLY_AND_DOWNLOAD_DESIGN.md`](development/BULK_APPLY_AND_DOWNLOAD_DESIGN.md) - design note: bulk apply and bulk download of device configuration (ginsys/shelly-manager#594, ginsys/shelly-manager#595)
 - [`development/PROVISIONER_REGISTRY_DESIGN.md`](development/PROVISIONER_REGISTRY_DESIGN.md) - proposal: provisioner agents, tokens and tasks in the database, and agent enrolment
+- [`development/PLUGIN_CONFIG_DESIGN.md`](development/PLUGIN_CONFIG_DESIGN.md) - proposal: stored plugin configuration, plugin test and plugin enablement (ginsys/shelly-manager#290)
 
 ---
 
