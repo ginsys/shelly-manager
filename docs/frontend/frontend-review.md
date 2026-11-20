@@ -1,6 +1,6 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250, and a unit test keeps them equal to the code (section 1)
+**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250 and ginsys/shelly-manager#748, and a unit test keeps them equal to the code (section 1)
 **Status:** 128 of 132 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
@@ -79,7 +79,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 9 | 9 | |
 | `errorBody.ts` | 4 | 4 | |
-| `export.ts` | 24 | 22 | `getBackupResult`, `downloadExport` |
+| `export.ts` | 27 | 25 | `getBackupResult`, `downloadExport` |
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
@@ -154,7 +154,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/drift/schedules` | Drift schedules (inspect and delete only, see section 5) | 357 | top bar (Drift) |
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
 | `/drift/trends` | Drift trends | 517 | top bar (Drift) |
-| `/export/backup` | Backup management | 856 | top bar (Export & Import) |
+| `/export/backup` | Backup management | 915 | top bar (Export & Import) |
 | `/export/gitops` | GitOps export | 276 | top bar (Export & Import) |
 | `/export/history` | Export history | 70 | top bar (Export & Import) |
 | `/export/:id` | Export result | 43 | Export history |
@@ -359,7 +359,7 @@ Found by reading the code at this commit; not a plan.
    route table (`ui/src/router/routes.ts`); the Playwright spec does not, so a new `:id` page is
    checked only if someone adds it to the spec.
 2. **Quasar is a dependency nothing imports** (section 2).
-3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (697),
+3. **Large pages:** `BackupManagementPage.vue` (915 lines), `MetricsDashboardPage.vue` (697),
    `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
