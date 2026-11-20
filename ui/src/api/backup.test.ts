@@ -283,6 +283,16 @@ describe('backup api', () => {
     })
   })
 
+  describe('previewRestore refusal', () => {
+    it('carries the server message of a refused check', async () => {
+      ;(api.post as any).mockRejectedValue({
+        response: { status: 404, data: { success: false, error: { message: 'Backup not found' } } },
+      })
+
+      await expect(previewRestore('gone')).rejects.toThrow('Backup not found')
+    })
+  })
+
   describe('staged restore', () => {
     const refused = (status: number, message: string) => ({
       response: { status, data: { success: false, error: { message } } },

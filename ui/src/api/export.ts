@@ -379,9 +379,14 @@ export interface RestorePreview {
 }
 
 export async function previewRestore(backupId: string): Promise<RestorePreview> {
-  const res = await api.post<APIResponse<RestorePreview>>('/import/restore-preview', {
-    backup_id: backupId,
-  })
+  let res
+  try {
+    res = await api.post<APIResponse<RestorePreview>>('/import/restore-preview', {
+      backup_id: backupId,
+    })
+  } catch (e: any) {
+    throw new Error((await errorEnvelopeMessage(e?.response?.data)) || e?.message || 'Failed to check the backup')
+  }
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.error?.message || 'Failed to check the backup')
   }
