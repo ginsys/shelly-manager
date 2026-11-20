@@ -173,7 +173,8 @@ describe('ScheduleForm', () => {
     expect((wrapper.find('[data-testid="schedule-name"]').element as HTMLInputElement).value).toBe('Nightly')
     expect((wrapper.find('[data-testid="schedule-description"]').element as HTMLInputElement).value).toBe('every night')
     expect((wrapper.find('[data-testid="schedule-preset"]').element as HTMLSelectElement).value).toBe('daily')
-    expect((wrapper.find('[data-testid="schedule-enabled"]').element as HTMLInputElement).checked).toBe(false)
+    // Enabled is not the form's to change: the card's Enable/Disable is, and a save must never undo it.
+    expect(wrapper.find('[data-testid="schedule-enabled"]').exists()).toBe(false)
     expect((wrapper.find('[data-testid="mode-devices"]').element as HTMLInputElement).checked).toBe(true)
     expect((wrapper.find('[data-testid="device-2"]').element as HTMLInputElement).checked).toBe(true)
     expect((wrapper.find('[data-testid="device-1"]').element as HTMLInputElement).checked).toBe(false)
@@ -184,10 +185,22 @@ describe('ScheduleForm', () => {
       name: 'Nightly',
       description: 'every night',
       cron_spec: '0 3 * * *',
-      enabled: false,
       device_ids: [2]
     })
+    expect('enabled' in vi.mocked(store.update).mock.calls[0][1]).toBe(false)
     expect(store.create).not.toHaveBeenCalled()
+  })
+
+  it('create has an Enabled box, checked, and sends it', async () => {
+    const { wrapper, store } = mountForm()
+    vi.mocked(store.create).mockResolvedValue(stored)
+    const box = wrapper.find('[data-testid="schedule-enabled"]')
+    expect((box.element as HTMLInputElement).checked).toBe(true)
+    await box.setValue(false)
+    await fillName(wrapper)
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(vi.mocked(store.create).mock.calls[0][0].enabled).toBe(false)
   })
 
   it('edit opens Custom for a spec that is no preset, and Filter for a stored filter', () => {

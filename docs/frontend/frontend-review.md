@@ -229,7 +229,8 @@ page imports still counts. The Playwright spec is what proves the links are rend
   preset or a custom spec, and one of three device choices: all devices, chosen devices, or a type
   and status filter), enables or disables it, deletes it, and lists its recent runs when a card is
   opened (started, status, duration, error; newest first). The form sends at most one of the device
-  list and the filter (neither for all devices), and waits with Save until a chosen list or a filter has something in it. The
+  list and the filter (neither for all devices), and waits with Save until a chosen list or a filter has something in it.
+  Only a new schedule has an Enabled box: an edit sends no `enabled`, so a save never undoes the card's Enable or Disable. The
   server checks the cron spec, the devices and the filter, and its refusal is shown as written.
   Saving can skip a run that is already due, and a changed schedule restarts its timer. The list
   route answers every schedule at once with no paging, so the page has no pager. Not in the UI: a
