@@ -203,6 +203,25 @@ describe('NotificationChannelDetailPage edit form', () => {
     expect(field(wrapper, 'channel-save-error').text()).toBe('Header x-team appears twice')
   })
 
+  // setChannelEnabled reads the channel and PUTs its whole config back, so one that runs while a save is
+  // pending can send the old config after the save and undo it.
+  it('cannot enable or disable the channel while a save is pending', async () => {
+    const { wrapper, store } = await mountEdit(email)
+    let finish: () => void = () => {}
+    vi.mocked(store.saveChannel).mockReturnValue(new Promise<any>((resolve) => { finish = () => resolve(undefined) }))
+    await openEdit(wrapper)
+    await save(wrapper)
+
+    const toggle = field(wrapper, 'channel-toggle')
+    expect((toggle.element as HTMLButtonElement).disabled).toBe(true)
+    await toggle.trigger('click')
+    expect(store.setChannelEnabled).not.toHaveBeenCalled()
+
+    finish()
+    await flushPromises()
+    expect((field(wrapper, 'channel-toggle').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
   it('leaves edit mode after a save', async () => {
     const { wrapper } = await mountEdit(email)
     await openEdit(wrapper)

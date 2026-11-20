@@ -63,7 +63,8 @@
       </div>
 
       <div style="margin-top:24px;display:flex;gap:8px;align-items:center">
-        <button class="primary-button" @click="toggleEnabled">
+        <!-- A toggle that ran during a save would read the old config and PUT it back after the save. -->
+        <button class="primary-button" :disabled="saving" data-testid="channel-toggle" @click="toggleEnabled">
           {{ store.currentChannel.enabled ? 'Disable' : 'Enable' }}
         </button>
         <button class="primary-button" :disabled="testing" data-testid="channel-test-button" @click="sendTest">
