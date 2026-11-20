@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
@@ -185,29 +186,72 @@ func TestBulkDownload_AnEmptyDesiredConfigurationIsNotNoSettings(t *testing.T) {
 	}
 }
 
-func TestBulkDownload_RefusesMoreThanTheCapBeforeAnyRead(t *testing.T) {
+// storedFleet stores n devices that each carry the given desired configuration and have no device
+// behind them: a download reads the database only, so none is needed. It returns the ids.
+func storedFleet(t *testing.T, db *database.Manager, n int, desiredConfig string) []uint {
+	t.Helper()
+	ids := make([]uint, 0, n)
+	for i := 0; i < n; i++ {
+		device := testutil.TestDevice()
+		device.IP = fmt.Sprintf("10.%d.%d.%d", i>>16&0xff, i>>8&0xff, i&0xff)
+		device.MAC = fmt.Sprintf("A4:CF:%02X:%02X:%02X:%02X", i>>24&0xff, i>>16&0xff, i>>8&0xff, i&0xff)
+		require.NoError(t, db.AddDevice(device))
+		require.NoError(t, db.GetDB().Exec("UPDATE devices SET desired_config = ? WHERE id = ?", desiredConfig, device.ID).Error)
+		ids = append(ids, device.ID)
+	}
+	return ids
+}
+
+// The cap is the one named constant: 11 devices (the old refusal), exactly the cap and a repeat of
+// one of them are accepted, and one more is a 400 that names the cap (ginsys/shelly-manager#751).
+func TestBulkDownload_TakesUpToTheCapAndRefusesOneMore(t *testing.T) {
 	db, cleanup := testutil.TestDatabase(t)
 	defer cleanup()
 	handler := exportHandler(t, db)
-	fleet := bulkFleet(t, db, maxBulkDownloadDevices+1)
-	ids := make([]uint, 0, len(fleet))
-	for _, f := range fleet {
-		ids = append(ids, f.device.ID)
-	}
+	ids := storedFleet(t, db, maxBulkDownloadDevices+1, `{"system":{"device":{"name":"fleet"}}}`)
+
+	assert.Equal(t, 200, maxBulkDownloadDevices)
+
+	eleven := postDownload(handler, idsBody(ids[:11]...))
+	assert.Len(t, decodeDownload(t, eleven).Devices, 11)
+
+	at := postDownload(handler, idsBody(ids[:maxBulkDownloadDevices]...))
+	assert.Len(t, decodeDownload(t, at).Devices, maxBulkDownloadDevices)
+
+	// The cap counts distinct ids: a repeat of one of them is not one more device.
+	repeat := postDownload(handler, idsBody(append(append([]uint{}, ids[:maxBulkDownloadDevices]...), ids[0])...))
+	assert.Len(t, decodeDownload(t, repeat).Devices, maxBulkDownloadDevices)
 
 	over := postDownload(handler, idsBody(ids...))
 	assert.Equal(t, http.StatusBadRequest, over.Code, over.Body.String())
 	assert.Contains(t, over.Body.String(), "VALIDATION_FAILED")
-	assert.Contains(t, over.Body.String(), strconv.Itoa(maxBulkDownloadDevices))
-	assert.Zero(t, totalHits(fleet))
+	assert.Contains(t, over.Body.String(), fmt.Sprintf("bulk-download takes at most %d devices, got %d", maxBulkDownloadDevices, len(ids)))
+}
 
-	// Exactly the cap is accepted.
-	at := postDownload(handler, idsBody(ids[:maxBulkDownloadDevices]...))
-	assert.Len(t, decodeDownload(t, at).Devices, maxBulkDownloadDevices)
+// The cap bounds an answer held in memory, so the answer at the cap is measured once, for devices
+// that each carry the fully populated typed configuration (every field set, every secret masked).
+// The size and the time go in the pull request. The limits are the ones a reader would stop at: the
+// body stays under 10 MiB, and the call is read against the client's 10 s default, though no
+// assertion is made on time.
+func TestBulkDownload_TheAnswerAtTheCapIsSmall(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	handler := exportHandler(t, db)
+	full, _, _ := populated(t)
+	ids := storedFleet(t, db, maxBulkDownloadDevices, marshalConfig(t, valid(t, full)))
 
-	// The cap counts distinct ids: a repeat of one of them is not an eleventh device.
-	repeat := postDownload(handler, idsBody(append(append([]uint{}, ids[:maxBulkDownloadDevices]...), ids[0])...))
-	assert.Len(t, decodeDownload(t, repeat).Devices, maxBulkDownloadDevices)
+	start := time.Now()
+	w := postDownload(handler, idsBody(ids...))
+	elapsed := time.Since(start)
+
+	file := decodeDownload(t, w)
+	require.Len(t, file.Devices, maxBulkDownloadDevices)
+	for _, entry := range file.Devices {
+		require.Equal(t, "ok", entry.Status, entry.Error)
+	}
+	t.Logf("bulk-download of %d fully populated devices: %d bytes (%.2f MiB), %s",
+		maxBulkDownloadDevices, w.Body.Len(), float64(w.Body.Len())/(1<<20), elapsed)
+	assert.Less(t, w.Body.Len(), 10<<20, "the answer at the cap is over 10 MiB: the cap is a real choice, come back with the number")
 }
 
 // The request contract of the other bulk routes holds, and stop_on_error, which a read has no use

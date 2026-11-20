@@ -155,7 +155,7 @@ components:
     BulkDownloadRequest:
       type: object
       description: >-
-        The request of bulk-download: the bulk request with a cap of 10 devices, and with
+        The request of bulk-download: the bulk request with a cap of 200 devices, and with
         `options.stop_on_error` limited to `false`, which is the same as leaving it out.
       additionalProperties: false
       required: [device_ids]
@@ -165,7 +165,7 @@ components:
           minItems: 1
           description: >-
             The devices to download. Each id is a positive integer; a repeated id counts once, in
-            first-seen order. More than 10 distinct ids are refused, and nothing is read. The limit
+            first-seen order. More than 200 distinct ids are refused, and nothing is read. The limit
             is on distinct ids, so the schema has no `maxItems`: it would refuse a list that
             repeats an id.
           items:
@@ -2543,7 +2543,7 @@ paths:
         Answers one JSON file (`Content-Disposition: attachment`) with an entry per named device,
         in request order, holding the desired configuration with every secret masked. It reads the
         database and never contacts a device. A device that cannot be read is an entry with
-        `status: error` and a fixed text, and the call still answers 200. At most 10 devices per
+        `status: error` and a fixed text, and the call still answers 200. At most 200 devices per
         call. The request is the one of the other bulk routes, except that `options.stop_on_error`
         can only be `false`.
       operationId: bulkDownloadConfigs
@@ -2569,7 +2569,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/BulkDownloadFile'
         '400':
-          description: No body, invalid JSON, no `device_ids`, a non-positive id, more than 10 devices, `options.stop_on_error`, or a field the server does not read (VALIDATION_FAILED); nothing is read
+          description: No body, invalid JSON, no `device_ids`, a non-positive id, more than 200 devices, `options.stop_on_error`, or a field the server does not read (VALIDATION_FAILED); nothing is read
           content:
             application/json:
               schema:

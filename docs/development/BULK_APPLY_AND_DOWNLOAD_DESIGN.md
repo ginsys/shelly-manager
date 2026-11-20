@@ -305,7 +305,7 @@ cuts the request at 10 s (section 2.2).
 
 | Option | Does NOT solve |
 |---|---|
-| A. A small hard cap (proposal: 10 devices; over the cap is a 400 that names the cap), with a longer per-call timeout in the UI | The 10 is a proposal, not a measurement. A slow device can still exceed any timeout. |
+| A. A small hard cap (proposal: 10 devices for bulk-apply, which contacts devices; over the cap is a 400 that names the cap), with a longer per-call timeout in the UI | The 10 is a proposal, not a measurement. A slow device can still exceed any timeout. bulk-download contacts no device and has its own cap of 200 (section 5.6). |
 | B. No cap, the UI sends in chunks | A direct API caller can send any number. A long call can still be cut. |
 | C. An asynchronous job: the call answers 202 with a job id, the UI polls | New state, storage and a job lifecycle. The largest change. |
 
@@ -437,8 +437,10 @@ whole fleet, so the route must not be open to an unauthenticated caller when an 
 
 ### 5.6 Smallest first slice for ginsys/shelly-manager#595 that ships alone
 
-`POST /config/bulk-download`, desired configuration, masked, one JSON file, the same device cap as
-4.5, admin check first. No device contact, so it ships before ginsys/shelly-manager#594 and carries no
+`POST /config/bulk-download`, desired configuration, masked, one JSON file, admin check first. Its
+device cap is 200, not the 10 of 4.5: it reads the database only, so the cap bounds the answer held
+in memory (200 fully populated configurations are about 1 MiB), not device contact
+(ginsys/shelly-manager#751). No device contact, so it ships before ginsys/shelly-manager#594 and carries no
 fleet-write risk. The UI adds a "Download configuration" action next to "Download Results"; that
 dialog change can follow in its own slice.
 
