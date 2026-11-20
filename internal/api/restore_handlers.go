@@ -117,7 +117,13 @@ func (ih *ImportHandlers) CancelRestore(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	rw := apiresp.NewResponseWriter(ih.logger)
-	if !restore.Cancel(ih.restoreLive) {
+	cancelled, err := restore.Cancel(ih.restoreLive)
+	if err != nil {
+		ih.logger.Error("Restore: cancel failed", "error", err)
+		rw.WriteInternalError(w, r, err)
+		return
+	}
+	if !cancelled {
 		rw.WriteNotFoundError(w, r, "Pending restore")
 		return
 	}

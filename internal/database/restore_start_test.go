@@ -52,6 +52,25 @@ func TestStartAppliesAStagedRestore(t *testing.T) {
 	assert.Equal(t, restore.StatusApplied, res.Status)
 }
 
+// A short-lived command may open the database while the server runs; it must not swap the file.
+func TestKeepingRestoreLeavesAStagedRestoreAlone(t *testing.T) {
+	dir := t.TempDir()
+	live := filepath.Join(dir, "shelly.db")
+	backupPath := filepath.Join(dir, "backup.sqlite")
+	markerDB(t, backupPath, "from-backup")
+	markerDB(t, live, "from-live")
+	require.NoError(t, restore.Stage(context.Background(), live, backupPath, "export-1", false))
+
+	m, err := NewManagerKeepingRestore(provider.DatabaseConfig{Provider: "sqlite", DSN: live}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "from-live", markerOf(t, m), "the command reads the database the server owns")
+	require.NoError(t, m.Close())
+
+	pending, err := restore.Pending(live)
+	require.NoError(t, err)
+	require.NotNil(t, pending, "the staged restore waits for the server's own start")
+}
+
 // A restored file can pass every check at stage and still fail to migrate. The start must then put
 // the previous database back instead of ending in a crash loop on the restored file.
 func TestStartRollsBackARestoreThatCannotBeMigrated(t *testing.T) {

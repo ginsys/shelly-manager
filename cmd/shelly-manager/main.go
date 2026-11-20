@@ -615,8 +615,13 @@ func initApp() {
 	// Log configuration load
 	logger.LogConfigLoad(configFile, nil)
 
-	// Initialize database with logger using provider abstraction
-	dbManager, err = database.NewManagerFromConfigWithLogger(cfg, logger)
+	// Initialize database with logger using provider abstraction. Only the server's own start applies a
+	// staged restore: a short-lived command may run while the server owns the database file.
+	if sub, _, findErr := rootCmd.Find(os.Args[1:]); findErr == nil && sub.Name() == "server" {
+		dbManager, err = database.NewManagerFromConfigWithLogger(cfg, logger)
+	} else {
+		dbManager, err = database.NewManagerKeepingRestore(cfg.GetDatabaseConfig(), logger)
+	}
 	if err != nil {
 		logger.WithFields(map[string]any{
 			"database":  cfg.DatabaseTarget(),
