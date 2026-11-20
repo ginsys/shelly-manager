@@ -88,10 +88,10 @@ describe('GitOps export API', () => {
     expect(mockApi.delete).toHaveBeenCalledWith('/export/gitops/e1')
   })
 
-  it('throws when the delete is refused', async () => {
-    mockApi.delete.mockResolvedValue({ status: 500 })
+  it('passes on the error when the delete is refused', async () => {
+    mockApi.delete.mockRejectedValue(new Error('Request failed with status code 500'))
 
-    await expect(deleteGitOpsExport('e1')).rejects.toThrow('Failed to delete GitOps export')
+    await expect(deleteGitOpsExport('e1')).rejects.toThrow('status code 500')
   })
 
   it('counts exports from the page count of a one-item history page', async () => {
