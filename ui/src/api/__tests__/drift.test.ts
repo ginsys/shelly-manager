@@ -14,6 +14,7 @@ import {
   listDriftSchedules,
   getDriftSchedule,
   deleteDriftSchedule,
+  getDriftSchedulerStatus,
   getDriftReports,
   getDriftTrends,
   resolveDriftTrend,
@@ -87,6 +88,21 @@ describe('Drift API client', () => {
       vi.mocked(api.delete).mockResolvedValueOnce(ok({ status: 'deleted' }))
       await expect(deleteDriftSchedule(5)).resolves.toBeUndefined()
       expect(api.delete).toHaveBeenCalledWith('/config/drift-schedules/5')
+    })
+  })
+
+  describe('getDriftSchedulerStatus', () => {
+    it.each([true, false])('returns enabled=%s from the status route', async (enabled) => {
+      vi.mocked(api.get).mockResolvedValueOnce(ok({ enabled }))
+      await expect(getDriftSchedulerStatus()).resolves.toBe(enabled)
+      expect(api.get).toHaveBeenCalledWith('/config/drift-scheduler')
+    })
+
+    it('throws on a failed answer and on a body with no boolean', async () => {
+      vi.mocked(api.get).mockResolvedValueOnce(fail('nope'))
+      await expect(getDriftSchedulerStatus()).rejects.toThrow('nope')
+      vi.mocked(api.get).mockResolvedValueOnce(ok({}))
+      await expect(getDriftSchedulerStatus()).rejects.toThrow('Failed to read the drift scheduler state')
     })
   })
 

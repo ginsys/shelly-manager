@@ -4,15 +4,17 @@
       <h1>Drift Detection Schedules</h1>
     </div>
 
-    <!-- Fail-closed notice (#270): schedules are stored but never executed. -->
-    <div class="notice" role="status">
-      <strong>Drift schedules are not executed in this release.</strong>
+    <!-- No banner while the server runs the scheduler. -->
+    <div v-if="store.schedulerEnabled === false" class="notice" role="status" data-testid="scheduler-banner">
+      <strong>The drift scheduler is off on this server.</strong>
       <p>
-        Stored schedules are shown for inspection and deletion only. Creating, editing,
-        enabling and run history are unavailable until scheduled execution ships
-        (tracked in issue #279). Any schedule below is inert persisted data, not an
-        operational job.
+        Schedules are stored and shown, and none runs
+        (<code>drift.scheduler_enabled</code> is not set).
       </p>
+    </div>
+    <div v-else-if="statusFailed" class="notice" role="status" data-testid="scheduler-banner">
+      <strong>The scheduler state could not be read.</strong>
+      <p>Whether the stored schedules run is unknown.</p>
     </div>
 
     <ErrorDisplay
@@ -42,7 +44,7 @@
               <p v-if="schedule.description" class="description">{{ schedule.description }}</p>
             </div>
             <div class="schedule-status">
-              <span class="status-badge">Stored (inactive)</span>
+              <span class="status-badge">{{ badge(schedule) }}</span>
             </div>
           </div>
 
@@ -62,12 +64,9 @@
           </div>
 
           <div class="stored-meta">
-            <span class="stored-meta-label">Persisted values (not executed):</span>
-            <span class="stored-meta-item">Stored enabled flag: {{ schedule.enabled ? 'true' : 'false' }}</span>
             <span class="stored-meta-item">Run count: {{ schedule.run_count }}</span>
             <span v-if="schedule.last_run" class="stored-meta-item">Last run: {{ formatDate(schedule.last_run) }}</span>
             <span v-if="schedule.next_run" class="stored-meta-item">Next run: {{ formatDate(schedule.next_run) }}</span>
-            <span class="stored-meta-item">Run history: unavailable</span>
           </div>
 
           <div class="schedule-actions">
@@ -107,6 +106,7 @@ import { ref, onMounted } from 'vue'
 import { useDriftStore } from '@/stores/drift'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { usePageError } from '@/composables/useNotice'
+import type { DriftSchedule } from '@/api/drift'
 
 const store = useDriftStore()
 // The failure of a delete, above the list. The store keeps no action failure (ginsys/shelly-manager#701).
@@ -114,6 +114,14 @@ const { error: actionError, setError: setActionError, clearError: clearActionErr
 
 const page = ref(1)
 const pageSize = ref(25)
+// Set when the read of the scheduler state failed; the store keeps null for that and for "not read yet".
+const statusFailed = ref(false)
+
+// A disabled schedule never runs; an enabled one runs only where the server runs the scheduler.
+function badge(schedule: DriftSchedule): string {
+  if (!schedule.enabled) return 'Disabled'
+  return store.schedulerEnabled === false ? 'Scheduler off' : 'Enabled'
+}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString()
@@ -138,7 +146,7 @@ function formatFilter(filter: unknown): string {
 }
 
 async function handleDelete(id: number) {
-  if (!confirm('Delete this stored schedule? This only removes persisted data.')) {
+  if (!confirm('Delete this schedule and its run history?')) {
     return
   }
   clearActionError()
@@ -154,8 +162,13 @@ async function handlePageChange(newPage: number) {
   await store.fetchSchedules(page.value, pageSize.value)
 }
 
-onMounted(() => {
+onMounted(async () => {
   store.fetchSchedules(page.value, pageSize.value)
+  try {
+    await store.fetchSchedulerStatus()
+  } catch {
+    statusFailed.value = true
+  }
 })
 </script>
 
@@ -304,12 +317,6 @@ onMounted(() => {
   margin-bottom: 16px;
   font-size: 12px;
   color: #94a3b8;
-}
-
-.stored-meta-label {
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
 }
 
 .schedule-actions {

@@ -32,6 +32,7 @@ vi.mock('@/api/drift', async (importOriginal) => {
     ...actual,
     listDriftSchedules: vi.fn(),
     deleteDriftSchedule: vi.fn(),
+    getDriftSchedulerStatus: vi.fn(),
     getDriftTrends: vi.fn(),
     resolveDriftTrend: vi.fn(),
     generateDeviceDriftReport: vi.fn(),
@@ -170,6 +171,18 @@ describe('drift store', () => {
     expect(store.trends).toEqual([{ id: 1, resolved: false }])
     expect(store.error).toBeNull()
     expect(store.loading).toBe(false)
+  })
+
+  it('fetchSchedulerStatus keeps the answer, and a failed read leaves null and no error', async () => {
+    const store = useDriftStore()
+    vi.mocked(driftApi.getDriftSchedulerStatus).mockResolvedValueOnce(false)
+    await store.fetchSchedulerStatus()
+    expect(store.schedulerEnabled).toBe(false)
+
+    vi.mocked(driftApi.getDriftSchedulerStatus).mockRejectedValueOnce(new Error('status is down'))
+    await expect(store.fetchSchedulerStatus()).rejects.toThrow('status is down')
+    expect(store.schedulerEnabled).toBeNull()
+    expect(store.error).toBeNull()
   })
 
   it('a failed list load still sets the error', async () => {
