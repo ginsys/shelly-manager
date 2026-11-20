@@ -165,9 +165,22 @@ func TestDriftScheduleWriteProviders_FilterRoundTripsAndAnUnchangedUpdateIsFound
 	}
 }
 
+// lockWaiters counts the statements of the test database that wait for a row lock now.
+func lockWaiters(t *testing.T, db *gorm.DB) int64 {
+	t.Helper()
+	q := "SELECT count(*) FROM performance_schema.data_lock_waits" // live; innodb_trx is cached for 0.1 s
+	if db.Name() == "postgres" {
+		q = "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()"
+	}
+	var n int64
+	require.NoError(t, db.Raw(q).Scan(&n).Error)
+	return n
+}
+
 // afterFirstScheduleRead runs fn once, right after the first read of the schedules table through db,
-// then waits for it to end or for a second. A row lock held by that read makes fn wait for the commit,
-// so the wait ends by the timeout; without the lock fn ends first.
+// and returns when fn has ended or a statement waits for a row lock. A lock held by that read makes
+// fn wait, so what the case then sees depends on the lock; the wait is observed on the server, never
+// assumed from elapsed time, and a competing statement that does neither fails the case.
 func afterFirstScheduleRead(t *testing.T, db *gorm.DB, fn func()) {
 	t.Helper()
 	fired := false
@@ -178,9 +191,19 @@ func afterFirstScheduleRead(t *testing.T, db *gorm.DB, fn func()) {
 		fired = true
 		done := make(chan struct{})
 		go func() { defer close(done); fn() }()
-		select {
-		case <-done:
-		case <-time.After(time.Second):
+		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			if lockWaiters(t, db) > 0 {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Error("the competing statement neither ended nor waited for a lock")
+				return
+			}
 		}
 	}))
 }
@@ -234,6 +257,36 @@ func TestDriftScheduleWriteProviders_ConcurrentUpdatesKeepTheSpecAndItsNextRunTo
 
 			var sc DriftDetectionSchedule
 			require.NoError(t, db.First(&sc, created.ID).Error)
+			require.NotNil(t, sc.NextRun)
+			minute := map[string]int{"7 * * * *": 7, "0 3 * * *": 0}[sc.CronSpec]
+			assert.Equal(t, minute, sc.NextRun.Minute(), "next run %s does not belong to spec %q", sc.NextRun, sc.CronSpec)
+		})
+	}
+}
+
+// A toggle on that read a disabled schedule must not arm it with the next run of a spec an edit
+// replaced meanwhile: the edit waits for the toggle's commit and then recomputes.
+func TestDriftScheduleWriteProviders_AToggleOnAndAnEditKeepTheSpecAndItsNextRunTogether(t *testing.T) {
+	for _, srv := range lockServers(t) {
+		t.Run(srv.name, func(t *testing.T) {
+			sa, sb, db := openSchedulerReplicas(t, srv)
+			off := false
+			created, err := sa.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "7 * * * *", Enabled: &off})
+			require.NoError(t, err)
+			edited := make(chan struct{})
+			afterFirstScheduleRead(t, db, func() {
+				defer close(edited)
+				_, uerr := sb.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *"})
+				assert.NoError(t, uerr)
+			})
+
+			_, err = sa.svc.ToggleDriftSchedule(created.ID)
+			require.NoError(t, err)
+			<-edited
+
+			var sc DriftDetectionSchedule
+			require.NoError(t, db.First(&sc, created.ID).Error)
+			require.True(t, sc.Enabled)
 			require.NotNil(t, sc.NextRun)
 			minute := map[string]int{"7 * * * *": 7, "0 3 * * *": 0}[sc.CronSpec]
 			assert.Equal(t, minute, sc.NextRun.Minute(), "next run %s does not belong to spec %q", sc.NextRun, sc.CronSpec)
