@@ -7,7 +7,7 @@ import type { APIResponse, PaginationMeta } from './types'
 // The conversion happens here and nowhere else: ginsys/shelly-manager#250 was the pages and the
 // server each assuming the other's shape.
 
-type ChannelType = 'email' | 'webhook' | 'slack'
+export type ChannelType = 'email' | 'webhook' | 'slack'
 
 interface ChannelWire {
   id: number
@@ -176,18 +176,17 @@ export async function getChannel(id: string): Promise<NotificationChannel> {
 // A refused config is a 400 that axios throws. The server's reason is in `details` ("invalid channel
 // configuration: email config must have at least one recipient") and `message` is a fixed phrase, so the
 // reason comes first, as for the backup check.
+async function refusal(e: any, fallback: string): Promise<Error> {
+  const body = e?.response?.data
+  return new Error((await errorEnvelopeDetails(body)) || (await errorEnvelopeMessage(body)) || e?.message || fallback)
+}
+
 export async function createChannel(data: NotificationChannelInput): Promise<NotificationChannel> {
   let res
   try {
     res = await api.post<APIResponse<ChannelWire>>('/notifications/channels', channelToWire(data))
   } catch (e: any) {
-    const body = e?.response?.data
-    throw new Error(
-      (await errorEnvelopeDetails(body)) ||
-        (await errorEnvelopeMessage(body)) ||
-        e?.message ||
-        'Failed to create notification channel'
-    )
+    throw await refusal(e, 'Failed to create notification channel')
   }
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to create notification channel'
@@ -197,11 +196,17 @@ export async function createChannel(data: NotificationChannelInput): Promise<Not
 }
 
 // A PUT replaces the channel's name, type, enabled, config and description, and the server answers
-// {status: "updated"}, not the channel: callers read the channel again. The only caller is
-// setChannelEnabled: no page edits a channel's other fields.
-async function updateChannel(id: string, data: NotificationChannelInput): Promise<void> {
+// {status: "updated"}, not the channel: callers read the channel again. The config goes as the edit form
+// built it: a credential kept is the placeholder the read carried, which the server takes back as the stored
+// value (ginsys/shelly-manager#783).
+export async function updateChannel(id: string, data: NotificationChannelInput): Promise<void> {
   const n = wireId(id)
-  const res = await api.put<APIResponse<{ status: string }>>(`/notifications/channels/${n}`, channelToWire(data))
+  let res
+  try {
+    res = await api.put<APIResponse<{ status: string }>>(`/notifications/channels/${n}`, channelToWire(data))
+  } catch (e: any) {
+    throw await refusal(e, 'Failed to update notification channel')
+  }
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to update notification channel'
     throw new Error(msg)

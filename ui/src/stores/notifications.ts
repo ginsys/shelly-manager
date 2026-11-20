@@ -4,6 +4,7 @@ import {
   getChannels,
   getChannel,
   createChannel,
+  updateChannel,
   setChannelEnabled,
   deleteChannel,
   getRules,
@@ -101,18 +102,30 @@ export const useNotificationsStore = defineStore('notifications', {
       this.channelsLoading = true
       try {
         await setChannelEnabled(id, enabled)
-        const updated = await getChannel(id)
-        const index = this.channels.findIndex((c) => c.id === id)
-        if (index !== -1) {
-          this.channels[index] = updated
-        }
-        if (this.currentChannel?.id === id) {
-          this.currentChannel = updated
-        }
-        return updated
+        return await this.replaceChannelCopies(id)
       } finally {
         this.channelsLoading = false
       }
+    },
+
+    // Saves the channel as the edit form built it (ginsys/shelly-manager#783). It leaves `channelsLoading`
+    // alone: the detail page shows "Loading..." in place of its details while it is set, which would tear the
+    // form down and lose what the user typed when the server refuses the save.
+    async saveChannel(id: string, data: NotificationChannelInput) {
+      await updateChannel(id, data)
+      return await this.replaceChannelCopies(id)
+    },
+
+    async replaceChannelCopies(id: string) {
+      const updated = await getChannel(id)
+      const index = this.channels.findIndex((c) => c.id === id)
+      if (index !== -1) {
+        this.channels[index] = updated
+      }
+      if (this.currentChannel?.id === id) {
+        this.currentChannel = updated
+      }
+      return updated
     },
 
     async removeChannel(id: string) {
