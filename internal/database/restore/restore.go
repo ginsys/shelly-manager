@@ -208,8 +208,8 @@ func ApplyPending(live string, logger *logging.Logger) bool {
 	staged := filepath.Join(dir, stagedName)
 	fail := func(msg string, cause error) bool {
 		logger.Error("Restore not applied", "backup_id", p.BackupID, "reason", msg, "error", cause)
+		clearPending(dir) // first: it frees the staged file's space for the result below
 		recordResult(dir, Result{Status: StatusFailed, BackupID: p.BackupID, Error: msg})
-		clearPending(dir)
 		return false
 	}
 
@@ -223,9 +223,9 @@ func ApplyPending(live string, logger *logging.Logger) bool {
 	if err := keepPreRestore(live); err != nil {
 		return fail("The live database could not be copied, so nothing was replaced", err)
 	}
-	for _, side := range []string{"-wal", "-shm"} {
+	for _, side := range staleSides {
 		if err := os.Remove(live + side); err != nil && !os.IsNotExist(err) {
-			return fail("A stale write-ahead file could not be removed, so nothing was replaced", err)
+			return fail("A file beside the old database could not be removed, so nothing was replaced", err)
 		}
 	}
 	if fi, statErr := os.Stat(live); statErr == nil {
@@ -258,7 +258,7 @@ func Rollback(live string, cause error, logger *logging.Logger) bool {
 		backupID = last.BackupID
 	}
 	msg := "The restored database could not be opened or migrated; the previous database was put back"
-	for _, side := range []string{"-wal", "-shm"} {
+	for _, side := range staleSides {
 		_ = os.Remove(live + side)
 	}
 	// The copy is moved, not copied: the failed database still holds its disk, and a rename needs none.
@@ -266,9 +266,11 @@ func Rollback(live string, cause error, logger *logging.Logger) bool {
 		logger.Error("Restore rollback failed", "error", err, "cause", cause)
 		return false
 	}
-	if exists(pre + "-wal") {
-		if err := os.Rename(pre+"-wal", live+"-wal"); err != nil {
-			logger.Error("Restore rollback could not put the write-ahead file back", "error", err)
+	for _, side := range keptSides {
+		if exists(pre + side) {
+			if err := os.Rename(pre+side, live+side); err != nil {
+				logger.Error("Restore rollback could not put a file beside the database back", "file", side, "error", err)
+			}
 		}
 	}
 	recordResult(dir, Result{Status: StatusFailed, BackupID: backupID, Error: msg})
@@ -276,14 +278,22 @@ func Rollback(live string, cause error, logger *logging.Logger) bool {
 	return true
 }
 
-// keepPreRestore keeps one copy of the live file, and of its -wal when it has one, beside it. The
-// previous copy is removed first, so the copy needs no more room than the live file.
+// The files SQLite keeps beside a database. A -wal or a -journal can hold committed or half-written
+// pages of the old database, so the copy keeps them. All of them are removed before the new database
+// is put in place: a leftover one would be replayed into it.
+var (
+	keptSides  = []string{"-wal", "-journal"}
+	staleSides = []string{"-wal", "-journal", "-shm"}
+)
+
+// keepPreRestore keeps one copy of the live file, and of its -wal and -journal when it has them,
+// beside it. The previous copy is removed first, so the copy needs no more room than the live file.
 func keepPreRestore(live string) error {
 	if !exists(live) {
 		return nil
 	}
 	pre := live + ".pre-restore"
-	for _, old := range []string{pre, pre + "-wal"} {
+	for _, old := range append([]string{pre}, sideNames(pre)...) {
 		if err := os.Remove(old); err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -297,12 +307,23 @@ func keepPreRestore(live string) error {
 		_ = os.Remove(tmp)
 		return err
 	}
-	if exists(live + "-wal") {
-		if err := copyFile(live+"-wal", pre+"-wal"); err != nil {
-			return err
+	for _, side := range keptSides {
+		if exists(live + side) {
+			if err := copyFile(live+side, pre+side); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// sideNames lists the kept side files of path.
+func sideNames(path string) []string {
+	names := make([]string, len(keptSides))
+	for i, side := range keptSides {
+		names[i] = path + side
+	}
+	return names
 }
 
 // expand writes the backup's database bytes to dst: a .gz or a .zip with one file is unpacked, any
@@ -443,7 +464,7 @@ func checkFile(ctx context.Context, path string) error {
 
 func liveSize(live string) uint64 {
 	var total uint64
-	for _, p := range []string{live, live + "-wal"} {
+	for _, p := range append([]string{live}, sideNames(live)...) {
 		if fi, err := os.Stat(p); err == nil {
 			total += uint64(fi.Size()) //nolint:gosec // a file size is not negative
 		}
@@ -505,7 +526,10 @@ func clearPending(dir string) {
 
 func recordResult(dir string, res Result) {
 	res.At = time.Now().UTC()
-	_ = writeJSON(filepath.Join(dir, resultName), res)
+	path := filepath.Join(dir, resultName)
+	if err := writeJSON(path, res); err != nil {
+		_ = os.Remove(path) // an older result must not stand for this start
+	}
 }
 
 func readJSON(path string, v any) (bool, error) {

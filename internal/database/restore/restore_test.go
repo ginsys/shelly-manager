@@ -314,6 +314,47 @@ func TestApplyRemovesStaleWalAndShm(t *testing.T) {
 	assert.Equal(t, "stale wal", string(kept), "the old -wal is kept beside the pre-restore copy")
 }
 
+func TestApplyKeepsAndRemovesAHotJournal(t *testing.T) {
+	r := newRig(t)
+	path := r.backup(t, "b.sqlite", "new-1")
+	require.NoError(t, Stage(context.Background(), r.live, path, "export-1", false))
+	require.NoError(t, os.WriteFile(r.live+"-journal", []byte("hot journal"), 0o600))
+
+	require.True(t, ApplyPending(r.live, testLogger(t)))
+
+	assert.False(t, exists(r.live+"-journal"), "a hot journal would be replayed into the restored file")
+	assert.Equal(t, []string{"new-1"}, readNames(t, r.live))
+	kept, err := os.ReadFile(r.live + ".pre-restore-journal")
+	require.NoError(t, err)
+	assert.Equal(t, "hot journal", string(kept), "the old journal stays with the pre-restore copy")
+
+	require.True(t, Rollback(r.live, errors.New("migrate failed"), testLogger(t)))
+	back, err := os.ReadFile(r.live + "-journal")
+	require.NoError(t, err)
+	assert.Equal(t, "hot journal", string(back), "a rollback puts the journal back with the old database")
+}
+
+func TestFailedApplyDoesNotLeaveAnOlderResultStanding(t *testing.T) {
+	r := newRig(t)
+	path := r.backup(t, "b.sqlite", "new-1")
+	require.NoError(t, Stage(context.Background(), r.live, path, "export-1", false))
+	require.True(t, ApplyPending(r.live, testLogger(t)))
+	res, err := LastResult(r.live)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, StatusApplied, res.Status)
+
+	// The next apply fails (tampered staged file) and the result cannot be written.
+	require.NoError(t, Stage(context.Background(), r.live, path, "export-2", false))
+	require.NoError(t, os.WriteFile(filepath.Join(Dir(r.live), "staged.sqlite"), []byte("changed"), 0o600))
+	require.NoError(t, os.Mkdir(filepath.Join(Dir(r.live), "result.json.tmp"), 0o755))
+	require.False(t, ApplyPending(r.live, testLogger(t)))
+
+	res, err = LastResult(r.live)
+	require.NoError(t, err)
+	assert.Nil(t, res, "an old applied result must not stand for a start that failed")
+}
+
 func TestOnePreRestoreCopyAndOnePendingRestore(t *testing.T) {
 	r := newRig(t)
 	a := r.backup(t, "a.sqlite", "a-1")

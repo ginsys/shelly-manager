@@ -95,17 +95,17 @@ their writers back.
    nothing else. `"dry_run": true` runs the checks and stages nothing.
 2. Restart the server (in Kubernetes, restart the pod; run one replica on the data volume).
    Before the database is opened, the start keeps one copy of the live file as
-   `<database file>.pre-restore` (and its `-wal` as `.pre-restore-wal`), removes the stale
-   `-wal` and `-shm` files, moves the staged file into place, then connects and migrates.
+   `<database file>.pre-restore` (and its `-wal` and `-journal` files as `.pre-restore-wal` and
+   `.pre-restore-journal`), removes the stale `-wal`, `-journal` and `-shm` files, moves the staged file into place, then connects and migrates.
 
 If the restored file cannot be opened or migrated, the start puts the `.pre-restore` copy
 back (it is moved, so it is used up) and runs on it. Any failed apply keeps the old database and records the reason:
 `GET /api/v1/import/restore` shows the staged restore and the result of the last start.
 `DELETE /api/v1/import/restore` cancels a staged restore. To undo a restore by hand, stop the
-server and copy `.pre-restore` (and `.pre-restore-wal`) back over the database file.
+server and copy `.pre-restore` (and `.pre-restore-wal`, `.pre-restore-journal`) back over the database file.
 
 Space: staging needs room for the unpacked backup, and the apply needs room for one copy
-of the live database and its `-wal`, all beside the database file. The check refuses a
+of the live database and its `-wal` and `-journal`, all beside the database file. The check refuses a
 backup that does not fit, with the numbers. The `.pre-restore` copy stays until the next
 restore replaces it, or a rollback uses it. PostgreSQL and MySQL answer `501`: restore is for SQLite only.
 
