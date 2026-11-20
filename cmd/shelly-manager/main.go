@@ -512,7 +512,7 @@ func startServer() {
 
 	// A signal ends the server cleanly only when the scheduler runs, so that the run in flight stops
 	// between devices; with the scheduler off nothing here changes. A device read already started is
-	// not interrupted (its client timeout bounds it, and Stop waits 30 seconds at most), so a run can
+	// not interrupted (its client timeout bounds it, and Stop waits 15 seconds at most), so a run can
 	// still be left running; the first poll after its recorded start is more than ten minutes old
 	// marks it interrupted.
 	serveCtx := context.Background()

@@ -120,6 +120,16 @@ func TestServe_ContextEndStopsSchedulerThenServer(t *testing.T) {
 	}
 }
 
+// A stop is the scheduler's wait and then the server's shutdown, one after the other. Kubernetes
+// sends SIGKILL after 30 seconds (no terminationGracePeriodSeconds is set), so the sum stays at 25.
+func TestStopWindow_FitsTheDefaultKubernetesGracePeriod(t *testing.T) {
+	const budget = 25 * time.Second
+	if got := configuration.DriftStopWait + shutdownTimeout; got > budget {
+		t.Fatalf("scheduler wait %s + server shutdown %s = %s, want at most %s",
+			configuration.DriftStopWait, shutdownTimeout, got, budget)
+	}
+}
+
 // A server that cannot listen is a failure, and the scheduler is left to the caller.
 func TestServe_ListenFailureIsReported(t *testing.T) {
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")
