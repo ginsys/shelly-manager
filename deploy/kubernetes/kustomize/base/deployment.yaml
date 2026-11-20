@@ -7,11 +7,10 @@ metadata:
     component: api-server
 spec:
   replicas: 1
+  # One replica on a SQLite file: the old pod must be gone before the new one opens the file, so a
+  # restart never overlaps two servers (a staged restore is applied by the start).
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
       app: shelly-manager

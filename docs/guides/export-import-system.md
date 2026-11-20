@@ -93,9 +93,11 @@ their writers back.
    `<database file>.restore/`, beside the database, checks the SQLite header, runs
    `PRAGMA integrity_check` and looks for the `devices` table. It answers `202` and changes
    nothing else. `"dry_run": true` runs the checks and stages nothing.
-2. Stop the server, then start it (in Kubernetes, scale the Deployment to 0 and back to 1: the
-   default rolling update starts the new pod while the old one still has the file open, and a
-   restore must never be applied under a running server). Only `shelly-manager server` applies a
+2. Stop the server, then start it. In Kubernetes, restart the Deployment: the base manifest uses
+   the `Recreate` strategy, so the old pod stops before the new one starts. A Deployment with a
+   rolling update starts the new pod while the old one still has the file open, and a restore
+   must never be applied under a running server; scale such a Deployment to 0 and back to 1.
+   Only `shelly-manager server` applies a
    staged restore; other commands, such as `list`, leave it for the next server start.
    Before the database is opened, the start keeps one copy of the live file as
    `<database file>.pre-restore` (and its `-wal` and `-journal` files as `.pre-restore-wal` and
