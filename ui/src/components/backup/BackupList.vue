@@ -75,9 +75,9 @@
             class="action-btn restore-btn"
             @click="restoreEnabled && emit('restore', row)"
             :disabled="!restoreEnabled"
-            :title="restoreEnabled ? 'Restore from backup' : 'Restore is not supported yet (tracked in #249)'"
+            :title="restoreEnabled ? 'Check this backup file (restoring is not offered yet)' : 'Not available'"
           >
-            ↩ Restore
+            ✔ Check
           </button>
           <button
             class="action-btn delete-btn"
@@ -101,8 +101,8 @@ interface Props {
   loading: boolean
   error: string
   downloading?: string
-  // Restore requires backend endpoints that do not exist yet (#249). Fail closed:
-  // a consumer must opt in explicitly once the restore backend slice lands.
+  // The button checks a stored backup file; it restores nothing. Fail closed: a consumer
+  // must opt in explicitly.
   restoreEnabled?: boolean
 }
 

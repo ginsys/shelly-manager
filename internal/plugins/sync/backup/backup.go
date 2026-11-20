@@ -334,20 +334,14 @@ func (b *BackupPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 	}, nil
 }
 
-// Import performs backup restoration
-func (b *BackupPlugin) Import(ctx context.Context, source sync.ImportSource, config sync.ImportConfig) (*sync.ImportResult, error) {
-	switch source.Type {
-	case "file":
-		return b.RestoreBackup(ctx, source.Path, config.Config)
-	case "data":
-		// TODO: Handle in-memory backup data
-		return nil, fmt.Errorf("in-memory backup restoration not yet implemented")
-	case "url":
-		// TODO: Download backup from URL and restore
-		return nil, fmt.Errorf("URL-based backup restoration not yet implemented")
-	default:
-		return nil, fmt.Errorf("unsupported import source type: %s", source.Type)
-	}
+// Import refuses every source. Restoring a backup replaces the live database and is not safe
+// today (the provider ignores dry run, copies a compressed backup over the database without
+// unpacking it, and reconnects with writers running), and POST /import and POST /import/preview
+// would reach it with a client-named path, the preview included. RestoreBackup stays for the safe
+// restore tracked in ginsys/shelly-manager#748.
+func (b *BackupPlugin) Import(_ context.Context, _ sync.ImportSource, _ sync.ImportConfig) (*sync.ImportResult, error) {
+	return nil, fmt.Errorf("restoring a backup is not offered yet because it replaces the live database unsafely: %w",
+		sync.ErrImportNotImplemented)
 }
 
 // Capabilities returns plugin capabilities

@@ -1,15 +1,21 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/gorilla/mux"
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
+	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/security/apikey"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
@@ -20,6 +26,9 @@ type ImportHandlers struct {
 	logger     *logging.Logger
 
 	adminKey apikey.Key
+	// exportBaseDir, when set, is the directory stored backups must lie in. It is the same
+	// directory export downloads are confined to (export.output_directory).
+	exportBaseDir string
 }
 
 // NewImportHandlers creates new import handlers
@@ -28,6 +37,11 @@ func NewImportHandlers(syncEngine *sync.SyncEngine, logger *logging.Logger) *Imp
 		syncEngine: syncEngine,
 		logger:     logger,
 	}
+}
+
+// SetExportBaseDir confines the backups the restore preview will open to dir.
+func (ih *ImportHandlers) SetExportBaseDir(dir string) {
+	ih.exportBaseDir = dir
 }
 
 // SetAdminAPIKey sets an optional admin API key for RBAC guarding of sensitive endpoints.
@@ -49,9 +63,8 @@ func (ih *ImportHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) b
 
 // AddImportRoutes adds import routes to the router
 func (ih *ImportHandlers) AddImportRoutes(api *mux.Router) {
-	// Backup import endpoints
-	api.HandleFunc("/import/backup", ih.RestoreBackup).Methods("POST")
-	api.HandleFunc("/import/backup/validate", ih.ValidateBackup).Methods("POST")
+	// Backup check: a stored backup is named by its export id, and is never restored
+	api.HandleFunc("/import/restore-preview", ih.PreviewRestore).Methods("POST")
 
 	// GitOps import endpoints
 	api.HandleFunc("/import/gitops", ih.ImportGitOps).Methods("POST")
@@ -68,100 +81,106 @@ func (ih *ImportHandlers) AddImportRoutes(api *mux.Router) {
 	api.HandleFunc("/import/{id}", ih.GetImportResult).Methods("GET")
 }
 
-// RestoreBackup restores a backup file
-func (ih *ImportHandlers) RestoreBackup(w http.ResponseWriter, r *http.Request) {
-	if !ih.requireAdmin(w, r) {
-		return
-	}
-	ih.logger.Info("Restore backup request")
+// backupFileName is the name the backup plugin gives its files. A stored path is only used when its
+// base name has this shape, so a history row that names any other file is refused.
+var backupFileName = regexp.MustCompile(`^shelly-backup-\d{8}-\d{6}-[0-9a-f]{8}\.sqlite(\.gz|\.zip)?$`)
 
-	var requestBody struct {
-		BackupPath string                 `json:"backup_path"`
-		Config     map[string]interface{} `json:"config"`
-		Options    sync.ImportOptions     `json:"options"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		ih.logger.Error("Invalid request body", "error", err)
-		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid request body")
-		return
-	}
-
-	if requestBody.BackupPath == "" {
-		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "backup_path is required")
-		return
-	}
-
-	// Create import request
-	importRequest := sync.ImportRequest{
-		PluginName: "backup",
-		Format:     "sma",
-		Source: sync.ImportSource{
-			Type: "file",
-			Path: requestBody.BackupPath,
-		},
-		Config:  requestBody.Config,
-		Options: requestBody.Options,
-	}
-
-	// Perform the import
-	result, err := ih.syncEngine.Import(r.Context(), importRequest)
-	if err != nil {
-		if result != nil {
-			_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
-		}
-		ih.logger.Error("Backup restore failed", "error", err)
-		ih.writeSyncError(w, r, err)
-		return
-	}
-	_ = ih.syncEngine.SaveImportHistory(r.Context(), importRequest, result, requesterFrom(r))
-	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
+// backupValidator is what the verify route needs from the backup plugin.
+type backupValidator interface {
+	ValidateBackup(ctx context.Context, backupPath string) (*provider.ValidationResult, error)
 }
 
-// ValidateBackup validates a backup file without importing it
-func (ih *ImportHandlers) ValidateBackup(w http.ResponseWriter, r *http.Request) {
+// backupFile returns the absolute path of a stored backup, or false when the file is not one this
+// server wrote: wrong name, outside the export directory, or not a regular file (a symlink or a
+// directory). The path comes from a database row, which is data, so it is checked like input.
+func (ih *ImportHandlers) backupFile(stored string) (string, bool) {
+	if !backupFileName.MatchString(filepath.Base(stored)) {
+		return "", false
+	}
+	path, err := filepath.Abs(stored)
+	if err != nil {
+		return "", false
+	}
+	if ih.exportBaseDir != "" {
+		if path, err = security.ValidatePath(ih.exportBaseDir, path); err != nil {
+			return "", false
+		}
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false
+	}
+	return path, true
+}
+
+// PreviewRestore checks a stored backup without restoring it. The client names the backup by its
+// export id only; the path comes from the export history, so no request field reaches the file
+// system. Restoring is not offered: it replaces the live database and is not safe today.
+func (ih *ImportHandlers) PreviewRestore(w http.ResponseWriter, r *http.Request) {
 	if !ih.requireAdmin(w, r) {
 		return
 	}
-	ih.logger.Info("Validate backup request")
+	rw := apiresp.NewResponseWriter(ih.logger)
 
 	var requestBody struct {
-		BackupPath string `json:"backup_path"`
+		BackupID string `json:"backup_id"`
 	}
-
-	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		ih.logger.Error("Invalid request body", "error", err)
-		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "Invalid request body")
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&requestBody); err != nil {
+		rw.WriteValidationError(w, r, "Invalid request body: only backup_id is accepted")
+		return
+	}
+	if requestBody.BackupID == "" {
+		rw.WriteValidationError(w, r, "backup_id is required")
 		return
 	}
 
-	if requestBody.BackupPath == "" {
-		apiresp.NewResponseWriter(ih.logger).WriteValidationError(w, r, "backup_path is required")
-		return
-	}
-
-	// Create validation-only import request
-	importRequest := sync.ImportRequest{
-		PluginName: "backup",
-		Format:     "sma",
-		Source: sync.ImportSource{
-			Type: "file",
-			Path: requestBody.BackupPath,
-		},
-		Options: sync.ImportOptions{
-			ValidateOnly: true,
-		},
-	}
-
-	// Perform validation
-	result, err := ih.syncEngine.Import(r.Context(), importRequest)
+	rec, err := ih.syncEngine.GetExportHistory(r.Context(), requestBody.BackupID)
 	if err != nil {
-		ih.logger.Error("Backup validation failed", "error", err)
-		ih.writeSyncError(w, r, err)
+		ih.logger.Error("Restore preview: history read failed", "error", err)
+		rw.WriteInternalError(w, r, err)
+		return
+	}
+	if rec == nil || rec.PluginName != "backup" {
+		rw.WriteNotFoundError(w, r, "Backup")
+		return
+	}
+	if !rec.Success {
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "This backup did not complete, so it cannot be checked", nil)
+		return
+	}
+	path, ok := ih.backupFile(rec.FilePath)
+	if !ok {
+		ih.logger.Warn("Restore preview: stored backup file refused", "export_id", rec.ExportID)
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "The backup file is not available", nil)
+		return
+	}
+	plugin, err := ih.syncEngine.GetPlugin("backup")
+	validator, isValidator := plugin.(backupValidator)
+	if err != nil || !isValidator {
+		rw.WriteError(w, r, http.StatusNotImplemented, apiresp.ErrCodeNotImplemented, "Backup checking is not available", nil)
+		return
+	}
+	res, err := validator.ValidateBackup(r.Context(), path)
+	if err != nil {
+		ih.logger.Error("Restore preview: validation failed", "error", err)
+		rw.WriteInternalError(w, r, err)
 		return
 	}
 
-	apiresp.NewResponseWriter(ih.logger).WriteSuccess(w, r, result)
+	// The provider checks that the file exists, is not empty and can be opened, and nothing more.
+	warnings := append([]string{"Only the file's presence and size were checked; its contents were not read."}, res.Warnings...)
+	rw.WriteSuccess(w, r, map[string]interface{}{
+		"backup_id":    rec.ExportID,
+		"name":         rec.Name,
+		"valid":        res.Valid,
+		"file_size":    res.Size,
+		"record_count": rec.RecordCount,
+		"created_at":   rec.CreatedAt,
+		"errors":       res.Errors,
+		"warnings":     warnings,
+	})
 }
 
 // ImportGitOps imports a GitOps configuration

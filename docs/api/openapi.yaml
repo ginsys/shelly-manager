@@ -2809,11 +2809,17 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
 
   # Import Endpoints
-  /api/v1/import/backup:
+  /api/v1/import/restore-preview:
     post:
       tags: [Import]
-      summary: Restore from backup
-      operationId: restoreBackup
+      summary: Check a stored backup
+      description: >
+        Checks the stored backup file that the export history records for `backup_id`.
+        The request takes no path. The file must be a regular file named like a backup
+        inside the export directory. The check confirms that the file is present and can be
+        opened. It does not read the contents and it restores nothing.
+        Restoring a backup is not offered yet.
+      operationId: previewRestore
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
@@ -2823,16 +2829,14 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
+              required: [backup_id]
               properties:
-                backup_path:
+                backup_id:
                   type: string
-                config:
-                  type: object
-                options:
-                  $ref: '#/components/schemas/ImportOptions'
       responses:
         '200':
-          description: Restore result
+          description: Check result
           content:
             application/json:
               schema:
@@ -2841,32 +2845,36 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: '#/components/schemas/ImportResult'
-
-  /api/v1/import/backup/validate:
-    post:
-      tags: [Import]
-      summary: Validate backup file
-      operationId: validateBackup
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                backup_path:
-                  type: string
-      responses:
-        '200':
-          description: Validation result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIResponse'
+                        type: object
+                        properties:
+                          backup_id:
+                            type: string
+                          name:
+                            type: string
+                          valid:
+                            type: boolean
+                          file_size:
+                            type: integer
+                            format: int64
+                          record_count:
+                            type: integer
+                          created_at:
+                            type: string
+                            format: date-time
+                          errors:
+                            type: array
+                            items:
+                              type: string
+                          warnings:
+                            type: array
+                            items:
+                              type: string
+        '400':
+          description: Missing backup id, invalid JSON or an unknown field
+        '404':
+          description: No backup export with that id
+        '422':
+          description: The export failed or its file is not available
 
   /api/v1/import:
     post:

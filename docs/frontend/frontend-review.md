@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250, and a unit test keeps them equal to the code (section 1)
-**Status:** 131 of 135 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 130 of 133 exported API functions are referenced by the UI (98%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -79,7 +79,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 8 | 8 | |
 | `errorBody.ts` | 4 | 4 | |
-| `export.ts` | 28 | 26 | `getBackupResult`, `getRestoreResult` |
+| `export.ts` | 26 | 25 | `getBackupResult` |
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
@@ -88,7 +88,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **135** | **131** | **4** |
+| **Total** | **133** | **130** | **3** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -243,7 +243,9 @@ page imports still counts. The Playwright spec is what proves the links are rend
   browser import preview is SMA-only and registry-gated; SMA uses strict `2026.1`
   (ginsys/shelly-manager#268). A non-preview `POST /import` restores devices, templates and
   discovered devices in one transaction (ginsys/shelly-manager#284); the browser has no restore UI
-  for it. Export to the device was retired in favour of apply (ginsys/shelly-manager#604).
+  for it. A stored backup can be checked from Backup Management (`POST /import/restore-preview`,
+  the file's presence and size only); restoring one is not offered
+  (ginsys/shelly-manager#748). Export to the device was retired in favour of apply (ginsys/shelly-manager#604).
 - **Bulk operations** work from the devices page: a select column, a select-all for the visible rows
   and a Bulk Operations button that opens the dialog for exactly the picked ids
   (ginsys/shelly-manager#136). The selection is kept by device id across page changes. Opening the

@@ -41,7 +41,7 @@
       :loading="loading"
       :error="error"
       :downloading="downloading"
-      :restore-enabled="false"
+      :restore-enabled="true"
       @download="downloadBackup"
       @restore="startRestore"
       @delete="confirmDelete"
@@ -68,13 +68,11 @@
     <RestoreModal
       :show="showRestoreModal"
       :backup="restoreBackup"
-      v-model:options="restoreOptions"
       :preview="restorePreview"
       :loading="restoreLoading"
       :error="restoreError"
       @close="closeRestoreModal"
       @preview-restore="handlePreviewRestore"
-      @execute="handleExecuteRestore"
     />
 
     <!-- Delete Confirmation Modal -->
@@ -107,10 +105,8 @@ import {
   downloadBackupWithName,
   downloadExportWithName,
   previewRestore,
-  executeRestore,
   type BackupItem,
   type BackupStatistics,
-    type RestoreRequest,
     type RestorePreview
   } from '@/api/export'
 import api from '@/api/client'
@@ -181,13 +177,6 @@ const deleteConfirm = ref<BackupItem | null>(null)
 
 // Restore state
 const restoreBackup = ref<BackupItem | null>(null)
-const restoreOptions = reactive<RestoreRequest>({
-  backup_id: '',
-  include_settings: true,
-  include_schedules: true,
-  include_metrics: false,
-  dry_run: true
-})
 const restorePreview = ref<RestorePreview | null>(null)
 const restoreLoading = ref(false)
 const restoreError = ref('')
@@ -392,7 +381,6 @@ async function downloadBackup(backupId: string, backupName: string) {
  */
 function startRestore(backup: BackupItem) {
   restoreBackup.value = backup
-  restoreOptions.backup_id = backup.backup_id
   restorePreview.value = null
   restoreError.value = ''
   showRestoreModal.value = true
@@ -408,38 +396,9 @@ async function handlePreviewRestore() {
   restoreError.value = ''
   
   try {
-    restorePreview.value = await previewRestore({
-      ...restoreOptions,
-      dry_run: true
-    })
+    restorePreview.value = await previewRestore(restoreBackup.value.backup_id)
   } catch (err: any) {
-    restoreError.value = err.message || 'Failed to preview restore'
-  } finally {
-    restoreLoading.value = false
-  }
-}
-
-/**
- * Execute restore
- */
-async function handleExecuteRestore() {
-  if (!restoreBackup.value) return
-  
-  restoreLoading.value = true
-  restoreError.value = ''
-  
-  try {
-    const result = await executeRestore(restoreOptions)
-    
-    if (restoreOptions.dry_run) {
-      showMessage('Restore preview completed successfully', 'success')
-    } else {
-      showMessage(`Restore executed successfully (ID: ${result.restore_id})`, 'success')
-      closeRestoreModal()
-      // Optionally refresh device data
-    }
-  } catch (err: any) {
-    restoreError.value = err.message || 'Failed to execute restore'
+    restoreError.value = err.message || 'Failed to check the backup'
   } finally {
     restoreLoading.value = false
   }

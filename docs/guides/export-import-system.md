@@ -78,6 +78,11 @@ SMA then applies its 100 MiB normalized-data limit. An SMA import without a
 preview option restores devices, templates and discovered devices in one
 transaction. Preview and validation do not persist.
 
+A backup is not imported through these routes: restoring one replaces the live
+database and is not offered yet, so both routes answer `501` for the backup
+plugin. `POST /api/v1/import/restore-preview` with `{"backup_id": "..."}` only
+checks that the stored backup file is present and can be opened.
+
 ## Errors
 
 Stable engine error identities are classified with `errors.Is`:

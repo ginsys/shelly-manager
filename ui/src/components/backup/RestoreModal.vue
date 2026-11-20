@@ -2,7 +2,7 @@
   <div v-if="show" class="modal-overlay" @click="emit('close')">
     <div class="modal-content restore-modal" @click.stop>
       <div class="modal-header">
-        <h3>Restore from Backup</h3>
+        <h3>Check Backup</h3>
         <button class="close-button" @click="emit('close')">✖</button>
       </div>
 
@@ -12,122 +12,81 @@
           <p>{{ backup?.description }}</p>
           <div class="backup-details">
             <span>Format: {{ backup?.format.toUpperCase() }}</span> •
-            <span>Devices: {{ backup?.device_count }}</span> •
             <span>Size: {{ formatFileSize(backup?.file_size || 0) }}</span>
           </div>
         </div>
 
-        <form @submit.prevent="emit('execute')" class="restore-form">
-          <div class="form-section">
-            <h4>Restore Options</h4>
+        <div class="restore-notice" data-testid="restore-not-offered">
+          <strong>Restoring a backup from here is not offered yet.</strong>
+          Restoring replaces the live database, and that is not safe today. This check only
+          confirms that the stored backup file is still there and can be opened.
+        </div>
 
-            <label class="checkbox-label">
-              <input v-model="localOptions.include_settings" type="checkbox" />
-              <span>Restore Device Settings</span>
-            </label>
-
-            <label class="checkbox-label">
-              <input v-model="localOptions.include_schedules" type="checkbox" />
-              <span>Restore Schedules</span>
-            </label>
-
-            <label class="checkbox-label">
-              <input v-model="localOptions.include_metrics" type="checkbox" />
-              <span>Restore Historical Metrics</span>
-            </label>
-
-            <label class="checkbox-label">
-              <input v-model="localOptions.dry_run" type="checkbox" />
-              <span>Dry Run (Preview only)</span>
-            </label>
+        <div v-if="preview" class="restore-preview">
+          <h4>{{ preview.valid ? 'The backup file looks usable' : 'The backup file is not usable' }}</h4>
+          <div class="preview-stats">
+            <div>Size on disk: {{ formatFileSize(preview.file_size) }}</div>
+            <div>Records when created: {{ preview.record_count }}</div>
           </div>
 
-          <div v-if="preview" class="restore-preview">
-            <h4>Restore Preview</h4>
-            <div class="preview-stats">
-              <div>Devices: {{ preview.device_count }}</div>
-              <div>Settings: {{ preview.settings_count }}</div>
-              <div>Schedules: {{ preview.schedules_count }}</div>
-              <div>Metrics: {{ preview.metrics_count }}</div>
-            </div>
-
-            <div v-if="preview.warnings.length" class="warnings">
-              <h5>⚠️ Warnings</h5>
-              <ul>
-                <li v-for="warning in preview.warnings" :key="warning">
-                  {{ warning }}
-                </li>
-              </ul>
-            </div>
-
-            <div v-if="preview.conflicts.length" class="conflicts">
-              <h5>❌ Conflicts</h5>
-              <ul>
-                <li v-for="conflict in preview.conflicts" :key="conflict">
-                  {{ conflict }}
-                </li>
-              </ul>
-            </div>
+          <div v-if="preview.warnings?.length" class="warnings">
+            <h5>Notes</h5>
+            <ul>
+              <li v-for="warning in preview.warnings" :key="warning">
+                {{ warning }}
+              </li>
+            </ul>
           </div>
 
-          <div v-if="error" class="form-error">
-            <strong>Error:</strong> {{ error }}
+          <div v-if="preview.errors?.length" class="conflicts">
+            <h5>Problems</h5>
+            <ul>
+              <li v-for="problem in preview.errors" :key="problem">
+                {{ problem }}
+              </li>
+            </ul>
           </div>
+        </div>
 
-          <div class="modal-actions">
-            <button type="button" @click="emit('preview-restore')" class="secondary-button" :disabled="loading">
-              Preview Changes
-            </button>
-            <button type="button" @click="emit('close')" class="secondary-button">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              class="primary-button"
-              :disabled="loading || ((preview?.conflicts?.length ?? 0) > 0)"
-            >
-              {{ loading ? 'Restoring...' : (localOptions.dry_run ? 'Run Preview' : 'Execute Restore') }}
-            </button>
-          </div>
-        </form>
+        <div v-if="error" class="form-error">
+          <strong>Error:</strong> {{ error }}
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" @click="emit('close')" class="secondary-button">
+            Close
+          </button>
+          <button
+            type="button"
+            class="primary-button"
+            :disabled="loading"
+            @click="emit('preview-restore')"
+          >
+            {{ loading ? 'Checking...' : 'Check backup' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
-import type { BackupItem, RestoreRequest, RestorePreview } from '@/api/export'
+import type { BackupItem, RestorePreview } from '@/api/export'
 
 interface Props {
   show: boolean
   backup: BackupItem | null
-  options: RestoreRequest
   preview: RestorePreview | null
   loading: boolean
   error: string
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 
 const emit = defineEmits<{
   close: []
   'preview-restore': []
-  execute: []
-  'update:options': [options: RestoreRequest]
 }>()
-
-const localOptions = reactive<RestoreRequest>({ ...props.options })
-
-// Watch for changes in localOptions and emit them
-watch(localOptions, (newOptions) => {
-  emit('update:options', { ...newOptions })
-}, { deep: true })
-
-// Watch for external options changes
-watch(() => props.options, (newOptions) => {
-  Object.assign(localOptions, newOptions)
-}, { deep: true })
 
 /**
  * Format file size for display
@@ -223,22 +182,14 @@ function formatFileSize(bytes: number): string {
   color: #6b7280;
 }
 
-.form-section {
+.restore-notice {
   margin-bottom: 24px;
-}
-
-.form-section h4 {
-  margin: 0 0 12px 0;
-  color: #1f2937;
-  font-size: 1rem;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  cursor: pointer;
+  padding: 12px 16px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 0.875rem;
 }
 
 .restore-preview {

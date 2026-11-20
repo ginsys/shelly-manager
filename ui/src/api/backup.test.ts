@@ -20,8 +20,6 @@ import {
   getBackupStatistics, 
   deleteBackup,
   previewRestore,
-  executeRestore,
-  getRestoreResult,
   buildSMAExportConfig,
   type BackupRequest 
 } from './export'
@@ -251,98 +249,39 @@ describe('backup api', () => {
   })
 
   describe('previewRestore', () => {
-    it('should return restore preview', async () => {
+    it('posts only the backup id and returns the check result', async () => {
       const mockPreview = {
-        device_count: 5,
-        settings_count: 20,
-        schedules_count: 3,
-        metrics_count: 100,
-        conflicts: ['Device IP conflict: 192.168.1.100'],
-        warnings: ['Some metrics may be outdated']
-      }
-
-      const mockResponse = {
-        data: {
-          success: true,
-          data: mockPreview,
-          timestamp: new Date().toISOString()
-        }
-      }
-
-      ;(api.post as any).mockResolvedValue(mockResponse)
-
-      const result = await previewRestore({
         backup_id: 'backup-123',
-        include_settings: true,
-        include_schedules: true,
-        dry_run: true
+        name: 'nightly',
+        valid: true,
+        file_size: 4096,
+        record_count: 12,
+        created_at: '2026-11-20T08:15:00Z',
+        warnings: ["Only the file's presence and size were checked; its contents were not read."]
+      }
+
+      ;(api.post as any).mockResolvedValue({
+        data: { success: true, data: mockPreview, timestamp: new Date().toISOString() }
       })
-      
+
+      const result = await previewRestore('backup-123')
+
       expect(result).toEqual(mockPreview)
-      expect(api.post).toHaveBeenCalledWith('/import/restore-preview', {
-        backup_id: 'backup-123',
-        include_settings: true,
-        include_schedules: true,
-        dry_run: true
+      expect(api.post).toHaveBeenCalledWith('/import/restore-preview', { backup_id: 'backup-123' })
+    })
+
+    it('throws the server message when the check is refused', async () => {
+      ;(api.post as any).mockResolvedValue({
+        data: { success: false, error: { message: 'The backup file is not available' } }
       })
+
+      await expect(previewRestore('backup-123')).rejects.toThrow('The backup file is not available')
     })
   })
 
-  describe('executeRestore', () => {
-    it('should execute restore successfully', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          data: { restore_id: 'restore-456' },
-          timestamp: new Date().toISOString()
-        }
-      }
-
-      ;(api.post as any).mockResolvedValue(mockResponse)
-
-      const result = await executeRestore({
-        backup_id: 'backup-123',
-        include_settings: true,
-        dry_run: false
-      })
-      
-      expect(result.restore_id).toBe('restore-456')
-      expect(api.post).toHaveBeenCalledWith('/import/restore', {
-        backup_id: 'backup-123',
-        include_settings: true,
-        dry_run: false
-      })
-    })
-  })
-
-  describe('getRestoreResult', () => {
-    it('should return restore result', async () => {
-      const mockResult = {
-        restore_id: 'restore-456',
-        backup_id: 'backup-123',
-        success: true,
-        device_count: 5,
-        applied_settings: 20,
-        applied_schedules: 3,
-        applied_metrics: 100,
-        warnings: ['Some warnings'],
-        duration: '5.2s'
-      }
-
-      const mockResponse = {
-        data: {
-          success: true,
-          data: mockResult,
-          timestamp: new Date().toISOString()
-        }
-      }
-
-      ;(api.get as any).mockResolvedValue(mockResponse)
-
-      const result = await getRestoreResult('restore-456')
-      
-      expect(result).toEqual(mockResult)
-      expect(api.get).toHaveBeenCalledWith('/import/restore/restore-456')
-    })
+  it('offers no restore execution', async () => {
+    const mod = await import('./export')
+    expect('executeRestore' in mod).toBe(false)
+    expect('getRestoreResult' in mod).toBe(false)
   })
 })

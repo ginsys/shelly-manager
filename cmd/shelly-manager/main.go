@@ -367,7 +367,12 @@ func startServer() {
 		syncHandlers.SetExportBaseDir(cfg.Export.OutputDirectory)
 	}
 	apiHandler.ExportHandlers = syncHandlers
-	apiHandler.ImportHandlers = api.NewImportHandlers(syncEngine, logger)
+	importHandlers := api.NewImportHandlers(syncEngine, logger)
+	// The backup check opens only backups under the same directory
+	if cfg != nil && cfg.Export.OutputDirectory != "" {
+		importHandlers.SetExportBaseDir(cfg.Export.OutputDirectory)
+	}
+	apiHandler.ImportHandlers = importHandlers
 	// Protect the export, import and metrics endpoints with the one admin key
 	apiHandler.ShareAdminKey()
 

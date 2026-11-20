@@ -368,12 +368,11 @@ connects to the host first, and it fails with the connection error when they are
 
 ---
 
-### 12. Import Operations (10 endpoints)
+### 12. Import Operations (9 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/import/backup` | Restore from backup |
-| POST | `/api/v1/import/backup/validate` | Validate backup file |
+| POST | `/api/v1/import/restore-preview` | Check a stored backup by `backup_id` (nothing is restored) |
 | POST | `/api/v1/import/gitops` | Import GitOps config |
 | POST | `/api/v1/import/gitops/preview` | Preview GitOps import |
 | GET | `/api/v1/import/history` | List import history |
