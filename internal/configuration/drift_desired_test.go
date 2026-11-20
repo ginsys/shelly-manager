@@ -192,7 +192,7 @@ func TestBulkDetectDrift_NoDesiredConfigIsSkippedNotAnError(t *testing.T) {
 		return driftClient("tv-office", driftTestMAC), nil
 	}
 
-	result, err := service.BulkDetectDrift([]uint{1, 2}, getter, true)
+	result, err := service.BulkDetectDrift(context.Background(), []uint{1, 2}, getter, true)
 	assert.Equal(t, []uint{2}, asked, "a device with no desired configuration is not contacted")
 
 	require.NoError(t, err)

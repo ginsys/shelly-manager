@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 )
@@ -91,11 +93,39 @@ func (req bulkRequestBody) selection() (bulkSelection, error) {
 	return selection, nil
 }
 
+// bulkReadMargin is how long before the request deadline a bulk read stops starting devices. A device
+// that is dead (nothing listening) takes 9 s to give up on the fake devices of ginsys/shelly-manager#730,
+// so a device started just inside the budget ends before the deadline and the answer is written in time.
+// A proposal from that one reading, not a bound; a variable so a test can shorten it.
+var bulkReadMargin = 10 * time.Second
+
+// bulkReadContext is the context a bulk read runs under: the request's, ended bulkReadMargin before its
+// deadline, so the run stops starting devices in time to answer. A request with no deadline keeps its
+// own context. A client that leaves ends the run at the next device boundary, whatever the deadline.
+func bulkReadContext(r *http.Request) (context.Context, context.CancelFunc) {
+	if deadline, ok := r.Context().Deadline(); ok {
+		return context.WithDeadline(r.Context(), deadline.Add(-bulkReadMargin))
+	}
+	return r.Context(), func() {}
+}
+
+// bulkReadTimeLimited says whether a drift run left a device unread because the call's time limit was
+// reached. The comprehensive report leaves skipped devices out, so such a run answers the basic result
+// that names every device.
+func bulkReadTimeLimited(result *configuration.BulkDriftResult) bool {
+	for _, entry := range result.Results {
+		if entry.Status == configuration.BulkStatusSkipped && entry.Error == configuration.ReasonCallEnded {
+			return true
+		}
+	}
+	return false
+}
+
 // runBulkConfig applies do to each selected device in order and reports one result per device.
 // An id that names no device is that device's failure and the others still run. With
 // StopOnError, the devices after the first failure are reported skipped and are not contacted.
 // do returns the stored configuration id where the operation has one.
-func (h *Handler) runBulkConfig(sel bulkSelection, operation string, do func(id uint) (uint, error)) *configuration.BulkImportResult {
+func (h *Handler) runBulkConfig(ctx context.Context, sel bulkSelection, operation string, do func(id uint) (uint, error)) *configuration.BulkImportResult {
 	result := &configuration.BulkImportResult{
 		Total:   len(sel.IDs),
 		Results: make([]configuration.ImportResult, 0, len(sel.IDs)),
@@ -112,6 +142,11 @@ func (h *Handler) runBulkConfig(sel bulkSelection, operation string, do func(id 
 		switch {
 		case sel.StopOnError && result.Failed > 0:
 			entry.Status = configuration.BulkStatusSkipped
+			result.Skipped++
+		case ctx.Err() != nil:
+			// The call's time limit was reached or the client left: no device is started.
+			entry.Status = configuration.BulkStatusSkipped
+			entry.Error = configuration.ReasonCallEnded
 			result.Skipped++
 		case lookupErr != nil:
 			entry.Status = configuration.BulkStatusFailed

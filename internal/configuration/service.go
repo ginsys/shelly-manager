@@ -344,7 +344,7 @@ func (s *Service) DetectDrift(deviceID uint, client shelly.Client) (*ConfigDrift
 
 // BulkDetectDrift checks for configuration drift across the given devices, in order. With
 // stopOnError, the devices after the first one that errors are reported skipped and not contacted.
-func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (shelly.Client, error), stopOnError bool) (*BulkDriftResult, error) {
+func (s *Service) BulkDetectDrift(ctx context.Context, deviceIDs []uint, clientGetter func(uint) (shelly.Client, error), stopOnError bool) (*BulkDriftResult, error) {
 	result := &BulkDriftResult{
 		Total:     len(deviceIDs),
 		InSync:    0,
@@ -380,6 +380,16 @@ func (s *Service) BulkDetectDrift(deviceIDs []uint, clientGetter func(uint) (she
 		} else {
 			driftResult.DeviceName = device.Name
 			driftResult.DeviceIP = device.IP
+
+			// The call's time limit was reached or the client left: no device is started, and the
+			// device says why it was not checked.
+			if ctx.Err() != nil {
+				driftResult.Status = BulkStatusSkipped
+				driftResult.Error = ReasonCallEnded
+				result.Skipped++
+				result.Results = append(result.Results, driftResult)
+				continue
+			}
 
 			// A device with no desired configuration is skipped before its client is asked for: a
 			// login failure on a device that cannot be checked is not an error of this run, so

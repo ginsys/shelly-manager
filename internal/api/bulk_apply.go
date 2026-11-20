@@ -66,7 +66,7 @@ const (
 	reasonInvalid         = "the settings are not valid for this device model; nothing was stored or written"
 	reasonBlocked         = "not written: the settings are not valid for another selected device"
 	reasonStopped         = "not contacted: an earlier device did not end applied and stop_on_error is set"
-	reasonCallEnded       = "not contacted: the time limit of this call was reached or the request ended"
+	reasonCallEnded       = configuration.ReasonCallEnded
 	reasonPending         = "the desired configuration changed while it was applied; the device stays pending"
 	reasonUnconfirmed     = "the device stopped answering after a network change, so the write was not verified; the device stays pending"
 	reasonRefusedWrite    = "the device refused a write; the device stays pending"

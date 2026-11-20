@@ -1018,7 +1018,7 @@ func TestBulkDetectDrift(t *testing.T) {
 	}
 
 	// Test bulk drift detection
-	result, err := service.BulkDetectDrift([]uint{1, 2}, clientGetter, false)
+	result, err := service.BulkDetectDrift(context.Background(), []uint{1, 2}, clientGetter, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -1086,7 +1086,7 @@ func TestBulkDetectDrift_WithErrors(t *testing.T) {
 	}
 
 	// Test with mixed success/error scenarios
-	result, err := service.BulkDetectDrift([]uint{1, 2, 999}, clientGetter, false)
+	result, err := service.BulkDetectDrift(context.Background(), []uint{1, 2, 999}, clientGetter, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -1141,7 +1141,7 @@ func TestBulkDetectDrift_StopOnErrorSkipsTheRest(t *testing.T) {
 		return nil, fmt.Errorf("client creation failed")
 	}
 
-	result, err := service.BulkDetectDrift([]uint{1, 2}, clientGetter, true)
+	result, err := service.BulkDetectDrift(context.Background(), []uint{1, 2}, clientGetter, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, []uint{1}, asked, "the device after the first error must not be contacted")
@@ -1153,11 +1153,54 @@ func TestBulkDetectDrift_StopOnErrorSkipsTheRest(t *testing.T) {
 	assert.Equal(t, BulkStatusSkipped, result.Results[1].Status)
 
 	asked = nil
-	result, err = service.BulkDetectDrift([]uint{1, 2}, clientGetter, false)
+	result, err = service.BulkDetectDrift(context.Background(), []uint{1, 2}, clientGetter, false)
 	require.NoError(t, err)
 	assert.Equal(t, []uint{1, 2}, asked, "without stopOnError every device is tried")
 	assert.Equal(t, 2, result.Errors)
 	assert.Equal(t, 0, result.Skipped)
+}
+
+// A run whose context has ended starts no further device: each is reported skipped with the reason, by
+// name, and its client is never asked for (ginsys/shelly-manager#730). A device that does not exist is
+// still an error, because nothing is contacted to find that out.
+func TestBulkDetectDrift_SkipsTheDevicesAfterTheContextEnded(t *testing.T) {
+	service, db := setupTestService(t)
+	for _, id := range []uint{1, 2} {
+		require.NoError(t, db.Create(&Device{
+			ID:   id,
+			Name: fmt.Sprintf("Device%d", id),
+			Type: "SHSW-1",
+			IP:   fmt.Sprintf("192.168.1.%d", 120+id),
+			MAC:  fmt.Sprintf("AA:BB:CC:DD:EE:%02d", 20+id),
+		}).Error)
+	}
+	repo := newMockRepository()
+	repo.devices[1] = &ServiceDevice{ID: 1, MAC: "AA:BB:CC:DD:EE:21", DesiredConfig: desiredNamed(t, "Device1")}
+	repo.devices[2] = &ServiceDevice{ID: 2, MAC: "AA:BB:CC:DD:EE:22", DesiredConfig: desiredNamed(t, "Device2")}
+	service.ConfigurationSvc = NewConfigurationService(repo, nil, nil)
+
+	var asked []uint
+	clientGetter := func(deviceID uint) (shelly.Client, error) {
+		asked = append(asked, deviceID)
+		return nil, fmt.Errorf("client creation failed")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := service.BulkDetectDrift(ctx, []uint{1, 999, 2}, clientGetter, false)
+	require.NoError(t, err)
+
+	assert.Empty(t, asked, "a client was asked for after the context ended")
+	assert.Equal(t, 3, result.Total)
+	assert.Equal(t, 2, result.Skipped)
+	assert.Equal(t, 1, result.Errors, "the device that does not exist is an error, not a skip")
+	require.Len(t, result.Results, 3)
+	assert.Equal(t, BulkStatusSkipped, result.Results[0].Status)
+	assert.Equal(t, ReasonCallEnded, result.Results[0].Error)
+	assert.Equal(t, "Device1", result.Results[0].DeviceName, "the operator reads which device was not checked")
+	assert.Equal(t, "error", result.Results[1].Status)
+	assert.Equal(t, BulkStatusSkipped, result.Results[2].Status)
+	assert.Equal(t, ReasonCallEnded, result.Results[2].Error)
 }
 
 func TestBulkDetectDrift_EmptyDeviceList(t *testing.T) {
@@ -1168,7 +1211,7 @@ func TestBulkDetectDrift_EmptyDeviceList(t *testing.T) {
 	}
 
 	// Test with empty device list
-	result, err := service.BulkDetectDrift([]uint{}, clientGetter, false)
+	result, err := service.BulkDetectDrift(context.Background(), []uint{}, clientGetter, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
