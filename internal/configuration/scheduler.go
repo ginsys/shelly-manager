@@ -145,7 +145,8 @@ func (s *Scheduler) Stop() error {
 	}
 }
 
-// IsRunning reports whether Start has been called and Stop has not.
+// IsRunning reports whether Start has been called and Stop has not. The lifecycle tests read it; the
+// status route reports the configuration gate, not this.
 func (s *Scheduler) IsRunning() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -290,9 +291,9 @@ func (s *Scheduler) runClaimed(ctx context.Context, sc DriftDetectionSchedule, r
 		return
 	}
 
-	started := time.Now()
+	started := s.now()
 	result, err := s.execute(ctx, sc)
-	completed := now.Add(time.Since(started))
+	completed := now.Add(s.now().Sub(started))
 	run.CompletedAt = &completed
 	duration := completed.Sub(now)
 	run.Duration = &duration
