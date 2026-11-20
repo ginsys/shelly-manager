@@ -693,6 +693,37 @@ components:
           type: string
           format: date-time
 
+    DriftRun:
+      type: object
+      description: One run of a drift schedule, as the run list returns it.
+      properties:
+        id:
+          type: integer
+        schedule_id:
+          type: integer
+        status:
+          type: string
+          description: running, completed, failed or interrupted.
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null while the run is running.
+        duration:
+          type: [integer, 'null']
+          description: Nanoseconds (a Go time.Duration), null while the run is running.
+        error:
+          type: string
+          description: Absent unless the run failed or was interrupted.
+        created_at:
+          type: string
+          format: date-time
+        results:
+          type: object
+          description: The result document of the run. The run list never carries it, so this property is absent there.
+
     DriftDeviceFilter:
       type: [object, 'null']
       additionalProperties: false
@@ -2371,12 +2402,11 @@ paths:
   /api/v1/config/drift-schedules/{id}/runs:
     get:
       tags: [Drift]
-      summary: Get drift schedule run history (unavailable)
+      summary: List the runs of a drift schedule
       description: >-
-        Not implemented in this release: the route does not read the run history
-        the scheduler keeps when it is on (drift.scheduler_enabled, off by
-        default), and a successful empty array would assert there is none. Fails
-        closed with HTTP 501 (#270). See #279.
+        The runs the scheduler recorded, newest first, without their results. A
+        schedule that has not run yet gives an empty array. The scheduler keeps the
+        newest 100 runs per schedule.
       operationId: getDriftScheduleRuns
       security:
         - BearerAuth: []
@@ -2387,13 +2417,61 @@ paths:
           required: true
           schema:
             type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
       responses:
-        '501':
-          description: Drift schedule execution is not implemented in this release
+        '200':
+          description: The runs, newest first
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIResponse'
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DriftRun'
+        '400':
+          description: Invalid id, or a limit that is not a whole number from 1 to 100
+        '404':
+          description: No such schedule
+
+  /api/v1/config/drift-scheduler:
+    get:
+      tags: [Drift]
+      summary: Say whether this server runs the drift scheduler
+      description: >-
+        Reports drift.scheduler_enabled of the server that answers. With it off,
+        schedules are stored and shown and none runs. It reads the configuration of
+        one process, so replicas configured differently answer differently.
+      operationId: getDriftSchedulerStatus
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: The scheduler state
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [enabled]
+                        properties:
+                          enabled:
+                            type: boolean
 
   /api/v1/config/drift-reports:
     get:

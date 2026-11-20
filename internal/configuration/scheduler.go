@@ -18,10 +18,6 @@ import (
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
-// ErrSchedulingNotImplemented is the message of the 501 the run-history route returns until it reads
-// the runs (ginsys/shelly-manager#279).
-var ErrSchedulingNotImplemented = errors.New("drift schedule execution is not implemented in this release")
-
 const (
 	driftPollInterval = 30 * time.Second // how often the scheduler asks which schedules are due
 	driftRunTimeout   = 10 * time.Minute // a run left running longer than this is interrupted

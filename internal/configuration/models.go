@@ -374,7 +374,7 @@ type DriftDetectionRun struct {
 	StartedAt   time.Time       `json:"started_at"`
 	CompletedAt *time.Time      `json:"completed_at"`
 	Duration    *time.Duration  `json:"duration"`
-	Results     json.RawMessage `json:"results" gorm:"serializer:json"` // BulkDriftResult JSON; a serializer column is text, longtext on MySQL
+	Results     json.RawMessage `json:"results,omitempty" gorm:"serializer:json"` // BulkDriftResult JSON; a serializer column is text, longtext on MySQL; the run list leaves it out
 	Error       string          `json:"error,omitempty"`
 	CreatedAt   time.Time       `json:"created_at"`
 }

@@ -115,6 +115,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/config/drift-schedules/{id}", admin(handler.DeleteDriftSchedule)).Methods("DELETE")
 	api.HandleFunc("/config/drift-schedules/{id}/toggle", admin(handler.ToggleDriftSchedule)).Methods("POST")
 	api.HandleFunc("/config/drift-schedules/{id}/runs", admin(handler.GetDriftScheduleRuns)).Methods("GET")
+	api.HandleFunc("/config/drift-scheduler", admin(handler.GetDriftSchedulerStatus)).Methods("GET")
 
 	// Comprehensive drift reporting routes
 	api.HandleFunc("/config/drift-reports", admin(handler.GetDriftReports)).Methods("GET")
