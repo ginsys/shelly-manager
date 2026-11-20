@@ -734,37 +734,6 @@ func setContentTypeForPath(w http.ResponseWriter, path string) {
 	}
 }
 
-// Import performs a generic import using any plugin
-func (eh *SyncHandlers) Import(w http.ResponseWriter, r *http.Request) {
-	if !eh.requireAdmin(w, r) {
-		return
-	}
-	eh.logger.Info("Generic import request")
-
-	var importRequest sync.ImportRequest
-	if err := json.NewDecoder(r.Body).Decode(&importRequest); err != nil {
-		eh.logger.Error("Invalid import request", "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteValidationError(w, r, "Invalid import request")
-		return
-	}
-
-	// Perform the import
-	result, err := eh.syncEngine.Import(r.Context(), importRequest)
-	if err != nil {
-		eh.logger.Error("Import failed", "plugin", importRequest.PluginName, "error", err)
-		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
-		return
-	}
-
-	eh.logger.Info("Import completed successfully",
-		"plugin", importRequest.PluginName,
-		"imported", result.RecordsImported,
-		"skipped", result.RecordsSkipped,
-	)
-
-	apiresp.NewResponseWriter(eh.logger).WriteSuccess(w, r, result)
-}
-
 // Utility functions
 
 // Deprecated: use standardized response writer in handlers above.

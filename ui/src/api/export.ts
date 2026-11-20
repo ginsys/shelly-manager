@@ -340,58 +340,25 @@ export async function deleteBackup(id: string): Promise<void> {
 
 // Restore interfaces and methods
 
-export interface RestoreRequest {
-  backup_id: string
-  devices?: number[] // Target devices, empty/null for all
-  include_settings?: boolean
-  include_schedules?: boolean
-  include_metrics?: boolean
-  dry_run?: boolean
-  force?: boolean
-}
+// The server only checks a stored backup: restoring one is not offered yet.
 
 export interface RestorePreview {
-  device_count: number
-  settings_count: number
-  schedules_count: number
-  metrics_count: number
-  conflicts: string[]
-  warnings: string[]
-}
-
-export interface RestoreResult {
-  restore_id: string
   backup_id: string
-  success: boolean
-  device_count: number
-  applied_settings: number
-  applied_schedules: number
-  applied_metrics: number
-  warnings?: string[]
+  name: string
+  valid: boolean
+  file_size: number
+  record_count: number
+  created_at: string
   errors?: string[]
-  duration?: string
+  warnings?: string[]
 }
 
-export async function previewRestore(req: RestoreRequest): Promise<RestorePreview> {
-  const res = await api.post<APIResponse<RestorePreview>>('/import/restore-preview', req)
+export async function previewRestore(backupId: string): Promise<RestorePreview> {
+  const res = await api.post<APIResponse<RestorePreview>>('/import/restore-preview', {
+    backup_id: backupId,
+  })
   if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'Failed to preview restore')
-  }
-  return res.data.data
-}
-
-export async function executeRestore(req: RestoreRequest): Promise<{ restore_id: string }> {
-  const res = await api.post<APIResponse<{ restore_id: string }>>('/import/restore', req)
-  if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'Failed to execute restore')
-  }
-  return res.data.data
-}
-
-export async function getRestoreResult(id: string): Promise<RestoreResult> {
-  const res = await api.get<APIResponse<RestoreResult>>(`/import/restore/${id}`)
-  if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'Failed to get restore result')
+    throw new Error(res.data.error?.message || 'Failed to check the backup')
   }
   return res.data.data
 }

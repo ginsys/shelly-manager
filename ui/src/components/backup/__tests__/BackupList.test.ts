@@ -27,7 +27,7 @@ describe('BackupList restore gating (#249/#260)', () => {
 
     expect(btn.exists()).toBe(true)
     expect(btn.attributes('disabled')).toBeDefined()
-    expect(btn.attributes('title')).toContain('#249')
+    expect(btn.attributes('title')).toBe('Not available')
 
     await btn.trigger('click')
     expect(wrapper.emitted('restore')).toBeFalsy()
@@ -38,6 +38,7 @@ describe('BackupList restore gating (#249/#260)', () => {
     const btn = wrapper.find('.restore-btn')
 
     expect(btn.attributes('disabled')).toBeUndefined()
+    expect(btn.attributes('title')).toContain('restoring is not offered yet')
     await btn.trigger('click')
     expect(wrapper.emitted('restore')).toBeTruthy()
   })

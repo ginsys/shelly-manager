@@ -23,20 +23,5 @@
     "method": "GET",
     "template": "/api/v1/export/gitops/{param}",
     "issue": 249
-  },
-  {
-    "method": "POST",
-    "template": "/api/v1/import/restore",
-    "issue": 249
-  },
-  {
-    "method": "POST",
-    "template": "/api/v1/import/restore-preview",
-    "issue": 249
-  },
-  {
-    "method": "GET",
-    "template": "/api/v1/import/restore/{param}",
-    "issue": 249
   }
 ]
