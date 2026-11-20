@@ -87,7 +87,7 @@ describe('ScheduleForm', () => {
     expect(vi.mocked(store.create).mock.calls[0][0].cron_spec).toBe('*/15 * * * *')
   })
 
-  it('sends exactly one of device_ids and device_filter', async () => {
+  it('sends at most one of device_ids and device_filter, and neither for all devices', async () => {
     const { wrapper, store } = mountForm()
     vi.mocked(store.create).mockResolvedValue(stored)
     await fillName(wrapper)

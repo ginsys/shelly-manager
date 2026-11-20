@@ -1,4 +1,5 @@
 import api from './client'
+import { errorEnvelopeDetails, errorEnvelopeMessage } from './errorBody'
 import type { APIResponse, Metadata } from './types'
 
 // Backend uses snake_case; these interfaces mirror `internal/configuration/models.go`.
@@ -39,7 +40,7 @@ export interface DriftScheduleInput {
 }
 
 // One run of a schedule, as the run list answers it: newest first, without its `results` document.
-// `duration` is nanoseconds; `status` is "success", "failed" or "skipped".
+// `duration` is nanoseconds; `status` is "running", "completed", "failed", "interrupted" or "skipped".
 export interface DriftRun {
   id: number
   schedule_id: number
@@ -143,9 +144,18 @@ export async function deleteDriftSchedule(id: number | string): Promise<void> {
   }
 }
 
-// A refused input is a 400 whose message the caller shows as the server wrote it.
+// axios rejects a 4xx or 5xx answer before the envelope is read. A refused schedule input is a 400 whose
+// reason is the envelope's `details` (its `message` only says "Validation failed"), and a missing
+// schedule is a 404 with a `message`: throw the server's own text, or the original error when it sent none.
+async function throwServerReason(e: any): Promise<never> {
+  const data = e?.response?.data
+  const reason = (await errorEnvelopeDetails(data)) ?? (await errorEnvelopeMessage(data))
+  if (reason) throw new Error(reason)
+  throw e
+}
+
 export async function createDriftSchedule(input: DriftScheduleInput): Promise<DriftSchedule> {
-  const res = await api.post<APIResponse<DriftSchedule>>('/config/drift-schedules', input)
+  const res = await api.post<APIResponse<DriftSchedule>>('/config/drift-schedules', input).catch(throwServerReason)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to create drift schedule'
     throw new Error(msg)
@@ -155,7 +165,9 @@ export async function createDriftSchedule(input: DriftScheduleInput): Promise<Dr
 
 // Replaces every field of the schedule with the input.
 export async function updateDriftSchedule(id: number | string, input: DriftScheduleInput): Promise<DriftSchedule> {
-  const res = await api.put<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`, input)
+  const res = await api
+    .put<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`, input)
+    .catch(throwServerReason)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to update drift schedule'
     throw new Error(msg)
@@ -164,7 +176,9 @@ export async function updateDriftSchedule(id: number | string, input: DriftSched
 }
 
 export async function toggleDriftSchedule(id: number | string): Promise<DriftSchedule> {
-  const res = await api.post<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}/toggle`, {})
+  const res = await api
+    .post<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}/toggle`, {})
+    .catch(throwServerReason)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to toggle drift schedule'
     throw new Error(msg)
@@ -174,10 +188,9 @@ export async function toggleDriftSchedule(id: number | string): Promise<DriftSch
 
 // The newest runs of one schedule, `limit` 1 to 100 (the server's default is 20 when it is left out).
 export async function listDriftScheduleRuns(id: number | string, limit?: number): Promise<DriftRun[]> {
-  const res = await api.get<APIResponse<DriftRun[]>>(
-    `/config/drift-schedules/${id}/runs`,
-    limit === undefined ? undefined : { params: { limit } }
-  )
+  const res = await api
+    .get<APIResponse<DriftRun[]>>(`/config/drift-schedules/${id}/runs`, limit === undefined ? undefined : { params: { limit } })
+    .catch(throwServerReason)
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to load the runs of the drift schedule'
     throw new Error(msg)

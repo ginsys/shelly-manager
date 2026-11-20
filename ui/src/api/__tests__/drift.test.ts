@@ -117,6 +117,37 @@ describe('Drift API client', () => {
     })
   })
 
+  // axios rejects a 4xx answer before the envelope is read: the server's reason is in the error's response.
+  describe('a refused write', () => {
+    const refused = (status: number, error: Record<string, unknown>) =>
+      Object.assign(new Error(`Request failed with status code ${status}`), {
+        response: { status, data: { success: false, error, timestamp: 'x' } }
+      })
+    const input = { name: 'N', cron_spec: '0 * * * *' }
+
+    it('throws the details of a 400 validation refusal, not "Validation failed"', async () => {
+      vi.mocked(api.post).mockRejectedValueOnce(
+        refused(400, { code: 'VALIDATION_FAILED', message: 'Validation failed', details: 'device 99 does not exist' })
+      )
+      await expect(createDriftSchedule(input)).rejects.toThrow('device 99 does not exist')
+    })
+
+    it('throws the message of a 404 on update, toggle and runs', async () => {
+      vi.mocked(api.put).mockRejectedValueOnce(refused(404, { code: 'NOT_FOUND', message: 'Schedule not found' }))
+      await expect(updateDriftSchedule(4, input)).rejects.toThrow('Schedule not found')
+      vi.mocked(api.post).mockRejectedValueOnce(refused(404, { code: 'NOT_FOUND', message: 'Schedule not found' }))
+      await expect(toggleDriftSchedule(4)).rejects.toThrow('Schedule not found')
+      vi.mocked(api.get).mockRejectedValueOnce(refused(404, { code: 'NOT_FOUND', message: 'Schedule not found' }))
+      await expect(listDriftScheduleRuns(4)).rejects.toThrow('Schedule not found')
+    })
+
+    it('rethrows the original error when the answer carries no envelope', async () => {
+      const original = Object.assign(new Error('Network Error'), { response: undefined })
+      vi.mocked(api.post).mockRejectedValueOnce(original)
+      await expect(createDriftSchedule(input)).rejects.toBe(original)
+    })
+  })
+
   describe('updateDriftSchedule', () => {
     const input = { name: 'Nightly', cron_spec: '0 3 * * *', device_filter: { type: 'plug' } }
 
@@ -154,7 +185,7 @@ describe('Drift API client', () => {
   describe('listDriftScheduleRuns', () => {
     const runs: DriftRun[] = [
       { id: 2, schedule_id: 4, status: 'skipped', started_at: 'b', created_at: 'b' },
-      { id: 1, schedule_id: 4, status: 'success', started_at: 'a', duration: 1_500_000_000, created_at: 'a' }
+      { id: 1, schedule_id: 4, status: 'completed', started_at: 'a', duration: 1_500_000_000, created_at: 'a' }
     ]
 
     it('asks for the server default when no limit is given', async () => {

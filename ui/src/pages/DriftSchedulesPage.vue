@@ -2,7 +2,7 @@
   <div class="page">
     <div class="page-header">
       <h1>Drift Detection Schedules</h1>
-      <button class="primary-button" data-testid="new-schedule" @click="openForm(null)">New schedule</button>
+      <button class="primary-button" data-testid="new-schedule" :disabled="opening" @click="openForm(null)">New schedule</button>
     </div>
 
     <!-- No banner while the server runs the scheduler. -->
@@ -79,7 +79,7 @@
             >
               Recent runs
             </button>
-            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" @click="openForm(schedule)">Edit</button>
+            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="opening" @click="openForm(schedule)">Edit</button>
             <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" @click="handleToggle(schedule.id)">
               {{ schedule.enabled ? 'Disable' : 'Enable' }}
             </button>
@@ -197,7 +197,13 @@ const editing = ref<DriftSchedule | null>(null)
 const devices = ref<Device[]>([])
 const devicesError = ref('')
 
+// True while the device list loads: a second New or Edit in that time is ignored, so the form that opens
+// is the one that was asked for.
+const opening = ref(false)
+
 async function openForm(schedule: DriftSchedule | null) {
+  if (opening.value || formOpen.value) return
+  opening.value = true
   clearActionError()
   devicesError.value = ''
   try {
@@ -208,6 +214,7 @@ async function openForm(schedule: DriftSchedule | null) {
   }
   editing.value = schedule
   formOpen.value = true
+  opening.value = false
 }
 
 // Recent runs of one card, read when the card is first expanded and again on a retry.

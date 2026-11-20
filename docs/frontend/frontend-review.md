@@ -151,7 +151,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | 132 | Device details |
 | `/templates` | Configuration templates | 395 | top bar, Template detail |
 | `/templates/:id` | Template detail | 425 | Templates |
-| `/drift/schedules` | Drift schedules (create, edit, enable or disable, delete, recent runs; see section 5) | 494 | top bar (Drift) |
+| `/drift/schedules` | Drift schedules (create, edit, enable or disable, delete, recent runs; see section 5) | 501 | top bar (Drift) |
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
 | `/drift/trends` | Drift trends | 517 | top bar (Drift) |
 | `/export/backup` | Backup management | 921 | top bar (Export & Import) |
@@ -228,8 +228,8 @@ page imports still counts. The Playwright spec is what proves the links are rend
   configured differently differ. The page also creates and edits a schedule (a form with a cron
   preset or a custom spec, and one of three device choices: all devices, chosen devices, or a type
   and status filter), enables or disables it, deletes it, and lists its recent runs when a card is
-  opened (started, status, duration, error; newest first). The form sends exactly one of the device
-  list and the filter, and waits with Save until a chosen list or a filter has something in it. The
+  opened (started, status, duration, error; newest first). The form sends at most one of the device
+  list and the filter (neither for all devices), and waits with Save until a chosen list or a filter has something in it. The
   server checks the cron spec, the devices and the filter, and its refusal is shown as written.
   Saving can skip a run that is already due, and a changed schedule restarts its timer. The list
   route answers every schedule at once with no paging, so the page has no pager. Not in the UI: a
