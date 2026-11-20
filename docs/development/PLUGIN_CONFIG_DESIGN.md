@@ -200,7 +200,9 @@ files without checking either (`internal/plugins/sync/jsonexport/json.go:82-158`
 changes (`opnsense.go:523,554`, `internal/opnsense/dhcp.go:242,301,326`,
 `internal/opnsense/firewall.go:244,261`), but `Export` connects to the host and tests the connection
 first (`opnsense.go:229-236`). So `POST /export` with `options.dry_run` set on OPNsense already
-checks the credentials and changes nothing. Cost: none. It does not solve: for OPNsense `Preview`
+checks the credentials and changes nothing on the OPNsense host, but it still writes an export-history
+row in the manager's database, success or failure (`sync_handlers.go:539,545`,
+`internal/sync/engine.go:666`). Cost: none. It does not solve: for OPNsense `Preview`
 cannot tell a wrong credential, because it never contacts the host (section 1, item 5), and no UI path
 runs that dry run (section 2.5).
 
