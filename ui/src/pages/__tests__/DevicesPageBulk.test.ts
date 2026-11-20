@@ -119,6 +119,45 @@ describe('DevicesPage bulk operations', () => {
     expect(bulkButton(wrapper).text()).toBe('Bulk Operations')
   })
 
+  // ginsys/shelly-manager#750: a greyed button says why, and a hidden Select column is named.
+  it('says why the button is greyed while nothing is selected', async () => {
+    const wrapper = await mountPage()
+
+    const hint = wrapper.get('[data-testid="bulk-hint"]')
+    expect(hint.text()).toBe('Tick one or more devices to enable bulk operations.')
+    expect(bulkButton(wrapper).attributes('title')).toBe(hint.text())
+    expect(bulkButton(wrapper).attributes('aria-describedby')).toBe(hint.attributes('id'))
+  })
+
+  it('points to the Columns control while the Select column is hidden', async () => {
+    const wrapper = await mountPage()
+
+    useDevicesStore().toggleColumn('select')
+    await flushPromises()
+
+    expect(rowBoxes(wrapper)).toHaveLength(0)
+    expect(wrapper.get('[data-testid="bulk-hint"]').text()).toBe(
+      'The Select column is hidden, so no device can be picked. Show it from Columns.'
+    )
+  })
+
+  it('says it when the browser remembered a hidden Select column', async () => {
+    localStorage.setItem('devices.visibleColumns', JSON.stringify({ select: false }))
+    const wrapper = await mountPage()
+
+    expect(wrapper.get('[data-testid="bulk-hint"]').text()).toContain('Select column is hidden')
+  })
+
+  it('shows no hint and no title once a row is ticked', async () => {
+    const wrapper = await mountPage()
+
+    await rowBoxes(wrapper)[0].setValue(true)
+
+    expect(wrapper.find('[data-testid="bulk-hint"]').exists()).toBe(false)
+    expect(bulkButton(wrapper).attributes('title')).toBeUndefined()
+    expect(bulkButton(wrapper).attributes('aria-describedby')).toBeUndefined()
+  })
+
   it('enables the button with the count once rows are ticked', async () => {
     const wrapper = await mountPage()
 
