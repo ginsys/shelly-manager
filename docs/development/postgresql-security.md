@@ -158,9 +158,10 @@ database:
 ```
 
 The file holds no credentials. The user name and the password come from `SHELLY_DATABASE_USERNAME` and
-`SHELLY_DATABASE_PASSWORD`, set from the variables above, for example
-`export SHELLY_DATABASE_PASSWORD="$POSTGRES_PASSWORD"`
-(`internal/config/config.go:238-241`, `internal/database/provider/postgresql_provider.go:472-481`). The
+`SHELLY_DATABASE_PASSWORD`, for example `export SHELLY_DATABASE_USERNAME=shelly` and
+`export SHELLY_DATABASE_PASSWORD="$POSTGRES_PASSWORD"`. Set both: the provider refuses a password
+without a user name (`internal/database/provider/postgresql_provider.go:394-398`). The keys are read at
+`internal/config/config.go:238-241` and applied to the DSN at `postgresql_provider.go:472-481`. The
 loader does not expand a `${...}` reference in a config file (`internal/config/config.go:170-214`), so
 the file cannot name them.
 
