@@ -14,6 +14,7 @@ vi.mock('@/api/templates', async (importActual) => {
 import { getTypedDeviceConfig } from '@/api/deviceConfig'
 import { getConfigSchema } from '@/api/typedConfig'
 import { createTemplate, listDeviceTypes, TemplateSaveError } from '@/api/templates'
+import { dismissNotice, notice, noticeSeverity } from '@/composables/useNotice'
 import CreateTemplateFromImportDialog from '../CreateTemplateFromImportDialog.vue'
 
 // The schema the server builds for the device names the model it was built for.
@@ -191,6 +192,33 @@ describe('CreateTemplateFromImportDialog', () => {
     finish({ id: 9 })
     await flushPromises()
     expect(push).toHaveBeenCalledWith({ name: 'template-detail', params: { id: 9 } })
+  })
+
+  it('tells the app notice when a save fails after the user left the page, and when it succeeds', async () => {
+    dismissNotice()
+    let fail: (e: unknown) => void = () => {}
+    ;(createTemplate as any).mockReturnValue(new Promise((_, reject) => (fail = reject)))
+    const wrapper = await ready()
+    await wrapper.get('[data-testid="from-import-name"]').setValue('Gone')
+    await wrapper.get('[data-testid="from-import-save"]').trigger('click')
+    wrapper.unmount()
+    fail(new Error('Database unavailable'))
+    await flushPromises()
+    expect(notice.value?.message).toContain('Database unavailable')
+    expect(noticeSeverity.value).toBe('error')
+
+    dismissNotice()
+    let finish: (v: unknown) => void = () => {}
+    ;(createTemplate as any).mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const second = await ready()
+    await second.get('[data-testid="from-import-name"]').setValue('Made')
+    await second.get('[data-testid="from-import-save"]').trigger('click')
+    second.unmount()
+    finish({ id: 5 })
+    await flushPromises()
+    expect(notice.value?.message).toContain('Made')
+    expect(noticeSeverity.value).toBe('info')
+    expect(push).not.toHaveBeenCalled()
   })
 
   it('keeps Save off until there is a name and something ticked', async () => {
