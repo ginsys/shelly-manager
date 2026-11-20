@@ -19,7 +19,6 @@
       <select v-model="groupBy" data-testid="gitops-group-by">
         <option value="location">Location</option>
         <option value="type">Device type</option>
-        <option value="custom">Custom mapping</option>
       </select>
     </label>
     <label class="check"><input v-model="includeCommon" type="checkbox" /> Write the common settings file</label>

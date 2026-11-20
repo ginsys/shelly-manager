@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250, and a unit test keeps them equal to the code (section 1)
-**Status:** 126 of 130 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 127 of 131 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -79,7 +79,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 8 | 8 | |
 | `errorBody.ts` | 4 | 4 | |
-| `export.ts` | 23 | 21 | `getBackupResult`, `downloadExport` |
+| `export.ts` | 24 | 22 | `getBackupResult`, `downloadExport` |
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
@@ -88,7 +88,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **130** | **126** | **4** |
+| **Total** | **131** | **127** | **4** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -118,7 +118,7 @@ Counts (commands, from the repository root):
 | What | Count | Command |
 |------|-------|---------|
 | Routed page components | 26 | `fd -e vue . ui/src/pages \| wc -l` |
-| Reusable components (excluding tests) | 39 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
+| Reusable components (excluding tests) | 41 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
 | Pinia stores (excluding tests) | 11 | `fd -e ts . ui/src/stores \| rg -v '\.test\.ts\|__tests__' \| wc -l` |
 | Composables | 2 | `fd -e ts . ui/src/composables \| rg -v __tests__ \| wc -l` |
 | Unit test files / `it`+`test` calls | 70 / 687 | `fd '\.test\.ts$' ui/src \| wc -l`; `rg --no-filename -c '^\s*(it\|test)\(' ui/src --glob '*.test.ts' \| awk '{s+=$1} END{print s}'` |
@@ -349,7 +349,7 @@ Found by reading the code at this commit; not a plan.
    `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
-5. **No generated API client.** The 130 functions are written by hand. The coverage figure in section 1
+5. **No generated API client.** The 131 functions are written by hand. The coverage figure in section 1
    is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
    stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and

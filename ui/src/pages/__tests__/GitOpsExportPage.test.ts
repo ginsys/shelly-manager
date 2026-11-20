@@ -62,6 +62,57 @@ describe('GitOpsExportPage', () => {
     expect(api.delete).toHaveBeenCalledWith('/export/gitops/a')
   })
 
+  it('loads every page of devices for the selection', async () => {
+    const device = (id: number) => ({ id, name: `dev${id}`, ip: `10.0.0.${id}` })
+    vi.mocked(api.get as any).mockImplementation((path: string, config: { params: { page: number; page_size: number } }) => {
+      if (path === '/devices') {
+        const page = config.params.page
+        return Promise.resolve({
+          data: { success: true, data: { devices: [device(page)] }, meta: { pagination: { page, has_next: page < 3 } } },
+        })
+      }
+      return Promise.resolve(historyAnswer([]))
+    })
+
+    const wrapper = mount(GitOpsExportPage)
+    await flushPromises()
+    await wrapper.get('.primary-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="gitops-devices"] option')).toHaveLength(3)
+  })
+
+  it('keeps the preview of the newest request when an older one answers last', async () => {
+    const sample = (text: string) => ({ data: { success: true, data: { preview: { sample_data: Buffer.from(text).toString('base64') } } } })
+    let answerFirst: (v: unknown) => void = () => {}
+    let previews = 0
+    vi.mocked(api.get as any).mockResolvedValue(historyAnswer([]))
+    vi.mocked(api.post as any).mockImplementation(() => {
+      previews++
+      return previews === 1
+        ? new Promise((resolve) => {
+            answerFirst = resolve
+          })
+        : Promise.resolve(sample('second tree'))
+    })
+
+    const wrapper = mount(GitOpsExportPage)
+    await flushPromises()
+    await wrapper.get('.primary-button').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="gitops-name"]').setValue('nightly')
+    const previewButton = wrapper.findAll('.actions .secondary').find((b) => b.text() === 'Preview files')!
+    await previewButton.trigger('click')
+    await previewButton.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="gitops-preview"]').text()).toBe('second tree')
+
+    answerFirst(sample('first tree'))
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="gitops-preview"]').text()).toBe('second tree')
+  })
+
   it('drops the list answer of a request that a newer one replaced', async () => {
     let answerFirst: (v: unknown) => void = () => {}
     let calls = 0

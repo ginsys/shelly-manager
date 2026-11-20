@@ -374,7 +374,7 @@ export async function previewRestore(backupId: string): Promise<RestorePreview> 
 export interface GitOpsExportOptions {
   name: string
   description?: string
-  group_by: 'location' | 'type' | 'custom'
+  group_by: 'location' | 'type' // 'custom' needs a group_mapping the page has no input for
   include_common: boolean
   include_templates: boolean
   device_ids?: number[] // empty or missing: every device
@@ -399,6 +399,11 @@ export async function createGitOpsExport(o: GitOpsExportOptions): Promise<{ expo
     throw new Error(res.data.error?.message || 'Failed to create GitOps export')
   }
   return res.data.data
+}
+
+// The preview's sample is the file tree as UTF-8 text, base64 encoded by the server.
+export function decodePreviewSample(sample: string): string {
+  return new TextDecoder().decode(Uint8Array.from(atob(sample), (c) => c.charCodeAt(0)))
 }
 
 export function previewGitOpsExport(o: GitOpsExportOptions): Promise<ExportPreviewResponse> {
