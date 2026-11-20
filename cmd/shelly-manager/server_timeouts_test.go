@@ -33,11 +33,16 @@ const (
 // startServer runs a server built by newHTTPServerWith on a local listener and returns its address.
 func startTimeoutServer(t *testing.T, handler http.Handler) string {
 	t.Helper()
+	return startTimeoutServerWith(t, handler, testHeaderTimeout, testIdleTimeout)
+}
+
+func startTimeoutServerWith(t *testing.T, handler http.Handler, readHeader, idle time.Duration) string {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	srv := newHTTPServerWith(ln.Addr().String(), handler, testHeaderTimeout, testIdleTimeout)
+	srv := newHTTPServerWith(ln.Addr().String(), handler, readHeader, idle)
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
 	return ln.Addr().String()
@@ -108,6 +113,38 @@ func TestServerClosesIdleKeepAlive(t *testing.T) {
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
 	requireClosedByServer(t, conn, "idle keep-alive")
+}
+
+// Pins what the docs say about a reused connection: its idle limit comes first, and the header limit
+// starts only once the first bytes of the next request have arrived. So a client that sends a single
+// byte after a request is held for the idle time, not for the header time.
+func TestServerHeaderClockOnAReusedConnectionStartsAtTheFirstBytes(t *testing.T) {
+	const header, idle = testHeaderTimeout, 1200 * time.Millisecond
+	addr := startTimeoutServerWith(t, okHandler(), header, idle)
+	conn := dial(t, addr)
+	br := bufio.NewReader(conn)
+	if _, err := io.WriteString(conn, getRequest); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		t.Fatalf("read the answer: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	// Four bytes of the next request start the header clock; fewer do not.
+	if _, err := io.WriteString(conn, "G"); err != nil {
+		t.Fatalf("write one byte: %v", err)
+	}
+	time.Sleep(3 * header) // well past the header timeout, well inside the idle timeout
+	if _, err := io.WriteString(conn, "E"); err != nil {
+		t.Fatalf("the server closed a reused connection after one byte, within the idle time: %v", err)
+	}
+	if _, err := io.WriteString(conn, "T "); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// Now four bytes are in: the header clock runs, and the header is never finished.
+	requireClosedByServer(t, conn, "reused connection with an unfinished header")
 }
 
 // Guard: a body that arrives slowly, after a complete header, is not cut. This is what stops a
