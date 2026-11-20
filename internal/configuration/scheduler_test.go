@@ -490,6 +490,30 @@ func TestSchedulerTick_ADatabaseWaitIsPartOfTheElapsedTime(t *testing.T) {
 	assert.True(t, runs[0].StartedAt.Equal(at(10*time.Second+2*time.Minute)), "started_at %s", runs[0].StartedAt)
 }
 
+// A run's duration and completion time come from the scheduler's own clock, the one the start time
+// came from, so a test (or a clock that jumps) cannot mix two clocks into one run row.
+func TestSchedulerTick_ARunsDurationUsesTheSchedulersClock(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	reads := 0
+	fx.s.now = func() time.Time {
+		reads++
+		if reads <= 3 { // the poll start, the schedule's start, the run's start
+			return at(10 * time.Second)
+		}
+		return at(13 * time.Second) // the run's end
+	}
+
+	fx.s.tick(context.Background(), at(10*time.Second))
+
+	runs := fx.runs(id)
+	require.Len(t, runs, 1)
+	require.NotNil(t, runs[0].Duration)
+	assert.Equal(t, 3*time.Second, *runs[0].Duration)
+	require.NotNil(t, runs[0].CompletedAt)
+	assert.True(t, runs[0].CompletedAt.Equal(at(13*time.Second)), "completed_at %s", runs[0].CompletedAt)
+}
+
 // A failure recorded for a schedule that cannot run counts toward the history cap too.
 func TestSchedulerFailSchedule_KeepsTheHistoryCap(t *testing.T) {
 	fx := newSchedFixture(t)
