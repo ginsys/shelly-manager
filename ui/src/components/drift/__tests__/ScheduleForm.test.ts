@@ -234,9 +234,20 @@ describe('ScheduleForm', () => {
     expect(store.create).not.toHaveBeenCalled()
   })
 
-  it('keeps chosen devices that the list does not show, and says so', () => {
-    const { wrapper } = mountForm({ schedule: { ...stored, device_ids: [2, 99] } })
-    expect(wrapper.find('[data-testid="unlisted-devices"]').text()).toContain('1 chosen device(s)')
+  it('lists a chosen device that the list does not show, so it can be unchecked', async () => {
+    // The server keeps the id of a deleted device in the schedule and refuses every save that still
+    // names it, so the form must let the operator remove it.
+    const { wrapper, store } = mountForm({ schedule: { ...stored, device_ids: [2, 99] } })
+    vi.mocked(store.update).mockResolvedValue(stored)
+    const row = wrapper.find('[data-testid="device-99"]')
+    expect(row.exists()).toBe(true)
+    expect((row.element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('[data-testid="unlisted-devices"]').text()).toContain('Device 99')
+
+    await row.setValue(false)
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(vi.mocked(store.update).mock.calls[0][1]).toMatchObject({ device_ids: [2] })
   })
 
   it('shows the device list failure in the picker', async () => {

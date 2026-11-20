@@ -48,9 +48,13 @@
               <input v-model="selectedIds" type="checkbox" :value="d.id" :data-testid="`device-${d.id}`" />
               {{ d.name || d.mac }} <span class="hint">{{ d.type }}</span>
             </label>
-            <p v-if="unlistedCount > 0" class="hint" data-testid="unlisted-devices">
-              {{ unlistedCount }} chosen device(s) are not in this list and stay chosen.
-            </p>
+            <div v-if="unlistedIds.length > 0" data-testid="unlisted-devices">
+              <p class="hint">These chosen devices are no longer in the list. The server refuses a save that names one, so uncheck it.</p>
+              <label v-for="id in unlistedIds" :key="id" class="inline device-row">
+                <input v-model="selectedIds" type="checkbox" :value="id" :data-testid="`device-${id}`" />
+                Device {{ id }}
+              </label>
+            </div>
           </div>
 
           <div v-if="mode === 'filter'" class="filter-fields" data-testid="filter-fields">
@@ -145,7 +149,7 @@ const saving = ref(false)
 const failure = ref('')
 
 const deviceTypes = computed(() => [...new Set(props.devices.map(d => d.type).filter(Boolean))].sort())
-const unlistedCount = computed(() => selectedIds.value.filter(id => !props.devices.some(d => d.id === id)).length)
+const unlistedIds = computed(() => selectedIds.value.filter(id => !props.devices.some(d => d.id === id)))
 
 // An empty selection must never mean "all devices" by accident: Save waits until the mode has content.
 const blocked = computed(() => {

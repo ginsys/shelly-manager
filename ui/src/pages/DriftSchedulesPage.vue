@@ -80,7 +80,7 @@
               Recent runs
             </button>
             <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="opening" @click="openForm(schedule)">Edit</button>
-            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" @click="handleToggle(schedule.id)">
+            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" :disabled="toggling.includes(schedule.id)" @click="handleToggle(schedule.id)">
               {{ schedule.enabled ? 'Disable' : 'Enable' }}
             </button>
             <button class="btn-icon danger" title="Delete" @click="handleDelete(schedule.id)">
@@ -182,12 +182,20 @@ async function handleDelete(id: number) {
   }
 }
 
+// The schedules whose toggle request is running. The server flips the stored flag on every call, so a
+// second click while one runs would flip it back.
+const toggling = ref<number[]>([])
+
 async function handleToggle(id: number) {
+  if (toggling.value.includes(id)) return
+  toggling.value.push(id)
   clearActionError()
   try {
     await store.toggle(id)
   } catch (e) {
     setActionError(e, { action: 'Toggle drift schedule', resource: 'Drift schedule', resourceId: String(id) })
+  } finally {
+    toggling.value = toggling.value.filter(t => t !== id)
   }
 }
 
