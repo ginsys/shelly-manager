@@ -2,6 +2,7 @@
   <div class="page">
     <div class="page-header">
       <h1>Drift Detection Schedules</h1>
+      <button class="primary-button" data-testid="new-schedule" @click="openForm(null)">New schedule</button>
     </div>
 
     <!-- No banner while the server runs the scheduler. -->
@@ -70,50 +71,74 @@
           </div>
 
           <div class="schedule-actions">
+            <button
+              class="btn-icon"
+              :aria-expanded="runsOf(schedule.id).open"
+              :data-testid="`runs-toggle-${schedule.id}`"
+              @click="toggleRuns(schedule.id)"
+            >
+              Recent runs
+            </button>
+            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" @click="openForm(schedule)">Edit</button>
+            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" @click="handleToggle(schedule.id)">
+              {{ schedule.enabled ? 'Disable' : 'Enable' }}
+            </button>
             <button class="btn-icon danger" title="Delete" @click="handleDelete(schedule.id)">
               🗑️ Delete
             </button>
           </div>
+
+          <div v-if="runsOf(schedule.id).open" class="runs" :data-testid="`runs-${schedule.id}`">
+            <p v-if="runsOf(schedule.id).loading" class="hint">Loading runs...</p>
+            <div v-else-if="runsOf(schedule.id).error" class="runs-error" role="alert">
+              <span>{{ runsOf(schedule.id).error }}</span>
+              <button class="btn-icon" :data-testid="`runs-retry-${schedule.id}`" @click="loadRuns(schedule.id)">Retry</button>
+            </div>
+            <p v-else-if="runsOf(schedule.id).runs.length === 0" class="hint">No runs yet</p>
+            <table v-else class="runs-table">
+              <thead>
+                <tr><th>Started</th><th>Status</th><th>Duration</th><th>Error</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="run in runsOf(schedule.id).runs" :key="run.id" class="run-row">
+                  <td>{{ formatDate(run.started_at) }}</td>
+                  <td>{{ run.status }}</td>
+                  <td>{{ formatDuration(run.duration) }}</td>
+                  <td>{{ run.error || '' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      <div v-if="store.scheduleMeta && (store.scheduleMeta.total_count || 0) > pageSize" class="pagination">
-        <button
-          class="btn"
-          :disabled="page === 1"
-          @click="handlePageChange(page - 1)"
-        >
-          Previous
-        </button>
-        <span class="page-info">
-          Page {{ page }} of {{ Math.ceil((store.scheduleMeta.total_count || 0) / pageSize) }}
-          ({{ (store.scheduleMeta.total_count || 0) }} total)
-        </span>
-        <button
-          class="btn"
-          :disabled="page >= Math.ceil((store.scheduleMeta.total_count || 0) / pageSize)"
-          @click="handlePageChange(page + 1)"
-        >
-          Next
-        </button>
-      </div>
     </div>
+
+    <ScheduleForm
+      v-if="formOpen"
+      :schedule="editing"
+      :devices="devices"
+      :devices-error="devicesError"
+      @saved="formOpen = false"
+      @cancel="formOpen = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useDriftStore } from '@/stores/drift'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import ScheduleForm from '@/components/drift/ScheduleForm.vue'
 import { usePageError } from '@/composables/useNotice'
-import type { DriftSchedule } from '@/api/drift'
+import { listDevices } from '@/api/devices'
+import type { DriftSchedule, DriftRun } from '@/api/drift'
+import type { Device } from '@/api/types'
 
 const store = useDriftStore()
-// The failure of a delete, above the list. The store keeps no action failure (ginsys/shelly-manager#701).
+// The failure of a delete or a toggle, above the list. The store keeps no action failure
+// (ginsys/shelly-manager#701).
 const { error: actionError, setError: setActionError, clearError: clearActionError } = usePageError()
 
-const page = ref(1)
-const pageSize = ref(25)
 // Set when the read of the scheduler state failed; the store keeps null for that and for "not read yet".
 const statusFailed = ref(false)
 
@@ -157,13 +182,83 @@ async function handleDelete(id: number) {
   }
 }
 
-async function handlePageChange(newPage: number) {
-  page.value = newPage
-  await store.fetchSchedules(page.value, pageSize.value)
+async function handleToggle(id: number) {
+  clearActionError()
+  try {
+    await store.toggle(id)
+  } catch (e) {
+    setActionError(e, { action: 'Toggle drift schedule', resource: 'Drift schedule', resourceId: String(id) })
+  }
+}
+
+// The form: the devices it offers are every device, read each time it opens.
+const formOpen = ref(false)
+const editing = ref<DriftSchedule | null>(null)
+const devices = ref<Device[]>([])
+const devicesError = ref('')
+
+async function openForm(schedule: DriftSchedule | null) {
+  clearActionError()
+  devicesError.value = ''
+  try {
+    devices.value = (await listDevices({ all: true })).items
+  } catch (e: any) {
+    devices.value = []
+    devicesError.value = `Devices could not be loaded: ${e?.message || 'unknown error'}`
+  }
+  editing.value = schedule
+  formOpen.value = true
+}
+
+// Recent runs of one card, read when the card is first expanded and again on a retry.
+interface RunsState {
+  open: boolean
+  loading: boolean
+  error: string
+  runs: DriftRun[]
+}
+const runStates = reactive<Record<number, RunsState>>({})
+
+function runsOf(id: number): RunsState {
+  return runStates[id] ?? { open: false, loading: false, error: '', runs: [] }
+}
+
+async function loadRuns(id: number) {
+  const state = (runStates[id] ??= { open: true, loading: false, error: '', runs: [] })
+  state.loading = true
+  state.error = ''
+  try {
+    state.runs = await store.fetchRuns(id)
+  } catch (e: any) {
+    state.error = `Runs could not be loaded: ${e?.message || 'unknown error'}`
+  } finally {
+    state.loading = false
+  }
+}
+
+async function toggleRuns(id: number) {
+  const state = runStates[id]
+  if (state) {
+    state.open = !state.open
+    if (!state.open || state.runs.length > 0 || state.loading) return
+  } else {
+    runStates[id] = { open: true, loading: false, error: '', runs: [] }
+  }
+  await loadRuns(id)
+}
+
+// A run's duration comes in nanoseconds.
+function formatDuration(ns: number | null | undefined): string {
+  if (ns === null || ns === undefined) return ''
+  const ms = ns / 1e6
+  if (ms < 1000) return `${Math.round(ms)} ms`
+  const s = ms / 1000
+  if (s < 60) return `${s.toFixed(1)} s`
+  return `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`
 }
 
 onMounted(async () => {
-  store.fetchSchedules(page.value, pageSize.value)
+  store.fetchSchedules()
   try {
     await store.fetchSchedulerStatus()
   } catch {
@@ -240,8 +335,6 @@ onMounted(async () => {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  /* Neutral, non-operational styling: stored data, never an active job. */
-  opacity: 0.85;
 }
 
 .schedule-header {
@@ -343,34 +436,59 @@ onMounted(async () => {
   background: #fee2e2;
 }
 
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 24px;
+.primary-button {
+  padding: 8px 16px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
-.page-info {
-  font-size: 14px;
+.primary-button:hover {
+  background: #1d4ed8;
+}
+
+.runs {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
   color: #64748b;
 }
 
-.btn {
-  padding: 8px 16px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
+.runs-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #fee2e2;
+  color: #b91c1c;
   border-radius: 6px;
-  cursor: pointer;
   font-size: 14px;
 }
 
-.btn:hover {
-  background: #f8fafc;
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
 
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.runs-table th,
+.runs-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.runs-table th {
+  color: #6b7280;
+  font-size: 12px;
+  text-transform: uppercase;
 }
 </style>
