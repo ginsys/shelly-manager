@@ -278,20 +278,23 @@ func (s *SQLiteProvider) CreateBackup(ctx context.Context, config BackupConfig) 
 	if s.config.DSN == ":memory:" {
 		return nil, fmt.Errorf("cannot back up in-memory SQLite database")
 	}
-	if config.BackupPath == "" {
-		return nil, fmt.Errorf("backup path is required")
-	}
-	// Ensure destination directory exists
-	if err := os.MkdirAll(filepath.Dir(config.BackupPath), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create backup directory: %w", err)
-	}
-
 	if s.db == nil {
 		return nil, fmt.Errorf("sqlite provider not connected")
 	}
+	if config.BackupPath == "" {
+		return nil, fmt.Errorf("backup path is required")
+	}
+	// Refuse a ".." component before any directory is created.
+	dst, err := s.validateBackupPath(config.BackupPath)
+	if err != nil {
+		return nil, err
+	}
+	// Ensure destination directory exists
+	if err = os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create backup directory: %w", err)
+	}
 
 	start := time.Now()
-	dst := config.BackupPath
 
 	// Copying the file would miss every write still in the -wal file and can tear against a
 	// checkpoint. VACUUM INTO writes one consistent snapshot of every committed write, and needs a

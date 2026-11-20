@@ -256,12 +256,19 @@ Common error codes include `VALIDATION_FAILED`, `INTERNAL_SERVER_ERROR`, and `NO
 - When set, any requested `output_path` must resolve under this directory; otherwise the API returns `403 FORBIDDEN`.
 ### Backup export (Provider snapshot)
 
-The Backup plugin performs a raw database snapshot via the active DB provider.
+The Backup plugin takes a database snapshot via the active DB provider.
 
 - SQLite behavior:
   - `config.compression = false` → output file `*.sqlite`
   - `config.compression = true`  → output file `*.sqlite.gz`
   - No `.tar.gz` container; single-file outputs only.
+  - The snapshot is one consistent copy of every committed write, including writes that are
+    still in the `-wal` file (SQLite `VACUUM INTO`).
+  - While it runs, the backup needs free space for one full, uncompressed copy of the database in
+    a temporary `.backup-*` directory beside the output file, even when compression is on. The
+    directory is removed afterwards. A crash can leave it behind; delete it by hand.
+  - The database has one connection, so every other query waits until the snapshot is written.
+    For a small database that is seconds.
 - Backup directory: a backup is written only inside one directory. That is `sync.export_base_dir` when it is set, and `./data/backups` (relative to the working directory) when it is not. `config.output_path` is optional; empty means that directory. A relative `output_path` joins under `sync.export_base_dir` when it is set, and is relative to the working directory when it is not. An `output_path` that is not inside the backup directory answers `400` with the directory in the reason, and nothing is created. The check reads the path text only: a symbolic link inside the backup directory is followed, so only the host's own administrator should create one. The result's `output_path` is an absolute path. To keep backups elsewhere, set `sync.export_base_dir`; the download and restore routes check `export.output_directory`, so set both to the same directory.
 
 Request example (SQLite):
