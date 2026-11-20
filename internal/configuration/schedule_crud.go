@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // ErrInvalidDriftSchedule wraps every refusal of a schedule's input, so a caller can tell a bad
@@ -121,8 +120,7 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 	}
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var sc DriftDetectionSchedule
-		// Locked until the commit, so a delete cannot land between this read and the writes below.
-		if res := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&sc, id); res.Error != nil {
+		if res := tx.First(&sc, id); res.Error != nil {
 			return res.Error
 		}
 		enabled := sc.Enabled
