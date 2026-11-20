@@ -258,6 +258,8 @@ func (s *Service) DeleteRule(ruleID uint) error {
 		return err
 	}
 
+	// A delivery already in flight can write the entry again when it finishes. That leaves one small
+	// struct for a rule that no longer exists: ids are not reused, so no other rule reads it.
 	s.rateLimitMu.Lock()
 	delete(s.rateLimits, ruleID)
 	s.rateLimitMu.Unlock()

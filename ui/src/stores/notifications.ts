@@ -185,14 +185,6 @@ export const useNotificationsStore = defineStore('notifications', {
       }
     },
 
-    setHistoryPage(page: number) {
-      this.historyPage = page
-    },
-
-    setHistoryLimit(limit: number) {
-      this.historyLimit = limit
-    },
-
     clearCurrentChannel() {
       this.currentChannel = null
     }

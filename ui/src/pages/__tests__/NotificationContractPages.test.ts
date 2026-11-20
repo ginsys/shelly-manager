@@ -143,6 +143,22 @@ describe('NotificationHistoryPage', () => {
     expect(next.attributes('disabled')).toBeUndefined()
   })
 
+  it('Next and the page size ask the store to load, and the store alone commits the page', async () => {
+    const { wrapper, store } = mountWith(NotificationHistoryPage, {
+      history: [row()], channels: [], rules: [], historyPage: 1, historyTotal: 120,
+      historyPagination: { page: 1, page_size: 50, total_pages: 3, has_next: true, has_previous: false },
+    })
+    await flushPromises()
+    vi.mocked(store.fetchHistory).mockClear()
+
+    await wrapper.findAll('button.secondary-button')[1].trigger('click')
+    expect(store.fetchHistory).toHaveBeenCalledWith({ page: 2 })
+    expect(store.historyPage).toBe(1)
+
+    await wrapper.find('select').setValue(25)
+    expect(store.fetchHistory).toHaveBeenLastCalledWith({ page: 1, limit: 25 })
+  })
+
   it('disables Next on the last page and Previous on the first', async () => {
     const last = mountWith(NotificationHistoryPage, {
       history: [row()], channels: [], rules: [], historyPage: 3, historyTotal: 120,
@@ -240,6 +256,21 @@ describe('notifications store, against the api layer', () => {
 
     expect(store.channels[0].enabled).toBe(true)
     expect(notificationApi.getChannel).not.toHaveBeenCalled()
+  })
+
+  it('a history page that fails to load leaves the page number, rows and pager as they were', async () => {
+    const pagination = { page: 1, page_size: 50, total_pages: 2, has_next: true, has_previous: false }
+    vi.mocked(notificationApi.getHistory).mockResolvedValueOnce({ items: [], pagination, total: 60 })
+    const store = useNotificationsStore()
+    await store.fetchHistory()
+
+    vi.mocked(notificationApi.getHistory).mockRejectedValueOnce(new Error('timeout'))
+    await store.fetchHistory({ page: 2 })
+
+    expect(store.historyError).toBe('timeout')
+    expect(store.historyPage).toBe(1)
+    expect(store.historyPagination).toEqual(pagination)
+    expect(store.historyTotal).toBe(60)
   })
 
   it('fetchHistory keeps the server\'s page description and the count of all rows', async () => {

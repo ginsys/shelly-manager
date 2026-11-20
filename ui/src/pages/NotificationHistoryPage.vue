@@ -93,14 +93,13 @@ const getRuleName = computed(() => (ruleId: string) => {
 
 async function changePage(page: number) {
   if (page < 1) return
-  store.setHistoryPage(page)
-  await store.fetchHistory()
+  // The store commits the page with the server's description of it, after a successful load: a failed
+  // load leaves the page and its pager as they were.
+  await store.fetchHistory({ page })
 }
 
 async function changePageSize() {
-  store.setHistoryLimit(pageSize.value)
-  store.setHistoryPage(1)
-  await store.fetchHistory()
+  await store.fetchHistory({ page: 1, limit: pageSize.value })
 }
 </script>
 
