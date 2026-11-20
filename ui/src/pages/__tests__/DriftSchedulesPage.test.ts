@@ -30,13 +30,19 @@ interface MountOptions {
   schedulerEnabled?: boolean | null
   statusFails?: boolean
   schedules?: DriftSchedule[]
+  toggling?: number[]
 }
 
-function mountPage({ schedulerEnabled = true, statusFails = false, schedules = [storedSchedule] }: MountOptions = {}) {
+function mountPage({
+  schedulerEnabled = true,
+  statusFails = false,
+  schedules = [storedSchedule],
+  toggling = []
+}: MountOptions = {}) {
   const pinia = createTestingPinia({
     createSpy: vi.fn,
     initialState: {
-      drift: { schedules, loading: false, error: null, schedulerEnabled }
+      drift: { schedules, loading: false, error: null, schedulerEnabled, togglingIds: toggling }
     }
   })
   if (statusFails) {
@@ -206,64 +212,50 @@ describe('DriftSchedulesPage', () => {
     expect(useDriftStore().toggle).toHaveBeenCalledWith(2)
   })
 
-  it('holds the toggle of a schedule while its request runs, so a second click cannot flip it back', async () => {
-    const wrapper = mountPage({ schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }] })
+  // The pending toggles live in the store, because the request outlives the page: a page that is left and
+  // opened again must still hold the card.
+  it('holds the card of a schedule whose toggle the store is still running, also on a new page', async () => {
+    const wrapper = mountPage({
+      schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }],
+      toggling: [1]
+    })
     await flushPromises()
-    let finish: () => void = () => {}
-    vi.mocked(useDriftStore().toggle).mockImplementationOnce(
-      () => new Promise<void>(resolve => (finish = resolve)) as never
-    )
-    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
     expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
-    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
-    expect(useDriftStore().toggle).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeDefined()
     // another schedule is not held
     expect(wrapper.find('[data-testid="toggle-2"]').attributes('disabled')).toBeUndefined()
-
-    finish()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeUndefined()
-  })
-
-  it('holds Edit while the toggle of that schedule runs, so the form never opens on the old state', async () => {
-    const wrapper = mountPage({ schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }] })
-    await flushPromises()
-    let finish: () => void = () => {}
-    vi.mocked(useDriftStore().toggle).mockImplementationOnce(
-      () => new Promise<void>(resolve => (finish = resolve)) as never
-    )
-    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
-    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-testid="edit-2"]').attributes('disabled')).toBeUndefined()
-    finish()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
+    await wrapper.find('[data-testid="edit-1"]').trigger('click')
+    expect(useDriftStore().toggle).not.toHaveBeenCalled()
+    expect(listDevices).not.toHaveBeenCalled()
   })
 
-  it('holds every toggle while the form is opening, so the form never starts from an old state', async () => {
-    const wrapper = mountPage()
+  it('holds every card while the form is opening and while it is open', async () => {
+    const wrapper = mountPage({ schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }] })
     await flushPromises()
     let release: (v: { items: never[] }) => void = () => {}
     vi.mocked(listDevices).mockImplementationOnce(() => new Promise(resolve => (release = resolve as never)))
     await wrapper.find('[data-testid="edit-1"]').trigger('click')
-    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
+    for (const id of [1, 2]) {
+      expect(wrapper.find(`[data-testid="toggle-${id}"]`).attributes('disabled')).toBeDefined()
+      expect(wrapper.find(`[data-testid="edit-${id}"]`).attributes('disabled')).toBeDefined()
+    }
     release({ items: [] })
     await flushPromises()
-    // the form is now open, and the card behind it stays held until it closes
+    // the form is now open, and the cards behind it stay held until it closes
     expect(wrapper.find('[data-testid="schedule-form"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
+    for (const id of [1, 2]) {
+      expect(wrapper.find(`[data-testid="toggle-${id}"]`).attributes('disabled')).toBeDefined()
+    }
     await wrapper.find('[data-testid="schedule-cancel"]').trigger('click')
-    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeUndefined()
+    for (const id of [1, 2]) {
+      expect(wrapper.find(`[data-testid="toggle-${id}"]`).attributes('disabled')).toBeUndefined()
+      expect(wrapper.find(`[data-testid="edit-${id}"]`).attributes('disabled')).toBeUndefined()
+    }
   })
 
-  it('releases the toggle after a failed request', async () => {
-    const wrapper = mountPage()
-    await flushPromises()
-    vi.mocked(useDriftStore().toggle).mockRejectedValueOnce(new Error('toggle refused'))
-    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeUndefined()
-  })
 
   it('a failed toggle shows its failure above the list and keeps the page', async () => {
     const wrapper = mountPage()
