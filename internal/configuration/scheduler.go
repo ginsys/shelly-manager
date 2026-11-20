@@ -199,7 +199,8 @@ func (s *Scheduler) handle(ctx context.Context, sc DriftDetectionSchedule, now t
 	}
 	if sc.NextRun == nil {
 		// Never armed (a row from before the scheduler ran): arm it, run it at its next instant.
-		armErr := s.db.Model(&DriftDetectionSchedule{}).Where("id = ? AND next_run IS NULL", sc.ID).
+		armErr := s.db.Model(&DriftDetectionSchedule{}).
+			Where("id = ? AND next_run IS NULL AND enabled = ? AND cron_spec = ?", sc.ID, true, sc.CronSpec).
 			Update("next_run", next).Error
 		if armErr != nil {
 			s.logError("arm drift schedule", sc.ID, armErr)
@@ -269,7 +270,8 @@ func (s *Scheduler) claimAndRecord(sc DriftDetectionSchedule, next, now time.Tim
 // so a spec fixed since the read is never disabled for the failure of the old one.
 func (s *Scheduler) failSchedule(sc DriftDetectionSchedule, now time.Time, cause error) {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		res := tx.Model(&DriftDetectionSchedule{}).Where("id = ? AND enabled = ? AND cron_spec = ?", sc.ID, true, sc.CronSpec).Update("enabled", false)
+		res := tx.Model(&DriftDetectionSchedule{}).Where("id = ? AND enabled = ? AND cron_spec = ?", sc.ID, true, sc.CronSpec).
+			Updates(map[string]any{"enabled": false, "next_run": nil}) // a disabled schedule has no next run
 		if res.Error != nil || res.RowsAffected != 1 {
 			return res.Error
 		}
@@ -308,7 +310,9 @@ func (s *Scheduler) runClaimed(ctx context.Context, sc DriftDetectionSchedule, r
 			run.Status, run.Error = DriftRunFailed, fmt.Sprintf("encode the run result: %v", err)
 		}
 	}
-	if err := s.db.Save(run).Error; err != nil {
+	// An update, not Save: Save inserts the row again when its schedule was deleted while it ran.
+	if err := s.db.Model(&DriftDetectionRun{}).Where("id = ?", run.ID).
+		Select("status", "error", "completed_at", "duration", "results").Updates(run).Error; err != nil {
 		s.logError("save drift run", sc.ID, err)
 	}
 }

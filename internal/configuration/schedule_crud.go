@@ -58,7 +58,7 @@ func (s *Service) validateSchedule(in ScheduleInput, now time.Time) (validSchedu
 			return v, fmt.Errorf("encode the device filter: %w", err)
 		}
 	}
-	v.ids = slices.Compact(slices.Sorted(slices.Values(in.DeviceIDs)))
+	v.ids = append([]uint{}, slices.Compact(slices.Sorted(slices.Values(in.DeviceIDs)))...) // never nil: the API says []
 	if len(v.ids) > 0 {
 		var found []uint
 		if err := s.db.Table("devices").Where("id IN ?", v.ids).Pluck("id", &found).Error; err != nil {
@@ -140,8 +140,12 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 		case sc.CronSpec != in.CronSpec || !sc.Enabled || sc.NextRun == nil:
 			fields["next_run"] = v.next
 		}
-		if res := tx.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Updates(fields); res.Error != nil {
+		res := tx.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Updates(fields)
+		if res.Error != nil {
 			return res.Error
+		}
+		if res.RowsAffected == 0 { // deleted since the read: write no device rows for it
+			return gorm.ErrRecordNotFound
 		}
 		return replaceScheduleDevices(tx, id, v.ids)
 	})
@@ -204,7 +208,7 @@ func (s *Service) GetDriftSchedule(id uint) (*DriftDetectionSchedule, error) {
 	if err != nil {
 		return nil, err
 	}
-	sc.DeviceIDs = lists[sc.ID]
+	sc.DeviceIDs = append([]uint{}, lists[sc.ID]...)
 	return &sc, nil
 }
 
@@ -226,7 +230,7 @@ func (s *Service) ListDriftSchedules() ([]DriftDetectionSchedule, error) {
 		return nil, err
 	}
 	for i := range list {
-		list[i].DeviceIDs = lists[list[i].ID]
+		list[i].DeviceIDs = append([]uint{}, lists[list[i].ID]...)
 	}
 	return list, nil
 }
