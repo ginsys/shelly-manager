@@ -175,6 +175,15 @@ func TestRestorePreviewReportsAnUnusableFileWithoutAPath(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &wrap))
 		require.False(t, wrap.Data.Valid, id)
+		if id == "unreadable" {
+			var sized struct {
+				Data struct {
+					FileSize int64 `json:"file_size"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &sized))
+			require.Equal(t, int64(len("sqlite bytes")), sized.Data.FileSize, "the size of the file the server could stat")
+		}
 		require.Equal(t, []string{"The backup file is empty or cannot be opened"}, wrap.Data.Errors, id)
 	}
 }

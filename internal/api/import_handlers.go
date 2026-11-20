@@ -173,15 +173,20 @@ func (ih *ImportHandlers) PreviewRestore(w http.ResponseWriter, r *http.Request)
 	// Its error strings can carry the server path, so they go to the log and the answer says it in general terms.
 	warnings := []string{"Only the file's presence and size were checked; its contents were not read."}
 	problems := []string{}
+	size := res.Size
 	if !res.Valid {
 		ih.logger.Warn("Restore preview: backup file not usable", "export_id", rec.ExportID, "errors", res.Errors)
 		problems = append(problems, "The backup file is empty or cannot be opened")
+		// The provider reports no size for a file it could not open; backupFile already stat'ed it.
+		if fi, statErr := os.Lstat(path); statErr == nil {
+			size = fi.Size()
+		}
 	}
 	rw.WriteSuccess(w, r, map[string]interface{}{
 		"backup_id":    rec.ExportID,
 		"name":         rec.Name,
 		"valid":        res.Valid,
-		"file_size":    res.Size,
+		"file_size":    size,
 		"record_count": rec.RecordCount,
 		"created_at":   rec.CreatedAt,
 		"errors":       problems,
