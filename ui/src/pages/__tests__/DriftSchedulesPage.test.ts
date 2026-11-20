@@ -155,6 +155,24 @@ describe('DriftSchedulesPage', () => {
     expect((wrapper.find('[data-testid="schedule-name"]').element as HTMLInputElement).value).toBe('')
   })
 
+  it('a second New or Edit while the devices load is ignored: the form is the one first asked for', async () => {
+    let release: (v: { items: any[] }) => void = () => {}
+    vi.mocked(listDevices).mockReset()
+    vi.mocked(listDevices).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+    const wrapper = mountPage({ schedules: [{ ...storedSchedule, device_filter: null }] })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="new-schedule"]').trigger('click')
+    await wrapper.find('[data-testid="edit-1"]').trigger('click')
+    expect(listDevices).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeDefined()
+
+    release({ items: [] })
+    await flushPromises()
+    expect(wrapper.find('h2').text()).toBe('New drift schedule')
+    expect((wrapper.find('[data-testid="schedule-name"]').element as HTMLInputElement).value).toBe('')
+  })
+
   it('Edit opens the form filled from that schedule', async () => {
     const wrapper = mountPage({ schedules: [{ ...storedSchedule, device_filter: null }] })
     await flushPromises()
@@ -203,7 +221,7 @@ describe('DriftSchedulesPage', () => {
     const runs: DriftRun[] = [
       { id: 12, schedule_id: 1, status: 'skipped', started_at: '2026-07-02T03:00:00Z', duration: 4_000_000, created_at: 'x' },
       { id: 11, schedule_id: 1, status: 'failed', started_at: '2026-07-01T03:00:00Z', duration: 2_500_000_000, error: 'device unreachable', created_at: 'x' },
-      { id: 10, schedule_id: 1, status: 'success', started_at: '2026-06-30T03:00:00Z', duration: 90_000_000_000, created_at: 'x' }
+      { id: 10, schedule_id: 1, status: 'completed', started_at: '2026-06-30T03:00:00Z', duration: 90_000_000_000, created_at: 'x' }
     ]
 
     it('loads when the card is first expanded, newest first, with durations from nanoseconds', async () => {
@@ -218,7 +236,7 @@ describe('DriftSchedulesPage', () => {
 
       expect(store.fetchRuns).toHaveBeenCalledWith(1)
       const rows = wrapper.findAll('[data-testid="runs-1"] .run-row').map(r => r.findAll('td').map(td => td.text()))
-      expect(rows.map(r => r[1])).toEqual(['skipped', 'failed', 'success'])
+      expect(rows.map(r => r[1])).toEqual(['skipped', 'failed', 'completed'])
       expect(rows.map(r => r[2])).toEqual(['4 ms', '2.5 s', '1 min 30 s'])
       expect(rows[1][3]).toBe('device unreachable')
     })
