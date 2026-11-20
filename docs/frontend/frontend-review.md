@@ -256,8 +256,10 @@ page imports still counts. The Playwright spec is what proves the links are rend
   (ginsys/shelly-manager#268). A non-preview `POST /import` restores devices, templates and
   discovered devices in one transaction (ginsys/shelly-manager#284); the browser has no restore UI
   for it. A stored backup can be checked from Backup Management (`POST /import/restore-preview`,
-  the file's presence and size only); restoring one is not offered
-  (ginsys/shelly-manager#748). Export to the device was retired in favour of apply (ginsys/shelly-manager#604).
+  the file's presence and size only), then staged (`POST /import/restore`); the server applies a
+  staged restore at its next start. The page shows the staged restore with Cancel (`DELETE`) and the
+  last result (`GET /import/restore`); a 501 on a database that is not SQLite keeps the check and
+  withholds staging (ginsys/shelly-manager#748). Export to the device was retired in favour of apply (ginsys/shelly-manager#604).
 - **Bulk operations** work from the devices page: a select column, a select-all for the visible rows
   and a Bulk Operations button that opens the dialog for exactly the picked ids
   (ginsys/shelly-manager#136). The selection is kept by device id across page changes. Opening the

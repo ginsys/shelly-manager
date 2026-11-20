@@ -35,6 +35,14 @@
       @refresh="refreshData"
     />
 
+    <!-- Staged restore and the result of the last start -->
+    <RestoreStatus
+      :status="restoreStatus"
+      :backups="backups"
+      :cancelling="restoreCancelling"
+      @cancel="cancelPendingRestore"
+    />
+
     <!-- Backups Table -->
     <BackupList
       :backups="backups"
@@ -71,8 +79,13 @@
       :preview="restorePreview"
       :loading="restoreLoading"
       :error="restoreError"
+      :restore-supported="restoreStatus?.supported !== false"
+      :staging="restoreStaging"
+      :staged="restoreStaged"
+      :replaces-pending="!!restoreStatus?.pending"
       @close="closeRestoreModal"
       @preview-restore="handlePreviewRestore"
+      @stage-restore="handleStageRestore"
     />
 
     <!-- Delete Confirmation Modal -->
@@ -105,9 +118,13 @@ import {
   downloadBackupWithName,
   downloadExportWithName,
   previewRestore,
+  stageRestore,
+  getRestoreStatus,
+  cancelRestore,
   type BackupItem,
   type BackupStatistics,
-    type RestorePreview
+    type RestorePreview,
+    type RestoreStatus as RestoreStatusData
   } from '@/api/export'
 import api from '@/api/client'
 import type { Device, Metadata } from '@/api/types'
@@ -117,6 +134,7 @@ import BackupFilterBar from '@/components/backup/BackupFilterBar.vue'
 import BackupList from '@/components/backup/BackupList.vue'
 import ContentExportsList from '@/components/backup/ContentExportsList.vue'
 import RestoreModal from '@/components/backup/RestoreModal.vue'
+import RestoreStatus from '@/components/backup/RestoreStatus.vue'
 import DeleteConfirmModal from '@/components/backup/DeleteConfirmModal.vue'
 import BackupCreateForm from '@/components/backup/BackupCreateForm.vue'
 
@@ -180,7 +198,12 @@ const restoreBackup = ref<BackupItem | null>(null)
 const restorePreview = ref<RestorePreview | null>(null)
 const restoreLoading = ref(false)
 const restoreError = ref('')
-let restoreCheckId = 0 // identifies the newest backup check; older answers are dropped
+const restoreStaging = ref(false)
+const restoreStaged = ref(false)
+const restoreCancelling = ref(false)
+// What the server reports; null until it answers. Only a 501 turns staging off.
+const restoreStatus = ref<RestoreStatusData | null>(null)
+let restoreCheckId = 0 // identifies the newest backup check or stage call; older answers are dropped
 
 // Initialize
 onMounted(() => {
@@ -198,6 +221,7 @@ function loadInitialData() {
     fetchStatistics().catch(err => console.warn('Failed to fetch statistics:', err)),
     fetchAvailableDevices().catch(err => console.warn('Failed to fetch devices:', err)),
     fetchContentExports().catch(err => console.warn('Failed to fetch content exports:', err)),
+    loadRestoreStatus(),
   ]).catch(err => {
     console.warn('Some data failed to load:', err)
   })
@@ -386,7 +410,56 @@ function startRestore(backup: BackupItem) {
   restorePreview.value = null
   restoreError.value = ''
   restoreLoading.value = false
+  restoreStaging.value = false
+  restoreStaged.value = false
   showRestoreModal.value = true
+}
+
+/**
+ * Read the staged restore and the last result. A failed read leaves the last known status: the
+ * stage call is the authority and refuses by itself.
+ */
+async function loadRestoreStatus() {
+  try {
+    restoreStatus.value = await getRestoreStatus()
+  } catch (err) {
+    console.warn('Failed to read the restore status:', err)
+  }
+}
+
+/**
+ * Stage the checked backup. The server runs its full checks and answers 202, or refuses with the
+ * reason and stages nothing. After a 202 the status is read again, even if the dialog was closed
+ * meanwhile: the server's state changed, not only the dialog's.
+ */
+async function handleStageRestore() {
+  if (!restoreBackup.value) return
+
+  const mine = ++restoreCheckId
+  restoreStaging.value = true
+  restoreError.value = ''
+
+  try {
+    await stageRestore(restoreBackup.value.backup_id)
+    if (mine === restoreCheckId) restoreStaged.value = true
+    await loadRestoreStatus()
+  } catch (err: any) {
+    if (mine === restoreCheckId) restoreError.value = `Nothing was staged. ${err.message || 'Failed to stage the restore'}`
+  } finally {
+    if (mine === restoreCheckId) restoreStaging.value = false
+  }
+}
+
+async function cancelPendingRestore() {
+  restoreCancelling.value = true
+  try {
+    await cancelRestore()
+    await loadRestoreStatus()
+  } catch (err: any) {
+    showMessage(err.message || 'Failed to cancel the restore', 'error')
+  } finally {
+    restoreCancelling.value = false
+  }
 }
 
 /**
@@ -446,6 +519,8 @@ function closeRestoreModal() {
   restorePreview.value = null
   restoreError.value = ''
   restoreLoading.value = false
+  restoreStaging.value = false
+  restoreStaged.value = false
 }
 
 /**

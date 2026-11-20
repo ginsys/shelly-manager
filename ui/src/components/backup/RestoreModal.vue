@@ -2,7 +2,7 @@
   <div v-if="show" class="modal-overlay" @click="emit('close')">
     <div class="modal-content restore-modal" @click.stop>
       <div class="modal-header">
-        <h3>Check Backup</h3>
+        <h3>Restore Backup</h3>
         <button class="close-button" @click="emit('close')">✖</button>
       </div>
 
@@ -16,14 +16,21 @@
           </div>
         </div>
 
-        <div class="restore-notice" data-testid="restore-not-offered">
-          <strong>Restoring a backup from here is not offered yet.</strong>
-          Restoring replaces the live database, and that is not safe today. This check only
-          confirms that the stored backup file is still there and can be opened.
+        <div v-if="staged" class="restore-notice" data-testid="restore-staged">
+          The restore is applied when the server next starts. Restart the server to apply it.
+        </div>
+        <div v-else class="restore-notice" data-testid="restore-two-steps">
+          <strong>A restore is applied when the server next starts.</strong>
+          Staging checks the backup and keeps a copy; the running database is not touched until you
+          restart the server.
+        </div>
+
+        <div v-if="!restoreSupported" class="form-error" data-testid="restore-sqlite-only">
+          Restore is only available for SQLite. The check below still works.
         </div>
 
         <div v-if="preview" class="restore-preview">
-          <h4>{{ preview.valid ? 'The backup file looks usable' : 'The backup file is not usable' }}</h4>
+          <h4>{{ preview.valid ? 'The backup file can be opened' : 'The backup file is not usable' }}</h4>
           <div class="preview-stats">
             <div>Size on disk: {{ formatFileSize(preview.file_size) }}</div>
             <div>Records when created: {{ preview.record_count }}</div>
@@ -52,18 +59,33 @@
           <strong>Error:</strong> {{ error }}
         </div>
 
+        <p v-if="canStage && replacesPending" class="replaces-note">
+          This replaces the restore already staged.
+        </p>
+
         <div class="modal-actions">
           <button type="button" @click="emit('close')" class="secondary-button">
             Close
           </button>
-          <button
-            type="button"
-            class="primary-button"
-            :disabled="loading"
-            @click="emit('preview-restore')"
-          >
-            {{ loading ? 'Checking...' : 'Check backup' }}
-          </button>
+          <template v-if="!staged">
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="loading || staging"
+              @click="emit('preview-restore')"
+            >
+              {{ loading ? 'Checking...' : 'Check backup' }}
+            </button>
+            <button
+              v-if="canStage"
+              type="button"
+              class="primary-button stage-button"
+              :disabled="staging"
+              @click="emit('stage-restore')"
+            >
+              {{ staging ? 'Staging...' : 'Stage restore' }}
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -71,6 +93,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { BackupItem, RestorePreview } from '@/api/export'
 
 interface Props {
@@ -79,13 +102,27 @@ interface Props {
   preview: RestorePreview | null
   loading: boolean
   error: string
+  // Staging is offered after a usable check, on a database that supports it. The check itself
+  // works on every database.
+  restoreSupported?: boolean
+  staging?: boolean
+  staged?: boolean
+  replacesPending?: boolean
 }
 
-defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  restoreSupported: true,
+  staging: false,
+  staged: false,
+  replacesPending: false,
+})
+
+const canStage = computed(() => props.restoreSupported && props.preview?.valid === true)
 
 const emit = defineEmits<{
   close: []
   'preview-restore': []
+  'stage-restore': []
 }>()
 
 /**
@@ -234,6 +271,12 @@ function formatFileSize(bytes: number): string {
 
 .conflicts {
   color: #dc2626;
+}
+
+.replaces-note {
+  margin: 0 0 16px;
+  color: #92400e;
+  font-size: 0.875rem;
 }
 
 .form-error {
