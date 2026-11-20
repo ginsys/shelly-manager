@@ -191,7 +191,8 @@ describe('Drift API client', () => {
     it('asks for the server default when no limit is given', async () => {
       vi.mocked(api.get).mockResolvedValueOnce(ok(runs))
       await expect(listDriftScheduleRuns(4)).resolves.toEqual(runs)
-      expect(api.get).toHaveBeenCalledWith('/config/drift-schedules/4/runs', undefined)
+      // axios leaves an undefined param out of the query string
+      expect(api.get).toHaveBeenCalledWith('/config/drift-schedules/4/runs', { params: { limit: undefined } })
     })
 
     it('sends the limit when one is given', async () => {
