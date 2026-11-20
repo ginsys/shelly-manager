@@ -8,6 +8,20 @@ import (
 	"time"
 )
 
+// SleepContext waits for d, or until ctx ends. It reports false when ctx ended first. A retry loop
+// waits with it, so a caller that has gone or a deadline that has passed stops the loop at once
+// instead of after the sum of its delays (ginsys/shelly-manager#755).
+func SleepContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // DetectGeneration detects the generation of a Shelly device at the given IP
 func DetectGeneration(ctx context.Context, ip string) (int, error) {
 	httpClient := &http.Client{
