@@ -18,8 +18,8 @@ import (
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
-// ErrSchedulingNotImplemented is the message of the 501 the schedule routes return until the write
-// path lands (ginsys/shelly-manager#279, slice 2).
+// ErrSchedulingNotImplemented is the message of the 501 the run-history route returns until it reads
+// the runs (ginsys/shelly-manager#279).
 var ErrSchedulingNotImplemented = errors.New("drift schedule execution is not implemented in this release")
 
 const (
@@ -218,10 +218,12 @@ func (s *Scheduler) handle(ctx context.Context, sc DriftDetectionSchedule, now t
 
 // claim takes one due tick of a schedule that was read earlier. It compares and sets the integer
 // run_count, which counts claimed ticks (skipped ones too), so of several replicas that read the same
-// row exactly one wins: a timestamp would be read back in another precision than it was written.
+// row exactly one wins: a timestamp would be read back in another precision than it was written. It
+// also matches the spec that was read, so a tick read before an edit of the spec is not claimed: the
+// claim would put the old spec's next instant over the edit's.
 func (s *Scheduler) claim(db *gorm.DB, sc DriftDetectionSchedule, next time.Time) (bool, error) {
 	res := db.Model(&DriftDetectionSchedule{}).
-		Where("id = ? AND enabled = ? AND run_count = ?", sc.ID, true, sc.RunCount).
+		Where("id = ? AND enabled = ? AND run_count = ? AND cron_spec = ?", sc.ID, true, sc.RunCount, sc.CronSpec).
 		Updates(map[string]any{"next_run": next, "run_count": gorm.Expr("run_count + 1")})
 	return res.RowsAffected == 1, res.Error
 }
@@ -263,10 +265,11 @@ func (s *Scheduler) claimAndRecord(sc DriftDetectionSchedule, next, now time.Tim
 
 // failSchedule records one failed run for a schedule that cannot run and disables it, so it is
 // reported once and not on every tick. The disable is the arbiter: of several replicas that read the
-// same row, only the one that turns enabled off records the failure.
+// same row, only the one that turns enabled off records the failure. It matches the spec that failed,
+// so a spec fixed since the read is never disabled for the failure of the old one.
 func (s *Scheduler) failSchedule(sc DriftDetectionSchedule, now time.Time, cause error) {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		res := tx.Model(&DriftDetectionSchedule{}).Where("id = ? AND enabled = ?", sc.ID, true).Update("enabled", false)
+		res := tx.Model(&DriftDetectionSchedule{}).Where("id = ? AND enabled = ? AND cron_spec = ?", sc.ID, true, sc.CronSpec).Update("enabled", false)
 		if res.Error != nil || res.RowsAffected != 1 {
 			return res.Error
 		}
