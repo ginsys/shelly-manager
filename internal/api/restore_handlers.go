@@ -58,7 +58,7 @@ func (ih *ImportHandlers) StageRestore(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	report, err := restore.Stage(r.Context(), ih.restoreLive, path, rec.ExportID, requestBody.DryRun)
+	err := restore.Stage(r.Context(), ih.restoreLive, path, rec.ExportID, requestBody.DryRun)
 	var refused *restore.CheckError
 	if errors.As(err, &refused) {
 		ih.logger.Warn("Restore: backup refused", "export_id", rec.ExportID, "reason", refused.Reason)
@@ -72,16 +72,14 @@ func (ih *ImportHandlers) StageRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	if requestBody.DryRun {
 		rw.WriteSuccess(w, r, map[string]interface{}{
-			"backup_id": report.BackupID,
+			"backup_id": rec.ExportID,
 			"dry_run":   true,
 			"valid":     true,
-			"file_size": report.Size,
 		})
 		return
 	}
 	rw.WriteAccepted(w, r, map[string]interface{}{
-		"backup_id": report.BackupID,
-		"file_size": report.Size,
+		"backup_id": rec.ExportID,
 		"applies":   "at the next start",
 	})
 }
@@ -119,13 +117,7 @@ func (ih *ImportHandlers) CancelRestore(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	rw := apiresp.NewResponseWriter(ih.logger)
-	cancelled, err := restore.Cancel(ih.restoreLive)
-	if err != nil {
-		ih.logger.Error("Restore: cancel failed", "error", err)
-		rw.WriteInternalError(w, r, err)
-		return
-	}
-	if !cancelled {
+	if !restore.Cancel(ih.restoreLive) {
 		rw.WriteNotFoundError(w, r, "Pending restore")
 		return
 	}

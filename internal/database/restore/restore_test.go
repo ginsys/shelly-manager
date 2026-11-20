@@ -140,9 +140,7 @@ func TestStageThenApplyRestoresEachBackupFormat(t *testing.T) {
 			r := newRig(t)
 			path := r.backup(t, name, "new-1", "new-2", "new-3")
 
-			rep, err := Stage(context.Background(), r.live, path, "export-1", false)
-			require.NoError(t, err)
-			assert.Equal(t, "export-1", rep.BackupID)
+			require.NoError(t, Stage(context.Background(), r.live, path, "export-1", false))
 			p, err := Pending(r.live)
 			require.NoError(t, err)
 			require.NotNil(t, p)
@@ -212,7 +210,7 @@ func TestStageRefusesWhatCannotBeRestored(t *testing.T) {
 		"zip with two entries": twoEntries, "bad gzip": badGzip,
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Stage(context.Background(), r.live, path, "export-x", false)
+			err := Stage(context.Background(), r.live, path, "export-x", false)
 			var ce *CheckError
 			require.True(t, errors.As(err, &ce), "want a CheckError, got %v", err)
 			assert.NotContains(t, ce.Reason, r.dir, "the reason never names a server path")
@@ -230,10 +228,7 @@ func TestDryRunChecksAndStagesNothing(t *testing.T) {
 	r := newRig(t)
 	path := r.backup(t, "b.sqlite.gz", "new-1")
 
-	rep, err := Stage(context.Background(), r.live, path, "export-1", true)
-	require.NoError(t, err)
-	assert.Equal(t, "export-1", rep.BackupID)
-	assert.Greater(t, rep.Size, int64(0))
+	require.NoError(t, Stage(context.Background(), r.live, path, "export-1", true))
 
 	entries, rerr := os.ReadDir(Dir(r.live))
 	if rerr == nil {
@@ -248,7 +243,7 @@ func TestDryRunChecksAndStagesNothing(t *testing.T) {
 	// The same dry run refuses what a real stage refuses.
 	bad := filepath.Join(r.dir, "text.sqlite")
 	require.NoError(t, os.WriteFile(bad, []byte(strings.Repeat("x", 4096)), 0o600))
-	_, err = Stage(context.Background(), r.live, bad, "export-2", true)
+	err = Stage(context.Background(), r.live, bad, "export-2", true)
 	var ce *CheckError
 	require.True(t, errors.As(err, &ce))
 }
@@ -257,7 +252,7 @@ func TestFailedApplyKeepsTheOldDatabaseAndRecordsTheError(t *testing.T) {
 	t.Run("staged file changed after staging", func(t *testing.T) {
 		r := newRig(t)
 		path := r.backup(t, "b.sqlite", "new-1")
-		_, err := Stage(context.Background(), r.live, path, "export-1", false)
+		err := Stage(context.Background(), r.live, path, "export-1", false)
 		require.NoError(t, err)
 		staged := filepath.Join(Dir(r.live), "staged.sqlite")
 		f, err := os.OpenFile(staged, os.O_APPEND|os.O_WRONLY, 0)
@@ -285,7 +280,7 @@ func TestFailedApplyKeepsTheOldDatabaseAndRecordsTheError(t *testing.T) {
 	t.Run("the pre-restore copy cannot be written", func(t *testing.T) {
 		r := newRig(t)
 		path := r.backup(t, "b.sqlite", "new-1")
-		_, err := Stage(context.Background(), r.live, path, "export-1", false)
+		err := Stage(context.Background(), r.live, path, "export-1", false)
 		require.NoError(t, err)
 		// A non-empty directory where the copy goes makes creating the file fail.
 		blocker := r.live + ".pre-restore.tmp"
@@ -304,7 +299,7 @@ func TestFailedApplyKeepsTheOldDatabaseAndRecordsTheError(t *testing.T) {
 func TestApplyRemovesStaleWalAndShm(t *testing.T) {
 	r := newRig(t)
 	path := r.backup(t, "b.sqlite", "new-1")
-	_, err := Stage(context.Background(), r.live, path, "export-1", false)
+	err := Stage(context.Background(), r.live, path, "export-1", false)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(r.live+"-wal", []byte("stale wal"), 0o600))
 	require.NoError(t, os.WriteFile(r.live+"-shm", []byte("stale shm"), 0o600))
@@ -324,9 +319,9 @@ func TestOnePreRestoreCopyAndOnePendingRestore(t *testing.T) {
 	a := r.backup(t, "a.sqlite", "a-1")
 	b := r.backup(t, "b.sqlite", "b-1")
 
-	_, err := Stage(context.Background(), r.live, a, "export-a", false)
+	err := Stage(context.Background(), r.live, a, "export-a", false)
 	require.NoError(t, err)
-	_, err = Stage(context.Background(), r.live, b, "export-b", false)
+	err = Stage(context.Background(), r.live, b, "export-b", false)
 	require.NoError(t, err)
 	p, err := Pending(r.live)
 	require.NoError(t, err)
@@ -336,24 +331,20 @@ func TestOnePreRestoreCopyAndOnePendingRestore(t *testing.T) {
 	require.True(t, ApplyPending(r.live, testLogger(t)))
 	assert.Equal(t, []string{"b-1"}, readNames(t, r.live))
 
-	_, err = Stage(context.Background(), r.live, a, "export-a", false)
+	err = Stage(context.Background(), r.live, a, "export-a", false)
 	require.NoError(t, err)
 	require.True(t, ApplyPending(r.live, testLogger(t)))
 	assert.Equal(t, []string{"a-1"}, readNames(t, r.live))
 	assert.Equal(t, []string{"b-1"}, readNames(t, r.live+".pre-restore"), "the second apply replaced the first copy")
 
-	_, err = Stage(context.Background(), r.live, b, "export-b", false)
+	err = Stage(context.Background(), r.live, b, "export-b", false)
 	require.NoError(t, err)
-	ok, err := Cancel(r.live)
-	require.NoError(t, err)
-	assert.True(t, ok)
+	assert.True(t, Cancel(r.live))
 	p, err = Pending(r.live)
 	require.NoError(t, err)
 	assert.Nil(t, p)
 	assert.False(t, exists(filepath.Join(Dir(r.live), "staged.sqlite")))
-	ok, err = Cancel(r.live)
-	require.NoError(t, err)
-	assert.False(t, ok, "nothing pending, nothing cancelled")
+	assert.False(t, Cancel(r.live), "nothing pending, nothing cancelled")
 	assert.False(t, ApplyPending(r.live, testLogger(t)), "no pending restore is a no-op")
 }
 
@@ -365,7 +356,7 @@ func TestStageIsCappedByTheFreeSpace(t *testing.T) {
 	t.Cleanup(func() { freeBytes = old })
 	freeBytes = func(string) (uint64, error) { return 8 * 1024, nil } // less than the live file plus the backup
 
-	_, err := Stage(context.Background(), r.live, path, "export-1", false)
+	err := Stage(context.Background(), r.live, path, "export-1", false)
 	var ce *CheckError
 	require.True(t, errors.As(err, &ce), "want a CheckError, got %v", err)
 	assert.Contains(t, ce.Reason, "free")
@@ -376,7 +367,7 @@ func TestStageIsCappedByTheFreeSpace(t *testing.T) {
 func TestRollbackPutsThePreRestoreCopyBack(t *testing.T) {
 	r := newRig(t)
 	path := r.backup(t, "b.sqlite", "new-1")
-	_, err := Stage(context.Background(), r.live, path, "export-1", false)
+	err := Stage(context.Background(), r.live, path, "export-1", false)
 	require.NoError(t, err)
 	require.True(t, ApplyPending(r.live, testLogger(t)))
 	require.Equal(t, []string{"new-1"}, readNames(t, r.live))

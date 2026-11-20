@@ -3054,7 +3054,7 @@ paths:
       responses:
         '200':
           description: >
-            `pending` (backup_id, staged_at, size, sha256) or null, and `last_result` (status
+            `pending` (backup_id, staged_at, sha256) or null, and `last_result` (status
             `applied` or `failed`, backup_id, at, error) or null
         '501':
           description: The database is not SQLite

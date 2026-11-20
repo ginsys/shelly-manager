@@ -70,7 +70,6 @@ func refuse(format string, args ...any) error {
 type PendingInfo struct {
 	BackupID string    `json:"backup_id"`
 	StagedAt time.Time `json:"staged_at"`
-	Size     int64     `json:"size"`
 	SHA256   string    `json:"sha256"`
 }
 
@@ -81,12 +80,6 @@ type Result struct {
 	BackupID string    `json:"backup_id,omitempty"`
 	At       time.Time `json:"at"`
 	Error    string    `json:"error,omitempty"`
-}
-
-// Report is what a successful check found.
-type Report struct {
-	BackupID string `json:"backup_id"`
-	Size     int64  `json:"size"`
 }
 
 // Dir is the directory that holds the staged file and the markers. It sits beside the live file, so
@@ -111,7 +104,7 @@ func LivePath(dsn string) (string, bool) {
 // a copy in the restore directory; a failure removes the copy and leaves the live file and any
 // pending restore as they were. The copy is capped by the free space, after reserving what the apply
 // will need for the copy of the live file.
-func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) (*Report, error) {
+func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) error {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -119,7 +112,7 @@ func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) 
 	staged := filepath.Join(dir, stagedName)
 	free, err := freeBytes(filepath.Dir(live))
 	if err != nil {
-		return nil, fmt.Errorf("read the free space: %w", err)
+		return fmt.Errorf("read the free space: %w", err)
 	}
 	if fi, statErr := os.Stat(staged); statErr == nil {
 		free += uint64(fi.Size()) //nolint:gosec // a file size is not negative
@@ -127,13 +120,13 @@ func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) 
 	reserve := liveSize(live)
 	need := reserve + free/20
 	if free <= need {
-		return nil, refuse("There is not enough free space beside the database: about %s are needed for the previous database, and %s are free", human(reserve), human(free))
+		return refuse("There is not enough free space beside the database: about %s are needed for the previous database, and %s are free", human(reserve), human(free))
 	}
 	budget := free - need
 
 	dirExisted := exists(dir)
 	if err = os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("create the restore directory: %w", err)
+		return fmt.Errorf("create the restore directory: %w", err)
 	}
 	tmp := filepath.Join(dir, stagedName+".tmp")
 	defer func() {
@@ -143,29 +136,28 @@ func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) 
 		}
 	}()
 
-	size, err := expand(backupPath, tmp, budget)
-	if err != nil {
-		return nil, err
+	if err = expand(backupPath, tmp, budget); err != nil {
+		return err
 	}
 	if err = checkFile(ctx, tmp); err != nil {
-		return nil, err
+		return err
 	}
 	if dryRun {
-		return &Report{BackupID: backupID, Size: size}, nil
+		return nil
 	}
 	sum, err := fileSHA(tmp)
 	if err != nil {
-		return nil, fmt.Errorf("hash the staged file: %w", err)
+		return fmt.Errorf("hash the staged file: %w", err)
 	}
-	if err := os.Rename(tmp, staged); err != nil {
-		return nil, fmt.Errorf("stage the file: %w", err)
+	if err = os.Rename(tmp, staged); err != nil {
+		return fmt.Errorf("stage the file: %w", err)
 	}
-	info := PendingInfo{BackupID: backupID, StagedAt: time.Now().UTC(), Size: size, SHA256: sum}
-	if err := writeJSON(filepath.Join(dir, pendingName), info); err != nil {
+	info := PendingInfo{BackupID: backupID, StagedAt: time.Now().UTC(), SHA256: sum}
+	if err = writeJSON(filepath.Join(dir, pendingName), info); err != nil {
 		_ = os.Remove(staged)
-		return nil, fmt.Errorf("record the pending restore: %w", err)
+		return fmt.Errorf("record the pending restore: %w", err)
 	}
-	return &Report{BackupID: backupID, Size: size}, nil
+	return nil
 }
 
 // Pending returns the staged restore, or nil when there is none.
@@ -187,31 +179,20 @@ func LastResult(live string) (*Result, error) {
 	return &res, nil
 }
 
-// Cancel removes a pending restore. It reports whether there was one.
-func Cancel(live string) (bool, error) {
+// Cancel removes a pending restore, an unreadable marker included. It reports whether there was one.
+func Cancel(live string) bool {
 	mu.Lock()
 	defer mu.Unlock()
 	dir := Dir(live)
 	p, err := readPending(dir)
-	if err != nil {
-		// An unreadable marker is cleared like any other.
-		clearPending(dir)
-		return true, nil
-	}
-	if p == nil {
-		return false, nil
-	}
 	clearPending(dir)
-	return true, nil
+	return p != nil || err != nil
 }
 
 // ApplyPending swaps a staged restore into place. Call it before the database is opened. It reports
 // whether the swap happened; a failure keeps the live file, records a failed Result and clears the
 // pending restore, so the same failure is not retried at every start.
 func ApplyPending(live string, logger *logging.Logger) bool {
-	if logger == nil {
-		logger = logging.GetDefault()
-	}
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -264,9 +245,6 @@ func ApplyPending(live string, logger *logging.Logger) bool {
 // Rollback puts the pre-restore copy back after the restored database could not be opened or
 // migrated. It reports whether a copy was there to put back. The cause goes to the log only.
 func Rollback(live string, cause error, logger *logging.Logger) bool {
-	if logger == nil {
-		logger = logging.GetDefault()
-	}
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -336,40 +314,40 @@ func keepPreRestore(live string) error {
 
 // expand writes the backup's database bytes to dst: a .gz or a .zip with one file is unpacked, any
 // other name is copied as it is. It stops at budget bytes, so a small archive cannot fill the disk.
-func expand(src, dst string, budget uint64) (int64, error) {
+func expand(src, dst string, budget uint64) error {
 	var in io.Reader
 	switch strings.ToLower(filepath.Ext(src)) {
 	case ".gz":
 		f, err := os.Open(src)
 		if err != nil {
-			return 0, fmt.Errorf("open the backup: %w", err)
+			return fmt.Errorf("open the backup: %w", err)
 		}
 		defer func() { _ = f.Close() }()
 		gz, err := gzip.NewReader(f)
 		if err != nil {
-			return 0, refuse("The backup is not a valid gzip file")
+			return refuse("The backup is not a valid gzip file")
 		}
 		defer func() { _ = gz.Close() }()
 		in = gz
 	case ".zip":
 		zr, err := zip.OpenReader(src)
 		if err != nil {
-			return 0, refuse("The backup is not a valid zip file")
+			return refuse("The backup is not a valid zip file")
 		}
 		defer func() { _ = zr.Close() }()
 		if len(zr.File) != 1 || zr.File[0].FileInfo().IsDir() {
-			return 0, refuse("A zip backup must hold exactly one file")
+			return refuse("A zip backup must hold exactly one file")
 		}
 		rc, err := zr.File[0].Open()
 		if err != nil {
-			return 0, refuse("The backup is not a valid zip file")
+			return refuse("The backup is not a valid zip file")
 		}
 		defer func() { _ = rc.Close() }()
 		in = rc
 	default:
 		f, err := os.Open(src)
 		if err != nil {
-			return 0, fmt.Errorf("open the backup: %w", err)
+			return fmt.Errorf("open the backup: %w", err)
 		}
 		defer func() { _ = f.Close() }()
 		in = f
@@ -377,27 +355,27 @@ func expand(src, dst string, budget uint64) (int64, error) {
 
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
-		return 0, fmt.Errorf("create the staged copy: %w", err)
+		return fmt.Errorf("create the staged copy: %w", err)
 	}
 	cr := &readErrors{r: io.LimitReader(in, int64(budget)+1)} //nolint:gosec // a budget above the int64 range is not a real disk
 	n, copyErr := io.Copy(out, cr)
 	if cr.err != nil {
 		_ = out.Close()
-		return 0, refuse("The backup file is damaged or not a valid archive")
+		return refuse("The backup file is damaged or not a valid archive")
 	}
 	if copyErr != nil {
 		_ = out.Close()
-		return 0, fmt.Errorf("write the staged copy: %w", copyErr)
+		return fmt.Errorf("write the staged copy: %w", copyErr)
 	}
 	if uint64(n) > budget { //nolint:gosec // n is not negative
 		_ = out.Close()
-		return 0, refuse("The backup is larger than the free space beside the database allows (about %s)", human(budget))
+		return refuse("The backup is larger than the free space beside the database allows (about %s)", human(budget))
 	}
 	if err := out.Sync(); err != nil {
 		_ = out.Close()
-		return 0, fmt.Errorf("sync the staged copy: %w", err)
+		return fmt.Errorf("sync the staged copy: %w", err)
 	}
-	return n, out.Close()
+	return out.Close()
 }
 
 // readErrors remembers an error from the source, so a damaged archive can be told from a full disk.
@@ -534,9 +512,7 @@ func clearPending(dir string) {
 
 func recordResult(dir string, res Result) {
 	res.At = time.Now().UTC()
-	if err := os.MkdirAll(dir, 0o755); err == nil {
-		_ = writeJSON(filepath.Join(dir, resultName), res)
-	}
+	_ = writeJSON(filepath.Join(dir, resultName), res)
 }
 
 func readJSON(path string, v any) (bool, error) {
