@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
@@ -114,7 +115,8 @@ func TestDriftScheduleWriteRoutes_NoDatabaseSideEffects(t *testing.T) {
 	defer cleanup()
 	logger := logging.GetDefault()
 
-	// NewService runs the AutoMigrate that creates the schedule/run tables.
+	// The database Manager above creates the schedule and run tables; NewService migrates the
+	// device config, config history, drift report and drift trend tables.
 	configuration.NewService(db.GetDB(), logger)
 
 	handler := &Handler{
@@ -129,7 +131,7 @@ func TestDriftScheduleWriteRoutes_NoDatabaseSideEffects(t *testing.T) {
 		CronSpec: "0 0 * * *",
 	}
 	require.NoError(t, db.GetDB().Create(&seed).Error)
-	run := configuration.DriftDetectionRun{ScheduleID: seed.ID, Status: "completed"}
+	run := configuration.DriftDetectionRun{ScheduleID: seed.ID, Status: "completed", StartedAt: time.Now().UTC()}
 	require.NoError(t, db.GetDB().Create(&run).Error)
 
 	snapshot := func() (schedules, runs int64, first configuration.DriftDetectionSchedule) {
