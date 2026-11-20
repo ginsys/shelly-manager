@@ -295,6 +295,37 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
+    it('warns on Refresh when the newest status read, made by a cancel meanwhile, failed', async () => {
+      let failOlder: (e: unknown) => void = () => {}
+      let reads = 0
+      restoreStatus = () => {
+        reads++
+        if (reads === 1) {
+          return statusAnswer({ pending: { backup_id: 'a', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })()
+        }
+        if (reads === 2) {
+          return new Promise((_resolve, reject) => {
+            failOlder = reject
+          })
+        }
+        return Promise.reject(refused(500, 'Internal error'))
+      }
+      vi.mocked(api.delete as any).mockResolvedValue({ status: 204 })
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await wrapper.get('.refresh-button').trigger('click')
+      await flushPromises()
+
+      await wrapper.get('[data-testid="restore-cancel"]').trigger('click')
+      await flushPromises()
+      failOlder(refused(500, 'Internal error'))
+      await flushPromises()
+
+      expect(wrapper.get('.message').text()).toContain('restore status could not be refreshed')
+      expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
     it('keeps the newest status when an older read answers late', async () => {
       let answerFirst: (v: unknown) => void = () => {}
       let reads = 0
