@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -48,6 +49,8 @@ func (ni *LinuxNetworkInterface) interfaceInfo(ctx context.Context) NetworkInter
 
 	// Try to get WiFi device information using nmcli
 	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status")
+	// nmcli translates its states; the comparisons below are in English (nmcli's own advice for parsing).
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	output, err := cmd.Output()
 	if err != nil {
 		ni.logger.WithFields(map[string]any{

@@ -42,6 +42,7 @@ docs/
 | [export-import-system.md](guides/export-import-system.md) | Complete guide to export/import functionality |
 | [ui-guide.md](guides/ui-guide.md) | Web UI navigation and features guide |
 | [sma-format.md](guides/sma-format.md) | SMA (Shelly Manager Archive) format specification |
+| [provisioner-status.md](guides/provisioner-status.md) | What `shelly-provisioner status` reports for the Wi-Fi device, and how a device that cannot scan fails discovery |
 | [database-upgrade.md](guides/database-upgrade.md) | Upgrading an existing database: startup schema repair, and how to resolve a refused upgrade |
 
 ---

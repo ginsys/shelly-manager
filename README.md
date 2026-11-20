@@ -239,6 +239,9 @@ scanner:
   interface: wlan0
 ```
 
+`shelly-provisioner status` checks the host's Wi-Fi device and scanning; what its lines mean is in
+[docs/guides/provisioner-status.md](docs/guides/provisioner-status.md).
+
 A `${...}` written in a value of these files is not replaced, so set the keys through the environment
 (`SHELLY_SECURITY_ADMIN_API_KEY`, `SHELLY_SECURITY_AGENT_API_KEY`, `SHELLY_API_KEY`, each also in the `_FILE` form).
 
