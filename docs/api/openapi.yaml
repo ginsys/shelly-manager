@@ -2135,9 +2135,10 @@ paths:
       tags: [Drift]
       summary: Create drift detection schedule (unavailable)
       description: >-
-        Not implemented in this release. Drift schedules are stored but never
-        executed, so creation fails closed with HTTP 501 and performs no
-        database writes. The scheduled-execution vertical is tracked as #279.
+        Not implemented in this release: creation fails closed with HTTP 501 and
+        performs no database writes. Schedules already stored run only when the
+        scheduler is on (drift.scheduler_enabled, off by default). The write
+        path is tracked as #279.
       operationId: createDriftSchedule
       security:
         - BearerAuth: []
@@ -2250,9 +2251,10 @@ paths:
       tags: [Drift]
       summary: Get drift schedule run history (unavailable)
       description: >-
-        Not implemented in this release. Schedules never execute, so run history
-        cannot exist; a successful empty array would assert history that never
-        happened. Fails closed with HTTP 501 (#270). See #279.
+        Not implemented in this release: the route does not read the run history
+        the scheduler keeps when it is on (drift.scheduler_enabled, off by
+        default), and a successful empty array would assert there is none. Fails
+        closed with HTTP 501 (#270). See #279.
       operationId: getDriftScheduleRuns
       security:
         - BearerAuth: []
