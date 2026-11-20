@@ -338,20 +338,18 @@ func checkStatus() {
 
 	// Check network interface availability
 	if netInterface != nil {
-		fmt.Printf("✅ Network Interface: Available\n")
-
-		// Test WiFi scanning capability
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		if networks, err := netInterface.GetAvailableNetworks(ctx); err != nil {
-			fmt.Printf("❌ WiFi Scanning: Failed (%v)\n", err)
+		info := netInterface.GetInterfaceInfo()
+		if problem := info.Problem(); problem != "" {
+			// A device that cannot scan is not asked to: the one failure line says why.
+			fmt.Printf("❌ Network Interface: %s\n", problem)
 			logger.WithFields(map[string]any{
-				"error":     err.Error(),
+				"device":    info.Name,
+				"state":     info.Status,
 				"component": "status",
-			}).Warn("WiFi scanning test failed")
+			}).Warn("Network interface cannot scan")
 		} else {
-			fmt.Printf("✅ WiFi Scanning: Working (%d networks found)\n", len(networks))
+			fmt.Printf("✅ Network Interface: %s (%s)\n", info.Name, info.Status)
+			checkScanning()
 		}
 	} else {
 		fmt.Printf("❌ Network Interface: Not available\n")
@@ -387,6 +385,26 @@ func checkStatus() {
 	logger.WithFields(map[string]any{
 		"component": "status",
 	}).Info("Status check completed")
+}
+
+// checkScanning tests WiFi scanning. A scan that works but sees nothing is a warning, not a tick.
+func checkScanning() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	networks, err := netInterface.GetAvailableNetworks(ctx)
+	switch {
+	case err != nil:
+		fmt.Printf("❌ WiFi Scanning: Failed (%v)\n", err)
+		logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "status",
+		}).Warn("WiFi scanning test failed")
+	case len(networks) == 0:
+		fmt.Printf("⚠️  WiFi Scanning: No networks listed (nothing in range, or the rescan was refused: see the log)\n")
+	default:
+		fmt.Printf("✅ WiFi Scanning: Working (%d networks found)\n", len(networks))
+	}
 }
 
 // Helper functions
@@ -755,9 +773,6 @@ func initApp() {
 
 	fmt.Printf("Shelly Provisioner initialized\n")
 	fmt.Printf("Agent ID: %s\n", generateAgentID())
-	if netInterface != nil {
-		fmt.Printf("Network interface: Available\n")
-	}
 	if apiClient != nil {
 		fmt.Printf("API client: Configured for %s\n", apiURL)
 	}

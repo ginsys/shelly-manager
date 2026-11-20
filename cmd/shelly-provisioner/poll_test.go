@@ -34,11 +34,11 @@ func TestPollForTasks_RegistersBeforePolling(t *testing.T) {
 	}))
 	defer server.Close()
 
-	logger, err := logging.New(logging.Config{Level: "error", Format: "text", Output: "stdout"})
+	testLogger, err := logging.New(logging.Config{Level: "error", Format: "text", Output: "stdout"})
 	require.NoError(t, err)
 	saved := apiClient
 	t.Cleanup(func() { apiClient = saved })
-	apiClient = provisioning.NewAPIClient(server.URL, "k", "a", logger)
+	apiClient = provisioning.NewAPIClient(server.URL, "k", "a", testLogger)
 
 	require.NoError(t, pollForTasks(context.Background()), "a client that never registered registers, then polls")
 	assert.EqualValues(t, 1, registers.Load())
