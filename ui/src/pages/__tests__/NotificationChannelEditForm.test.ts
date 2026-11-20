@@ -169,6 +169,26 @@ describe('NotificationChannelDetailPage edit form', () => {
     expect((field(wrapper, 'channel-subject').element as HTMLInputElement).value).toBe('Typed subject')
   })
 
+  // The URL input is `required`, as in the create form: the browser stops an empty one before save() runs. A
+  // blank one passes that check, is sent empty and the server says why.
+  it('leaves an empty URL to the browser and a blank one to the server', async () => {
+    const { wrapper, store } = await mountEdit(webhook)
+    vi.mocked(store.saveChannel).mockRejectedValue(new Error('invalid channel configuration: webhook config must have a URL'))
+    await openEdit(wrapper)
+    await field(wrapper, 'channel-keep-url').setValue(false)
+    const form = wrapper.find('form').element as HTMLFormElement
+    expect(form.checkValidity()).toBe(false)
+    form.requestSubmit()
+    await flushPromises()
+    expect(store.saveChannel).not.toHaveBeenCalled()
+
+    await field(wrapper, 'channel-webhook-url').setValue('   ')
+    expect(form.checkValidity()).toBe(true)
+    await save(wrapper)
+    expect(vi.mocked(store.saveChannel).mock.calls[0][1].config.url).toBe('')
+    expect(field(wrapper, 'channel-save-error').text()).toBe('invalid channel configuration: webhook config must have a URL')
+  })
+
   it('refuses two headers of one name and posts nothing', async () => {
     const { wrapper, store } = await mountEdit(webhook)
     await openEdit(wrapper)

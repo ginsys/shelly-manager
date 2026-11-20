@@ -124,6 +124,21 @@ describe('buildEditConfig', () => {
     expect(built.config?.url).toBe(MASK)
   })
 
+  it('folds a name the way the server does, so a long-s spelling of a key is not sent beside the new one', () => {
+    // encoding/json and strings.EqualFold treat U+017F as an s, so the server sees this key as "secret".
+    const read = { url: MASK, method: 'POST', 'ſecret': MASK }
+    const { fields, keep, stored } = editFromConfig('webhook', read)
+    expect(stored.secret).toBe(true)
+
+    keep.secret = false
+    fields.secret = 'replacement'
+    const replaced = buildEditConfig('webhook', read, fields, keep).config ?? {}
+    expect(replaced).toEqual({ url: MASK, method: 'POST', secret: 'replacement' })
+
+    const kept = editFromConfig('webhook', read)
+    expect(buildEditConfig('webhook', read, kept.fields, kept.keep).config).toEqual({ url: MASK, method: 'POST', secret: MASK })
+  })
+
   it('sends no headers and no secret key when the read stored none', () => {
     const read = { url: MASK, method: 'POST' }
     const { fields, keep } = editFromConfig('webhook', read)
