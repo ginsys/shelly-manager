@@ -42,16 +42,18 @@ function optional(config: Record<string, unknown>, name: string, value: string) 
 // Headers are a name-to-value object, so two rows with one name (HTTP names ignore case) would silently
 // keep one of them: that is refused here, where the user can see both rows.
 function headerObject(rows: ChannelFields['headers']): { headers?: Record<string, string>; error?: string } {
-  const headers: Record<string, string> = {}
+  const entries: [string, string][] = []
   const seen = new Set<string>()
   for (const row of rows) {
     const name = row.key.trim()
     if (!name) continue
     if (seen.has(name.toLowerCase())) return { error: `Header ${name} appears twice` }
     seen.add(name.toLowerCase())
-    headers[name] = row.value
+    entries.push([name, row.value])
   }
-  return { headers }
+  // fromEntries makes an own property of each name; assigning into {} would turn "__proto__" into a prototype
+  // change and drop the header.
+  return { headers: Object.fromEntries(entries) }
 }
 
 export function buildChannelConfig(

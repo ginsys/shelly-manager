@@ -187,6 +187,43 @@ describe('NotificationChannelsPage create form', () => {
     }
   })
 
+  it('keeps a header named __proto__ instead of dropping it', async () => {
+    const { wrapper, store } = await openForm()
+    await field(wrapper, 'channel-name').setValue('Hook')
+    await field(wrapper, 'channel-type').setValue('webhook')
+    await field(wrapper, 'channel-webhook-url').setValue('https://hooks.example.com/x')
+    await field(wrapper, 'channel-header-name').setValue('__proto__')
+    await field(wrapper, 'channel-header-value').setValue('fixture-token')
+    await submit(wrapper)
+
+    const headers = vi.mocked(store.addChannel).mock.calls[0][0].config.headers as Record<string, string>
+    expect(Object.getOwnPropertyNames(headers)).toEqual(['__proto__'])
+    expect(JSON.stringify(headers)).toBe('{"__proto__":"fixture-token"}')
+  })
+
+  it('Cancel and the backdrop drop what was typed, credentials included', async () => {
+    const { wrapper } = await openForm()
+    const typed = async () => {
+      await field(wrapper, 'channel-type').setValue('webhook')
+      await field(wrapper, 'channel-webhook-url').setValue('https://hooks.example.com/token')
+      await field(wrapper, 'channel-webhook-secret').setValue('s3cr3t')
+      await field(wrapper, 'channel-header-name').setValue('Authorization')
+      await field(wrapper, 'channel-header-value').setValue('Bearer abc')
+    }
+    const held = () => JSON.stringify((wrapper.vm as any).fields)
+
+    await typed()
+    await field(wrapper, 'channel-cancel').trigger('click')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(held()).not.toMatch(/token|s3cr3t|Bearer/)
+
+    await wrapper.find('.primary-button').trigger('click')
+    await typed()
+    await wrapper.find('.modal-overlay').trigger('click')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(held()).not.toMatch(/token|s3cr3t|Bearer/)
+  })
+
   it('opens empty after a create and posts a typed secret exactly as typed', async () => {
     const { wrapper, store } = await openForm()
     await field(wrapper, 'channel-name').setValue('Hook')
