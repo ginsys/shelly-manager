@@ -79,8 +79,8 @@
             >
               Recent runs
             </button>
-            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="opening" @click="openForm(schedule)">Edit</button>
-            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" :disabled="toggling.includes(schedule.id)" @click="handleToggle(schedule.id)">
+            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="opening || toggling.includes(schedule.id)" @click="openForm(schedule)">Edit</button>
+            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" :disabled="opening || toggling.includes(schedule.id)" @click="handleToggle(schedule.id)">
               {{ schedule.enabled ? 'Disable' : 'Enable' }}
             </button>
             <button class="btn-icon danger" title="Delete" @click="handleDelete(schedule.id)">
