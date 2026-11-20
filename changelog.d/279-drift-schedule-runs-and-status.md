@@ -8,4 +8,4 @@ Changed
 
 Fixed
 
-- A drift schedule now carries a revision that every edit, toggle and disable bumps, and the scheduler claims a tick only at the revision it read. A tick read before a change of the device selection, or before a disable and enable, is no longer run from the old read. An edit costs the tick in flight one claim; the next poll takes it. Refs ginsys/shelly-manager#279.
+- A drift schedule now carries a revision that every edit, toggle and disable bumps, and the scheduler claims a tick only at the revision it read. A tick read before a change of the device selection, or before a disable and enable, is no longer run from the old read. An edit costs the tick in flight one claim, and the schedule runs at the next instant its spec names. Refs ginsys/shelly-manager#279.

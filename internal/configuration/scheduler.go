@@ -196,7 +196,7 @@ func (s *Scheduler) handle(ctx context.Context, sc DriftDetectionSchedule, now t
 	if sc.NextRun == nil {
 		// Never armed (a row from before the scheduler ran): arm it, run it at its next instant.
 		armErr := s.db.Model(&DriftDetectionSchedule{}).
-			Where("id = ? AND next_run IS NULL AND revision = ?", sc.ID, sc.Revision).
+			Where("id = ? AND enabled = ? AND next_run IS NULL AND revision = ?", sc.ID, true, sc.Revision).
 			Update("next_run", next).Error
 		if armErr != nil {
 			s.logError("arm drift schedule", sc.ID, armErr)
@@ -218,10 +218,11 @@ func (s *Scheduler) handle(ctx context.Context, sc DriftDetectionSchedule, now t
 // row exactly one wins: a timestamp would be read back in another precision than it was written. It
 // also matches the revision that was read, so a tick read before an edit or a toggle is not claimed: the
 // claim would put the old state's next instant over the edit's, or run a schedule that was switched off
-// and on again.
+// and on again. It matches enabled too, for a writer of the release before the revision, which switches a
+// schedule off without bumping it.
 func (s *Scheduler) claim(db *gorm.DB, sc DriftDetectionSchedule, next time.Time) (bool, error) {
 	res := db.Model(&DriftDetectionSchedule{}).
-		Where("id = ? AND run_count = ? AND revision = ?", sc.ID, sc.RunCount, sc.Revision).
+		Where("id = ? AND enabled = ? AND run_count = ? AND revision = ?", sc.ID, true, sc.RunCount, sc.Revision).
 		Updates(map[string]any{"next_run": next, "run_count": gorm.Expr("run_count + 1")})
 	return res.RowsAffected == 1, res.Error
 }

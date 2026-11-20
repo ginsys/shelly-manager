@@ -570,9 +570,8 @@ func TestSchedulerClaim_ADisabledScheduleIsNotClaimed(t *testing.T) {
 	fx := newSchedFixture(t)
 	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
 	read := fx.schedule(id)
-	// A writer of scheduling state bumps the revision with the change, as the service does.
-	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", id).
-		Updates(map[string]any{"enabled": false, "revision": gorm.Expr("revision + 1")}).Error)
+	// Switched off without a bump of the revision, as the release before the column does.
+	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Update("enabled", false).Error)
 
 	won, err := fx.s.claim(fx.db, read, at(5*time.Minute))
 
