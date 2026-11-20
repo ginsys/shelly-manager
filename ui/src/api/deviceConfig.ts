@@ -1,5 +1,6 @@
 import api from './client'
 import { DEVICE_CALL_TIMEOUT_MS } from './deviceCallTimeout'
+import { errorEnvelopeMessage } from './errorBody'
 import type { APIResponse } from './types'
 
 // Configuration interfaces
@@ -9,6 +10,9 @@ export interface DeviceConfig {
 
 export interface ConfigDrift {
   hasDrift: boolean
+  // The device has no desired configuration, so nothing was compared. hasDrift is false then, and
+  // that is not a "no drift" result.
+  noDesiredConfig?: boolean
   driftFields?: string[]
   storedConfig?: DeviceConfig
   liveConfig?: DeviceConfig
@@ -43,9 +47,11 @@ export async function getCurrentDeviceConfig(id: number | string): Promise<Devic
   return res.data.data
 }
 
-// The drift endpoint answers in one of two shapes: a full report
+// The drift endpoint answers a 200 in one of two shapes: a full report
 // ({differences: [{path, ...}], ...}) when the device is compared, or
-// {device_id, drift: false, message} when no stored configuration exists.
+// {device_id, drift: false, message} when the check returns no report. A device with no desired
+// configuration is not a 200: the server answers 404 with the sentence below, because there is
+// nothing to compare the device with, and that is not "no drift".
 interface DriftDifference {
   path?: string
 }
@@ -78,9 +84,24 @@ function mapDriftResponse(data: DriftResponse): ConfigDrift {
   }
 }
 
+// configuration.ErrNoDesiredConfig, as the server writes it into the 404.
+const NO_DESIRED_CONFIG_MESSAGE =
+  'no desired configuration is set for this device, so there is nothing to compare it with'
+
 // Detect configuration drift
 export async function detectConfigDrift(id: number | string, signal?: AbortSignal): Promise<ConfigDrift> {
-  const res = await api.get<APIResponse<DriftResponse>>(`/devices/${id}/config/drift`, { signal })
+  let res
+  try {
+    res = await api.get<APIResponse<DriftResponse>>(`/devices/${id}/config/drift`, {
+      signal,
+      timeout: DEVICE_CALL_TIMEOUT_MS,
+    })
+  } catch (e: any) {
+    if (e?.response?.status === 404 && (await errorEnvelopeMessage(e.response.data)) === NO_DESIRED_CONFIG_MESSAGE) {
+      return { hasDrift: false, noDesiredConfig: true }
+    }
+    throw e
+  }
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to detect configuration drift'
     throw new Error(msg)
