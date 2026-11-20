@@ -3,7 +3,7 @@
     :rows="exports"
     :loading="loading"
     :error="error"
-    :cols="5"
+    :cols="6"
     :rowKey="(row: any) => row.export_id"
   >
     <template #header>
