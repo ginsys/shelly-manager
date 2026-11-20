@@ -7,7 +7,7 @@ NetworkManager (`nmcli`). On other platforms the provisioner uses a mock interfa
 ## The interface line
 
 The provisioner reads the first Wi-Fi device from `nmcli device status` and prints its name and NetworkManager
-state. It reads the state in the `C` locale, so a translated `nmcli` does not change the verdict.
+state. Every `nmcli` call of the provisioner runs in the `C` locale, so a translated `nmcli` does not change a verdict, the disconnect, or the current-connection read.
 
 | State | Line | Meaning |
 |---|---|---|

@@ -20,6 +20,15 @@ type LinuxNetworkInterface struct {
 	logger *logging.Logger
 }
 
+// nmcliCommand builds an nmcli command that runs in the C locale. nmcli translates its states and
+// messages, and this file compares them in English (nmcli's own advice for parsing its output). Every
+// nmcli call of the file goes through it.
+func nmcliCommand(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "nmcli", args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	return cmd
+}
+
 // NewLinuxNetworkInterface creates a new Linux network interface manager
 func NewLinuxNetworkInterface(logger *logging.Logger) *LinuxNetworkInterface {
 	return &LinuxNetworkInterface{
@@ -48,9 +57,7 @@ func (ni *LinuxNetworkInterface) interfaceInfo(ctx context.Context) NetworkInter
 	}
 
 	// Try to get WiFi device information using nmcli
-	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status")
-	// nmcli translates its states; the comparisons below are in English (nmcli's own advice for parsing).
-	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd := nmcliCommand(ctx, "-t", "-f", "DEVICE,TYPE,STATE", "device", "status")
 	output, err := cmd.Output()
 	if err != nil {
 		ni.logger.WithFields(map[string]any{
@@ -102,7 +109,7 @@ func (ni *LinuxNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]Wi
 	}
 
 	// Request a fresh scan
-	scanCmd := exec.CommandContext(ctx, "nmcli", "device", "wifi", "rescan")
+	scanCmd := nmcliCommand(ctx, "device", "wifi", "rescan")
 	scanOutput, scanErr := scanCmd.CombinedOutput()
 	if scanErr != nil {
 		ni.logger.WithFields(map[string]any{
@@ -124,7 +131,7 @@ func (ni *LinuxNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]Wi
 	time.Sleep(2 * time.Second)
 
 	// Get the list of networks
-	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL,CHAN,FREQ", "device", "wifi", "list")
+	cmd := nmcliCommand(ctx, "-t", "-f", "SSID,SECURITY,SIGNAL,CHAN,FREQ", "device", "wifi", "list")
 	output, err := cmd.CombinedOutput()
 	ni.logger.WithFields(map[string]any{
 		"component":    "network_interface",
@@ -261,16 +268,16 @@ func (ni *LinuxNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, pas
 	if password == "" {
 		// Open network
 		if profileExists {
-			cmd = exec.CommandContext(ctx, "nmcli", "connection", "up", ssid)
+			cmd = nmcliCommand(ctx, "connection", "up", ssid)
 		} else {
-			cmd = exec.CommandContext(ctx, "nmcli", "device", "wifi", "connect", ssid)
+			cmd = nmcliCommand(ctx, "device", "wifi", "connect", ssid)
 		}
 	} else {
 		// Secured network
 		if profileExists {
-			cmd = exec.CommandContext(ctx, "nmcli", "connection", "up", ssid)
+			cmd = nmcliCommand(ctx, "connection", "up", ssid)
 		} else {
-			cmd = exec.CommandContext(ctx, "nmcli", "device", "wifi", "connect", ssid, "password", password)
+			cmd = nmcliCommand(ctx, "device", "wifi", "connect", ssid, "password", password)
 		}
 	}
 
@@ -300,7 +307,7 @@ func (ni *LinuxNetworkInterface) ConnectToNetwork(ctx context.Context, ssid, pas
 
 // checkConnectionProfile checks if a connection profile exists for the SSID
 func (ni *LinuxNetworkInterface) checkConnectionProfile(ctx context.Context, ssid string) bool {
-	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME", "connection", "show")
+	cmd := nmcliCommand(ctx, "-t", "-f", "NAME", "connection", "show")
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -344,7 +351,7 @@ func (ni *LinuxNetworkInterface) DisconnectFromNetwork(ctx context.Context) erro
 	}).Info("Disconnecting from current WiFi network")
 
 	// Get the active WiFi connection
-	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME,TYPE,STATE", "connection", "show", "--active")
+	cmd := nmcliCommand(ctx, "-t", "-f", "NAME,TYPE,STATE", "connection", "show", "--active")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to get active connections: %w", err)
@@ -361,7 +368,7 @@ func (ni *LinuxNetworkInterface) DisconnectFromNetwork(ctx context.Context) erro
 				"connection": connectionName,
 			}).Debug("Disconnecting from WiFi connection")
 
-			downCmd := exec.CommandContext(ctx, "nmcli", "connection", "down", connectionName)
+			downCmd := nmcliCommand(ctx, "connection", "down", connectionName)
 			if err := downCmd.Run(); err != nil {
 				ni.logger.WithFields(map[string]any{
 					"component":  "network_interface",
@@ -378,7 +385,7 @@ func (ni *LinuxNetworkInterface) DisconnectFromNetwork(ctx context.Context) erro
 // GetCurrentNetwork returns the currently connected network info
 func (ni *LinuxNetworkInterface) GetCurrentNetwork(ctx context.Context) (*WiFiNetwork, error) {
 	// Get the active WiFi connection
-	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "NAME,TYPE,STATE", "connection", "show", "--active")
+	cmd := nmcliCommand(ctx, "-t", "-f", "NAME,TYPE,STATE", "connection", "show", "--active")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active connections: %w", err)
@@ -391,7 +398,7 @@ func (ni *LinuxNetworkInterface) GetCurrentNetwork(ctx context.Context) (*WiFiNe
 			ssid := parts[0]
 
 			// Get detailed info about this connection
-			detailCmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "802-11-wireless.ssid,802-11-wireless.security", "connection", "show", ssid)
+			detailCmd := nmcliCommand(ctx, "-t", "-f", "802-11-wireless.ssid,802-11-wireless.security", "connection", "show", ssid)
 			detailOutput, err := detailCmd.Output()
 			if err != nil {
 				continue
