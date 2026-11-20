@@ -38,15 +38,5 @@
     "method": "GET",
     "template": "/api/v1/import/restore/{param}",
     "issue": 249
-  },
-  {
-    "method": "GET",
-    "template": "/api/v1/notifications/channels/{param}",
-    "issue": 250
-  },
-  {
-    "method": "DELETE",
-    "template": "/api/v1/notifications/rules/{param}",
-    "issue": 250
   }
 ]

@@ -3036,9 +3036,34 @@ paths:
         schema:
           type: integer
 
+    get:
+      tags: [Notifications]
+      summary: Get one notification channel
+      operationId: getNotificationChannel
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: The channel, with credentials masked as in the list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NotificationChannel'
+        '404':
+          description: No channel has this id
+
     put:
       tags: [Notifications]
       summary: Update notification channel
+      description: >-
+        Replaces name, type, enabled, config and description. A body that leaves out enabled
+        disables the channel and one that leaves out description blanks it.
       operationId: updateNotificationChannel
       security:
         - BearerAuth: []
@@ -3065,8 +3090,12 @@ paths:
         - BearerAuth: []
         - ApiKeyAuth: []
       responses:
-        '204':
+        '200':
           description: Channel deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/notifications/channels/{id}/test:
     post:
@@ -3138,6 +3167,31 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/NotificationRule'
+
+  /api/v1/notifications/rules/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Delete notification rule
+      description: Deletes the rule and its delivery history in one transaction. The channel stays.
+      operationId: deleteNotificationRule
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Rule deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: No rule has this id
 
   /api/v1/notifications/history:
     get:

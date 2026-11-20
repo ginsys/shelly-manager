@@ -26,9 +26,11 @@ var adminGuardedOpenRoutes = []struct{ method, path string }{
 	{"DELETE", "/api/v1/notifications/channels/1"},
 	{"POST", "/api/v1/notifications/channels/1/test"},
 	{"POST", "/api/v1/notifications/rules"},
+	{"DELETE", "/api/v1/notifications/rules/1"},
 
 	// Reads that return a channel's stored configuration.
 	{"GET", "/api/v1/notifications/channels"},
+	{"GET", "/api/v1/notifications/channels/1"},
 	{"GET", "/api/v1/notifications/rules"},
 	{"GET", "/api/v1/notifications/history"},
 
