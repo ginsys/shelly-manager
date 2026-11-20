@@ -230,6 +230,10 @@ page imports still counts. The Playwright spec is what proves the links are rend
   configured differently differ. The page lists schedules and deletes them: its create and edit
   form, the presets and the run history list are the last slice of ginsys/shelly-manager#279.
 
+  ![Drift schedules with the scheduler off](images/drift-schedules-scheduler-off.png)
+  ![Drift schedules with the scheduler on](images/drift-schedules-scheduler-on.png)
+  ![Drift schedules when the scheduler state could not be read](images/drift-schedules-status-unreadable.png)
+
 - **Drift compares with the desired configuration**, the one apply writes and verify reads, and no
   longer with the stored import record (ginsys/shelly-manager#606). A device with no desired
   configuration cannot be checked: the drift route answers 404 and a bulk run marks it skipped.
