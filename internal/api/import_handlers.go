@@ -41,6 +41,11 @@ func NewImportHandlers(syncEngine *sync.SyncEngine, logger *logging.Logger) *Imp
 
 // SetExportBaseDir confines the backups the restore preview will open to dir.
 func (ih *ImportHandlers) SetExportBaseDir(dir string) {
+	// Absolute, because the containment check compares it with the absolute path of the file, and
+	// the configured directory can be relative (./data/exports).
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
 	ih.exportBaseDir = dir
 }
 

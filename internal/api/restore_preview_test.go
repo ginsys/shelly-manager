@@ -26,6 +26,8 @@ type restoreRig struct {
 	router http.Handler
 	db     *database.Manager
 	dir    string
+	engine *sync.SyncEngine
+	logger *logging.Logger
 }
 
 // newRestoreRig builds the import routes over a real engine with the real backup plugin, and
@@ -46,7 +48,7 @@ func newRestoreRig(t *testing.T, withBase bool) *restoreRig {
 	}
 	r := mux.NewRouter()
 	imp.AddImportRoutes(r.PathPrefix("/api/v1").Subrouter())
-	return &restoreRig{router: r, db: db, dir: dir}
+	return &restoreRig{router: r, db: db, dir: dir, engine: engine, logger: logger}
 }
 
 func (rg *restoreRig) record(t *testing.T, id, plugin, path string, success bool) {
@@ -150,6 +152,31 @@ func TestRestorePreviewRefusesWhatIsNotAStoredBackup(t *testing.T) {
 		require.NotContains(t, rr.Body.String(), rg.dir, "%s: the answer must not name a server path", id)
 		require.NotContains(t, rr.Body.String(), "passwd", "%s: the answer must not name a server path", id)
 	}
+}
+
+// The shipped development configuration sets a relative export directory (./data/exports): a
+// stored backup under it must still be checked.
+func TestRestorePreviewAcceptsARelativeBaseDirectory(t *testing.T) {
+	rg := newRestoreRig(t, false)
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	rel, err := filepath.Rel(cwd, rg.dir)
+	require.NoError(t, err)
+	require.False(t, filepath.IsAbs(rel))
+
+	imp := NewImportHandlers(rg.engine, rg.logger)
+	imp.SetExportBaseDir(rel)
+	r := mux.NewRouter()
+	imp.AddImportRoutes(r.PathPrefix("/api/v1").Subrouter())
+	rg.router = r
+
+	rg.record(t, "ok", "backup", rg.file(t, goodBackupName), true)
+	require.Equal(t, http.StatusOK, rg.post(t, `{"backup_id":"ok"}`).Code)
+
+	outside := filepath.Join(t.TempDir(), goodBackupName)
+	require.NoError(t, os.WriteFile(outside, []byte("elsewhere"), 0o600))
+	rg.record(t, "outside", "backup", outside, true)
+	require.Equal(t, http.StatusUnprocessableEntity, rg.post(t, `{"backup_id":"outside"}`).Code)
 }
 
 // An empty or unreadable file is a check result (200, valid false), and the answer never carries
