@@ -396,12 +396,16 @@ func TestOnePreRestoreCopyAndOnePendingRestore(t *testing.T) {
 
 	err = Stage(context.Background(), r.live, b, "export-b", false)
 	require.NoError(t, err)
-	assert.True(t, Cancel(r.live))
+	cancelled, err := Cancel(r.live)
+	require.NoError(t, err)
+	assert.True(t, cancelled)
 	p, err = Pending(r.live)
 	require.NoError(t, err)
 	assert.Nil(t, p)
 	assert.False(t, exists(filepath.Join(Dir(r.live), "staged.sqlite")))
-	assert.False(t, Cancel(r.live), "nothing pending, nothing cancelled")
+	cancelled, err = Cancel(r.live)
+	require.NoError(t, err)
+	assert.False(t, cancelled, "nothing pending, nothing cancelled")
 	assert.False(t, ApplyPending(r.live, testLogger(t)), "no pending restore is a no-op")
 }
 
@@ -440,6 +444,21 @@ func TestRestagingDoesNotCountTheStagedFileAsFree(t *testing.T) {
 	require.NoError(t, perr)
 	require.NotNil(t, p)
 	assert.Equal(t, "export-1", p.BackupID, "a refused restage keeps the pending restore")
+}
+
+func TestCancelThatCannotRemoveTheRestoreSaysSo(t *testing.T) {
+	r := newRig(t)
+	path := r.backup(t, "b.sqlite", "new-1")
+	require.NoError(t, Stage(context.Background(), r.live, path, "export-1", false))
+
+	// The marker cannot be removed: swap it for a directory with a file in it.
+	marker := filepath.Join(Dir(r.live), "pending.json")
+	require.NoError(t, os.Remove(marker))
+	require.NoError(t, os.MkdirAll(filepath.Join(marker, "x"), 0o755))
+
+	cancelled, err := Cancel(r.live)
+	require.Error(t, err)
+	assert.False(t, cancelled, "a restore that is still there is not reported as cancelled")
 }
 
 func TestFailedRestageLeavesNothingPending(t *testing.T) {

@@ -152,7 +152,7 @@ func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) 
 	}
 	info := PendingInfo{BackupID: backupID, StagedAt: time.Now().UTC(), SHA256: sum}
 	if err = writeJSON(filepath.Join(dir, pendingName), info); err != nil {
-		clearPending(dir) // the old marker would point at bytes this stage replaced
+		_ = clearPending(dir) // the old marker would point at bytes this stage replaced
 		return fmt.Errorf("record the pending restore: %w", err)
 	}
 	return nil
@@ -178,13 +178,17 @@ func LastResult(live string) (*Result, error) {
 }
 
 // Cancel removes a pending restore, an unreadable marker included. It reports whether there was one.
-func Cancel(live string) bool {
+// It returns an error when the restore could not be removed, so a restore that is still pending is
+// never reported as cancelled.
+func Cancel(live string) (bool, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	dir := Dir(live)
-	p, err := readPending(dir)
-	clearPending(dir)
-	return p != nil || err != nil
+	p, readErr := readPending(dir)
+	if err := clearPending(dir); err != nil {
+		return false, err
+	}
+	return p != nil || readErr != nil, nil
 }
 
 // ApplyPending swaps a staged restore into place. Call it before the database is opened. It reports
@@ -199,7 +203,7 @@ func ApplyPending(live string, logger *logging.Logger) bool {
 	if err != nil {
 		logger.Error("Restore not applied: the pending marker is unreadable", "error", err)
 		recordResult(dir, Result{Status: StatusFailed, Error: "The pending restore marker could not be read"})
-		clearPending(dir)
+		_ = clearPending(dir)
 		return false
 	}
 	if p == nil {
@@ -208,7 +212,7 @@ func ApplyPending(live string, logger *logging.Logger) bool {
 	staged := filepath.Join(dir, stagedName)
 	fail := func(msg string, cause error) bool {
 		logger.Error("Restore not applied", "backup_id", p.BackupID, "reason", msg, "error", cause)
-		clearPending(dir) // first: it frees the staged file's space for the result below
+		_ = clearPending(dir) // first: it frees the staged file's space for the result below
 		recordResult(dir, Result{Status: StatusFailed, BackupID: p.BackupID, Error: msg})
 		return false
 	}
@@ -530,9 +534,16 @@ func readPending(dir string) (*PendingInfo, error) {
 	return &p, nil
 }
 
-func clearPending(dir string) {
-	_ = os.Remove(filepath.Join(dir, pendingName))
-	_ = os.Remove(filepath.Join(dir, stagedName))
+// clearPending removes the marker first, then the staged file, and reports the first failure. With
+// the marker gone nothing is pending, whatever happens to the staged file.
+func clearPending(dir string) error {
+	var first error
+	for _, name := range []string{pendingName, stagedName} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 func recordResult(dir string, res Result) {

@@ -31,8 +31,20 @@ func NewManager(config provider.DatabaseConfig) (*Manager, error) {
 	return NewManagerWithLogger(config, logging.GetDefault())
 }
 
-// NewManagerWithLogger creates a new database manager with custom logger
+// NewManagerWithLogger creates a new database manager with custom logger. A restore staged before
+// the last stop is applied first.
 func NewManagerWithLogger(config provider.DatabaseConfig, logger *logging.Logger) (*Manager, error) {
+	return newManager(config, logger, true)
+}
+
+// NewManagerKeepingRestore opens the database as NewManagerWithLogger does but leaves a staged
+// restore alone. A short-lived command uses it: it may run while the server owns the database, and
+// only the server's own start may swap the file.
+func NewManagerKeepingRestore(config provider.DatabaseConfig, logger *logging.Logger) (*Manager, error) {
+	return newManager(config, logger, false)
+}
+
+func newManager(config provider.DatabaseConfig, logger *logging.Logger, applyRestore bool) (*Manager, error) {
 	if logger == nil {
 		logger = logging.GetDefault()
 	}
@@ -48,7 +60,7 @@ func NewManagerWithLogger(config provider.DatabaseConfig, logger *logging.Logger
 	// A restore staged before the last stop is swapped in now, before anything opens the file. If the
 	// restored database then cannot be opened or migrated, the previous one is put back and opened.
 	livePath, restorable := RestoreTarget(config)
-	applied := restorable && restore.ApplyPending(livePath, logger)
+	applied := applyRestore && restorable && restore.ApplyPending(livePath, logger)
 	m, err := openManager(factory, config, logger)
 	if err != nil && applied && restore.Rollback(livePath, err, logger) {
 		return openManager(factory, config, logger)
