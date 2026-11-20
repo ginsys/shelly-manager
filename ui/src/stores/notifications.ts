@@ -176,8 +176,10 @@ export const useNotificationsStore = defineStore('notifications', {
         this.history = loaded.items
         this.historyPagination = loaded.pagination
         this.historyTotal = loaded.total
-        if (params?.page) this.historyPage = params.page
-        if (params?.limit) this.historyLimit = params.limit
+        // The page and the limit this response was loaded with are committed together with its rows and its
+        // pagination, so two requests that finish out of order still leave one consistent state.
+        this.historyPage = options.page
+        this.historyLimit = options.limit
       } catch (e: any) {
         this.historyError = e?.message || 'Failed to load history'
       } finally {
