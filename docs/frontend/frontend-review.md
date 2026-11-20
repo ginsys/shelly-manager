@@ -357,7 +357,7 @@ Found by reading the code at this commit; not a plan.
    `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
-5. **No generated API client.** The 131 functions are written by hand. The coverage figure in section 1
+5. **No generated API client.** The API functions counted in section 1 are written by hand. The coverage figure in section 1
    is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
    stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
