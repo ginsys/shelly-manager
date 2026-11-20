@@ -242,6 +242,7 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	agent := handler.agentOrAdmin
 	api.HandleFunc("/provisioner/agents/register", agent(handler.RegisterAgent)).Methods("POST")
 	api.HandleFunc("/provisioner/agents", admin(handler.GetProvisionerAgents)).Methods("GET")
+	api.HandleFunc("/provisioner/agents/{id}", admin(handler.DeleteProvisionerAgent)).Methods("DELETE")
 	api.HandleFunc("/provisioner/agents/{id}/tasks", agent(handler.PollTasks)).Methods("GET")
 	api.HandleFunc("/provisioner/tasks", admin(handler.CreateProvisioningTask)).Methods("POST")
 	api.HandleFunc("/provisioner/tasks", admin(handler.GetProvisioningTasks)).Methods("GET")

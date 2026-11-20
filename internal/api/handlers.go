@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -50,6 +51,8 @@ type Handler struct {
 	// background tracks goroutines that handlers start after they answer, such as the cleanup
 	// of expired discovered devices.
 	background sync.WaitGroup
+	// registryPurgedAt is when the provisioner registry purge last started, in Unix nanoseconds.
+	registryPurgedAt atomic.Int64
 }
 
 // WaitBackground blocks until the background work that handlers started has finished. Call it

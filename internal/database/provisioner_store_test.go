@@ -294,8 +294,74 @@ func checkProvisionerStore(t *testing.T, manager *Manager) {
 
 	t.Run("twenty registers of one new id: one wins", func(t *testing.T) { checkRegisterRace(t, manager) })
 
+	t.Run("delete and purge remove old rows and fail stranded tasks", func(t *testing.T) { checkDeleteAndPurge(t, manager) })
+
+	t.Run("a create for an agent waits for a purge that holds the agent", func(t *testing.T) { checkCreateWaitsForPurge(t, manager) })
+
 	// Last: see checkClaimOnce.
 	t.Run("two agents poll one task: it is claimed once", func(t *testing.T) { checkClaimOnce(t, manager) })
+}
+
+// checkDeleteAndPurge runs the delete and the purge on the provider's own SQL. Its agent and task ids carry
+// a prefix, so the rows of the other cases stay out of its counts.
+func checkDeleteAndPurge(t *testing.T, manager *Manager) {
+	t.Helper()
+	s := NewProvisionerStore(manager.GetDB())
+	ctx := provisionerCtx(t)
+	now := time.Now()
+	old, recent := now.Add(-31*24*time.Hour), now.Add(-29*24*time.Hour)
+	month := 30 * 24 * time.Hour
+
+	for _, id := range []string{"gone", "gone-assigned", "kept-pending", "kept-recent", "deleted"} {
+		register(t, s, adminActor, "pg-"+id, "tok-pg-"+id, now)
+	}
+	for _, id := range []string{"gone", "gone-assigned", "kept-pending"} {
+		require.NoError(t, manager.GetDB().Model(&ProvisionerAgent{}).Where("agent_id = ?", "pg-"+id).Update("last_seen", old).Error)
+	}
+	require.NoError(t, manager.GetDB().Model(&ProvisionerAgent{}).Where("agent_id = ?", "pg-kept-recent").Update("last_seen", recent).Error)
+	for _, task := range []*ProvisioningTask{
+		newTask("pg-stranded", "assigned", "pg-gone-assigned", 0, old),
+		newTask("pg-in-progress", "in_progress", "pg-deleted", 0, old),
+		newTask("pg-pending", "pending", "pg-kept-pending", 0, old),
+		newTask("pg-old-completed", "completed", "", 0, old),
+		newTask("pg-old-failed", "failed", "", 0, old),
+		newTask("pg-recent-completed", "completed", "", 0, recent),
+	} {
+		require.NoError(t, s.CreateTask(ctx, task))
+	}
+
+	require.ErrorIs(t, s.DeleteAgent(ctx, "pg-nobody", now), ErrAgentNotFound)
+	require.NoError(t, s.DeleteAgent(ctx, "pg-deleted", now))
+	got, err := s.GetTask(ctx, "pg-in-progress")
+	require.NoError(t, err)
+	assert.Equal(t, "failed", got.Status)
+	assert.NotEmpty(t, got.Config["_error"])
+
+	res, err := s.Purge(ctx, now, month, month)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, res.Agents, int64(2), "pg-gone and pg-gone-assigned")
+	assert.GreaterOrEqual(t, res.Tasks, int64(2), "pg-old-completed and pg-old-failed")
+
+	_, err = s.GetAgent(ctx, "pg-gone")
+	assert.ErrorIs(t, err, ErrAgentNotFound)
+	_, err = s.GetAgent(ctx, "pg-gone-assigned")
+	assert.ErrorIs(t, err, ErrAgentNotFound)
+	for _, id := range []string{"pg-kept-pending", "pg-kept-recent"} {
+		_, err = s.GetAgent(ctx, id)
+		assert.NoError(t, err, id)
+	}
+	got, err = s.GetTask(ctx, "pg-stranded")
+	require.NoError(t, err)
+	assert.Equal(t, "failed", got.Status)
+	assert.NotEmpty(t, got.Config["_error"])
+	for _, id := range []string{"pg-old-completed", "pg-old-failed"} {
+		_, err = s.GetTask(ctx, id)
+		assert.ErrorIs(t, err, ErrTaskNotFound, id)
+	}
+	for _, id := range []string{"pg-pending", "pg-recent-completed"} {
+		_, err = s.GetTask(ctx, id)
+		assert.NoError(t, err, id)
+	}
 }
 
 // checkReplaceWaitsForRequestInFlight holds a poll between "I hold the agent's lock" and "I read my
@@ -347,6 +413,55 @@ func checkReplaceWaitsForRequestInFlight(t *testing.T, manager *Manager, id stri
 	_, err := fresh.ClaimTasks(ctx, tokenActor(oldToken), id, now)
 	assert.ErrorIs(t, err, ErrUnauthorized)
 	_, err = fresh.ClaimTasks(ctx, tokenActor(newToken), id, now)
+	assert.NoError(t, err)
+}
+
+// checkCreateWaitsForPurge holds a purge between "I hold the agent's lock" and "I look for a pending task",
+// starts a task for that agent, and asserts that the create does not finish while the purge is in flight. A
+// purge that did not lock out the create could delete the agent after the create's task was committed.
+func checkCreateWaitsForPurge(t *testing.T, manager *Manager) {
+	t.Helper()
+	ctx := provisionerCtx(t)
+	now := time.Now()
+	month := 30 * 24 * time.Hour
+	holder := NewProvisionerStore(manager.GetDB())
+	// The purge must meet no other silent agent first, or its hook would fire on that one.
+	require.NoError(t, manager.GetDB().Where("agent_id LIKE ?", "pg-%").Delete(&ProvisionerAgent{}).Error)
+	register(t, holder, adminActor, "pg-purge-race", "tok-pg-race", now.Add(-31*24*time.Hour))
+
+	locked, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	holder.afterLock = func() {
+		once.Do(func() {
+			close(locked)
+			<-release
+		})
+	}
+	purgeDone := make(chan error, 1)
+	go func() {
+		_, err := holder.Purge(ctx, now, month, month)
+		purgeDone <- err
+	}()
+	<-locked
+
+	createDone := make(chan error, 1)
+	go func() {
+		createDone <- NewProvisionerStore(manager.GetDB()).CreateTask(ctx, newTask("pg-race-task", "pending", "pg-purge-race", 0, now))
+	}()
+	select {
+	case err := <-createDone:
+		t.Fatalf("the create finished while the purge held the agent's row (err=%v)", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	close(release)
+	require.NoError(t, <-purgeDone)
+	require.NoError(t, <-createDone)
+
+	// Either order is consistent: the purge removed an agent with no pending task, and the task came after.
+	_, agentErr := NewProvisionerStore(manager.GetDB()).GetAgent(ctx, "pg-purge-race")
+	assert.ErrorIs(t, agentErr, ErrAgentNotFound)
+	_, err := NewProvisionerStore(manager.GetDB()).GetTask(ctx, "pg-race-task")
 	assert.NoError(t, err)
 }
 

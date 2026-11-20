@@ -3450,6 +3450,33 @@ paths:
                         items:
                           $ref: '#/components/schemas/ProvisionerAgent'
 
+  /api/v1/provisioner/agents/{id}:
+    delete:
+      tags: [Provisioning]
+      summary: Delete provisioner agent
+      description: >-
+        Frees the agent's id at once and revokes its token. Its `assigned` and `in_progress` tasks become `failed`
+        with `config._error`; its `pending` tasks stay. Admin key only.
+      operationId: deleteProvisionerAgent
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Agent deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: No agent has this id.
+
   /api/v1/provisioner/agents/register:
     post:
       tags: [Provisioning]
