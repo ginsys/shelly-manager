@@ -57,8 +57,8 @@ func ValidateCronSpec(spec string) error {
 
 // Scheduler runs the drift detection schedules stored in the database. The rows are the only copy
 // of the schedule: every poll reads which enabled schedules are due, so a replica that starts or
-// stops loses nothing, one that crashes mid-run leaves a run row the next tick marks interrupted, and
-// several replicas on one database share the work through claim.
+// stops loses nothing, one that crashes mid-run leaves a run row that the first poll after its recorded
+// start is more than the run timeout old marks interrupted, and several replicas on one database share the work through claim.
 type Scheduler struct {
 	db     *gorm.DB
 	svc    *Service
@@ -71,6 +71,8 @@ type Scheduler struct {
 	clientFor func(uint) (shelly.Client, error)
 	// since is the time elapsed from a start instant (tests set it).
 	since func(time.Time) time.Duration
+	// now is the clock read when a poll is received (tests set it).
+	now func() time.Time
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -79,7 +81,7 @@ type Scheduler struct {
 
 // NewScheduler creates a scheduler over the schedule rows.
 func NewScheduler(db *gorm.DB, svc *Service, logger *logging.Logger) *Scheduler {
-	return &Scheduler{db: db, svc: svc, logger: logger, clientFor: svc.createClientForDevice, since: time.Since}
+	return &Scheduler{db: db, svc: svc, logger: logger, clientFor: svc.createClientForDevice, since: time.Since, now: time.Now}
 }
 
 // Start begins polling. It fails when the schedule table cannot be read, and when already started.
@@ -112,8 +114,10 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			select {
 			case <-runCtx.Done():
 				return
-			case now := <-ticks:
-				s.tick(runCtx, now)
+			case <-ticks:
+				// The timer value is the instant the poll was due; one delivered behind a long poll
+				// would backdate the runs it starts, so the poll runs at the clock now.
+				s.tick(runCtx, s.now())
 			}
 		}
 	}()
@@ -219,7 +223,7 @@ func (s *Scheduler) claim(db *gorm.DB, sc DriftDetectionSchedule, next time.Time
 }
 
 // claimAndRecord claims the tick and writes its run row in one transaction, so a process that ends
-// after the claim leaves a row the next tick marks interrupted, never a tick that nobody ran. The
+// after the claim leaves a row that is marked interrupted once it is older than the run timeout, never a tick that nobody ran. The
 // row is skipped when a run of the schedule is still running, otherwise running. It returns nil when
 // another replica took the tick.
 func (s *Scheduler) claimAndRecord(sc DriftDetectionSchedule, next, now time.Time) (*DriftDetectionRun, error) {
