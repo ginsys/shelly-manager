@@ -20,6 +20,10 @@ import {
   getBackupStatistics, 
   deleteBackup,
   previewRestore,
+  stageRestore,
+  getRestoreStatus,
+  cancelRestore,
+  RESTORE_SQLITE_ONLY,
   buildSMAExportConfig,
   type BackupRequest 
 } from './export'
@@ -279,9 +283,78 @@ describe('backup api', () => {
     })
   })
 
-  it('offers no restore execution', async () => {
-    const mod = await import('./export')
-    expect('executeRestore' in mod).toBe(false)
-    expect('getRestoreResult' in mod).toBe(false)
+  describe('staged restore', () => {
+    const refused = (status: number, message: string) => ({
+      response: { status, data: { success: false, error: { message } } },
+    })
+
+    it('stages by backup id only', async () => {
+      ;(api.post as any).mockResolvedValue({
+        status: 202,
+        data: { success: true, data: { backup_id: 'b1', applies: 'at the next start' } },
+      })
+
+      await stageRestore('b1')
+
+      expect(api.post).toHaveBeenCalledWith('/import/restore', { backup_id: 'b1' })
+    })
+
+    it('says so when the database is not SQLite', async () => {
+      ;(api.post as any).mockRejectedValue(refused(501, 'Restore is available for SQLite databases only'))
+
+      await expect(stageRestore('b1')).rejects.toThrow(RESTORE_SQLITE_ONLY)
+    })
+
+    it('carries the reason of a refused backup', async () => {
+      ;(api.post as any).mockRejectedValue(refused(422, 'The backup is not a SQLite database'))
+
+      await expect(stageRestore('b1')).rejects.toThrow('The backup is not a SQLite database')
+    })
+
+    it('reads the pending restore and the last result', async () => {
+      ;(api.get as any).mockResolvedValue({
+        data: {
+          success: true,
+          data: {
+            pending: { backup_id: 'b1', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' },
+            last_result: { status: 'failed', backup_id: 'b0', at: '2026-11-20T17:00:00Z', error: 'The restore failed' },
+          },
+        },
+      })
+
+      const status = await getRestoreStatus()
+
+      expect(api.get).toHaveBeenCalledWith('/import/restore')
+      expect(status.supported).toBe(true)
+      expect(status.pending?.backup_id).toBe('b1')
+      expect(status.lastResult?.error).toBe('The restore failed')
+    })
+
+    it('reads an answer without a pending restore or a result', async () => {
+      ;(api.get as any).mockResolvedValue({ data: { success: true, data: {} } })
+
+      expect(await getRestoreStatus()).toEqual({ supported: true, pending: null, lastResult: null })
+    })
+
+    it('reports a 501 as unsupported, not as an error', async () => {
+      ;(api.get as any).mockRejectedValue(refused(501, 'Restore is available for SQLite databases only'))
+
+      expect(await getRestoreStatus()).toEqual({ supported: false, pending: null, lastResult: null })
+    })
+
+    it('cancels with DELETE and counts a 404 as cancelled', async () => {
+      ;(api.delete as any).mockResolvedValueOnce({ status: 204 })
+      await cancelRestore()
+      expect(api.delete).toHaveBeenCalledWith('/import/restore')
+
+      ;(api.delete as any).mockRejectedValueOnce(refused(404, 'Pending restore not found'))
+      await expect(cancelRestore()).resolves.toBeUndefined()
+    })
+
+    it('fails a cancel the server could not do', async () => {
+      ;(api.delete as any).mockRejectedValue(refused(500, 'Internal error'))
+
+      await expect(cancelRestore()).rejects.toThrow('Internal error')
+    })
   })
 })

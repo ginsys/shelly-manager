@@ -343,7 +343,29 @@ export async function deleteBackup(id: string): Promise<void> {
 
 // Restore interfaces and methods
 
-// The server only checks a stored backup: restoring one is not offered yet.
+// A backup is restored in two steps: the server stages a checked copy, and applies it when it next
+// starts. Only the preview is a quick look at the stored file; staging runs the real checks.
+
+export const RESTORE_SQLITE_ONLY = 'Restore is only available for SQLite'
+
+export interface RestorePending {
+  backup_id: string
+  staged_at: string
+  sha256: string
+}
+
+export interface RestoreResult {
+  status: 'applied' | 'failed'
+  backup_id?: string
+  at: string
+  error?: string
+}
+
+export interface RestoreStatus {
+  supported: boolean
+  pending: RestorePending | null
+  lastResult: RestoreResult | null
+}
 
 export interface RestorePreview {
   backup_id: string
@@ -364,6 +386,44 @@ export async function previewRestore(backupId: string): Promise<RestorePreview> 
     throw new Error(res.data.error?.message || 'Failed to check the backup')
   }
   return res.data.data
+}
+
+// The server's reason for a refused restore call: the SQLite-only sentence for a 501, else the
+// message of its error envelope.
+async function restoreFailure(e: any, fallback: string): Promise<Error> {
+  if (e?.response?.status === 501) return new Error(RESTORE_SQLITE_ONLY)
+  return new Error((await errorEnvelopeMessage(e?.response?.data)) || e?.message || fallback)
+}
+
+export async function stageRestore(backupId: string): Promise<void> {
+  try {
+    await api.post('/import/restore', { backup_id: backupId })
+  } catch (e: any) {
+    throw await restoreFailure(e, 'Failed to stage the restore')
+  }
+}
+
+// A 501 is the answer of a database that is not SQLite, not a failure.
+export async function getRestoreStatus(): Promise<RestoreStatus> {
+  try {
+    const res = await api.get<APIResponse<{ pending?: RestorePending | null; last_result?: RestoreResult | null }>>(
+      '/import/restore',
+    )
+    return { supported: true, pending: res.data.data?.pending ?? null, lastResult: res.data.data?.last_result ?? null }
+  } catch (e: any) {
+    if (e?.response?.status === 501) return { supported: false, pending: null, lastResult: null }
+    throw await restoreFailure(e, 'Failed to read the restore status')
+  }
+}
+
+// A 404 means nothing is staged any more, which is what the caller wanted.
+export async function cancelRestore(): Promise<void> {
+  try {
+    await api.delete('/import/restore')
+  } catch (e: any) {
+    if (e?.response?.status === 404) return
+    throw await restoreFailure(e, 'Failed to cancel the restore')
+  }
 }
 
 // GitOps exports. The server writes a directory of YAML files. Its history route lists them
