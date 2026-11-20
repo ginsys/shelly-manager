@@ -249,6 +249,11 @@ describe('DriftSchedulesPage', () => {
     expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
     release({ items: [] })
     await flushPromises()
+    // the form is now open, and the card behind it stays held until it closes
+    expect(wrapper.find('[data-testid="schedule-form"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
+    await wrapper.find('[data-testid="schedule-cancel"]').trigger('click')
+    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeUndefined()
   })
 
   it('releases the toggle after a failed request', async () => {
