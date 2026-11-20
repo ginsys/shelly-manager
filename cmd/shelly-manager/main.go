@@ -501,13 +501,36 @@ func startServer() {
 	// Note: Legacy dashboard removed. New SPA is served from Vite (dev) or ui/dist (prod).
 	fmt.Printf("API base URL: http://%s/api/v1\n", address)
 
-	if err := http.ListenAndServe(address, router); err != nil {
+	if err := newHTTPServer(address, router).ListenAndServe(); err != nil {
 		logger.WithFields(map[string]any{
 			"address":   address,
 			"error":     err.Error(),
 			"component": "server",
 		}).Error("Server failed to start")
 		log.Fatal("Server failed to start:", err)
+	}
+}
+
+// The server's own limits, for a client that never finishes its request header or that holds an
+// idle keep-alive connection. The router's request deadline starts only after the header is read.
+// ReadTimeout and WriteTimeout stay unset on purpose: each is one limit for a whole request, so a
+// value short enough to matter would cut a slow upload (up to 10 MiB), a download or the 5 minute
+// bulk-apply answer. IdleTimeout is above the idle time a reverse proxy keeps an upstream connection.
+const (
+	serverReadHeaderTimeout = 10 * time.Second
+	serverIdleTimeout       = 120 * time.Second
+)
+
+func newHTTPServer(address string, handler http.Handler) *http.Server {
+	return newHTTPServerWith(address, handler, serverReadHeaderTimeout, serverIdleTimeout)
+}
+
+func newHTTPServerWith(address string, handler http.Handler, readHeader, idle time.Duration) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeader,
+		IdleTimeout:       idle,
 	}
 }
 

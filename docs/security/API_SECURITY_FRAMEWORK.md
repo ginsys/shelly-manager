@@ -191,6 +191,14 @@ The security middleware is applied in a carefully designed order to ensure maxim
 10. **Enhanced CORS Middleware**: Security-aware cross-origin request handling
 11. **Standard Logging Middleware**: Existing HTTP request logging
 
+### Connection limits of the server
+
+The middleware above runs only after a request header has been read, so the server has two limits of its own, fixed in code and not configurable. A client that has not sent a complete request header within 10 seconds (`ReadHeaderTimeout`) has its connection closed. A keep-alive connection that sends no new request for 120 seconds (`IdleTimeout`) is closed. A request that is being handled is never counted as idle, and a WebSocket connection is outside both limits once it is upgraded.
+
+There is no `ReadTimeout` or `WriteTimeout`: each is one limit for a whole request, so a value short enough to matter would cut a slow upload (the body limit is 10 MiB), a download or the 5 minute bulk-apply answer. This means a client that sends its body slowly after a complete header, or reads its answer slowly, still holds a connection until the request deadline of the router (30 seconds, 5 minutes on `bulk-apply`) ends the handler. The number of connections is not limited either.
+
+The `api.timeout` setting is not one of these limits: it is read by nothing today.
+
 ## API Endpoints
 
 ### Security Metrics Endpoint

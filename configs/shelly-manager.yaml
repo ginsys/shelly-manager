@@ -95,7 +95,7 @@ main_app:
 api:
   url: ""                   # the manager's base URL, e.g. http://manager:8080; read only by the provisioner agent (flag --api-url, or SHELLY_API_URL)
   key: ""                   # API authentication key
-  timeout: 30               # Request timeout (seconds)
+  timeout: 30               # Not read by anything yet: the provisioner's client uses a fixed 30 s, and this is not a server limit
   retry_attempts: 3         # Number of retry attempts
   retry_delay: 5            # Delay between retries (seconds)
 
