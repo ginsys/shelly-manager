@@ -192,13 +192,17 @@ and `internal/sync` for `net/http`, `http.Client`, `http.NewRequest`, `exec.Comm
 nothing, and the OPNsense client in `internal/opnsense/client.go` is where the network code is. For
 those five, "test" can only mean a dry run.
 
-**Option (a): test is a dry run.** The only export dry run is `POST /export/preview`
+**Option (a): test is a dry run.** The general dry run is `POST /export/preview`
 (`sync_handlers.go:550`). The `DryRun` and `ValidateOnly` options (`internal/sync/plugin.go:154-160`)
-are not a general export dry run: the export engine does not read them, JSON export writes its files
-without checking either (`internal/plugins/sync/jsonexport/json.go:82-158`), and OPNsense `Export`
-connects to the host and tests the connection even when `DryRun` is set (`opnsense.go:229-236`). Cost:
-none. It does not solve: for OPNsense `Preview` cannot tell a wrong credential, because it never
-contacts the host (section 1, item 5).
+are not a general export dry run: the export engine does not read them and JSON export writes its
+files without checking either (`internal/plugins/sync/jsonexport/json.go:82-158`). One plugin honours
+`DryRun` on its own: OPNsense passes it to its DHCP and firewall-alias syncs, which then skip their
+changes (`opnsense.go:523,554`, `internal/opnsense/dhcp.go:242,301,326`,
+`internal/opnsense/firewall.go:244,261`), but `Export` connects to the host and tests the connection
+first (`opnsense.go:229-236`). So `POST /export` with `options.dry_run` set on OPNsense already
+checks the credentials and changes nothing. Cost: none. It does not solve: for OPNsense `Preview`
+cannot tell a wrong credential, because it never contacts the host (section 1, item 5), and no UI path
+runs that dry run (section 2.5).
 
 **Option (b): a connectivity check for plugins that have a connection.** An optional interface,
 `ConnectionTester` with `TestConnection(ctx, config) error`, so `SyncPlugin` does not change and five
@@ -211,7 +215,7 @@ admin-guarded like the others. OpenAPI: one path.
 
 **Option (c): neither.** The first export fails with the connection error (`opnsense.go:235`).
 
-**Recommendation: (a), and write down that `Preview` does not check OPNsense credentials.** Build (b)
+**Recommendation: (a), and write down that `Preview` does not check OPNsense credentials while an OPNsense export with `dry_run` does.** Build (b)
 when operators ask; it is independent of storage. **This decision is the lead's:** (b) adds a route and
 no new power.
 
@@ -253,7 +257,7 @@ database snapshot, build (c). **This decision is the lead's:** it changes a resp
 |---|---|---|---|
 | 1 | Is a stored plugin config desired? | No: keep it per request (A). Revisit when a second plugin needs saved credentials or scheduled exports return. | the maintainer |
 | 2 | If stored: scope, secrets, validation | Singleton; environment reference with a fixed name prefix for secrets; validate the complete config on `PUT`. Only if decision 1 is "stored". | the maintainer (which secret reaches a stored row) |
-| 3 | What does "test" mean? | A dry run; document that `Preview` does not check OPNsense credentials. Build the connectivity check (b) on request. | the lead |
+| 3 | What does "test" mean? | A dry run; document that `Preview` does not check OPNsense credentials and an OPNsense export with `dry_run` does. Build the connectivity check (b) on request. | the lead |
 | 4 | What do enable and disable mean? | Not applicable: stop returning `configured` and `enabled`. A start-up key (c) if a plugin must be switched off. | the lead |
 
 ginsys/shelly-manager#290 stays open until decision 1 is recorded, and until what it decides is built.
