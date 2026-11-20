@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -166,6 +167,57 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		"message":       "Agent registered successfully",
 	}
 	h.responseWriter().WriteCreated(w, r, response)
+
+	// The register has committed and answered; the purge is its own transaction and never changes the answer.
+	h.purgeRegistryIfDue(r.Context())
+}
+
+// How the registry forgets: an agent silent this long with no pending task is removed, and a task that
+// finished (completed or failed) this long ago is deleted. The purge runs at most once an hour per process.
+const (
+	registryAgentSilentFor = 30 * 24 * time.Hour
+	registryKeepFinished   = 30 * 24 * time.Hour
+	registryPurgeEvery     = time.Hour
+	registryPurgeTimeout   = time.Minute
+)
+
+// purgeRegistryIfDue starts the purge in the background group when the last one began over an hour ago. It
+// outlives the request that started it (context.WithoutCancel) and logs a failure without reporting it.
+func (h *Handler) purgeRegistryIfDue(ctx context.Context) {
+	now := time.Now()
+	last := h.registryPurgedAt.Load()
+	if now.UnixNano()-last < int64(registryPurgeEvery) || !h.registryPurgedAt.CompareAndSwap(last, now.UnixNano()) {
+		return
+	}
+	store := h.provisionerStore()
+	detached := context.WithoutCancel(ctx)
+	h.background.Add(1)
+	go func() {
+		defer h.background.Done()
+		purgeCtx, cancel := context.WithTimeout(detached, registryPurgeTimeout)
+		defer cancel()
+		res, err := store.Purge(purgeCtx, now, registryAgentSilentFor, registryKeepFinished)
+		fields := map[string]any{"agents": res.Agents, "tasks": res.Tasks, "component": "provisioner_handler"}
+		if err != nil {
+			fields["error"] = err.Error()
+			h.logger.WithFields(fields).Warn("Provisioner registry purge failed")
+		} else if res.Agents > 0 || res.Tasks > 0 {
+			h.logger.WithFields(fields).Info("Provisioner registry purge removed old rows")
+		}
+	}()
+}
+
+// DeleteProvisionerAgent handles DELETE /api/v1/provisioner/agents/{id}: it frees the id, revokes the
+// agent's token and fails its assigned tasks. A token held by a running agent stops working at once, and
+// that agent registers again.
+func (h *Handler) DeleteProvisionerAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := mux.Vars(r)["id"]
+	if err := h.provisionerStore().DeleteAgent(r.Context(), agentID, time.Now()); err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
+	h.logger.WithFields(map[string]any{"agent_id": agentID}).Info("Provisioning agent deleted")
+	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{"agent_id": agentID, "status": "deleted"})
 }
 
 // GetProvisionerAgents handles GET /api/v1/provisioner/agents

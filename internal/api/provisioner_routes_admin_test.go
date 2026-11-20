@@ -29,6 +29,7 @@ var agentProvisionerRoutes = []routeCase{
 // the agent key opens none of them.
 var adminOnlyProvisionerRoutes = []routeCase{
 	{"GET", "/api/v1/provisioner/agents"},
+	{"DELETE", "/api/v1/provisioner/agents/agent-1"},
 	{"POST", "/api/v1/provisioner/tasks"},
 	{"GET", "/api/v1/provisioner/tasks"},
 	{"GET", "/api/v1/provisioner/discovered-devices"},

@@ -221,6 +221,18 @@ func (s *ProvisionerStore) UpdateTaskStatus(ctx context.Context, actor Provision
 	var task ProvisioningTask
 	err := s.tx(ctx, func(tx *gorm.DB) error {
 		agentID := ""
+		if actor.Privileged && status == "pending" {
+			// A task the admin sets back to pending keeps its agent from a purge: lock that agent first, as Purge does.
+			var owner string
+			if err := tx.Model(&ProvisioningTask{}).Where("task_id = ?", taskID).Select("agent_id").Scan(&owner).Error; err != nil {
+				return err
+			}
+			if owner != "" {
+				if _, err := s.lockAgent(tx, actor, owner); err != nil {
+					return err
+				}
+			}
+		}
 		if !actor.Privileged {
 			agent, err := s.agentByToken(tx, actor)
 			if err != nil {
@@ -300,9 +312,17 @@ func (s *ProvisionerStore) ReportDiscovered(ctx context.Context, actor Provision
 	return persisted, failures, err
 }
 
-// CreateTask stores a new task.
+// CreateTask stores a new task. A task for an agent locks that agent's row first, as Purge does, so a purge
+// cannot delete the agent between its check for a pending task and this insert.
 func (s *ProvisionerStore) CreateTask(ctx context.Context, task *ProvisioningTask) error {
-	return s.db.WithContext(ctx).Create(task).Error
+	return s.tx(ctx, func(tx *gorm.DB) error {
+		if task.AgentID != "" {
+			if _, err := s.lockAgent(tx, ProvisionerActor{Privileged: true}, task.AgentID); err != nil {
+				return err
+			}
+		}
+		return tx.Create(task).Error
+	})
 }
 
 // GetTask returns one task, or ErrTaskNotFound.
@@ -347,6 +367,105 @@ func (s *ProvisionerStore) CancelTask(ctx context.Context, taskID string, now ti
 		return tx.Model(&task).Select("Status", "Config", "UpdatedAt").Updates(&task).Error
 	})
 	return task, err
+}
+
+// removeAgent deletes the agent whose row tx holds locked, and fails its assigned and in-progress tasks
+// with config["_error"] = reason: nobody will deliver them again, and the UI shows why. A pending task
+// stays, so an agent that registers the id again still receives it.
+func removeAgent(tx *gorm.DB, agent ProvisionerAgent, reason string, now time.Time) error {
+	var stranded []ProvisioningTask
+	if err := tx.Clauses(forUpdate()).Where("agent_id = ? AND status IN ?", agent.AgentID, []string{"assigned", "in_progress"}).
+		Find(&stranded).Error; err != nil {
+		return err
+	}
+	for i := range stranded {
+		task := &stranded[i]
+		if task.Config == nil {
+			task.Config = map[string]interface{}{}
+		}
+		task.Config["_error"] = reason
+		task.Status, task.UpdatedAt = "failed", now
+		if err := tx.Model(task).Select("Status", "Config", "UpdatedAt").Updates(task).Error; err != nil {
+			return err
+		}
+	}
+	return tx.Delete(&ProvisionerAgent{}, agent.ID).Error
+}
+
+// DeleteAgent removes an agent, which frees its id and revokes its token (ErrAgentNotFound if there is
+// none), and fails its assigned and in-progress tasks.
+func (s *ProvisionerStore) DeleteAgent(ctx context.Context, agentID string, now time.Time) error {
+	return s.tx(ctx, func(tx *gorm.DB) error {
+		var agent ProvisionerAgent
+		err := tx.Clauses(forUpdate()).Where("agent_id = ?", agentID).First(&agent).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrAgentNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return removeAgent(tx, agent, "the agent was deleted", now)
+	})
+}
+
+// PurgeResult is what one Purge removed.
+type PurgeResult struct {
+	Agents, Tasks int64
+}
+
+// Purge removes the agents last seen before now-silentFor that have no pending task (their assigned and
+// in-progress tasks are failed, as in DeleteAgent), and the completed and failed tasks last updated before
+// now-keepFinished. Each agent goes in its own transaction, which locks the agent row first as every other
+// operation does and checks the conditions again under that lock, so an agent that registered or polled
+// meanwhile stays. It keeps going past a failure and returns the first error.
+func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, keepFinished time.Duration) (PurgeResult, error) {
+	var res PurgeResult
+	var first error
+	note := func(err error) {
+		if first == nil {
+			first = err
+		}
+	}
+	cutoff := now.Add(-silentFor)
+	var silent []string
+	if err := s.db.WithContext(ctx).Model(&ProvisionerAgent{}).Where("last_seen < ?", cutoff).Pluck("agent_id", &silent).Error; err != nil {
+		note(err)
+	}
+	for _, id := range silent {
+		err := s.tx(ctx, func(tx *gorm.DB) error {
+			var agent ProvisionerAgent
+			err := tx.Clauses(forUpdate()).Where("agent_id = ? AND last_seen < ?", id, cutoff).First(&agent).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if s.afterLock != nil {
+				s.afterLock()
+			}
+			// A locking read sees every pending task committed so far, on MySQL's repeatable read too. A writer of
+			// a pending task for this agent locks the agent row first, so none can commit after this read.
+			var pending []ProvisioningTask
+			if err := tx.Clauses(forUpdate()).Where("agent_id = ? AND status = ?", id, "pending").Limit(1).Find(&pending).Error; err != nil || len(pending) > 0 {
+				return err
+			}
+			if err := removeAgent(tx, agent, "the agent was removed after it stayed silent too long", now); err != nil {
+				return err
+			}
+			res.Agents++
+			return nil
+		})
+		if err != nil {
+			note(err)
+		}
+	}
+	done := s.db.WithContext(ctx).Where("status IN ? AND updated_at < ?", []string{"completed", "failed"}, now.Add(-keepFinished)).Delete(&ProvisioningTask{})
+	res.Tasks = done.RowsAffected
+	if done.Error != nil {
+		note(done.Error)
+	}
+	return res, first
 }
 
 // ListAgents returns every agent, by hostname.

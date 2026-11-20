@@ -1,8 +1,8 @@
 # Provisioner registry in the database, and agent enrolment
 
 Status: proposal for ginsys/shelly-manager#638. Slice 1 is built: the tables and the store
-(merged as ginsys/shelly-manager#724) and the handlers that use them. The delete route and the
-purge of old rows (slice 1's last part) and slices 2 and 3 are not built. Sections below that
+(merged as ginsys/shelly-manager#724), the handlers that use them, the admin delete route and the
+hourly purge of old rows. Slices 2 and 3 are not built. Sections below that
 describe the registry "today" describe the code before slice 1.
 Read at origin/main 147080796e83 (cites are `file:line` at that commit). Every
 cited file is the same at 6343b21c3fda, the base this note sits on.

@@ -96,6 +96,13 @@ func configRoutesRouterKeys(t *testing.T, adminKey, agentKey string) *mux.Router
 // configRoutesRouterOn builds the route table on a database the caller owns, so a test can put a second
 // handler on it and call that a manager restart.
 func configRoutesRouterOn(t *testing.T, db *database.Manager, adminKey, agentKey string) *mux.Router {
+	router, _ := configRoutesHandlerOn(t, db, adminKey, agentKey)
+	return router
+}
+
+// configRoutesHandlerOn is configRoutesRouterOn that also returns the handler, for a test that waits for
+// its background work.
+func configRoutesHandlerOn(t *testing.T, db *database.Manager, adminKey, agentKey string) (*mux.Router, *Handler) {
 	t.Helper()
 	handler := NewHandlerWithLogger(db, testShellyService(t, db), testNotificationHandler(t, db), nil, logging.GetDefault())
 	t.Cleanup(handler.WaitBackground) // a request to POST /discover starts work; it ends before the database closes
@@ -107,7 +114,7 @@ func configRoutesRouterOn(t *testing.T, db *database.Manager, adminKey, agentKey
 	}
 	router := mux.NewRouter()
 	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), handler, logging.GetDefault(), nil)
-	return router
+	return router, handler
 }
 
 func TestConfigRoutes_RequireTheAdminKey(t *testing.T) {

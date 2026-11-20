@@ -445,7 +445,7 @@ The call is not atomic: device 3 can be applied while device 4 is refused, and n
 
 ---
 
-### 16. Provisioner Agent Management (9 endpoints)
+### 16. Provisioner Agent Management (10 endpoints)
 
 Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/provisioning/provision` above, requires a key (`Authorization: Bearer <key>` or `X-API-Key`) when the manager has an admin key configured, and answers `401` without it. The admin key opens every route. The agent key (`security.agent_api_key`, `SHELLY_SECURITY_AGENT_API_KEY`) is accepted on the five routes the agent itself calls: register, poll tasks, update task status, report discovered devices and health. Creating a task and listing agents, tasks or discovered devices need the admin key, and so does everything else; the agent key opens nothing else in the API. The provisioner agent sends the agent key as its `api.key` (`SHELLY_API_KEY`). The `Bearer ` prefix is case-sensitive.
 
@@ -453,10 +453,13 @@ Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/pr
 
 **Where the registry is kept.** Agents, their tokens and the provisioning tasks are rows in the manager's database (`provisioner_agents` and `provisioning_tasks`), so a manager restart keeps them and every replica that shares the database sees the same registry. A token is stored only as its SHA-256 hash. The register answer returns the new token once, in `agent_token`, and no route returns a stored hash. Tasks stay in the table after they finish. A poll that finds no task answers `"tasks": []` (it was `null`). Two answers now follow the stored rows and no longer a shared in-memory object: an agent that was silent for more than 5 minutes and then reports devices is listed `online` again, and cancelling a task no longer changes a sibling task that a bulk create had given the same `config`. The registry is as durable as the database: with SQLite on a path that does not survive a restart (the development overlay puts the database in `/tmp`), the registry does not either. An agent id, a task type, a task status and a task `agent_id` may each be at most 191 characters; a longer value is refused with `400`. On MySQL the two tables use the binary collation `utf8mb4_0900_bin`, so ids compare byte for byte (`alpha` and `Alpha` are two agents), as they already do on SQLite and PostgreSQL. That collation needs MySQL 8.0.17 or later: on MariaDB or an older MySQL the manager logs a warning at start-up and keeps the default collation, where ids that differ only in case (on some older servers, also in trailing spaces) compare as equal.
 
+**How the registry forgets.** An admin deletes an agent with `DELETE /api/v1/provisioner/agents/{id}`. That frees the id at once, whatever its last-seen time, and revokes its token: the agent's next call answers `401` and it registers again. The agent's `assigned` and `in_progress` tasks become `failed` with `config._error` giving the reason. Its `pending` tasks stay and go to whoever holds the id next. An unknown id answers `404`. A register also starts a purge in the background, at most once an hour per manager process, and the register's own answer never depends on it: a purge that fails is logged. The purge removes agents last seen more than 30 days ago that have no `pending` task (their `assigned` and `in_progress` tasks fail as above), and deletes `completed` and `failed` tasks last updated more than 30 days ago. Before the registry was kept in the database, a restart cleared every task. Finished tasks now stay until a purge removes them: they become eligible after 30 days, and the purge runs only when an agent registers.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/provisioner/agents/register` | Register provisioner agent, returns `agent_token` (agent or admin key; `409` for an online id) |
 | GET | `/api/v1/provisioner/agents` | List registered agents (admin key) |
+| DELETE | `/api/v1/provisioner/agents/{id}` | Delete an agent: frees its id, revokes its token, fails its assigned tasks (admin key; `404` for an unknown id) |
 | GET | `/api/v1/provisioner/agents/{id}/tasks` | Poll tasks for agent (agent key and that agent's token, or admin key) |
 | POST | `/api/v1/provisioner/tasks` | Create provisioning task (admin key) |
 | GET | `/api/v1/provisioner/tasks` | List tasks (admin key) |
