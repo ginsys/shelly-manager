@@ -273,6 +273,44 @@ func TestSchedulerClaim_AReplacedSpecIsNotClaimedFromAnEarlierRead(t *testing.T)
 	assert.True(t, fx.schedule(sc.ID).NextRun.Equal(*updated.NextRun), "the edit's next_run stands")
 }
 
+// A tick read before an edit of the device selection must not be claimed even when the spec is the
+// same: it would run the new selection's schedule over the old selection's device list.
+func TestSchedulerClaim_AnEditOfTheDeviceSelectionIsNotClaimedFromAnEarlierRead(t *testing.T) {
+	fx := newSchedFixture(t)
+	sc, err := fx.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{1}})
+	require.NoError(t, err)
+	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("next_run", at(0)).Error)
+	read := fx.schedule(sc.ID)
+
+	_, err = fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHSW-1"}})
+	require.NoError(t, err)
+
+	won, err := fx.s.claim(fx.db, read, at(5*time.Minute))
+
+	require.NoError(t, err)
+	assert.False(t, won)
+	assert.Zero(t, fx.schedule(sc.ID).RunCount)
+}
+
+// A tick read before the schedule was switched off and on must not be claimed: the toggle armed it
+// from now, and the claim would run it at once.
+func TestSchedulerClaim_ADisableAndEnableIsNotClaimedFromAnEarlierRead(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	read := fx.schedule(id)
+	for range 2 {
+		_, err := fx.svc.ToggleDriftSchedule(id)
+		require.NoError(t, err)
+	}
+
+	won, err := fx.s.claim(fx.db, read, at(5*time.Minute))
+
+	require.NoError(t, err)
+	assert.False(t, won)
+	assert.Zero(t, fx.schedule(id).RunCount)
+	assert.True(t, fx.schedule(id).NextRun.After(time.Now()), "the toggle's next_run stands")
+}
+
 // The same race, on the path that disables a schedule: a row whose spec did not parse is read, the
 // user fixes the spec, and the stale read must not disable the fixed schedule.
 func TestSchedulerFailSchedule_AReplacedSpecIsNotDisabledFromAnEarlierRead(t *testing.T) {
@@ -340,27 +378,6 @@ func TestSchedulerRun_ADeletedSchedulesRunIsNotRecreated(t *testing.T) {
 	fx.s.runClaimed(context.Background(), sc, run, at(time.Minute))
 
 	assert.Zero(t, fx.count(&DriftDetectionRun{}, "schedule_id = ?", id))
-}
-
-// An update whose schedule is deleted between its read and its write must leave no device rows.
-func TestUpdateDriftSchedule_ADeleteInTheMiddleWritesNoDeviceRows(t *testing.T) {
-	fx := newSchedFixture(t)
-	id := fx.add("*/5 * * * *", ptr(at(0)), "") // no device list yet
-	fired := false
-	require.NoError(t, fx.db.Callback().Query().After("gorm:query").Register("test:delete-after-read", func(tx *gorm.DB) {
-		if fired || tx.Statement.Table != "drift_detection_schedules" {
-			return
-		}
-		fired = true
-		_, err := tx.Statement.ConnPool.ExecContext(tx.Statement.Context, "DELETE FROM drift_detection_schedules")
-		require.NoError(t, err)
-	}))
-
-	_, err := fx.svc.UpdateDriftSchedule(id, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{2, 3}})
-
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
-	assert.True(t, fired)
-	assert.Zero(t, fx.count(&DriftScheduleDevice{}, "schedule_id = ?", id))
 }
 
 func TestDriftSchedule_ANoDeviceListIsAnEmptyArrayInJSON(t *testing.T) {

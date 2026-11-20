@@ -131,7 +131,7 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 		}
 		fields := map[string]any{
 			"name": strings.TrimSpace(in.Name), "description": in.Description, "cron_spec": in.CronSpec,
-			"enabled": enabled, "device_filter": nil,
+			"enabled": enabled, "device_filter": nil, "revision": gorm.Expr("revision + 1"),
 		}
 		if v.filter != nil {
 			fields["device_filter"] = v.filter
@@ -142,18 +142,9 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 		case sc.CronSpec != in.CronSpec || !sc.Enabled || sc.NextRun == nil:
 			fields["next_run"] = v.next
 		}
-		res := tx.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Updates(fields)
-		if res.Error != nil {
+		// The row is locked, so it is there, and its revision changes, so the count of changed rows is not read.
+		if res := tx.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Updates(fields); res.Error != nil {
 			return res.Error
-		}
-		if res.RowsAffected == 0 { // MySQL reports 0 for an unchanged row too: count before calling it deleted
-			var left int64
-			if cres := tx.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Count(&left); cres.Error != nil || left == 0 {
-				if cres.Error != nil {
-					return cres.Error
-				}
-				return gorm.ErrRecordNotFound
-			}
 		}
 		return replaceScheduleDevices(tx, id, v.ids)
 	})
@@ -171,7 +162,7 @@ func (s *Service) ToggleDriftSchedule(id uint) (*DriftDetectionSchedule, error) 
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&sc, id).Error; err != nil { // as in the update: an edit waits
 			return err
 		}
-		fields := map[string]any{"enabled": !sc.Enabled, "next_run": nil}
+		fields := map[string]any{"enabled": !sc.Enabled, "next_run": nil, "revision": gorm.Expr("revision + 1")}
 		if !sc.Enabled {
 			next, err := NextRun(sc.CronSpec, time.Now())
 			if err != nil {

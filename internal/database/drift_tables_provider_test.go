@@ -54,6 +54,46 @@ const (
 		"error longtext," +
 		"created_at datetime(3))"
 
+	// The schedules table as the release before the revision column made it, with no such column.
+	driftSchedulesLegacySQLite = `CREATE TABLE drift_detection_schedules (
+		id integer PRIMARY KEY AUTOINCREMENT,
+		name text NOT NULL,
+		description text,
+		enabled numeric DEFAULT true,
+		cron_spec text NOT NULL,
+		device_filter text,
+		last_run datetime,
+		next_run datetime,
+		run_count integer DEFAULT 0,
+		created_at datetime,
+		updated_at datetime)`
+
+	driftSchedulesLegacyPostgres = `CREATE TABLE drift_detection_schedules (
+		id bigserial PRIMARY KEY,
+		name text NOT NULL,
+		description text,
+		enabled boolean DEFAULT true,
+		cron_spec text NOT NULL,
+		device_filter text,
+		last_run timestamptz,
+		next_run timestamptz,
+		run_count bigint DEFAULT 0,
+		created_at timestamptz,
+		updated_at timestamptz)`
+
+	driftSchedulesLegacyMySQL = "CREATE TABLE drift_detection_schedules (" +
+		"id bigint unsigned AUTO_INCREMENT PRIMARY KEY," +
+		"name longtext NOT NULL," +
+		"description longtext," +
+		"enabled tinyint(1) DEFAULT 1," +
+		"cron_spec longtext NOT NULL," +
+		"device_filter text," +
+		"last_run datetime(3)," +
+		"next_run datetime(3)," +
+		"run_count bigint DEFAULT 0," +
+		"created_at datetime(3)," +
+		"updated_at datetime(3))"
+
 	// A document with backslashes and quotes: a column that re-encodes text changes it.
 	driftLegacyResults = `{"total":1,"results":[{"device_id":7,"path":"C:\\temp\\x","note":"a \"quoted\" word"}]}`
 )
@@ -84,6 +124,12 @@ func TestDriftTablesMigrationProviders(t *testing.T) {
 				1, "completed", driftLegacyResults).Error)
 			require.NoError(t, raw.Exec(
 				"INSERT INTO drift_detection_runs (schedule_id, status) VALUES (?, ?)", 1, "running").Error)
+			schedulesDDL := map[string]string{
+				"sqlite": driftSchedulesLegacySQLite, "postgresql": driftSchedulesLegacyPostgres, "mysql": driftSchedulesLegacyMySQL,
+			}[spec.name]
+			require.NoError(t, raw.Exec(schedulesDDL).Error)
+			require.NoError(t, raw.Exec(
+				"INSERT INTO drift_detection_schedules (name, cron_spec) VALUES (?, ?)", "legacy", "*/5 * * * *").Error)
 
 			check := func(t *testing.T, manager *Manager) {
 				t.Helper()
@@ -101,6 +147,11 @@ func TestDriftTablesMigrationProviders(t *testing.T) {
 				assert.Empty(t, runs[1].Results, "a running row has no result")
 
 				assert.Equal(t, spec.wantType, spec.columnType(t, db), "type of drift_detection_runs.results")
+
+				var legacy configuration.DriftDetectionSchedule
+				require.NoError(t, db.Where("name = ?", "legacy").First(&legacy).Error, "a schedule of the previous release")
+				assert.Zero(t, legacy.Revision, "the added column starts at 0 on a row that was there")
+				assert.True(t, legacy.Enabled)
 			}
 
 			manager := startProviderManager(t, fixture)
