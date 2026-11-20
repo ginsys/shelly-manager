@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import BulkOperationsDialog from '../BulkOperationsDialog.vue'
 import { bulkImport, bulkDriftDetect, bulkDownload } from '@/api/bulk'
-import { bulkApply, OUTCOME_UNKNOWN } from '@/api/bulkApply'
+import { bulkApply, NothingWrittenError, OUTCOME_UNKNOWN } from '@/api/bulkApply'
 
 vi.mock('@/api/bulkApply', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/bulkApply')>()
@@ -560,8 +560,10 @@ describe('BulkOperationsDialog', () => {
       expect(shown(wrapper, 'bulk-apply-form')).toBe(false)
     })
 
-    it('returns to the confirmation with the text intact after a refused call', async () => {
-      vi.mocked(bulkApply).mockRejectedValue(new Error('bulk-apply takes at most 10 devices, got 11. Nothing was written.'))
+    it('returns to the confirmation with the text intact after a refusal before any write', async () => {
+      vi.mocked(bulkApply).mockRejectedValue(
+        new NothingWrittenError('bulk-apply takes at most 10 devices, got 11. Nothing was written.')
+      )
       const wrapper = await confirmation('{"name":"New"}')
 
       await byId(wrapper, 'bulk-apply-submit').trigger('click')
@@ -574,16 +576,57 @@ describe('BulkOperationsDialog', () => {
       expect(wrapper.emitted('complete')).toBeUndefined()
     })
 
-    it('says an unknown outcome, never "failed", when no answer arrived', async () => {
+    // After an outcome that may follow writes the form is emptied: a click on the same confirmation
+    // cannot repeat the writes, and the typed secret does not stay in the dialog.
+    it('says an unknown outcome, never "failed", and forgets the typed text', async () => {
       vi.mocked(bulkApply).mockRejectedValue(new Error(OUTCOME_UNKNOWN))
-      const wrapper = await confirmation('{"name":"New"}')
+      const wrapper = await confirmation('{"wifi":{"pass":"s3cret"}}')
 
       await byId(wrapper, 'bulk-apply-submit').trigger('click')
       await flushPromises()
 
-      const shown = byId(wrapper, 'bulk-error').text()
-      expect(shown).toContain('Check each device before sending again.')
-      expect(shown).not.toMatch(/nothing was written/i)
+      const message = byId(wrapper, 'bulk-error').text()
+      expect(message).toContain('Check each device before sending again.')
+      expect(message).not.toMatch(/nothing was written/i)
+      expect(byId(wrapper, 'bulk-apply-confirm').exists()).toBe(false)
+      expect((byId(wrapper, 'bulk-apply-json').element as HTMLTextAreaElement).value).toBe('')
+      expect(wrapper.html()).not.toContain('s3cret')
+      expect(bulkApply).toHaveBeenCalledTimes(1)
+    })
+
+    // Closing does not stop the call, so a reopened dialog must not start a second one on the same devices.
+    it('offers no second apply while an earlier one is still running, even after close and reopen', async () => {
+      let answer!: (value: unknown) => void
+      vi.mocked(bulkApply).mockReturnValue(new Promise((resolve) => (answer = resolve)) as any)
+      const wrapper = await confirmation('{"name":"New"}')
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+
+      await byId(wrapper, 'bulk-close').trigger('click')
+      await wrapper.setProps({ isOpen: true })
+
+      expect(byId(wrapper, 'bulk-apply-running').text()).toContain('still running')
+      expect(byId(wrapper, 'bulk-op-apply').attributes('disabled')).toBeDefined()
+      await byId(wrapper, 'bulk-op-apply').trigger('click')
+      expect(byId(wrapper, 'bulk-apply-form').exists()).toBe(false)
+      expect(bulkApply).toHaveBeenCalledTimes(1)
+
+      answer(applyAnswer)
+      await flushPromises()
+
+      expect(byId(wrapper, 'bulk-apply-running').exists()).toBe(false)
+      expect(byId(wrapper, 'bulk-op-apply').attributes('disabled')).toBeUndefined()
+    })
+
+    it('offers apply again after a call that failed to answer', async () => {
+      vi.mocked(bulkApply).mockRejectedValue(new Error(OUTCOME_UNKNOWN))
+      const wrapper = await confirmation('{"name":"New"}')
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+      await flushPromises()
+
+      await byId(wrapper, 'bulk-apply-back').trigger('click')
+
+      expect(byId(wrapper, 'bulk-apply-running').exists()).toBe(false)
+      expect(byId(wrapper, 'bulk-op-apply').attributes('disabled')).toBeUndefined()
     })
 
     it('forgets the typed text when the dialog is closed, and opens empty again', async () => {
@@ -612,14 +655,19 @@ describe('BulkOperationsDialog', () => {
       expect(byId(wrapper, 'bulk-results').exists()).toBe(false)
     })
 
-    it('sends nothing when the selection empties after the form was opened', async () => {
+    // The operator confirmed these devices: an emptied live selection neither drops the click silently
+    // nor changes what was confirmed.
+    it('sends the confirmed devices when the live selection emptied after the review', async () => {
+      vi.mocked(bulkApply).mockResolvedValue(applyAnswer as any)
       const wrapper = await confirmation('{"name":"New"}')
 
       await wrapper.setProps({ selectedDevices: [] })
       await byId(wrapper, 'bulk-apply-submit').trigger('click')
       await flushPromises()
 
-      expect(bulkApply).not.toHaveBeenCalled()
+      expect(bulkApply).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(bulkApply).mock.calls[0][0].device_ids).toEqual([4, 9])
+      expect(byId(wrapper, 'bulk-results').exists()).toBe(true)
     })
 
     it('goes Back to the operation cards', async () => {

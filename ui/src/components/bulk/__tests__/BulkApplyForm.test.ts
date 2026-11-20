@@ -28,7 +28,11 @@ describe('BulkApplyForm', () => {
     const text = w.text()
 
     expect(text).toContain('overrides, never as a template')
-    expect(text).toContain('PATCH /devices/{id}/overrides')
+    expect(text).toContain('PATCH /devices/{id}/overrides/new')
+    // The example the route accepts: a top-level `name` is not a setting of the device configuration.
+    expect(text).toContain('{"system":{"device":{"name":"Kitchen"}}}')
+    expect(by(w, 'bulk-apply-json').attributes('placeholder')).toBe('{"system":{"device":{"name":"Kitchen"}}}')
+    expect(text).toContain('A setting the device configuration does not know is refused')
     expect(by(w, 'bulk-apply-notes').text()).toContain('null removes that override')
     expect(by(w, 'bulk-apply-notes').text()).toContain('A secret sent as ******** keeps the stored secret')
     expect(by(w, 'bulk-apply-notes').text()).toContain('At most 10 devices per call')

@@ -15,6 +15,7 @@ import api from '../client'
 import {
   BULK_APPLY_TIMEOUT_MS,
   MAX_BULK_APPLY_DEVICES,
+  NothingWrittenError,
   OUTCOME_UNKNOWN,
   applyViewOf,
   bulkApply,
@@ -99,9 +100,10 @@ describe('bulkApply', () => {
     async (status) => {
       mockedApi.post.mockRejectedValue(httpError(status, { message: 'm', details: 'The reason.' }))
 
-      await expect(bulkApply({ device_ids: [1], config: { a: 1 } })).rejects.toThrow(
-        'The reason. Nothing was written.'
-      )
+      const err = await bulkApply({ device_ids: [1], config: { a: 1 } }).catch((e: Error) => e)
+
+      expect(err).toBeInstanceOf(NothingWrittenError)
+      expect((err as Error).message).toBe('The reason. Nothing was written.')
     }
   )
 
@@ -129,6 +131,7 @@ describe('bulkApply', () => {
     const err = await bulkApply({ device_ids: [1], config: { a: 1 } }).catch((e: Error) => e)
 
     expect(err).toBeInstanceOf(Error)
+    expect(err).not.toBeInstanceOf(NothingWrittenError)
     expect((err as Error).message).toBe(OUTCOME_UNKNOWN)
     expect((err as Error).message).not.toMatch(/nothing was written/i)
     expect((err as Error).message).not.toMatch(/failed/i)

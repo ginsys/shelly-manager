@@ -28,6 +28,11 @@
           }}
         </p>
 
+        <p v-if="applying" class="form-note" role="status" data-testid="bulk-apply-running">
+          An earlier apply is still running. Closing the window did not stop it. Apply Configuration
+          is off until it ends.
+        </p>
+
         <ul class="picked-devices" data-testid="bulk-picked-devices">
           <li
             v-for="d in selectedDevices"
@@ -99,7 +104,7 @@
 
           <button
             class="operation-card"
-            :disabled="selectedDevices.length === 0 || checking"
+            :disabled="selectedDevices.length === 0 || checking || applying"
             data-testid="bulk-op-apply"
             @click="operation = 'apply'"
           >
@@ -320,7 +325,13 @@ import {
   type BulkAnswer,
   type BulkRequest
 } from '@/api/bulk'
-import { bulkApply, applyViewOf, isApplyResult, type BulkApplyResult } from '@/api/bulkApply'
+import {
+  bulkApply,
+  applyViewOf,
+  isApplyResult,
+  NothingWrittenError,
+  type BulkApplyResult
+} from '@/api/bulkApply'
 import { useError } from '@/composables/useError'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import BulkApplyForm from '@/components/bulk/BulkApplyForm.vue'
@@ -383,14 +394,20 @@ function close() {
   emit('close')
 }
 
-async function run(call: (request: BulkRequest) => Promise<Answer>, action: string) {
-  if (props.selectedDevices.length === 0) return
+// `ids` are the devices to name when they are not the live selection: apply names the ones the
+// operator confirmed.
+async function run(
+  call: (request: BulkRequest) => Promise<Answer>,
+  action: string,
+  ids: number[] = props.selectedDevices.map((d) => d.id)
+) {
+  if (ids.length === 0) return
   clearError()
   const mine = ++currentRun
   try {
     isProcessing.value = true
     const answer = await call({
-      device_ids: props.selectedDevices.map((d) => d.id),
+      device_ids: ids,
       options: { stop_on_error: stopOnError.value }
     })
     // The devices were contacted either way, so the page still refreshes its list.
@@ -405,6 +422,9 @@ async function run(call: (request: BulkRequest) => Promise<Answer>, action: stri
   } catch (e: unknown) {
     if (mine !== currentRun) return
     isProcessing.value = false
+    // After an answer that may follow writes, what was typed is forgotten, so the call cannot be sent
+    // again by a click on the same confirmation. After a refusal before any write it stays to correct.
+    if (!(e instanceof NothingWrittenError)) applyForm.value?.reset()
     setError(e, { action, resource: 'Devices' })
   }
 }
@@ -412,10 +432,25 @@ async function run(call: (request: BulkRequest) => Promise<Answer>, action: stri
 const handleImport = () => run(bulkImport, 'Bulk import')
 const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection')
 const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report')
+// An apply that is still running, whether or not the dialog was closed meanwhile: closing does not stop
+// the call, so a second apply on the same devices must wait for it.
+const applying = ref(false)
+
 // The devices are the ones the operator confirmed in the form, which can differ from the live
 // selection if the page removed a device meanwhile: a device that is gone is answered by the route.
-const handleApply = (p: { deviceIds: number[]; config: Record<string, unknown> }) =>
-  run((request) => bulkApply({ ...request, device_ids: p.deviceIds, config: p.config }), 'Bulk apply')
+async function handleApply(p: { deviceIds: number[]; config: Record<string, unknown> }) {
+  if (applying.value) return
+  applying.value = true
+  try {
+    await run(
+      (request) => bulkApply({ ...request, config: p.config }),
+      'Bulk apply',
+      p.deviceIds
+    )
+  } finally {
+    applying.value = false
+  }
+}
 
 function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob)

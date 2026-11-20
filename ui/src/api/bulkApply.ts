@@ -26,7 +26,7 @@ export type BulkApplyStatus =
   | 'skipped'
 
 export interface BulkApplyRequest extends BulkRequest {
-  // A partial device configuration, as the body of PATCH /devices/{id}/overrides. `null` removes
+  // A partial device configuration, as the body of PATCH /devices/{id}/overrides/new. `null` removes
   // an override and a secret sent as the mask keeps the stored one.
   config: Record<string, unknown>
 }
@@ -62,6 +62,10 @@ export interface BulkApplyResult {
 // devices, so it is never reported as a failure that changed nothing.
 const REFUSED_BEFORE_ANY_WRITE = new Set([400, 401, 403, 413, 415, 429])
 
+// An answer the route gave before it touched a device. The dialog keeps what the operator typed after
+// this one, so it can be corrected, and forgets it after any other outcome.
+export class NothingWrittenError extends Error {}
+
 export const OUTCOME_UNKNOWN =
   'No answer arrived in time, or it could not be read. Some devices may have been written, and one may have been cut in the middle of the write. Check each device before sending again.'
 
@@ -79,7 +83,9 @@ export async function bulkApply(request: BulkApplyRequest): Promise<BulkApplyRes
     if (status !== undefined && REFUSED_BEFORE_ANY_WRITE.has(status)) {
       const error = e.response.data?.error
       const details = typeof error?.details === 'string' ? error.details : undefined
-      throw new Error(`${details || error?.message || 'The request was refused.'} Nothing was written.`)
+      throw new NothingWrittenError(
+        `${details || error?.message || 'The request was refused.'} Nothing was written.`
+      )
     }
     throw new Error(OUTCOME_UNKNOWN)
   }

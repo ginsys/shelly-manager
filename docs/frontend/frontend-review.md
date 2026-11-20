@@ -259,8 +259,9 @@ page imports still counts. The Playwright spec is what proves the links are rend
   `components/bulk/BulkApplyForm.vue`). The operator types one partial configuration as JSON
   (`null` removes an override, a secret sent as `********` keeps the stored one) and reviews the exact
   devices and the exact JSON in a confirmation before anything is sent; Apply sends what was
-  confirmed. The dialog takes at most 10 devices and forgets the typed text when an answer arrives or
-  the window closes. The result says per device what was written and whether the new settings are
+  confirmed. The dialog takes at most 10 devices, forgets the typed text when an answer arrives, when the
+  outcome is unknown or when the window closes, and offers no second apply while an earlier call is
+  still running (closing the window does not stop it). The result says per device what was written and whether the new settings are
   stored and the device stays pending. Only a refusal the route gives before it touches a device (400,
   401, 403, 413, 415, 429) is reported as "nothing was written"; any other outcome (a 408, a 5xx, no
   answer) is reported as unknown, with "check each device before sending again". The browser waits 310
