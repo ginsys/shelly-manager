@@ -168,6 +168,23 @@ func TestCreateBackupSnapshotFailureLeavesNothing(t *testing.T) {
 	}
 }
 
+func TestCreateBackupRefusesDotDotBeforeCreatingAnything(t *testing.T) {
+	dir := t.TempDir()
+	p := walProvider(t, filepath.Join(dir, "live.db"))
+
+	// filepath.Join would clean the ".." away, so the path is built by hand.
+	dst := dir + string(filepath.Separator) + "outer" + string(filepath.Separator) + ".." +
+		string(filepath.Separator) + "inner" + string(filepath.Separator) + "backup.sqlite"
+	if _, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: dst, BackupType: BackupTypeFull}); err == nil {
+		t.Fatal("CreateBackup accepted a path with a .. component")
+	}
+	for _, name := range []string{"outer", "inner"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Fatalf("a refused path still created %q (stat err %v)", name, err)
+		}
+	}
+}
+
 func TestCreateBackupPathWithQuote(t *testing.T) {
 	dir := t.TempDir()
 	live := filepath.Join(dir, "live.db")
