@@ -62,6 +62,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useLateFailure, useLateResult } from '@/composables/useNotice'
 import { getTypedDeviceConfig } from '@/api/deviceConfig'
 import { getConfigSchema, type ConfigSchema } from '@/api/typedConfig'
 import { createTemplate, listDeviceTypes, TemplateSaveError, type FieldError } from '@/api/templates'
@@ -71,6 +72,8 @@ const props = defineProps<{ deviceId: number | string }>()
 const emit = defineEmits<{ close: [] }>()
 
 const router = useRouter()
+const reportLate = useLateFailure()
+const reportLateResult = useLateResult()
 
 const loading = ref(true)
 const loadError = ref('')
@@ -153,11 +156,18 @@ async function save() {
       device_type: scope.value === 'device_type' ? model.value : undefined,
       config: body.value.config,
     })
-    if (!alive) return
+    if (!alive) {
+      reportLateResult('info', `Template "${name.value.trim()}" was created.`, { action: 'Create template', resource: 'Template' })
+      return
+    }
     emit('close')
     await router.push({ name: 'template-detail', params: { id: template.id } })
   } catch (e: any) {
-    if (!alive) return
+    if (!alive) {
+      // The user left the page while the save ran: the dialog is gone, so the app notice is the only place left.
+      reportLate(e, { action: 'Create template', resource: 'Template' })
+      return
+    }
     if (e instanceof TemplateSaveError) fieldErrors.value = e.fields
     saveError.value = e?.message || 'Failed to create the template'
   } finally {
