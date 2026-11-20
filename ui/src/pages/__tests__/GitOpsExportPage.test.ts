@@ -113,6 +113,41 @@ describe('GitOpsExportPage', () => {
     expect(wrapper.get('[data-testid="gitops-preview"]').text()).toBe('second tree')
   })
 
+  it('drops a preview when an option changes, also one still on its way', async () => {
+    const sample = (text: string) => ({ data: { success: true, data: { preview: { sample_data: Buffer.from(text).toString('base64') } } } })
+    let answer: (v: unknown) => void = () => {}
+    vi.mocked(api.get as any).mockResolvedValue(historyAnswer([]))
+    vi.mocked(api.post as any).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    )
+
+    const wrapper = mount(GitOpsExportPage)
+    await flushPromises()
+    await wrapper.get('.primary-button').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="gitops-name"]').setValue('nightly')
+    const previewButton = wrapper.findAll('.actions .secondary').find((b) => b.text() === 'Preview files')!
+    await previewButton.trigger('click')
+
+    // The grouping changes while the answer for the old one is pending.
+    await wrapper.get('[data-testid="gitops-group-by"]').setValue('type')
+    answer(sample('location tree'))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gitops-preview"]').exists()).toBe(false)
+
+    // A preview that arrived is dropped by the next change too.
+    const second = previewButton.trigger('click')
+    answer(sample('type tree'))
+    await second
+    await flushPromises()
+    expect(wrapper.get('[data-testid="gitops-preview"]').text()).toBe('type tree')
+    await wrapper.get('[data-testid="gitops-group-by"]').setValue('location')
+    expect(wrapper.find('[data-testid="gitops-preview"]').exists()).toBe(false)
+  })
+
   it('drops the list answer of a request that a newer one replaced', async () => {
     let answerFirst: (v: unknown) => void = () => {}
     let calls = 0

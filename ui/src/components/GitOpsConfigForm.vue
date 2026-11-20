@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { GitOpsExportOptions } from '@/api/export'
 import type { Device } from '@/api/types'
 
@@ -61,6 +61,7 @@ defineProps<{
 const emit = defineEmits<{
   submit: [options: GitOpsExportOptions]
   preview: [options: GitOpsExportOptions]
+  'preview-stale': []
   cancel: []
 }>()
 
@@ -70,6 +71,10 @@ const groupBy = ref<GitOpsExportOptions['group_by']>('location')
 const includeCommon = ref(true)
 const includeTemplates = ref(true)
 const deviceIds = ref<number[]>([])
+
+// A preview describes the options it was asked for: once one of them that shapes the files changes,
+// the page drops the shown tree and any answer still on its way.
+watch([groupBy, includeCommon, includeTemplates, deviceIds], () => emit('preview-stale'), { deep: true })
 
 function options(): GitOpsExportOptions {
   return {

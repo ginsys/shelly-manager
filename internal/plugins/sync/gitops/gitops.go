@@ -363,10 +363,7 @@ func (g *GitOpsPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 	}
 
 	// Add ungrouped devices
-	if ungroupedCount > 0 {
-		ungroupedTypeGroups := g.groupDevicesByType(g.getUngroupedDevices(data.Devices, deviceGroups))
-		fileCount += len(ungroupedTypeGroups) * ungroupedCount // ungrouped device files
-	}
+	fileCount += ungroupedCount // one file per ungrouped device, as Export writes them
 
 	// Add templates
 	if includeTemplates {
@@ -766,6 +763,17 @@ func (g *GitOpsPlugin) generatePreviewStructure(groups map[string][]sync.DeviceD
 			for _, device := range typeDevices {
 				filename := g.sanitizeFilename(device.Name)
 				fmt.Fprintf(&preview, "│   │   └── %s.yaml\n", filename)
+			}
+		}
+	}
+
+	// Export writes the devices no group claimed under ungrouped/<type>/.
+	if ungrouped := g.getUngroupedDevices(data.Devices, groups); len(ungrouped) > 0 {
+		preview.WriteString("├── ungrouped/\n")
+		for deviceType, typeDevices := range g.groupDevicesByType(ungrouped) {
+			fmt.Fprintf(&preview, "│   ├── %s/\n", dirSegment(deviceType))
+			for _, device := range typeDevices {
+				fmt.Fprintf(&preview, "│   │   └── %s.yaml\n", g.sanitizeFilename(device.Name))
 			}
 		}
 	}

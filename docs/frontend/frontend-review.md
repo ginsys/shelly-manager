@@ -155,7 +155,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
 | `/drift/trends` | Drift trends | 517 | top bar (Drift) |
 | `/export/backup` | Backup management | 856 | top bar (Export & Import) |
-| `/export/gitops` | GitOps export | 259 | top bar (Export & Import) |
+| `/export/gitops` | GitOps export | 276 | top bar (Export & Import) |
 | `/export/history` | Export history | 70 | top bar (Export & Import) |
 | `/export/:id` | Export result | 43 | Export history |
 | `/import/history` | Import history | 57 | top bar (Export & Import) |

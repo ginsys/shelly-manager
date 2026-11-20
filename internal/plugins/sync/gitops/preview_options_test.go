@@ -43,3 +43,29 @@ func TestPreviewFollowsTheCommonAndTemplateOptions(t *testing.T) {
 		t.Errorf("file count: %d with the options, %d without; want a difference of 2", onFiles, offFiles)
 	}
 }
+
+// A device that matches no group is written under ungrouped/<type>/, so the preview lists it there and
+// counts one file per such device, whatever the number of types.
+func TestPreviewListsUngroupedDevices(t *testing.T) {
+	data := &sync.ExportData{Devices: []sync.DeviceData{
+		{ID: 1, Name: "sensor-1", Type: "shelly1"},
+		{ID: 2, Name: "sensor-2", Type: "shelly1"},
+		{ID: 3, Name: "plug-1", Type: "shellyplug"},
+	}}
+	res, err := NewGitOpsExporter().Preview(context.Background(), data, sync.ExportConfig{Config: map[string]interface{}{
+		"group_by": "location",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := string(res.SampleData)
+	for _, want := range []string{"ungrouped/", "sensor-1.yaml", "sensor-2.yaml", "plug-1.yaml"} {
+		if !strings.Contains(tree, want) {
+			t.Errorf("the tree lacks %q:\n%s", want, tree)
+		}
+	}
+	// Three device files and export-summary.yaml.
+	if res.RecordCount != 4 {
+		t.Errorf("file count = %d, want 4", res.RecordCount)
+	}
+}
