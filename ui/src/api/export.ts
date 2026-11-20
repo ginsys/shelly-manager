@@ -8,6 +8,9 @@ export interface ExportHistoryItem {
   export_id: string
   plugin_name: string
   format: string
+  name?: string
+  description?: string
+  file_path?: string
   requested_by?: string
   success: boolean
   record_count?: number
@@ -363,198 +366,63 @@ export async function previewRestore(backupId: string): Promise<RestorePreview> 
   return res.data.data
 }
 
-// GitOps-specific interfaces and methods
+// GitOps exports. The server writes a directory of YAML files. Its history route lists them
+// (listExportHistory with plugin 'gitops'), the generic result route reads one (getExportResult)
+// and the generic preview route previews one (previewExport). Only create and delete have
+// GitOps routes of their own.
 
-export interface GitOpsExportRequest {
+export interface GitOpsExportOptions {
   name: string
   description?: string
-  format: 'terraform' | 'ansible' | 'kubernetes' | 'docker-compose' | 'yaml'
-  devices?: number[] // Selected device IDs, empty/null for all
-  repository_structure: 'monorepo' | 'hierarchical' | 'per-device' | 'flat'
-  template_options?: GitOpsTemplateOptions
-  git_config?: GitOpsGitConfig
-  variable_substitution?: Record<string, string>
-  include_secrets?: boolean
-  generate_readme?: boolean
+  group_by: 'location' | 'type' | 'custom'
+  include_common: boolean
+  include_templates: boolean
+  device_ids?: number[] // empty or missing: every device
 }
 
-export interface GitOpsTemplateOptions {
-  terraform?: {
-    provider_version?: string
-    module_structure?: 'single' | 'per-device' | 'per-type'
-    include_data_sources?: boolean
-    variable_files?: boolean
-  }
-  ansible?: {
-    playbook_structure?: 'single' | 'per-device' | 'roles'
-    inventory_format?: 'ini' | 'yaml'
-    include_vault?: boolean
-    use_collections?: boolean
-  }
-  kubernetes?: {
-    api_version?: string
-    namespace?: string
-    use_kustomize?: boolean
-    include_rbac?: boolean
-    config_map_structure?: 'single' | 'per-device'
-  }
-  docker_compose?: {
-    version?: string
-    network_mode?: 'bridge' | 'host' | 'custom'
-    include_volumes?: boolean
-    use_profiles?: boolean
+function gitopsConfig(o: GitOpsExportOptions) {
+  return {
+    config: {
+      name: o.name,
+      description: o.description,
+      group_by: o.group_by,
+      include_common: o.include_common,
+      include_templates: o.include_templates,
+    },
+    filters: { device_ids: o.device_ids?.length ? o.device_ids : undefined },
   }
 }
 
-export interface GitOpsGitConfig {
-  repository_url?: string
-  branch?: string
-  commit_message_template?: string
-  author_name?: string
-  author_email?: string
-  use_webhooks?: boolean
-  webhook_secret?: string
-}
-
-export interface GitOpsExportResult {
-  export_id: string
-  name: string
-  format: string
-  repository_structure: string
-  device_count: number
-  file_count: number
-  total_size: number
-  files: GitOpsExportFile[]
-  git_integration?: GitOpsIntegrationStatus
-  warnings?: string[]
-  duration?: string
-}
-
-export interface GitOpsExportFile {
-  path: string
-  name: string
-  size: number
-  type: 'config' | 'template' | 'variable' | 'readme' | 'script'
-  description?: string
-}
-
-export interface GitOpsIntegrationStatus {
-  repository_connected: boolean
-  branch_exists: boolean
-  last_commit?: string
-  webhook_configured: boolean
-  ci_status?: 'passing' | 'failing' | 'unknown'
-}
-
-export interface GitOpsExportItem {
-  id: number
-  export_id: string
-  name: string
-  description?: string
-  format: string
-  repository_structure: string
-  device_count: number
-  file_count: number
-  total_size: number
-  success: boolean
-  error_message?: string
-  created_at: string
-  created_by?: string
-}
-
-export interface ListGitOpsExportsParams {
-  page?: number
-  pageSize?: number
-  format?: string
-  success?: boolean
-}
-
-export interface ListGitOpsExportsResult {
-  items: GitOpsExportItem[]
-  meta?: Metadata
-}
-
-export interface GitOpsExportStatistics {
-  total: number
-  success: number
-  failure: number
-  by_format: Record<string, number>
-  by_structure: Record<string, number>
-  total_files: number
-  total_size: number
-  last_export?: string
-}
-
-export async function createGitOpsExport(req: GitOpsExportRequest): Promise<{ export_id: string }> {
-  const res = await api.post<APIResponse<{ export_id: string }>>('/export/gitops', req)
+export async function createGitOpsExport(o: GitOpsExportOptions): Promise<{ export_id: string }> {
+  const res = await api.post<APIResponse<{ export_id: string }>>('/export/gitops', gitopsConfig(o))
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.error?.message || 'Failed to create GitOps export')
   }
   return res.data.data
 }
 
-export async function getGitOpsExportResult(id: string): Promise<GitOpsExportResult> {
-  const res = await api.get<APIResponse<GitOpsExportResult>>(`/export/gitops/${id}`)
-  if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'Failed to get GitOps export result')
-  }
-  return res.data.data
-}
-
-export async function downloadGitOpsExport(id: string): Promise<Blob> {
-  const res = await api.get(`/export/gitops/${id}/download`, {
-    responseType: 'blob'
+export function previewGitOpsExport(o: GitOpsExportOptions): Promise<ExportPreviewResponse> {
+  return previewExport({
+    plugin_name: 'gitops',
+    format: 'yaml',
+    ...gitopsConfig(o),
+    output: { type: 'response' },
+    options: { dry_run: true, include_history: false, validate_only: false, compact_output: false, include_metadata: false },
   })
-  return res.data
 }
 
-export async function listGitOpsExports(params: ListGitOpsExportsParams = {}): Promise<ListGitOpsExportsResult> {
-  const { page = 1, pageSize = 20, format, success } = params
-  const res = await api.get<APIResponse<{ exports: GitOpsExportItem[] }>>('/export/gitops', {
-    params: { page, page_size: pageSize, format, success },
-  })
-  if (!res.data.success) {
-    throw new Error(res.data.error?.message || 'Failed to load GitOps exports')
-  }
-  return { items: res.data.data?.exports || [], meta: res.data.meta }
-}
-
-export async function getGitOpsExportStatistics(): Promise<GitOpsExportStatistics> {
-  const res = await api.get<APIResponse<GitOpsExportStatistics>>('/export/gitops-statistics')
-  if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'Failed to load GitOps export statistics')
-  }
-  return res.data.data
-}
-
+// Removes the history record only. The exported files stay where the export wrote them.
 export async function deleteGitOpsExport(id: string): Promise<void> {
-  const res = await api.delete<APIResponse<void>>(`/export/gitops/${id}`)
-  if (!res.data.success) {
-    throw new Error(res.data.error?.message || 'Failed to delete GitOps export')
+  const res = await api.delete(`/export/gitops/${id}`)
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error('Failed to delete GitOps export')
   }
 }
 
-export interface GitOpsExportPreview {
-  success: boolean
-  file_count?: number
-  estimated_size?: number
-  structure_preview: string[]
-  template_validation: GitOpsTemplateValidation
-  warnings?: string[]
+// The history response has no total, but its page count at one item per page is the item count
+// (the Go test TestHistoryPageCountWithPageSizeOneIsTheRowCount pins this).
+export async function countGitOpsExports(success?: boolean): Promise<number> {
+  const { meta } = await listExportHistory({ plugin: 'gitops', pageSize: 1, success })
+  return meta?.pagination?.total_pages ?? 0
 }
 
-export interface GitOpsTemplateValidation {
-  valid: boolean
-  terraform?: { syntax_valid: boolean; provider_compatible: boolean; warnings?: string[] }
-  ansible?: { syntax_valid: boolean; collection_available: boolean; warnings?: string[] }
-  kubernetes?: { api_valid: boolean; rbac_valid: boolean; warnings?: string[] }
-  docker_compose?: { syntax_valid: boolean; service_valid: boolean; warnings?: string[] }
-}
-
-export async function previewGitOpsExport(req: GitOpsExportRequest): Promise<{ preview: GitOpsExportPreview; summary: any }> {
-  const res = await api.post<APIResponse<{ preview: GitOpsExportPreview; summary: any }>>('/export/gitops-preview', req)
-  if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'GitOps preview failed')
-  }
-  return res.data.data
-}

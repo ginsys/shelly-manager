@@ -13,14 +13,6 @@
         <span class="stat-label">Failed:</span>
         <span class="stat-value failure">{{ statistics.failure || 0 }}</span>
       </div>
-      <div class="card">
-        <span class="stat-label">Files:</span>
-        <span class="stat-value">{{ statistics.total_files || 0 }}</span>
-      </div>
-      <div class="card">
-        <span class="stat-label">Total Size:</span>
-        <span class="stat-value">{{ formatFileSize(statistics.total_size || 0) }}</span>
-      </div>
     </div>
   </section>
 </template>
@@ -30,21 +22,11 @@ interface Statistics {
   total: number
   success: number
   failure: number
-  total_files: number
-  total_size: number
 }
 
 defineProps<{
   statistics: Statistics
 }>()
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
 </script>
 
 <style scoped>

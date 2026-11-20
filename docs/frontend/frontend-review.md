@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250, and a unit test keeps them equal to the code (section 1)
-**Status:** 130 of 133 exported API functions are referenced by the UI (98%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 126 of 130 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -79,7 +79,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 8 | 8 | |
 | `errorBody.ts` | 4 | 4 | |
-| `export.ts` | 26 | 25 | `getBackupResult` |
+| `export.ts` | 23 | 21 | `getBackupResult`, `downloadExport` |
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
@@ -88,7 +88,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **133** | **130** | **3** |
+| **Total** | **130** | **126** | **4** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -118,7 +118,7 @@ Counts (commands, from the repository root):
 | What | Count | Command |
 |------|-------|---------|
 | Routed page components | 26 | `fd -e vue . ui/src/pages \| wc -l` |
-| Reusable components (excluding tests) | 40 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
+| Reusable components (excluding tests) | 39 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
 | Pinia stores (excluding tests) | 11 | `fd -e ts . ui/src/stores \| rg -v '\.test\.ts\|__tests__' \| wc -l` |
 | Composables | 2 | `fd -e ts . ui/src/composables \| rg -v __tests__ \| wc -l` |
 | Unit test files / `it`+`test` calls | 70 / 687 | `fd '\.test\.ts$' ui/src \| wc -l`; `rg --no-filename -c '^\s*(it\|test)\(' ui/src --glob '*.test.ts' \| awk '{s+=$1} END{print s}'` |
@@ -155,7 +155,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
 | `/drift/trends` | Drift trends | 517 | top bar (Drift) |
 | `/export/backup` | Backup management | 856 | top bar (Export & Import) |
-| `/export/gitops` | GitOps export | 577 | top bar (Export & Import) |
+| `/export/gitops` | GitOps export | 259 | top bar (Export & Import) |
 | `/export/history` | Export history | 70 | top bar (Export & Import) |
 | `/export/:id` | Export result | 43 | Export history |
 | `/import/history` | Import history | 57 | top bar (Export & Import) |
@@ -205,7 +205,7 @@ page imports still counts. The Playwright spec is what proves the links are rend
 ## 4. Components, stores and utilities
 
 - **Components** (`ui/src/components`): `backup/` (7), `bulk/` (the bulk dialog and its apply form, 2), `charts/` (2),
-  `config/` (3), `devices/` (2), `gitops/` (5), `plugin/` (3), `provisioning/` (2), `shared/` (5), and
+  `config/` (3), `devices/` (2), `gitops/` (4), `plugin/` (3), `provisioning/` (2), `shared/` (5), and
   8 top-level files (`DataTable`, `FilterBar`, `PaginationBar`, `ExportPreviewForm`,
   `ImportPreviewForm`, `GitOpsConfigForm`, `PluginDetailsView`, `PluginSchemaViewer`).
 - **Stores** (`ui/src/stores`): devices, deviceConfigNew, drift, export, import, metrics,
@@ -346,10 +346,10 @@ Found by reading the code at this commit; not a plan.
    checked only if someone adds it to the spec.
 2. **Quasar is a dependency nothing imports** (section 2).
 3. **Large pages:** `BackupManagementPage.vue` (856 lines), `MetricsDashboardPage.vue` (697),
-   `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
+   `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
-5. **No generated API client.** The 134 functions are written by hand. The coverage figure in section 1
+5. **No generated API client.** The 130 functions are written by hand. The coverage figure in section 1
    is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
    stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
