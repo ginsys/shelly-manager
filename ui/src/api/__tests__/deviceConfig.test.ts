@@ -19,6 +19,7 @@ import {
   detectConfigDrift,
   getConfigHistory,
   getStoredDeviceConfig,
+  getTypedDeviceConfig,
   type DeviceConfig
 } from '../deviceConfig'
 
@@ -293,6 +294,28 @@ describe('deviceConfig API', () => {
       ;(api.get as any).mockResolvedValue({ data: { success: false, error: { message: 'Broken' } } })
 
       await expect(getStoredDeviceConfig(123)).rejects.toThrow('Broken')
+    })
+  })
+
+  describe('getTypedDeviceConfig', () => {
+    it('returns the typed configuration of the stored import', async () => {
+      const configuration = { mqtt: { user: 'iot', pass: '********' } }
+      ;(api.get as any).mockResolvedValue({ data: { success: true, data: { configuration } } })
+
+      expect(await getTypedDeviceConfig(123)).toEqual(configuration)
+      expect(api.get).toHaveBeenCalledWith('/devices/123/config/typed')
+    })
+
+    it('does not turn a failure into "nothing stored": the server answers 500 when nothing is stored', async () => {
+      ;(api.get as any).mockRejectedValue({ isAxiosError: true, response: { status: 500, data: {} } })
+
+      await expect(getTypedDeviceConfig(123)).rejects.toMatchObject({ response: { status: 500 } })
+    })
+
+    it('throws the backend message on an unsuccessful answer', async () => {
+      ;(api.get as any).mockResolvedValue({ data: { success: false, error: { message: 'Broken' } } })
+
+      await expect(getTypedDeviceConfig(123)).rejects.toThrow('Broken')
     })
   })
 })

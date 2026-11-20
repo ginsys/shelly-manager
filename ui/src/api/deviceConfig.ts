@@ -146,6 +146,18 @@ export async function getStoredDeviceConfig(id: number | string): Promise<Stored
   return res.data.data
 }
 
+// Get the stored import in its typed form (GET /devices/{id}/config/typed): the sections a template has,
+// secrets masked. The server answers 500 when nothing is stored, so every failure is thrown and none is
+// read as "nothing stored".
+export async function getTypedDeviceConfig(id: number | string): Promise<Record<string, any>> {
+  const res = await api.get<APIResponse<{ configuration: Record<string, any> }>>(`/devices/${id}/config/typed`)
+  if (!res.data.success || !res.data.data?.configuration) {
+    const msg = res.data.error?.message || 'Failed to get the typed device configuration'
+    throw new Error(msg)
+  }
+  return res.data.data.configuration
+}
+
 // A row of the history answer (internal/configuration ConfigHistory).
 interface ConfigHistoryRow {
   id: number
