@@ -115,7 +115,9 @@ func (e *SyncEngine) DeleteExport(ctx context.Context, exportID string, removeFi
 
 	// Delete DB history
 	if db := e.dbManager.GetDB(); db != nil {
-		_ = db.WithContext(ctx).Where("export_id = ?", exportID).Delete(&database.ExportHistory{}).Error
+		if err := db.WithContext(ctx).Where("export_id = ?", exportID).Delete(&database.ExportHistory{}).Error; err != nil {
+			return fmt.Errorf("delete export history: %w", err)
+		}
 	}
 
 	// Remove from in-memory map

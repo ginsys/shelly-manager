@@ -345,8 +345,14 @@ func (g *GitOpsPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 	deviceGroups := g.groupDevices(data.Devices, groupBy, config.Config["group_mapping"])
 	ungroupedCount := len(g.getUngroupedDevices(data.Devices, deviceGroups))
 
+	includeCommon, _ := config.Config["include_common"].(bool)
+	includeTemplates, _ := config.Config["include_templates"].(bool)
+
 	// Estimate files
-	fileCount := 1 // common.yaml
+	fileCount := 0
+	if includeCommon {
+		fileCount++ // common.yaml
+	}
 	for _, devices := range deviceGroups {
 		fileCount++ // group.yaml
 		typeGroups := g.groupDevicesByType(devices)
@@ -363,7 +369,7 @@ func (g *GitOpsPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 	}
 
 	// Add templates
-	if includeTemplates, _ := config.Config["include_templates"].(bool); includeTemplates {
+	if includeTemplates {
 		fileCount += len(data.Templates)
 	}
 
@@ -371,7 +377,7 @@ func (g *GitOpsPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 
 	estimatedSize := int64(fileCount) * 2048 // Rough estimate: 2KB per YAML file
 
-	sampleStructure := g.generatePreviewStructure(deviceGroups, data)
+	sampleStructure := g.generatePreviewStructure(deviceGroups, data, includeCommon, includeTemplates)
 
 	return &sync.PreviewResult{
 		Success:       true,
@@ -740,12 +746,14 @@ func (g *GitOpsPlugin) calculateDirectorySize(dirPath string) (int64, error) {
 	return totalSize, err
 }
 
-func (g *GitOpsPlugin) generatePreviewStructure(groups map[string][]sync.DeviceData, data *sync.ExportData) string {
+func (g *GitOpsPlugin) generatePreviewStructure(groups map[string][]sync.DeviceData, data *sync.ExportData, includeCommon, includeTemplates bool) string {
 	var preview strings.Builder
 
 	preview.WriteString("GitOps Export Structure Preview:\n\n")
 	preview.WriteString("gitops/\n")
-	preview.WriteString("├── common.yaml                    # Global settings\n")
+	if includeCommon {
+		preview.WriteString("├── common.yaml                    # Global settings\n")
+	}
 
 	for groupName, devices := range groups {
 		fmt.Fprintf(&preview, "├── groups/%s/\n", dirSegment(groupName))
@@ -762,7 +770,7 @@ func (g *GitOpsPlugin) generatePreviewStructure(groups map[string][]sync.DeviceD
 		}
 	}
 
-	if len(data.Templates) > 0 {
+	if includeTemplates && len(data.Templates) > 0 {
 		preview.WriteString("├── templates/\n")
 		for _, template := range data.Templates {
 			filename := g.sanitizeFilename(template.Name)

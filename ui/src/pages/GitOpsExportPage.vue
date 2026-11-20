@@ -81,6 +81,7 @@ import {
   createGitOpsExport,
   deleteGitOpsExport,
   previewGitOpsExport,
+  decodePreviewSample,
   type ExportHistoryItem,
   type ExportResult,
   type GitOpsExportOptions,
@@ -119,6 +120,7 @@ const message = reactive({ text: '', type: 'success' as 'success' | 'error' })
 // (a filter changed, another row opened) is dropped.
 let listRequest = 0
 let detailsRequest = 0
+let previewRequest = 0
 
 onMounted(() => {
   fetchExports()
@@ -157,11 +159,18 @@ async function fetchStatistics() {
 }
 
 async function openCreateForm() {
+  previewRequest++
   previewText.value = ''
   createError.value = ''
   showCreateForm.value = true
   try {
-    availableDevices.value = (await listDevices({ pageSize: 1000 })).items
+    const all: Device[] = []
+    for (let page = 1; ; page++) {
+      const { items, meta } = await listDevices({ page, pageSize: 500 })
+      all.push(...items)
+      if (!meta?.pagination?.has_next) break
+    }
+    availableDevices.value = all
   } catch (err) {
     console.error('Failed to load devices:', err)
   }
@@ -193,11 +202,13 @@ async function handleCreateExport(options: GitOpsExportOptions) {
 }
 
 async function handlePreviewExport(options: GitOpsExportOptions) {
+  const mine = ++previewRequest
   createError.value = ''
   try {
     const { preview } = await previewGitOpsExport(options)
-    previewText.value = atob(preview.sample_data || '')
+    if (mine === previewRequest) previewText.value = decodePreviewSample(preview.sample_data || '')
   } catch (err: any) {
+    if (mine !== previewRequest) return
     previewText.value = ''
     createError.value = err.message || 'Failed to preview the export'
   }

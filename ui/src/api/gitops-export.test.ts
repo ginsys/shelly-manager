@@ -4,6 +4,7 @@ import {
   deleteGitOpsExport,
   previewGitOpsExport,
   countGitOpsExports,
+  decodePreviewSample,
   type GitOpsExportOptions,
 } from './export'
 import api from './client'
@@ -70,6 +71,13 @@ describe('GitOps export API', () => {
     expect(body.plugin_name).toBe('gitops')
     expect(body.config.group_by).toBe('type')
     expect(body.filters).toEqual({ device_ids: [3, 4] })
+  })
+
+  it('decodes the preview sample as UTF-8, box-drawing characters included', () => {
+    const tree = 'gitops/\n├── common.yaml\n└── kitchen-é.yaml\n'
+    const base64 = Buffer.from(tree, 'utf8').toString('base64')
+
+    expect(decodePreviewSample(base64)).toBe(tree)
   })
 
   it('deletes the record through the gitops delete route', async () => {

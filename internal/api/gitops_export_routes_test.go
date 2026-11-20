@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/plugins/sync/gitops"
 	"github.com/ginsys/shelly-manager/internal/sync"
@@ -221,4 +223,19 @@ func TestHistoryPageCountWithPageSizeOneIsTheRowCount(t *testing.T) {
 
 	require.Equal(t, 3, totalPages("plugin=gitops"))
 	require.Equal(t, 2, totalPages("plugin=gitops&success=true"))
+}
+
+// A record that cannot be deleted is an error, not a 204.
+func TestDeleteGitOpsExportReportsAFailedRecordDelete(t *testing.T) {
+	router, engine, _, db, cleanup := setupSyncTestRouter(t)
+	defer cleanup()
+	require.NoError(t, engine.RegisterPlugin(gitops.NewPlugin()))
+	id, _ := createGitOpsExport(t, router)
+
+	require.NoError(t, db.GetDB().Callback().Delete().Before("gorm:delete").Register("test:locked", func(tx *gorm.DB) {
+		_ = tx.AddError(errors.New("database is locked"))
+	}))
+
+	rr := callGitOps(t, router, http.MethodDelete, "/api/v1/export/gitops/"+id, nil)
+	require.Equal(t, http.StatusInternalServerError, rr.Code, rr.Body.String())
 }

@@ -682,7 +682,10 @@ func (eh *SyncHandlers) DeleteGitOpsExport(w http.ResponseWriter, r *http.Reques
 		apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, "GitOps export")
 		return
 	}
-	_ = eh.syncEngine.DeleteExport(r.Context(), id, false)
+	if err := eh.syncEngine.DeleteExport(r.Context(), id, false); err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		return
+	}
 	apiresp.NewResponseWriter(eh.logger).WriteNoContent(w, r)
 }
 
