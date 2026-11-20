@@ -201,6 +201,8 @@ func TestSchedulerTick_SelectsExactlyTheConfiguredDevices(t *testing.T) {
 		{name: "a list of deleted devices never widens to all", ids: []uint{90, 91}, want: []uint{}},
 		{name: "an unknown filter key fails the run and reads no device", filter: `{"device_type":"SHSW-1"}`,
 			want: []uint{}, status: DriftRunFailed, errHas: "device_type"},
+		{name: "text after the filter fails the run, it is never read as an empty filter", filter: `{} {"type":"SHSW-1"}`,
+			want: []uint{}, status: DriftRunFailed, errHas: "device filter"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -414,10 +416,10 @@ func TestSchedulerClaim_OneWinnerPerTick(t *testing.T) {
 	read := fx.schedule(id)
 	next := at(5 * time.Minute)
 
-	won, err := fx.s.claim(read, next)
+	won, err := fx.s.claim(fx.db, read, next)
 	require.NoError(t, err)
 	assert.True(t, won)
-	again, err := fx.s.claim(read, next)
+	again, err := fx.s.claim(fx.db, read, next)
 	require.NoError(t, err)
 	assert.False(t, again, "the same stale read claimed twice")
 
@@ -426,13 +428,64 @@ func TestSchedulerClaim_OneWinnerPerTick(t *testing.T) {
 	assert.True(t, sc.NextRun.Equal(next))
 }
 
+// The claim and the run row are one commit: a tick whose run cannot be recorded is not claimed, so
+// it is still due and a crash between the two never loses an occurrence.
+func TestSchedulerTick_ATickThatCannotRecordItsRunIsNotClaimed(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	require.NoError(t, fx.db.Migrator().DropTable(&DriftDetectionRun{}))
+
+	fx.s.tick(context.Background(), at(10*time.Second))
+
+	sc := fx.schedule(id)
+	assert.Zero(t, sc.RunCount, "the claim committed without its run row")
+	assert.True(t, sc.NextRun.Equal(at(0)), "next_run moved without a run row: %s", sc.NextRun)
+}
+
+// Two replicas that read the same due schedule with a spec that cannot run record one failure.
+func TestSchedulerFailSchedule_TwoReplicasRecordOneFailure(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("0 */5 * * * *", nil, "", 1)
+	read := fx.schedule(id)
+
+	fx.s.failSchedule(read, at(0), errors.New("invalid cron spec"))
+	fx.s.failSchedule(read, at(0), errors.New("invalid cron spec"))
+
+	assert.Len(t, fx.runs(id), 1)
+	assert.False(t, fx.schedule(id).Enabled)
+}
+
+// A prune that read its list of rows to keep before another replica added a run must not delete
+// that run.
+func TestSchedulerPrune_NeverDeletesARunNewerThanItsList(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(time.Hour)), "", 1)
+	var keep []uint
+	for i := 0; i < driftRunsKept+1; i++ {
+		run := DriftDetectionRun{ScheduleID: id, Status: DriftRunCompleted, StartedAt: at(time.Duration(i) * time.Minute)}
+		require.NoError(t, fx.db.Create(&run).Error)
+		if i > 0 {
+			keep = append(keep, run.ID) // the newest 100 of the 101 rows at the time of the read
+		}
+	}
+	newer := DriftDetectionRun{ScheduleID: id, Status: DriftRunCompleted, StartedAt: at(time.Hour)}
+	require.NoError(t, fx.db.Create(&newer).Error) // another replica's run, after the read
+
+	fx.s.deleteRunsNotIn(id, keep)
+
+	runs := fx.runs(id)
+	assert.Len(t, runs, driftRunsKept+1, "the oldest row goes and the newer run stays")
+	assert.Equal(t, newer.ID, runs[len(runs)-1].ID)
+	assert.NotEqual(t, uint(1), runs[0].ID)
+}
+
 func TestSchedulerClaim_ADisabledScheduleIsNotClaimed(t *testing.T) {
 	fx := newSchedFixture(t)
 	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
 	read := fx.schedule(id)
 	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Update("enabled", false).Error)
 
-	won, err := fx.s.claim(read, at(5*time.Minute))
+	won, err := fx.s.claim(fx.db, read, at(5*time.Minute))
 
 	require.NoError(t, err)
 	assert.False(t, won)
