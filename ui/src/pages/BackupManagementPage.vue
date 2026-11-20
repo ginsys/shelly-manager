@@ -180,6 +180,7 @@ const restoreBackup = ref<BackupItem | null>(null)
 const restorePreview = ref<RestorePreview | null>(null)
 const restoreLoading = ref(false)
 const restoreError = ref('')
+let restoreCheckId = 0 // identifies the newest backup check; older answers are dropped
 
 // Initialize
 onMounted(() => {
@@ -380,27 +381,32 @@ async function downloadBackup(backupId: string, backupName: string) {
  * Start restore process
  */
 function startRestore(backup: BackupItem) {
+  restoreCheckId++ // a check still pending for another backup must not land here
   restoreBackup.value = backup
   restorePreview.value = null
   restoreError.value = ''
+  restoreLoading.value = false
   showRestoreModal.value = true
 }
 
 /**
- * Preview restore changes
+ * Check a stored backup. Only the newest check may update the dialog: closing it or opening
+ * another backup makes an older answer stale, and it must not be shown under another name.
  */
 async function handlePreviewRestore() {
   if (!restoreBackup.value) return
-  
+
+  const mine = ++restoreCheckId
   restoreLoading.value = true
   restoreError.value = ''
-  
+
   try {
-    restorePreview.value = await previewRestore(restoreBackup.value.backup_id)
+    const result = await previewRestore(restoreBackup.value.backup_id)
+    if (mine === restoreCheckId) restorePreview.value = result
   } catch (err: any) {
-    restoreError.value = err.message || 'Failed to check the backup'
+    if (mine === restoreCheckId) restoreError.value = err.message || 'Failed to check the backup'
   } finally {
-    restoreLoading.value = false
+    if (mine === restoreCheckId) restoreLoading.value = false
   }
 }
 
@@ -434,10 +440,12 @@ async function performDelete() {
  * Close restore modal
  */
 function closeRestoreModal() {
+  restoreCheckId++
   showRestoreModal.value = false
   restoreBackup.value = null
   restorePreview.value = null
   restoreError.value = ''
+  restoreLoading.value = false
 }
 
 /**
