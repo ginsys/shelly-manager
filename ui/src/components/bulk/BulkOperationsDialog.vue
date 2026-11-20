@@ -96,6 +96,17 @@
             <h3>Download Configuration</h3>
             <p>Save the desired configuration of the selected devices as one file</p>
           </button>
+
+          <button
+            class="operation-card"
+            :disabled="selectedDevices.length === 0 || checking"
+            data-testid="bulk-op-apply"
+            @click="operation = 'apply'"
+          >
+            <span class="operation-icon">✍️</span>
+            <h3>Apply Configuration</h3>
+            <p>Write one configuration to the selected devices</p>
+          </button>
         </div>
       </div>
 
@@ -105,8 +116,7 @@
         <form @submit.prevent="handleImport">
           <p class="form-note">
             Reads the current configuration of each selected device into the manager. Nothing is
-            written to the devices; to write a configuration to a device, apply it from that
-            device's page.
+            written to the devices; to write a configuration to them, use Apply Configuration.
           </p>
 
           <div class="form-field checkbox">
@@ -234,7 +244,23 @@
           Contacting {{ selectedDevices.length }} device(s). The answer arrives when every
           device has been tried.
         </p>
+        <p v-if="operation === 'apply'" class="progress-text" data-testid="bulk-apply-processing">
+          The devices are being written. Closing this window does not stop the call or undo what
+          was written. A call can last up to 5 minutes.
+        </p>
       </div>
+
+      <!-- Apply Configuration Form. Outside the chain above, so it stays mounted while the call
+           runs and a refused call returns to the confirmation with the text intact. -->
+      <BulkApplyForm
+        v-if="operation === 'apply'"
+        v-show="!isProcessing && !result"
+        ref="applyForm"
+        v-model="stopOnError"
+        :devices="selectedDevices"
+        @back="operation = null"
+        @submit="handleApply"
+      />
 
       <!-- Results -->
       <div v-if="view" class="results" data-testid="bulk-results">
@@ -294,9 +320,14 @@ import {
   type BulkAnswer,
   type BulkRequest
 } from '@/api/bulk'
+import { bulkApply, applyViewOf, isApplyResult, type BulkApplyResult } from '@/api/bulkApply'
 import { useError } from '@/composables/useError'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
+import BulkApplyForm from '@/components/bulk/BulkApplyForm.vue'
 import type { SelectedDevice } from '@/stores/devices'
+
+// What a run can end in: the answer of one of the read routes, or the one of bulk-apply.
+type Answer = BulkAnswer | BulkApplyResult
 
 interface Props {
   isOpen: boolean
@@ -312,18 +343,26 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { checking: false, removedCount: 0 })
 const emit = defineEmits<{
   close: []
-  complete: [result: BulkAnswer]
+  complete: [result: Answer]
   remove: [id: number]
 }>()
 
 const { error, setError, clearError } = useError()
 
-type Operation = 'import' | 'drift' | 'drift-enhanced' | 'download'
+type Operation = 'import' | 'drift' | 'drift-enhanced' | 'download' | 'apply'
 
 const operation = ref<Operation | null>(null)
 const isProcessing = ref(false)
-const result = ref<BulkAnswer | null>(null)
-const view = computed(() => (result.value ? viewOf(result.value) : null))
+const result = ref<Answer | null>(null)
+const view = computed(() => {
+  const answer = result.value
+  if (!answer) return null
+  return isApplyResult(answer) ? applyViewOf(answer) : viewOf(answer)
+})
+
+// The apply form holds what the operator typed, which may be a secret: it is emptied when an answer
+// arrives and when the dialog closes.
+const applyForm = ref<InstanceType<typeof BulkApplyForm> | null>(null)
 
 // The one option the routes read: after the first failed device the rest are skipped.
 const stopOnError = ref(false)
@@ -334,6 +373,7 @@ let currentRun = 0
 
 function close() {
   currentRun++
+  applyForm.value?.reset()
   operation.value = null
   isProcessing.value = false
   downloading.value = false
@@ -343,7 +383,7 @@ function close() {
   emit('close')
 }
 
-async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, action: string) {
+async function run(call: (request: BulkRequest) => Promise<Answer>, action: string) {
   if (props.selectedDevices.length === 0) return
   clearError()
   const mine = ++currentRun
@@ -360,6 +400,7 @@ async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, action: 
     }
     result.value = answer
     isProcessing.value = false
+    applyForm.value?.reset()
     emit('complete', answer)
   } catch (e: unknown) {
     if (mine !== currentRun) return
@@ -371,6 +412,10 @@ async function run(call: (request: BulkRequest) => Promise<BulkAnswer>, action: 
 const handleImport = () => run(bulkImport, 'Bulk import')
 const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection')
 const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report')
+// The devices are the ones the operator confirmed in the form, which can differ from the live
+// selection if the page removed a device meanwhile: a device that is gone is answered by the route.
+const handleApply = (p: { deviceIds: number[]; config: Record<string, unknown> }) =>
+  run((request) => bulkApply({ ...request, device_ids: p.deviceIds, config: p.config }), 'Bulk apply')
 
 function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob)

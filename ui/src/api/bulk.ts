@@ -6,7 +6,8 @@ import type { APIResponse } from './types'
 // The bulk configuration routes act on exactly the devices named in `device_ids`, in the direction
 // of the per-device route of the same name, and answer synchronously with the shapes below
 // (ginsys/shelly-manager#248). The names are the wire names of the backend. None of them writes
-// a device; writing a configuration to a device is the per-device apply. The bulk-export route is
+// a device. The one bulk route that does, bulk-apply, is in `bulkApply.ts`, because what the
+// operator is told about a write matters more than the shape of the call. The bulk-export route is
 // not used: it is being retired in favour of the apply (ginsys/shelly-manager#592).
 //
 //   bulk-import   reads each device's live configuration into the manager

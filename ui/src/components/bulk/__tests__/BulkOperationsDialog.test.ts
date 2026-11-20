@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import BulkOperationsDialog from '../BulkOperationsDialog.vue'
 import { bulkImport, bulkDriftDetect, bulkDownload } from '@/api/bulk'
+import { bulkApply, OUTCOME_UNKNOWN } from '@/api/bulkApply'
+
+vi.mock('@/api/bulkApply', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/bulkApply')>()
+  return { ...actual, bulkApply: vi.fn() }
+})
 
 vi.mock('@/api/bulk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/bulk')>()
@@ -145,6 +151,7 @@ describe('BulkOperationsDialog', () => {
     expect(byId(wrapper, 'bulk-op-drift').attributes('disabled')).toBeDefined()
     expect(byId(wrapper, 'bulk-op-drift-enhanced').attributes('disabled')).toBeDefined()
     expect(byId(wrapper, 'bulk-op-download').attributes('disabled')).toBeDefined()
+    expect(byId(wrapper, 'bulk-op-apply').attributes('disabled')).toBeDefined()
 
     await byId(wrapper, 'bulk-op-import').trigger('click')
     expect(bulkImport).not.toHaveBeenCalled()
@@ -181,7 +188,13 @@ describe('BulkOperationsDialog', () => {
   })
 
   describe('while the page checks the selection', () => {
-    const cards = ['bulk-op-import', 'bulk-op-drift', 'bulk-op-drift-enhanced', 'bulk-op-download']
+    const cards = [
+      'bulk-op-import',
+      'bulk-op-drift',
+      'bulk-op-drift-enhanced',
+      'bulk-op-download',
+      'bulk-op-apply'
+    ]
 
     it('says how many devices it is checking and offers no operation yet', () => {
       const wrapper = mount(BulkOperationsDialog, {
@@ -422,6 +435,210 @@ describe('BulkOperationsDialog', () => {
       await byId(wrapper, 'bulk-op-download').trigger('click')
       expect(byId(wrapper, 'bulk-download-submit').exists()).toBe(true)
       expect(byId(wrapper, 'bulk-download-saved').exists()).toBe(false)
+    })
+  })
+
+  describe('apply configuration', () => {
+    const applyAnswer = {
+      total: 2,
+      applied: 1,
+      pending: 0,
+      unconfirmed: 0,
+      refused: 0,
+      failed: 1,
+      skipped: 0,
+      results: [
+        { device_id: 4, device_name: 'Kitchen', device_ip: '10.0.0.4', status: 'applied', stored: true, requires_reboot: false },
+        {
+          device_id: 9,
+          device_name: 'Garage',
+          device_ip: '10.0.0.9',
+          status: 'failed',
+          stored: true,
+          reason: 'the apply did not end in a verified, recorded write; the device stays pending',
+          failures: ['wifi.sta.pass'],
+          requires_reboot: false
+        }
+      ]
+    }
+
+    // The form stays mounted while the call runs and is hidden with v-show, which sets display on its root.
+    const shown = (w: ReturnType<typeof mount>, id: string) =>
+      (byId(w, id).element as HTMLElement).style.display !== 'none'
+
+    // Opens the card and reviews the typed JSON, leaving the dialog on the confirmation.
+    async function confirmation(text = '{"name":"New","wifi":{"sta":{"pass":"s3cret"}}}', devices = picked) {
+      const wrapper = open(devices)
+      await byId(wrapper, 'bulk-op-apply').trigger('click')
+      await byId(wrapper, 'bulk-apply-json').setValue(text)
+      await wrapper.find('form').trigger('submit')
+      return wrapper
+    }
+
+    it('opens a form for the card, with the typed text and no call yet', async () => {
+      const wrapper = open()
+
+      await byId(wrapper, 'bulk-op-apply').trigger('click')
+
+      expect(shown(wrapper, 'bulk-apply-form')).toBe(true)
+      expect(bulkApply).not.toHaveBeenCalled()
+    })
+
+    it('shows the exact devices and JSON before anything is sent', async () => {
+      const wrapper = await confirmation()
+
+      expect(byId(wrapper, 'bulk-apply-confirm-devices').text()).toContain('Kitchen')
+      expect(byId(wrapper, 'bulk-apply-confirm-devices').text()).toContain('Garage')
+      expect(byId(wrapper, 'bulk-apply-confirm-json').text()).toBe(
+        JSON.stringify({ name: 'New', wifi: { sta: { pass: 's3cret' } } }, null, 2)
+      )
+      expect(bulkApply).not.toHaveBeenCalled()
+    })
+
+    it('sends invalid JSON nowhere', async () => {
+      const wrapper = await confirmation('{ nope')
+
+      expect(byId(wrapper, 'bulk-apply-problem').exists()).toBe(true)
+      expect(bulkApply).not.toHaveBeenCalled()
+    })
+
+    it('calls the route once with the confirmed ids, the confirmed JSON and the stop flag', async () => {
+      vi.mocked(bulkApply).mockResolvedValue(applyAnswer as any)
+      const wrapper = open()
+      await byId(wrapper, 'bulk-op-apply').trigger('click')
+      await byId(wrapper, 'bulk-apply-stop-on-error').setValue(true)
+      await byId(wrapper, 'bulk-apply-json').setValue('{"name":"New"}')
+      await wrapper.find('form').trigger('submit')
+
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+      await flushPromises()
+
+      expect(bulkApply).toHaveBeenCalledTimes(1)
+      expect(bulkApply).toHaveBeenCalledWith({
+        device_ids: [4, 9],
+        config: { name: 'New' },
+        options: { stop_on_error: true }
+      })
+    })
+
+    it('sends the devices that were confirmed even when the page removed one meanwhile', async () => {
+      vi.mocked(bulkApply).mockResolvedValue(applyAnswer as any)
+      const wrapper = await confirmation('{"name":"New"}')
+
+      await wrapper.setProps({ selectedDevices: [picked[0]] })
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+      await flushPromises()
+
+      expect(vi.mocked(bulkApply).mock.calls[0][0].device_ids).toEqual([4, 9])
+    })
+
+    it('shows what happened to each device, tells the page and forgets the typed secret', async () => {
+      vi.mocked(bulkApply).mockResolvedValue(applyAnswer as any)
+      const wrapper = await confirmation()
+
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+      await flushPromises()
+
+      const results = byId(wrapper, 'bulk-results').text()
+      expect(results).toContain('Kitchen')
+      expect(results).toContain('Written to the device and read back equal.')
+      expect(results).toContain('The write did not end in a verified result: check the device.')
+      expect(results).toContain('The new settings are stored and the device stays pending.')
+      expect(results).toContain('Settings: wifi.sta.pass.')
+      expect(wrapper.emitted('complete')).toHaveLength(1)
+      // The typed secret is in no part of the dialog any more.
+      expect(wrapper.html()).not.toContain('s3cret')
+    })
+
+    it('says the call cannot be stopped by closing the window while it runs', async () => {
+      vi.mocked(bulkApply).mockReturnValue(new Promise(() => {}) as any)
+      const wrapper = await confirmation('{"name":"New"}')
+
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+
+      expect(byId(wrapper, 'bulk-apply-processing').text()).toContain('does not stop the call')
+      expect(shown(wrapper, 'bulk-apply-form')).toBe(false)
+    })
+
+    it('returns to the confirmation with the text intact after a refused call', async () => {
+      vi.mocked(bulkApply).mockRejectedValue(new Error('bulk-apply takes at most 10 devices, got 11. Nothing was written.'))
+      const wrapper = await confirmation('{"name":"New"}')
+
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+      await flushPromises()
+
+      expect(byId(wrapper, 'bulk-error').text()).toContain('Nothing was written.')
+      expect(shown(wrapper, 'bulk-apply-form')).toBe(true)
+      expect(byId(wrapper, 'bulk-apply-confirm').exists()).toBe(true)
+      expect(byId(wrapper, 'bulk-apply-confirm-json').text()).toContain('"name": "New"')
+      expect(wrapper.emitted('complete')).toBeUndefined()
+    })
+
+    it('says an unknown outcome, never "failed", when no answer arrived', async () => {
+      vi.mocked(bulkApply).mockRejectedValue(new Error(OUTCOME_UNKNOWN))
+      const wrapper = await confirmation('{"name":"New"}')
+
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+      await flushPromises()
+
+      const shown = byId(wrapper, 'bulk-error').text()
+      expect(shown).toContain('Check each device before sending again.')
+      expect(shown).not.toMatch(/nothing was written/i)
+    })
+
+    it('forgets the typed text when the dialog is closed, and opens empty again', async () => {
+      const wrapper = await confirmation('{"wifi":{"pass":"s3cret"}}')
+
+      await byId(wrapper, 'bulk-close').trigger('click')
+      await wrapper.setProps({ isOpen: true })
+      await byId(wrapper, 'bulk-op-apply').trigger('click')
+
+      expect((byId(wrapper, 'bulk-apply-json').element as HTMLTextAreaElement).value).toBe('')
+      expect(byId(wrapper, 'bulk-apply-confirm').exists()).toBe(false)
+      expect(wrapper.html()).not.toContain('s3cret')
+    })
+
+    it('still tells the page when the dialog was closed while the call ran', async () => {
+      let answer!: (value: unknown) => void
+      vi.mocked(bulkApply).mockReturnValue(new Promise((resolve) => (answer = resolve)) as any)
+      const wrapper = await confirmation('{"name":"New"}')
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+
+      await byId(wrapper, 'bulk-close').trigger('click')
+      answer(applyAnswer)
+      await flushPromises()
+
+      expect(wrapper.emitted('complete')).toHaveLength(1)
+      expect(byId(wrapper, 'bulk-results').exists()).toBe(false)
+    })
+
+    it('sends nothing when the selection empties after the form was opened', async () => {
+      const wrapper = await confirmation('{"name":"New"}')
+
+      await wrapper.setProps({ selectedDevices: [] })
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+      await flushPromises()
+
+      expect(bulkApply).not.toHaveBeenCalled()
+    })
+
+    it('goes Back to the operation cards', async () => {
+      const wrapper = open()
+      await byId(wrapper, 'bulk-op-apply').trigger('click')
+
+      await byId(wrapper, 'bulk-apply-back').trigger('click')
+
+      expect(byId(wrapper, 'bulk-op-apply').exists()).toBe(true)
+      expect(byId(wrapper, 'bulk-apply-form').exists()).toBe(false)
+    })
+
+    it('says in the import form that apply is the way to write, not the device page', async () => {
+      const wrapper = open()
+
+      await byId(wrapper, 'bulk-op-import').trigger('click')
+
+      expect(wrapper.text()).toContain('use Apply Configuration')
+      expect(wrapper.text()).not.toContain("apply it from that device's page")
     })
   })
 
