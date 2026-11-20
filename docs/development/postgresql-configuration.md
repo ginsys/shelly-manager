@@ -262,7 +262,7 @@ database:
 ```yaml
 database:
   provider: "postgresql"
-  dsn: "postgres://shelly:${POSTGRES_PASSWORD}@db-prod:5432/shelly_prod?sslmode=verify-full&sslcert=/certs/client.crt&sslkey=/certs/client.key&sslrootcert=/certs/ca.crt"
+  dsn: "postgres://shelly:<password>@db-prod:5432/shelly_prod?sslmode=verify-full&sslcert=/certs/client.crt&sslkey=/certs/client.key&sslrootcert=/certs/ca.crt"
   options:
     sslmode: "verify-full"
     sslcert: "/certs/client.crt"
@@ -277,6 +277,11 @@ database:
   slow_query_time: 500
   log_level: "error"
 ```
+
+Write the real password in place of `<password>`. To keep it out of the file, leave the user name and
+password out of the DSN and set `SHELLY_DATABASE_USERNAME` and `SHELLY_DATABASE_PASSWORD` instead
+(`internal/config/config.go:238-241`, `internal/database/provider/postgresql_provider.go:391-401`). The
+loader does not expand a `${...}` reference in a config file (`internal/config/config.go:170-214`).
 
 ## Environment Variables
 

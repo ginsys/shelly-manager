@@ -131,7 +131,7 @@ user:password@tcp(localhost:3306)/shelly_manager
 app:secure_pass@tcp(mysql.internal:3306)/production?tls=true
 
 # Complete production DSN
-app_user:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/shelly_manager?tls=true&charset=utf8mb4&timeout=10s
+app_user:<password>@tcp(mysql.internal:3306)/shelly_manager?tls=true&charset=utf8mb4&timeout=10s
 ```
 
 ### Configuration Parameters
@@ -200,16 +200,21 @@ database:
 ```yaml
 database:
   provider: "mysql"
-  dsn: "app:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/production"
+  dsn: "app:<password>@tcp(mysql.internal:3306)/production"
   options:
     tls: "true"
 ```
+
+Write the real password in place of `<password>`, or set the whole DSN as `SHELLY_DATABASE_DSN`. The
+loader does not expand a `${...}` reference in a config file (`internal/config/config.go:170-214`), and
+the MySQL provider refuses `database.password` (`internal/database/provider/mysql_provider.go:66-70`),
+so the password always travels inside the DSN. The same holds for every sample below.
 
 ##### High-Security Environment
 ```yaml  
 database:
   provider: "mysql"
-  dsn: "secure_app:${MYSQL_PASSWORD}@tcp(mysql.secure.internal:3306)/secure_db"
+  dsn: "secure_app:<password>@tcp(mysql.secure.internal:3306)/secure_db"
   options:
     tls: "true"
     charset: "utf8mb4"
@@ -289,7 +294,7 @@ volumes:
 # config/staging.yaml
 database:
   provider: "mysql"
-  dsn: "staging_app:${MYSQL_PASSWORD}@tcp(mysql.staging:3306)/shelly_staging"
+  dsn: "staging_app:<password>@tcp(mysql.staging:3306)/shelly_staging"
   options:
     tls: "true"
     charset: "utf8mb4"
@@ -317,7 +322,7 @@ database:
 # config/production.yaml  
 database:
   provider: "mysql"
-  dsn: "prod_app:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/shelly_manager"
+  dsn: "prod_app:<password>@tcp(mysql.internal:3306)/shelly_manager"
   options:
     tls: "true"
     charset: "utf8mb4"
