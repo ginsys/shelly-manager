@@ -515,7 +515,8 @@ func startServer() {
 // idle keep-alive connection. The router's request deadline starts only after the header is read.
 // ReadTimeout and WriteTimeout stay unset on purpose: each is one limit for a whole request, so a
 // value short enough to matter would cut a slow upload (up to 10 MiB), a download or the 5 minute
-// bulk-apply answer. IdleTimeout is above the idle time a reverse proxy keeps an upstream connection.
+// bulk-apply answer. On a connection that already carried a request the idle limit comes first: the
+// 10 seconds start once the first bytes of the next request have arrived.
 const (
 	serverReadHeaderTimeout = 10 * time.Second
 	serverIdleTimeout       = 120 * time.Second
