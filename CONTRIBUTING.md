@@ -4,7 +4,7 @@ Thanks for your interest in contributing! This document summarizes the local wor
 
 ## Local Dev & Tests
 
-- Install tool versions pinned by `mise.toml` (optional but recommended):
+- Install tool versions pinned by `mise.toml` (Go, golangci-lint and Node 24; optional but recommended):
   - `mise install`
 - Useful commands (same as CI):
   - `make test-ci` — deps → race+coverage → coverage gate → lint → frontend type-check ratchet → vitest (run before every commit)

@@ -254,8 +254,13 @@ make test-ci        # Match CI exactly
 
 **Prerequisites:**
 - Go 1.27+ (pinned in `.go-version`, managed via [mise](https://mise.jdx.dev/))
+- Node 24 (pinned in `mise.toml`, installed by `mise install`; only the frontend checks and builds need it)
 - SQLite3 development libraries
 - GCC (for CGO)
+
+`mise install` downloads Node as well as Go. The pre-commit hook runs its tools through `mise exec`, so your first
+commit after the pin installs Node once; if that download fails the hook falls back to the tools on your `PATH` and
+does not block the commit.
 
 ```bash
 git clone https://github.com/ginsys/shelly-manager

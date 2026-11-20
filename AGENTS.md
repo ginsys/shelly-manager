@@ -27,7 +27,7 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backe
 - Package names: lower-case, short; exported identifiers use PascalCase, unexported camelCase.
 - Files: tests end with `_test.go`; platform-specific files use suffixes (e.g., `_linux.go`).
 - Architecture: maintain dual-binary separation (server vs. provisioner), structured logging, robust error handling.
- - Tooling versions: `golangci-lint` is pinned via `mise.toml` and used by CI; run `mise install` to match local with CI.
+ - Tooling versions: `go`, `golangci-lint` and `node` are pinned via `mise.toml`; run `mise install` to match local with CI. The frontend checks (`make typecheck-check test-vitest`) run on that `node`, so an environment that installs only the mise tools can run them too.
 
 ## Testing Guidelines
 - Frameworks: `go test` with `testify` assertions.
