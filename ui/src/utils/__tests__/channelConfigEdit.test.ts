@@ -139,6 +139,23 @@ describe('buildEditConfig', () => {
     expect(buildEditConfig('webhook', read, kept.fields, kept.keep).config).toEqual({ url: MASK, method: 'POST', secret: MASK })
   })
 
+  it('folds the Kelvin sign too, and keeps apart a name the server keeps apart', () => {
+    // U+212A is a k to the server, so this is the slack webhook_url; U+0131 (dotless i) is not an i to it,
+    // so "recipients" with one is another member of the config and must go back as the read gave it.
+    const slack = { 'webhooK_url': MASK }
+    const s = editFromConfig('slack', slack)
+    expect(s.stored.webhook_url).toBe(true)
+    expect(buildEditConfig('slack', slack, s.fields, s.keep).config).toEqual({ webhook_url: MASK })
+
+    const read = { recipients: ['ops@example.com'], 'recıpients': ['opaque@example.com'] }
+    const e = editFromConfig('email', read)
+    e.fields.recipients = 'new@example.com'
+    expect(buildEditConfig('email', read, e.fields, e.keep).config).toEqual({
+      recipients: ['new@example.com'],
+      'recıpients': ['opaque@example.com']
+    })
+  })
+
   it('sends no headers and no secret key when the read stored none', () => {
     const read = { url: MASK, method: 'POST' }
     const { fields, keep } = editFromConfig('webhook', read)
