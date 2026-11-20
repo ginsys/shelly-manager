@@ -1,4 +1,5 @@
 import api from './client'
+import { DEVICE_CALL_TIMEOUT_MS } from './deviceCallTimeout'
 import { blobText } from './errorBody'
 import { downloadBlobWithName } from './export'
 import type { APIResponse } from './types'
@@ -131,6 +132,9 @@ async function unwrap<T>(call: Promise<{ data: APIResponse<T> }>, failure: strin
   try {
     body = (await call).data
   } catch (e: any) {
+    // No answer at all (the call timed out or the connection was lost): the axios error goes on as
+    // it is, so the panel names a timeout or a lost connection and not an unknown error.
+    if (e?.isAxiosError && !e.response) throw e
     // A refused request is a 400 whose `details` says why.
     const error = e?.response?.data?.error
     const details = typeof error?.details === 'string' ? error.details : undefined
@@ -142,10 +146,15 @@ async function unwrap<T>(call: Promise<{ data: APIResponse<T> }>, failure: strin
   return body.data
 }
 
+// The three routes below contact each named device, so they wait as long as the server does
+// (ginsys/shelly-manager#752). An unreachable device is one failed row of the answer.
+
 // Read each device's live configuration into the manager.
 export function bulkImport(request: BulkRequest): Promise<BulkConfigResult> {
   return unwrap(
-    api.post<APIResponse<BulkConfigResult>>('/config/bulk-import', request),
+    api.post<APIResponse<BulkConfigResult>>('/config/bulk-import', request, {
+      timeout: DEVICE_CALL_TIMEOUT_MS
+    }),
     'Failed to execute bulk import'
   )
 }
@@ -153,7 +162,9 @@ export function bulkImport(request: BulkRequest): Promise<BulkConfigResult> {
 // Compare stored and live configuration.
 export function bulkDriftDetect(request: BulkRequest): Promise<BulkDriftResult> {
   return unwrap(
-    api.post<APIResponse<BulkDriftResult>>('/config/bulk-drift-detect', request),
+    api.post<APIResponse<BulkDriftResult>>('/config/bulk-drift-detect', request, {
+      timeout: DEVICE_CALL_TIMEOUT_MS
+    }),
     'Failed to execute bulk drift detection'
   )
 }
@@ -165,7 +176,8 @@ export function bulkDriftDetectEnhanced(
   return unwrap(
     api.post<APIResponse<BulkDriftReport | BulkDriftResult>>(
       '/config/bulk-drift-detect-enhanced',
-      request
+      request,
+      { timeout: DEVICE_CALL_TIMEOUT_MS }
     ),
     'Failed to execute enhanced bulk drift detection'
   )
