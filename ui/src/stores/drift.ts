@@ -4,6 +4,7 @@ import {
   listDriftSchedules,
   getDriftSchedule,
   deleteDriftSchedule,
+  getDriftSchedulerStatus,
   getDriftReports,
   getDriftTrends,
   resolveDriftTrend,
@@ -26,6 +27,8 @@ export const useDriftStore = defineStore('drift', () => {
   const error = ref<string | null>(null)
   const scheduleMeta = ref<Metadata | undefined>(undefined)
   const reportMeta = ref<Metadata | undefined>(undefined)
+  // Whether the server runs the scheduler: null until it was read, and after a read that failed.
+  const schedulerEnabled = ref<boolean | null>(null)
 
   const trendAggregates = computed<DriftDailyAggregate[]>(() =>
     computeDailyAggregates(trends.value, trendAggregateDays.value)
@@ -57,6 +60,16 @@ export const useDriftStore = defineStore('drift', () => {
       throw e
     } finally {
       loading.value = false
+    }
+  }
+
+  // Rethrows a failed read and leaves `error` alone: the page shows its own banner for it.
+  async function fetchSchedulerStatus() {
+    try {
+      schedulerEnabled.value = await getDriftSchedulerStatus()
+    } catch (e) {
+      schedulerEnabled.value = null
+      throw e
     }
   }
 
@@ -154,8 +167,10 @@ export const useDriftStore = defineStore('drift', () => {
     error,
     scheduleMeta,
     reportMeta,
+    schedulerEnabled,
     fetchSchedules,
     fetchSchedule,
+    fetchSchedulerStatus,
     remove,
     fetchReports,
     fetchTrends,

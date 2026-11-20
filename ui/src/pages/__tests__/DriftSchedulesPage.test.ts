@@ -5,11 +5,11 @@ import DriftSchedulesPage from '../DriftSchedulesPage.vue'
 import { useDriftStore } from '@/stores/drift'
 import type { DriftSchedule } from '@/api/drift'
 
-// A stored-but-inert schedule with enabled=true and a JSON device_filter.
+// An enabled schedule with a JSON device_filter.
 const storedSchedule: DriftSchedule = {
   id: 1,
   name: 'Nightly drift',
-  description: 'stored only',
+  description: 'every night',
   enabled: true,
   cron_spec: '0 0 * * *',
   device_ids: [1, 2],
@@ -21,41 +21,77 @@ const storedSchedule: DriftSchedule = {
   updated_at: '2026-07-01T00:00:00Z'
 }
 
-function mountPage() {
-  const wrapper = mount(DriftSchedulesPage, {
-    global: {
-      plugins: [
-        createTestingPinia({
-          createSpy: vi.fn,
-          initialState: {
-            drift: { schedules: [storedSchedule], loading: false, error: null }
-          }
-        })
-      ]
-    }
-  })
-  return wrapper
+interface MountOptions {
+  schedulerEnabled?: boolean | null
+  statusFails?: boolean
+  schedules?: DriftSchedule[]
 }
 
-describe('DriftSchedulesPage (fail-closed #270)', () => {
+function mountPage({ schedulerEnabled = true, statusFails = false, schedules = [storedSchedule] }: MountOptions = {}) {
+  const pinia = createTestingPinia({
+    createSpy: vi.fn,
+    initialState: {
+      drift: { schedules, loading: false, error: null, schedulerEnabled }
+    }
+  })
+  if (statusFails) {
+    vi.mocked(useDriftStore(pinia).fetchSchedulerStatus).mockRejectedValue(new Error('status is down'))
+  }
+  return mount(DriftSchedulesPage, { global: { plugins: [pinia] } })
+}
+
+describe('DriftSchedulesPage', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('shows the not-executed notice', async () => {
+  it('reads the scheduler state when it opens', async () => {
     const wrapper = mountPage()
     await flushPromises()
-    expect(wrapper.text()).toContain('Drift schedules are not executed in this release.')
+    expect(useDriftStore().fetchSchedulerStatus).toHaveBeenCalledTimes(1)
+    expect(wrapper.exists()).toBe(true)
   })
 
-  it('renders an enabled schedule as stored/inactive, not operational', async () => {
-    const wrapper = mountPage()
+  it('shows no banner and an Enabled badge while the scheduler runs', async () => {
+    const wrapper = mountPage({ schedulerEnabled: true })
     await flushPromises()
-    // Neutral "Stored" badge, never an "Enabled"/operational badge.
-    expect(wrapper.text()).toContain('Stored (inactive)')
-    expect(wrapper.find('.status-badge').text()).not.toContain('Enabled')
-    // Run history is labelled unavailable, not empty.
-    expect(wrapper.text()).toContain('Run history: unavailable')
+    expect(wrapper.find('[data-testid="scheduler-banner"]').exists()).toBe(false)
+    expect(wrapper.find('.status-badge').text()).toBe('Enabled')
+  })
+
+  it('says the scheduler is off, and badges an enabled schedule "Scheduler off"', async () => {
+    const wrapper = mountPage({ schedulerEnabled: false })
+    await flushPromises()
+    const banner = wrapper.find('[data-testid="scheduler-banner"]')
+    expect(banner.text()).toContain('The drift scheduler is off on this server')
+    expect(banner.text()).toContain('drift.scheduler_enabled')
+    expect(wrapper.find('.status-badge').text()).toBe('Scheduler off')
+  })
+
+  it('badges a disabled schedule "Disabled" whatever the scheduler state', async () => {
+    for (const schedulerEnabled of [true, false]) {
+      const wrapper = mountPage({ schedulerEnabled, schedules: [{ ...storedSchedule, enabled: false }] })
+      await flushPromises()
+      expect(wrapper.find('.status-badge').text()).toBe('Disabled')
+    }
+  })
+
+  it('says the state is unknown when the read failed, never that the scheduler is off', async () => {
+    const wrapper = mountPage({ schedulerEnabled: null, statusFails: true })
+    await flushPromises()
+    const banner = wrapper.find('[data-testid="scheduler-banner"]')
+    expect(banner.text()).toContain('The scheduler state could not be read')
+    expect(wrapper.text()).not.toContain('is off on this server')
+    expect(wrapper.find('.status-badge').text()).toBe('Enabled')
+  })
+
+  it('no longer says schedules are not executed or that run history is unavailable', async () => {
+    const wrapper = mountPage({ schedulerEnabled: false })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('not executed')
+    expect(wrapper.text()).not.toContain('Run history: unavailable')
+    expect(wrapper.text()).not.toContain('Persisted values')
+    expect(wrapper.text()).toContain('Run count: 0')
   })
 
   it('renders device_filter read-only as JSON (never [object Object])', async () => {
@@ -67,7 +103,7 @@ describe('DriftSchedulesPage (fail-closed #270)', () => {
     expect(wrapper.text()).not.toContain('[object Object]')
   })
 
-  it('exposes only Delete — no create, edit, toggle or runs controls', async () => {
+  it('exposes only Delete — no create, edit, toggle or runs controls yet', async () => {
     const wrapper = mountPage()
     await flushPromises()
 
@@ -78,7 +114,6 @@ describe('DriftSchedulesPage (fail-closed #270)', () => {
     expect(buttonText.some(t => t.includes('toggle'))).toBe(false)
     expect(buttonText.some(t => t.includes('runs') || t.includes('view runs'))).toBe(false)
 
-    // No create/edit modal or form inputs exist at all.
     expect(wrapper.find('.modal').exists()).toBe(false)
     expect(wrapper.find('form').exists()).toBe(false)
     expect(wrapper.findAll('input').length).toBe(0)

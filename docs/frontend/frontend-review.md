@@ -185,8 +185,8 @@ ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
 (`ui/tests/e2e/nav-reachability.spec.ts`) walks the links.
 
 Linked is not the same as working: the Notification channels page cannot create a channel, because its
-form has no config fields (ginsys/shelly-manager#744), the Drift schedules page says its schedules are
-not executed (ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
+form has no config fields (ginsys/shelly-manager#744), the Drift schedules page cannot create or edit a
+schedule yet (ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
 server process still holds in memory (ginsys/shelly-manager#647). Both pages show the main fields
 of a result (status, created time, duration, errors, warnings, and for an import the changes by
 type, never their values; ginsys/shelly-manager#139). They do not show the export `output_path`,
@@ -221,14 +221,14 @@ page imports still counts. The Playwright spec is what proves the links are rend
 
 ## 5. Features whose state is not obvious
 
-- **Drift schedules run only when the scheduler is on, and the page does not say so yet.** The
-  scheduler is off by default (`drift.scheduler_enabled`). The create, update and toggle routes work
-  (ginsys/shelly-manager#279), and the run-history route still answers HTTP 501
-  (ginsys/shelly-manager#270). The page shows a "not executed" notice, lists every schedule as
-  "Stored (inactive)" and offers deletion only, so a schedule made through the API shows as inert
-  here. The run-history route and the page are the next changes of ginsys/shelly-manager#279.
-
-  ![Drift schedules fail-closed UI](images/drift-schedules-fail-closed.png)
+- **Drift schedules run only when the scheduler is on, and the page now says whether it is.** The
+  scheduler is off by default (`drift.scheduler_enabled`). The create, update, toggle and run-list
+  routes work (ginsys/shelly-manager#279). The page reads `GET /api/v1/config/drift-scheduler` and,
+  with the scheduler off, shows a banner and the badge "Scheduler off" on an enabled schedule; a
+  disabled schedule reads "Disabled", and a failed read of the state shows its own banner and never
+  claims the scheduler is off. The state is that of the one server that answers, so replicas
+  configured differently differ. The page lists schedules and deletes them: its create and edit
+  form, the presets and the run history list are the last slice of ginsys/shelly-manager#279.
 
 - **Drift compares with the desired configuration**, the one apply writes and verify reads, and no
   longer with the stored import record (ginsys/shelly-manager#606). A device with no desired
@@ -333,8 +333,8 @@ that date. It left one frontend issue, found on 2026-11-20: ginsys/shelly-manage
 channel cannot be created from the page because the create form has no config fields.
 
 Also parked, not frontend-labelled: ginsys/shelly-manager#249 (export/import routes the frontend
-calls that the backend does not have) and ginsys/shelly-manager#279 (the drift scheduler is never
-started). Parked issues are not next work.
+calls that the backend does not have) and ginsys/shelly-manager#279 (the drift schedule form,
+presets and run history list are not in the UI yet). Parked issues are not next work.
 
 ---
 

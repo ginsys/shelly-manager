@@ -39,6 +39,7 @@ const answers: Record<string, unknown> = {
   '/provisioning/tasks/t1': envelope(task),
   '/provisioning/agents': envelope({ agents: [] }),
   '/config/drift-schedules': envelope([]),
+  '/config/drift-scheduler': envelope({ enabled: true }),
   '/config/drift-reports': envelope([]),
   '/config/drift-trends': envelope([]),
   '/devices': envelope({ devices: [] }, pagination),

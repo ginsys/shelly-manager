@@ -92,10 +92,18 @@ export async function getDriftSchedule(id: number | string): Promise<DriftSchedu
   return res.data.data
 }
 
-// Drift schedules are stored but never executed in this release, so create,
-// update, toggle and run-history are intentionally absent: the backend fails
-// those routes closed with HTTP 501 (#270). Only list, detail and delete —
-// inspection and cleanup — remain. The execution vertical is tracked as #279.
+// A stored schedule runs only where the server has drift.scheduler_enabled set, and the status route
+// says whether the server that answers has. The UI offers list, detail, delete and that status; create,
+// update, toggle and the run list are not wired yet (ginsys/shelly-manager#279, slice 3).
+// The status is the state of one server process, so replicas configured differently answer differently.
+export async function getDriftSchedulerStatus(): Promise<boolean> {
+  const res = await api.get<APIResponse<{ enabled: boolean }>>('/config/drift-scheduler')
+  if (!res.data.success || typeof res.data.data?.enabled !== 'boolean') {
+    const msg = res.data.error?.message || 'Failed to read the drift scheduler state'
+    throw new Error(msg)
+  }
+  return res.data.data.enabled
+}
 
 export async function deleteDriftSchedule(id: number | string): Promise<void> {
   const res = await api.delete<APIResponse<void>>(`/config/drift-schedules/${id}`)
