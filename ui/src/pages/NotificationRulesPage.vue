@@ -22,20 +22,24 @@
       :rows="store.rules"
       :loading="store.rulesLoading"
       :error="store.rulesError"
-      :cols="5"
+      :cols="7"
       :rowKey="row => row.id"
     >
       <template #header>
         <th>Name</th>
         <th>Channel</th>
-        <th>Event Types</th>
+        <th>Alert Level</th>
+        <th>Min Severity</th>
+        <th>Categories</th>
         <th>Enabled</th>
         <th>Actions</th>
       </template>
       <template #row="{ row }">
         <td>{{ row.name }}</td>
         <td>{{ getChannelName(row.channelId) }}</td>
-        <td><span class="badge">{{ row.eventTypes.join(', ') }}</span></td>
+        <td><span class="badge">{{ row.alertLevel || '-' }}</span></td>
+        <td>{{ row.minSeverity || '-' }}</td>
+        <td>{{ row.categories.length ? row.categories.join(', ') : 'all' }}</td>
         <td>{{ row.enabled ? '✓ Yes' : '✗ No' }}</td>
         <td>
           <button class="link-button text-red-600" @click="handleDelete(row.id)">
@@ -65,8 +69,26 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Event Types (comma-separated):</label>
-            <input v-model="eventTypesInput" placeholder="device.offline,export.failed" required class="form-input" />
+            <label>Alert Level:</label>
+            <select v-model="newRule.alertLevel" class="form-input">
+              <option value="all">All</option>
+              <option value="critical">Critical</option>
+              <option value="warning">Warning</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Min Severity:</label>
+            <select v-model="newRule.minSeverity" class="form-input">
+              <option value="">None</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Categories (comma-separated, empty for all):</label>
+            <input v-model="categoriesInput" placeholder="security,device" class="form-input" />
           </div>
           <div class="form-group">
             <label>Enabled:</label>
@@ -101,14 +123,9 @@ const { error: actionError, setError: setActionError, clearError: clearActionErr
 )
 // The failure of this form's own submission.
 const createError = ref('')
-const eventTypesInput = ref('')
-const newRule = ref({
-  name: '',
-  channelId: '',
-  eventTypes: [] as string[],
-  filters: {},
-  enabled: true
-})
+const categoriesInput = ref('')
+const blankRule = () => ({ name: '', channelId: '', alertLevel: 'all', minSeverity: '', enabled: true })
+const newRule = ref(blankRule())
 
 onMounted(() => {
   store.fetchRules()
@@ -133,12 +150,12 @@ async function handleCreate() {
   const session = formSession
   createError.value = ''
   try {
-    newRule.value.eventTypes = eventTypesInput.value.split(',').map(s => s.trim()).filter(Boolean)
-    await store.addRule(newRule.value)
+    const categories = categoriesInput.value.split(',').map(s => s.trim()).filter(Boolean)
+    await store.addRule({ ...newRule.value, categories })
     if (session !== formSession) return
     showCreateForm.value = false
-    newRule.value = { name: '', channelId: '', eventTypes: [], filters: {}, enabled: true }
-    eventTypesInput.value = ''
+    newRule.value = blankRule()
+    categoriesInput.value = ''
   } catch (e) {
     const context = { action: 'Create rule', resource: 'Notification rule' }
     if (session === formSession && showCreateForm.value) {

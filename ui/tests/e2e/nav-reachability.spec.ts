@@ -19,7 +19,8 @@ const envelope = (data: unknown, meta?: unknown) => ({
 const pagination = { pagination: { page: 1, page_size: 20, total_pages: 1, has_next: false, has_previous: false } }
 
 const template = { id: 1, name: 'Standard plug', scope: 'global', config: {}, created_at: now, updated_at: now }
-const channel = { id: 'c1', name: 'Ops mail', type: 'email', config: {}, enabled: true, createdAt: now, updatedAt: now }
+// The server's own shape (snake_case, numeric id), as the notification pages receive it.
+const channel = { id: 1, name: 'Ops mail', type: 'email', config: {}, enabled: true, description: '', created_at: now, updated_at: now }
 const task = {
   id: 't1', deviceId: '31', deviceName: 'Hall', status: 'pending', taskType: 'configure',
   config: {}, createdAt: now, updatedAt: now,
@@ -31,7 +32,7 @@ const answers: Record<string, unknown> = {
   '/config/templates/new/1': envelope({ template }),
   '/config/device-types': envelope({ device_types: [] }),
   '/notifications/channels': envelope({ channels: [channel] }),
-  '/notifications/channels/c1': envelope(channel),
+  '/notifications/channels/1': envelope(channel),
   '/notifications/rules': envelope({ rules: [] }),
   '/notifications/history': envelope({ history: [] }),
   '/provisioning/tasks': envelope({ tasks: [task] }),
@@ -133,7 +134,7 @@ test.describe('navigation reachability', () => {
   test('a notification channel and a provisioning task open from their lists', async ({ page }) => {
     await page.goto('/notifications/channels')
     await page.getByRole('link', { name: 'Edit' }).click()
-    await expect(page).toHaveURL(/\/notifications\/channels\/c1$/)
+    await expect(page).toHaveURL(/\/notifications\/channels\/1$/)
     await expect(page.getByRole('heading', { level: 1, name: 'Channel Details' })).toBeVisible()
 
     await page.goto('/provisioning/tasks')

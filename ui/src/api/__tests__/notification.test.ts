@@ -17,16 +17,46 @@ import {
   getChannels,
   getChannel,
   createChannel,
-  updateChannel,
+  setChannelEnabled,
   deleteChannel,
+  testChannel,
   getRules,
   createRule,
   deleteRule,
-  getHistory,
-  type NotificationChannel,
-  type NotificationRule,
-  type NotificationHistory
+  getHistory
 } from '../notification'
+
+// The fixtures below are what the server sends (internal/notification models and handlers): snake_case
+// fields and numeric ids. A fixture in the pages' own shape is how ginsys/shelly-manager#250 hid.
+const wireChannel = (over: Record<string, unknown> = {}) => ({
+  id: 1,
+  name: 'Email Channel',
+  type: 'email',
+  enabled: true,
+  config: { recipients: ['ops@example.com'] },
+  description: 'Ops mail',
+  created_at: '2023-01-01T00:00:00Z',
+  updated_at: '2023-01-02T00:00:00Z',
+  ...over
+})
+
+const wireRule = (over: Record<string, unknown> = {}) => ({
+  id: 7,
+  name: 'Critical Drift',
+  description: '',
+  enabled: true,
+  channel_id: 1,
+  alert_level: 'critical',
+  min_severity: 'warning',
+  categories: ['security', 'device'],
+  created_at: '2023-01-01T00:00:00Z',
+  updated_at: '2023-01-01T00:00:00Z',
+  ...over
+})
+
+const ok = (data: unknown, meta?: unknown) => ({
+  data: { success: true, data, meta, timestamp: '2023-01-01T00:00:00Z' }
+})
 
 describe('notification api', () => {
   beforeEach(() => {
@@ -37,123 +67,97 @@ describe('notification api', () => {
   })
 
   describe('channels', () => {
-    it('getChannels returns list of channels', async () => {
-      const mockChannels: NotificationChannel[] = [
+    it('getChannels maps the server shape to the page model', async () => {
+      ;(api.get as any).mockResolvedValue(ok({ channels: [wireChannel()], total: 1 }))
+
+      const channels = await getChannels()
+      expect(channels).toEqual([
         {
           id: '1',
           name: 'Email Channel',
           type: 'email',
-          config: { smtp_host: 'smtp.example.com' },
           enabled: true,
+          config: { recipients: ['ops@example.com'] },
+          description: 'Ops mail',
           createdAt: '2023-01-01T00:00:00Z',
-          updatedAt: '2023-01-01T00:00:00Z'
+          updatedAt: '2023-01-02T00:00:00Z'
         }
-      ]
-
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { channels: mockChannels },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const channels = await getChannels()
-      expect(channels).toEqual(mockChannels)
+      ])
       expect(api.get).toHaveBeenCalledWith('/notifications/channels')
     })
 
-    it('getChannel returns a single channel', async () => {
-      const mockChannel: NotificationChannel = {
-        id: '1',
-        name: 'Slack Channel',
-        type: 'slack',
-        config: { webhook_url: 'https://hooks.slack.com/...' },
-        enabled: true,
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2023-01-01T00:00:00Z'
-      }
+    it('getChannel reads one channel by its numeric id', async () => {
+      ;(api.get as any).mockResolvedValue(ok(wireChannel({ id: 3, type: 'slack', config: null })))
 
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: mockChannel,
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const channel = await getChannel('1')
-      expect(channel).toEqual(mockChannel)
-      expect(api.get).toHaveBeenCalledWith('/notifications/channels/1')
+      const channel = await getChannel('3')
+      expect(channel.id).toBe('3')
+      expect(channel.type).toBe('slack')
+      expect(channel.config).toEqual({})
+      expect(api.get).toHaveBeenCalledWith('/notifications/channels/3')
     })
 
-    it('createChannel creates a new channel', async () => {
-      const newChannel: Partial<NotificationChannel> = {
-        name: 'Webhook Channel',
+    it('getChannel refuses an id that is not a whole number before any request', async () => {
+      await expect(getChannel('c1')).rejects.toThrow('Invalid notification id')
+      expect(api.get).not.toHaveBeenCalled()
+    })
+
+    it('createChannel sends the server fields and maps the answer', async () => {
+      ;(api.post as any).mockResolvedValue(ok(wireChannel({ id: 2, name: 'Hook', type: 'webhook' })))
+
+      const channel = await createChannel({ name: 'Hook', type: 'webhook', enabled: false, config: { url: 'https://x' } })
+      expect(channel.id).toBe('2')
+      expect(api.post).toHaveBeenCalledWith('/notifications/channels', {
+        name: 'Hook',
         type: 'webhook',
-        config: { url: 'https://example.com/webhook' },
-        enabled: true
-      }
-
-      const createdChannel: NotificationChannel = {
-        id: '2',
-        ...newChannel,
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2023-01-01T00:00:00Z'
-      } as NotificationChannel
-
-      ;(api.post as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: createdChannel,
-          timestamp: new Date().toISOString()
-        }
+        enabled: false,
+        config: { url: 'https://x' },
+        description: ''
       })
-
-      const channel = await createChannel(newChannel)
-      expect(channel).toEqual(createdChannel)
-      expect(api.post).toHaveBeenCalledWith('/notifications/channels', newChannel)
     })
 
-    it('updateChannel updates an existing channel', async () => {
-      const updates: Partial<NotificationChannel> = {
-        name: 'Updated Channel',
-        enabled: false
-      }
+    it('setChannelEnabled reads the channel and sends it back complete with only enabled changed', async () => {
+      ;(api.get as any).mockResolvedValue(
+        ok(wireChannel({ type: 'webhook', config: { url: '********', secret: '********' } }))
+      )
+      ;(api.put as any).mockResolvedValue(ok({ status: 'updated' }))
 
-      const updatedChannel: NotificationChannel = {
-        id: '1',
-        name: 'Updated Channel',
-        type: 'email',
-        config: {},
+      await setChannelEnabled('1', false)
+
+      expect(api.get).toHaveBeenCalledWith('/notifications/channels/1')
+      expect(api.put).toHaveBeenCalledWith('/notifications/channels/1', {
+        name: 'Email Channel',
+        type: 'webhook',
         enabled: false,
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2023-01-02T00:00:00Z'
-      }
-
-      ;(api.put as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: updatedChannel,
-          timestamp: new Date().toISOString()
-        }
+        config: { url: '********', secret: '********' },
+        description: 'Ops mail'
       })
+    })
 
-      const channel = await updateChannel('1', updates)
-      expect(channel).toEqual(updatedChannel)
-      expect(api.put).toHaveBeenCalledWith('/notifications/channels/1', updates)
+    it('setChannelEnabled sends nothing when the read fails', async () => {
+      ;(api.get as any).mockResolvedValue({ data: { success: false, error: { message: 'gone' } } })
+
+      await expect(setChannelEnabled('1', true)).rejects.toThrow('gone')
+      expect(api.put).not.toHaveBeenCalled()
     })
 
     it('deleteChannel deletes a channel', async () => {
-      ;(api.delete as any).mockResolvedValue({
-        data: {
-          success: true,
-          timestamp: new Date().toISOString()
-        }
-      })
+      ;(api.delete as any).mockResolvedValue(ok({ status: 'deleted' }))
 
       await deleteChannel('1')
       expect(api.delete).toHaveBeenCalledWith('/notifications/channels/1')
+    })
+
+    it('testChannel posts to the test route and returns the server message', async () => {
+      ;(api.post as any).mockResolvedValue(ok({ status: 'sent', message: 'Test notification sent successfully' }))
+
+      await expect(testChannel('4')).resolves.toBe('Test notification sent successfully')
+      expect(api.post).toHaveBeenCalledWith('/notifications/channels/4/test')
+    })
+
+    it('testChannel throws the server message on failure', async () => {
+      ;(api.post as any).mockResolvedValue({ data: { success: false, error: { message: 'webhook request failed' } } })
+
+      await expect(testChannel('4')).rejects.toThrow('webhook request failed')
     })
 
     it('getChannels throws error on API failure', async () => {
@@ -169,140 +173,126 @@ describe('notification api', () => {
   })
 
   describe('rules', () => {
-    it('getRules returns list of rules', async () => {
-      const mockRules: NotificationRule[] = [
-        {
-          id: '1',
-          name: 'Device Offline Alert',
-          channelId: '1',
-          eventTypes: ['device.offline'],
-          filters: {},
-          enabled: true,
-          createdAt: '2023-01-01T00:00:00Z',
-          updatedAt: '2023-01-01T00:00:00Z'
-        }
-      ]
-
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { rules: mockRules },
-          timestamp: new Date().toISOString()
-        }
-      })
+    it('getRules maps the server shape (alert level, severity, categories) to the page model', async () => {
+      ;(api.get as any).mockResolvedValue(
+        ok({ rules: [wireRule(), wireRule({ id: 8, categories: null, min_severity: '' })], total: 2 })
+      )
 
       const rules = await getRules()
-      expect(rules).toEqual(mockRules)
+      expect(rules[0]).toEqual({
+        id: '7',
+        name: 'Critical Drift',
+        description: '',
+        channelId: '1',
+        enabled: true,
+        alertLevel: 'critical',
+        minSeverity: 'warning',
+        categories: ['security', 'device'],
+        createdAt: '2023-01-01T00:00:00Z',
+        updatedAt: '2023-01-01T00:00:00Z'
+      })
+      expect(rules[1].categories).toEqual([])
+      expect(rules[1].minSeverity).toBe('')
       expect(api.get).toHaveBeenCalledWith('/notifications/rules')
     })
 
-    it('createRule creates a new rule', async () => {
-      const newRule: Partial<NotificationRule> = {
-        name: 'Export Failed Alert',
+    it('createRule sends the server fields with a numeric channel_id', async () => {
+      ;(api.post as any).mockResolvedValue(ok(wireRule({ id: 9 })))
+
+      const rule = await createRule({
+        name: 'Critical Drift',
         channelId: '1',
-        eventTypes: ['export.failed'],
-        filters: {},
-        enabled: true
-      }
-
-      const createdRule: NotificationRule = {
-        id: '2',
-        ...newRule,
-        createdAt: '2023-01-01T00:00:00Z',
-        updatedAt: '2023-01-01T00:00:00Z'
-      } as NotificationRule
-
-      ;(api.post as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: createdRule,
-          timestamp: new Date().toISOString()
-        }
+        enabled: false,
+        alertLevel: 'all',
+        minSeverity: '',
+        categories: ['security']
       })
+      expect(rule.id).toBe('9')
+      expect(api.post).toHaveBeenCalledWith('/notifications/rules', {
+        name: 'Critical Drift',
+        description: '',
+        enabled: false,
+        channel_id: 1,
+        alert_level: 'all',
+        min_severity: '',
+        categories: ['security']
+      })
+    })
 
-      const rule = await createRule(newRule)
-      expect(rule).toEqual(createdRule)
-      expect(api.post).toHaveBeenCalledWith('/notifications/rules', newRule)
+    it('createRule refuses a channel id that is not a whole number before any request', async () => {
+      await expect(
+        createRule({ name: 'r', channelId: '', enabled: true, alertLevel: 'all', minSeverity: '', categories: [] })
+      ).rejects.toThrow('Invalid notification id')
+      expect(api.post).not.toHaveBeenCalled()
     })
 
     it('deleteRule deletes a rule', async () => {
-      ;(api.delete as any).mockResolvedValue({
-        data: {
-          success: true,
-          timestamp: new Date().toISOString()
-        }
-      })
+      ;(api.delete as any).mockResolvedValue(ok({ status: 'deleted' }))
 
-      await deleteRule('1')
-      expect(api.delete).toHaveBeenCalledWith('/notifications/rules/1')
+      await deleteRule('7')
+      expect(api.delete).toHaveBeenCalledWith('/notifications/rules/7')
     })
   })
 
   describe('history', () => {
-    it('getHistory returns list of notification history', async () => {
-      const mockHistory: NotificationHistory[] = [
+    const wireHistory = (over: Record<string, unknown> = {}) => ({
+      id: 10,
+      rule_id: 7,
+      channel_id: 1,
+      trigger_type: 'drift_detected',
+      status: 'sent',
+      sent_at: '2023-01-01T00:00:10Z',
+      created_at: '2023-01-01T00:00:00Z',
+      ...over
+    })
+
+    it('getHistory maps rows and reads the page and the total from meta', async () => {
+      const pagination = { page: 1, page_size: 50, total_pages: 3, has_next: true, has_previous: false }
+      ;(api.get as any).mockResolvedValue(
+        ok({ history: [wireHistory()] }, { count: 1, total_count: 120, pagination })
+      )
+
+      const page = await getHistory()
+      expect(page.items).toEqual([
         {
-          id: '1',
+          id: '10',
           channelId: '1',
-          ruleId: '1',
-          eventType: 'device.offline',
+          ruleId: '7',
+          triggerType: 'drift_detected',
           status: 'sent',
-          sentAt: '2023-01-01T00:00:00Z'
+          sentAt: '2023-01-01T00:00:10Z',
+          createdAt: '2023-01-01T00:00:00Z',
+          error: undefined
         }
-      ]
-
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { history: mockHistory },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const history = await getHistory()
-      expect(history).toEqual(mockHistory)
-      expect(api.get).toHaveBeenCalledWith('/notifications/history', { params: {} })
+      ])
+      expect(page.pagination).toEqual(pagination)
+      expect(page.total).toBe(120)
+      expect(api.get).toHaveBeenCalledWith('/notifications/history', { params: { limit: 50, offset: 0 } })
     })
 
-    it('getHistory supports pagination', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { history: [] },
-          timestamp: new Date().toISOString()
-        }
-      })
+    it('getHistory sends limit and offset, not page', async () => {
+      ;(api.get as any).mockResolvedValue(ok({ history: [] }, { total_count: 0 }))
 
-      await getHistory({ page: 2, limit: 50 })
-      expect(api.get).toHaveBeenCalledWith('/notifications/history', {
-        params: { page: 2, limit: 50 }
-      })
+      await getHistory({ page: 3, limit: 25 })
+      expect(api.get).toHaveBeenCalledWith('/notifications/history', { params: { limit: 25, offset: 50 } })
     })
 
-    it('getHistory includes failed status and error', async () => {
-      const mockHistory: NotificationHistory[] = [
-        {
-          id: '2',
-          channelId: '1',
-          ruleId: '1',
-          eventType: 'export.failed',
-          status: 'failed',
-          sentAt: '2023-01-01T00:00:00Z',
-          error: 'SMTP connection timeout'
-        }
-      ]
+    it('getHistory keeps a failed row with its error, and a pending row has no sent time', async () => {
+      ;(api.get as any).mockResolvedValue(
+        ok({
+          history: [
+            wireHistory({ id: 11, status: 'failed', error: 'SMTP connection timeout' }),
+            wireHistory({ id: 12, status: 'pending', sent_at: undefined })
+          ]
+        })
+      )
 
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { history: mockHistory },
-          timestamp: new Date().toISOString()
-        }
-      })
-
-      const history = await getHistory()
-      expect(history[0].status).toBe('failed')
-      expect(history[0].error).toBe('SMTP connection timeout')
+      const { items, total } = await getHistory()
+      expect(items[0].status).toBe('failed')
+      expect(items[0].error).toBe('SMTP connection timeout')
+      expect(items[1].sentAt).toBeUndefined()
+      expect(items[1].createdAt).toBe('2023-01-01T00:00:00Z')
+      expect(total).toBe(2)
     })
   })
 })

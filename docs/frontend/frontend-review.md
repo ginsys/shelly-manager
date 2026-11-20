@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595, and a unit test keeps them equal to the code (section 1)
-**Status:** 130 of 134 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250, and a unit test keeps them equal to the code (section 1)
+**Status:** 131 of 135 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -83,12 +83,12 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
-| `notification.ts` | 9 | 9 | |
+| `notification.ts` | 10 | 10 | |
 | `plugin.ts` | 4 | 3 | `getPlugin` |
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **134** | **130** | **4** |
+| **Total** | **135** | **131** | **4** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -184,9 +184,9 @@ pages and the device configuration pages) is linked from its list page. This was
 ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
 (`ui/tests/e2e/nav-reachability.spec.ts`) walks the links.
 
-Linked is not the same as working: the Channel detail page has no matching `GET` route on the server
-(ginsys/shelly-manager#250), the Drift schedules page says its schedules are not executed
-(ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
+Linked is not the same as working: the Notification channels page cannot create a channel, because its
+form has no config fields (ginsys/shelly-manager#744), the Drift schedules page says its schedules are
+not executed (ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
 server process still holds in memory (ginsys/shelly-manager#647). Both pages show the main fields
 of a result (status, created time, duration, errors, warnings, and for an import the changes by
 type, never their values; ginsys/shelly-manager#139). They do not show the export `output_path`,
@@ -323,7 +323,10 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 |-------|---------|
 | ginsys/shelly-manager#619 | A production build has no supported way to get the admin key (pull requests in flight) |
 | ginsys/shelly-manager#290 | Design the plugin configuration model (plugins stay read-only until then) |
-| ginsys/shelly-manager#250 | Notification API contract mismatches and missing endpoints (**parked**) |
+
+ginsys/shelly-manager#250 (the notification pages and the notification API disagreed) was fixed after
+that date. It left one frontend issue, found on 2026-11-20: ginsys/shelly-manager#744, a notification
+channel cannot be created from the page because the create form has no config fields.
 
 Also parked, not frontend-labelled: ginsys/shelly-manager#249 (export/import routes the frontend
 calls that the backend does not have) and ginsys/shelly-manager#279 (the drift scheduler is never

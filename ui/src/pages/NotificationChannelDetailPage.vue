@@ -45,19 +45,24 @@
         <pre style="background:#f3f4f6;padding:8px;border-radius:4px">{{ JSON.stringify(store.currentChannel.config, null, 2) }}</pre>
       </div>
 
-      <div style="margin-top:24px">
+      <div style="margin-top:24px;display:flex;gap:8px;align-items:center">
         <button class="primary-button" @click="toggleEnabled">
           {{ store.currentChannel.enabled ? 'Disable' : 'Enable' }}
         </button>
+        <button class="primary-button" :disabled="testing" data-testid="channel-test-button" @click="sendTest">
+          {{ testing ? 'Sending...' : 'Send Test' }}
+        </button>
+        <span v-if="testResult" class="test-result" role="status" data-testid="channel-test-result">{{ testResult }}</span>
       </div>
     </div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNotificationsStore } from '@/stores/notifications'
+import { testChannel } from '@/api/notification'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { usePageError } from '@/composables/useNotice'
 
@@ -79,9 +84,29 @@ async function toggleEnabled() {
   const { id, enabled } = store.currentChannel
   clearActionError()
   try {
-    await store.modifyChannel(id, { enabled: !enabled })
+    await store.setChannelEnabled(id, !enabled)
   } catch (e) {
     setActionError(e, { action: 'Update channel', resource: 'Notification channel', resourceId: id })
+  }
+}
+
+// Sends one synthetic notification through the channel. A failure goes to the page's error panel; a
+// success is a line beside the button.
+const testing = ref(false)
+const testResult = ref('')
+
+async function sendTest() {
+  if (!store.currentChannel || testing.value) return
+  const { id } = store.currentChannel
+  clearActionError()
+  testResult.value = ''
+  testing.value = true
+  try {
+    testResult.value = await testChannel(id)
+  } catch (e) {
+    setActionError(e, { action: 'Send test notification', resource: 'Notification channel', resourceId: id })
+  } finally {
+    testing.value = false
   }
 }
 </script>
@@ -132,7 +157,14 @@ async function toggleEnabled() {
   border-radius: 6px;
   cursor: pointer;
 }
-.primary-button:hover {
+.primary-button:hover:not(:disabled) {
   background: #1d4ed8;
+}
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.test-result {
+  color: #065f46;
 }
 </style>
