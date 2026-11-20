@@ -271,6 +271,78 @@ describe('buildTemplateBody', () => {
     )
   })
 
+  it('leaves out the auth realm, which is the device\'s own id', () => {
+    const typed = { auth: { enable: true, user: 'admin', realm: 'shellyplus1-aabbccddeeff' } }
+    const withRealm = {
+      type: 'object',
+      properties: {
+        auth: {
+          type: 'object',
+          properties: { enable: { type: 'boolean' }, user: { type: 'string' }, realm: { type: 'string' } },
+        },
+      },
+    } as unknown as ConfigSchema
+
+    const { config, leftOut } = buildTemplateBody(typed, withRealm, ['auth'])
+
+    expect(config.auth).toEqual({ enable: true, user: 'admin' })
+    expect(leftOut).toContain('auth.realm')
+  })
+
+  it('drops a secret slot whatever its value, an empty one included: an empty password would clear the target\'s', () => {
+    const typed = {
+      mqtt: { enable: true, pass: '' },
+      auth: { user: 'admin', pass: '' },
+      wifi: { ssid: 'Home', password: '', ap: { enable: true, pass: '', key: '' } },
+      network: { wifi: { sta: { ssid: 'Home', pass: '' }, ap: { pass: '' } } },
+    }
+    const wide = {
+      type: 'object',
+      properties: {
+        mqtt: { type: 'object', properties: { enable: { type: 'boolean' }, pass: { type: 'string' } } },
+        auth: { type: 'object', properties: { user: { type: 'string' }, pass: { type: 'string' } } },
+        wifi: {
+          type: 'object',
+          properties: {
+            ssid: { type: 'string' },
+            password: { type: 'string' },
+            ap: { type: 'object', properties: { enable: { type: 'boolean' }, pass: { type: 'string' }, key: { type: 'string' } } },
+          },
+        },
+        network: {
+          type: 'object',
+          properties: {
+            wifi: {
+              type: 'object',
+              properties: {
+                sta: { type: 'object', properties: { ssid: { type: 'string' }, pass: { type: 'string' } } },
+                ap: { type: 'object', properties: { pass: { type: 'string' } } },
+              },
+            },
+          },
+        },
+      },
+    } as unknown as ConfigSchema
+
+    const { config, omittedSecrets } = buildTemplateBody(typed, wide, ['mqtt', 'auth', 'wifi', 'network'])
+
+    expect(config.mqtt).toEqual({ enable: true })
+    expect(config.auth).toEqual({ user: 'admin' })
+    expect(config.wifi).toEqual({ ssid: 'Home', ap: { enable: true } })
+    expect(config.network).toEqual({ wifi: { sta: { ssid: 'Home' } } })
+    expect(omittedSecrets).toEqual(
+      expect.arrayContaining([
+        'mqtt.pass',
+        'auth.pass',
+        'wifi.password',
+        'wifi.ap.pass',
+        'wifi.ap.key',
+        'network.wifi.sta.pass',
+        'network.wifi.ap.pass',
+      ]),
+    )
+  })
+
   it('does not change the import it was given', () => {
     const typed = typedImport()
     const before = JSON.stringify(typed)

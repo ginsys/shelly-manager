@@ -1,5 +1,5 @@
 <template>
-  <div class="modal-overlay" data-testid="from-import-dialog" @click.self="emit('close')">
+  <div class="modal-overlay" data-testid="from-import-dialog" @click.self="close">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="from-import-title">
       <h2 id="from-import-title">Create template from this import</h2>
 
@@ -52,7 +52,7 @@
       <p v-if="saveError" class="save-error" role="alert" data-testid="from-import-save-error">{{ saveError }}</p>
 
       <div class="modal-actions">
-        <button class="btn" data-testid="from-import-cancel" @click="emit('close')">Cancel</button>
+        <button class="btn" data-testid="from-import-cancel" :disabled="saving" @click="close">Cancel</button>
         <button class="btn primary" data-testid="from-import-save" :disabled="!canSave" @click="save">Save</button>
       </div>
     </div>
@@ -133,6 +133,11 @@ async function load() {
   } finally {
     if (alive) loading.value = false
   }
+}
+
+// Not while a save is pending: its outcome, an error above all, would reach nobody.
+function close() {
+  if (!saving.value) emit('close')
 }
 
 async function save() {

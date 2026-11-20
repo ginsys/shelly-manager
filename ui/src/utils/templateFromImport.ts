@@ -14,6 +14,7 @@ const PER_DEVICE_PATHS = [
   'system.device.mac',
   'mqtt.id',
   'mqtt.topic_prefix',
+  'auth.realm',
   'wifi.static_ip',
   'wifi.ipv4mode',
   'network.eth.ip',
@@ -27,6 +28,18 @@ const PER_DEVICE_PATHS = [
 ]
 export const PER_DEVICE_NOTE =
   'per-device name, hostname, MAC, MQTT client id and topic prefix, access-point name, channel names and static address'
+
+// The slots the server treats as secrets (internal/api secretSlots). A value there is never copied,
+// whatever it is: an empty one would clear the password of every device the template is applied to.
+const SECRET_PATHS = [
+  'wifi.password',
+  'wifi.ap.pass',
+  'wifi.ap.key',
+  'mqtt.pass',
+  'auth.pass',
+  'network.wifi.sta.pass',
+  'network.wifi.ap.pass',
+]
 
 // Sections that start unticked: they hold the Wi-Fi network and the login of one site.
 const UNTICKED_SECTIONS = ['wifi', 'network', 'auth']
@@ -50,7 +63,7 @@ function project(value: unknown, schema: SchemaProperty | undefined, path: strin
     walk.leftOut.push(generic)
     return undefined
   }
-  if (value === MASK) {
+  if (value === MASK || (SECRET_PATHS.includes(generic) && value !== undefined && value !== null)) {
     walk.omittedSecrets.push(path)
     return undefined
   }

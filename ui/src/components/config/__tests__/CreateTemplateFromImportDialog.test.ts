@@ -176,6 +176,23 @@ describe('CreateTemplateFromImportDialog', () => {
     expect((wrapper.get('[data-testid="from-import-save"]').element as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('cannot be dismissed while the save is pending, so its outcome is never lost', async () => {
+    let finish: (v: unknown) => void = () => {}
+    ;(createTemplate as any).mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const wrapper = await ready()
+    await wrapper.get('[data-testid="from-import-name"]').setValue('Slow')
+    await wrapper.get('[data-testid="from-import-save"]').trigger('click')
+
+    expect((wrapper.get('[data-testid="from-import-cancel"]').element as HTMLButtonElement).disabled).toBe(true)
+    await wrapper.get('[data-testid="from-import-cancel"]').trigger('click')
+    await wrapper.get('[data-testid="from-import-dialog"]').trigger('click')
+    expect(wrapper.emitted('close')).toBeFalsy()
+
+    finish({ id: 9 })
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'template-detail', params: { id: 9 } })
+  })
+
   it('keeps Save off until there is a name and something ticked', async () => {
     const wrapper = await ready()
     const save = () => (wrapper.get('[data-testid="from-import-save"]').element as HTMLButtonElement).disabled
