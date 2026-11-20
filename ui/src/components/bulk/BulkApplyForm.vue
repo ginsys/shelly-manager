@@ -7,7 +7,8 @@
       <p class="form-note">
         Writes one partial configuration to each selected device: it is stored as that device's
         overrides, never as a template, and then applied to the device. The JSON has the shape of
-        the body of <code>PATCH /devices/{id}/overrides</code>.
+        the body of <code>PATCH /devices/{id}/overrides/new</code>, for example
+        <code>{{ EXAMPLE }}</code>. A setting the device configuration does not know is refused.
       </p>
       <ul class="form-notes" data-testid="bulk-apply-notes">
         <li>A setting set to <code>null</code> removes that override.</li>
@@ -30,7 +31,7 @@
           rows="10"
           spellcheck="false"
           autocomplete="off"
-          placeholder='{ "name": "Kitchen" }'
+          :placeholder="EXAMPLE"
           data-testid="bulk-apply-json"
         ></textarea>
       </div>
@@ -117,6 +118,9 @@ import type { SelectedDevice } from '@/stores/devices'
 // stored secret.
 const MASK = '********'
 
+// A configuration the route accepts, as the placeholder and the note show it.
+const EXAMPLE = '{"system":{"device":{"name":"Kitchen"}}}'
+
 const props = defineProps<{
   devices: SelectedDevice[]
   // The shared "stop on first error" flag of the dialog.
@@ -159,7 +163,7 @@ function review() {
     return
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    problem.value = 'The configuration must be a JSON object, such as { "name": "Kitchen" }.'
+    problem.value = `The configuration must be a JSON object, such as ${EXAMPLE}.`
     return
   }
   const config = parsed as Record<string, unknown>
