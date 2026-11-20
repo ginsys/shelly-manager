@@ -140,7 +140,9 @@ func TestDriftScheduleWriteProviders_FilterRoundTripsAndAnUnchangedUpdateIsFound
 			assert.JSONEq(t, `{"type":"SHPLG-S"}`, string(got.DeviceFilter))
 
 			same := ScheduleInput{Name: "plugs", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHPLG-S"}}
-			for i := 0; i < 3; i++ { // the same body again: no column changes but updated_at
+			// The same body again, with a clock that stands still: no column changes, not even updated_at.
+			db.NowFunc = func() time.Time { return at(0) }
+			for i := 0; i < 2; i++ { // the first writes the fixed updated_at, the second changes nothing
 				_, err = svc.UpdateDriftSchedule(created.ID, same)
 				require.NoError(t, err)
 			}
