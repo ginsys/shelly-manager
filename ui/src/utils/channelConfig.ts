@@ -102,9 +102,15 @@ const OWNED_KEYS: Record<ChannelType, string[]> = {
   slack: ['webhook_url', 'channel', 'username']
 }
 
-// The server reads a member name without regard to case, so a key is looked up the same way.
+// The server compares a member name by Unicode simple case folding (encoding/json and strings.EqualFold), so
+// "URL" and the long-s spelling of "secret" are the same name to it. Upper then lower case folds the same way
+// for the names used here; toLowerCase alone would leave the long s apart and send the member twice.
+function fold(name: string): string {
+  return name.toUpperCase().toLowerCase()
+}
+
 function keyOf(config: Record<string, unknown>, name: string): string | undefined {
-  return Object.keys(config).find((k) => k.toLowerCase() === name)
+  return Object.keys(config).find((k) => fold(k) === name)
 }
 
 function textOf(config: Record<string, unknown>, name: string): string {
@@ -159,7 +165,7 @@ export function buildEditConfig(
   const owned = new Set(OWNED_KEYS[type])
   const config: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(read)) {
-    if (!owned.has(key.toLowerCase())) config[key] = value
+    if (!owned.has(fold(key))) config[key] = value
   }
   Object.assign(config, built.config)
   for (const slot of MASKED_SLOTS[type]) {
