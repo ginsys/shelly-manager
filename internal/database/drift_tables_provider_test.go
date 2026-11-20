@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,7 +108,8 @@ func TestDriftTablesMigrationProviders(t *testing.T) {
 
 			t.Run("a result of 200 KiB round-trips", func(t *testing.T) {
 				big := `{"pad":"` + strings.Repeat("x", 200<<10) + `"}`
-				run := configuration.DriftDetectionRun{ScheduleID: 1, Status: "completed", Results: []byte(big)}
+				// The scheduler always sets StartedAt; MySQL refuses the zero time (error 1292).
+				run := configuration.DriftDetectionRun{ScheduleID: 1, Status: "completed", StartedAt: time.Now().UTC(), Results: []byte(big)}
 				require.NoError(t, manager.GetDB().Create(&run).Error)
 				var back configuration.DriftDetectionRun
 				require.NoError(t, manager.GetDB().First(&back, run.ID).Error)
