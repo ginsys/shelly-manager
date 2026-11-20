@@ -164,3 +164,79 @@ func TestDriftScheduleWriteProviders_FilterRoundTripsAndAnUnchangedUpdateIsFound
 		})
 	}
 }
+
+// afterFirstScheduleRead runs fn once, right after the first read of the schedules table through db,
+// then waits for it to end or for a second. A row lock held by that read makes fn wait for the commit,
+// so the wait ends by the timeout; without the lock fn ends first.
+func afterFirstScheduleRead(t *testing.T, db *gorm.DB, fn func()) {
+	t.Helper()
+	fired := false
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:after-schedule-read", func(tx *gorm.DB) {
+		if fired || tx.Statement.Table != "drift_detection_schedules" {
+			return
+		}
+		fired = true
+		done := make(chan struct{})
+		go func() { defer close(done); fn() }()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+		}
+	}))
+}
+
+// A delete that commits between an update's read and its write must leave no device rows. On MySQL a
+// recount after the update still reads the old snapshot and finds the row, so only the row lock stops it.
+func TestDriftScheduleWriteProviders_ADeleteBetweenReadAndUpdateLeavesNoDeviceRows(t *testing.T) {
+	for _, srv := range lockServers(t) {
+		t.Run(srv.name, func(t *testing.T) {
+			sa, sb, db := openSchedulerReplicas(t, srv)
+			require.NoError(t, db.Create(&Device{ID: 1, Name: "Device", Type: "SHSW-1", IP: "192.168.1.100", MAC: "AA:BB:CC:DD:EE:FF", LastSeen: at(0)}).Error)
+			created, err := sa.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *"})
+			require.NoError(t, err)
+			deleted := make(chan struct{})
+			afterFirstScheduleRead(t, db, func() {
+				defer close(deleted)
+				_ = sb.svc.DeleteDriftSchedule(created.ID)
+			})
+
+			_, err = sa.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
+			<-deleted
+
+			assert.True(t, err == nil || errors.Is(err, gorm.ErrRecordNotFound), "update: %v", err)
+			var rows, schedules int64
+			require.NoError(t, db.Model(&DriftScheduleDevice{}).Where("schedule_id = ?", created.ID).Count(&rows).Error)
+			require.NoError(t, db.Model(&DriftDetectionSchedule{}).Where("id = ?", created.ID).Count(&schedules).Error)
+			assert.Zero(t, rows, "device rows of a deleted schedule")
+			assert.Zero(t, schedules)
+		})
+	}
+}
+
+// Two updates that read the same spec must not leave a spec with the next run of the other: the second
+// one waits for the first, reads its result and recomputes.
+func TestDriftScheduleWriteProviders_ConcurrentUpdatesKeepTheSpecAndItsNextRunTogether(t *testing.T) {
+	for _, srv := range lockServers(t) {
+		t.Run(srv.name, func(t *testing.T) {
+			sa, sb, db := openSchedulerReplicas(t, srv)
+			created, err := sa.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "7 * * * *"})
+			require.NoError(t, err)
+			other := make(chan struct{})
+			afterFirstScheduleRead(t, db, func() {
+				defer close(other)
+				_, uerr := sb.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *"})
+				assert.NoError(t, uerr)
+			})
+
+			_, err = sa.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "renamed", CronSpec: "7 * * * *"})
+			require.NoError(t, err)
+			<-other
+
+			var sc DriftDetectionSchedule
+			require.NoError(t, db.First(&sc, created.ID).Error)
+			require.NotNil(t, sc.NextRun)
+			minute := map[string]int{"7 * * * *": 7, "0 3 * * *": 0}[sc.CronSpec]
+			assert.Equal(t, minute, sc.NextRun.Minute(), "next run %s does not belong to spec %q", sc.NextRun, sc.CronSpec)
+		})
+	}
+}
