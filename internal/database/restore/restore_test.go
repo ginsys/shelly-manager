@@ -385,6 +385,23 @@ func TestRestagingDoesNotCountTheStagedFileAsFree(t *testing.T) {
 	assert.Equal(t, "export-1", p.BackupID, "a refused restage keeps the pending restore")
 }
 
+func TestFailedRestageLeavesNothingPending(t *testing.T) {
+	r := newRig(t)
+	a := r.backup(t, "a.sqlite", "a-1")
+	b := r.backup(t, "b.sqlite", "b-1")
+	require.NoError(t, Stage(context.Background(), r.live, a, "export-a", false))
+
+	// The marker cannot be written: its temporary name is taken by a directory.
+	require.NoError(t, os.Mkdir(filepath.Join(Dir(r.live), "pending.json.tmp"), 0o755))
+	err := Stage(context.Background(), r.live, b, "export-b", false)
+	require.Error(t, err)
+
+	p, perr := Pending(r.live)
+	require.NoError(t, perr)
+	assert.Nil(t, p, "the old marker must not point at the bytes the failed stage replaced")
+	assert.False(t, exists(filepath.Join(Dir(r.live), "staged.sqlite")))
+}
+
 func TestRollbackPutsThePreRestoreCopyBack(t *testing.T) {
 	r := newRig(t)
 	path := r.backup(t, "b.sqlite", "new-1")
@@ -396,6 +413,8 @@ func TestRollbackPutsThePreRestoreCopyBack(t *testing.T) {
 	require.True(t, Rollback(r.live, errors.New("migrate failed"), testLogger(t)))
 
 	assert.Equal(t, []string{"old-1", "old-2"}, readNames(t, r.live))
+	assert.False(t, exists(r.live+".pre-restore"), "the copy is moved into place, which needs no free space")
+	assert.False(t, exists(r.live+".rollback.tmp"))
 	res, err := LastResult(r.live)
 	require.NoError(t, err)
 	require.NotNil(t, res)

@@ -152,7 +152,7 @@ func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) 
 	}
 	info := PendingInfo{BackupID: backupID, StagedAt: time.Now().UTC(), SHA256: sum}
 	if err = writeJSON(filepath.Join(dir, pendingName), info); err != nil {
-		_ = os.Remove(staged)
+		clearPending(dir) // the old marker would point at bytes this stage replaced
 		return fmt.Errorf("record the pending restore: %w", err)
 	}
 	return nil
@@ -241,7 +241,8 @@ func ApplyPending(live string, logger *logging.Logger) bool {
 }
 
 // Rollback puts the pre-restore copy back after the restored database could not be opened or
-// migrated. It reports whether a copy was there to put back. The cause goes to the log only.
+// migrated. It reports whether a copy was there to put back; the copy is moved into place, so it is
+// used up. The cause goes to the log only.
 func Rollback(live string, cause error, logger *logging.Logger) bool {
 	mu.Lock()
 	defer mu.Unlock()
@@ -260,19 +261,13 @@ func Rollback(live string, cause error, logger *logging.Logger) bool {
 	for _, side := range []string{"-wal", "-shm"} {
 		_ = os.Remove(live + side)
 	}
-	tmp := live + ".rollback.tmp"
-	if err := copyFile(pre, tmp); err != nil {
-		_ = os.Remove(tmp)
-		logger.Error("Restore rollback failed", "error", err, "cause", cause)
-		return false
-	}
-	if err := os.Rename(tmp, live); err != nil {
-		_ = os.Remove(tmp)
+	// The copy is moved, not copied: the failed database still holds its disk, and a rename needs none.
+	if err := os.Rename(pre, live); err != nil {
 		logger.Error("Restore rollback failed", "error", err, "cause", cause)
 		return false
 	}
 	if exists(pre + "-wal") {
-		if err := copyFile(pre+"-wal", live+"-wal"); err != nil {
+		if err := os.Rename(pre+"-wal", live+"-wal"); err != nil {
 			logger.Error("Restore rollback could not put the write-ahead file back", "error", err)
 		}
 	}

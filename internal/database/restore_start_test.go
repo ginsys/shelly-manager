@@ -87,7 +87,7 @@ func TestStartRollsBackARestoreThatCannotBeMigrated(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, pending)
 	_, err = os.Stat(live + ".pre-restore")
-	assert.NoError(t, err, "the pre-restore copy stays")
+	assert.True(t, os.IsNotExist(err), "the pre-restore copy was moved back into place")
 }
 
 func TestStartWithoutAStagedRestoreChangesNothing(t *testing.T) {
