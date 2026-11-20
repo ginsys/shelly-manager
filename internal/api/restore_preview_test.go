@@ -140,6 +140,45 @@ func TestRestorePreviewRefusesWhatIsNotAStoredBackup(t *testing.T) {
 	}
 }
 
+// An empty or unreadable file is a check result (200, valid false), and the answer never carries
+// the provider's error text, which names the server path.
+func TestRestorePreviewReportsAnUnusableFileWithoutAPath(t *testing.T) {
+	rg := newRestoreRig(t, true)
+
+	empty := filepath.Join(rg.dir, "shelly-backup-20261120-081503-0a1b2c3d.sqlite")
+	require.NoError(t, os.WriteFile(empty, nil, 0o600))
+	rg.record(t, "empty", "backup", empty, true)
+
+	unreadable := filepath.Join(rg.dir, "shelly-backup-20261120-081504-0a1b2c3d.sqlite")
+	require.NoError(t, os.WriteFile(unreadable, []byte("sqlite bytes"), 0o000))
+	rg.record(t, "unreadable", "backup", unreadable, true)
+	canOpen := false
+	if f, err := os.Open(unreadable); err == nil {
+		_ = f.Close()
+		canOpen = true // running as root: the permission does not stop the open
+	}
+
+	ids := []string{"empty"}
+	if !canOpen {
+		ids = append(ids, "unreadable")
+	}
+	for _, id := range ids {
+		rr := rg.post(t, `{"backup_id":"`+id+`"}`)
+		require.Equal(t, http.StatusOK, rr.Code, "%s: %s", id, rr.Body.String())
+		require.NotContains(t, rr.Body.String(), rg.dir, "%s: the answer must not name a server path", id)
+
+		var wrap struct {
+			Data struct {
+				Valid  bool     `json:"valid"`
+				Errors []string `json:"errors"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &wrap))
+		require.False(t, wrap.Data.Valid, id)
+		require.Equal(t, []string{"The backup file is empty or cannot be opened"}, wrap.Data.Errors, id)
+	}
+}
+
 // Without a configured export directory the file name and the regular-file check still hold.
 func TestRestorePreviewWithoutABaseDirectoryStillChecksNameAndType(t *testing.T) {
 	rg := newRestoreRig(t, false)
