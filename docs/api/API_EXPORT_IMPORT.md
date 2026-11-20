@@ -139,9 +139,11 @@ POST /api/v1/export/preview
   It takes no path: the file is the one the export history records for that id, and it must
   be a regular file named like a backup inside the export directory. The answer says whether
   the file is present and can be opened, with its size and record count. It checks nothing
-  of the file's contents and restores nothing. An unknown id, or an id of another plugin,
-  answers `404`; a failed export or an unusable file answers `422`; a body with any other
-  field answers `400`.
+  of the file's contents and restores nothing. An empty file, or one the server cannot open,
+  answers `200` with `valid: false` and a general message in `errors` (never a path). An
+  unknown id, or an id of another plugin, answers `404`; a failed export, or a file that is
+  missing, outside the export directory or not a regular backup file, answers `422`; a body
+  with any other field answers `400`.
 - Restoring a backup is not offered yet: restoring replaces the live database and is not safe
   today. `POST /api/v1/import` and `/import/preview` refuse every source for the backup plugin
   with `501`.

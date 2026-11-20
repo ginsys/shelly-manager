@@ -2872,7 +2872,9 @@ paths:
         '404':
           description: No backup export with that id
         '422':
-          description: The export failed or its file is not available
+          description: >
+            The export failed, or its file is missing, outside the export directory or not a regular
+            backup file. An empty or unopenable file is a 200 with `valid` false.
 
   /api/v1/import:
     post:
