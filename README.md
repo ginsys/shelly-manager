@@ -165,6 +165,13 @@ Each secret also takes a `_FILE` form, for example `SHELLY_SECURITY_ADMIN_API_KE
 (see `docs/security/SECURITY_SECRETS.md`). A `_FILE` that names a file the process cannot read stops the start-up
 with an error that names the variable and the path, so a typo in the path cannot leave the routes open.
 
+Drift schedules run only when the scheduler is on: `drift.scheduler_enabled` (`SHELLY_DRIFT_SCHEDULER_ENABLED=true`),
+off by default because a run reads every device its schedule selects on a timer. A schedule's `cron_spec` has five
+fields (minute, hour, day of month, month, day of week) and is read in the server's time zone; a row with a
+six-field spec from an earlier release fails once and is disabled when the scheduler reaches it. With several
+replicas on one database each schedule still runs once per due time. A run only reads devices, and its result is
+kept in the run history (the newest 100 runs per schedule).
+
 The PostgreSQL credentials can stay out of the DSN: set `SHELLY_DATABASE_USERNAME` and
 `SHELLY_DATABASE_PASSWORD` (`database.username` and `database.password`) and give a DSN without them,
 for example `postgresql://db.example:5432/shelly`. The app puts them into the URL with the escaping a

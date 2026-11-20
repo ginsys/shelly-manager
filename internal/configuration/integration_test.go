@@ -24,6 +24,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&DeviceConfig{},
 		&ConfigHistory{},
 		&DriftDetectionSchedule{},
+		&DriftDetectionRun{},
+		&DriftScheduleDevice{},
 		&DriftReport{},
 		&DriftTrend{},
 		&Device{},
