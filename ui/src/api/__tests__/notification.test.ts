@@ -115,6 +115,44 @@ describe('notification api', () => {
       })
     })
 
+    // A refused create is a 400 that axios throws: the server's reason is in error.details, and error.message
+    // is the fixed "Invalid channel configuration" (internal/notification/handlers.go CreateChannel).
+    it('createChannel throws the server\'s reason for a refused config', async () => {
+      ;(api.post as any).mockRejectedValue({
+        message: 'Request failed with status code 400',
+        response: {
+          status: 400,
+          data: {
+            success: false,
+            error: {
+              code: 'VALIDATION_FAILED',
+              message: 'Invalid channel configuration',
+              details: 'invalid channel configuration: webhook config must have a URL'
+            }
+          }
+        }
+      })
+
+      await expect(createChannel({ name: 'Hook', type: 'webhook', enabled: true, config: {} })).rejects.toThrow(
+        'invalid channel configuration: webhook config must have a URL'
+      )
+    })
+
+    it('createChannel falls back to the envelope message, then to the transport message', async () => {
+      ;(api.post as any).mockRejectedValueOnce({
+        message: 'Request failed with status code 400',
+        response: { status: 400, data: { success: false, error: { message: 'Invalid JSON request body' } } }
+      })
+      await expect(createChannel({ name: 'Hook', type: 'webhook', enabled: true, config: {} })).rejects.toThrow(
+        'Invalid JSON request body'
+      )
+
+      ;(api.post as any).mockRejectedValueOnce(new Error('Network Error'))
+      await expect(createChannel({ name: 'Hook', type: 'webhook', enabled: true, config: {} })).rejects.toThrow(
+        'Network Error'
+      )
+    })
+
     it('setChannelEnabled reads the channel and sends it back complete with only enabled changed', async () => {
       ;(api.get as any).mockResolvedValue(
         ok(wireChannel({ type: 'webhook', config: { url: '********', secret: '********' } }))
