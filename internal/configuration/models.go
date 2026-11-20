@@ -347,7 +347,7 @@ const (
 	DriftRunCompleted   = "completed"
 	DriftRunFailed      = "failed"
 	DriftRunSkipped     = "skipped"     // the previous run of the schedule was still running
-	DriftRunInterrupted = "interrupted" // the process that started it ended without finishing it
+	DriftRunInterrupted = "interrupted" // still running after the run timeout; its process may have ended
 )
 
 // DriftScheduleDevice is one device a schedule checks. A schedule with no rows here and no
