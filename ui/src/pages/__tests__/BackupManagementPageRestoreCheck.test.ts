@@ -228,20 +228,25 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
-    it('does not report a refresh as successful when the restore status could not be read', async () => {
+    it('says in the status panel that the status could not be read, and keeps the last known one', async () => {
       restoreStatus = statusAnswer({ pending: { backup_id: 'a', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })
       const wrapper = mount(BackupManagementPage)
       await flushPromises()
+      expect(wrapper.find('[data-testid="restore-read-failed"]').exists()).toBe(false)
       restoreStatus = () => Promise.reject(refused(500, 'Internal error'))
 
       await wrapper.get('.refresh-button').trigger('click')
       await flushPromises()
 
-      const message = wrapper.get('.message').text()
-      expect(message).not.toContain('Data refreshed successfully')
-      expect(message).toContain('restore status could not be refreshed')
+      expect(wrapper.get('[data-testid="restore-read-failed"]').text()).toContain('could not be read')
       // The last known status stays on screen.
       expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
+
+      restoreStatus = statusAnswer({ pending: null, last_result: null })
+      await wrapper.get('.refresh-button').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="restore-read-failed"]').exists()).toBe(false)
       wrapper.unmount()
     })
 
@@ -284,18 +289,46 @@ describe('BackupManagementPage backup check', () => {
       await flushPromises()
       await wrapper.get('.refresh-button').trigger('click')
       await flushPromises()
-      expect(wrapper.get('.message').text()).toContain('restore status could not be refreshed')
+      expect(wrapper.find('[data-testid="restore-read-failed"]').exists()).toBe(true)
 
       answerOlder(await statusAnswer({ pending: null, last_result: null })())
       await flushPromises()
 
-      const message = wrapper.get('.message').text()
-      expect(message).toContain('restore status could not be refreshed')
-      expect(message).not.toContain('Data refreshed successfully')
+      // The older read answered late and changes nothing: the newest read failed.
+      expect(wrapper.find('[data-testid="restore-read-failed"]').exists()).toBe(true)
       wrapper.unmount()
     })
 
-    it('warns on Refresh when the newest status read, made by a cancel meanwhile, failed', async () => {
+    it('shows the failure of a status read that fails after Refresh already reported', async () => {
+      let failCancelRead: (e: unknown) => void = () => {}
+      let reads = 0
+      restoreStatus = () => {
+        reads++
+        if (reads === 3) {
+          return new Promise((_resolve, reject) => {
+            failCancelRead = reject
+          })
+        }
+        return statusAnswer({ pending: { backup_id: 'a', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })()
+      }
+      vi.mocked(api.delete as any).mockResolvedValue({ status: 204 })
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await wrapper.get('.refresh-button').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('.message').text()).toContain('Data refreshed successfully')
+
+      await wrapper.get('[data-testid="restore-cancel"]').trigger('click')
+      await flushPromises()
+      failCancelRead(refused(500, 'Internal error'))
+      await flushPromises()
+
+      expect(wrapper.get('[data-testid="restore-read-failed"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('shows the failure of the newest status read, made by a cancel during a Refresh', async () => {
       let failOlder: (e: unknown) => void = () => {}
       let reads = 0
       restoreStatus = () => {
@@ -321,7 +354,7 @@ describe('BackupManagementPage backup check', () => {
       failOlder(refused(500, 'Internal error'))
       await flushPromises()
 
-      expect(wrapper.get('.message').text()).toContain('restore status could not be refreshed')
+      expect(wrapper.find('[data-testid="restore-read-failed"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
       wrapper.unmount()
     })
