@@ -297,7 +297,8 @@ func TestSchedulerTick_MarksStaleRunningRunsInterruptedAndRuns(t *testing.T) {
 	runs := fx.runs(id)
 	require.Len(t, runs, 2)
 	assert.Equal(t, DriftRunInterrupted, runs[0].Status)
-	assert.NotEmpty(t, runs[0].Error)
+	assert.Contains(t, runs[0].Error, "may have ended or may still be reading a device",
+		"the row must not claim the process ended: a device read outlives the timeout")
 	assert.NotNil(t, runs[0].CompletedAt)
 	assert.Equal(t, DriftRunCompleted, runs[1].Status)
 }

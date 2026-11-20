@@ -170,14 +170,16 @@ func (s *Scheduler) tick(ctx context.Context, now time.Time) {
 	}
 }
 
-// interruptStaleRuns marks a run that has been running longer than the run timeout interrupted: its
-// process ended without finishing it, and no other tick would ever close the row.
+// interruptStaleRuns marks a run that has been running longer than the run timeout interrupted. Its
+// process may have ended, or may still be inside a device read that the timeout cannot cut short
+// (DetectDrift has no context), so the row says it did not finish in time and nothing more; without
+// this no other tick would ever close the row of a process that did end.
 func (s *Scheduler) interruptStaleRuns(now time.Time) {
 	err := s.db.Model(&DriftDetectionRun{}).
 		Where("status = ? AND started_at < ?", DriftRunRunning, now.Add(-driftRunTimeout)).
 		Updates(map[string]any{
 			"status":       DriftRunInterrupted,
-			"error":        "the process that started this run ended before the run finished",
+			"error":        "the run was still marked running after the run timeout; its process may have ended or may still be reading a device",
 			"completed_at": now,
 		}).Error
 	if err != nil {
