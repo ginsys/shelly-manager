@@ -36,11 +36,12 @@ const schedule = {
   created_at: '2026-07-01T00:00:00Z', updated_at: '2026-07-01T00:00:00Z',
 }
 const channel = {
-  id: 'ch-1', name: 'Ops mail', type: 'email', config: {}, enabled: true,
+  id: 'ch-1', name: 'Ops mail', type: 'email', config: {}, enabled: true, description: '',
   createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z',
 }
 const rule = {
-  id: 'r-1', name: 'Offline', channelId: 'ch-1', eventTypes: ['device.offline'], filters: {}, enabled: true,
+  id: 'r-1', name: 'Offline', description: '', channelId: 'ch-1', enabled: true,
+  alertLevel: 'critical', minSeverity: '', categories: ['device'],
   createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z',
 }
 const agent = {
@@ -137,7 +138,7 @@ const cases: Case[] = [
     name: 'NotificationChannelDetailPage update',
     page: NotificationChannelDetailPage,
     initialState: { notifications: { currentChannel: channel, channelsLoading: false, channelsError: '' } },
-    action: () => useNotificationsStore().modifyChannel,
+    action: () => useNotificationsStore().setChannelEnabled,
     start: (w) => w.find('.primary-button').trigger('click'),
     message: 'Failed to update channel',
   },

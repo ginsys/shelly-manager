@@ -20,11 +20,12 @@ import { dismissNotice, notice } from '@/composables/useNotice'
 const RouterLinkStub = { props: ['to'], render(this: any) { return h('a', this.$slots.default?.()) } }
 
 const channel = {
-  id: 'ch-1', name: 'Ops mail', type: 'email', config: {}, enabled: true,
+  id: 'ch-1', name: 'Ops mail', type: 'email', config: {}, enabled: true, description: '',
   createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z',
 }
 const rule = {
-  id: 'r-1', name: 'Offline', channelId: 'ch-1', eventTypes: ['device.offline'], filters: {}, enabled: true,
+  id: 'r-1', name: 'Offline', description: '', channelId: 'ch-1', enabled: true,
+  alertLevel: 'critical', minSeverity: '', categories: ['device'],
   createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z',
 }
 
@@ -146,7 +147,7 @@ describe('NotificationChannelDetailPage', () => {
     const { wrapper, store } = mountWith(NotificationChannelDetailPage, {
       currentChannel: channel, channelsLoading: false, channelsError: '',
     })
-    vi.mocked(store.modifyChannel).mockRejectedValue(new Error('Failed to update channel'))
+    vi.mocked(store.setChannelEnabled).mockRejectedValue(new Error('Failed to update channel'))
     await flushPromises()
     await wrapper.find('.primary-button').trigger('click')
     await flushPromises()
@@ -163,7 +164,7 @@ describe('NotificationChannelDetailPage', () => {
     const { wrapper, store } = mountWith(NotificationChannelDetailPage, {
       currentChannel: channel, channelsLoading: false, channelsError: '',
     })
-    const fail = deferredAction(store, 'modifyChannel')
+    const fail = deferredAction(store, 'setChannelEnabled')
     await flushPromises()
     await wrapper.find('.primary-button').trigger('click')
     store.currentChannel = null

@@ -7,7 +7,7 @@ vi.mock('@/api/notification', async (importOriginal) => {
     ...actual,
     getChannels: vi.fn(),
     createChannel: vi.fn(),
-    updateChannel: vi.fn(),
+    setChannelEnabled: vi.fn(),
     deleteChannel: vi.fn(),
     getRules: vi.fn(),
     createRule: vi.fn(),
@@ -68,12 +68,15 @@ beforeEach(() => {
 })
 
 describe('notifications store', () => {
-  const channel = { id: 'ch-1', name: 'Ops', type: 'email', config: {}, enabled: true } as any
-  const rule = { id: 'r-1', name: 'Offline', channelId: 'ch-1', eventTypes: [], filters: {}, enabled: true } as any
+  const channel = { id: 'ch-1', name: 'Ops', type: 'email', config: {}, enabled: true, description: '' } as any
+  const rule = {
+    id: 'r-1', name: 'Offline', description: '', channelId: 'ch-1', enabled: true,
+    alertLevel: 'all', minSeverity: '', categories: [],
+  } as any
 
   it.each([
     ['addChannel', () => vi.mocked(notificationApi.createChannel), (s: any) => s.addChannel({ name: 'x' })],
-    ['modifyChannel', () => vi.mocked(notificationApi.updateChannel), (s: any) => s.modifyChannel('ch-1', { enabled: false })],
+    ['setChannelEnabled', () => vi.mocked(notificationApi.setChannelEnabled), (s: any) => s.setChannelEnabled('ch-1', false)],
     ['removeChannel', () => vi.mocked(notificationApi.deleteChannel), (s: any) => s.removeChannel('ch-1')],
   ])('%s that fails keeps the channels and sets no error', async (_name, api, run) => {
     const store = useNotificationsStore()

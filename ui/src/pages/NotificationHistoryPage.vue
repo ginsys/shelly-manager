@@ -13,7 +13,7 @@
       :rowKey="row => row.id"
     >
       <template #header>
-        <th>Event Type</th>
+        <th>Trigger</th>
         <th>Channel</th>
         <th>Rule</th>
         <th>Status</th>
@@ -21,7 +21,7 @@
         <th>Error</th>
       </template>
       <template #row="{ row }">
-        <td><span class="badge">{{ row.eventType }}</span></td>
+        <td><span class="badge">{{ row.triggerType }}</span></td>
         <td>{{ getChannelName(row.channelId) }}</td>
         <td>{{ getRuleName(row.ruleId) }}</td>
         <td>
@@ -29,7 +29,7 @@
             {{ row.status }}
           </span>
         </td>
-        <td>{{ new Date(row.sentAt).toLocaleString() }}</td>
+        <td>{{ new Date(row.sentAt ?? row.createdAt).toLocaleString() }}</td>
         <td>{{ row.error || '-' }}</td>
       </template>
     </DataTable>
@@ -37,13 +37,17 @@
     <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
       <button
         class="secondary-button"
-        :disabled="store.historyPage === 1"
+        :disabled="!store.historyPagination?.has_previous"
         @click="changePage(store.historyPage - 1)"
       >
         ← Previous
       </button>
-      <span>Page {{ store.historyPage }}</span>
-      <button class="secondary-button" @click="changePage(store.historyPage + 1)">
+      <span>Page {{ store.historyPage }} of {{ store.historyPagination?.total_pages || 1 }}</span>
+      <button
+        class="secondary-button"
+        :disabled="!store.historyPagination?.has_next"
+        @click="changePage(store.historyPage + 1)"
+      >
         Next →
       </button>
       <select v-model.number="pageSize" @change="changePageSize" class="form-input" style="width:auto;margin-left:auto">
@@ -56,10 +60,10 @@
     <section style="margin-top:24px">
       <h2>Summary</h2>
       <div class="stats">
-        <div class="card">Total: {{ store.history.length }}</div>
-        <div class="card">Sent: {{ store.sentNotifications.length }}</div>
-        <div class="card">Failed: {{ store.failedNotifications.length }}</div>
-        <div class="card">Pending: {{ store.pendingNotifications.length }}</div>
+        <div class="card">Total: {{ store.historyTotal }}</div>
+        <div class="card">Sent on this page: {{ store.sentNotifications.length }}</div>
+        <div class="card">Failed on this page: {{ store.failedNotifications.length }}</div>
+        <div class="card">Pending on this page: {{ store.pendingNotifications.length }}</div>
       </div>
     </section>
   </main>

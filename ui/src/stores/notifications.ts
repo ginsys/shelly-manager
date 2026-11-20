@@ -1,16 +1,19 @@
 import { defineStore } from 'pinia'
+import type { PaginationMeta } from '@/api/types'
 import {
   getChannels,
   getChannel,
   createChannel,
-  updateChannel,
+  setChannelEnabled,
   deleteChannel,
   getRules,
   createRule,
   deleteRule,
   getHistory,
   type NotificationChannel,
+  type NotificationChannelInput,
   type NotificationRule,
+  type NotificationRuleInput,
   type NotificationHistory,
   type GetHistoryParams
 } from '@/api/notification'
@@ -33,7 +36,10 @@ export const useNotificationsStore = defineStore('notifications', {
     historyLoading: false,
     historyError: '' as string,
     historyPage: 1,
-    historyLimit: 50
+    historyLimit: 50,
+    // The server's description of the page last loaded, and the count of all rows (not just this page).
+    historyPagination: undefined as PaginationMeta | undefined,
+    historyTotal: 0
   }),
 
   getters: {
@@ -42,7 +48,7 @@ export const useNotificationsStore = defineStore('notifications', {
 
     sentNotifications: (state) => state.history.filter((h) => h.status === 'sent'),
     failedNotifications: (state) => state.history.filter((h) => h.status === 'failed'),
-    pendingNotifications: (state) => state.history.filter((h) => h.status === 'pending'),
+    pendingNotifications: (state) => state.history.filter((h) => h.status === 'pending' || h.status === 'retry'),
 
     channelById: (state) => (id: string) => state.channels.find((c) => c.id === id),
     rulesByChannel: (state) => (channelId: string) =>
@@ -78,7 +84,7 @@ export const useNotificationsStore = defineStore('notifications', {
     // An action (add, modify, remove) rethrows its failure and leaves `channelsError` and the list alone:
     // `channelsError` is the failure of the last list load, and the page that acted shows the failure of
     // its own action (ginsys/shelly-manager#701).
-    async addChannel(data: Partial<NotificationChannel>) {
+    async addChannel(data: NotificationChannelInput) {
       this.channelsLoading = true
       try {
         const newChannel = await createChannel(data)
@@ -89,10 +95,13 @@ export const useNotificationsStore = defineStore('notifications', {
       }
     },
 
-    async modifyChannel(id: string, data: Partial<NotificationChannel>) {
+    // The server answers an update with a status, not the channel, so the channel is read again and
+    // replaces the copies the store holds.
+    async setChannelEnabled(id: string, enabled: boolean) {
       this.channelsLoading = true
       try {
-        const updated = await updateChannel(id, data)
+        await setChannelEnabled(id, enabled)
+        const updated = await getChannel(id)
         const index = this.channels.findIndex((c) => c.id === id)
         if (index !== -1) {
           this.channels[index] = updated
@@ -133,7 +142,7 @@ export const useNotificationsStore = defineStore('notifications', {
     },
 
     // Like the channel actions: a failed action rethrows and leaves `rulesError` and the list alone.
-    async addRule(data: Partial<NotificationRule>) {
+    async addRule(data: NotificationRuleInput) {
       this.rulesLoading = true
       try {
         const newRule = await createRule(data)
@@ -163,7 +172,10 @@ export const useNotificationsStore = defineStore('notifications', {
           page: params?.page || this.historyPage,
           limit: params?.limit || this.historyLimit
         }
-        this.history = await getHistory(options)
+        const loaded = await getHistory(options)
+        this.history = loaded.items
+        this.historyPagination = loaded.pagination
+        this.historyTotal = loaded.total
         if (params?.page) this.historyPage = params.page
         if (params?.limit) this.historyLimit = params.limit
       } catch (e: any) {
