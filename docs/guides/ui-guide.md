@@ -108,8 +108,9 @@ from this import** on that card opens a dialog that makes a configuration templa
   value and names the secrets it left out. Set a secret on the template page after saving. The server also
   drops a `********` it receives in a new template.
 - What is one device's own is always left out, so one template does not give every device the same identity:
-  the name, hostname, MAC, MQTT client id and topic prefix, the access-point name, the name of each relay and
-  input channel (the channel ids stay), and every static address (the address mode goes with it).
+  the name, hostname, MAC, MQTT client id and topic prefix, the login realm, the access-point name, the name of
+  each relay and input channel (the channel ids stay), and every static address (the address mode goes with it).
+  A password slot is left out whatever its value, so an empty password never reaches a template.
 - The dialog reads the import through the server's typed form, which does not yet read every key of a
   second-generation device (`sys`, `switch:0` and similar). Such an import can offer few sections, often only
   `cloud`. Build the template on its template page instead.
