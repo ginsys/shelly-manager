@@ -267,13 +267,14 @@ func (s *Scheduler) claimAndRecord(sc DriftDetectionSchedule, next, now time.Tim
 // failSchedule records one failed run for a schedule that cannot run and disables it, so it is
 // reported once and not on every tick. The disable is the arbiter: of several replicas that read the
 // same row, only the one that turns enabled off records the failure. It matches the revision that
-// failed, and the cron_spec that was read (for a writer of the release before the revision), so a schedule
-// edited since the read is never disabled for the failure of the old one; it bumps the revision itself,
-// so the other replicas' reads of the schedule go stale too.
+// failed, and the enabled flag and cron_spec that were read (for a writer of the release before the
+// revision, which bumps nothing), so a schedule edited or already disabled since the read is never
+// disabled, nor its failure recorded again; it bumps the revision itself, so the other replicas' reads of
+// the schedule go stale too.
 func (s *Scheduler) failSchedule(sc DriftDetectionSchedule, now time.Time, cause error) {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&DriftDetectionSchedule{}).
-			Where("id = ? AND cron_spec = ? AND revision = ?", sc.ID, sc.CronSpec, sc.Revision).
+			Where("id = ? AND enabled = ? AND cron_spec = ? AND revision = ?", sc.ID, true, sc.CronSpec, sc.Revision).
 			Updates(map[string]any{"enabled": false, "next_run": nil, "revision": gorm.Expr("revision + 1")}) // a disabled schedule has no next run
 		if res.Error != nil || res.RowsAffected != 1 {
 			return res.Error
