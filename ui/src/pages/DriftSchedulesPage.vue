@@ -79,8 +79,8 @@
             >
               Recent runs
             </button>
-            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="opening || toggling.includes(schedule.id)" @click="openForm(schedule)">Edit</button>
-            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" :disabled="opening || toggling.includes(schedule.id)" @click="handleToggle(schedule.id)">
+            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="held(schedule.id)" @click="openForm(schedule)">Edit</button>
+            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" :disabled="held(schedule.id)" @click="handleToggle(schedule.id)">
               {{ schedule.enabled ? 'Disable' : 'Enable' }}
             </button>
             <button class="btn-icon danger" title="Delete" @click="handleDelete(schedule.id)">
@@ -185,6 +185,13 @@ async function handleDelete(id: number) {
 // The schedules whose toggle request is running. The server flips the stored flag on every call, so a
 // second click while one runs would flip it back.
 const toggling = ref<number[]>([])
+
+// Edit and Enable/Disable of a card are held while its own toggle runs, while the form opens and while it
+// is open: the form carries its own `enabled`, so a toggle in any of those spans would be overwritten by
+// the next save, or the form would start from a state the card no longer shows.
+function held(id: number): boolean {
+  return opening.value || formOpen.value || toggling.value.includes(id)
+}
 
 async function handleToggle(id: number) {
   if (toggling.value.includes(id)) return
