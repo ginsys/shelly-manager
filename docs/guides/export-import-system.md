@@ -10,7 +10,9 @@ maintaining a separate list of formats or mock previews.
 is the plugin's supported format list. The plugin detail endpoint exposes the
 structured runtime capability object, while
 `GET /api/v1/export/plugins/{name}/schema` returns the recursive configuration
-schema.
+schema. Each listed plugin has a `status` with `available` and `enabled`, both
+`true`, because plugins are compiled in. Plugin configuration is not stored: it
+travels with each export or import request.
 
 Use `POST /api/v1/export/preview` to validate and preview any registered
 plugin/format pair:
@@ -33,6 +35,11 @@ plugin/format pair:
 Validation order is stable: plugin lookup, supported format, plugin
 configuration, then engine-owned path validation and normalization. Preview
 loads actual database data and invokes the selected plugin.
+
+Preview is how to test a plugin: there is no separate test route. For the
+OPNsense plugin it does not contact the OPNsense host, so it does not check the
+API key and secret. An export does, and fails with the connection error when
+they are wrong.
 
 File-producing plugins validate paths without creating directories during
 configuration validation. Execution repeats path/security checks and creates

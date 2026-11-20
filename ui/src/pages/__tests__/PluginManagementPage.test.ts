@@ -20,7 +20,7 @@ function plugin(name: string, display: string): Plugin {
     version: '1.0.0',
     category: 'backup',
     capabilities: ['x'],
-    status: { available: true, configured: true, enabled: true },
+    status: { available: true, enabled: true },
   }
 }
 

@@ -29,7 +29,6 @@ function makePlugin(overrides: Partial<Plugin> = {}): Plugin {
     capabilities: ['json', 'yaml'],
     status: {
       available: true,
-      configured: true,
       enabled: true,
     },
     ...overrides,

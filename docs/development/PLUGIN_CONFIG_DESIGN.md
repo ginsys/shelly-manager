@@ -1,7 +1,9 @@
 # Design note: plugin configuration, testing and enablement
 
 Status: proposal. It decides nothing; the last section lists the decisions and one recommendation
-for each. No code, OpenAPI or UI file changes with this note.
+for each. The note itself changes no code, OpenAPI or UI file. Decisions 3 and 4 were taken on
+ginsys/shelly-manager#290 and built after it: the plugin list no longer returns `configured`, and
+the docs say that "test" means a dry run.
 
 It answers the four questions of ginsys/shelly-manager#290, which was opened when
 ginsys/shelly-manager#264 removed the plugin config, test and enable controls from the UI because

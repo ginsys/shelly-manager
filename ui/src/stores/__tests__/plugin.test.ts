@@ -22,7 +22,7 @@ describe('Plugin Store', () => {
     version: '1.0.0',
     category: 'backup',
     capabilities: ['backup', 'restore'],
-    status: { available: true, configured: true, enabled: true },
+    status: { available: true, enabled: true },
   }
 
   const mockPlugin2: Plugin = {
@@ -32,7 +32,7 @@ describe('Plugin Store', () => {
     version: '2.0.0',
     category: 'sync',
     capabilities: ['sync'],
-    status: { available: true, configured: false, enabled: false },
+    status: { available: true, enabled: false },
   }
 
   const mockCategory: PluginCategory = {
