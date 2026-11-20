@@ -117,6 +117,70 @@ describe('DeviceConfigPage shows the fields the server refused on Save', () => {
     expect(wrapper.find('[data-testid="override-save-errors"]').exists()).toBe(false)
   })
 
+  // The server names a relay by its position in the body it was sent. Only relay 1 is in the override,
+  // so relay 1 is item 0 there. The mark stays under relay 1 after an edit of relay 0 and a remount
+  // of the editor (Verify Device removes and re-creates it).
+  it('keeps a refusal under the relay it names after another relay is edited and the editor remounts', async () => {
+    vi.mocked(getConfigSchema).mockResolvedValue({
+      type: 'object',
+      'x-device-type': 'SHSW-25',
+      'x-apply-supported': true,
+      properties: {
+        relay: {
+          type: 'object',
+          title: 'Relay',
+          properties: {
+            relays: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer', 'x-applicable': true },
+                  name: { type: 'string', 'x-applicable': true },
+                },
+              },
+            },
+          },
+        },
+      },
+    } as ConfigSchema)
+    const inherited = { relay: { relays: [{ id: 0, name: 'Lamp' }, { id: 1, name: 'Fan' }] } }
+    api.getDeviceOverridesNew.mockImplementation(async () => ({ overrides: { relay: { relays: [{ id: 1, name: 'bad' }] } } }) as any)
+    api.getDesiredConfigNew.mockImplementation(
+      async () => ({ config: inherited, sources: {}, inherited, inherited_sources: {} }) as any,
+    )
+    api.verifyDeviceConfigNew.mockImplementation(async () => ({ match: true, differences: [] }) as any)
+    api.setDeviceOverridesNew.mockRejectedValue(
+      new TemplateSaveError('Validation failed', [{ path: 'relay.relays.0.name', message: 'name is refused' }]),
+    )
+    const wrapper = await openEditor()
+    const mark = (id: number) => wrapper.find(`[data-path="relay.relays.${id}.name"] .field-error`)
+
+    await wrapper.find('[data-testid="save-overrides"]').trigger('click')
+    await flushPromises()
+    expect(mark(1).text()).toBe('name is refused')
+
+    await wrapper.find('[data-path="relay.relays.0.name"] input').setValue('Lamp 2')
+    await wrapper.findAll('button').find((b) => b.text().trim() === 'Verify Device')!.trigger('click')
+    await flushPromises()
+    expect(api.verifyDeviceConfigNew).toHaveBeenCalled()
+    expect(wrapper.find('[data-path="relay.relays.0.name"] input').exists()).toBe(true)
+    expect(mark(1).text()).toBe('name is refused')
+    expect(mark(0).exists()).toBe(false)
+  })
+
+  // Preparing the body can throw on a body that is no object; the failure belongs in the error panel.
+  it('a body that cannot be prepared for Save shows the error panel and sends nothing', async () => {
+    api.getDeviceOverridesNew.mockImplementation(async () => ({ overrides: { mqtt: { port: 1883, pass: '********' } } }) as any)
+    const wrapper = await openEditor()
+    await wrapper.findAll('.mode-btn')[1].trigger('click')
+    await wrapper.find('textarea').setValue('5')
+    await wrapper.find('[data-testid="save-overrides"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="config-action-error"]').exists()).toBe(true)
+    expect(api.setDeviceOverridesNew).not.toHaveBeenCalled()
+  })
+
   it('a refusal that is not a field list shows an error panel, not a field list or an alert', async () => {
     api.setDeviceOverridesNew.mockRejectedValue(new Error('device not found'))
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})

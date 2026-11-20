@@ -130,6 +130,7 @@
             v-model="overridesData"
             v-model:valid="overridesValid"
             :held="overridesHeld"
+            :server-errors="refusedKeys"
             :device-id="deviceId"
             :inherited="store.inherited"
             :sources="store.inheritedSources"
@@ -226,7 +227,7 @@ import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useError } from '@/composables/useError'
 import { usePageError, useLateResult } from '@/composables/useNotice'
 import { getCurrentDeviceConfig } from '@/api/deviceConfig'
-import { nullRemovedSecrets } from '@/utils/config-form'
+import { formErrorKey, nullRemovedSecrets } from '@/utils/config-form'
 import { TemplateSaveError, type FieldError } from '@/api/templates'
 
 const route = useRoute()
@@ -241,6 +242,10 @@ const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
 // Fields the server refused on the last Save, as the template page lists them.
 const saveErrors = ref<FieldError[]>([])
+// The same refusals keyed for the form, by relay id, against the body that was sent: the server names
+// a list item by its position in that body. They live here because the editor is removed and
+// re-created while the page loads, and an edit made since must not move them to another item.
+const refusedKeys = ref<Record<string, string>>({})
 // The overrides as they were saved, which the editor's required-field guard reads. The editor is
 // removed and re-created while the page loads (Verify Device does it), so it lives here, beside the
 // body it describes. Only a load of the overrides sets it; no edit does.
@@ -284,6 +289,7 @@ watch(() => store.overrides, (newOverrides) => {
 // Edit starts clean and a key reset in the abandoned edit blocks nothing.
 function toggleEditOverrides() {
   saveErrors.value = []
+  refusedKeys.value = {}
   if (editOverrides.value) loadOverrides(store.overrides)
   editOverrides.value = !editOverrides.value
 }
@@ -414,16 +420,22 @@ async function handleSaveOverrides() {
   const id = deviceId.value
   const generation = routeGeneration
   saveErrors.value = []
+  refusedKeys.value = {}
   clearActionError()
+  let sent: Record<string, any> = {}
   try {
-    await store.saveOverrides(id, nullRemovedSecrets(overridesData.value, overridesHeld.value, overridesEditor.value?.schema))
+    sent = nullRemovedSecrets(overridesData.value, overridesHeld.value, overridesEditor.value?.schema)
+    await store.saveOverrides(id, sent)
     if (routeGeneration !== generation) return
     editOverrides.value = false
     await handleRefresh()
   } catch (e: any) {
     if (e instanceof TemplateSaveError) {
       // The server refused values the form let through. Keep the edit open and list them.
-      if (routeGeneration === generation) saveErrors.value = e.fields
+      if (routeGeneration === generation) {
+        saveErrors.value = e.fields
+        refusedKeys.value = Object.fromEntries(e.fields.map(f => [formErrorKey(sent, f.path), f.message]))
+      }
       return
     }
     setActionError(e, { action: 'Save overrides', resource: 'Device', resourceId: id })

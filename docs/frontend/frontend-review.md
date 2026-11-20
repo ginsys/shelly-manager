@@ -240,6 +240,13 @@ page imports still counts. The Playwright spec is what proves the links are rend
 
   ![Read-only plugin schema viewer](images/plugin-schema-viewer-readonly.png)
 
+- **A list of channels (relays) shows and edits as fields, not as JSON** (ginsys/shelly-manager#765).
+  The device configuration view shows a nested value by its shape: an object as fields, a list of
+  objects as one group per item, a list of plain values as a comma list. The override editor shows one
+  fieldset per relay, keyed by the relay `id` as the server merges lists by id, and an override holds
+  only the relays and fields changed. It offers no add or remove: the schema fixes no length. A list
+  whose items share an id stays one JSON box. A save the server refuses shows each field error under
+  its field. The template detail page is unchanged.
 - **Export and import.** Export preview reads the live plugin registry and the backend schemas;
   browser import preview is SMA-only and registry-gated; SMA uses strict `2026.1`
   (ginsys/shelly-manager#268). A non-preview `POST /import` restores devices, templates and

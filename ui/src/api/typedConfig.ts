@@ -35,6 +35,7 @@ export interface SchemaProperty {
   if?: { properties?: Record<string, { const?: any }> }
   then?: { required?: string[] }
   items?: SchemaProperty
+  maxItems?: number
   // Device-type schema only (GET /config/schema?device_id=...): false when apply cannot write
   // the field to the device yet. The generic schema omits it.
   'x-applicable'?: boolean

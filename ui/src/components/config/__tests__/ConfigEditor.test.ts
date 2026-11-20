@@ -605,6 +605,163 @@ describe('ConfigEditor', () => {
     })
   })
 
+  // A list of relays is one fieldset per relay, each addressed by its id, so an override carries only
+  // the relays and fields the user changed.
+  describe('a list of relays', () => {
+    const relaySchema: ConfigSchema = {
+      type: 'object',
+      'x-device-type': 'SHSW-25',
+      'x-apply-supported': true,
+      properties: {
+        relay: {
+          type: 'object',
+          title: 'Relay',
+          properties: {
+            relays: {
+              type: 'array',
+              title: 'Relays',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer', 'x-applicable': true },
+                  name: { type: 'string', maxLength: 64, 'x-applicable': true },
+                  auto_on: { type: 'integer', minimum: 0, maximum: 100, 'x-applicable': true },
+                  schedule_rules: { type: 'array', items: { type: 'string' }, 'x-applicable': true },
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+    const inherited = { relay: { relays: [{ id: 0, name: 'Lamp', schedule_rules: ['0800-0123456-on'] }, { id: 1 }] } }
+
+    async function mountRelays(modelValue: Record<string, any> = {}, extra: Record<string, any> = {}) {
+      vi.mocked(getConfigSchema).mockResolvedValue(relaySchema)
+      const wrapper = mountEditor(modelValue, { inherited, ...extra })
+      await flushPromises()
+      await openSection(wrapper, 'relay')
+      return wrapper
+    }
+    const relay = (id: number, field: string) => `[data-path="relay.relays.${id}.${field}"]`
+
+    it('shows one fieldset per relay, never a JSON box', async () => {
+      const wrapper = await mountRelays()
+      expect(wrapper.findAll('fieldset.item-list > fieldset legend').map(l => l.text())).toEqual(['Item 0: Lamp', 'Item 1'])
+      expect(wrapper.find(relay(0, 'name')).exists()).toBe(true)
+      expect(wrapper.find(relay(1, 'name')).exists()).toBe(true)
+      expect(wrapper.find('[data-path="relay.relays"] > textarea').exists()).toBe(false)
+    })
+
+    it('editing one relay field puts that relay alone, by id, into the override body', async () => {
+      const wrapper = await mountRelays()
+      await wrapper.find(`${relay(1, 'name')} input`).setValue('Fan')
+      expect(lastModel(wrapper)).toEqual({ relay: { relays: [{ id: 1, name: 'Fan' }] } })
+    })
+
+    it('reset removes that field and the relay and list it leaves empty', async () => {
+      const wrapper = await mountRelays({ relay: { relays: [{ id: 0, name: 'Lamp 2' }, { id: 1, name: 'Fan' }] } })
+      await wrapper.find(`${relay(1, 'name')} [data-action="reset"]`).trigger('click')
+      expect(lastModel(wrapper)).toEqual({ relay: { relays: [{ id: 0, name: 'Lamp 2' }] } })
+      await wrapper.setProps({ modelValue: lastModel(wrapper) })
+      await wrapper.find(`${relay(0, 'name')} [data-action="reset"]`).trigger('click')
+      expect(lastModel(wrapper)).toEqual({})
+    })
+
+    it('setting a relay field back to its inherited value leaves no override', async () => {
+      const wrapper = await mountRelays()
+      const input = wrapper.find(`${relay(0, 'name')} input`)
+      await input.setValue('Lamp 2')
+      expect(lastModel(wrapper)).toEqual({ relay: { relays: [{ id: 0, name: 'Lamp 2' }] } })
+      await input.setValue('Lamp')
+      expect(lastModel(wrapper)).toEqual({})
+    })
+
+    it('an out-of-range value is an error under that relay and blocks save', async () => {
+      const wrapper = await mountRelays()
+      await wrapper.find(`${relay(1, 'auto_on')} input`).setValue('500')
+      expect(wrapper.find(`${relay(1, 'auto_on')} .field-error`).text()).toBe('Must be at most 100')
+      expect(wrapper.find(`${relay(0, 'auto_on')} .field-error`).exists()).toBe(false)
+      expect(lastValid(wrapper)).toBe(false)
+    })
+
+    it('a list of text values is one entry per line, and an override is a list', async () => {
+      const wrapper = await mountRelays()
+      const box = wrapper.find(`${relay(1, 'schedule_rules')} textarea`)
+      await box.setValue('0800-0123456-on\n2200-0123456-off\n')
+      expect(lastModel(wrapper)).toEqual({ relay: { relays: [{ id: 1, schedule_rules: ['0800-0123456-on', '2200-0123456-off'] }] } })
+      // The inherited list reads as its entries, not as JSON.
+      expect(wrapper.find(`${relay(0, 'schedule_rules')} .field-inherited`).text()).toBe('Inherited: 0800-0123456-on')
+    })
+
+    it('offers no field for the id of a relay, so Reset cannot take it away', async () => {
+      const wrapper = await mountRelays({ relay: { relays: [{ id: 1, name: 'Fan' }] } })
+      expect(wrapper.find(relay(1, 'name')).exists()).toBe(true)
+      expect(wrapper.find(relay(1, 'id')).exists()).toBe(false)
+    })
+
+    it('typing the inherited entry keeps the text, so the next entry can follow', async () => {
+      const wrapper = await mountRelays()
+      const box = wrapper.find(`${relay(0, 'schedule_rules')} textarea`)
+      // A keystroke fires input only; setValue would also fire change, which ends the draft.
+      const typeInto = async (text: string) => {
+        ;(box.element as HTMLTextAreaElement).value = text
+        await box.trigger('input')
+      }
+      await typeInto('0800-0123456-on\n')
+      expect(lastModel(wrapper)).toEqual({})
+      expect((box.element as HTMLTextAreaElement).value).toBe('0800-0123456-on\n')
+      await typeInto('0800-0123456-on\n2200-0123456-off')
+      expect(lastModel(wrapper)).toEqual({ relay: { relays: [{ id: 0, schedule_rules: ['0800-0123456-on', '2200-0123456-off'] }] } })
+    })
+
+    it('an empty list can be saved over an inherited list, apart from Reset', async () => {
+      const wrapper = await mountRelays()
+      await wrapper.find(`${relay(0, 'schedule_rules')} [data-action="empty-list"]`).trigger('click')
+      expect(lastModel(wrapper)).toEqual({ relay: { relays: [{ id: 0, schedule_rules: [] }] } })
+      await wrapper.setProps({ modelValue: lastModel(wrapper) })
+      expect(wrapper.find(`${relay(0, 'schedule_rules')} [data-action="empty-list"]`).exists()).toBe(false)
+      expect(wrapper.find(`${relay(1, 'schedule_rules')} [data-action="empty-list"]`).exists()).toBe(false)
+    })
+
+    it('names an error inside a list the form cannot split on the box that holds it', async () => {
+      const wrapper = await mountRelays({ relay: { relays: [{ id: 1, auto_on: -1 }] } }, {
+        inherited: { relay: { relays: [{ id: 1 }, { id: 1 }] } },
+      })
+      expect(wrapper.find('[data-path="relay.relays"] .field-error').text()).toBe('Must be at least 0')
+      expect(lastValid(wrapper)).toBe(false)
+    })
+
+    it('reads the source of an item by its position in the inherited list, not by its id', async () => {
+      const wrapper = await mountRelays({}, {
+        inherited: { relay: { relays: [{ id: 1, name: 'Fan' }, { id: 3, name: 'Lamp' }] } },
+        sources: { 'relay.relays.0.name': 'Global', 'relay.relays.1.name': 'Group' },
+      })
+      expect(wrapper.find(relay(1, 'name')).text()).toContain('Inherited: Fan from Global')
+      expect(wrapper.find(relay(3, 'name')).text()).toContain('Inherited: Lamp from Group')
+    })
+
+    it('a list whose items share an id stays one JSON box', async () => {
+      const wrapper = await mountRelays({}, { inherited: { relay: { relays: [{ id: 1 }, { id: 1 }] } } })
+      expect(wrapper.find('[data-path="relay.relays"] textarea').exists()).toBe(true)
+      expect(wrapper.find('fieldset.item-list').exists()).toBe(false)
+    })
+
+    it('says the count is not editable when no relay is known', async () => {
+      const wrapper = await mountRelays({}, { inherited: {} })
+      expect(wrapper.find('[data-note="no-items"]').exists()).toBe(true)
+    })
+
+    it('shows a server refusal, keyed by relay id, under that relay and never changes valid', async () => {
+      const wrapper = await mountRelays({ relay: { relays: [{ id: 1, name: 'x'.repeat(10) }] } }, {
+        serverErrors: { 'relay.relays.1.name': 'name is refused' },
+      })
+      expect(wrapper.find(`${relay(1, 'name')} .field-error`).text()).toBe('name is refused')
+      expect(wrapper.find(`${relay(0, 'name')} .field-error`).exists()).toBe(false)
+      expect(lastValid(wrapper)).toBe(true)
+    })
+  })
+
   it('a field apply cannot write is read-only but its override can be reset', async () => {
     const wrapper = mountEditor({ relay: { default_state: 'on' } })
     await flushPromises()

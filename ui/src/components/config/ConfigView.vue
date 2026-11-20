@@ -30,9 +30,12 @@
               class="field-row"
             >
               <span class="field-label">{{ formatLabel(fieldKey as string) }}:</span>
-              <span class="field-value" :class="getValueClass(fieldValue)">
-                {{ formatValue(fieldValue) }}
-              </span>
+              <ConfigValue
+                :value="fieldValue"
+                :path="`${key}.${fieldKey}`"
+                :sources="sources"
+                :show-source-badges="showSourceBadges"
+              />
               <span v-if="showSourceBadges && sources?.[`${key}.${fieldKey}`]" class="source-badge small">
                 {{ sources[`${key}.${fieldKey}`] }}
               </span>
@@ -40,9 +43,7 @@
           </template>
           <template v-else>
             <div class="field-row">
-              <span class="field-value" :class="getValueClass(value)">
-                {{ formatValue(value) }}
-              </span>
+              <ConfigValue :value="value" :path="String(key)" :sources="sources" :show-source-badges="showSourceBadges" />
             </div>
           </template>
         </div>
@@ -53,6 +54,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import ConfigValue from './ConfigValue.vue'
+import { formatLabel } from '@/utils/config-form'
 
 interface Props {
   config: Record<string, any> | null
@@ -132,33 +135,8 @@ function formatSectionTitle(key: string): string {
   return titles[key] || formatLabel(key)
 }
 
-function formatLabel(key: string): string {
-  return key
-    .replace(/_/g, ' ')
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
-    .trim()
-}
-
 function isObject(value: any): boolean {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function formatValue(value: any): string {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  if (Array.isArray(value)) {
-    if (value.length === 0) return '(empty)'
-    return JSON.stringify(value)
-  }
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
-function getValueClass(value: any): string {
-  if (typeof value === 'boolean') return value ? 'value-true' : 'value-false'
-  if (value === null || value === undefined) return 'value-null'
-  return ''
 }
 </script>
 
