@@ -26,6 +26,10 @@ const (
 	driftPollInterval = 30 * time.Second // how often the scheduler asks which schedules are due
 	driftRunTimeout   = 10 * time.Minute // a run left running longer than this is interrupted
 	driftRunsKept     = 100              // run rows kept per schedule
+
+	// DriftStopWait is the longest Stop waits for the loop; with the server's shutdown it must fit
+	// the 25 seconds under Kubernetes' default 30 second grace period (pinned in cmd/shelly-manager).
+	DriftStopWait = 15 * time.Second
 )
 
 // driftCronParser reads exactly five fields: no seconds and no descriptors such as @hourly.
@@ -123,7 +127,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 }
 
 // Stop ends polling and the run in flight: the devices it has not read yet are reported skipped. It
-// waits for the loop, at most 30 seconds, and is a no-op when not running.
+// waits for the loop, at most DriftStopWait, and is a no-op when not running.
 func (s *Scheduler) Stop() error {
 	s.mu.Lock()
 	cancel, done := s.cancel, s.done
@@ -136,8 +140,8 @@ func (s *Scheduler) Stop() error {
 	select {
 	case <-done:
 		return nil
-	case <-time.After(30 * time.Second):
-		return errors.New("the drift scheduler did not stop within 30 seconds")
+	case <-time.After(DriftStopWait):
+		return fmt.Errorf("the drift scheduler did not stop within %s", DriftStopWait)
 	}
 }
 
