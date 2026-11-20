@@ -196,7 +196,7 @@ jobs:
       run: |
         go test ./internal/database -run '^(TestConfigTemplateScopeMigrationProviders|TestUpdateDeviceIfVersionProviders|TestUpdateDeviceZeroTimesKeptProviders|TestUpdateDeviceColumnsProviders|TestRemoveLegacyDeliveryErrorsProviders|TestProvisionerStoreProviders|TestDriftTablesMigrationProviders)$' -v
         go test ./internal/sync -run '^TestImportZeroLastSeenProviders$' -v
-        go test ./internal/configuration -run '^(TestApplyLockProviders_|TestDriftSchedulerProviders_)' -v
+        go test ./internal/configuration -run '^(TestApplyLockProviders_|TestDriftSchedulerProviders_|TestDriftScheduleWriteProviders_)' -v
         go test ./internal/database -run '^TestPoolDefaultProviders$' -v
 
   vitest:

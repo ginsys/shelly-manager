@@ -121,3 +121,44 @@ func TestDriftSchedulerProviders_StaleRunningRunIsInterrupted(t *testing.T) {
 		})
 	}
 }
+
+// The write path on the real servers: a device filter written by create and by update reads back
+// (PostgreSQL returns a text column as a string, which a plain RawMessage cannot scan), and an
+// update that changes nothing is not a missing schedule (MySQL reports 0 rows changed for it).
+func TestDriftScheduleWriteProviders_FilterRoundTripsAndAnUnchangedUpdateIsFound(t *testing.T) {
+	for _, srv := range lockServers(t) {
+		t.Run(srv.name, func(t *testing.T) {
+			s, _, db := openSchedulerReplicas(t, srv)
+			svc := s.svc
+			created, err := svc.CreateDriftSchedule(ScheduleInput{
+				Name: "plugs", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHPLG-S"},
+			})
+			require.NoError(t, err)
+
+			got, err := svc.GetDriftSchedule(created.ID)
+			require.NoError(t, err)
+			assert.JSONEq(t, `{"type":"SHPLG-S"}`, string(got.DeviceFilter))
+
+			same := ScheduleInput{Name: "plugs", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHPLG-S"}}
+			for i := 0; i < 3; i++ { // the same body again: no column changes but updated_at
+				_, err = svc.UpdateDriftSchedule(created.ID, same)
+				require.NoError(t, err)
+			}
+			changed, err := svc.UpdateDriftSchedule(created.ID, ScheduleInput{
+				Name: "plugs", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Status: "online"},
+			})
+			require.NoError(t, err)
+			assert.JSONEq(t, `{"status":"online"}`, string(changed.DeviceFilter))
+
+			list, err := svc.ListDriftSchedules()
+			require.NoError(t, err)
+			require.Len(t, list, 1)
+			assert.Equal(t, []uint{}, list[0].DeviceIDs)
+
+			var sc DriftDetectionSchedule
+			require.NoError(t, db.First(&sc, created.ID).Error, "the scheduler reads the row the same way")
+			require.NoError(t, svc.DeleteDriftSchedule(created.ID))
+			assert.ErrorIs(t, svc.DeleteDriftSchedule(created.ID), gorm.ErrRecordNotFound)
+		})
+	}
+}

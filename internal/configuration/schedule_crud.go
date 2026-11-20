@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrInvalidDriftSchedule wraps every refusal of a schedule's input, so a caller can tell a bad
@@ -120,7 +121,8 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 	}
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var sc DriftDetectionSchedule
-		if res := tx.First(&sc, id); res.Error != nil {
+		// Locked until the commit, so a delete cannot land between this read and the writes below.
+		if res := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&sc, id); res.Error != nil {
 			return res.Error
 		}
 		enabled := sc.Enabled
@@ -132,7 +134,7 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 			"enabled": enabled, "device_filter": nil,
 		}
 		if v.filter != nil {
-			fields["device_filter"] = []byte(v.filter) // the form Create stores; a string would not scan back
+			fields["device_filter"] = v.filter
 		}
 		switch {
 		case !enabled:
@@ -144,8 +146,14 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 		if res.Error != nil {
 			return res.Error
 		}
-		if res.RowsAffected == 0 { // deleted since the read: write no device rows for it
-			return gorm.ErrRecordNotFound
+		if res.RowsAffected == 0 { // MySQL reports 0 for an unchanged row too: count before calling it deleted
+			var left int64
+			if cres := tx.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Count(&left); cres.Error != nil || left == 0 {
+				if cres.Error != nil {
+					return cres.Error
+				}
+				return gorm.ErrRecordNotFound
+			}
 		}
 		return replaceScheduleDevices(tx, id, v.ids)
 	})

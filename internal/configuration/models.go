@@ -331,9 +331,9 @@ type DriftDetectionSchedule struct {
 	Name         string          `json:"name" gorm:"not null"`
 	Description  string          `json:"description"`
 	Enabled      bool            `json:"enabled" gorm:"default:true"`
-	CronSpec     string          `json:"cron_spec" gorm:"not null"`      // Cron expression (e.g., "0 */6 * * *" for every 6 hours)
-	DeviceIDs    []uint          `json:"device_ids" gorm:"-"`            // Device IDs to check (empty = all devices)
-	DeviceFilter json.RawMessage `json:"device_filter" gorm:"type:text"` // JSON filter criteria
+	CronSpec     string          `json:"cron_spec" gorm:"not null"`                         // Cron expression (e.g., "0 */6 * * *" for every 6 hours)
+	DeviceIDs    []uint          `json:"device_ids" gorm:"-"`                               // Device IDs to check (empty = all devices)
+	DeviceFilter json.RawMessage `json:"device_filter" gorm:"type:text;serializer:rawtext"` // JSON filter criteria
 	LastRun      *time.Time      `json:"last_run"`
 	NextRun      *time.Time      `json:"next_run"`
 	RunCount     int             `json:"run_count" gorm:"default:0"`

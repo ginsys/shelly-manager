@@ -72,10 +72,10 @@ func (fx *schedFixture) newScheduler() *Scheduler {
 func (fx *schedFixture) add(spec string, next *time.Time, filter string, ids ...uint) uint {
 	fx.t.Helper()
 	sc := DriftDetectionSchedule{Name: "nightly", CronSpec: spec, NextRun: next}
-	if filter != "" {
-		sc.DeviceFilter = json.RawMessage(filter)
-	}
 	require.NoError(fx.t, fx.db.Create(&sc).Error)
+	if filter != "" { // raw SQL: a case stores text that is not valid JSON, which a write refuses
+		require.NoError(fx.t, fx.db.Exec("UPDATE drift_detection_schedules SET device_filter = ? WHERE id = ?", filter, sc.ID).Error)
+	}
 	for _, id := range ids {
 		require.NoError(fx.t, fx.db.Create(&DriftScheduleDevice{ScheduleID: sc.ID, DeviceID: id}).Error)
 	}
