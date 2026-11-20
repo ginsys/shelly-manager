@@ -32,8 +32,9 @@ Read ginsys/shelly-manager#290 with these corrections. Section 2 gives the detai
 4. **The OPNsense schema example promises something the code does not do.** Its example uses
    `"api_key": "${OPNSENSE_API_KEY}"` (`internal/plugins/sync/opnsense/opnsense.go:143-144`). Nothing in
    the OPNsense package or in `internal/sync/engine.go` expands such a reference, so a client that
-   copies the example sends the literal text as the key. This is a separate defect; this note does not
-   fix it.
+   copies the example sends the literal text as the key. This was a separate defect, fixed by
+   ginsys/shelly-manager#736: the example now shows a plain placeholder and the field descriptions say
+   the value is sent as written.
 5. **`Preview` does not contact OPNsense; `Export` does.** The OPNsense `Preview` builds a text from
    local data and never creates the client (`opnsense.go:280-328`). `Export` creates the client and
    calls `TestConnection` before it writes anything (`:229-236`).
@@ -165,7 +166,7 @@ maintainer's to decide.
 | Option | What it does | What it does not solve |
 |---|---|---|
 | (i) store the secret in the row, mask it on read, restore the placeholder on save | the notification-channel behaviour; about 0 new code beyond the table, because `internal/redact` already does the walk | the secret is clear text in the database, and the `backup` plugin writes a raw database snapshot (`docs/api/API_EXPORT_IMPORT.md:235`), which the export masking does not cover (`:68`). The OPNsense secret would travel inside every backup. |
-| (ii) store only an environment reference such as `${OPNSENSE_API_SECRET}` and read the process environment when the plugin runs | the secret never reaches the database or a backup; it matches what the schema example already shows (section 1, item 4) | needs expansion code (none today, about 60 lines) and a rule for which names may be read: without one, whoever may store the config could point a field at any variable of the process, such as the database password, and send it to a host of their choosing. That is an admin-key holder, and anyone at all when no admin key is set (section 2.4). A fixed name prefix closes it in both cases. |
+| (ii) store only an environment reference such as `${OPNSENSE_API_SECRET}` and read the process environment when the plugin runs | the secret never reaches the database or a backup; the schema example showed this form before ginsys/shelly-manager#736 (section 1, item 4) | needs expansion code (none today, about 60 lines) and a rule for which names may be read: without one, whoever may store the config could point a field at any variable of the process, such as the database password, and send it to a host of their choosing. That is an admin-key holder, and anyone at all when no admin key is set (section 2.4). A fixed name prefix closes it in both cases. |
 | (iii) store the non-secret fields only; send the secret with each request | a stored host and port | the request still carries the secret every time, so it solves little. |
 
 **Validation surface.** `ValidateConfig` is per plugin and cannot check a partial config: OPNsense
@@ -230,7 +231,8 @@ database snapshot, build (c). **This decision is the lead's:** it changes a resp
 
 ## 7. What this note does not solve
 
-- The `${OPNSENSE_API_KEY}` example (section 1, item 4) is a defect whatever is decided.
+- The `${OPNSENSE_API_KEY}` example (section 1, item 4) was a defect whatever was decided;
+  ginsys/shelly-manager#736 removed it.
 - No plugin sends a webhook, and the GitOps and OPNsense imports are not implemented. The note does not
   propose building them.
 - A second registry exists (`cmd/shelly-manager/main.go:724`, `internal/plugins/sync/registry`) and is
