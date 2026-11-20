@@ -63,11 +63,11 @@ The configuration is part of each request: `ExportRequest.Config` (`internal/syn
 (`internal/api/sync_handlers.go:529-536`).
 
 No database row keeps the configuration. `ExportHistory` and `ImportHistory`
-(`internal/database/models.go:88-122`) hold the ids, the plugin name, the format and the outcome. One
-plugin does write it to disk: GitOps puts the whole request config, unmasked, in `export-summary.yaml`
-in its output directory (`internal/plugins/sync/gitops/gitops.go:298-302`). The
-engine copies only `name` and `description` out of the config for the history row
-(`engine.go:637-646`). The application config has no plugin key: a search of `internal/config` for
+(`internal/database/models.go:88-118`) hold the ids, the plugin name, the format, who asked, the
+outcome, counts, size, path, duration and the first error message. From the config, the export row
+takes only the `name` and `description` keys (`engine.go:632-651`). One plugin does write the whole
+config to disk: GitOps puts the request config, unmasked, in `export-summary.yaml` in its output
+directory (`internal/plugins/sync/gitops/gitops.go:298-302`). The application config has no plugin key: a search of `internal/config` for
 "plugin" finds nothing, and the same search for `ExportBaseDir` finds its two lines
 (`internal/config/config.go:154,156`).
 
@@ -193,7 +193,7 @@ nothing, and the OPNsense client in `internal/opnsense/client.go` is where the n
 those five, "test" can only mean a dry run.
 
 **Option (a): test is a dry run.** The general dry run is `POST /export/preview`
-(`sync_handlers.go:550`). The `DryRun` and `ValidateOnly` options (`internal/sync/plugin.go:154-160`)
+(`sync_handlers.go:550`); its handler saves no history row (`:564-578`). The `DryRun` and `ValidateOnly` options (`internal/sync/plugin.go:154-160`)
 are not a general export dry run: the export engine does not read them and JSON export writes its
 files without checking either (`internal/plugins/sync/jsonexport/json.go:82-158`). One plugin honours
 `DryRun` on its own: OPNsense passes it to its DHCP and firewall-alias syncs, which then skip their
