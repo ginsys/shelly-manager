@@ -29,9 +29,10 @@ func startScheduler(ctx context.Context, cfg *config.Config, db *gorm.DB, svc *c
 	return scheduler, nil
 }
 
-// serve runs the server until it fails or ctx ends. When ctx ends it calls stop (the scheduler, so
-// no run is in flight while requests drain), then shuts the server down within the timeout. A server
-// closed by that shutdown is a clean end, not a failure.
+// serve runs the server until it fails or ctx ends. When ctx ends it calls stop (the scheduler: the
+// run in flight stops between devices, waiting at most the scheduler's own 30 seconds for a device
+// read already started), then shuts the server down within the timeout. A server closed by that
+// shutdown is a clean end, not a failure.
 func serve(ctx context.Context, server *http.Server, stop func(), timeout time.Duration) error {
 	failed := make(chan error, 1)
 	go func() { failed <- server.ListenAndServe() }()

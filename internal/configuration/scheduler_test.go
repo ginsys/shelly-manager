@@ -442,6 +442,38 @@ func TestSchedulerTick_ATickThatCannotRecordItsRunIsNotClaimed(t *testing.T) {
 	assert.True(t, sc.NextRun.Equal(at(0)), "next_run moved without a run row: %s", sc.NextRun)
 }
 
+// A schedule that waits behind a long run starts later than the poll that found it due: its run
+// row says when it really started, or another replica would take the row for a dead run.
+func TestSchedulerTick_ALaterScheduleRecordsWhenItReallyStarted(t *testing.T) {
+	fx := newSchedFixture(t)
+	first := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	second := fx.add("*/5 * * * *", ptr(at(0)), "", 2)
+	fx.s.since = func(time.Time) time.Duration { return 9*time.Minute + 400*time.Millisecond }
+
+	fx.s.tick(context.Background(), at(10*time.Second))
+
+	for _, id := range []uint{first, second} {
+		runs := fx.runs(id)
+		require.Len(t, runs, 1)
+		assert.True(t, runs[0].StartedAt.Equal(at(10*time.Second+9*time.Minute)), "started_at %s", runs[0].StartedAt)
+	}
+}
+
+// A failure recorded for a schedule that cannot run counts toward the history cap too.
+func TestSchedulerFailSchedule_KeepsTheHistoryCap(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("0 */5 * * * *", nil, "", 1)
+	for i := 0; i < driftRunsKept; i++ {
+		require.NoError(t, fx.db.Create(&DriftDetectionRun{
+			ScheduleID: id, Status: DriftRunCompleted, StartedAt: at(-time.Duration(i+1) * time.Hour),
+		}).Error)
+	}
+
+	fx.s.tick(context.Background(), at(0))
+
+	assert.Len(t, fx.runs(id), driftRunsKept)
+}
+
 // Two replicas that read the same due schedule with a spec that cannot run record one failure.
 func TestSchedulerFailSchedule_TwoReplicasRecordOneFailure(t *testing.T) {
 	fx := newSchedFixture(t)

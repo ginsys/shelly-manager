@@ -170,7 +170,9 @@ off by default because a run reads every device its schedule selects on a timer.
 fields (minute, hour, day of month, month, day of week) and is read in the server's time zone; a row with a
 six-field spec from an earlier release fails once and is disabled when the scheduler reaches it. With several
 replicas on one database each schedule still runs once per due time. A run only reads devices, and its result is
-kept in the run history (the newest 100 runs per schedule).
+kept in the run history (the newest 100 runs per schedule). On SIGINT or SIGTERM the run in flight stops between
+devices; a device read already started is not interrupted, and a run left unfinished is marked `interrupted` by the
+next poll.
 
 The PostgreSQL credentials can stay out of the DSN: set `SHELLY_DATABASE_USERNAME` and
 `SHELLY_DATABASE_PASSWORD` (`database.username` and `database.password`) and give a DSN without them,
