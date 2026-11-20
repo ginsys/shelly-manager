@@ -315,13 +315,18 @@ async function fetchAvailableDevices() {
  * Refresh all data
  */
 async function refreshData() {
-  await Promise.all([
+  const [, , , statusRead] = await Promise.all([
     fetchBackups(),
     fetchStatistics(),
     fetchAvailableDevices(),
     loadRestoreStatus()
   ])
-  showMessage('Data refreshed successfully', 'success')
+  if (statusRead) {
+    showMessage('Data refreshed successfully', 'success')
+  } else {
+    // The last known restore status stays on screen; say that it may be out of date.
+    showMessage('Data refreshed, but the restore status could not be refreshed.', 'error')
+  }
 }
 
 async function createBackupPanel() {
@@ -421,13 +426,15 @@ function startRestore(backup: BackupItem) {
  * Read the staged restore and the last result. A failed read leaves the last known status: the
  * stage call is the authority and refuses by itself.
  */
-async function loadRestoreStatus() {
+async function loadRestoreStatus(): Promise<boolean> {
   const mine = ++restoreStatusId
   try {
     const status = await getRestoreStatus()
     if (mine === restoreStatusId) restoreStatus.value = status // an older read must not undo a newer one
+    return true
   } catch (err) {
     console.warn('Failed to read the restore status:', err)
+    return false
   }
 }
 
