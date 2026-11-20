@@ -102,7 +102,9 @@ func (ih *ImportHandlers) backupFile(stored string) (string, bool) {
 		return "", false
 	}
 	if ih.exportBaseDir != "" {
-		if path, err = security.ValidatePath(ih.exportBaseDir, path); err != nil {
+		// The symlink-resolving form: a symlinked directory inside the base must not lead out of it.
+		// The unresolved path stays the one that is stat'ed, so a link as the file itself is refused below.
+		if _, err = security.ValidatePathWithSymlinks(ih.exportBaseDir, path); err != nil {
 			return "", false
 		}
 	}

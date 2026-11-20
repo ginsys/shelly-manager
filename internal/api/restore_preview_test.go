@@ -115,6 +115,15 @@ func TestRestorePreviewRefusesWhatIsNotAStoredBackup(t *testing.T) {
 	if err := os.Symlink(good, link); err == nil {
 		rg.record(t, "symlink", "backup", link, true)
 	}
+	// A symlinked directory inside the base that leads outside it: the path string stays under the
+	// base and the last element is a regular file, so only resolving the links refuses it.
+	outsideDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outsideDir, goodBackupName), []byte("elsewhere"), 0o600))
+	linkedDir := filepath.Join(rg.dir, "sub")
+	linkedDirOK := os.Symlink(outsideDir, linkedDir) == nil
+	if linkedDirOK {
+		rg.record(t, "linked-dir", "backup", filepath.Join(linkedDir, goodBackupName), true)
+	}
 	dirAsFile := filepath.Join(rg.dir, "shelly-backup-20261120-081502-0a1b2c3d.sqlite")
 	require.NoError(t, os.Mkdir(dirAsFile, 0o755))
 	rg.record(t, "directory", "backup", dirAsFile, true)
@@ -124,10 +133,13 @@ func TestRestorePreviewRefusesWhatIsNotAStoredBackup(t *testing.T) {
 		"other-plugin":   http.StatusNotFound,
 		"failed":         http.StatusUnprocessableEntity,
 		"outside-base":   http.StatusUnprocessableEntity,
-		"traversal":      http.StatusUnprocessableEntity,
+		"traversal":      http.StatusUnprocessableEntity, // refused by the file-name pattern, not by containment
 		"wrong-name":     http.StatusUnprocessableEntity,
 		"missing":        http.StatusUnprocessableEntity,
 		"directory":      http.StatusUnprocessableEntity,
+	}
+	if linkedDirOK {
+		cases["linked-dir"] = http.StatusUnprocessableEntity
 	}
 	if _, err := os.Lstat(link); err == nil {
 		cases["symlink"] = http.StatusUnprocessableEntity
