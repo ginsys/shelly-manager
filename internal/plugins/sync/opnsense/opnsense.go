@@ -71,12 +71,12 @@ func (o *OPNSensePlugin) ConfigSchema() sync.ConfigSchema {
 			},
 			"api_key": {
 				Type:        "string",
-				Description: "OPNSense API key",
+				Description: "OPNSense API key. Sent as written: a ${VARIABLE} reference is not expanded.",
 				Sensitive:   true,
 			},
 			"api_secret": {
 				Type:        "string",
-				Description: "OPNSense API secret",
+				Description: "OPNSense API secret. Sent as written: a ${VARIABLE} reference is not expanded.",
 				Sensitive:   true,
 			},
 			"insecure_skip_verify": {
@@ -140,8 +140,8 @@ func (o *OPNSensePlugin) ConfigSchema() sync.ConfigSchema {
 				"host":                  "192.168.1.1",
 				"port":                  443,
 				"use_https":             true,
-				"api_key":               "${OPNSENSE_API_KEY}",
-				"api_secret":            "${OPNSENSE_API_SECRET}",
+				"api_key":               "your-api-key",
+				"api_secret":            "your-api-secret",
 				"dhcp_interface":        "lan",
 				"hostname_template":     "shelly-{{.Type}}-{{.MAC | last4}}",
 				"firewall_alias_name":   "shelly_devices",
