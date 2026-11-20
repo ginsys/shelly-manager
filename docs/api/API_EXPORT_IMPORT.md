@@ -30,7 +30,7 @@ This document describes the Export/Import endpoints, request/response schemas an
 - Statistics: `GET /api/v1/export/statistics`
 - Backup export: `POST /api/v1/export/backup`
 - Backup download: `GET /api/v1/export/backup/{id}/download`
-- GitOps export: `POST /api/v1/export/gitops`
+- GitOps export: `POST /api/v1/export/gitops`. `config.output_path` must be a new or empty directory, or one an earlier GitOps export wrote. Such a directory holds a `.shelly-manager-gitops` marker file, or the `export-summary.yaml` file that earlier versions wrote, as a regular file; an export replaces every file in it, so files you add there are removed by the next export. Any other non-empty directory answers `400` and is left untouched. Group and device type names become one directory name each: lower case, with `/`, `\`, spaces and a few other characters replaced.
 - GitOps download: `GET /api/v1/export/gitops/{id}/download`
 - Export scheduling is not available. The former scheduling routes were
   removed because no scheduler executed the stored definitions.

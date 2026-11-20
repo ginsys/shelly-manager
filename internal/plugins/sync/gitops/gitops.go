@@ -14,6 +14,10 @@ import (
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
+// markerName is the file an export writes into its output directory. A directory that holds it
+// was written by an export and may be cleaned by the next one.
+const markerName = ".shelly-manager-gitops"
+
 // GitOpsPlugin implements the SyncPlugin interface for GitOps YAML exports
 type GitOpsPlugin struct {
 	logger *logging.Logger
@@ -53,7 +57,7 @@ func (g *GitOpsPlugin) ConfigSchema() sync.ConfigSchema {
 		Properties: map[string]sync.PropertySchema{
 			"output_path": {
 				Type:        "string",
-				Description: "Directory path for GitOps YAML files",
+				Description: "Directory path for GitOps YAML files. A new or empty directory, or one an earlier GitOps export wrote, is used and its previous files are replaced; any other directory is refused",
 				Default:     "./gitops",
 			},
 			"group_by": {
@@ -154,12 +158,8 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	includeTemplates, _ := config.Config["include_templates"].(bool)
 	excludeFields := g.parseExcludeFields(config.Config["exclude_fields"])
 
-	// Clean and create output directory
-	if err := os.RemoveAll(outputPath); err != nil {
-		g.logger.Warn("Failed to clean output directory", "error", err)
-	}
-	if err := os.MkdirAll(outputPath, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %w", err)
+	if err := g.prepareOutputDir(outputPath); err != nil {
+		return nil, err
 	}
 
 	recordCount := 0
@@ -181,7 +181,7 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	// Generate group and device configurations
 	totalDeviceFiles := 0
 	for groupName, devices := range deviceGroups {
-		groupPath := filepath.Join(outputPath, "groups", groupName)
+		groupPath := filepath.Join(outputPath, "groups", g.segment(groupName))
 		if err := os.MkdirAll(groupPath, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create group directory %s: %w", groupPath, err)
 		}
@@ -198,7 +198,7 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 		typeGroups := g.groupDevicesByType(devices)
 
 		for deviceType, typeDevices := range typeGroups {
-			typePath := filepath.Join(groupPath, strings.ToLower(deviceType))
+			typePath := filepath.Join(groupPath, g.segment(deviceType))
 			if err := os.MkdirAll(typePath, 0755); err != nil {
 				return nil, fmt.Errorf("failed to create type directory %s: %w", typePath, err)
 			}
@@ -236,7 +236,7 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 
 		typeGroups := g.groupDevicesByType(ungroupedDevices)
 		for deviceType, typeDevices := range typeGroups {
-			typePath := filepath.Join(ungroupedPath, strings.ToLower(deviceType))
+			typePath := filepath.Join(ungroupedPath, g.segment(deviceType))
 			if err := os.MkdirAll(typePath, 0755); err != nil {
 				return nil, fmt.Errorf("failed to create ungrouped type directory: %w", err)
 			}
@@ -593,6 +593,98 @@ func (g *GitOpsPlugin) parseExcludeFields(fieldsInterface interface{}) []string 
 	return fields
 }
 
+// prepareOutputDir makes outputPath ready for a fresh export. It creates an absent directory,
+// keeps an empty one, and cleans one an earlier export wrote (the marker, or the summary file every
+// earlier version wrote, either as a regular file). It refuses any other directory, so a request
+// cannot make the plugin delete files it did not write.
+func (g *GitOpsPlugin) prepareOutputDir(outputPath string) error {
+	info, err := os.Stat(outputPath)
+	switch {
+	case os.IsNotExist(err):
+		if mkErr := os.MkdirAll(outputPath, 0o755); mkErr != nil {
+			return fmt.Errorf("failed to create output directory: %w", mkErr)
+		}
+		return writeMarker(outputPath)
+	case err != nil:
+		return fmt.Errorf("failed to inspect output directory: %w", err)
+	case !info.IsDir():
+		return fmt.Errorf("%w: output_path %q is not a directory", sync.ErrInvalidExportPath, outputPath)
+	}
+
+	entries, err := os.ReadDir(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to read output directory: %w", err)
+	}
+	if len(entries) > 0 && !isRegularFile(filepath.Join(outputPath, markerName)) &&
+		!isRegularFile(filepath.Join(outputPath, "export-summary.yaml")) {
+		return fmt.Errorf("%w: output_path %q is not empty and was not written by a GitOps export; "+
+			"refusing to clean it. Use an empty or new directory", sync.ErrInvalidExportPath, outputPath)
+	}
+	// The marker goes first, so a clean that stops halfway leaves a directory the next run may replace.
+	if err := writeMarker(outputPath); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Name() == markerName {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(outputPath, e.Name())); err != nil {
+			return fmt.Errorf("failed to clean output directory: %w", err)
+		}
+	}
+	return nil
+}
+
+// writeMarker makes the marker a regular file of our own. Whatever else holds that name (a symlink
+// into another directory, say) is removed first, never written through.
+func writeMarker(dir string) error {
+	path := filepath.Join(dir, markerName)
+	if isRegularFile(path) {
+		return nil
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to replace output directory marker: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to write output directory marker: %w", err)
+	}
+	_, err = f.WriteString("written by a shelly-manager GitOps export\n")
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("failed to write output directory marker: %w", err)
+	}
+	return nil
+}
+
+// isRegularFile is false for a symlink or a directory: a request must not be able to plant either
+// as a marker.
+func isRegularFile(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
+// dirSegment turns a group name or device type into one safe directory name. Both come from the
+// request or from stored device data, so neither may name a path.
+func dirSegment(name string) string {
+	seg := (&GitOpsPlugin{}).sanitizeFilename(name)
+	if seg == "" || seg == "." || seg == ".." {
+		return "unnamed"
+	}
+	return seg
+}
+
+// segment is dirSegment for the export, and says when a name was changed beyond lower-casing.
+func (g *GitOpsPlugin) segment(name string) string {
+	seg := dirSegment(name)
+	if seg != strings.ToLower(name) {
+		g.logger.Warn("Group or device type name changed to a safe directory name", "name", name, "directory", seg)
+	}
+	return seg
+}
+
 func (g *GitOpsPlugin) sanitizeFilename(name string) string {
 	// Replace invalid filename characters
 	replacer := strings.NewReplacer(
@@ -654,12 +746,12 @@ func (g *GitOpsPlugin) generatePreviewStructure(groups map[string][]sync.DeviceD
 	preview.WriteString("├── common.yaml                    # Global settings\n")
 
 	for groupName, devices := range groups {
-		fmt.Fprintf(&preview, "├── groups/%s/\n", groupName)
+		fmt.Fprintf(&preview, "├── groups/%s/\n", dirSegment(groupName))
 		fmt.Fprintf(&preview, "│   ├── group.yaml              # Group: %s (%d devices)\n", groupName, len(devices))
 
 		typeGroups := g.groupDevicesByType(devices)
 		for deviceType, typeDevices := range typeGroups {
-			fmt.Fprintf(&preview, "│   ├── %s/\n", strings.ToLower(deviceType))
+			fmt.Fprintf(&preview, "│   ├── %s/\n", dirSegment(deviceType))
 			fmt.Fprintf(&preview, "│   │   ├── common.yaml         # %s settings\n", deviceType)
 			for _, device := range typeDevices {
 				filename := g.sanitizeFilename(device.Name)
