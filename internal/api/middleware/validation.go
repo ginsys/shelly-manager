@@ -74,6 +74,12 @@ func DefaultValidationConfig() *ValidationConfig {
 	}
 }
 
+// requestHasBody reports whether the request carries a body. A server request with none has
+// ContentLength 0 and http.NoBody; a chunked body has ContentLength -1 and counts as a body.
+func requestHasBody(r *http.Request) bool {
+	return r.ContentLength != 0 && r.Body != nil && r.Body != http.NoBody
+}
+
 // ValidateContentTypeMiddleware validates request content types
 func ValidateContentTypeMiddleware(config *ValidationConfig, logger *logging.Logger) func(http.Handler) http.Handler {
 	respWriter := response.NewResponseWriter(logger)
@@ -88,7 +94,9 @@ func ValidateContentTypeMiddleware(config *ValidationConfig, logger *logging.Log
 
 			contentType := r.Header.Get("Content-Type")
 			if contentType == "" {
-				if config.StrictContentType {
+				// A content type describes a body, so a request with none needs none: axios and curl send
+				// no type when they send no data.
+				if config.StrictContentType && requestHasBody(r) {
 					respWriter.WriteValidationError(w, r, map[string]string{
 						"content_type": "Content-Type header is required",
 					})

@@ -128,6 +128,62 @@ func TestValidateContentTypeMiddleware(t *testing.T) {
 	}
 }
 
+// A content type describes a body. A POST, PUT or PATCH with no body needs none (axios and curl send
+// none when there is no data), while a body with no type is still refused, as is a chunked body whose
+// length is unknown until it is read (ginsys/shelly-manager#767).
+func TestValidateContentTypeMiddlewareBodylessRequests(t *testing.T) {
+	logger, _ := logging.New(logging.Config{Level: "error", Format: "text", Output: "stdout"})
+	config := DefaultValidationConfig()
+
+	tests := []struct {
+		name        string
+		method      string
+		body        io.Reader // nil: a request built with no body
+		chunked     bool      // the length is unknown until the body is read (ContentLength -1)
+		contentType string
+		wantStatus  int
+	}{
+		{name: "POST no body no type", method: "POST", wantStatus: http.StatusOK},
+		{name: "PUT no body no type", method: "PUT", wantStatus: http.StatusOK},
+		{name: "PATCH no body no type", method: "PATCH", wantStatus: http.StatusOK},
+		{name: "POST empty reader no type", method: "POST", body: strings.NewReader(""), wantStatus: http.StatusOK},
+		{name: "POST body no type", method: "POST", body: strings.NewReader(`{"a":1}`), wantStatus: http.StatusBadRequest},
+		{name: "PUT body no type", method: "PUT", body: strings.NewReader(`{"a":1}`), wantStatus: http.StatusBadRequest},
+		{name: "POST chunked no type", method: "POST", body: strings.NewReader(`{"a":1}`), chunked: true, wantStatus: http.StatusBadRequest},
+		{name: "POST no body unlisted type", method: "POST", contentType: "application/xml", wantStatus: http.StatusUnsupportedMediaType},
+		{name: "POST no body malformed type", method: "POST", contentType: "application/json; charset", wantStatus: http.StatusBadRequest},
+		{name: "POST no body json type", method: "POST", contentType: "application/json", wantStatus: http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reached := 0
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reached++
+				w.WriteHeader(http.StatusOK)
+			})
+
+			req := httptest.NewRequest(tt.method, "/api/v1/test", tt.body)
+			if tt.chunked {
+				req.ContentLength = -1
+			}
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+
+			rr := httptest.NewRecorder()
+			ValidateContentTypeMiddleware(config, logger)(handler).ServeHTTP(rr, req)
+
+			assert.Equal(t, tt.wantStatus, rr.Code)
+			if tt.wantStatus == http.StatusOK {
+				assert.Equal(t, 1, reached, "the handler runs once")
+			} else {
+				assert.Zero(t, reached, "a refused request never reaches the handler")
+			}
+		})
+	}
+}
+
 func TestValidateHeadersMiddleware(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
 
