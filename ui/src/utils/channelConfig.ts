@@ -102,11 +102,12 @@ const OWNED_KEYS: Record<ChannelType, string[]> = {
   slack: ['webhook_url', 'channel', 'username']
 }
 
-// The server compares a member name by Unicode simple case folding (encoding/json and strings.EqualFold), so
-// "URL" and the long-s spelling of "secret" are the same name to it. Upper then lower case folds the same way
-// for the names used here; toLowerCase alone would leave the long s apart and send the member twice.
+// The server compares a member name by Unicode simple case folding (encoding/json and strings.EqualFold). For
+// the ASCII names the form compares, that is ASCII case plus two more spellings: the Kelvin sign (U+212A) for
+// k, which toLowerCase handles, and the long s (U+017F) for s, which it does not. Upper then lower case would
+// also turn the dotless i (U+0131) into i, which the server keeps apart, and drop a member that is not ours.
 function fold(name: string): string {
-  return name.toUpperCase().toLowerCase()
+  return name.toLowerCase().replace(/ſ/g, 's')
 }
 
 function keyOf(config: Record<string, unknown>, name: string): string | undefined {
