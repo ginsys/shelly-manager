@@ -104,8 +104,11 @@ func (i NetworkInterfaceInfo) Problem() string {
 		return "no Wi-Fi device found, so there is nothing to scan with (" + radioHint + ")"
 	case i.Status == "error":
 		return "the Wi-Fi device state cannot be read with nmcli (is NetworkManager running?)"
-	case i.Status == "unavailable" || i.Status == "unmanaged":
-		return fmt.Sprintf("the Wi-Fi device %s is %s and cannot scan (%s)", i.Name, i.Status, radioHint)
+	case i.Status == "unmanaged":
+		// The radio can be on: NetworkManager ignores the device, so the radio hint does not apply.
+		return fmt.Sprintf("the Wi-Fi device %s is unmanaged and cannot scan (NetworkManager does not manage it: `nmcli device set %s managed yes`)", i.Name, i.Name)
+	case i.Status == "unavailable":
+		return fmt.Sprintf("the Wi-Fi device %s is unavailable and cannot scan (%s)", i.Name, radioHint)
 	}
 	return ""
 }

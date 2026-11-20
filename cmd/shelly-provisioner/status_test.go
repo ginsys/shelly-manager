@@ -84,7 +84,12 @@ func TestCheckStatus_ADeviceThatCannotScanIsAFailure(t *testing.T) {
 			assert.NotContains(t, out, "Available")
 			assert.NotContains(t, out, "Working")
 			assert.Zero(t, iface.scans, "a device that cannot scan is not asked to scan")
-			if tc.info.Status != "error" {
+			switch tc.info.Status {
+			case "error":
+			case "unmanaged":
+				assert.Contains(t, out, "nmcli device set wlo1 managed yes")
+				assert.NotContains(t, out, "rfkill")
+			default:
 				assert.Contains(t, out, "nmcli radio wifi")
 				assert.Contains(t, out, "rfkill list")
 			}

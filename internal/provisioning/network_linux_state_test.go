@@ -79,8 +79,14 @@ func TestGetAvailableNetworks_RefusesADeviceThatCannotScan(t *testing.T) {
 			require.Error(t, err)
 			assert.Nil(t, networks)
 			assert.Contains(t, err.Error(), tc.wantState)
-			assert.Contains(t, err.Error(), "rfkill list")
-			assert.Contains(t, err.Error(), "nmcli radio wifi")
+			if tc.name == "unmanaged" {
+				// The radio can be on: the hint is about NetworkManager ignoring the device.
+				assert.Contains(t, err.Error(), "nmcli device set wlo1 managed yes")
+				assert.NotContains(t, err.Error(), "rfkill")
+			} else {
+				assert.Contains(t, err.Error(), "rfkill list")
+				assert.Contains(t, err.Error(), "nmcli radio wifi")
+			}
 			if tc.name != "no Wi-Fi device" {
 				assert.Contains(t, err.Error(), tc.name)
 			}
@@ -122,6 +128,26 @@ func TestGetAvailableNetworks_AGoodScanWithNoNetworksIsEmpty(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Empty(t, networks)
+}
+
+// nmcli prints its states in the caller's language unless it is told otherwise. The stand-in answers in
+// Dutch when LC_ALL is not C, so a read that does not set it sees "niet beschikbaar" and calls the device
+// usable.
+func TestGetInterfaceInfo_ReadsTheStateInTheCLocale(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\nif [ \"$LC_ALL\" = C ]; then printf 'wlo1:wifi:unavailable\\n'; else printf 'wlo1:wifi:niet beschikbaar\\n'; fi\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "nmcli"), []byte(script), 0o755))
+	t.Setenv("PATH", dir)
+	t.Setenv("LC_ALL", "nl_BE.UTF-8")
+
+	info := newTestLinuxInterface(t).GetInterfaceInfo()
+
+	assert.Equal(t, "unavailable", info.Status)
+	assert.NotEmpty(t, info.Problem())
+
+	_, err := newTestLinuxInterface(t).GetAvailableNetworks(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unavailable")
 }
 
 // A hung nmcli must not hang the state read: it ends in the "error" state.
