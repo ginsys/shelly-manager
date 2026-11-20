@@ -40,6 +40,7 @@
           :preview="previewText"
           @submit="handleCreateExport"
           @preview="handlePreviewExport"
+          @preview-stale="dropPreview"
           @cancel="showCreateForm = false"
         />
       </div>
@@ -199,6 +200,11 @@ async function handleCreateExport(options: GitOpsExportOptions) {
   } finally {
     createLoading.value = false
   }
+}
+
+function dropPreview() {
+  previewRequest++
+  previewText.value = ''
 }
 
 async function handlePreviewExport(options: GitOpsExportOptions) {

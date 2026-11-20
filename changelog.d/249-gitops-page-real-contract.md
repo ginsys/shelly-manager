@@ -3,7 +3,7 @@ Added
 
 Changed
 - The GitOps Export page now talks to routes the server has. It lists the GitOps history (`GET /api/v1/export/history?plugin=gitops`), reads one record through `GET /api/v1/export/{id}`, previews through `POST /api/v1/export/preview`, and posts only what `POST /api/v1/export/gitops` reads: a name, a grouping, the common and template options and a device filter. The page shows what the record holds (name, directory, file count, size, status) and counts total, successful and failed exports.
-- The GitOps export preview now follows the common-file and template options, as the export does: with them off, the file tree and the file count no longer list those files.
+- The GitOps export preview now follows the common-file and template options, as the export does: with them off, the file tree and the file count no longer list those files. It also lists the devices that no group claims, under `ungrouped/`, and counts one file for each (it counted one per device type before).
 - The history size of a GitOps export is now the total size of the exported files; it was the size of the directory entry, which says nothing about its contents.
 
 Removed
