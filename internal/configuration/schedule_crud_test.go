@@ -355,6 +355,31 @@ func TestSchedulerArm_AStaleReadDoesNotArmAReplacedSpec(t *testing.T) {
 	assert.True(t, fx.schedule(id).NextRun.Equal(*updated.NextRun), "the edit's next_run stands")
 }
 
+// A writer of the release before the revision column changes cron_spec and bumps nothing: the claim,
+// the arm and the failure write still refuse a read from before that edit.
+func TestScheduler_AnEditByAWriterThatDoesNotBumpTheRevisionIsNotOverwrittenByAStaleRead(t *testing.T) {
+	fx := newSchedFixture(t)
+	due := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	unarmed := fx.add("*/5 * * * *", nil, "", 1)
+	broken := fx.add("0 */5 * * * *", nil, "", 1) // six fields
+	reads := map[string]DriftDetectionSchedule{"due": fx.schedule(due), "unarmed": fx.schedule(unarmed), "broken": fx.schedule(broken)}
+	for _, id := range []uint{due, unarmed, broken} {
+		require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Update("cron_spec", "0 3 * * *").Error)
+	}
+
+	won, err := fx.s.claim(fx.db, reads["due"], at(5*time.Minute))
+	require.NoError(t, err)
+	assert.False(t, won)
+	assert.Zero(t, fx.schedule(due).RunCount)
+
+	fx.s.handle(context.Background(), reads["unarmed"], at(0))
+	assert.Nil(t, fx.schedule(unarmed).NextRun, "the stale arm wrote nothing")
+
+	fx.s.failSchedule(reads["broken"], at(0), assert.AnError)
+	assert.True(t, fx.schedule(broken).Enabled, "the repaired schedule stays enabled")
+	assert.Empty(t, fx.runs(broken))
+}
+
 // A schedule that cannot run is disabled with no next_run, so a disabled schedule never shows one.
 func TestSchedulerFailSchedule_ClearsTheNextRunItDisables(t *testing.T) {
 	fx := newSchedFixture(t)
