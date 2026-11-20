@@ -665,14 +665,79 @@ components:
           type: string
         enabled:
           type: boolean
-        cron:
+        cron_spec:
           type: string
+          description: Five-field cron (minute hour day-of-month month day-of-week), in the server's time zone.
+        device_ids:
+          type: array
+          items:
+            type: integer
+          description: The devices the schedule checks. Empty with no device_filter means every device.
+        device_filter:
+          $ref: '#/components/schemas/DriftDeviceFilter'
+        last_run:
+          type: string
+          format: date-time
+          nullable: true
+        next_run:
+          type: string
+          format: date-time
+          nullable: true
+          description: Null while the schedule is disabled.
+        run_count:
+          type: integer
+          description: Ticks the scheduler has claimed for this schedule, runs and skipped ticks alike.
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    DriftDeviceFilter:
+      type: object
+      nullable: true
+      additionalProperties: false
+      description: Selects devices by column. A key other than these is refused.
+      properties:
+        type:
+          type: string
+        status:
+          type: string
+
+    DriftScheduleInput:
+      type: object
+      additionalProperties: false
+      required: [name, cron_spec]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        cron_spec:
+          type: string
+          example: '*/5 * * * *'
+          description: >-
+            Exactly five fields. A sixth field, a descriptor such as @hourly, a TZ= prefix
+            and a spec that never fires (0 0 30 2 *) are refused.
+        enabled:
+          type: boolean
+          description: Defaults to true on create and stays as it is on update.
+        device_ids:
+          type: array
+          items:
+            type: integer
+          description: Must exist. Not allowed together with device_filter.
+        device_filter:
+          $ref: '#/components/schemas/DriftDeviceFilter'
+
+    DriftScheduleResponse:
+      allOf:
+        - $ref: '#/components/schemas/APIResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DriftSchedule'
 
     # Export/Import Models
     ExportRequest:
@@ -2133,23 +2198,31 @@ paths:
 
     post:
       tags: [Drift]
-      summary: Create drift detection schedule (unavailable)
+      summary: Create drift detection schedule
       description: >-
-        Not implemented in this release: creation fails closed with HTTP 501 and
-        performs no database writes. Schedules already stored run only when the
-        scheduler is on (drift.scheduler_enabled, off by default). The write
-        path is tracked as #279.
+        Stores a schedule and its device list. An enabled schedule is armed at the
+        next instant of its spec. A stored schedule runs only when the scheduler is
+        on (drift.scheduler_enabled, off by default), so with it off a created
+        schedule never runs. An invalid body writes nothing.
       operationId: createDriftSchedule
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriftScheduleInput'
       responses:
-        '501':
-          description: Drift schedule execution is not implemented in this release
+        '201':
+          description: Schedule created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIResponse'
+                $ref: '#/components/schemas/DriftScheduleResponse'
+        '400':
+          description: Invalid body, cron spec, device selection or unknown device id
 
   /api/v1/config/drift-schedules/{id}:
     parameters:
@@ -2181,21 +2254,32 @@ paths:
 
     put:
       tags: [Drift]
-      summary: Update drift schedule (unavailable)
+      summary: Update drift schedule
       description: >-
-        Not implemented in this release. Fails closed with HTTP 501 before
-        decoding input or touching the database (#270). See #279.
+        Replaces the editable fields and the device list or filter. The next run is
+        recomputed when the spec changes or the schedule becomes enabled, and stays
+        as it is otherwise. An invalid body changes nothing.
       operationId: updateDriftSchedule
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriftScheduleInput'
       responses:
-        '501':
-          description: Drift schedule execution is not implemented in this release
+        '200':
+          description: Schedule updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIResponse'
+                $ref: '#/components/schemas/DriftScheduleResponse'
+        '400':
+          description: Invalid id, body, cron spec, device selection or unknown device id
+        '404':
+          description: No such schedule
 
     delete:
       tags: [Drift]
@@ -2206,7 +2290,7 @@ paths:
         - ApiKeyAuth: []
       responses:
         '200':
-          description: Schedule deleted
+          description: Schedule deleted, with its device list and its runs
           content:
             application/json:
               schema:
@@ -2220,14 +2304,18 @@ paths:
                           status:
                             type: string
                             example: deleted
+        '404':
+          description: No such schedule
 
   /api/v1/config/drift-schedules/{id}/toggle:
     post:
       tags: [Drift]
-      summary: Toggle drift schedule enabled state (unavailable)
+      summary: Toggle drift schedule enabled state
       description: >-
-        Not implemented in this release. Fails closed with HTTP 501 and performs
-        no database writes (#270). See #279.
+        Turning a schedule on arms it from now, so a long pause causes no catch-up
+        run. Turning it off clears its next run. A stored spec that no longer
+        parses (a six-field spec saved by an older release) cannot be enabled until
+        it is updated.
       operationId: toggleDriftSchedule
       security:
         - BearerAuth: []
@@ -2239,12 +2327,16 @@ paths:
           schema:
             type: integer
       responses:
-        '501':
-          description: Drift schedule execution is not implemented in this release
+        '200':
+          description: The schedule with its new state
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIResponse'
+                $ref: '#/components/schemas/DriftScheduleResponse'
+        '400':
+          description: Invalid id, or the stored spec does not parse
+        '404':
+          description: No such schedule
 
   /api/v1/config/drift-schedules/{id}/runs:
     get:
