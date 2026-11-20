@@ -31,7 +31,7 @@
           />
         </div>
 
-        <div class="form-group">
+        <div v-if="!stored" class="form-group">
           <label class="inline"><input v-model="enabled" type="checkbox" data-testid="schedule-enabled" /> Enabled</label>
         </div>
 
@@ -134,7 +134,9 @@ const extraFilterKeys = Object.keys(storedFilter).filter(k => k !== 'type' && k 
 
 const name = ref(stored?.name ?? '')
 const description = ref(stored?.description ?? '')
-const enabled = ref(stored ? stored.enabled : true)
+// Only a new schedule has the box. An edit sends no `enabled`, so the server keeps it and a save can
+// never undo the card's Enable/Disable.
+const enabled = ref(true)
 const presetOfSpec = PRESETS.find(p => p.spec === stored?.cron_spec)
 const preset = ref<string>(stored ? (presetOfSpec?.key ?? 'custom') : 'daily')
 const customSpec = ref(stored && !presetOfSpec ? stored.cron_spec : '')
@@ -163,14 +165,14 @@ function cronSpec(): string {
   return p ? p.spec : customSpec.value.trim()
 }
 
-// Exactly one of device_ids and device_filter, or neither for all devices: the server refuses both.
+// At most one of device_ids and device_filter, and neither for all devices: the server refuses both.
 function buildInput(): DriftScheduleInput {
   const input: DriftScheduleInput = {
     name: name.value.trim(),
     description: description.value.trim(),
-    cron_spec: cronSpec(),
-    enabled: enabled.value
+    cron_spec: cronSpec()
   }
+  if (!stored) input.enabled = enabled.value
   if (mode.value === 'devices') {
     input.device_ids = [...selectedIds.value]
   } else if (mode.value === 'filter') {

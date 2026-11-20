@@ -213,47 +213,38 @@ describe('DriftSchedulesPage', () => {
   })
 
   // The pending toggles live in the store, because the request outlives the page: a page that is left and
-  // opened again must still hold the card.
-  it('holds the card of a schedule whose toggle the store is still running, also on a new page', async () => {
+  // opened again must still hold the button. Only the Enable/Disable button is held: Edit sends no
+  // `enabled`, so it cannot undo a toggle.
+  it('holds the toggle button of a schedule whose toggle the store is still running, also on a new page', async () => {
     const wrapper = mountPage({
       schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }],
       toggling: [1]
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeDefined()
-    // another schedule is not held
+    // another schedule is not held, and Edit never is
     expect(wrapper.find('[data-testid="toggle-2"]').attributes('disabled')).toBeUndefined()
-    expect(wrapper.find('[data-testid="edit-2"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeUndefined()
 
     await wrapper.find('[data-testid="toggle-1"]').trigger('click')
-    await wrapper.find('[data-testid="edit-1"]').trigger('click')
     expect(useDriftStore().toggle).not.toHaveBeenCalled()
-    expect(listDevices).not.toHaveBeenCalled()
   })
 
-  it('holds every card while the form is opening and while it is open', async () => {
+  it('holds New and Edit while a form is opening, so the form that opens is the one asked for', async () => {
     const wrapper = mountPage({ schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }] })
     await flushPromises()
     let release: (v: { items: never[] }) => void = () => {}
     vi.mocked(listDevices).mockImplementationOnce(() => new Promise(resolve => (release = resolve as never)))
     await wrapper.find('[data-testid="edit-1"]').trigger('click')
     for (const id of [1, 2]) {
-      expect(wrapper.find(`[data-testid="toggle-${id}"]`).attributes('disabled')).toBeDefined()
       expect(wrapper.find(`[data-testid="edit-${id}"]`).attributes('disabled')).toBeDefined()
     }
+    expect(wrapper.find('[data-testid="new-schedule"]').attributes('disabled')).toBeDefined()
     release({ items: [] })
     await flushPromises()
-    // the form is now open, and the cards behind it stay held until it closes
     expect(wrapper.find('[data-testid="schedule-form"]').exists()).toBe(true)
-    for (const id of [1, 2]) {
-      expect(wrapper.find(`[data-testid="toggle-${id}"]`).attributes('disabled')).toBeDefined()
-    }
     await wrapper.find('[data-testid="schedule-cancel"]').trigger('click')
-    for (const id of [1, 2]) {
-      expect(wrapper.find(`[data-testid="toggle-${id}"]`).attributes('disabled')).toBeUndefined()
-      expect(wrapper.find(`[data-testid="edit-${id}"]`).attributes('disabled')).toBeUndefined()
-    }
+    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeUndefined()
   })
 
 

@@ -79,8 +79,8 @@
             >
               Recent runs
             </button>
-            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="held(schedule.id)" @click="openForm(schedule)">Edit</button>
-            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" :disabled="held(schedule.id)" @click="handleToggle(schedule.id)">
+            <button class="btn-icon" :data-testid="`edit-${schedule.id}`" :disabled="opening" @click="openForm(schedule)">Edit</button>
+            <button class="btn-icon" :data-testid="`toggle-${schedule.id}`" :disabled="store.togglingIds.includes(schedule.id)" @click="handleToggle(schedule.id)">
               {{ schedule.enabled ? 'Disable' : 'Enable' }}
             </button>
             <button class="btn-icon danger" title="Delete" @click="handleDelete(schedule.id)">
@@ -182,16 +182,9 @@ async function handleDelete(id: number) {
   }
 }
 
-// Edit and Enable/Disable of a card are held while its own toggle runs (the store keeps that list, because
-// the request outlives this page), while the form opens and while it is open: the form carries its own
-// `enabled`, so a toggle in any of those spans would be overwritten by the next save, or the form would
-// start from a state the card no longer shows.
-function held(id: number): boolean {
-  return opening.value || formOpen.value || store.togglingIds.includes(id)
-}
-
+// The Enable/Disable button of a schedule is held while its toggle runs: the server flips the flag on every
+// call. The store keeps that list and ignores a second call, because the request outlives this page.
 async function handleToggle(id: number) {
-  if (held(id)) return
   clearActionError()
   try {
     await store.toggle(id)
