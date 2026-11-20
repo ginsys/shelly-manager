@@ -189,7 +189,7 @@ export async function toggleDriftSchedule(id: number | string): Promise<DriftSch
 // The newest runs of one schedule, `limit` 1 to 100 (the server's default is 20 when it is left out).
 export async function listDriftScheduleRuns(id: number | string, limit?: number): Promise<DriftRun[]> {
   const res = await api
-    .get<APIResponse<DriftRun[]>>(`/config/drift-schedules/${id}/runs`, limit === undefined ? undefined : { params: { limit } })
+    .get<APIResponse<DriftRun[]>>(`/config/drift-schedules/${id}/runs`, { params: { limit } })
     .catch(throwServerReason)
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to load the runs of the drift schedule'
