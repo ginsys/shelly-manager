@@ -10,14 +10,45 @@ export interface DriftSchedule {
   enabled: boolean
   cron_spec: string
   device_ids?: number[] | null
-  // Backend stores this as a raw JSON value (json.RawMessage). It is
-  // inspection-only in this release; the UI renders it read-only as JSON.
+  // Backend stores this as a raw JSON value (json.RawMessage): a DriftDeviceFilter for a schedule saved
+  // through the API, anything for an older row. The form reads `type` and `status` from it.
   device_filter?: unknown
   last_run?: string | null
   next_run?: string | null
   run_count: number
   created_at: string
   updated_at: string
+}
+
+// What a caller may set on a schedule (`ScheduleInput`, internal/configuration/schedule_crud.go). A
+// schedule checks the devices in `device_ids`, or the devices `device_filter` selects, or every device
+// when neither is given; both at once is refused with a 400. An update replaces every field, and an
+// `enabled` that is left out stays as it is on update and is true on create.
+export interface DriftDeviceFilter {
+  type?: string
+  status?: string
+}
+
+export interface DriftScheduleInput {
+  name: string
+  description?: string
+  cron_spec: string
+  enabled?: boolean
+  device_ids?: number[]
+  device_filter?: DriftDeviceFilter | null
+}
+
+// One run of a schedule, as the run list answers it: newest first, without its `results` document.
+// `duration` is nanoseconds; `status` is "success", "failed" or "skipped".
+export interface DriftRun {
+  id: number
+  schedule_id: number
+  status: string
+  started_at: string
+  completed_at?: string | null
+  duration?: number | null
+  error?: string
+  created_at: string
 }
 
 // Aggregate report (summary + devices + recommendations). Backend model;
@@ -93,9 +124,8 @@ export async function getDriftSchedule(id: number | string): Promise<DriftSchedu
 }
 
 // A stored schedule runs only where the server has drift.scheduler_enabled set, and the status route
-// says whether the server that answers has. The UI offers list, detail, delete and that status; create,
-// update, toggle and the run list are not wired yet (ginsys/shelly-manager#279, slice 3).
-// The status is the state of one server process, so replicas configured differently answer differently.
+// says whether the server that answers has. The status is the state of one server process, so replicas
+// configured differently answer differently.
 export async function getDriftSchedulerStatus(): Promise<boolean> {
   const res = await api.get<APIResponse<{ enabled: boolean }>>('/config/drift-scheduler')
   if (!res.data.success || typeof res.data.data?.enabled !== 'boolean') {
@@ -111,6 +141,48 @@ export async function deleteDriftSchedule(id: number | string): Promise<void> {
     const msg = res.data.error?.message || 'Failed to delete drift schedule'
     throw new Error(msg)
   }
+}
+
+// A refused input is a 400 whose message the caller shows as the server wrote it.
+export async function createDriftSchedule(input: DriftScheduleInput): Promise<DriftSchedule> {
+  const res = await api.post<APIResponse<DriftSchedule>>('/config/drift-schedules', input)
+  if (!res.data.success || !res.data.data) {
+    const msg = res.data.error?.message || 'Failed to create drift schedule'
+    throw new Error(msg)
+  }
+  return res.data.data
+}
+
+// Replaces every field of the schedule with the input.
+export async function updateDriftSchedule(id: number | string, input: DriftScheduleInput): Promise<DriftSchedule> {
+  const res = await api.put<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`, input)
+  if (!res.data.success || !res.data.data) {
+    const msg = res.data.error?.message || 'Failed to update drift schedule'
+    throw new Error(msg)
+  }
+  return res.data.data
+}
+
+export async function toggleDriftSchedule(id: number | string): Promise<DriftSchedule> {
+  const res = await api.post<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}/toggle`, {})
+  if (!res.data.success || !res.data.data) {
+    const msg = res.data.error?.message || 'Failed to toggle drift schedule'
+    throw new Error(msg)
+  }
+  return res.data.data
+}
+
+// The newest runs of one schedule, `limit` 1 to 100 (the server's default is 20 when it is left out).
+export async function listDriftScheduleRuns(id: number | string, limit?: number): Promise<DriftRun[]> {
+  const res = await api.get<APIResponse<DriftRun[]>>(
+    `/config/drift-schedules/${id}/runs`,
+    limit === undefined ? undefined : { params: { limit } }
+  )
+  if (!res.data.success) {
+    const msg = res.data.error?.message || 'Failed to load the runs of the drift schedule'
+    throw new Error(msg)
+  }
+  return res.data.data || []
 }
 
 // Aggregate drift reports. Returned as a raw array. Rarely used by the UI today;

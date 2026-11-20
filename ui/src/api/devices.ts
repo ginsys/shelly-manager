@@ -5,6 +5,8 @@ import type { APIResponse, Device, Metadata } from './types'
 export interface ListDevicesParams {
   page?: number
   pageSize?: number
+  // Every device in one answer: neither `page` nor `page_size` is sent, which the server reads as no paging.
+  all?: boolean
 }
 
 export interface ListDevicesResult {
@@ -13,9 +15,9 @@ export interface ListDevicesResult {
 }
 
 export async function listDevices(params: ListDevicesParams = {}): Promise<ListDevicesResult> {
-  const { page = 1, pageSize = 25 } = params
+  const { page = 1, pageSize = 25, all = false } = params
   const res = await api.get<APIResponse<{ devices: Device[] }>>('/devices', {
-    params: { page, page_size: pageSize },
+    params: all ? {} : { page, page_size: pageSize },
   })
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to load devices'

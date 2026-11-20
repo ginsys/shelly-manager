@@ -66,6 +66,17 @@ describe('Devices API', () => {
       expect(result.meta).toBeDefined()
     })
 
+    it('sends neither page nor page_size when every device is asked for', async () => {
+      mockApi.get.mockResolvedValue({
+        data: { success: true, data: { devices: [mockDevice] } },
+      })
+
+      const result = await listDevices({ all: true })
+
+      expect(mockApi.get).toHaveBeenCalledWith('/devices', { params: {} })
+      expect(result.items).toEqual([mockDevice])
+    })
+
     it('should handle API error', async () => {
       mockApi.get.mockResolvedValue({
         data: {

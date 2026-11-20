@@ -4,6 +4,10 @@ import {
   listDriftSchedules,
   getDriftSchedule,
   deleteDriftSchedule,
+  createDriftSchedule,
+  updateDriftSchedule,
+  toggleDriftSchedule,
+  listDriftScheduleRuns,
   getDriftSchedulerStatus,
   getDriftReports,
   getDriftTrends,
@@ -11,6 +15,8 @@ import {
   generateDeviceDriftReport,
   computeDailyAggregates,
   type DriftSchedule,
+  type DriftScheduleInput,
+  type DriftRun,
   type DriftReport,
   type DriftTrend,
   type DriftDailyAggregate
@@ -85,6 +91,34 @@ export const useDriftStore = defineStore('drift', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  // Put the schedule the server answered into the list: replace its row, or add it at the end.
+  function putSchedule(schedule: DriftSchedule) {
+    const index = schedules.value.findIndex(s => s.id === schedule.id)
+    if (index === -1) schedules.value = [...schedules.value, schedule]
+    else schedules.value = schedules.value.map((s, i) => (i === index ? schedule : s))
+    if (currentSchedule.value?.id === schedule.id) currentSchedule.value = schedule
+    return schedule
+  }
+
+  // create, update and toggle follow the same convention as remove: a failure is rethrown with the
+  // server's text and `error` and the list stay as they were; a success replaces the one row.
+  async function create(input: DriftScheduleInput) {
+    return putSchedule(await createDriftSchedule(input))
+  }
+
+  async function update(id: number | string, input: DriftScheduleInput) {
+    return putSchedule(await updateDriftSchedule(id, input))
+  }
+
+  async function toggle(id: number | string) {
+    return putSchedule(await toggleDriftSchedule(id))
+  }
+
+  // The runs of one schedule are not kept here: the page holds them per card.
+  async function fetchRuns(id: number | string, limit?: number): Promise<DriftRun[]> {
+    return listDriftScheduleRuns(id, limit)
   }
 
   async function fetchReports(limit = 50, deviceId?: number, reportType?: string) {
@@ -172,6 +206,10 @@ export const useDriftStore = defineStore('drift', () => {
     fetchSchedule,
     fetchSchedulerStatus,
     remove,
+    create,
+    update,
+    toggle,
+    fetchRuns,
     fetchReports,
     fetchTrends,
     resolveTrend,
