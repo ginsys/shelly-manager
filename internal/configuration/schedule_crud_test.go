@@ -380,6 +380,20 @@ func TestScheduler_AnEditByAWriterThatDoesNotBumpTheRevisionIsNotOverwrittenByAS
 	assert.Empty(t, fx.runs(broken))
 }
 
+// The release before the revision column disabled the schedule and recorded its failure, without a bump:
+// a read from before that must not record a second failed run.
+func TestSchedulerFailSchedule_ASchedulerThatDoesNotBumpTheRevisionRecordsTheFailureOnce(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("0 */5 * * * *", nil, "", 1) // six fields
+	read := fx.schedule(id)
+	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", id).Update("enabled", false).Error)
+	require.NoError(t, fx.db.Create(&DriftDetectionRun{ScheduleID: id, Status: DriftRunFailed, StartedAt: at(0)}).Error)
+
+	fx.s.failSchedule(read, at(time.Minute), assert.AnError)
+
+	assert.Len(t, fx.runs(id), 1, "the failure is recorded once")
+}
+
 // A schedule that cannot run is disabled with no next_run, so a disabled schedule never shows one.
 func TestSchedulerFailSchedule_ClearsTheNextRunItDisables(t *testing.T) {
 	fx := newSchedFixture(t)
