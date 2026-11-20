@@ -693,6 +693,16 @@ describe('BulkOperationsDialog', () => {
       expect(byId(wrapper, 'bulk-results').exists()).toBe(true)
     })
 
+    it('says how many devices the call names, not how many are selected now', async () => {
+      vi.mocked(bulkApply).mockReturnValue(new Promise(() => {}) as any)
+      const wrapper = await confirmation('{"name":"New"}')
+
+      await wrapper.setProps({ selectedDevices: [] })
+      await byId(wrapper, 'bulk-apply-submit').trigger('click')
+
+      expect(wrapper.text()).toContain('Contacting 2 device(s)')
+    })
+
     it('goes Back to the operation cards', async () => {
       const wrapper = open()
       await byId(wrapper, 'bulk-op-apply').trigger('click')

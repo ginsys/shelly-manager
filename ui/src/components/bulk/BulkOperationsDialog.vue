@@ -246,7 +246,7 @@
       <div v-else-if="isProcessing" class="processing">
         <h3>Processing...</h3>
         <p class="progress-text">
-          Contacting {{ selectedDevices.length }} device(s). The answer arrives when every
+          Contacting {{ contacting }} device(s). The answer arrives when every
           device has been tried.
         </p>
         <p v-if="operation === 'apply'" class="progress-text" data-testid="bulk-apply-processing">
@@ -395,6 +395,9 @@ function close() {
   emit('close')
 }
 
+// How many devices the running call names: the live selection can change while it runs.
+const contacting = ref(0)
+
 // `ids` are the devices to name when they are not the live selection: apply names the ones the
 // operator confirmed.
 async function run(
@@ -406,6 +409,7 @@ async function run(
   clearError()
   const mine = ++currentRun
   try {
+    contacting.value = ids.length
     isProcessing.value = true
     const answer = await call({
       device_ids: ids,
