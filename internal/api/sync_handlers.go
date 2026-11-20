@@ -117,6 +117,7 @@ func (eh *SyncHandlers) AddExportRoutes(api *mux.Router) {
 
 	api.HandleFunc("/export/gitops", eh.CreateGitOpsExport).Methods("POST")
 	api.HandleFunc("/export/gitops/{id}/download", eh.DownloadGitOpsExport).Methods("GET")
+	api.HandleFunc("/export/gitops/{id}", eh.DeleteGitOpsExport).Methods("DELETE")
 
 	// History & statistics endpoints
 	api.HandleFunc("/export/history", eh.ListExportHistory).Methods("GET")
@@ -662,6 +663,26 @@ func (eh *SyncHandlers) DeleteBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	// Remove both history and file
 	_ = eh.syncEngine.DeleteExport(r.Context(), id, true)
+	apiresp.NewResponseWriter(eh.logger).WriteNoContent(w, r)
+}
+
+// DeleteGitOpsExport deletes the history record of a GitOps export. The files it wrote stay where
+// they are: the directory is the operator's, and a later export may already have replaced it.
+func (eh *SyncHandlers) DeleteGitOpsExport(w http.ResponseWriter, r *http.Request) {
+	if !eh.requireAdmin(w, r) {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	rec, err := eh.syncEngine.GetExportHistory(r.Context(), id)
+	if err != nil {
+		apiresp.NewResponseWriter(eh.logger).WriteInternalError(w, r, err)
+		return
+	}
+	if rec == nil || rec.PluginName != "gitops" {
+		apiresp.NewResponseWriter(eh.logger).WriteNotFoundError(w, r, "GitOps export")
+		return
+	}
+	_ = eh.syncEngine.DeleteExport(r.Context(), id, false)
 	apiresp.NewResponseWriter(eh.logger).WriteNoContent(w, r)
 }
 

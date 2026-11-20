@@ -627,6 +627,11 @@ func (e *SyncEngine) SaveExportHistory(ctx context.Context, request ExportReques
 	if result.OutputPath != "" {
 		if fi, err := os.Stat(result.OutputPath); err == nil {
 			fileSize = fi.Size()
+			if fi.IsDir() {
+				// A directory entry's own size says nothing about what is in it; the plugin
+				// counted the files.
+				fileSize = result.FileSize
+			}
 		}
 	}
 	rec := &database.ExportHistory{

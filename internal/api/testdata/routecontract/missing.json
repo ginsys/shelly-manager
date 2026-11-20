@@ -15,11 +15,6 @@
     "issue": 249
   },
   {
-    "method": "DELETE",
-    "template": "/api/v1/export/gitops/{param}",
-    "issue": 249
-  },
-  {
     "method": "GET",
     "template": "/api/v1/export/gitops/{param}",
     "issue": 249

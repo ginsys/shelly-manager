@@ -732,7 +732,9 @@ func (g *GitOpsPlugin) calculateDirectorySize(dirPath string) (int64, error) {
 		if err != nil {
 			return err
 		}
-		totalSize += info.Size()
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
 		return nil
 	})
 	return totalSize, err
