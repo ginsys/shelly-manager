@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/smtp"
+	"net/url"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -76,7 +79,7 @@ func (s *Service) CreateChannel(channel *NotificationChannel) error {
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
 	channel.Config = restored
-	if err := s.validateChannelConfig(channel); err != nil {
+	if err := s.validateChannelConfig(channel, false); err != nil {
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
 
@@ -147,7 +150,7 @@ func (s *Service) UpdateChannel(channelID uint, updates *NotificationChannel) er
 	}
 	updates.Config = restored
 
-	if err := s.validateChannelConfig(updates); err != nil {
+	if err := s.validateChannelConfig(updates, sameConfig(updates, &stored)); err != nil {
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
 
@@ -377,8 +380,45 @@ func (s *Service) TestChannel(ctx context.Context, channelID uint) error {
 	return s.deliverNotification(ctx, &channel, history)
 }
 
-// validateChannelConfig validates channel configuration
-func (s *Service) validateChannelConfig(channel *NotificationChannel) error {
+// webhookMethods are the methods a webhook channel can use, the three the form offers
+// (WEBHOOK_METHODS in ui/src/utils/channelConfig.ts). An empty method is POST. The match is exact:
+// a method is case-sensitive, so "post" would be sent as "post".
+var webhookMethods = []string{"POST", "PUT", "PATCH"}
+
+// checkHTTPURL refuses a URL that is not absolute http or https with a host. The text never carries the
+// URL: a webhook URL is a credential, and the handler returns and logs this text.
+func checkHTTPURL(raw, what string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return fmt.Errorf("%s must be an absolute http or https URL with a host", what)
+	}
+	return nil
+}
+
+// sameConfig reports whether an update leaves a stored webhook or Slack config as it is: the same type and
+// the same decoded config, so key order and spacing do not count. Such an update is not judged again by the
+// method and URL rules, so a channel stored before them can still be switched off or renamed.
+func sameConfig(updates, stored *NotificationChannel) bool {
+	var a, b any
+	switch {
+	case stored.ID == 0 || updates.Type != stored.Type:
+		return false
+	case updates.Type == "webhook":
+		a, b = &WebhookConfig{}, &WebhookConfig{}
+	case updates.Type == "slack":
+		a, b = &SlackConfig{}, &SlackConfig{}
+	default:
+		return false
+	}
+	if json.Unmarshal(updates.Config, a) != nil || json.Unmarshal(stored.Config, b) != nil {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+// validateChannelConfig validates channel configuration. unchanged skips the method and URL rules for an
+// update that leaves the stored config as it is (sameConfig).
+func (s *Service) validateChannelConfig(channel *NotificationChannel, unchanged bool) error {
 	switch channel.Type {
 	case "email":
 		var config EmailConfig
@@ -397,6 +437,14 @@ func (s *Service) validateChannelConfig(channel *NotificationChannel) error {
 		if config.URL == "" {
 			return fmt.Errorf("webhook config must have a URL")
 		}
+		if !unchanged {
+			if err := checkHTTPURL(config.URL, "webhook URL"); err != nil {
+				return err
+			}
+			if config.Method != "" && !slices.Contains(webhookMethods, config.Method) {
+				return fmt.Errorf("webhook method must be one of %s (empty means POST)", strings.Join(webhookMethods, ", "))
+			}
+		}
 
 	case "slack":
 		var config SlackConfig
@@ -405,6 +453,11 @@ func (s *Service) validateChannelConfig(channel *NotificationChannel) error {
 		}
 		if config.WebhookURL == "" {
 			return fmt.Errorf("slack config must have a webhook URL")
+		}
+		if !unchanged {
+			if err := checkHTTPURL(config.WebhookURL, "slack webhook URL"); err != nil {
+				return err
+			}
 		}
 
 	default:

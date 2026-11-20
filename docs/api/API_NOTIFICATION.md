@@ -51,6 +51,13 @@ Type-specific config examples:
 - Webhook: `{ "url": "https://...", "method": "POST", "headers": {..}, "secret": "..." }`
 - Slack: `{ "webhook_url": "https://hooks.slack.com/...", "channel": "#alerts" }`
 
+Create and update refuse, with 400 `VALIDATION_FAILED` and the reason in `details`, a webhook `method` other than
+`POST`, `PUT` or `PATCH` (upper case, as sent; empty means `POST`) and a webhook `url` or Slack `webhook_url` that is
+not an absolute `http` or `https` URL with a host. The reason names the rule and never carries the URL, which holds
+the token. A save whose config is unchanged from the stored one is not checked against these two rules again, so a
+channel stored before them can still be disabled or renamed; any change to its config is checked in full. The server
+does not block private or link-local addresses: an administrator sets these URLs.
+
 ## Secrets in a channel's config
 
 A channel's config holds credentials for its destination: a webhook `url` and `webhook_url` (a Slack or
@@ -74,7 +81,9 @@ credential, whatever its type: a string, a number, an object (`headers`) or a li
   on create and on update, because the server reads such a text in member order.
   An object inside a list gets its credentials back from the stored entry that equals it except for its
   credentials, and from no other; where it matches more than one stored entry that disagree at a credential
-  it needs, the update is refused with 400 and asks for the value. The same walker masks and restores the device
+  it needs, the update is refused with 400 and asks for the value. The method and URL rules above run on the
+  config after the placeholders are replaced, so a kept `url` is checked as stored, never as `********`; an
+  unchanged config is not re-checked against them. The same walker masks and restores the device
   routes' secrets (`docs/api/api-overview.md`).
 - **Delivery errors.** The error text of a failed delivery (`error` in `GET /notifications/history`, the message
   of a failed `POST /notifications/channels/{id}/test`, the log lines) names the operation and the failure class
