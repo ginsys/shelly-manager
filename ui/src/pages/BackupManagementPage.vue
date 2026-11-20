@@ -321,6 +321,7 @@ async function refreshData() {
     fetchAvailableDevices(),
     loadRestoreStatus()
   ])
+  if (statusRead === null) return // a newer status read, and the refresh that made it, report instead
   if (statusRead) {
     showMessage('Data refreshed successfully', 'success')
   } else {
@@ -426,15 +427,18 @@ function startRestore(backup: BackupItem) {
  * Read the staged restore and the last result. A failed read leaves the last known status: the
  * stage call is the authority and refuses by itself.
  */
-async function loadRestoreStatus(): Promise<boolean> {
+// Answers true when the read worked and false when it failed. A read that a newer one has
+// superseded answers null: the newer read owns the outcome, and an older one must not undo it.
+async function loadRestoreStatus(): Promise<boolean | null> {
   const mine = ++restoreStatusId
   try {
     const status = await getRestoreStatus()
-    if (mine === restoreStatusId) restoreStatus.value = status // an older read must not undo a newer one
+    if (mine !== restoreStatusId) return null
+    restoreStatus.value = status
     return true
   } catch (err) {
     console.warn('Failed to read the restore status:', err)
-    return false
+    return mine === restoreStatusId ? false : null
   }
 }
 

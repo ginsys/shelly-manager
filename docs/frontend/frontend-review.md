@@ -154,7 +154,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/drift/schedules` | Drift schedules (inspect and delete only, see section 5) | 357 | top bar (Drift) |
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
 | `/drift/trends` | Drift trends | 517 | top bar (Drift) |
-| `/export/backup` | Backup management | 922 | top bar (Export & Import) |
+| `/export/backup` | Backup management | 926 | top bar (Export & Import) |
 | `/export/gitops` | GitOps export | 276 | top bar (Export & Import) |
 | `/export/history` | Export history | 70 | top bar (Export & Import) |
 | `/export/:id` | Export result | 43 | Export history |
@@ -359,7 +359,7 @@ Found by reading the code at this commit; not a plan.
    route table (`ui/src/router/routes.ts`); the Playwright spec does not, so a new `:id` page is
    checked only if someone adds it to the spec.
 2. **Quasar is a dependency nothing imports** (section 2).
-3. **Large pages:** `BackupManagementPage.vue` (922 lines), `MetricsDashboardPage.vue` (697),
+3. **Large pages:** `BackupManagementPage.vue` (926 lines), `MetricsDashboardPage.vue` (697),
    `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
