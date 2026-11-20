@@ -39,7 +39,7 @@ The Shelly Manager API Security Framework provides comprehensive protection agai
 
 **Content Type Validation**:
 - Configurable allowed content types
-- Strict content-type enforcement option
+- Strict content-type enforcement option: a POST, PUT or PATCH with a body must name an allowed type; one with no body needs none
 - Media type parsing with parameter support
 
 **Header Validation**:
