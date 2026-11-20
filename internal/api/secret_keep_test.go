@@ -181,6 +181,39 @@ func TestCreateTemplateNeverStoresTheMask(t *testing.T) {
 	assert.NotContains(t, storedTemplateConfig(t, handler, resp.Data.Template.ID), secretMask)
 }
 
+// A create from a masked import (ginsys/shelly-manager#747 slice 2) may carry the mask in any secret
+// slot. Each one is dropped, never stored: the UI strips them first, and this is the layer behind it.
+func TestCreateTemplateNeverStoresTheMaskInAnySecretSlot(t *testing.T) {
+	for _, path := range allSecretPaths() {
+		t.Run(path, func(t *testing.T) {
+			handler, cleanup := setupTestHandler(t)
+			defer cleanup()
+
+			// {"wifi":{"ap":{"key":"********"}}} for "wifi.ap.key".
+			var config any = secretMask
+			segments := strings.Split(path, ".")
+			for i := len(segments) - 1; i >= 0; i-- {
+				config = map[string]any{segments[i]: config}
+			}
+			body, err := json.Marshal(map[string]any{"name": "m", "scope": "global", "config": config})
+			require.NoError(t, err)
+
+			req := httptest.NewRequest("POST", "/api/v1/config/templates/new", strings.NewReader(string(body)))
+			w := httptest.NewRecorder()
+			handler.CreateNewConfigTemplate(w, req)
+			require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+			var resp struct {
+				Data struct {
+					Template TemplateResponse `json:"template"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			assert.NotContains(t, storedTemplateConfig(t, handler, resp.Data.Template.ID), secretMask)
+		})
+	}
+}
+
 func TestGetTemplateListsStoredSecrets(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()

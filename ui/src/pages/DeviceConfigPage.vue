@@ -189,7 +189,21 @@
     <div class="card" data-testid="stored-card">
       <div class="header-row">
         <h2>Last imported configuration</h2>
+        <button
+          v-if="stored && isSettings(stored.config)"
+          class="btn"
+          data-testid="create-template-from-import"
+          @click="openFromImport"
+        >
+          Create template from this import
+        </button>
       </div>
+      <CreateTemplateFromImportDialog
+        v-if="showFromImport"
+        :device-id="deviceId"
+        :device-type="fromImportType"
+        @close="showFromImport = false"
+      />
       <div v-if="storedError" class="live-error" data-testid="stored-config-error">{{ storedError }}</div>
       <div v-else-if="stored" data-testid="stored-config">
         <div class="status-row">
@@ -279,6 +293,8 @@ import { useRoute } from 'vue-router'
 import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
+import CreateTemplateFromImportDialog from '@/components/config/CreateTemplateFromImportDialog.vue'
+import { getDevice } from '@/api/devices'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useError } from '@/composables/useError'
 import { usePageError, useLateResult } from '@/composables/useNotice'
@@ -320,6 +336,21 @@ const newTemplatePosition = ref<number | null>(null)
 const liveConfig = ref<Record<string, any> | null>(null)
 const liveError = ref<string | null>(null)
 const liveLoading = ref(false)
+// "Create template from this import": the dialog reads the typed import itself. The page gives it the
+// device's model, which a device-type template can name; a device that cannot be read gets no model,
+// so only an all-devices template is offered.
+const showFromImport = ref(false)
+const fromImportType = ref('')
+
+async function openFromImport() {
+  try {
+    fromImportType.value = (await getDevice(deviceId.value)).type || ''
+  } catch {
+    fromImportType.value = ''
+  }
+  showFromImport.value = true
+}
+
 // The stored import and its history. A card shows its own failed read, never an alert.
 const stored = ref<StoredDeviceConfig | null>(null)
 const storedLoaded = ref(false)
@@ -384,6 +415,7 @@ function toggleHistoryEntry(entryId: number) {
 }
 
 function resetStored() {
+  showFromImport.value = false
   stored.value = null
   storedLoaded.value = false
   storedError.value = null

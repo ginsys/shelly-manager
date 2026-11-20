@@ -1,0 +1,2 @@
+Added
+- The device configuration page has a **Create template from this import** button on the last imported configuration. A dialog lists the sections a template for the device's model can hold (`wifi`, `network` and `auth` start unticked), takes a name, a description and a scope, and saves a template. Secrets are never copied (the server's `********` is dropped and the secrets left out are named), and the per-device name, hostname, MAC and static IP are always left out. A refusal from the server shows its reason. Refs ginsys/shelly-manager#747.

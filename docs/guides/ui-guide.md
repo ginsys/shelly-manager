@@ -96,6 +96,23 @@ Top bar:
 The menus are listed in `ui/src/layouts/MainLayout.vue` and drawn by `ui/src/components/NavMenu.vue`.
 A new page needs an entry there, or a link from a page that has one.
 
+#### Templates from a device import
+
+The device configuration page (`/devices/:id/config`) shows the last imported configuration. **Create template
+from this import** on that card opens a dialog that makes a configuration template from it.
+
+- The dialog reads the import in its typed form and lists the sections that a template for this model can hold.
+  `wifi`, `network` and `auth` start unticked, because they hold the network and the login of one site. The
+  other sections start ticked.
+- Secrets are never copied. The server sends each saved secret as `********`, and the dialog drops every such
+  value and names the secrets it left out. Set a secret on the template page after saving. The server also
+  drops a `********` it receives in a new template.
+- The per-device name, hostname, MAC and static IP are always left out, so one template does not give every
+  device the same identity.
+- Enter a name and a description. The scope is the device's model when the server lists it
+  (`GET /config/device-types`); otherwise the template is for all devices. A refusal from the server shows its
+  reason, and the field list when the server names fields. After a save, the page of the new template opens.
+
 ### Export/Import Section
 
 #### Navigation Structure
