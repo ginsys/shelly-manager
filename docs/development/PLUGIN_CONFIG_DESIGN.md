@@ -165,7 +165,7 @@ maintainer's to decide.
 | Option | What it does | What it does not solve |
 |---|---|---|
 | (i) store the secret in the row, mask it on read, restore the placeholder on save | the notification-channel behaviour; about 0 new code beyond the table, because `internal/redact` already does the walk | the secret is clear text in the database, and the `backup` plugin writes a raw database snapshot (`docs/api/API_EXPORT_IMPORT.md:235`), which the export masking does not cover (`:68`). The OPNsense secret would travel inside every backup. |
-| (ii) store only an environment reference such as `${OPNSENSE_API_SECRET}` and read the process environment when the plugin runs | the secret never reaches the database or a backup; it matches what the schema example already shows (section 1, item 4) | needs expansion code (none today, about 60 lines) and a rule for which names may be read: without one, an admin could point a field at any variable of the process, such as the database password, and send it to a host of their choosing. A fixed name prefix closes that. |
+| (ii) store only an environment reference such as `${OPNSENSE_API_SECRET}` and read the process environment when the plugin runs | the secret never reaches the database or a backup; it matches what the schema example already shows (section 1, item 4) | needs expansion code (none today, about 60 lines) and a rule for which names may be read: without one, whoever may store the config could point a field at any variable of the process, such as the database password, and send it to a host of their choosing. That is an admin-key holder, and anyone at all when no admin key is set (section 2.4). A fixed name prefix closes it in both cases. |
 | (iii) store the non-secret fields only; send the secret with each request | a stored host and port | the request still carries the secret every time, so it solves little. |
 
 **Validation surface.** `ValidateConfig` is per plugin and cannot check a partial config: OPNsense
@@ -207,14 +207,15 @@ no new power.
 
 ## 6. Question 4: what do enable and disable mean?
 
-Plugins are compiled in (section 2.1), so "enabled" is true for every registered plugin and
-"configured" has no meaning without a stored config.
+Plugins are compiled in (section 2.1), so a registered plugin is always available and always enabled:
+the handler's value for those two is accurate, if redundant. "Configured" is the one that says
+something untrue, because it has no meaning without a stored config.
 
-**Option (a): not applicable.** Stop returning `configured` and `enabled` (and the `error` and
-`last_used` the DTO declares and never sets, `sync_handlers.go:164-170`). The UI does not read them
-(section 2.5) and the OpenAPI file does not spell them. Cost: about 15 lines of Go and a test, and
-the `PluginStatus` type in `ui/src/api/plugin.ts`. It does not solve: an operator who wants `backup`
-or `gitops` switched off.
+**Option (a): not applicable.** Stop returning `configured`, and the `error` and `last_used` the DTO
+declares and never sets (`sync_handlers.go:164-170`); keep available and `enabled`. The UI does not
+read any of them (section 2.5) and the OpenAPI file does not spell them. Cost: about 15 lines of Go and
+a test, and the `PluginStatus` type in `ui/src/api/plugin.ts` (an estimate). It does not solve: an
+operator who wants `backup` or `gitops` switched off.
 
 **Option (b): an operator flag stored per plugin.** The engine refuses a request for a disabled plugin.
 It needs a table, so it shares the cost of Option B in section 3, and it gives an admin a new power: to
@@ -244,6 +245,6 @@ database snapshot, build (c). **This decision is the lead's:** it changes a resp
 | 1 | Is a stored plugin config desired? | No: keep it per request (A). Revisit when a second plugin needs saved credentials or scheduled exports return. | the maintainer |
 | 2 | If stored: scope, secrets, validation | Singleton; environment reference with a fixed name prefix for secrets; validate the complete config on `PUT`. Only if decision 1 is "stored". | the maintainer (which secret reaches a stored row) |
 | 3 | What does "test" mean? | A dry run; document that `Preview` does not check OPNsense credentials. Build the connectivity check (b) on request. | the lead |
-| 4 | What do enable and disable mean? | Not applicable: stop returning `configured` and `enabled`. A start-up key (c) if a plugin must be switched off. | the lead |
+| 4 | What do enable and disable mean? | Not applicable: stop returning `configured`, error and last_used; keep available and `enabled`. A start-up key (c) if a plugin must be switched off. | the lead |
 
 ginsys/shelly-manager#290 stays open until decision 1 is recorded, and until what it decides is built.
