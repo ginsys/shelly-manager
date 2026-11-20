@@ -105,7 +105,7 @@ export async function generateSMAFile(
     return {
       success: true,
       blob,
-      filename: `shelly-manager-${createdAt.replace(/[-:.]/g, '').replace('Z', 'Z')}.sma`,
+      filename: `shelly-manager-${createdAt.replace(/[-:.]/g, '')}.sma`,
       metadata: {
         originalSize: encoded.byteLength,
         compressedSize: compressed.byteLength,

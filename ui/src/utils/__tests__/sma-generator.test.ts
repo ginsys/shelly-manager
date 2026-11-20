@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ungzip } from 'pako'
 import { generateSMAFile } from '../sma-generator'
 import { parseStrictJSON } from '../strict-json'
@@ -19,6 +19,17 @@ describe('strict SMA 2026.1 generator', () => {
     expect(result.metadata.checksum).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(result.metadata.checksum).toBe((archive.metadata as any).integrity.checksum)
     expect(result.metadata.recordCount).toBe(1)
+  })
+
+  it('names the file by the compact UTC time of creation, keeping the Z', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-11-20T14:05:06.789Z'))
+      const result = await generateSMAFile({ devices: [validDevice] })
+      expect(result.filename).toBe('shelly-manager-20261120T140506789Z.sma')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects empty archives and invalid compression levels', async () => {
