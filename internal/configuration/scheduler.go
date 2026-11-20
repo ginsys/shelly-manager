@@ -145,8 +145,7 @@ func (s *Scheduler) Stop() error {
 	}
 }
 
-// IsRunning reports whether Start has been called and Stop has not. The lifecycle tests read it; the
-// status route reports the configuration gate, not this.
+// IsRunning reports whether Start has been called and Stop has not. The lifecycle tests read it.
 func (s *Scheduler) IsRunning() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
