@@ -286,16 +286,27 @@ func (s *SQLiteProvider) CreateBackup(ctx context.Context, config BackupConfig) 
 		return nil, fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	start := time.Now()
-
-	// Flush any pending writes by getting underlying DB and ping
-	if err := s.Ping(); err != nil {
-		// Not fatal, proceed with best-effort file copy
-		s.logger.WithFields(map[string]any{"error": err.Error()}).Warn("SQLite ping before backup failed; proceeding")
+	if s.db == nil {
+		return nil, fmt.Errorf("sqlite provider not connected")
 	}
 
-	src := s.config.DSN
+	start := time.Now()
 	dst := config.BackupPath
+
+	// Copying the file would miss every write still in the -wal file and can tear against a
+	// checkpoint. VACUUM INTO writes one consistent snapshot of every committed write, and needs a
+	// target that does not exist, so it goes in a fresh directory beside dst (on that disk, not
+	// /tmp). The file keeps the live file's name, which is the name a zip entry carries.
+	tmpDir, err := os.MkdirTemp(filepath.Dir(dst), ".backup-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create snapshot directory: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	livePath, _, _ := strings.Cut(s.config.DSN, "?")
+	src := filepath.Join(tmpDir, filepath.Base(livePath))
+	if err := s.db.WithContext(ctx).Exec("VACUUM INTO ?", src).Error; err != nil {
+		return nil, fmt.Errorf("failed to snapshot sqlite database: %w", err)
+	}
 
 	// Decide strategy based on extension (single-file gzip or raw copy)
 	if strings.HasSuffix(strings.ToLower(dst), ".gz") {
