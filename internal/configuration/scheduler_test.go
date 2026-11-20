@@ -529,6 +529,7 @@ func TestSchedulerLifecycle(t *testing.T) {
 	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
 	ticks := make(chan time.Time)
 	fx.s.ticks = ticks
+	fx.s.now = func() time.Time { return at(10 * time.Second) }
 	assert.False(t, fx.s.IsRunning())
 
 	require.NoError(t, fx.s.Start(context.Background()))
@@ -542,6 +543,26 @@ func TestSchedulerLifecycle(t *testing.T) {
 	assert.False(t, fx.s.IsRunning())
 	assert.NoError(t, fx.s.Stop(), "a second Stop is a no-op")
 	assert.Len(t, fx.runs(id), 1)
+}
+
+// A timer value that was delivered late carries the instant it was due, not the instant the loop
+// took it: the poll runs at the clock read when it is received, so a run recorded after a long
+// previous poll is not backdated.
+func TestSchedulerLifecycle_ADelayedTickRunsAtTheClockNotTheTimerValue(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	ticks := make(chan time.Time)
+	fx.s.ticks = ticks
+	fx.s.now = func() time.Time { return at(17 * time.Minute) }
+
+	require.NoError(t, fx.s.Start(context.Background()))
+	ticks <- at(-time.Minute) // due a minute before the schedule, delivered at 17 minutes
+	ticks <- at(-time.Minute) // taken only once the loop has finished the first tick
+	require.NoError(t, fx.s.Stop())
+
+	runs := fx.runs(id)
+	require.Len(t, runs, 1, "the poll ran at the clock, when the schedule was due")
+	assert.True(t, runs[0].StartedAt.Equal(at(17*time.Minute)), "the run starts at the clock read, got %s", runs[0].StartedAt)
 }
 
 func TestSchedulerStart_FailsWhenTheScheduleTableIsUnreadable(t *testing.T) {
