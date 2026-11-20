@@ -35,7 +35,7 @@
         <div class="row"><div class="k">Status</div><div class="v">
           <span :class="['chip', shown.cssClass]" :title="shown.title" data-testid="device-status">{{ shown.label }}</span>
         </div></div>
-        <div class="row"><div class="k">Last Seen</div><div class="v">{{ formatDate(d.last_seen) }}</div></div>
+        <div class="row"><div class="k">Last Seen</div><div class="v">{{ formatDate(lastSeen) }}</div></div>
         <div class="row"><div class="k">Firmware</div><div class="v mono small">{{ d.firmware || '-' }}</div></div>
         <div class="row"><div class="k">Created</div><div class="v">{{ formatDate(d.created_at) }}</div></div>
         <div class="row"><div class="k">Updated</div><div class="v">{{ formatDate(d.updated_at) }}</div></div>
@@ -222,7 +222,11 @@ const energy = ref<DeviceEnergy | null>(null)
 type ReadState = { state: 'pending' | 'done' | 'failed'; message?: string }
 const statusRead = ref<ReadState>({ state: 'pending' })
 const energyRead = ref<ReadState>({ state: 'pending' })
-const shown = computed(() => shownDeviceStatus(d.value))
+// A successful live status read makes the server record the device as seen now. The stored device
+// is read once, so the page keeps that instant here and shows it over an older stored value.
+const liveSeenAt = ref<string | null>(null)
+const lastSeen = computed(() => liveSeenAt.value ?? d.value.last_seen)
+const shown = computed(() => shownDeviceStatus({ ...d.value, last_seen: lastSeen.value }))
 const drift = ref<ConfigDrift | null>(null)
 const driftLoading = ref(false)
 const driftFailure = ref<string | null>(null)
@@ -347,6 +351,7 @@ async function fetchStatus() {
     const fetched = await getDeviceStatus(id, abortController.signal)
     if (seq !== statusReadSeq) return
     status.value = fetched
+    liveSeenAt.value = new Date().toISOString()
     statusRead.value = { state: 'done' }
   } catch (e: any) {
     if (isAbortError(e) || seq !== statusReadSeq) return

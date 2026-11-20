@@ -282,6 +282,14 @@ func (m *mockRepository) addDevice(id uint) {
 
 // --- Tests ---
 
+// The drift page recognises this exact text in the 404 body (NO_DESIRED_CONFIG_MESSAGE in
+// ui/src/api/deviceConfig.ts). If the text changes, change it there too.
+func TestErrNoDesiredConfig_TextMatchesWhatTheDriftPageRecognises(t *testing.T) {
+	assert.Equal(t,
+		"no desired configuration is set for this device, so there is nothing to compare it with",
+		ErrNoDesiredConfig.Error())
+}
+
 func TestNewConfigurationService(t *testing.T) {
 	repo := newMockRepository()
 	svc := NewConfigurationService(repo, nil, nil)

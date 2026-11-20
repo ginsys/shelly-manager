@@ -160,4 +160,15 @@ describe('DeviceDetailPage with a device that does not answer', () => {
 
     expect(wrapper.get('[data-testid="device-status"]').text()).toBe('not seen recently')
   })
+
+  it('shows the device as online once a live status read succeeds, whatever the stored last seen says', async () => {
+    vi.mocked(getDevice).mockImplementation(async () => ({
+      ...device,
+      last_seen: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+    }))
+    vi.mocked(getDeviceStatus).mockResolvedValue({ device_id: 7, ip: '10.0.0.7' } as never)
+    const wrapper = await openPage()
+
+    expect(wrapper.get('[data-testid="device-status"]').text()).toBe('online')
+  })
 })
