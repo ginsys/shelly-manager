@@ -337,6 +337,7 @@ type DriftDetectionSchedule struct {
 	LastRun      *time.Time      `json:"last_run"`
 	NextRun      *time.Time      `json:"next_run"`
 	RunCount     int             `json:"run_count" gorm:"default:0"`
+	Revision     int             `json:"-" gorm:"not null;default:0"` // bumped by every write that decides whether a scheduler's read is still current
 	CreatedAt    time.Time       `json:"created_at"`
 	UpdatedAt    time.Time       `json:"updated_at"`
 }

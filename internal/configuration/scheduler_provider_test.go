@@ -168,7 +168,9 @@ func TestDriftScheduleWriteProviders_FilterRoundTripsAndAnUnchangedUpdateIsFound
 // lockWaiters counts the statements of the test database that wait for a row lock now.
 func lockWaiters(t *testing.T, db *gorm.DB) int64 {
 	t.Helper()
-	q := "SELECT count(*) FROM performance_schema.data_lock_waits" // live; innodb_trx is cached for 0.1 s
+	// Live where innodb_trx is cached for 0.1 s; the join keeps the waits of other databases out.
+	q := "SELECT count(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.data_locks l " +
+		"ON l.ENGINE_LOCK_ID = w.REQUESTING_ENGINE_LOCK_ID WHERE l.OBJECT_SCHEMA = DATABASE()"
 	if db.Name() == "postgres" {
 		q = "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()"
 	}
@@ -290,6 +292,46 @@ func TestDriftScheduleWriteProviders_AToggleOnAndAnEditKeepTheSpecAndItsNextRunT
 			require.NotNil(t, sc.NextRun)
 			minute := map[string]int{"7 * * * *": 7, "0 3 * * *": 0}[sc.CronSpec]
 			assert.Equal(t, minute, sc.NextRun.Minute(), "next run %s does not belong to spec %q", sc.NextRun, sc.CronSpec)
+		})
+	}
+}
+
+// A tick read before an edit of the device selection (same spec), or before a disable and enable, is
+// not claimed on either server: the claim matches the revision those writes bump. A read taken after
+// them is claimed, so the case does not pass for a claim that never works.
+func TestDriftSchedulerProviders_AClaimReadBeforeAnEditOrAToggleIsNotWon(t *testing.T) {
+	for _, srv := range lockServers(t) {
+		t.Run(srv.name, func(t *testing.T) {
+			sa, _, db := openSchedulerReplicas(t, srv)
+			require.NoError(t, db.Create(&Device{ID: 1, Name: "Device", Type: "SHSW-1", IP: "192.168.1.100", MAC: "AA:BB:CC:DD:EE:FF", LastSeen: at(0)}).Error)
+			sc, err := sa.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{1}})
+			require.NoError(t, err)
+			due := func() DriftDetectionSchedule { // the row as a tick reads it when it is due
+				require.NoError(t, db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("next_run", at(0)).Error)
+				var read DriftDetectionSchedule
+				require.NoError(t, db.First(&read, sc.ID).Error)
+				return read
+			}
+
+			read := due()
+			_, err = sa.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHSW-1"}})
+			require.NoError(t, err)
+			won, err := sa.claim(db, read, at(5*time.Minute))
+			require.NoError(t, err)
+			assert.False(t, won, "a read from before an edit of the device selection")
+
+			read = due()
+			for range 2 {
+				_, err = sa.svc.ToggleDriftSchedule(sc.ID)
+				require.NoError(t, err)
+			}
+			won, err = sa.claim(db, read, at(5*time.Minute))
+			require.NoError(t, err)
+			assert.False(t, won, "a read from before a disable and enable")
+
+			won, err = sa.claim(db, due(), at(5*time.Minute))
+			require.NoError(t, err)
+			assert.True(t, won, "a read taken after them")
 		})
 	}
 }
