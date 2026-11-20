@@ -164,7 +164,7 @@ if [ "$LC_ALL" = C ]; then active=activated; dev=disconnected; else active=geact
 case "$*" in
   *"device status") printf 'wlo1:wifi:%s\n' "$dev" ;;
   *"device wifi list") printf 'HomeNet:WPA2:70:6:2437\n' ;;
-  *"-f NAME connection show") printf 'HomeNet\n' ;;
+  *"-f NAME connection show") printf '%s\n' "${NMCLI_PROFILES-HomeNet}" ;;
   *"connection show --active") printf 'HomeNet:802-11-wireless:%s\n' "$active" ;;
   *"connection show HomeNet") printf '802-11-wireless.ssid:HomeNet\n802-11-wireless.security:wpa-psk\n' ;;
 esac
@@ -206,11 +206,17 @@ func TestEveryNmcliCallRunsInTheCLocale(t *testing.T) {
 	_, _ = ni.GetCurrentNetwork(ctx)
 	_, _ = ni.IsConnected(ctx, "HomeNet")
 	_ = ni.DisconnectFromNetwork(ctx)
-	_ = ni.ConnectToNetwork(ctx, "HomeNet", "")
+	// All four connect branches: an open or a secured network, with and without a stored profile.
+	for _, profiles := range []string{"HomeNet", "OtherNet"} {
+		t.Setenv("NMCLI_PROFILES", profiles)
+		for _, password := range []string{"", "secret"} {
+			_ = ni.ConnectToNetwork(ctx, "HomeNet", password)
+		}
+	}
 
 	calls := standInCalls(t, callLog)
-	// Control: the calls that parse a translated word, and the connect path, all ran.
-	for _, want := range []string{"device status", "device wifi rescan", "device wifi list", "-f NAME connection show", "connection show --active", "802-11-wireless.ssid", "connection down", "connection up"} {
+	// Control: the calls that parse a translated word, and every connect path, all ran.
+	for _, want := range []string{"device status", "device wifi rescan", "device wifi list", "-f NAME connection show", "connection show --active", "802-11-wireless.ssid", "connection down", "connection up HomeNet", "device wifi connect HomeNet\n", "device wifi connect HomeNet password secret"} {
 		assert.Contains(t, calls, want, "control: the case did not reach %q", want)
 	}
 	for _, line := range strings.Split(strings.TrimSpace(calls), "\n") {
