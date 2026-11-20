@@ -256,7 +256,7 @@ page imports still counts. The Playwright spec is what proves the links are rend
   Configuration, saves the desired configuration of the picked devices as one JSON file through
   `POST /api/v1/config/bulk-download`. It reads the database and contacts no device, every secret in the
   file is masked, and the dialog says so and never shows a configuration itself. A device that
-  cannot be read is listed with the reason. The route refuses more than 10 devices and the dialog shows
+  cannot be read is listed with the reason. The route refuses more than 200 devices and the dialog shows
   its text (ginsys/shelly-manager#595). A fifth card, Apply Configuration, is the only bulk operation
   that writes devices (`POST /api/v1/config/bulk-apply`, `ui/src/api/bulkApply.ts` and
   `components/bulk/BulkApplyForm.vue`). The operator types one partial configuration as JSON

@@ -381,7 +381,7 @@ describe('bulkDownload', () => {
             error: {
               code: 'VALIDATION_FAILED',
               message: 'Validation failed',
-              details: 'bulk-download takes at most 10 devices, got 12'
+              details: 'bulk-download takes at most 200 devices, got 201'
             }
           })
         }
@@ -390,7 +390,7 @@ describe('bulkDownload', () => {
 
     const err = await bulkDownload({ device_ids: [1] }).catch((e) => e)
 
-    expect(err.message).toBe('bulk-download takes at most 10 devices, got 12')
+    expect(err.message).toBe('bulk-download takes at most 200 devices, got 201')
   })
 
   it('rethrows the original error when the body is not an error envelope', async () => {

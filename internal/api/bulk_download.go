@@ -11,9 +11,10 @@ import (
 )
 
 // maxBulkDownloadDevices is the most devices one bulk-download names. The file is built in memory
-// from the database, so the cap bounds the answer, not device contact. It is a proposal, not a
-// measurement: raise it where an operator has a real fleet to download.
-const maxBulkDownloadDevices = 10
+// from the database, so the cap bounds the answer, not device contact: 200 fully populated
+// configurations are about 1 MiB (TestBulkDownload_TheAnswerAtTheCapIsSmall). Bulk-apply keeps its
+// cap of 10, because it contacts devices one after another.
+const maxBulkDownloadDevices = 200
 
 // Entry statuses of the downloaded file.
 const (

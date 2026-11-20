@@ -382,12 +382,12 @@ describe('BulkOperationsDialog', () => {
     })
 
     it('shows the cap the route named when it refuses the selection, saves no file and stays on the form', async () => {
-      vi.mocked(bulkDownload).mockRejectedValue(new Error('bulk-download takes at most 10 devices, got 12'))
+      vi.mocked(bulkDownload).mockRejectedValue(new Error('bulk-download takes at most 200 devices, got 201'))
       const wrapper = await openForm()
 
       await send(wrapper)
 
-      expect(byId(wrapper, 'bulk-error').text()).toContain('bulk-download takes at most 10 devices, got 12')
+      expect(byId(wrapper, 'bulk-error').text()).toContain('bulk-download takes at most 200 devices, got 201')
       expect(createUrl).not.toHaveBeenCalled()
       expect(clicks).toEqual([])
       expect(byId(wrapper, 'bulk-download-saved').exists()).toBe(false)
