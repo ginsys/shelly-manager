@@ -311,6 +311,16 @@ describe('backup api', () => {
       await expect(stageRestore('b1')).rejects.toThrow('The backup is not a SQLite database')
     })
 
+    it('marks a stage call that got no answer, since the server may have staged it', async () => {
+      ;(api.post as any).mockRejectedValue(new Error('Network Error'))
+      const lost = await stageRestore('b1').catch((e) => e)
+      expect(lost.answered).toBe(false)
+
+      ;(api.post as any).mockRejectedValue(refused(422, 'The backup is not a SQLite database'))
+      const refusedStage = await stageRestore('b1').catch((e) => e)
+      expect(refusedStage.answered).toBe(true)
+    })
+
     it('reads the pending restore and the last result', async () => {
       ;(api.get as any).mockResolvedValue({
         data: {

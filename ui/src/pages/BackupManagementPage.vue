@@ -121,6 +121,7 @@ import {
   stageRestore,
   getRestoreStatus,
   cancelRestore,
+  RESTORE_SQLITE_ONLY,
   type BackupItem,
   type BackupStatistics,
     type RestorePreview,
@@ -204,6 +205,7 @@ const restoreCancelling = ref(false)
 // What the server reports; null until it answers. Only a 501 turns staging off.
 const restoreStatus = ref<RestoreStatusData | null>(null)
 let restoreCheckId = 0 // identifies the newest backup check or stage call; older answers are dropped
+let restoreStatusId = 0 // the same for status reads
 
 // Initialize
 onMounted(() => {
@@ -420,8 +422,10 @@ function startRestore(backup: BackupItem) {
  * stage call is the authority and refuses by itself.
  */
 async function loadRestoreStatus() {
+  const mine = ++restoreStatusId
   try {
-    restoreStatus.value = await getRestoreStatus()
+    const status = await getRestoreStatus()
+    if (mine === restoreStatusId) restoreStatus.value = status // an older read must not undo a newer one
   } catch (err) {
     console.warn('Failed to read the restore status:', err)
   }
@@ -444,7 +448,19 @@ async function handleStageRestore() {
     if (mine === restoreCheckId) restoreStaged.value = true
     await loadRestoreStatus()
   } catch (err: any) {
-    if (mine === restoreCheckId) restoreError.value = `Nothing was staged. ${err.message || 'Failed to stage the restore'}`
+    if (err.message === RESTORE_SQLITE_ONLY) {
+      restoreStatus.value = { supported: false, pending: null, lastResult: null }
+    }
+    const reason = err.message || 'Failed to stage the restore'
+    if (err.answered === false) {
+      // No answer came back, so the server may have staged it: read what it holds.
+      await loadRestoreStatus()
+      if (mine === restoreCheckId) {
+        restoreError.value = `The server did not answer, so it is not known whether the restore was staged. ${reason}`
+      }
+    } else if (mine === restoreCheckId) {
+      restoreError.value = `Nothing was staged. ${reason}`
+    }
   } finally {
     if (mine === restoreCheckId) restoreStaging.value = false
   }

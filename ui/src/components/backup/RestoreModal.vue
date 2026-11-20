@@ -117,7 +117,8 @@ const props = withDefaults(defineProps<Props>(), {
   replacesPending: false,
 })
 
-const canStage = computed(() => props.restoreSupported && props.preview?.valid === true)
+// Not while a check runs: a stage call would make that check's answer stale and leave it pending.
+const canStage = computed(() => props.restoreSupported && props.preview?.valid === true && !props.loading)
 
 const emit = defineEmits<{
   close: []

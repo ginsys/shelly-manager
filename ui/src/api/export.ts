@@ -399,7 +399,8 @@ export async function stageRestore(backupId: string): Promise<void> {
   try {
     await api.post('/import/restore', { backup_id: backupId })
   } catch (e: any) {
-    throw await restoreFailure(e, 'Failed to stage the restore')
+    // `answered` is false when no response arrived: the server may have staged the restore.
+    throw Object.assign(await restoreFailure(e, 'Failed to stage the restore'), { answered: !!e?.response })
   }
 }
 

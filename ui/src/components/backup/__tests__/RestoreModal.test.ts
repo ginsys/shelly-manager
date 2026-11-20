@@ -88,6 +88,12 @@ describe('RestoreModal', () => {
     expect(wrapper.text()).toContain('This replaces the restore already staged.')
   })
 
+  it('withholds Stage restore while a check runs', () => {
+    const wrapper = mountModal({ preview: preview(true), loading: true })
+
+    expect(wrapper.find('.stage-button').exists()).toBe(false)
+  })
+
   it('disables Stage restore while it runs', () => {
     const wrapper = mountModal({ preview: preview(true), staging: true })
 
