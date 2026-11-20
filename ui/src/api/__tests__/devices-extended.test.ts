@@ -13,6 +13,7 @@ vi.mock('../client', () => {
 })
 
 import api from '../client'
+import { DEVICE_CALL_TIMEOUT_MS } from '../deviceCallTimeout'
 import {
   createDevice,
   updateDevice,
@@ -206,7 +207,7 @@ describe('devices api - extended operations', () => {
 
       const result = await getDeviceStatus(123)
       expect(result).toEqual(status)
-      expect(api.get).toHaveBeenCalledWith('/devices/123/status', { signal: undefined })
+      expect(api.get).toHaveBeenCalledWith('/devices/123/status', { signal: undefined, timeout: DEVICE_CALL_TIMEOUT_MS })
     })
 
     it('throws error when status unavailable', async () => {
@@ -244,6 +245,7 @@ describe('devices api - extended operations', () => {
       expect(api.get).toHaveBeenCalledWith('/devices/123/energy', {
         params: { channel: 0 },
         signal: undefined,
+        timeout: DEVICE_CALL_TIMEOUT_MS,
       })
     })
 
@@ -266,6 +268,7 @@ describe('devices api - extended operations', () => {
       expect(api.get).toHaveBeenCalledWith('/devices/123/energy', {
         params: { channel: 0 },
         signal: undefined,
+        timeout: DEVICE_CALL_TIMEOUT_MS,
       })
     })
 

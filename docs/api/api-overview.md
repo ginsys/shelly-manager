@@ -546,6 +546,7 @@ All API responses follow this envelope:
 | `INTERNAL_SERVER_ERROR` | 500 | Server error |
 | `DEVICE_NOT_FOUND` | 404 | Device does not exist |
 | `DEVICE_OFFLINE` | 503 | Device unreachable |
+| `DEVICE_UNREACHABLE` | 504 | Device did not answer in time (status, energy and current-config reads) |
 | `CONFIGURATION_ERROR` | 400 | Config operation failed |
 | `TEMPLATE_ERROR` | 400 | Template processing error |
 | `EXTERNAL_SERVICE_ERROR` | 502 | A device rejected its stored login on a live read (`/devices/{id}/config/current` and `/current/normalized`). Store the right login with `PUT /devices/{id}/config/auth`. |

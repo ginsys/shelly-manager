@@ -1,8 +1,10 @@
 package shelly
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 )
 
 var (
@@ -92,6 +94,22 @@ func IsNetworkError(err error) bool {
 	return errors.Is(err, ErrDeviceNotFound) ||
 		errors.Is(err, ErrTimeout) ||
 		errors.Is(err, ErrConnectionFailed)
+}
+
+// IsUnanswered reports whether a device did not answer in time: the call's deadline passed, or the
+// network gave up waiting (a dial or a read that timed out). The client returns such a failure as the
+// transport gave it, so this tests the error's own kinds; the sentinels above are returned nowhere.
+// A refused connection is not matched (it is an answer of a kind), and neither is a caller that
+// cancelled the call.
+func IsUnanswered(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 // IsDeviceError checks if the error is a device-specific error

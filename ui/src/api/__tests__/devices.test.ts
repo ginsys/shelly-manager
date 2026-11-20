@@ -10,6 +10,7 @@ import {
   getDeviceEnergy,
 } from '../devices'
 import api from '../client'
+import { DEVICE_CALL_TIMEOUT_MS } from '../deviceCallTimeout'
 import type { Device, DeviceStatus, DeviceEnergy } from '../types'
 
 // Mock the API client
@@ -366,7 +367,7 @@ describe('Devices API', () => {
 
       const result = await getDeviceStatus(1)
 
-      expect(mockApi.get).toHaveBeenCalledWith('/devices/1/status', { signal: undefined })
+      expect(mockApi.get).toHaveBeenCalledWith('/devices/1/status', { signal: undefined, timeout: DEVICE_CALL_TIMEOUT_MS })
       expect(result).toEqual(mockStatus)
     })
 
@@ -406,6 +407,7 @@ describe('Devices API', () => {
       expect(mockApi.get).toHaveBeenCalledWith('/devices/1/energy', {
         params: { channel: 0 },
         signal: undefined,
+        timeout: DEVICE_CALL_TIMEOUT_MS,
       })
       expect(result).toEqual(mockEnergy)
     })
@@ -432,6 +434,7 @@ describe('Devices API', () => {
       expect(mockApi.get).toHaveBeenCalledWith('/devices/1/energy', {
         params: { channel: 2 },
         signal: undefined,
+        timeout: DEVICE_CALL_TIMEOUT_MS,
       })
       expect(result).toEqual(mockEnergy)
     })

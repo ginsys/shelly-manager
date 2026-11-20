@@ -12,6 +12,7 @@ vi.mock('../client', () => {
 })
 
 import api from '../client'
+import { DEVICE_CALL_TIMEOUT_MS } from '../deviceCallTimeout'
 import {
   updateDeviceConfig,
   getCurrentDeviceConfig,
@@ -76,7 +77,7 @@ describe('deviceConfig API', () => {
 
       const result = await getCurrentDeviceConfig(123)
       expect(result).toEqual(config)
-      expect(api.get).toHaveBeenCalledWith('/devices/123/config/current')
+      expect(api.get).toHaveBeenCalledWith('/devices/123/config/current', { timeout: DEVICE_CALL_TIMEOUT_MS })
     })
 
     it('throws error when device offline', async () => {
