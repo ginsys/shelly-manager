@@ -99,7 +99,7 @@ their writers back.
    `-wal` and `-shm` files, moves the staged file into place, then connects and migrates.
 
 If the restored file cannot be opened or migrated, the start puts the `.pre-restore` copy
-back and runs on it. Any failed apply keeps the old database and records the reason:
+back (it is moved, so it is used up) and runs on it. Any failed apply keeps the old database and records the reason:
 `GET /api/v1/import/restore` shows the staged restore and the result of the last start.
 `DELETE /api/v1/import/restore` cancels a staged restore. To undo a restore by hand, stop the
 server and copy `.pre-restore` (and `.pre-restore-wal`) back over the database file.
@@ -107,7 +107,7 @@ server and copy `.pre-restore` (and `.pre-restore-wal`) back over the database f
 Space: staging needs room for the unpacked backup, and the apply needs room for one copy
 of the live database and its `-wal`, all beside the database file. The check refuses a
 backup that does not fit, with the numbers. The `.pre-restore` copy stays until the next
-restore replaces it. PostgreSQL and MySQL answer `501`: restore is for SQLite only.
+restore replaces it, or a rollback uses it. PostgreSQL and MySQL answer `501`: restore is for SQLite only.
 
 Not detected: a backup made by a newer version. The schema has no version number; extra
 columns in a newer backup are ignored and missing ones are added at start. A backup made
