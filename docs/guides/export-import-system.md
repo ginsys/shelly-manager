@@ -114,6 +114,12 @@ columns in a newer backup are ignored and missing ones are added at start. A bac
 while the database had uncheckpointed writes can miss them, because the backup copies the
 file as it is.
 
+Not covered: a process killed in the middle of the start-up apply. A kill between two of its
+steps can leave the previous database without its `-wal` in the `.pre-restore` copy, or leave
+a restored file that cannot be migrated with no rollback at the next start. The staged file is
+checked before this point, so the cases need a kill and a bad restore together. Restore the
+copy by hand as described above.
+
 ## Errors
 
 Stable engine error identities are classified with `errors.Is`:

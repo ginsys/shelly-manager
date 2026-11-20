@@ -364,6 +364,27 @@ func TestStageIsCappedByTheFreeSpace(t *testing.T) {
 	assert.False(t, exists(filepath.Join(Dir(r.live), "staged.sqlite.tmp")))
 }
 
+func TestRestagingDoesNotCountTheStagedFileAsFree(t *testing.T) {
+	r := newRig(t)
+	path := r.backup(t, "b.sqlite", "new-1")
+	require.NoError(t, Stage(context.Background(), r.live, path, "export-1", false))
+	fi, err := os.Stat(filepath.Join(Dir(r.live), "staged.sqlite"))
+	require.NoError(t, err)
+
+	// The first staged file stays on disk while the second is unpacked, so it is not free space.
+	old := freeBytes
+	t.Cleanup(func() { freeBytes = old })
+	freeBytes = func(string) (uint64, error) { return uint64(liveSize(r.live)) + uint64(fi.Size())/2, nil }
+
+	err = Stage(context.Background(), r.live, path, "export-2", false)
+	var ce *CheckError
+	require.True(t, errors.As(err, &ce), "want a CheckError, got %v", err)
+	p, perr := Pending(r.live)
+	require.NoError(t, perr)
+	require.NotNil(t, p)
+	assert.Equal(t, "export-1", p.BackupID, "a refused restage keeps the pending restore")
+}
+
 func TestRollbackPutsThePreRestoreCopyBack(t *testing.T) {
 	r := newRig(t)
 	path := r.backup(t, "b.sqlite", "new-1")
