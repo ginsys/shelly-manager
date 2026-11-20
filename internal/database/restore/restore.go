@@ -223,16 +223,27 @@ func ApplyPending(live string, logger *logging.Logger) bool {
 	if err := keepPreRestore(live); err != nil {
 		return fail("The live database could not be copied, so nothing was replaced", err)
 	}
+	// From here the old database may lose its side files. A failure that keeps it must give them back.
+	failKept := func(msg string, cause error) bool {
+		for _, side := range keptSides {
+			if exists(live+".pre-restore"+side) && !exists(live+side) {
+				if err := copyFile(live+".pre-restore"+side, live+side); err != nil {
+					logger.Error("Restore could not put a file beside the old database back", "file", side, "error", err)
+				}
+			}
+		}
+		return fail(msg, cause)
+	}
 	for _, side := range staleSides {
 		if err := os.Remove(live + side); err != nil && !os.IsNotExist(err) {
-			return fail("A file beside the old database could not be removed, so nothing was replaced", err)
+			return failKept("A file beside the old database could not be removed, so nothing was replaced", err)
 		}
 	}
 	if fi, statErr := os.Stat(live); statErr == nil {
 		_ = os.Chmod(staged, fi.Mode().Perm())
 	}
 	if err := os.Rename(staged, live); err != nil {
-		return fail("The staged file could not be moved into place", err)
+		return failKept("The staged file could not be moved into place", err)
 	}
 	recordResult(dir, Result{Status: StatusApplied, BackupID: p.BackupID})
 	_ = os.Remove(filepath.Join(dir, pendingName))

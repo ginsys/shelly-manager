@@ -334,6 +334,22 @@ func TestApplyKeepsAndRemovesAHotJournal(t *testing.T) {
 	assert.Equal(t, "hot journal", string(back), "a rollback puts the journal back with the old database")
 }
 
+func TestFailedApplyAfterTheSideFilesWentGivesThemBack(t *testing.T) {
+	r := newRig(t)
+	path := r.backup(t, "b.sqlite", "new-1")
+	require.NoError(t, Stage(context.Background(), r.live, path, "export-1", false))
+	require.NoError(t, os.WriteFile(r.live+"-wal", []byte("committed frames"), 0o600))
+	// The -shm is removed after the -wal and cannot be: a directory with a file in it.
+	require.NoError(t, os.MkdirAll(filepath.Join(r.live+"-shm", "x"), 0o755))
+
+	require.False(t, ApplyPending(r.live, testLogger(t)))
+
+	wal, err := os.ReadFile(r.live + "-wal")
+	require.NoError(t, err, "the -wal was removed before the failure and must be back")
+	assert.Equal(t, "committed frames", string(wal))
+	assert.Equal(t, []string{"old-1", "old-2"}, readNames(t, r.live), "the old database is untouched")
+}
+
 func TestFailedApplyDoesNotLeaveAnOlderResultStanding(t *testing.T) {
 	r := newRig(t)
 	path := r.backup(t, "b.sqlite", "new-1")
