@@ -2312,6 +2312,10 @@ paths:
         Reads the live configuration of each named device into the manager, as
         POST /api/v1/devices/{id}/config/import does for one device. It never writes to a device.
         An id that names no device is that device's `failed` entry and the others still run.
+        The run stops starting devices 10 seconds before the 30 second request deadline, or when the
+        client has left: each device not started is a `skipped` entry whose `error` is `not
+        contacted: the time limit of this call was reached or the request ended`. One device that
+        outlasts the margin can still end in 408, and its outcome is then unknown.
       operationId: bulkImportConfigs
       security:
         - BearerAuth: []
@@ -2340,7 +2344,12 @@ paths:
     post:
       tags: [Drift]
       summary: Bulk drift detection
-      description: Compares the stored and the live configuration of each named device. It never writes to a device.
+      description: >-
+        Compares the stored and the live configuration of each named device. It never writes to a device.
+        The run stops starting devices 10 seconds before the 30 second request deadline, or when the
+        client has left: each device not started is a `skipped` result whose `error` is `not
+        contacted: the time limit of this call was reached or the request ended`. One device that
+        outlasts the margin can still end in 408, and its outcome is then unknown.
       operationId: bulkDetectDrift
       security:
         - BearerAuth: []
@@ -2374,7 +2383,10 @@ paths:
         comprehensive drift report, which covers the devices that ran. With `stop_on_error` the
         devices after the first error are not contacted and are not in the report, so its totals
         add up. If the report cannot be generated or stored, the call still answers 200 with the
-        BulkDriftResult of bulk-drift-detect (`data.total`, `data.results`) in its place.
+        BulkDriftResult of bulk-drift-detect (`data.total`, `data.results`) in its place. It answers
+        that BulkDriftResult too when the run stopped starting devices at its time limit (10 seconds
+        before the 30 second request deadline, or the client left): the devices not started are
+        `skipped` with the reason, and no report is stored for the devices that did run.
       operationId: bulkDetectDriftEnhanced
       security:
         - BearerAuth: []

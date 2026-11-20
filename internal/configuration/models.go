@@ -146,6 +146,10 @@ const (
 	BulkStatusSkipped = "skipped"
 )
 
+// ReasonCallEnded is the reason of a device that a bulk run did not start because the call's time
+// limit was reached or the request ended (the client left). The device was not contacted.
+const ReasonCallEnded = "not contacted: the time limit of this call was reached or the request ended"
+
 // ImportResult is the outcome of one device in a bulk import or a bulk export.
 type ImportResult struct {
 	DeviceID   uint   `json:"device_id"`

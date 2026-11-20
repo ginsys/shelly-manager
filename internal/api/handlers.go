@@ -903,7 +903,9 @@ func (h *Handler) BulkImportConfigs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := h.runBulkConfig(selection, "import", func(id uint) (uint, error) {
+	ctx, cancel := bulkReadContext(r)
+	defer cancel()
+	result := h.runBulkConfig(ctx, selection, "import", func(id uint) (uint, error) {
 		config, err := h.Service.ImportDeviceConfig(id)
 		if err != nil {
 			return 0, err
@@ -967,7 +969,9 @@ func (h *Handler) BulkDetectConfigDrift(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	result, err := h.Service.BulkDetectConfigDrift(selection.IDs, selection.StopOnError)
+	ctx, cancel := bulkReadContext(r)
+	defer cancel()
+	result, err := h.Service.BulkDetectConfigDrift(ctx, selection.IDs, selection.StopOnError)
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
@@ -1495,12 +1499,23 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 	}
 	h.logger.Info("Starting enhanced bulk drift detection with comprehensive reporting")
 
-	result, err := h.Service.BulkDetectConfigDrift(selection.IDs, selection.StopOnError)
+	ctx, cancel := bulkReadContext(r)
+	defer cancel()
+	result, err := h.Service.BulkDetectConfigDrift(ctx, selection.IDs, selection.StopOnError)
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"error": err.Error(),
 		}).Error("Failed to perform bulk drift detection")
 		h.responseWriter().WriteInternalError(w, r, err)
+		return
+	}
+
+	// The report leaves out the devices that were skipped, so a run that stopped at its time limit
+	// answers the basic result, which names every device and why it was not read. No report of the
+	// devices that did run is stored then. (A stop_on_error skip is the operator's own choice and
+	// still answers the report.)
+	if bulkReadTimeLimited(result) {
+		h.responseWriter().WriteSuccess(w, r, result)
 		return
 	}
 

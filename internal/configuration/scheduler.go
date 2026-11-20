@@ -247,7 +247,7 @@ func (s *Scheduler) executeDriftDetection(schedule DriftDetectionSchedule) (*Bul
 		return s.service.createClientForDevice(deviceID)
 	}
 
-	return s.service.BulkDetectDrift(deviceIDs, clientGetter, false)
+	return s.service.BulkDetectDrift(context.Background(), deviceIDs, clientGetter, false)
 }
 
 // getDevicesForSchedule determines which devices to check for a given schedule
