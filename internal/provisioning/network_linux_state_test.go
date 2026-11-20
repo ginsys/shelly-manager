@@ -150,6 +150,74 @@ func TestGetInterfaceInfo_ReadsTheStateInTheCLocale(t *testing.T) {
 	assert.Contains(t, err.Error(), "unavailable")
 }
 
+// dutchNmcli puts a stand-in nmcli on PATH that answers in English only when LC_ALL is C and in Dutch
+// otherwise ("geactiveerd", "niet beschikbaar"), and logs LC_ALL with the arguments of every call. The
+// parent environment is Dutch. It returns the call log path.
+func dutchNmcli(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	callLog := filepath.Join(dir, "calls.log")
+	script := `#!/bin/sh
+echo "LC_ALL=$LC_ALL $*" >> "$NMCLI_CALL_LOG"
+if [ "$LC_ALL" = C ]; then active=activated; dev=disconnected; else active=geactiveerd; dev='niet beschikbaar'; fi
+case "$*" in
+  *"device status") printf 'wlo1:wifi:%s\n' "$dev" ;;
+  *"device wifi list") printf 'HomeNet:WPA2:70:6:2437\n' ;;
+  *"-f NAME connection show") printf 'HomeNet\n' ;;
+  *"connection show --active") printf 'HomeNet:802-11-wireless:%s\n' "$active" ;;
+  *"connection show HomeNet") printf '802-11-wireless.ssid:HomeNet\n802-11-wireless.security:wpa-psk\n' ;;
+esac
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "nmcli"), []byte(script), 0o755))
+	t.Setenv("PATH", dir)
+	t.Setenv("NMCLI_CALL_LOG", callLog)
+	t.Setenv("LC_ALL", "nl_BE.UTF-8")
+	return callLog
+}
+
+func TestGetCurrentNetwork_ReadsAnActiveConnectionUnderANonEnglishLocale(t *testing.T) {
+	dutchNmcli(t)
+
+	network, err := newTestLinuxInterface(t).GetCurrentNetwork(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "HomeNet", network.SSID)
+	assert.Equal(t, "wpa-psk", network.Security)
+}
+
+func TestDisconnectFromNetwork_BringsDownTheActiveConnectionUnderANonEnglishLocale(t *testing.T) {
+	callLog := dutchNmcli(t)
+
+	require.NoError(t, newTestLinuxInterface(t).DisconnectFromNetwork(context.Background()))
+
+	assert.Contains(t, standInCalls(t, callLog), "connection down HomeNet")
+}
+
+// Every nmcli call of the file runs in the C locale, because the file compares nmcli's words in English.
+// The case calls every method that runs nmcli and reads the locale of each call from the log.
+func TestEveryNmcliCallRunsInTheCLocale(t *testing.T) {
+	callLog := dutchNmcli(t)
+	ni := newTestLinuxInterface(t)
+	ctx := context.Background()
+
+	ni.GetInterfaceInfo()
+	_, _ = ni.GetAvailableNetworks(ctx)
+	_, _ = ni.GetCurrentNetwork(ctx)
+	_, _ = ni.IsConnected(ctx, "HomeNet")
+	_ = ni.DisconnectFromNetwork(ctx)
+	_ = ni.ConnectToNetwork(ctx, "HomeNet", "")
+
+	calls := standInCalls(t, callLog)
+	// Control: the calls that parse a translated word, and the connect path, all ran.
+	for _, want := range []string{"device status", "device wifi rescan", "device wifi list", "-f NAME connection show", "connection show --active", "802-11-wireless.ssid", "connection down", "connection up"} {
+		assert.Contains(t, calls, want, "control: the case did not reach %q", want)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(calls), "\n") {
+		assert.True(t, strings.HasPrefix(line, "LC_ALL=C "), "nmcli ran in the caller's locale: %q", line)
+	}
+}
+
 // A hung nmcli must not hang the state read: it ends in the "error" state.
 func TestGetInterfaceInfo_AHungNmcliEndsInTheErrorState(t *testing.T) {
 	dir := t.TempDir()
