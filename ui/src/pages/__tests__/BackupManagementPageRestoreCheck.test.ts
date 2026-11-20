@@ -265,6 +265,36 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
+    it('lets an older refresh that answers late neither override nor hide a newer refresh failure', async () => {
+      let answerOlder: (v: unknown) => void = () => {}
+      let reads = 0
+      restoreStatus = () => {
+        reads++
+        if (reads === 2) {
+          return new Promise((resolve) => {
+            answerOlder = resolve
+          })
+        }
+        if (reads === 3) return Promise.reject(refused(500, 'Internal error'))
+        return statusAnswer({ pending: null, last_result: null })()
+      }
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await wrapper.get('.refresh-button').trigger('click')
+      await flushPromises()
+      await wrapper.get('.refresh-button').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('.message').text()).toContain('restore status could not be refreshed')
+
+      answerOlder(await statusAnswer({ pending: null, last_result: null })())
+      await flushPromises()
+
+      const message = wrapper.get('.message').text()
+      expect(message).toContain('restore status could not be refreshed')
+      expect(message).not.toContain('Data refreshed successfully')
+      wrapper.unmount()
+    })
+
     it('keeps the newest status when an older read answers late', async () => {
       let answerFirst: (v: unknown) => void = () => {}
       let reads = 0
