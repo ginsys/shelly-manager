@@ -4,6 +4,7 @@ package provisioning
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -27,6 +28,17 @@ func NewLinuxNetworkInterface(logger *logging.Logger) *LinuxNetworkInterface {
 
 // GetInterfaceInfo returns information about the Linux network interface
 func (ni *LinuxNetworkInterface) GetInterfaceInfo() NetworkInterfaceInfo {
+	// A hung nmcli ends in the "error" state, never in a status command that waits for ever.
+	ctx, cancel := context.WithTimeout(context.Background(), interfaceInfoTimeout)
+	defer cancel()
+	return ni.interfaceInfo(ctx)
+}
+
+// interfaceInfoTimeout bounds the nmcli state read of GetInterfaceInfo. A variable so a test can shorten it.
+var interfaceInfoTimeout = 10 * time.Second
+
+// interfaceInfo reads the Wi-Fi device and its NetworkManager state with nmcli.
+func (ni *LinuxNetworkInterface) interfaceInfo(ctx context.Context) NetworkInterfaceInfo {
 	info := NetworkInterfaceInfo{
 		Type:         "wireless",
 		Tooling:      "nmcli (NetworkManager)",
@@ -35,7 +47,7 @@ func (ni *LinuxNetworkInterface) GetInterfaceInfo() NetworkInterfaceInfo {
 	}
 
 	// Try to get WiFi device information using nmcli
-	cmd := exec.Command("nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status")
+	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status")
 	output, err := cmd.Output()
 	if err != nil {
 		ni.logger.WithFields(map[string]any{
@@ -53,23 +65,14 @@ func (ni *LinuxNetworkInterface) GetInterfaceInfo() NetworkInterfaceInfo {
 		fields := strings.Split(line, ":")
 		if len(fields) >= 3 && fields[1] == "wifi" {
 			info.Name = fields[0]
-			switch fields[2] {
-			case "connected":
-				info.Status = "connected"
-			case "disconnected":
-				info.Status = "disconnected"
-			case "unavailable":
-				info.Status = "unavailable"
-			default:
-				info.Status = fields[2]
-			}
+			info.Status = fields[2] // NetworkManager's own state, passed through
 			break
 		}
 	}
 
 	// If no WiFi device found, set default values
 	if info.Name == "" {
-		info.Name = "no-wifi-device"
+		info.Name = NoWiFiDevice
 		info.Status = "unavailable"
 		info.Capabilities = []string{"none"}
 	}
@@ -84,15 +87,16 @@ func (ni *LinuxNetworkInterface) GetAvailableNetworks(ctx context.Context) ([]Wi
 		"platform":  "linux",
 	}).Debug("Scanning for available WiFi networks")
 
-	// Debug: Check if nmcli is available and get device status first
-	deviceCmd := exec.CommandContext(ctx, "nmcli", "device", "status")
-	deviceOutput, deviceErr := deviceCmd.CombinedOutput()
+	// A device that cannot scan is an error, not an empty list, and is not asked to rescan.
+	info := ni.interfaceInfo(ctx)
 	ni.logger.WithFields(map[string]any{
 		"component": "network_interface",
-		"command":   "nmcli device status",
-		"output":    string(deviceOutput),
-		"error":     deviceErr,
-	}).Debug("NetworkManager device status")
+		"device":    info.Name,
+		"state":     info.Status,
+	}).Debug("NetworkManager device state")
+	if problem := info.Problem(); problem != "" {
+		return nil, errors.New(problem)
+	}
 
 	// Request a fresh scan
 	scanCmd := exec.CommandContext(ctx, "nmcli", "device", "wifi", "rescan")

@@ -90,6 +90,26 @@ type NetworkInterfaceInfo struct {
 	Status       string   `json:"status"`       // Current status (up, down, connected, etc.)
 }
 
+// NoWiFiDevice is the Name an interface reports when the host has no Wi-Fi device at all.
+const NoWiFiDevice = "no-wifi-device"
+
+// Problem says why the interface cannot scan, or returns "" when nothing stops it. The states that stop
+// a scan are "unavailable" (the radio is off or blocked), "unmanaged" (NetworkManager does not manage the
+// device), "error" (the state could not be read) and no Wi-Fi device. "disconnected" is not one: it is
+// the radio on and joined to nothing, the normal state of a host that scans.
+func (i NetworkInterfaceInfo) Problem() string {
+	const radioHint = "the radio may be off or blocked: check `nmcli radio wifi` and `rfkill list`"
+	switch {
+	case i.Name == NoWiFiDevice:
+		return "no Wi-Fi device found, so there is nothing to scan with (" + radioHint + ")"
+	case i.Status == "error":
+		return "the Wi-Fi device state cannot be read with nmcli (is NetworkManager running?)"
+	case i.Status == "unavailable" || i.Status == "unmanaged":
+		return fmt.Sprintf("the Wi-Fi device %s is %s and cannot scan (%s)", i.Name, i.Status, radioHint)
+	}
+	return ""
+}
+
 // NetworkInterface represents a system network interface abstraction
 type NetworkInterface interface {
 	// GetInterfaceInfo returns information about the network interface
