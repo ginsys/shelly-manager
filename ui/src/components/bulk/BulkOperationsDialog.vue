@@ -430,7 +430,8 @@ async function run(
     // After an answer that may follow writes, what was typed is forgotten, so the call cannot be sent
     // again by a click on the same confirmation. After a refusal before any write it stays to correct.
     if (!(e instanceof NothingWrittenError)) applyForm.value?.reset()
-    setError(e, { action, resource: 'Devices' })
+    // The panel names the call and how many devices it named, so a failure is not a bare error.
+    setError(e, { action, resource: `${ids.length} ${ids.length === 1 ? 'device' : 'devices'}` })
   }
 }
 

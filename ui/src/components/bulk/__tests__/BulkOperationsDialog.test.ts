@@ -128,6 +128,26 @@ describe('BulkOperationsDialog', () => {
     expect(wrapper.emitted('complete')).toBeUndefined()
   })
 
+  it('shows a request the server never answered as a timeout, naming the operation and the devices', async () => {
+    // What axios throws when its time runs out with no response (ginsys/shelly-manager#752).
+    const noAnswer = Object.assign(new Error('timeout of 35000ms exceeded'), {
+      isAxiosError: true,
+      code: 'ECONNABORTED'
+    })
+    vi.mocked(bulkImport).mockRejectedValue(noAnswer)
+    const wrapper = open()
+
+    await byId(wrapper, 'bulk-op-import').trigger('click')
+    await byId(wrapper, 'bulk-submit').trigger('submit')
+    await flushPromises()
+
+    const shown = byId(wrapper, 'bulk-error').text()
+    expect(shown).toContain('TIMEOUT')
+    expect(shown).toContain('Bulk import')
+    expect(shown).toContain('2 devices')
+    expect(shown).not.toContain('UNKNOWN')
+  })
+
   it('clears an earlier error when the request is sent again', async () => {
     vi.mocked(bulkImport)
       .mockRejectedValueOnce(new Error('upstream failed'))

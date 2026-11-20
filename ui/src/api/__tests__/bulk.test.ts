@@ -25,6 +25,7 @@ import {
   type BulkDriftResult,
   type BulkDriftReport
 } from '../bulk'
+import { DEVICE_CALL_TIMEOUT_MS } from '../deviceCallTimeout'
 
 // The answers below are copies of what the backend handlers return for a request naming one stored
 // device and one id that names no device (internal/api/bulk_contract_test.go in the backend, the
@@ -149,10 +150,11 @@ describe('Bulk Operations API', () => {
       const response = await bulkImport(request)
 
       expect(response).toEqual(importAnswer)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-import', {
-        device_ids: [1, 9999],
-        options: { stop_on_error: false }
-      })
+      expect(api.post).toHaveBeenCalledWith(
+        '/config/bulk-import',
+        { device_ids: [1, 9999], options: { stop_on_error: false } },
+        { timeout: DEVICE_CALL_TIMEOUT_MS }
+      )
     })
 
     it('throws the backend message when the answer is not a success', async () => {
@@ -194,6 +196,16 @@ describe('Bulk Operations API', () => {
         'device_ids must name at least one device'
       )
     })
+
+    it('passes on an axios error that has no answer, so a timeout is not an unknown error', async () => {
+      const timeout = Object.assign(new Error('timeout of 35000ms exceeded'), {
+        isAxiosError: true,
+        code: 'ECONNABORTED'
+      })
+      ;(api.post as any).mockRejectedValue(timeout)
+
+      await expect(bulkImport(request)).rejects.toBe(timeout)
+    })
   })
 
   it('sends the stop-on-error option as given', async () => {
@@ -205,10 +217,11 @@ describe('Bulk Operations API', () => {
     })
 
     expect(response).toEqual(importStopAnswer)
-    expect(api.post).toHaveBeenCalledWith('/config/bulk-import', {
-      device_ids: [9999, 1],
-      options: { stop_on_error: true }
-    })
+    expect(api.post).toHaveBeenCalledWith(
+      '/config/bulk-import',
+      { device_ids: [9999, 1], options: { stop_on_error: true } },
+      { timeout: DEVICE_CALL_TIMEOUT_MS }
+    )
   })
 
   describe('bulkDriftDetect', () => {
@@ -218,7 +231,9 @@ describe('Bulk Operations API', () => {
       const response = await bulkDriftDetect(request)
 
       expect(response).toEqual(driftAnswer)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect', request)
+      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect', request, {
+        timeout: DEVICE_CALL_TIMEOUT_MS
+      })
     })
 
     it('throws the default message when no data returned', async () => {
@@ -239,7 +254,9 @@ describe('Bulk Operations API', () => {
       const response = await bulkDriftDetectEnhanced(request)
 
       expect(response).toEqual(reportAnswer)
-      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect-enhanced', request)
+      expect(api.post).toHaveBeenCalledWith('/config/bulk-drift-detect-enhanced', request, {
+        timeout: DEVICE_CALL_TIMEOUT_MS
+      })
     })
 
     it('throws the default message when no data returned', async () => {
