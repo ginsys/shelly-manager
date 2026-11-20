@@ -193,21 +193,18 @@ nothing, and the OPNsense client in `internal/opnsense/client.go` is where the n
 those five, "test" can only mean a dry run.
 
 **Option (a): test is a dry run.** The general dry run is `POST /export/preview`
-(`sync_handlers.go:550`); its handler saves no history row (`:564-578`). The `DryRun` and `ValidateOnly` options (`internal/sync/plugin.go:154-160`)
-are not a general export dry run: the export engine does not read them and JSON export writes its
-files without checking either (`internal/plugins/sync/jsonexport/json.go:82-158`). One plugin honours
-`DryRun` on its own: OPNsense passes it to its DHCP and firewall-alias syncs, which then skip their
-creates, updates and configuration apply (`opnsense.go:523,554`, `internal/opnsense/dhcp.go:242,301,326`,
-`internal/opnsense/firewall.go:244,261`). `bidirectional_sync` runs both, and `xml_config` only builds
-text (`opnsense.go:576-633`). `Export` connects to the host and tests the connection first
-(`opnsense.go:229-236`), and the DHCP sync reads the existing reservations (`dhcp.go:221`). So a
-`POST /export` for OPNsense with `options.dry_run` set, once its config passes validation
-(`sync_handlers.go:529-533`), already checks the credentials and makes no change on the OPNsense host
-in any of its four formats. It still writes an export-history row in the manager's database
-whenever the engine returns a result, a failed export included (`sync_handlers.go:536-545`,
-`internal/sync/engine.go:666`); a request that fails validation writes none. Cost: none. It does not solve: for OPNsense `Preview`
-cannot tell a wrong credential, because it never contacts the host (section 1, item 5), and no UI path
-runs that dry run (section 2.5).
+(`sync_handlers.go:550`); its handler saves no history row (`:564-578`). The `DryRun` and
+`ValidateOnly` options (`internal/sync/plugin.go:154-160`) are not a general export dry run: the
+export engine does not read them and JSON export writes its files without checking either
+(`internal/plugins/sync/jsonexport/json.go:82-158`). One plugin honours `DryRun` on its own: OPNsense
+passes it to its DHCP and firewall-alias syncs, which then skip their creates, updates and
+configuration apply (`opnsense.go:523,554`, `internal/opnsense/dhcp.go:242,301,326`,
+`internal/opnsense/firewall.go:244,261`). Its `Export` tests the connection before it syncs
+(`opnsense.go:229-236`). So an OPNsense export with `options.dry_run` that reaches the plugin checks
+the credentials and makes no create, update or apply on the host. The handler also attempts to save
+an export-history row for it (`sync_handlers.go:536-545`). Cost: none. It does not solve: for OPNsense
+`Preview` cannot tell a wrong credential, because it never contacts the host (section 1, item 5),
+and no UI path runs that dry run (section 2.5).
 
 **Option (b): a connectivity check for plugins that have a connection.** An optional interface,
 `ConnectionTester` with `TestConnection(ctx, config) error`, so `SyncPlugin` does not change and five
