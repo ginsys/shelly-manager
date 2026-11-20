@@ -150,6 +150,25 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
+    it('offers no Stage after a recheck failed, whatever the earlier check said', async () => {
+      let checks = 0
+      vi.mocked(api.post as any).mockImplementation(() => {
+        checks++
+        return checks === 1 ? Promise.resolve(checkAnswer('b', 2048)) : Promise.reject(refused(404, 'Backup not found'))
+      })
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await openChecked(wrapper)
+      expect(wrapper.find('.stage-button').exists()).toBe(true)
+
+      await wrapper.get('.restore-modal .primary-button').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.get('.restore-modal').text()).toContain('Backup not found')
+      expect(wrapper.find('.stage-button').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
     it('does not say nothing was staged when the answer never arrived, and reads the status', async () => {
       vi.mocked(api.post as any).mockImplementation((path: string) =>
         path === '/import/restore' ? Promise.reject(new Error('Network Error')) : Promise.resolve(checkAnswer('b', 2048)),

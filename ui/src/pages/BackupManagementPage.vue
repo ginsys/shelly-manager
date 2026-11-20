@@ -488,6 +488,7 @@ async function handlePreviewRestore() {
   const mine = ++restoreCheckId
   restoreLoading.value = true
   restoreError.value = ''
+  restorePreview.value = null // a failed recheck must not leave the earlier answer standing
 
   try {
     const result = await previewRestore(restoreBackup.value.backup_id)
