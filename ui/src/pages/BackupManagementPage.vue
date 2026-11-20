@@ -421,9 +421,9 @@ function startRestore(backup: BackupItem) {
 
 /**
  * Read the staged restore and the last result. A failed read leaves the last known status: the
- * stage call is the authority and refuses by itself.
+ * stage call is the authority and refuses by itself. The newest read owns both the status and
+ * whether the status panel says it could not be read.
  */
-// The newest read owns both the status and whether the status panel says it could not be read.
 async function loadRestoreStatus() {
   const mine = ++restoreStatusId
   try {
@@ -462,7 +462,7 @@ async function handleStageRestore() {
       // No answer came back, so the server may have staged it: read what it holds.
       await loadRestoreStatus()
       if (mine === restoreCheckId) {
-        restoreError.value = `The server did not answer, so it is not known whether the restore was staged. ${reason}`
+        restoreError.value = `It is not known whether the restore was staged; the restore status is read again. ${reason}`
       }
     } else if (mine === restoreCheckId) {
       restoreError.value = `Nothing was staged. ${reason}`
