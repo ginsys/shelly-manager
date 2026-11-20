@@ -17,6 +17,7 @@ import {
   getChannels,
   getChannel,
   createChannel,
+  updateChannel,
   setChannelEnabled,
   deleteChannel,
   testChannel,
@@ -169,6 +170,86 @@ describe('notification api', () => {
         config: { url: '********', secret: '********' },
         description: 'Ops mail'
       })
+    })
+
+    // ginsys/shelly-manager#783: the edit form calls updateChannel with the config it built.
+    it('updateChannel sends the whole channel to its numeric id', async () => {
+      ;(api.put as any).mockResolvedValue(ok({ status: 'updated' }))
+
+      await updateChannel('5', {
+        name: 'Hook',
+        type: 'webhook',
+        enabled: true,
+        config: { url: '********', headers: '********', method: 'POST' },
+        description: 'Ops hook'
+      })
+
+      expect(api.put).toHaveBeenCalledWith('/notifications/channels/5', {
+        name: 'Hook',
+        type: 'webhook',
+        enabled: true,
+        config: { url: '********', headers: '********', method: 'POST' },
+        description: 'Ops hook'
+      })
+    })
+
+    // A refused update is the same 400 as a refused create (internal/notification/handlers.go UpdateChannel):
+    // the reason is in error.details and error.message is the fixed "Invalid channel update".
+    it('updateChannel throws the server\'s reason for a refused config', async () => {
+      ;(api.put as any).mockRejectedValue({
+        message: 'Request failed with status code 400',
+        response: {
+          status: 400,
+          data: {
+            success: false,
+            error: {
+              code: 'VALIDATION_FAILED',
+              message: 'Invalid channel update',
+              details: 'invalid channel configuration: email config must have at least one recipient'
+            }
+          }
+        }
+      })
+
+      await expect(
+        updateChannel('1', { name: 'Mail', type: 'email', enabled: true, config: { recipients: [] } })
+      ).rejects.toThrow('invalid channel configuration: email config must have at least one recipient')
+    })
+
+    it('updateChannel falls back to the envelope message, then to the transport message', async () => {
+      ;(api.put as any).mockRejectedValueOnce({
+        message: 'Request failed with status code 400',
+        response: { status: 400, data: { success: false, error: { message: 'Invalid JSON request body' } } }
+      })
+      await expect(
+        updateChannel('1', { name: 'Mail', type: 'email', enabled: true, config: {} })
+      ).rejects.toThrow('Invalid JSON request body')
+
+      ;(api.put as any).mockRejectedValueOnce(new Error('Network Error'))
+      await expect(
+        updateChannel('1', { name: 'Mail', type: 'email', enabled: true, config: {} })
+      ).rejects.toThrow('Network Error')
+    })
+
+    it('updateChannel refuses an id that is not a whole number before any request', async () => {
+      await expect(updateChannel('c1', { name: 'x', type: 'email', enabled: true, config: {} })).rejects.toThrow(
+        'Invalid notification id'
+      )
+      expect(api.put).not.toHaveBeenCalled()
+    })
+
+    // setChannelEnabled goes through the same function, so a refused toggle now says why as well.
+    it('setChannelEnabled throws the server\'s reason when the update is refused', async () => {
+      ;(api.get as any).mockResolvedValue(ok(wireChannel()))
+      ;(api.put as any).mockRejectedValue({
+        message: 'Request failed with status code 400',
+        response: {
+          status: 400,
+          data: { success: false, error: { message: 'Invalid channel update', details: 'invalid channel configuration: x' } }
+        }
+      })
+
+      await expect(setChannelEnabled('1', false)).rejects.toThrow('invalid channel configuration: x')
     })
 
     it('setChannelEnabled sends nothing when the read fails', async () => {

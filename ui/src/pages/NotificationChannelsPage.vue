@@ -73,91 +73,7 @@
             </select>
           </div>
           <!-- The config of the chosen type. The server decides what is valid and says why when it refuses. -->
-          <template v-if="newChannel.type === 'email'">
-            <div class="form-group">
-              <label>Recipients:</label>
-              <textarea
-                v-model="fields.recipients"
-                required
-                rows="3"
-                class="form-input"
-                placeholder="One address per line, or separated by commas"
-                data-testid="channel-recipients"
-              />
-            </div>
-            <div class="form-group">
-              <label>Subject (optional):</label>
-              <input v-model="fields.subject" class="form-input" data-testid="channel-subject" />
-            </div>
-          </template>
-          <template v-else-if="newChannel.type === 'webhook'">
-            <div class="form-group">
-              <label>URL:</label>
-              <input
-                v-model="fields.webhookUrl"
-                required
-                autocomplete="off"
-                class="form-input"
-                placeholder="https://"
-                data-testid="channel-webhook-url"
-              />
-            </div>
-            <div class="form-group">
-              <label>Method:</label>
-              <select v-model="fields.method" class="form-input" data-testid="channel-webhook-method">
-                <option v-for="m in WEBHOOK_METHODS" :key="m" :value="m">{{ m }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Headers (optional):</label>
-              <div v-for="(row, i) in fields.headers" :key="i" class="header-row">
-                <input v-model="row.key" placeholder="Name" class="form-input" data-testid="channel-header-name" />
-                <input v-model="row.value" placeholder="Value" autocomplete="off" class="form-input" data-testid="channel-header-value" />
-                <button
-                  type="button"
-                  class="secondary-button"
-                  data-testid="channel-remove-header"
-                  @click="removeHeader(i)"
-                >
-                  Remove
-                </button>
-              </div>
-              <button type="button" class="secondary-button" data-testid="channel-add-header" @click="addHeader">
-                Add header
-              </button>
-            </div>
-            <div class="form-group">
-              <label>Secret (optional, signs the payload):</label>
-              <input
-                v-model="fields.secret"
-                type="password"
-                autocomplete="off"
-                class="form-input"
-                data-testid="channel-webhook-secret"
-              />
-            </div>
-          </template>
-          <template v-else>
-            <div class="form-group">
-              <label>Webhook URL:</label>
-              <input
-                v-model="fields.slackUrl"
-                required
-                autocomplete="off"
-                class="form-input"
-                placeholder="https://hooks.slack.com/services/..."
-                data-testid="channel-slack-url"
-              />
-            </div>
-            <div class="form-group">
-              <label>Channel (optional):</label>
-              <input v-model="fields.slackChannel" class="form-input" placeholder="#alerts" data-testid="channel-slack-channel" />
-            </div>
-            <div class="form-group">
-              <label>Username (optional):</label>
-              <input v-model="fields.slackUsername" class="form-input" data-testid="channel-slack-username" />
-            </div>
-          </template>
+          <ChannelConfigFields :type="newChannel.type" :fields="fields" />
           <div class="form-group">
             <label>Enabled:</label>
             <input type="checkbox" v-model="newChannel.enabled" />
@@ -177,7 +93,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications'
-import { buildChannelConfig, emptyChannelFields, WEBHOOK_METHODS, type ChannelType } from '@/utils/channelConfig'
+import type { ChannelType } from '@/api/notification'
+import { buildChannelConfig, emptyChannelFields } from '@/utils/channelConfig'
+import ChannelConfigFields from '@/components/ChannelConfigFields.vue'
 import DataTable from '@/components/DataTable.vue'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useLateFailure, usePageError } from '@/composables/useNotice'
@@ -207,14 +125,6 @@ watch(
     fields.value = emptyChannelFields()
   }
 )
-
-function addHeader() {
-  fields.value.headers.push({ key: '', value: '' })
-}
-
-function removeHeader(index: number) {
-  fields.value.headers.splice(index, 1)
-}
 
 function resetForm() {
   newChannel.value = { name: '', type: 'email', enabled: true, config: {} }
@@ -287,11 +197,6 @@ async function handleDelete(id: string) {
   background: #fee2e2;
   border-radius: 4px;
   overflow-wrap: anywhere;
-}
-.header-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
 }
 .badge {
   padding: 2px 8px;

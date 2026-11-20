@@ -544,10 +544,17 @@ one recipient").
 - **Slack**: Webhook URL (required), and an optional Channel and Username.
 
 The server never shows a stored credential again: the URL, the headers and the secret read back as `********`.
-They are write-only. A channel's config is shown read-only on its own page (Edit on the list), which can
-enable or disable the channel and send a test notification; changing a config after creation is not offered
-yet (ginsys/shelly-manager#783). A message template, a webhook timeout and retries, and the Slack icon are
-not in the form; the server uses its defaults.
+They are write-only.
+
+**Edit a channel** on its own page (Edit on the list, then the Edit button there). The form has the same
+fields as the create form for the channel's type; the type, name and description do not change. Each stored
+credential (the URL, the headers, the secret) shows a "Keep the stored ..." box, ticked: while it is ticked
+the stored value stays as it is, and untick it to type a new one. Unticking the headers and leaving no row
+removes all headers, and unticking the secret and leaving it empty removes the secret. Save shows the
+server's reason when it refuses the config and keeps what you typed; Cancel drops it and sends nothing.
+
+A message template, a webhook timeout and retries, and the Slack icon are not in the form. The server uses
+its defaults, and a save leaves any value of them as it is.
 
 #### Notification Rules
 

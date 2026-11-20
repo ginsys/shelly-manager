@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250 and ginsys/shelly-manager#748, and a unit test keeps them equal to the code (section 1)
-**Status:** 131 of 136 exported API functions are referenced by the UI (96%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 132 of 137 exported API functions are referenced by the UI (96%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -83,12 +83,12 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
-| `notification.ts` | 10 | 10 | |
+| `notification.ts` | 11 | 11 | |
 | `plugin.ts` | 4 | 3 | `getPlugin` |
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **136** | **131** | **5** |
+| **Total** | **137** | **132** | **5** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -163,8 +163,8 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/plugins` | Plugin management (read-only) | 565 | top bar |
 | `/dashboard` | Metrics dashboard | 667 | top bar |
 | `/admin` | Admin settings (admin key rotation) | 45 | top bar |
-| `/notifications/channels` | Notification channels | 365 | top bar (Notifications), Channel detail |
-| `/notifications/channels/:id` | Channel detail | 126 | Channels |
+| `/notifications/channels` | Notification channels | 276 | top bar (Notifications), Channel detail |
+| `/notifications/channels/:id` | Channel detail | 255 | Channels |
 | `/notifications/rules` | Notification rules | 199 | top bar (Notifications) |
 | `/notifications/history` | Notification history | 156 | top bar (Notifications) |
 | `/provisioning` | Provisioning dashboard | 86 | top bar (Provisioning) |
@@ -184,9 +184,7 @@ pages and the device configuration pages) is linked from its list page. This was
 ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
 (`ui/tests/e2e/nav-reachability.spec.ts`) walks the links.
 
-Linked is not the same as working: the Notification channels page creates a channel but cannot change
-its config afterwards, because the channel page shows the config read-only (ginsys/shelly-manager#744 added
-the create form; ginsys/shelly-manager#783 is the edit), the Drift schedules page cannot create or edit a
+Linked is not the same as working: the Drift schedules page cannot create or edit a
 schedule yet (ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
 server process still holds in memory (ginsys/shelly-manager#647). Both pages show the main fields
 of a result (status, created time, duration, errors, warnings, and for an import the changes by
@@ -345,8 +343,11 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 ginsys/shelly-manager#250 (the notification pages and the notification API disagreed) was fixed after
 that date. It left one frontend issue, found on 2026-11-20: ginsys/shelly-manager#744, a notification
 channel could not be created from the page because the create form had no config fields. That is fixed: the
-form has the fields of each type, and a refused config shows the server's reason. What is left is editing a
-channel's config from the channel page (ginsys/shelly-manager#783).
+form has the fields of each type, and a refused config shows the server's reason. Editing a channel's config
+from the channel page (ginsys/shelly-manager#783) is fixed too: the page has an Edit mode with the same
+fields, and a stored credential (the URL, the headers, the secret) is kept or replaced as the user chooses.
+What is left is the channel's name, description and type, which the page cannot change, and the config keys
+the form does not show (a template, a timeout, retries, a Slack icon), which a save keeps as they are.
 
 Also parked, not frontend-labelled: ginsys/shelly-manager#249 (export/import routes the frontend
 calls that the backend does not have) and ginsys/shelly-manager#279 (the drift schedule form,
