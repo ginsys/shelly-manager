@@ -2,7 +2,7 @@
 
 # Logging configuration
 logging:
-  level: info         # debug, info, warn, error (debug prints every nmcli output line)
+  level: info         # debug, info, warn, error (debug prints the raw nmcli network list)
   format: text       # text, json
   output: stdout     # stdout, file path
 
