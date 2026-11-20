@@ -477,3 +477,42 @@ func TestNotificationSecrets_SaveReplacesAndDrops(t *testing.T) {
 	})
 	assert.Equal(t, http.StatusBadRequest, code, resp)
 }
+
+// A webhook method outside POST, PUT and PATCH and a URL that is not absolute http or https are refused
+// with the rule as the reason. The URL is the token, so the response never carries it, and an update that
+// keeps the url as the placeholder is checked as stored and passes.
+func TestNotificationChannelRefusesBadDestinationWithoutEchoingIt(t *testing.T) {
+	env := setupNotificationSecrets(t)
+	bad := "ftp://hook:" + leakUserPwd + "@h.example/" + leakPath + "?t=" + leakQuery
+	good := map[string]any{"url": "https://h.example/" + leakPath, "method": "POST"}
+	id, _ := env.createChannel(t, map[string]any{"name": "hook", "type": "webhook", "config": good})
+
+	refused := map[string]struct {
+		method, path string
+		body         map[string]any
+		reason       string
+	}{
+		"create, webhook url":    {"POST", "/notifications/channels", map[string]any{"name": "w", "type": "webhook", "config": map[string]any{"url": bad}}, "webhook URL must be an absolute http or https URL"},
+		"create, slack url":      {"POST", "/notifications/channels", map[string]any{"name": "s", "type": "slack", "config": map[string]any{"webhook_url": bad}}, "slack webhook URL must be an absolute http or https URL"},
+		"create, webhook method": {"POST", "/notifications/channels", map[string]any{"name": "m", "type": "webhook", "config": map[string]any{"url": "https://h.example/x", "method": "NOT A METHOD"}}, "webhook method must be one of POST, PUT, PATCH"},
+		"update, webhook url":    {"PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{"name": "hook", "type": "webhook", "config": map[string]any{"url": bad}}, "webhook URL must be an absolute http or https URL"},
+		"update, webhook method": {"PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{"name": "hook", "type": "webhook", "config": map[string]any{"url": redact.Placeholder, "method": "GET"}}, "webhook method must be one of POST, PUT, PATCH"},
+	}
+	for name, c := range refused {
+		code, resp := env.do(t, c.method, c.path, c.body)
+		assert.Equal(t, http.StatusBadRequest, code, name+": "+resp)
+		assert.Contains(t, resp, "VALIDATION_FAILED", name)
+		assert.Contains(t, resp, c.reason, name)
+		for _, leak := range allLeaks {
+			assert.NotContains(t, resp, leak, name)
+		}
+	}
+
+	code, resp := env.do(t, "PUT", fmt.Sprintf("/notifications/channels/%d", id), map[string]any{
+		"name": "hook", "type": "webhook", "config": map[string]any{"url": redact.Placeholder, "method": "PUT"},
+	})
+	require.Equal(t, http.StatusOK, code, resp)
+	stored := env.storedConfig(t, id)
+	assert.Equal(t, good["url"], stored["url"], "the kept url is the stored one, not the placeholder")
+	assert.Equal(t, "PUT", stored["method"])
+}
