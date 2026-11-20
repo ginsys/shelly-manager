@@ -13,15 +13,102 @@ export type ConfigBody = Record<string, any>
 
 export const APPLICABLE_KEY = 'x-applicable' as const
 
+// A list whose items are objects with an int `id` is a list of channels (relays, inputs). The server
+// merges it by id, not by position (internal/configuration/merge.go: channelIDs, mergeChannelsByID),
+// so a path names one item by its id, written "#<id>": ["relay", "relays", "#1", "name"].
+const ITEM = '#'
+
+export function isItem(key: string): boolean {
+  return key.startsWith(ITEM)
+}
+
+// Items of a list that all leave the id out are addressed by position. Adding or removing an item
+// would move the others, so each one takes its position as an explicit id first.
+function pinPositions(list: any[]) {
+  if (list.length > 1 && list.every(item => isPlainObject(item) && !(typeof item.id === 'number' && item.id !== 0))) {
+    list.forEach((item, i) => { item.id = i })
+  }
+}
+
+export function itemKey(id: number): string {
+  return `${ITEM}${id}`
+}
+
+// listIds is channelIDs in internal/configuration/merge.go: the id of each item, an id left out
+// being 0, and in a list of more than one item whose ids are all 0 the position. It is null for a
+// list that cannot be addressed by id: an item that is no object, or two items of one id.
+export function listIds(list: any[]): number[] | null {
+  if (!list.every(isPlainObject)) return null
+  const ids = list.map(item => (typeof item.id === 'number' ? item.id : 0))
+  if (ids.length > 1 && ids.every(id => id === 0)) ids.forEach((_, i) => { ids[i] = i })
+  return new Set(ids).size === ids.length ? ids : null
+}
+
+function itemIndex(list: any[], key: string): number {
+  return isItem(key) ? (listIds(list) ?? []).indexOf(Number(key.slice(ITEM.length))) : -1
+}
+
+// child is the value under key: a field of an object, or an item of a list by its "#id".
+function child(node: any, key: string): any {
+  if (Array.isArray(node)) return node[itemIndex(node, key)]
+  if (node === null || typeof node !== 'object' || isItem(key)) return undefined
+  return node[key]
+}
+
+// The key of a path as the form shows it and as errors are keyed: an item is its id, so
+// "relay.relays.1.name". The server's sources map keys an item by its position, which is the id in
+// a list in id order (the Gen1 apply requires that).
 export function pathKey(path: ConfigPath): string {
-  return path.join('.')
+  return path.map(key => (isItem(key) ? key.slice(ITEM.length) : key)).join('.')
+}
+
+// The server names a list item by its position in the body it was sent ("relay.relays.0.name"). The
+// form keys an item by its id, so each position becomes the id of that item in the body. A list the
+// form cannot address by id (a list of plain values, two items of one id) is one control, so the
+// path ends at that list. A position the body lacks keeps the path as the server gave it.
+export function formErrorKey(body: ConfigBody, serverPath: string): string {
+  let node: any = body
+  const keys: string[] = []
+  for (const key of serverPath.split('.')) {
+    if (Array.isArray(node) && /^\d+$/.test(key)) {
+      const ids = listIds(node)
+      if (ids === null) return keys.join('.')
+      if (Number(key) >= ids.length) return serverPath
+      keys.push(String(ids[Number(key)]))
+      node = node[Number(key)]
+    } else {
+      keys.push(key)
+      node = isPlainObject(node) ? node[key] : undefined
+    }
+  }
+  return keys.join('.')
+}
+
+// The server's sources map keys a list item by its position in the merged list, so a path of the form
+// becomes that key: "relay.relays.1.name" for item #3 when it is the second item of the inherited
+// list. An item the inherited list lacks has no source.
+export function sourceKey(inherited: ConfigBody | null | undefined, path: ConfigPath): string | undefined {
+  let node: any = inherited
+  const keys: string[] = []
+  for (const key of path) {
+    if (isItem(key)) {
+      const at = Array.isArray(node) ? itemIndex(node, key) : -1
+      if (at < 0) return undefined
+      keys.push(String(at))
+      node = node[at]
+    } else {
+      keys.push(key)
+      node = isPlainObject(node) ? node[key] : undefined
+    }
+  }
+  return keys.join('.')
 }
 
 export function getAt(body: ConfigBody | null | undefined, path: ConfigPath): any {
   let node: any = body
   for (const key of path) {
-    if (node === null || typeof node !== 'object' || Array.isArray(node)) return undefined
-    node = node[key]
+    node = child(node, key)
+    if (node === undefined) return undefined
   }
   return node
 }
@@ -29,22 +116,66 @@ export function getAt(body: ConfigBody | null | undefined, path: ConfigPath): an
 export function hasAt(body: ConfigBody | null | undefined, path: ConfigPath): boolean {
   if (path.length === 0) return false
   const parent = getAt(body, path.slice(0, -1))
-  return parent !== null && typeof parent === 'object' && !Array.isArray(parent) &&
-    Object.prototype.hasOwnProperty.call(parent, path[path.length - 1])
+  const last = path[path.length - 1]
+  if (Array.isArray(parent)) return itemIndex(parent, last) >= 0
+  return parent !== null && typeof parent === 'object' && !isItem(last) &&
+    Object.prototype.hasOwnProperty.call(parent, last)
 }
 
-// setAt returns a copy of body with value at path. It creates missing parent objects.
+// put stores value under key: a field of an object, or an item of a list, which takes its id and
+// stands before the first item of a higher id.
+function put(container: any, key: string, value: any) {
+  if (!Array.isArray(container)) {
+    container[key] = value
+    return
+  }
+  const id = Number(key.slice(ITEM.length))
+  const at = itemIndex(container, key)
+  if (at >= 0) {
+    container[at] = value
+    return
+  }
+  pinPositions(container)
+  const ids = listIds(container) ?? []
+  const before = ids.findIndex(other => other > id)
+  container.splice(before < 0 ? container.length : before, 0, { id, ...value })
+}
+
+// setAt returns a copy of body with value at path. It creates missing parents: an object, or a
+// list where the next key is an item.
 export function setAt(body: ConfigBody, path: ConfigPath, value: any): ConfigBody {
   const copy: ConfigBody = clone(body)
   let node: any = copy
-  for (const key of path.slice(0, -1)) {
-    if (node[key] === null || typeof node[key] !== 'object' || Array.isArray(node[key])) {
-      node[key] = {}
+  path.slice(0, -1).forEach((key, i) => {
+    const wantList = isItem(path[i + 1])
+    let next = child(node, key)
+    if (next === null || typeof next !== 'object' || Array.isArray(next) !== wantList) {
+      next = wantList ? [] : {}
+      put(node, key, next)
+      next = child(node, key)
     }
-    node = node[key]
-  }
-  node[path[path.length - 1]] = value
+    node = next
+  })
+  put(node, path[path.length - 1], value)
   return copy
+}
+
+function remove(container: any, key: string) {
+  if (!Array.isArray(container)) {
+    delete container[key]
+    return
+  }
+  const at = itemIndex(container, key)
+  if (at < 0) return
+  pinPositions(container)
+  container.splice(at, 1)
+}
+
+// An empty object or list, or an item left with only its id, holds no override.
+function holdsNothing(node: any, key: string): boolean {
+  if (Array.isArray(node)) return node.length === 0
+  const keys = Object.keys(node)
+  return keys.length === 0 || (isItem(key) && keys.length === 1 && keys[0] === 'id')
 }
 
 // deleteAt returns a copy of body without the key at path. Parent objects that become empty are
@@ -54,15 +185,14 @@ export function deleteAt(body: ConfigBody, path: ConfigPath): ConfigBody {
   const parents: any[] = [copy]
   let node: any = copy
   for (const key of path.slice(0, -1)) {
-    node = node?.[key]
-    if (node === null || typeof node !== 'object' || Array.isArray(node)) return copy
+    node = child(node, key)
+    if (node === null || typeof node !== 'object') return copy
     parents.push(node)
   }
-  delete node[path[path.length - 1]]
+  remove(node, path[path.length - 1])
   for (let i = path.length - 2; i >= 0; i--) {
-    const child = parents[i + 1]
-    if (Object.keys(child).length > 0) break
-    delete parents[i][path[i]]
+    if (!holdsNothing(parents[i + 1], path[i])) break
+    remove(parents[i], path[i])
   }
   return copy
 }
@@ -161,6 +291,7 @@ export function validateValue(schema: SchemaProperty, value: any): string | null
       break
     case 'array':
       if (!Array.isArray(value)) return 'Must be a JSON list'
+      if (schema.maxItems !== undefined && value.length > schema.maxItems) return `Must have at most ${schema.maxItems} items`
       break
   }
   if (typeof value === 'number') {
@@ -264,6 +395,14 @@ export function validateOverrides(
       }
       return
     }
+    // A list of channels in the body is checked item by item, each keyed by its id.
+    const ids = schema.type === 'array' && schema.items?.properties && Array.isArray(getAt(overrides, path))
+      ? listIds(getAt(overrides, path))
+      : null
+    if (ids) {
+      ids.forEach(id => walk(schema.items!, [...path, itemKey(id)]))
+      return
+    }
     const value = getAt(overrides, path)
     const error = validateValue(schema, value)
     if (error) errors[pathKey(path)] = error
@@ -349,8 +488,23 @@ export function nullRemovedSecrets(
 export function countOverrides(body: ConfigBody, path: ConfigPath): number {
   const node = getAt(body, path)
   if (node === undefined) return 0
-  if (node === null || typeof node !== 'object' || Array.isArray(node)) return 1
-  return Object.keys(node).reduce((sum, key) => sum + countOverrides(body, [...path, key]), 0)
+  if (Array.isArray(node)) {
+    const ids = node.length > 0 ? listIds(node) : null
+    return ids ? ids.reduce((sum, id) => sum + countOverrides(body, [...path, itemKey(id)]), 0) : 1
+  }
+  if (node === null || typeof node !== 'object') return 1
+  // The id of an item names it and is no override.
+  const fields = Object.keys(node).filter(key => !(isItem(path[path.length - 1] ?? '') && key === 'id'))
+  return fields.reduce((sum, key) => sum + countOverrides(body, [...path, key]), 0)
+}
+
+// formatLabel turns a key into words: "auto_on" is "Auto on", "maxPower" is "Max Power".
+export function formatLabel(key: string): string {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim()
 }
 
 export function formatValue(value: any): string {

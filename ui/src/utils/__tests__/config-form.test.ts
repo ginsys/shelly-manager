@@ -4,9 +4,13 @@ import { describe, it, expect } from 'vitest'
 import {
   countOverrides,
   deleteAt,
+  formErrorKey,
+  getAt,
+  hasAt,
   nullRemovedSecrets,
   savedSecretBaseline,
   setAt,
+  sourceKey,
   subtreeApplicable,
   templateSchemaTarget,
   validateOverrides,
@@ -46,6 +50,122 @@ describe('config-form paths', () => {
   it('countOverrides counts leaves', () => {
     expect(countOverrides({ mqtt: { enable: true, server: 'b', tls: {} } }, ['mqtt'])).toBe(2)
     expect(countOverrides({}, ['mqtt'])).toBe(0)
+  })
+})
+
+// A list whose items carry an int `id` is a list of channels (relays, inputs). The server merges it by
+// id, not by position (internal/configuration/merge.go, channelIDs and mergeChannelsByID), so a path
+// names an item by its id, written "#<id>".
+describe('config-form paths through a list of channels', () => {
+  const relay = (id: number, name: string) => ({ id, name })
+
+  it('getAt and hasAt follow an item by its id, not by its position', () => {
+    const body = { relay: { relays: [relay(1, 'lamp'), relay(3, 'fan')] } }
+    expect(getAt(body, ['relay', 'relays', '#3', 'name'])).toBe('fan')
+    expect(hasAt(body, ['relay', 'relays', '#3', 'name'])).toBe(true)
+    expect(hasAt(body, ['relay', 'relays', '#2', 'name'])).toBe(false)
+    expect(hasAt(body, ['relay', 'relays', '#2'])).toBe(false)
+    expect(getAt(body, ['relay', 'relays'])).toEqual(body.relay.relays)
+  })
+
+  it('an id the items leave out is 0, and all ids 0 in a list of more than one is the position', () => {
+    // The Go rule (channelIDs): an id left out of a stored template decodes as 0, so in a list of
+    // more than one entry whose ids are all 0 the id is the list index.
+    const omitted = { relay: { relays: [{ name: 'a' }, { name: 'b' }] } }
+    expect(getAt(omitted, ['relay', 'relays', '#1', 'name'])).toBe('b')
+    const single = { relay: { relays: [{ name: 'only' }] } }
+    expect(getAt(single, ['relay', 'relays', '#0', 'name'])).toBe('only')
+  })
+
+  it('a list with two items of one id is not addressable', () => {
+    const body = { relay: { relays: [relay(1, 'a'), relay(1, 'b')] } }
+    expect(getAt(body, ['relay', 'relays', '#1', 'name'])).toBeUndefined()
+    expect(hasAt(body, ['relay', 'relays', '#1'])).toBe(false)
+  })
+
+  it('setAt creates the list and the item with its id, in id order, and does not change its input', () => {
+    const body = { relay: { relays: [relay(2, 'fan')] } }
+    const next = setAt(body, ['relay', 'relays', '#1', 'name'], 'lamp')
+    expect(next).toEqual({ relay: { relays: [{ id: 1, name: 'lamp' }, relay(2, 'fan')] } })
+    expect(body).toEqual({ relay: { relays: [relay(2, 'fan')] } })
+    expect(setAt({}, ['relay', 'relays', '#0', 'name'], 'x')).toEqual({ relay: { relays: [{ id: 0, name: 'x' }] } })
+  })
+
+  it('setAt changes one field of an existing item and keeps its others', () => {
+    const body = { relay: { relays: [{ id: 1, name: 'lamp', auto_on: 5 }] } }
+    expect(setAt(body, ['relay', 'relays', '#1', 'name'], 'desk')).toEqual({
+      relay: { relays: [{ id: 1, name: 'desk', auto_on: 5 }] },
+    })
+  })
+
+  it('deleteAt removes the field, then an item left with only its id, then the empty list and section', () => {
+    const body = { relay: { relays: [{ id: 1, name: 'lamp' }, { id: 2, name: 'fan', auto_on: 5 }] } }
+    const one = deleteAt(body, ['relay', 'relays', '#1', 'name'])
+    expect(one).toEqual({ relay: { relays: [{ id: 2, name: 'fan', auto_on: 5 }] } })
+    expect(deleteAt(one, ['relay', 'relays', '#2', 'name'])).toEqual({ relay: { relays: [{ id: 2, auto_on: 5 }] } })
+    expect(deleteAt({ relay: { relays: [{ id: 1, name: 'lamp' }] } }, ['relay', 'relays', '#1', 'name'])).toEqual({})
+    expect(body.relay.relays).toHaveLength(2)
+  })
+
+  it('countOverrides counts the fields of each item, not the list as one', () => {
+    const body = { relay: { relays: [{ id: 1, name: 'lamp', auto_on: 5 }, { id: 2, name: 'fan' }] } }
+    expect(countOverrides(body, ['relay'])).toBe(3)
+    expect(countOverrides({ relay: { relays: [{ id: 1 }] } }, ['relay'])).toBe(0)
+  })
+
+  const relaySchema: SchemaProperty = {
+    type: 'object',
+    properties: {
+      relays: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string', maxLength: 4 },
+            auto_on: { type: 'integer', minimum: 0 },
+          },
+        },
+      },
+    },
+  }
+
+  it('validateOverrides checks each item, keyed by the id of the item', () => {
+    const errors = validateOverrides({ relay: relaySchema }, {
+      relay: { relays: [{ id: 1, name: 'lamp' }, { id: 2, name: 'toolong', auto_on: -1 }] },
+    }, null)
+    expect(errors).toEqual({
+      'relay.relays.2.name': 'Must be at most 4 characters',
+      'relay.relays.2.auto_on': 'Must be at least 0',
+    })
+  })
+
+  it('items that all leave the id out are pinned to their positions before one is removed or added', () => {
+    // Two items without an id are relay 0 and relay 1. Removing the first must not turn the second into 0.
+    const body = { relay: { relays: [{ id: 0, name: 'Lamp' }, { id: 0, name: 'Fan' }] } }
+    expect(deleteAt(body, ['relay', 'relays', '#0', 'name'])).toEqual({ relay: { relays: [{ id: 1, name: 'Fan' }] } })
+    expect(setAt(body, ['relay', 'relays', '#2', 'name'], 'Fan 2')).toEqual({
+      relay: { relays: [{ id: 0, name: 'Lamp' }, { id: 1, name: 'Fan' }, { id: 2, name: 'Fan 2' }] },
+    })
+    expect(body.relay.relays).toEqual([{ id: 0, name: 'Lamp' }, { id: 0, name: 'Fan' }])
+  })
+
+  it('formErrorKey maps a server position to the id of that item in the body that was sent', () => {
+    const sent = { relay: { relays: [{ id: 1, name: 'x' }] } }
+    expect(formErrorKey(sent, 'relay.relays.0.name')).toBe('relay.relays.1.name')
+    expect(formErrorKey(sent, 'relay.relays.5.name')).toBe('relay.relays.5.name')
+    expect(formErrorKey(sent, 'relay.default_state')).toBe('relay.default_state')
+    // A list of one control (two items of one id, plain values) takes the error on the list.
+    expect(formErrorKey({ relay: { relays: [{ id: 1 }, { id: 1 }] } }, 'relay.relays.0.name')).toBe('relay.relays')
+    const rules = { relay: { relays: [{ id: 1, schedule_rules: [42] }] } }
+    expect(formErrorKey(rules, 'relay.relays.0.schedule_rules.0')).toBe('relay.relays.1.schedule_rules')
+  })
+
+  it('sourceKey turns an id into the position the server keys sources by', () => {
+    const inherited = { relay: { relays: [{ id: 1, name: 'Fan' }, { id: 3, name: 'Lamp' }] } }
+    expect(sourceKey(inherited, ['relay', 'relays', '#3', 'name'])).toBe('relay.relays.1.name')
+    expect(sourceKey(inherited, ['relay', 'relays', '#2', 'name'])).toBeUndefined()
+    expect(sourceKey(inherited, ['relay', 'default_state'])).toBe('relay.default_state')
   })
 })
 

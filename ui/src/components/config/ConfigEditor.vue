@@ -79,7 +79,7 @@
                     :inherited="baseline"
                     :sources="sources"
                     :layer="layer"
-                    :errors="errors"
+                    :errors="shownErrors"
                     @set="setField"
                     @reset="resetField"
                   />
@@ -93,7 +93,7 @@
                   :inherited="baseline"
                   :sources="sources"
                   :layer="layer"
-                  :errors="errors"
+                  :errors="shownErrors"
                   @set="setField"
                   @reset="resetField"
                 />
@@ -145,6 +145,9 @@ interface Props {
   sources?: Record<string, string>
   // The overrides as they were saved: the page sets it when it loads them (see `held` below). The device page always gives it; template pages (layer) do not.
   held?: ConfigBody
+  // The field errors of a refused save by form key (a list item by its id, see formErrorKey), shown
+  // under their fields. They never change `valid`.
+  serverErrors?: Record<string, string>
 }
 
 const props = defineProps<Props>()
@@ -190,6 +193,9 @@ const errors = computed<Record<string, string>>(() =>
         props.layer)
     : {},
 )
+
+// What the fields show: the server's refusals of the last save, then the form's own checks.
+const shownErrors = computed<Record<string, string>>(() => ({ ...props.serverErrors, ...errors.value }))
 
 // Valid means checked and clean. While the schema request is pending nothing is checked yet, so
 // Save stays off. After a failed request the form says it cannot validate, and the server's
