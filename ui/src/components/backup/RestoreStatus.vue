@@ -1,6 +1,10 @@
 <template>
   <section v-if="visible" class="restore-status" data-testid="restore-status">
-    <div v-if="!status?.supported" class="status-row info" data-testid="restore-unsupported">
+    <div v-if="readFailed" class="status-row failed" data-testid="restore-read-failed">
+      The restore status could not be read. What is shown may be out of date.
+    </div>
+
+    <div v-if="status && !status.supported" class="status-row info" data-testid="restore-unsupported">
       {{ RESTORE_SQLITE_ONLY }}. Backups can still be checked.
     </div>
 
@@ -41,14 +45,17 @@ interface Props {
   status: RestoreStatus | null
   backups: BackupItem[]
   cancelling?: boolean
+  readFailed?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), { cancelling: false })
+const props = withDefaults(defineProps<Props>(), { cancelling: false, readFailed: false })
 
 const emit = defineEmits<{ cancel: [] }>()
 
 const visible = computed(
-  () => !!props.status && (!props.status.supported || !!props.status.pending || !!props.status.lastResult),
+  () =>
+    props.readFailed ||
+    (!!props.status && (!props.status.supported || !!props.status.pending || !!props.status.lastResult)),
 )
 
 // The name of a backup on the current page; a backup on another page shows its id.

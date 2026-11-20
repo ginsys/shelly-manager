@@ -38,6 +38,7 @@
     <!-- Staged restore and the result of the last start -->
     <RestoreStatus
       :status="restoreStatus"
+      :read-failed="restoreReadFailed"
       :backups="backups"
       :cancelling="restoreCancelling"
       @cancel="cancelPendingRestore"
@@ -203,6 +204,7 @@ const restoreStaged = ref(false)
 const restoreCancelling = ref(false)
 // What the server reports; null until it answers. Only a 501 turns staging off.
 const restoreStatus = ref<RestoreStatusData | null>(null)
+const restoreReadFailed = ref(false)
 let restoreCheckId = 0 // identifies the newest backup check or stage call; older answers are dropped
 let restoreStatusId = 0 // the same for status reads
 
@@ -321,12 +323,7 @@ async function refreshData() {
     fetchAvailableDevices(),
     loadRestoreStatus()
   ])
-  if (restoreStatusReadFailed) {
-    // The last known restore status stays on screen; say that it may be out of date.
-    showMessage('Data refreshed, but the restore status could not be refreshed.', 'error')
-  } else {
-    showMessage('Data refreshed successfully', 'success')
-  }
+  showMessage('Data refreshed successfully', 'success')
 }
 
 async function createBackupPanel() {
@@ -426,19 +423,17 @@ function startRestore(backup: BackupItem) {
  * Read the staged restore and the last result. A failed read leaves the last known status: the
  * stage call is the authority and refuses by itself.
  */
-// Whether the newest status read failed, so that Refresh can say the shown status may be out of date.
-let restoreStatusReadFailed = false
-
+// The newest read owns both the status and whether the status panel says it could not be read.
 async function loadRestoreStatus() {
   const mine = ++restoreStatusId
   try {
     const status = await getRestoreStatus()
     if (mine !== restoreStatusId) return // an older read must not undo a newer one
     restoreStatus.value = status
-    restoreStatusReadFailed = false
+    restoreReadFailed.value = false
   } catch (err) {
     console.warn('Failed to read the restore status:', err)
-    if (mine === restoreStatusId) restoreStatusReadFailed = true
+    if (mine === restoreStatusId) restoreReadFailed.value = true
   }
 }
 
