@@ -62,8 +62,10 @@ The configuration is part of each request: `ExportRequest.Config` (`internal/syn
 (`:574` for export, `:474` for import). The export handler validates, then runs
 (`internal/api/sync_handlers.go:529-536`).
 
-Nothing keeps the configuration. `ExportHistory` and `ImportHistory`
-(`internal/database/models.go:88-122`) hold the ids, the plugin name, the format and the outcome. The
+No database row keeps the configuration. `ExportHistory` and `ImportHistory`
+(`internal/database/models.go:88-122`) hold the ids, the plugin name, the format and the outcome. One
+plugin does write it to disk: GitOps puts the whole request config, unmasked, in `export-summary.yaml`
+in its output directory (`internal/plugins/sync/gitops/gitops.go:298-302`). The
 engine copies only `name` and `description` out of the config for the history row
 (`engine.go:637-646`). The application config has no plugin key: a search of `internal/config` for
 "plugin" finds nothing, and the same search for `ExportBaseDir` finds its two lines
@@ -74,9 +76,13 @@ engine copies only `name` and `description` out of the config for the history ro
 - **The schema flag.** `PropertySchema.Sensitive` (`plugin.go:109`). The UI shows such a field as a
   password input (`ui/src/components/shared/SchemaForm.vue:68`) and the schema viewer prints
   "Sensitive" (`ui/src/components/PluginSchemaViewer.vue:54`).
-- **Plugin configuration is never echoed or stored**, so nothing masks it today. The masking that
-  exists is for other data: device secrets inside an export (`engine.go:314`, `:410`, with the
-  `exclude_sensitive` option), and notification channels (section 2.6).
+- **Plugin configuration is not stored in the database or the history, and nothing masks it.** The
+  one place it lands is the GitOps output: `export-summary.yaml` carries the request config as it
+  came, so a GitOps config that held a secret would be written to disk in clear text
+  (`gitops.go:298-302`). No plugin that has a `Sensitive` field is GitOps today, so this is a
+  separate defect to file, not a reason for or against storage. The masking that exists is for other
+  data: device secrets inside an export (`engine.go:314`, `:410`, with the `exclude_sensitive`
+  option), and notification channels (section 2.6).
 
 ### 2.4 Authorization
 
@@ -95,8 +101,11 @@ not read them (`PluginCard.vue:15`, `ui/src/api/plugin.ts`, comment above `Plugi
 file names the three plugin operations and does not spell the list item, so it says nothing about
 these fields (`docs/api/openapi.yaml:2520-2574`).
 
-Configuration is still operable per request: `ExportPreviewForm.vue` loads a plugin's schema and
-renders its fields (`ui/src/components/ExportPreviewForm.vue:63,122`).
+`ExportPreviewForm.vue` loads a plugin's schema and renders its fields, but it only previews: it calls
+`previewExport`, which posts to `/export/preview` (`ui/src/components/ExportPreviewForm.vue:63,122,178`,
+`ui/src/api/export.ts:130-131`). The UI client can start real exports for backup, JSON, YAML, SMA and
+GitOps (`ui/src/api/export.ts:203,212,221,248,522`) and a restore (`:384`). Nothing in `ui/src` mentions
+OPNsense (a search finds no file), so no UI path runs an OPNsense export.
 
 ### 2.6 The notification channels, and why they are not a plugin config
 
@@ -116,9 +125,10 @@ accident (section 4).
 ## 3. Question 1: is a stored global plugin config desired?
 
 **Option A: keep it per request (do nothing).** The UI stays read-only for configuration. The
-operator can still export and import, because `ExportPreviewForm` renders the schema fields.
-What the operator cannot do: save the OPNsense host, key and secret, so each OPNsense export
-carries them again; and learn that a credential is wrong before an export fails at
+operator can still export through the API with the config in each request, and the UI can start the
+backup, JSON, YAML, SMA and GitOps exports (section 2.5). What the operator cannot do: save the
+OPNsense host, key and secret, so each OPNsense export carries them again, and the UI has no path
+to run one at all; and learn that a credential is wrong before an export fails at
 `failed to connect to OPNSense` (`opnsense.go:235`). No scheduled export exists to need a stored config
 (the repo's project notes record the export scheduling as removed, `.claude/CLAUDE.md:121`). Cost: none.
 Authorization and OpenAPI: unchanged.
@@ -182,10 +192,13 @@ and `internal/sync` for `net/http`, `http.Client`, `http.NewRequest`, `exec.Comm
 nothing, and the OPNsense client in `internal/opnsense/client.go` is where the network code is. For
 those five, "test" can only mean a dry run.
 
-**Option (a): test is a dry run.** It exists: `POST /export/preview` and the `DryRun` and
-`ValidateOnly` options (`sync_handlers.go:550`, `internal/sync/plugin.go:154-160`). Cost: none. It does
-not solve: for OPNsense it cannot tell a wrong credential, because `Preview` never contacts the host
-(section 1, item 5).
+**Option (a): test is a dry run.** The only export dry run is `POST /export/preview`
+(`sync_handlers.go:550`). The `DryRun` and `ValidateOnly` options (`internal/sync/plugin.go:154-160`)
+are not a general export dry run: the export engine does not read them, JSON export writes its files
+without checking either (`internal/plugins/sync/jsonexport/json.go:82-158`), and OPNsense `Export`
+connects to the host and tests the connection even when `DryRun` is set (`opnsense.go:229-236`). Cost:
+none. It does not solve: for OPNsense `Preview` cannot tell a wrong credential, because it never
+contacts the host (section 1, item 5).
 
 **Option (b): a connectivity check for plugins that have a connection.** An optional interface,
 `ConnectionTester` with `TestConnection(ctx, config) error`, so `SyncPlugin` does not change and five
