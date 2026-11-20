@@ -1,0 +1,3 @@
+Added
+
+- Stored drift schedules can now run: set `drift.scheduler_enabled` (`SHELLY_DRIFT_SCHEDULER_ENABLED=true`; off by default) and the server polls the schedule rows every 30 seconds, runs each due schedule on its five-field `cron_spec` once even with several replicas, only reads devices, stops a run from starting more devices after 10 minutes, and keeps the newest 100 runs per schedule. With the scheduler on, a stop on SIGINT or SIGTERM takes at most 25 seconds (a 15 second scheduler wait and a 10 second server shutdown), inside Kubernetes' default 30 second grace period. The create, update, toggle and run-history routes still answer 501. Refs ginsys/shelly-manager#279.
