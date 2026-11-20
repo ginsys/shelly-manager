@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250, and a unit test keeps them equal to the code (section 1)
-**Status:** 127 of 131 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 128 of 132 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -77,7 +77,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `configNew.ts` (per-device templates, overrides, desired config, apply, verify) | 12 | 12 | |
 | `deviceConfig.ts` | 4 | 4 | |
 | `devices.ts` | 10 | 10 | |
-| `drift.ts` | 8 | 8 | |
+| `drift.ts` | 9 | 9 | |
 | `errorBody.ts` | 4 | 4 | |
 | `export.ts` | 24 | 22 | `getBackupResult`, `downloadExport` |
 | `import.ts` | 4 | 4 | |
@@ -88,7 +88,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **131** | **127** | **4** |
+| **Total** | **132** | **128** | **4** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
