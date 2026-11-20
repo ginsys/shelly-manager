@@ -1,4 +1,5 @@
 import api from './client'
+import { errorEnvelopeDetails, errorEnvelopeMessage } from './errorBody'
 import type { APIResponse, PaginationMeta } from './types'
 
 // The server sends and takes snake_case objects with numeric ids (the Go models in
@@ -172,8 +173,22 @@ export async function getChannel(id: string): Promise<NotificationChannel> {
   return channelFromWire(res.data.data)
 }
 
+// A refused config is a 400 that axios throws. The server's reason is in `details` ("invalid channel
+// configuration: email config must have at least one recipient") and `message` is a fixed phrase, so the
+// reason comes first, as for the backup check.
 export async function createChannel(data: NotificationChannelInput): Promise<NotificationChannel> {
-  const res = await api.post<APIResponse<ChannelWire>>('/notifications/channels', channelToWire(data))
+  let res
+  try {
+    res = await api.post<APIResponse<ChannelWire>>('/notifications/channels', channelToWire(data))
+  } catch (e: any) {
+    const body = e?.response?.data
+    throw new Error(
+      (await errorEnvelopeDetails(body)) ||
+        (await errorEnvelopeMessage(body)) ||
+        e?.message ||
+        'Failed to create notification channel'
+    )
+  }
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to create notification channel'
     throw new Error(msg)

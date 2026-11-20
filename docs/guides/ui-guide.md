@@ -532,50 +532,22 @@ Features:
 
 #### Channel Configuration
 
-##### Email Channel Configuration
-```vue
-<EmailChannelConfig
-  v-model="emailConfig"
-  :show-test="true"
-  :allow-templates="true"
-/>
-```
+**Create Channel** on the Channels page asks for a name, a type and, under the type, the fields below.
+Changing the type clears what was typed for the type you left. The server decides whether a config is
+valid, and when it refuses one the form shows its reason (for example, "email config must have at least
+one recipient").
 
-Features:
-- SMTP server configuration
-- Recipient management
-- Email template customization
-- Delivery testing
+- **Email**: Recipients (required; one per line or separated by commas) and an optional Subject. The SMTP
+  server is set on the server, not per channel.
+- **Webhook**: URL (required), Method (POST, PUT or PATCH), Headers as name and value rows, and an optional
+  Secret that signs each payload.
+- **Slack**: Webhook URL (required), and an optional Channel and Username.
 
-##### Webhook Channel Configuration
-```vue
-<WebhookChannelConfig
-  v-model="webhookConfig"
-  :show-test="true"
-  :allow-headers="true"
-/>
-```
-
-Features:
-- Webhook URL configuration
-- HTTP header customization
-- Authentication settings
-- Payload testing
-
-##### Slack Channel Configuration
-```vue
-<SlackChannelConfig
-  v-model="slackConfig"
-  :show-test="true"
-  :channel-browser="true"
-/>
-```
-
-Features:
-- Slack workspace integration
-- Channel selection
-- Message formatting options
-- Delivery testing
+The server never shows a stored credential again: the URL, the headers and the secret read back as `********`.
+They are write-only. A channel's config is shown read-only on its own page (Edit on the list), which can
+enable or disable the channel and send a test notification; changing a config after creation is not offered
+yet (ginsys/shelly-manager#783). A message template, a webhook timeout and retries, and the Slack icon are
+not in the form; the server uses its defaults.
 
 #### Notification Rules
 

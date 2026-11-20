@@ -163,7 +163,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/plugins` | Plugin management (read-only) | 565 | top bar |
 | `/dashboard` | Metrics dashboard | 667 | top bar |
 | `/admin` | Admin settings (admin key rotation) | 45 | top bar |
-| `/notifications/channels` | Notification channels | 197 | top bar (Notifications), Channel detail |
+| `/notifications/channels` | Notification channels | 365 | top bar (Notifications), Channel detail |
 | `/notifications/channels/:id` | Channel detail | 126 | Channels |
 | `/notifications/rules` | Notification rules | 199 | top bar (Notifications) |
 | `/notifications/history` | Notification history | 156 | top bar (Notifications) |
@@ -184,8 +184,9 @@ pages and the device configuration pages) is linked from its list page. This was
 ginsys/shelly-manager#645 (ginsys/shelly-manager#641); a mocked end-to-end spec
 (`ui/tests/e2e/nav-reachability.spec.ts`) walks the links.
 
-Linked is not the same as working: the Notification channels page cannot create a channel, because its
-form has no config fields (ginsys/shelly-manager#744), the Drift schedules page cannot create or edit a
+Linked is not the same as working: the Notification channels page creates a channel but cannot change
+its config afterwards, because the channel page shows the config read-only (ginsys/shelly-manager#744 added
+the create form; ginsys/shelly-manager#783 is the edit), the Drift schedules page cannot create or edit a
 schedule yet (ginsys/shelly-manager#279), and the export and import detail pages answer only for results the
 server process still holds in memory (ginsys/shelly-manager#647). Both pages show the main fields
 of a result (status, created time, duration, errors, warnings, and for an import the changes by
@@ -343,7 +344,9 @@ Open frontend issues (label `area: frontend`) at 2026-11-19:
 
 ginsys/shelly-manager#250 (the notification pages and the notification API disagreed) was fixed after
 that date. It left one frontend issue, found on 2026-11-20: ginsys/shelly-manager#744, a notification
-channel cannot be created from the page because the create form has no config fields.
+channel could not be created from the page because the create form had no config fields. That is fixed: the
+form has the fields of each type, and a refused config shows the server's reason. What is left is editing a
+channel's config from the channel page (ginsys/shelly-manager#783).
 
 Also parked, not frontend-labelled: ginsys/shelly-manager#249 (export/import routes the frontend
 calls that the backend does not have) and ginsys/shelly-manager#279 (the drift schedule form,
