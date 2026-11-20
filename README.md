@@ -207,8 +207,7 @@ discovery:
   timeout: 5s
 
 security:
-  admin_api_key: "${ADMIN_API_KEY}"
-  agent_api_key: "${AGENT_API_KEY}"   # accepted only on the five provisioner agent routes
+  # No key here: set SHELLY_SECURITY_ADMIN_API_KEY and SHELLY_SECURITY_AGENT_API_KEY (see Environment Variables)
   use_proxy_headers: true
   trusted_proxies:
     - 10.0.0.0/8
@@ -221,12 +220,15 @@ security:
 ```yaml
 api:
   url: http://shelly-api.default.svc.cluster.local:8080
-  key: "${AGENT_API_KEY}"   # the manager's agent key: the agent routes refuse a request without a key
+  # No key here: set SHELLY_API_KEY to the manager's agent key
 
 scanner:
   interval: 60s
   interface: wlan0
 ```
+
+A `${...}` written in a value of these files is not replaced, so set the keys through the environment
+(`SHELLY_SECURITY_ADMIN_API_KEY`, `SHELLY_SECURITY_AGENT_API_KEY`, `SHELLY_API_KEY`, each also in the `_FILE` form).
 
 ## Testing
 
