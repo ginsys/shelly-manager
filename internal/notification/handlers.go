@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -77,6 +78,57 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 		"channels": channels,
 		"total":    len(channels),
 	})
+}
+
+// GetChannel handles GET /api/v1/notifications/channels/{id}
+func (h *Handler) GetChannel(w http.ResponseWriter, r *http.Request) {
+	channelID, err := strconv.ParseUint(mux.Vars(r)["id"], 10, 32)
+	if err != nil {
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid channel ID", nil)
+		return
+	}
+
+	channel, err := h.service.GetChannel(uint(channelID))
+	if err != nil {
+		if errors.Is(err, ErrChannelNotFound) {
+			apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusNotFound, apiresp.ErrCodeNotFound, err.Error(), nil)
+			return
+		}
+		h.logger.WithFields(map[string]any{
+			"channel_id": channelID,
+			"error":      err.Error(),
+			"component":  "notification_api",
+		}).Error("Failed to get notification channel")
+		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
+		return
+	}
+
+	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, maskedChannel(channel))
+}
+
+// DeleteRule handles DELETE /api/v1/notifications/rules/{id}
+func (h *Handler) DeleteRule(w http.ResponseWriter, r *http.Request) {
+	ruleID, err := strconv.ParseUint(mux.Vars(r)["id"], 10, 32)
+	if err != nil {
+		apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid rule ID", nil)
+		return
+	}
+
+	if err := h.service.DeleteRule(uint(ruleID)); err != nil {
+		if errors.Is(err, ErrRuleNotFound) {
+			apiresp.NewResponseWriter(h.logger).WriteError(w, r, http.StatusNotFound, apiresp.ErrCodeNotFound, err.Error(), nil)
+			return
+		}
+		h.logger.WithFields(map[string]any{
+			"rule_id":   ruleID,
+			"error":     err.Error(),
+			"component": "notification_api",
+		}).Error("Failed to delete notification rule")
+		apiresp.NewResponseWriter(h.logger).WriteInternalError(w, r, err)
+		return
+	}
+
+	apiresp.NewResponseWriter(h.logger).WriteSuccess(w, r, map[string]string{"status": "deleted"})
 }
 
 // UpdateChannel handles PUT /api/v1/notifications/channels/{id}

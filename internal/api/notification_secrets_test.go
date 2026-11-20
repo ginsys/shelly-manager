@@ -54,10 +54,12 @@ func setupNotificationSecrets(t *testing.T) *notificationSecretsEnv {
 	a := r.PathPrefix("/api/v1").Subrouter()
 	a.HandleFunc("/notifications/channels", handler.CreateChannel).Methods("POST")
 	a.HandleFunc("/notifications/channels", handler.GetChannels).Methods("GET")
+	a.HandleFunc("/notifications/channels/{id}", handler.GetChannel).Methods("GET")
 	a.HandleFunc("/notifications/channels/{id}", handler.UpdateChannel).Methods("PUT")
 	a.HandleFunc("/notifications/channels/{id}/test", handler.TestChannel).Methods("POST")
 	a.HandleFunc("/notifications/rules", handler.CreateRule).Methods("POST")
 	a.HandleFunc("/notifications/rules", handler.GetRules).Methods("GET")
+	a.HandleFunc("/notifications/rules/{id}", handler.DeleteRule).Methods("DELETE")
 	a.HandleFunc("/notifications/history", handler.GetHistory).Methods("GET")
 	return &notificationSecretsEnv{router: r, svc: svc, db: db.GetDB()}
 }

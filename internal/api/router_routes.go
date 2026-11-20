@@ -162,11 +162,13 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 		// so every notification route needs the key.
 		api.HandleFunc("/notifications/channels", admin(handler.NotificationHandler.CreateChannel)).Methods("POST")
 		api.HandleFunc("/notifications/channels", admin(handler.NotificationHandler.GetChannels)).Methods("GET")
+		api.HandleFunc("/notifications/channels/{id}", admin(handler.NotificationHandler.GetChannel)).Methods("GET")
 		api.HandleFunc("/notifications/channels/{id}", admin(handler.NotificationHandler.UpdateChannel)).Methods("PUT")
 		api.HandleFunc("/notifications/channels/{id}", admin(handler.NotificationHandler.DeleteChannel)).Methods("DELETE")
 		api.HandleFunc("/notifications/channels/{id}/test", admin(handler.NotificationHandler.TestChannel)).Methods("POST")
 		api.HandleFunc("/notifications/rules", admin(handler.NotificationHandler.CreateRule)).Methods("POST")
 		api.HandleFunc("/notifications/rules", admin(handler.NotificationHandler.GetRules)).Methods("GET")
+		api.HandleFunc("/notifications/rules/{id}", admin(handler.NotificationHandler.DeleteRule)).Methods("DELETE")
 		api.HandleFunc("/notifications/history", admin(handler.NotificationHandler.GetHistory)).Methods("GET")
 	}
 

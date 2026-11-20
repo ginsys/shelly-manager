@@ -390,17 +390,19 @@ connects to the host first, and it fails with the connection error when they are
 
 ---
 
-### 13. Notification System (8 endpoints)
+### 13. Notification System (10 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/notifications/channels` | Create notification channel |
 | GET | `/api/v1/notifications/channels` | List channels |
-| PUT | `/api/v1/notifications/channels/{id}` | Update channel |
+| GET | `/api/v1/notifications/channels/{id}` | Get one channel |
+| PUT | `/api/v1/notifications/channels/{id}` | Update channel (replaces name, type, enabled, config, description) |
 | DELETE | `/api/v1/notifications/channels/{id}` | Delete channel |
 | POST | `/api/v1/notifications/channels/{id}/test` | Test channel |
 | POST | `/api/v1/notifications/rules` | Create notification rule |
 | GET | `/api/v1/notifications/rules` | List rules |
+| DELETE | `/api/v1/notifications/rules/{id}` | Delete rule and its delivery history |
 | GET | `/api/v1/notifications/history` | Get notification history |
 
 **Channel Types:** `email`, `webhook`, `slack`, `discord`

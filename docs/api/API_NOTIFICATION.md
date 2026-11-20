@@ -14,13 +14,19 @@ channel's config (see "Secrets in a channel's config").
 - Channels
   - `POST /api/v1/notifications/channels` — create channel
   - `GET /api/v1/notifications/channels` — list channels
-  - `PUT /api/v1/notifications/channels/{id}` — update channel
+  - `GET /api/v1/notifications/channels/{id}` — read one channel (the object the list holds, masked; 404 `NOT_FOUND` for an unknown id)
+  - `PUT /api/v1/notifications/channels/{id}` — update channel (replaces `name`, `type`, `enabled`, `config` and `description`; answers `{"status": "updated"}`)
   - `DELETE /api/v1/notifications/channels/{id}` — delete channel
   - `POST /api/v1/notifications/channels/{id}/test` — send test notification
 
 - Rules
   - `POST /api/v1/notifications/rules` — create rule
   - `GET /api/v1/notifications/rules` — list rules (preloads channel)
+  - `DELETE /api/v1/notifications/rules/{id}` — delete a rule and its delivery history in one transaction (the channel stays; 404 `NOT_FOUND` for an unknown id; answers `{"status": "deleted"}`)
+
+**A PUT replaces the five fields.** A body that leaves out `enabled` disables the channel, and one that leaves
+out `description` blanks it. To change one field, read the channel with `GET /notifications/channels/{id}` and
+send it back complete. A create with `"enabled": false` stays disabled.
 
 - History
   - `GET /api/v1/notifications/history?limit=&offset=&channel_id=&status=` — list sent notifications with pagination/meta
@@ -53,7 +59,7 @@ Discord webhook URL is the token), `headers` (such as `Authorization`), and any 
 `Headers` are accepted by the server, so they are credentials too). The value under such a key is one
 credential, whatever its type: a string, a number, an object (`headers`) or a list (`"token_list": ["a", "b"]`).
 
-- **Reads.** `GET /notifications/channels`, `GET /notifications/rules`, `GET /notifications/history` and the
+- **Reads.** `GET /notifications/channels`, `GET /notifications/channels/{id}`, `GET /notifications/rules`, `GET /notifications/history` and the
   `POST /notifications/channels` response send `********` in place of that whole value (`"headers": "********"`).
   The same holds for the channel inside a rule or a history entry. Other fields (`recipients`, `method`,
   `channel`, `timeout`, ...) are returned as stored. An empty value stays empty.
@@ -137,7 +143,7 @@ GET /api/v1/notifications/history?limit=50&offset=0&channel_id=1&status=sent
 Common error codes: `VALIDATION_FAILED`, `NOT_FOUND`, `INTERNAL_SERVER_ERROR`.
 Examples:
 - Invalid body → `VALIDATION_FAILED` with details.
-- Channel not found (test) → `NOT_FOUND`.
+- Channel not found (read, test) or rule not found (delete) → `NOT_FOUND`.
 - Delete channel used by rules → `VALIDATION_FAILED` with explanatory message.
 
 ## Notes

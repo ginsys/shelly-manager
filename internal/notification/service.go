@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/smtp"
@@ -17,6 +18,13 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
+)
+
+// ErrChannelNotFound and ErrRuleNotFound report an id that nothing holds. The channel text is the one
+// the older paths return, so a caller that compares the text keeps working.
+var (
+	ErrChannelNotFound = errors.New("notification channel not found")
+	ErrRuleNotFound    = errors.New("notification rule not found")
 )
 
 // Service handles notification operations
@@ -72,9 +80,11 @@ func (s *Service) CreateChannel(channel *NotificationChannel) error {
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
 
-	if err := s.db.Create(channel).Error; err != nil {
+	wantEnabled := channel.Enabled
+	if err := createKeepingEnabled(s.db, channel, wantEnabled); err != nil {
 		return fmt.Errorf("failed to create notification channel: %w", err)
 	}
+	channel.Enabled = wantEnabled
 
 	s.logger.WithFields(map[string]any{
 		"channel_id":   channel.ID,
@@ -86,6 +96,21 @@ func (s *Service) CreateChannel(channel *NotificationChannel) error {
 	return nil
 }
 
+// createKeepingEnabled creates a row whose enabled column has a database default of true. gorm replaces
+// a false with that default on create, so the false is written back in the same transaction: a failure
+// of the second write never leaves the row enabled.
+func createKeepingEnabled(db *gorm.DB, row any, enabled bool) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(row).Error; err != nil {
+			return err
+		}
+		if enabled {
+			return nil
+		}
+		return tx.Model(row).Update("enabled", false).Error
+	})
+}
+
 // GetChannels retrieves all notification channels
 func (s *Service) GetChannels() ([]NotificationChannel, error) {
 	var channels []NotificationChannel
@@ -93,6 +118,18 @@ func (s *Service) GetChannels() ([]NotificationChannel, error) {
 		return nil, fmt.Errorf("failed to get notification channels: %w", err)
 	}
 	return channels, nil
+}
+
+// GetChannel retrieves one notification channel, with its stored config: the caller masks it.
+func (s *Service) GetChannel(channelID uint) (NotificationChannel, error) {
+	var channel NotificationChannel
+	if err := s.db.First(&channel, channelID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return NotificationChannel{}, ErrChannelNotFound
+		}
+		return NotificationChannel{}, fmt.Errorf("failed to get notification channel: %w", err)
+	}
+	return channel, nil
 }
 
 // UpdateChannel updates an existing notification channel
@@ -114,7 +151,10 @@ func (s *Service) UpdateChannel(channelID uint, updates *NotificationChannel) er
 		return fmt.Errorf("invalid channel configuration: %w", err)
 	}
 
-	result := s.db.Model(&NotificationChannel{}).Where("id = ?", channelID).Updates(updates)
+	// The update replaces these five fields. Select keeps a false and an empty string: a struct update
+	// without it skips zero values, so a disabled channel would stay enabled.
+	result := s.db.Model(&NotificationChannel{}).Where("id = ?", channelID).
+		Select("name", "type", "enabled", "config", "description").Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("failed to update notification channel: %w", result.Error)
 	}
@@ -179,9 +219,11 @@ func (s *Service) CreateRule(rule *NotificationRule) error {
 		rule.ScheduleDaysJSON = daysJSON
 	}
 
-	if err := s.db.Create(rule).Error; err != nil {
+	wantEnabled := rule.Enabled
+	if err := createKeepingEnabled(s.db, rule, wantEnabled); err != nil {
 		return fmt.Errorf("failed to create notification rule: %w", err)
 	}
+	rule.Enabled = wantEnabled
 
 	s.logger.WithFields(map[string]any{
 		"rule_id":    rule.ID,
@@ -189,6 +231,41 @@ func (s *Service) CreateRule(rule *NotificationRule) error {
 		"channel_id": rule.ChannelID,
 		"component":  "notification",
 	}).Info("Created notification rule")
+
+	return nil
+}
+
+// DeleteRule deletes a rule together with its delivery history, in one transaction. History rows point at
+// the rule (rule_id), and the databases enforce that, so they go first; the channel stays.
+func (s *Service) DeleteRule(ruleID uint) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var rule NotificationRule
+		if err := tx.First(&rule, ruleID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrRuleNotFound
+			}
+			return fmt.Errorf("failed to get notification rule: %w", err)
+		}
+		if err := tx.Where("rule_id = ?", ruleID).Delete(&NotificationHistory{}).Error; err != nil {
+			return fmt.Errorf("failed to delete notification history of the rule: %w", err)
+		}
+		if err := tx.Delete(&NotificationRule{}, ruleID).Error; err != nil {
+			return fmt.Errorf("failed to delete notification rule: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	s.rateLimitMu.Lock()
+	delete(s.rateLimits, ruleID)
+	s.rateLimitMu.Unlock()
+
+	s.logger.WithFields(map[string]any{
+		"rule_id":   ruleID,
+		"component": "notification",
+	}).Info("Deleted notification rule")
 
 	return nil
 }
