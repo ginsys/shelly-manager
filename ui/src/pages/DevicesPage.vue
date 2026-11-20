@@ -23,11 +23,15 @@
       <button
         class="btn"
         :disabled="store.selectedCount === 0"
+        :title="bulkHint || undefined"
+        :aria-describedby="bulkHint ? 'bulk-hint' : undefined"
         @click="openBulkDialog"
         data-testid="bulk-ops-btn"
       >
         {{ bulkButtonLabel }}
       </button>
+      <!-- A greyed button gives no hover or focus, so the reason is visible text beside it. -->
+      <span v-if="bulkHint" id="bulk-hint" class="small" data-testid="bulk-hint">{{ bulkHint }}</span>
       <button class="primary-button" @click="showCreateDialog = true" data-testid="add-device-btn">
         + Add Device
       </button>
@@ -271,6 +275,15 @@ function openBulkDialog() {
 const bulkButtonLabel = computed(() =>
   store.selectedCount > 0 ? `Bulk Operations (${store.selectedCount})` : 'Bulk Operations'
 )
+// Why the bulk button is greyed (ginsys/shelly-manager#750). The Select column can be hidden from
+// the column picker, and the browser remembers that, so the reason names it.
+const bulkHint = computed(() => {
+  if (store.selectedCount > 0) return ''
+  if (!store.visibleColumns.select) {
+    return 'The Select column is hidden, so no device can be picked. Show it from Columns.'
+  }
+  return 'Tick one or more devices to enable bulk operations.'
+})
 const allVisibleSelected = computed(
   () => store.sortedItems.length > 0 && store.sortedItems.every((d) => store.isSelected(d.id))
 )
