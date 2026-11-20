@@ -266,9 +266,11 @@ func assertConfined(t *testing.T, root, deviceFile string) {
 	}
 }
 
-// T6: a group or device type name never leaves the output directory, whatever it holds. Each name is
-// deep enough to escape under the old unchecked join, from the group directory (two levels below the
-// output directory), the type directory below it (three) and the ungrouped type directory (one).
+// T6: a group or device type name never leaves the output directory, whatever it holds. Each name
+// starting with "../" escapes the old unchecked join at one or more of the three places it is used:
+// the group directory (two levels below the output directory), the type directory below it (three)
+// and the ungrouped type directory (one). The others ("..", ".", "a/b", "") are compatibility cases: they
+// stayed inside under the old join (or made a nested directory) and must still export their device.
 func TestExportConfinesGroupAndTypeNames(t *testing.T) {
 	hostile := []string{
 		"../../../x", "../../x", "../../../../x/export-summary.yaml", `..\..\..\x`,
