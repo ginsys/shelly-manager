@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595, and a unit test keeps them equal to the code (section 1)
-**Status:** 127 of 131 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 130 of 134 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -66,13 +66,14 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
   and a name only as the start of a longer name reports all seven as unreferenced and the used names
   (plain and `async`) as referenced.
 
-**Result at 3b1374d:**
+**Result at 3b1374d, with `bulkApply.ts` added by ginsys/shelly-manager#594:**
 
 | Module | Functions | Referenced | Unreferenced |
 |--------|-----------|------------|--------------|
 | `admin.ts` | 1 | 1 | |
 | `adminKey.ts` | 8 | 8 | |
 | `bulk.ts` | 5 | 5 | |
+| `bulkApply.ts` | 3 | 3 | |
 | `configNew.ts` (per-device templates, overrides, desired config, apply, verify) | 12 | 12 | |
 | `deviceConfig.ts` | 4 | 4 | |
 | `devices.ts` | 10 | 10 | |
@@ -87,7 +88,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **131** | **127** | **4** |
+| **Total** | **134** | **130** | **4** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -203,7 +204,7 @@ page imports still counts. The Playwright spec is what proves the links are rend
 
 ## 4. Components, stores and utilities
 
-- **Components** (`ui/src/components`): `backup/` (7), `bulk/` (the bulk dialog, 1), `charts/` (2),
+- **Components** (`ui/src/components`): `backup/` (7), `bulk/` (the bulk dialog and its apply form, 2), `charts/` (2),
   `config/` (3), `devices/` (2), `gitops/` (5), `plugin/` (3), `provisioning/` (2), `shared/` (5), and
   8 top-level files (`DataTable`, `FilterBar`, `PaginationBar`, `ExportPreviewForm`,
   `ImportPreviewForm`, `GitOpsConfigForm`, `PluginDetailsView`, `PluginSchemaViewer`).
@@ -253,7 +254,18 @@ page imports still counts. The Playwright spec is what proves the links are rend
   `POST /api/v1/config/bulk-download`. It reads the database and contacts no device, every secret in the
   file is masked, and the dialog says so and never shows a configuration itself. A device that
   cannot be read is listed with the reason. The route refuses more than 10 devices and the dialog shows
-  its text (ginsys/shelly-manager#595).
+  its text (ginsys/shelly-manager#595). A fifth card, Apply Configuration, is the only bulk operation
+  that writes devices (`POST /api/v1/config/bulk-apply`, `ui/src/api/bulkApply.ts` and
+  `components/bulk/BulkApplyForm.vue`). The operator types one partial configuration as JSON
+  (`null` removes an override, a secret sent as `********` keeps the stored one) and reviews the exact
+  devices and the exact JSON in a confirmation before anything is sent; Apply sends what was
+  confirmed. The dialog takes at most 10 devices and forgets the typed text when an answer arrives or
+  the window closes. The result says per device what was written and whether the new settings are
+  stored and the device stays pending. Only a refusal the route gives before it touches a device (400,
+  401, 403, 413, 415, 429) is reported as "nothing was written"; any other outcome (a 408, a 5xx, no
+  answer) is reported as unknown, with "check each device before sending again". The browser waits 310
+  s, just over the route's own 5 minute deadline (ginsys/shelly-manager#725). Not in the dialog:
+  a tag, group or template as the target, and a dry run (ginsys/shelly-manager#594).
 - **Devices list refresh:** a Refresh button and an `R` shortcut reload the list; the rows stay on
   screen (dimmed, `aria-busy`) while it runs, and only the first load shows the loading text. The
   selection is kept, and a refresh copies the new name and address into ticked devices that are on
@@ -330,7 +342,7 @@ Found by reading the code at this commit; not a plan.
    `GitOpsExportPage.vue` (577), `PluginManagementPage.vue` (565).
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
-5. **No generated API client.** The 131 functions are written by hand. The coverage figure in section 1
+5. **No generated API client.** The 134 functions are written by hand. The coverage figure in section 1
    is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
    stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
