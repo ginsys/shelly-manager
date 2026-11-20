@@ -266,23 +266,35 @@ The call is not atomic: device 3 can be applied while device 4 is refused, and n
 
 ### 9. Drift Detection Schedules (7 endpoints)
 
-> **Fail-closed (#270), scheduler off by default (#279):** a schedule already in
-> the database runs on its five-field `cron_spec` only when the scheduler is on
-> (`drift.scheduler_enabled`, `SHELLY_DRIFT_SCHEDULER_ENABLED=true`). A run only
-> reads devices, stops starting devices after 10 minutes, and its result is kept
-> in the run history (the newest 100 runs per schedule). The four
-> execution-implying routes below still return **HTTP 501 Not Implemented**
-> with no database side effects; only list, detail and delete are functional.
-> The write path is the next change of #279.
+> **Scheduler off by default (#279):** a stored schedule runs on its five-field
+> `cron_spec` only when the scheduler is on (`drift.scheduler_enabled`,
+> `SHELLY_DRIFT_SCHEDULER_ENABLED=true`). With it off, create, update, toggle and
+> delete still work and nothing runs. A run only reads devices, stops starting
+> devices after 10 minutes, and its result is kept in the run history (the newest
+> 100 runs per schedule). The run-history route still returns **HTTP 501 Not
+> Implemented**, and the UI page still says schedules are not executed and offers
+> no create form: until those change, create a schedule through this API.
+
+A body is `{"name", "description", "cron_spec", "enabled", "device_ids", "device_filter"}`
+with `name` and `cron_spec` required. `cron_spec` is exactly five fields, in the
+server's time zone: a sixth field, a descriptor such as `@hourly`, a `TZ=` prefix
+and a spec that never fires are `400`. A schedule checks `device_ids` (each must
+exist), or the devices `device_filter` (`{"type", "status"}`) selects, or every
+device when it has neither; both at once is `400`, and an unknown key in the body
+is `400`. `enabled` defaults to true on create and stays as it is on update. A
+schedule saved by an older release with a six-field spec fails its first run once
+and is disabled; it cannot be enabled again until an update gives it a valid
+spec. `run_count` counts the ticks the scheduler claimed, runs and skipped ticks
+alike. Deleting a schedule also deletes its device list and its runs.
 
 | Method | Endpoint | Description | Status |
 |--------|----------|-------------|--------|
 | GET | `/api/v1/config/drift-schedules` | List drift schedules | ✅ Functional |
-| POST | `/api/v1/config/drift-schedules` | Create schedule | ⛔ 501 Not Implemented |
+| POST | `/api/v1/config/drift-schedules` | Create schedule | ✅ Functional |
 | GET | `/api/v1/config/drift-schedules/{id}` | Get schedule | ✅ Functional |
-| PUT | `/api/v1/config/drift-schedules/{id}` | Update schedule | ⛔ 501 Not Implemented |
+| PUT | `/api/v1/config/drift-schedules/{id}` | Update schedule | ✅ Functional |
 | DELETE | `/api/v1/config/drift-schedules/{id}` | Delete schedule | ✅ Functional |
-| POST | `/api/v1/config/drift-schedules/{id}/toggle` | Enable/disable schedule | ⛔ 501 Not Implemented |
+| POST | `/api/v1/config/drift-schedules/{id}/toggle` | Enable/disable schedule | ✅ Functional |
 | GET | `/api/v1/config/drift-schedules/{id}/runs` | Get schedule run history | ⛔ 501 Not Implemented |
 
 ---

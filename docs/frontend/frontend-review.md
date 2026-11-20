@@ -222,10 +222,11 @@ page imports still counts. The Playwright spec is what proves the links are rend
 ## 5. Features whose state is not obvious
 
 - **Drift schedules run only when the scheduler is on, and the page does not say so yet.** The
-  scheduler is off by default (`drift.scheduler_enabled`); the create, update, toggle and run-history
-  routes still answer HTTP 501 (ginsys/shelly-manager#270). The page shows a "not executed" notice,
-  lists every schedule as "Stored (inactive)" and offers deletion only. The write path and the page
-  are the next changes of ginsys/shelly-manager#279.
+  scheduler is off by default (`drift.scheduler_enabled`). The create, update and toggle routes work
+  (ginsys/shelly-manager#279), and the run-history route still answers HTTP 501
+  (ginsys/shelly-manager#270). The page shows a "not executed" notice, lists every schedule as
+  "Stored (inactive)" and offers deletion only, so a schedule made through the API shows as inert
+  here. The run-history route and the page are the next changes of ginsys/shelly-manager#279.
 
   ![Drift schedules fail-closed UI](images/drift-schedules-fail-closed.png)
 
