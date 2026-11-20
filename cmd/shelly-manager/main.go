@@ -510,8 +510,10 @@ func startServer() {
 	// Note: Legacy dashboard removed. New SPA is served from Vite (dev) or ui/dist (prod).
 	fmt.Printf("API base URL: http://%s/api/v1\n", address)
 
-	// A signal ends the server cleanly only when the scheduler runs, so that no run is cut mid-device;
-	// with the scheduler off nothing here changes.
+	// A signal ends the server cleanly only when the scheduler runs, so that the run in flight stops
+	// between devices; with the scheduler off nothing here changes. A device read already started is
+	// not interrupted (its client timeout bounds it, and Stop waits 30 seconds at most), so a run can
+	// still be left running and is marked interrupted by the next tick.
 	serveCtx := context.Background()
 	if scheduler != nil {
 		var stopSignals context.CancelFunc
