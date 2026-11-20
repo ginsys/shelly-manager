@@ -19,6 +19,7 @@ const schema = {
         enable: { type: 'boolean' },
         ssid: { type: 'string' },
         password: { type: 'string' },
+        ipv4mode: { type: 'string' },
         static_ip: { type: 'object', properties: { ip: { type: 'string' } } },
         ap: { type: 'object', properties: { enable: { type: 'boolean' }, key: { type: 'string' } } },
       },
@@ -30,6 +31,7 @@ const schema = {
         server: { type: 'string' },
         user: { type: 'string' },
         pass: { type: 'string' },
+        id: { type: 'string' },
       },
     },
     auth: {
@@ -38,7 +40,18 @@ const schema = {
     },
     network: {
       type: 'object',
-      properties: { wifi: { type: 'object', properties: { sta: { type: 'object', properties: { pass: { type: 'string' } } } } } },
+      properties: {
+        eth: { type: 'object', properties: { enable: { type: 'boolean' }, ipv4mode: { type: 'string' }, ip: { type: 'object', properties: { ip: { type: 'string' } } } } },
+        wifi: {
+          type: 'object',
+          properties: {
+            sta: {
+              type: 'object',
+              properties: { ssid: { type: 'string' }, pass: { type: 'string' }, ipv4mode: { type: 'string' }, ip: { type: 'object', properties: { ip: { type: 'string' } } } },
+            },
+          },
+        },
+      },
     },
     system: {
       type: 'object',
@@ -164,16 +177,40 @@ describe('buildTemplateBody', () => {
     expect(withExtra.mqtt).toEqual({ enable: true, server: 's' })
   })
 
-  it('always leaves out the per-device name, hostname, MAC and static IP, and says so', () => {
-    const { config, leftOut } = buildTemplateBody(typedImport(), schema, ['system', 'wifi'])
+  it('always leaves out what is one device\'s own: name, hostname, MAC, MQTT client id and every static address', () => {
+    const typed = typedImport()
+    typed.mqtt.id = 'shellyplug-s-AABBCC'
+    typed.wifi.ipv4mode = 'static'
+    typed.network = {
+      eth: { enable: true, ipv4mode: 'static', ip: { ip: '192.0.2.8' } },
+      wifi: { sta: { ssid: 'Home', ipv4mode: 'static', ip: { ip: '192.0.2.9' }, pass: MASK } },
+    }
+    const { config, leftOut } = buildTemplateBody(typed, schema, ['system', 'wifi', 'mqtt', 'network'])
 
     expect(config.system.device).toEqual({ eco_mode: true })
     expect(config.system.tz).toBe('Europe/Brussels')
     expect(config.wifi).not.toHaveProperty('static_ip')
+    // The mode goes with the address: "static" with no address would misconfigure the device.
+    expect(config.wifi).not.toHaveProperty('ipv4mode')
+    expect(config.mqtt).not.toHaveProperty('id')
+    expect(config.network).toEqual({ eth: { enable: true }, wifi: { sta: { ssid: 'Home' } } })
     expect(leftOut).toEqual(
-      expect.arrayContaining(['system.device.name', 'system.device.hostname', 'system.device.mac', 'wifi.static_ip']),
+      expect.arrayContaining([
+        'system.device.name',
+        'system.device.hostname',
+        'system.device.mac',
+        'wifi.static_ip',
+        'wifi.ipv4mode',
+        'mqtt.id',
+        'network.eth.ip',
+        'network.eth.ipv4mode',
+        'network.wifi.sta.ip',
+        'network.wifi.sta.ipv4mode',
+      ]),
     )
     expect(PER_DEVICE_NOTE).toContain('MAC')
+    expect(PER_DEVICE_NOTE).toContain('MQTT client id')
+    expect(PER_DEVICE_NOTE).toContain('static address')
   })
 
   it('does not change the import it was given', () => {

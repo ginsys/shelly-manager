@@ -9,10 +9,8 @@ vi.mock('@/api/deviceConfig', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/deviceConfig')>()
   return { ...actual, getStoredDeviceConfig: vi.fn(), getConfigHistory: vi.fn() }
 })
-vi.mock('@/api/devices', () => ({ getDevice: vi.fn() }))
 
 import { getStoredDeviceConfig, getConfigHistory } from '@/api/deviceConfig'
-import { getDevice } from '@/api/devices'
 
 // ginsys/shelly-manager#747 slice 2: "Create template from this import" sits on the stored import card.
 const stubs = {
@@ -20,10 +18,10 @@ const stubs = {
   ConfigEditor: true,
   ConfigView: { props: ['config'], template: '<div />' },
   CreateTemplateFromImportDialog: {
-    props: ['deviceId', 'deviceType'],
+    props: ['deviceId'],
     emits: ['close'],
     template:
-      '<div data-testid="stub-dialog">{{ deviceId }}|{{ deviceType }}<button data-testid="stub-close" @click="$emit(\'close\')">x</button></div>',
+      '<div data-testid="stub-dialog">device {{ deviceId }}<button data-testid="stub-close" @click="$emit(\'close\')">x</button></div>',
   },
 }
 
@@ -58,7 +56,6 @@ describe('DeviceConfigPage create template from import', () => {
     vi.resetAllMocks()
     vi.mocked(getStoredDeviceConfig).mockResolvedValue(stored as any)
     vi.mocked(getConfigHistory).mockResolvedValue([])
-    vi.mocked(getDevice).mockResolvedValue({ id: 7, type: 'SHPLG-S' } as any)
   })
 
   it('shows the button only when an import of settings is stored', async () => {
@@ -74,28 +71,15 @@ describe('DeviceConfigPage create template from import', () => {
     expect(text.find('[data-testid="create-template-from-import"]').exists()).toBe(false)
   })
 
-  it('opens the dialog with the device and its model, and closes it again', async () => {
+  it('opens the dialog for the device on screen, and closes it again', async () => {
     const wrapper = await mountPage()
     expect(wrapper.find('[data-testid="stub-dialog"]').exists()).toBe(false)
 
     await wrapper.get('[data-testid="create-template-from-import"]').trigger('click')
-    await flushPromises()
 
-    expect(getDevice).toHaveBeenCalledWith('7')
-    expect(wrapper.get('[data-testid="stub-dialog"]').text()).toContain('7|SHPLG-S')
+    expect(wrapper.get('[data-testid="stub-dialog"]').text()).toContain('device 7')
 
     await wrapper.get('[data-testid="stub-close"]').trigger('click')
     expect(wrapper.find('[data-testid="stub-dialog"]').exists()).toBe(false)
-  })
-
-  it('still opens the dialog, without a model, when the device cannot be read', async () => {
-    vi.mocked(getDevice).mockRejectedValue(new Error('down'))
-    const wrapper = await mountPage()
-
-    await wrapper.get('[data-testid="create-template-from-import"]').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.get('[data-testid="stub-dialog"]').text()).toContain('7|')
-    expect(wrapper.get('[data-testid="stub-dialog"]').text()).not.toContain('SHPLG-S')
   })
 })

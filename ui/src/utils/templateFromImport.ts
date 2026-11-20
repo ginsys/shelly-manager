@@ -5,10 +5,22 @@ import type { ConfigSchema, SchemaProperty } from '@/api/typedConfig'
 // never hold this string, or applying the template would write it to a device.
 export const MASK = '********'
 
-// What differs from one device to the next, so a template shared by a model or by every device must
-// not carry it. Always left out, and the dialog says so.
-const PER_DEVICE_PATHS = ['system.device.name', 'system.device.hostname', 'system.device.mac', 'wifi.static_ip']
-export const PER_DEVICE_NOTE = 'per-device name, hostname, MAC, static IP'
+// What is one device's own, so a template shared by a model or by every device must not carry it.
+// Always left out, and the dialog says so. An address mode goes with its address: "static" with no
+// address would misconfigure the device.
+const PER_DEVICE_PATHS = [
+  'system.device.name',
+  'system.device.hostname',
+  'system.device.mac',
+  'mqtt.id',
+  'wifi.static_ip',
+  'wifi.ipv4mode',
+  'network.eth.ip',
+  'network.eth.ipv4mode',
+  'network.wifi.sta.ip',
+  'network.wifi.sta.ipv4mode',
+]
+export const PER_DEVICE_NOTE = 'per-device name, hostname, MAC, MQTT client id and static address'
 
 // Sections that start unticked: they hold the Wi-Fi network and the login of one site.
 const UNTICKED_SECTIONS = ['wifi', 'network', 'auth']

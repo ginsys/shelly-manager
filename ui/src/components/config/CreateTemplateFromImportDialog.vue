@@ -36,7 +36,7 @@
             <label for="from-import-scope">Scope</label>
             <select id="from-import-scope" v-model="scope" class="form-input" data-testid="from-import-scope">
               <option value="global">All devices</option>
-              <option v-if="modelListed" value="device_type">Only {{ deviceType }}</option>
+              <option v-if="model" value="device_type">Only {{ model }}</option>
             </select>
           </div>
           <div class="form-group full">
@@ -67,11 +67,7 @@ import { getConfigSchema, type ConfigSchema } from '@/api/typedConfig'
 import { createTemplate, listDeviceTypes, TemplateSaveError, type FieldError } from '@/api/templates'
 import { PER_DEVICE_NOTE, buildTemplateBody, defaultTicked, importSections } from '@/utils/templateFromImport'
 
-const props = defineProps<{
-  deviceId: number | string
-  // The device's model code (Device.type). A device-type template can name it only when the server lists it.
-  deviceType: string
-}>()
+const props = defineProps<{ deviceId: number | string }>()
 const emit = defineEmits<{ close: [] }>()
 
 const router = useRouter()
@@ -82,7 +78,9 @@ const typed = ref<Record<string, any>>({})
 const schema = ref<ConfigSchema | null>(null)
 const sections = ref<string[]>([])
 const ticked = ref<string[]>([])
-const modelListed = ref(false)
+// The model a device-type template can name: the one the server built the device's schema for, when
+// the server lists it as a supported type. Empty gives only an all-devices template.
+const model = ref('')
 
 const name = ref('')
 const description = ref('')
@@ -126,8 +124,9 @@ async function load() {
     schema.value = deviceSchema
     sections.value = importSections(typedConfig, deviceSchema)
     ticked.value = sections.value.filter(defaultTicked)
-    modelListed.value = !!props.deviceType && types.some((t) => t.device_type === props.deviceType)
-    scope.value = modelListed.value ? 'device_type' : 'global'
+    const named = deviceSchema['x-device-type'] || ''
+    model.value = types.some((t) => t.device_type === named) ? named : ''
+    scope.value = model.value ? 'device_type' : 'global'
   } catch (e: any) {
     if (!alive) return
     loadError.value = 'Could not read the imported configuration: ' + (e?.message || 'Unknown error')
@@ -146,7 +145,7 @@ async function save() {
       name: name.value.trim(),
       description: description.value.trim() || undefined,
       scope: scope.value,
-      device_type: scope.value === 'device_type' ? props.deviceType : undefined,
+      device_type: scope.value === 'device_type' ? model.value : undefined,
       config: body.value.config,
     })
     if (!alive) return

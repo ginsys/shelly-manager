@@ -193,7 +193,7 @@
           v-if="stored && isSettings(stored.config)"
           class="btn"
           data-testid="create-template-from-import"
-          @click="openFromImport"
+          @click="showFromImport = true"
         >
           Create template from this import
         </button>
@@ -201,7 +201,6 @@
       <CreateTemplateFromImportDialog
         v-if="showFromImport"
         :device-id="deviceId"
-        :device-type="fromImportType"
         @close="showFromImport = false"
       />
       <div v-if="storedError" class="live-error" data-testid="stored-config-error">{{ storedError }}</div>
@@ -294,7 +293,6 @@ import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import CreateTemplateFromImportDialog from '@/components/config/CreateTemplateFromImportDialog.vue'
-import { getDevice } from '@/api/devices'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useError } from '@/composables/useError'
 import { usePageError, useLateResult } from '@/composables/useNotice'
@@ -336,20 +334,8 @@ const newTemplatePosition = ref<number | null>(null)
 const liveConfig = ref<Record<string, any> | null>(null)
 const liveError = ref<string | null>(null)
 const liveLoading = ref(false)
-// "Create template from this import": the dialog reads the typed import itself. The page gives it the
-// device's model, which a device-type template can name; a device that cannot be read gets no model,
-// so only an all-devices template is offered.
+// "Create template from this import": the dialog reads the typed import and the device schema itself.
 const showFromImport = ref(false)
-const fromImportType = ref('')
-
-async function openFromImport() {
-  try {
-    fromImportType.value = (await getDevice(deviceId.value)).type || ''
-  } catch {
-    fromImportType.value = ''
-  }
-  showFromImport.value = true
-}
 
 // The stored import and its history. A card shows its own failed read, never an alert.
 const stored = ref<StoredDeviceConfig | null>(null)

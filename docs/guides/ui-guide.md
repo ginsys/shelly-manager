@@ -107,10 +107,10 @@ from this import** on that card opens a dialog that makes a configuration templa
 - Secrets are never copied. The server sends each saved secret as `********`, and the dialog drops every such
   value and names the secrets it left out. Set a secret on the template page after saving. The server also
   drops a `********` it receives in a new template.
-- The per-device name, hostname, MAC and static IP are always left out, so one template does not give every
-  device the same identity.
-- Enter a name and a description. The scope is the device's model when the server lists it
-  (`GET /config/device-types`); otherwise the template is for all devices. A refusal from the server shows its
+- What is one device's own is always left out, so one template does not give every device the same identity:
+  the name, hostname, MAC, MQTT client id, and every static address (the address mode goes with it).
+- Enter a name and a description. The scope is the model of the device's schema (`GET /config/schema?device_id=...`) when
+  the server lists it (`GET /config/device-types`); otherwise the template is for all devices. A refusal from the server shows its
   reason, and the field list when the server names fields. After a save, the page of the new template opens.
 
 ### Export/Import Section

@@ -16,8 +16,10 @@ import { getConfigSchema } from '@/api/typedConfig'
 import { createTemplate, listDeviceTypes, TemplateSaveError } from '@/api/templates'
 import CreateTemplateFromImportDialog from '../CreateTemplateFromImportDialog.vue'
 
+// The schema the server builds for the device names the model it was built for.
 const schema = {
   type: 'object',
+  'x-device-type': 'SHPLG-S',
   properties: {
     wifi: { type: 'object', properties: { ssid: { type: 'string' }, password: { type: 'string' } } },
     mqtt: {
@@ -37,12 +39,8 @@ const typed = {
   raw: { anything: '********' },
 }
 
-function mountDialog(deviceType = 'SHPLG-S') {
-  return mount(CreateTemplateFromImportDialog, { props: { deviceId: 7, deviceType } })
-}
-
-async function ready(deviceType = 'SHPLG-S') {
-  const wrapper = mountDialog(deviceType)
+async function ready() {
+  const wrapper = mount(CreateTemplateFromImportDialog, { props: { deviceId: 7 } })
   await flushPromises()
   return wrapper
 }
@@ -101,11 +99,11 @@ describe('CreateTemplateFromImportDialog', () => {
     const wrapper = await ready()
 
     const note = wrapper.get('[data-testid="from-import-left-out"]').text()
-    expect(note).toContain('per-device name, hostname, MAC, static IP')
+    expect(note).toContain('per-device name, hostname, MAC, MQTT client id and static address')
     expect(note).toContain('mqtt.pass')
   })
 
-  it('fills the scope from the device model, and falls back to all devices for a model the server does not list', async () => {
+  it('fills the scope from the model of the device schema, and falls back to all devices for a model the server does not list', async () => {
     const wrapper = await ready()
     await wrapper.get('[data-testid="from-import-name"]').setValue('By model')
     await wrapper.get('[data-testid="from-import-save"]').trigger('click')
@@ -113,7 +111,8 @@ describe('CreateTemplateFromImportDialog', () => {
     expect((createTemplate as any).mock.calls[0][0]).toMatchObject({ scope: 'device_type', device_type: 'SHPLG-S' })
 
     ;(createTemplate as any).mockClear()
-    const other = await ready('SHXX-9')
+    ;(getConfigSchema as any).mockResolvedValue({ ...schema, 'x-device-type': 'SHXX-9' })
+    const other = await ready()
     expect(other.find('option[value="device_type"]').exists()).toBe(false)
     await other.get('[data-testid="from-import-name"]').setValue('All')
     await other.get('[data-testid="from-import-save"]').trigger('click')
@@ -121,6 +120,12 @@ describe('CreateTemplateFromImportDialog', () => {
     const sent = (createTemplate as any).mock.calls[0][0]
     expect(sent.scope).toBe('global')
     expect(sent.device_type).toBeUndefined()
+
+    // A schema that names no model (an older answer) gives no device-type scope either.
+    const { 'x-device-type': _model, ...unnamed } = schema
+    ;(getConfigSchema as any).mockResolvedValue(unnamed)
+    const none = await ready()
+    expect(none.find('option[value="device_type"]').exists()).toBe(false)
   })
 
   it('shows the server reason of a 400, with its field list', async () => {
