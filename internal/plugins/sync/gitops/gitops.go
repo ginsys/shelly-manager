@@ -283,7 +283,8 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 		}
 	}
 
-	// Create summary file
+	// Create summary file. It carries no request config: the config holds whatever the caller sent,
+	// secrets included, and this directory usually goes into a git repository.
 	summary := map[string]interface{}{
 		"export_metadata": data.Metadata,
 		"structure": map[string]interface{}{
@@ -295,7 +296,6 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 			"ungrouped_devices": len(ungroupedDevices),
 		},
 		"generated_at": time.Now(),
-		"config":       config.Config,
 	}
 
 	summaryPath := filepath.Join(outputPath, "export-summary.yaml")

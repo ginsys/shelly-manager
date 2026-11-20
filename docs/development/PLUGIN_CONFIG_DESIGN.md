@@ -76,8 +76,9 @@ same search for `ExportBaseDir` finds its two lines (`internal/config/config.go:
 - **Nothing masks a plugin configuration today.** It is not stored, so there is nothing to mask. The
   masking that exists is for other data: device secrets inside an export (`engine.go:314`, `:410`,
   with the `exclude_sensitive` option), and notification channels (section 2.6).
-- **A separate defect.** GitOps writes the request config, unmasked, into `export-summary.yaml` in its
-  output directory (`internal/plugins/sync/gitops/gitops.go:298-302`). No schema marks a GitOps
+- **A separate defect, fixed.** GitOps wrote the request config, unmasked, into `export-summary.yaml`
+  in its output directory (`internal/plugins/sync/gitops/gitops.go:298-302` before
+  ginsys/shelly-manager#737, which removed the entry: nothing read it). No schema marks a GitOps
   field `Sensitive`, so it is no argument for or against storing a config.
 
 ### 2.4 Authorization
