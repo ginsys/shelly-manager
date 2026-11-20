@@ -159,6 +159,19 @@ describe('NotificationHistoryPage', () => {
     expect(store.fetchHistory).toHaveBeenLastCalledWith({ page: 1, limit: 25 })
   })
 
+  it('the size selector goes back to the committed size when the load fails', async () => {
+    const { wrapper, store } = mountWith(NotificationHistoryPage, {
+      history: [row()], channels: [], rules: [], historyPage: 1, historyLimit: 50, historyTotal: 120,
+      historyPagination: { page: 1, page_size: 50, total_pages: 3, has_next: true, has_previous: false },
+    })
+    await flushPromises()
+    // the store action is a spy: it commits nothing, as a failed load commits nothing
+    await wrapper.find('select').setValue(25)
+    await flushPromises()
+    expect(store.historyLimit).toBe(50)
+    expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('50')
+  })
+
   it('disables Next on the last page and Previous on the first', async () => {
     const last = mountWith(NotificationHistoryPage, {
       history: [row()], channels: [], rules: [], historyPage: 3, historyTotal: 120,
@@ -271,6 +284,27 @@ describe('notifications store, against the api layer', () => {
     expect(store.historyPage).toBe(1)
     expect(store.historyPagination).toEqual(pagination)
     expect(store.historyTotal).toBe(60)
+  })
+
+  it('two history loads that finish out of order leave a page, a limit and a pager that belong together', async () => {
+    const store = useNotificationsStore()
+    const meta = (page: number, size: number) => ({
+      page, page_size: size, total_pages: Math.ceil(100 / size), has_next: true, has_previous: page > 1,
+    })
+    let finishNext: (v: any) => void = () => {}
+    vi.mocked(notificationApi.getHistory)
+      .mockImplementationOnce(() => new Promise((resolve) => { finishNext = resolve })) // Next: page 2 at 50
+      .mockResolvedValueOnce({ items: [], pagination: meta(1, 25), total: 100 }) // size change: page 1 at 25
+
+    const next = store.fetchHistory({ page: 2 })
+    await store.fetchHistory({ page: 1, limit: 25 })
+    finishNext({ items: [], pagination: meta(2, 50), total: 100 })
+    await next
+
+    // the last response to arrive was page 2 at 50: the whole state says so
+    expect(store.historyPage).toBe(2)
+    expect(store.historyLimit).toBe(50)
+    expect(store.historyPagination).toEqual(meta(2, 50))
   })
 
   it('fetchHistory keeps the server\'s page description and the count of all rows', async () => {

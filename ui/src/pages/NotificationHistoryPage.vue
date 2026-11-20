@@ -50,7 +50,7 @@
       >
         Next →
       </button>
-      <select v-model.number="pageSize" @change="changePageSize" class="form-input" style="width:auto;margin-left:auto">
+      <select :value="store.historyLimit" @change="changePageSize" class="form-input" style="width:auto;margin-left:auto">
         <option :value="25">25 per page</option>
         <option :value="50">50 per page</option>
         <option :value="100">100 per page</option>
@@ -70,12 +70,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useNotificationsStore } from '@/stores/notifications'
 import DataTable from '@/components/DataTable.vue'
 
 const store = useNotificationsStore()
-const pageSize = ref(50)
 
 onMounted(() => {
   store.fetchHistory()
@@ -98,8 +97,11 @@ async function changePage(page: number) {
   await store.fetchHistory({ page })
 }
 
-async function changePageSize() {
-  await store.fetchHistory({ page: 1, limit: pageSize.value })
+// The selector shows the limit the store committed, so a size change whose load failed shows the old size.
+async function changePageSize(event: Event) {
+  const select = event.target as HTMLSelectElement
+  await store.fetchHistory({ page: 1, limit: Number(select.value) })
+  select.value = String(store.historyLimit)
 }
 </script>
 
