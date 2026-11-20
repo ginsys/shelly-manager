@@ -228,6 +228,23 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
+    it('does not report a refresh as successful when the restore status could not be read', async () => {
+      restoreStatus = statusAnswer({ pending: { backup_id: 'a', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      restoreStatus = () => Promise.reject(refused(500, 'Internal error'))
+
+      await wrapper.get('.refresh-button').trigger('click')
+      await flushPromises()
+
+      const message = wrapper.get('.message').text()
+      expect(message).not.toContain('Data refreshed successfully')
+      expect(message).toContain('restore status could not be refreshed')
+      // The last known status stays on screen.
+      expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
     it('learns from a 501 on the stage call that the database is not SQLite', async () => {
       restoreStatus = () => Promise.reject(refused(500, 'Internal error'))
       vi.mocked(api.post as any).mockImplementation((path: string) =>
