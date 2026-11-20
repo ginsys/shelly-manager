@@ -125,6 +125,31 @@ describe('DeviceDetailPage with a device that does not answer', () => {
     expect(wrapper.text()).not.toContain('99°C')
   })
 
+  it('starts no new periodic read while the last one is still running, so its timeout is shown', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    try {
+      let failFirst!: (reason: unknown) => void
+      vi.mocked(getDeviceStatus).mockImplementationOnce(() => new Promise((_resolve, reject) => { failFirst = reject }))
+      const wrapper = await openPage()
+      expect(vi.mocked(getDeviceStatus)).toHaveBeenCalledTimes(1)
+
+      // Two polling periods pass with the first read still running: nothing new starts.
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(vi.mocked(getDeviceStatus)).toHaveBeenCalledTimes(1)
+
+      // The browser gives up on it: its failure is shown, and the next period reads again.
+      failFirst(unanswered('device "Garage" (10.0.0.7) did not answer'))
+      await flushPromises()
+      expect(wrapper.get('[data-testid="status-failed"]').text()).toContain('did not answer')
+      vi.mocked(getDeviceStatus).mockResolvedValue({ online: true } as never)
+      await vi.advanceTimersByTimeAsync(30_000)
+      await flushPromises()
+      expect(vi.mocked(getDeviceStatus)).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows a device last seen two days ago as not seen recently, never online', async () => {
     vi.mocked(getDevice).mockImplementation(async () => ({
       ...device,

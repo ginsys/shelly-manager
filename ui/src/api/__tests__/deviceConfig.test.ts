@@ -111,7 +111,7 @@ describe('deviceConfig API', () => {
 
       const result = await detectConfigDrift(123)
       expect(result).toEqual({ hasDrift: true, driftFields: ['wifi.ssid', 'mqtt.enabled'] })
-      expect(api.get).toHaveBeenCalledWith('/devices/123/config/drift', { signal: undefined })
+      expect(api.get).toHaveBeenCalledWith('/devices/123/config/drift', { signal: undefined, timeout: DEVICE_CALL_TIMEOUT_MS })
     })
 
     it('reports no drift for an empty differences list', async () => {
@@ -140,6 +140,36 @@ describe('deviceConfig API', () => {
       })
 
       await expect(detectConfigDrift(123)).rejects.toThrow('Device not responding')
+    })
+
+    const refused = (status: number, message: string) =>
+      (api.get as any).mockRejectedValue({
+        isAxiosError: true,
+        response: { status, data: { success: false, error: { code: 'NOT_FOUND', message } } }
+      })
+
+    it('reports a device with no desired configuration as such, never as no drift', async () => {
+      refused(
+        404,
+        'no desired configuration is set for this device, so there is nothing to compare it with'
+      )
+
+      expect(await detectConfigDrift(123)).toEqual({ hasDrift: false, noDesiredConfig: true })
+    })
+
+    it('rethrows any other 404, so a missing device is not shown as a missing configuration', async () => {
+      refused(404, 'device not found')
+
+      await expect(detectConfigDrift(123)).rejects.toMatchObject({ response: { status: 404 } })
+    })
+
+    it('rethrows the same sentence under another status', async () => {
+      refused(
+        500,
+        'no desired configuration is set for this device, so there is nothing to compare it with'
+      )
+
+      await expect(detectConfigDrift(123)).rejects.toMatchObject({ response: { status: 500 } })
     })
 
     it.each([

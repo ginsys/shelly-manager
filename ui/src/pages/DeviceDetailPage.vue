@@ -116,14 +116,17 @@
 
       <!-- Configuration Summary -->
       <div class="card">
-        <div class="config-header">
-          <h2 class="section-title">Configuration</h2>
-          <router-link :to="`/devices/${d.id}/config`" class="link-btn">View Full Config →</router-link>
-        </div>
+        <h2 class="section-title">Configuration</h2>
         <div class="config-summary">
           <div class="config-status">
             <div class="status-label">Drift Status</div>
             <div v-if="driftLoading" class="status-text">Checking...</div>
+            <div v-else-if="driftFailure" class="status-text" data-testid="drift-failed">
+              Could not check drift: {{ driftFailure }}
+            </div>
+            <div v-else-if="drift?.noDesiredConfig" class="status-text" data-testid="drift-no-desired">
+              No desired configuration yet: add a template or overrides
+            </div>
             <div v-else-if="drift">
               <span :class="['drift-badge', drift.hasDrift ? 'has-drift' : 'no-drift']">
                 {{ drift.hasDrift ? '⚠️ Configuration Drift Detected' : '✓ No Drift' }}
@@ -222,6 +225,7 @@ const energyRead = ref<ReadState>({ state: 'pending' })
 const shown = computed(() => shownDeviceStatus(d.value))
 const drift = ref<ConfigDrift | null>(null)
 const driftLoading = ref(false)
+const driftFailure = ref<string | null>(null)
 const showEditDialog = ref(false)
 const editForm = ref<{ name: string; settings: string }>({ name: '', settings: '' })
 // A failed control command shows under the toolbar. A failed save shows inside the edit dialog,
@@ -301,17 +305,27 @@ async function fetchDevice() {
   }
 }
 
+// Only the newest drift check may change the card, whether it succeeds, fails or is still running.
+let driftReadSeq = 0
+
 async function fetchDrift() {
+  const seq = ++driftReadSeq
+  driftLoading.value = true
   try {
-    driftLoading.value = true
     const id = route.params.id as string
-    drift.value = await detectConfigDrift(id, abortController.signal)
+    const fetched = await detectConfigDrift(id, abortController.signal)
+    if (seq !== driftReadSeq) return
+    drift.value = fetched
+    driftFailure.value = null
   } catch (e: any) {
-    if (isAbortError(e)) return
-    // Drift detection might not be available for all devices
+    if (isAbortError(e) || seq !== driftReadSeq) return
     console.warn('Failed to check drift:', e)
+    const message = await describeReadFailure(e, 'the drift check')
+    if (seq !== driftReadSeq) return
+    drift.value = null
+    driftFailure.value = message
   } finally {
-    driftLoading.value = false
+    if (seq === driftReadSeq) driftLoading.value = false
   }
 }
 
@@ -319,6 +333,11 @@ async function fetchDrift() {
 // answer must not put back a value a newer read has replaced.
 let statusReadSeq = 0
 let energyReadSeq = 0
+// The newest read that has ended, so the periodic refresh can tell a read is still running. It
+// must not start another then: the new read would supersede the running one, and a device that
+// never answers would never be shown as failed.
+let statusSettledSeq = 0
+let energySettledSeq = 0
 
 async function fetchStatus() {
   const seq = ++statusReadSeq
@@ -332,9 +351,13 @@ async function fetchStatus() {
   } catch (e: any) {
     if (isAbortError(e) || seq !== statusReadSeq) return
     console.warn('Failed to load status:', e)
+    const message = await describeReadFailure(e, 'the device status')
+    if (seq !== statusReadSeq) return
     // The last answer is dropped: "Online: Yes" next to a failed read would be the old lie.
     status.value = null
-    statusRead.value = { state: 'failed', message: await describeReadFailure(e, 'the device status') }
+    statusRead.value = { state: 'failed', message }
+  } finally {
+    statusSettledSeq = Math.max(statusSettledSeq, seq)
   }
 }
 
@@ -369,11 +392,13 @@ async function fetchEnergy() {
     if (isAbortError(e) || seq !== energyReadSeq) return
     // Energy metrics are not available for all devices
     console.warn('Failed to load energy metrics:', e)
-    energy.value = null
     // Only a device that did not answer (504) is shown: no meter is an ordinary failure.
-    energyRead.value = e?.response?.status === 504
-      ? { state: 'failed', message: await describeReadFailure(e, 'the energy metrics') }
-      : { state: 'failed' }
+    const message = e?.response?.status === 504 ? await describeReadFailure(e, 'the energy metrics') : undefined
+    if (seq !== energyReadSeq) return
+    energy.value = null
+    energyRead.value = { state: 'failed', message }
+  } finally {
+    energySettledSeq = Math.max(energySettledSeq, seq)
   }
 }
 
@@ -440,9 +465,10 @@ async function handleSaveDevice() {
 onMounted(() => {
   fetchData()
   // Auto-refresh every 30 seconds
+  // A read that is still running is left to end (at the latest at the browser's timeout).
   refreshInterval = setInterval(() => {
-    fetchStatus()
-    fetchEnergy()
+    if (statusSettledSeq === statusReadSeq) fetchStatus()
+    if (energySettledSeq === energyReadSeq) fetchEnergy()
   }, 30000)
 })
 
@@ -491,9 +517,6 @@ onUnmounted(() => {
 .energy-label { font-size: 12px; color: #64748b; font-weight: 500; }
 .energy-value { font-size: 18px; font-weight: 700; color: #2563eb; }
 
-.config-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.link-btn { color: #2563eb; text-decoration: none; font-size: 14px; }
-.link-btn:hover { text-decoration: underline; }
 .config-summary { display: flex; flex-direction: column; gap: 16px; }
 .config-status { display: flex; flex-direction: column; gap: 8px; }
 .status-text { font-size: 14px; color: #64748b; }
