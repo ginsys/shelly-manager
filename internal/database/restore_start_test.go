@@ -39,7 +39,7 @@ func TestStartAppliesAStagedRestore(t *testing.T) {
 	markerDB(t, backupPath, "from-backup")
 	markerDB(t, live, "from-live")
 
-	_, err := restore.Stage(context.Background(), live, backupPath, "export-1", false)
+	err := restore.Stage(context.Background(), live, backupPath, "export-1", false)
 	require.NoError(t, err)
 
 	m, err := NewManagerFromPath(live)
@@ -70,7 +70,7 @@ func TestStartRollsBackARestoreThatCannotBeMigrated(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
 
-	_, err = restore.Stage(context.Background(), live, bad, "export-bad", false)
+	err = restore.Stage(context.Background(), live, bad, "export-bad", false)
 	require.NoError(t, err)
 
 	m, err := NewManagerFromPath(live)
