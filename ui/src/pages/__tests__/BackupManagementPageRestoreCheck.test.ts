@@ -191,9 +191,12 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
-    it('reads the status after a timeout answer, since the stage may have gone on', async () => {
+    it.each([
+      [408, 'Request processing timeout'],
+      [500, 'Internal error'],
+    ])('reads the status after a %i answer, since the stage may have gone on', async (status, reason) => {
       vi.mocked(api.post as any).mockImplementation((path: string) =>
-        path === '/import/restore' ? Promise.reject(refused(408, 'Request processing timeout')) : Promise.resolve(checkAnswer('b', 2048)),
+        path === '/import/restore' ? Promise.reject(refused(status, reason)) : Promise.resolve(checkAnswer('b', 2048)),
       )
       const wrapper = mount(BackupManagementPage)
       await flushPromises()
@@ -206,6 +209,9 @@ describe('BackupManagementPage backup check', () => {
 
       const text = wrapper.get('.restore-modal').text()
       expect(text).toContain('not known whether the restore was staged')
+      expect(text).toContain(reason)
+      // The server did answer, so the text must not claim that it did not.
+      expect(text).not.toContain('did not answer')
       expect(text).not.toContain('Nothing was staged')
       expect(restoreStatusCalls()).toBe(before + 1)
       expect(wrapper.find('[data-testid="restore-cancel"]').exists()).toBe(true)
