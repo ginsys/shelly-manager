@@ -13,14 +13,20 @@ const PER_DEVICE_PATHS = [
   'system.device.hostname',
   'system.device.mac',
   'mqtt.id',
+  'mqtt.topic_prefix',
   'wifi.static_ip',
   'wifi.ipv4mode',
   'network.eth.ip',
   'network.eth.ipv4mode',
   'network.wifi.sta.ip',
   'network.wifi.sta.ipv4mode',
+  'network.wifi.ap.ssid',
+  // `*` stands for any list index, so a channel keeps its id and loses its name.
+  'relay.relays.*.name',
+  'input.inputs.*.name',
 ]
-export const PER_DEVICE_NOTE = 'per-device name, hostname, MAC, MQTT client id and static address'
+export const PER_DEVICE_NOTE =
+  'per-device name, hostname, MAC, MQTT client id and topic prefix, access-point name, channel names and static address'
 
 // Sections that start unticked: they hold the Wi-Fi network and the login of one site.
 const UNTICKED_SECTIONS = ['wifi', 'network', 'auth']
@@ -39,8 +45,9 @@ interface Walk {
 // and recorded, and a per-device path is dropped and recorded. It answers undefined when nothing is
 // left, so an empty object or list never reaches the body.
 function project(value: unknown, schema: SchemaProperty | undefined, path: string, walk: Walk): unknown {
-  if (PER_DEVICE_PATHS.includes(path)) {
-    walk.leftOut.push(path)
+  const generic = path.replace(/\.\d+(?=\.|$)/g, '.*')
+  if (PER_DEVICE_PATHS.includes(generic)) {
+    walk.leftOut.push(generic)
     return undefined
   }
   if (value === MASK) {

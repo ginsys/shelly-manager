@@ -145,7 +145,8 @@ describe('buildTemplateBody', () => {
     expect(hasMask(config)).toBe(false)
     expect(JSON.stringify(config)).not.toContain(MASK)
     // A secret held under a key the schema names, inside an array item, is dropped too.
-    expect(config.relay.relays[0]).toEqual({ name: 'Light', default_state: 'off' })
+    // (a channel's name is the device's own and stays out, see below)
+    expect(config.relay.relays[0]).toEqual({ default_state: 'off' })
   })
 
   it('keeps what is not a secret and lists the secrets it left out', () => {
@@ -211,6 +212,63 @@ describe('buildTemplateBody', () => {
     expect(PER_DEVICE_NOTE).toContain('MAC')
     expect(PER_DEVICE_NOTE).toContain('MQTT client id')
     expect(PER_DEVICE_NOTE).toContain('static address')
+  })
+
+  it('also leaves out the device\'s own topic prefix, access-point name and channel names, and keeps the channel ids', () => {
+    const typed = {
+      mqtt: { enable: true, id: 'shellyplus1-AABBCC', topic_prefix: 'shellyplus1-AABBCC' },
+      network: { wifi: { ap: { ssid: 'shellyplus1-AABBCC', enable: true } } },
+      relay: {
+        relays: [
+          { id: 0, name: 'Kitchen', default_state: 'off' },
+          { id: 1, name: 'Hall', default_state: 'on' },
+        ],
+      },
+      input: { inputs: [{ id: 0, name: 'Wall switch', type: 'switch' }] },
+    }
+    const wide = {
+      type: 'object',
+      properties: {
+        mqtt: { type: 'object', properties: { enable: { type: 'boolean' }, id: { type: 'string' }, topic_prefix: { type: 'string' } } },
+        network: {
+          type: 'object',
+          properties: {
+            wifi: { type: 'object', properties: { ap: { type: 'object', properties: { ssid: { type: 'string' }, enable: { type: 'boolean' } } } } },
+          },
+        },
+        relay: {
+          type: 'object',
+          properties: {
+            relays: {
+              type: 'array',
+              items: { type: 'object', properties: { id: { type: 'integer' }, name: { type: 'string' }, default_state: { type: 'string' } } },
+            },
+          },
+        },
+        input: {
+          type: 'object',
+          properties: {
+            inputs: {
+              type: 'array',
+              items: { type: 'object', properties: { id: { type: 'integer' }, name: { type: 'string' }, type: { type: 'string' } } },
+            },
+          },
+        },
+      },
+    } as unknown as ConfigSchema
+
+    const { config, leftOut } = buildTemplateBody(typed, wide, ['mqtt', 'network', 'relay', 'input'])
+
+    expect(config.mqtt).toEqual({ enable: true })
+    expect(config.network).toEqual({ wifi: { ap: { enable: true } } })
+    expect(config.relay.relays).toEqual([
+      { id: 0, default_state: 'off' },
+      { id: 1, default_state: 'on' },
+    ])
+    expect(config.input.inputs).toEqual([{ id: 0, type: 'switch' }])
+    expect(leftOut).toEqual(
+      expect.arrayContaining(['mqtt.topic_prefix', 'network.wifi.ap.ssid', 'relay.relays.*.name', 'input.inputs.*.name']),
+    )
   })
 
   it('does not change the import it was given', () => {
