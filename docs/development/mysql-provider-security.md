@@ -421,7 +421,7 @@ go test ./internal/database/provider -v -run Security -cover
 ```yaml
 database:
   provider: "mysql"
-  dsn: "app_user:${MYSQL_PASSWORD}@tcp(mysql.internal:3306)/production"
+  dsn: "app_user:<password>@tcp(mysql.internal:3306)/production"
   options:
     tls: "true"
     charset: "utf8mb4"
@@ -431,6 +431,9 @@ database:
   conn_max_lifetime: 1800
   conn_max_idle_time: 300
 ```
+
+Write the real password in place of `<password>`, or set the whole DSN as `SHELLY_DATABASE_DSN`: the
+loader does not expand a `${...}` reference in a config file (`internal/config/config.go:170-214`).
 
 ### 2. Development Environment
 

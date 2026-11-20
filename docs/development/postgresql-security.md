@@ -154,8 +154,15 @@ export POSTGRES_SSL_KEY_PASSPHRASE="$(cat /secure/secrets/ssl-key-passphrase)"
 **Configuration Reference:**
 ```yaml
 database:
-  dsn: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}?sslmode=require"
+  dsn: "postgres://db.example.internal:5432/shelly?sslmode=require"
 ```
+
+The file holds no credentials. The user name and the password come from `SHELLY_DATABASE_USERNAME` and
+`SHELLY_DATABASE_PASSWORD`, set from the variables above, for example
+`export SHELLY_DATABASE_PASSWORD="$POSTGRES_PASSWORD"`
+(`internal/config/config.go:238-241`, `internal/database/provider/postgresql_provider.go:472-481`). The
+loader does not expand a `${...}` reference in a config file (`internal/config/config.go:170-214`), so
+the file cannot name them.
 
 #### Kubernetes Secret Management
 
@@ -184,12 +191,12 @@ spec:
       containers:
       - name: shelly-manager
         env:
-        - name: POSTGRES_USER
+        - name: SHELLY_DATABASE_USERNAME
           valueFrom:
             secretKeyRef:
               name: shelly-postgres-credentials
               key: username
-        - name: POSTGRES_PASSWORD
+        - name: SHELLY_DATABASE_PASSWORD
           valueFrom:
             secretKeyRef:
               name: shelly-postgres-credentials

@@ -77,7 +77,7 @@ database:
   # Migration target (PostgreSQL)
   migration_target:
     provider: "postgresql"
-    dsn: "postgres://shelly:${POSTGRES_PASSWORD}@postgres:5432/shelly_manager?sslmode=require"
+    dsn: "postgres://shelly:<password>@postgres:5432/shelly_manager?sslmode=require"
     max_open_conns: 25
     max_idle_conns: 5
 ```
@@ -386,11 +386,12 @@ systemctl stop shelly-manager
 # Backup current configuration
 cp configs/shelly-manager.yaml configs/shelly-manager.sqlite.yaml
 
-# Update configuration to use PostgreSQL
+# Update configuration to use PostgreSQL. Replace <password> below, or leave the user name and
+# password out of the DSN and set SHELLY_DATABASE_USERNAME and SHELLY_DATABASE_PASSWORD for the service.
 cat > configs/shelly-manager.yaml << EOF
 database:
   provider: "postgresql"
-  dsn: "postgres://shelly:\${POSTGRES_PASSWORD}@postgres:5432/shelly_manager?sslmode=require"
+  dsn: "postgres://shelly:<password>@postgres:5432/shelly_manager?sslmode=require"
   options:
     sslmode: "require"
     connect_timeout: "30"
@@ -489,7 +490,7 @@ database:
 ```yaml
 database:
   provider: "postgresql"
-  dsn: "postgres://shelly:${POSTGRES_PASSWORD}@postgres:5432/shelly_manager?sslmode=require"
+  dsn: "postgres://shelly:<password>@postgres:5432/shelly_manager?sslmode=require"
   options:
     sslmode: "require"
     connect_timeout: "30"
@@ -501,6 +502,11 @@ database:
   slow_query_time: 200
   log_level: "warn"
 ```
+
+Write the real password in place of `<password>`. To keep it out of the file, leave the user name and
+password out of the DSN and set `SHELLY_DATABASE_USERNAME` and `SHELLY_DATABASE_PASSWORD` instead
+(`internal/config/config.go:238-241`, `internal/database/provider/postgresql_provider.go:391-401`). The
+loader does not expand a `${...}` reference in a config file (`internal/config/config.go:170-214`).
 
 ### Environment Variable Updates
 
