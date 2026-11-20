@@ -1,0 +1,2 @@
+Security
+- Logs no longer carry secrets: the provisioner does not log the default access-point password, the template engine logs the size of a rendered configuration that is not valid JSON instead of its text (which could hold the device password), and the provisioner agent client logs the size of a registration answer it cannot decode instead of the answer (which carries the agent token). Refs ginsys/shelly-manager#768.

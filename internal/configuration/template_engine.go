@@ -243,9 +243,9 @@ func (te *TemplateEngine) SubstituteVariables(configData json.RawMessage, contex
 	// Validate that result is still valid JSON
 	if !json.Valid(result) {
 		te.logger.WithFields(map[string]any{
-			"device_id": context.Device.ID,
-			"result":    string(result),
-			"component": "template",
+			"device_id":   context.Device.ID,
+			"result_size": len(result), // size only: the rendered text can hold a password
+			"component":   "template",
 		}).Error("Template substitution resulted in invalid JSON")
 		return nil, fmt.Errorf("template substitution resulted in invalid JSON")
 	}

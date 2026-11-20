@@ -431,7 +431,7 @@ func (c *APIClient) makeRequest(method, endpoint string, requestBody interface{}
 				"method":        method,
 				"full_url":      url,
 				"status_code":   resp.StatusCode,
-				"response_body": string(respBody),
+				"response_size": len(respBody), // size only: a success answer can carry the agent token
 				"error":         err.Error(),
 			}).Error("Failed to parse JSON response")
 			return fmt.Errorf("failed to unmarshal response body: %w", err)

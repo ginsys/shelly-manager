@@ -253,12 +253,11 @@ func (sp *ShellyProvisioner) identifyShellyDevice(ctx context.Context, network W
 	defaultPassword := sp.getDefaultPassword(model, macSuffix)
 
 	sp.logger.WithFields(map[string]any{
-		"component":        "shelly_provisioner",
-		"ssid":             network.SSID,
-		"detected_model":   model,
-		"detected_gen":     generation,
-		"default_password": defaultPassword,
-		"mac_suffix":       macSuffix,
+		"component":      "shelly_provisioner",
+		"ssid":           network.SSID,
+		"detected_model": model,
+		"detected_gen":   generation,
+		"mac_suffix":     macSuffix,
 	}).Debug("Device identification completed")
 
 	device := &UnprovisionedDevice{
