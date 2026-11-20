@@ -45,6 +45,8 @@ type Handler struct {
 	// AgentAPIKey is the second key, accepted next to the admin key on the provisioner agent
 	// routes only. Empty means the agent routes accept the admin key alone.
 	AgentAPIKey string
+	// driftSchedulerEnabled is whether this process runs the drift scheduler; set once at start-up.
+	driftSchedulerEnabled bool
 	// Version/banner support
 	serverStartedAt time.Time
 	// gitSHA is the revision this binary was built from, or "" when the build carries none.
@@ -1302,15 +1304,6 @@ func (h *Handler) GetDriftSchedules(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, schedules)
 }
 
-// writeSchedulingNotImplemented fails the run-history route closed with an HTTP
-// 501 until the route reads the runs the scheduler records (#279): an empty list
-// would assert history that was never read. It is called before touching the
-// service, so the path has no database side effects.
-func (h *Handler) writeSchedulingNotImplemented(w http.ResponseWriter, r *http.Request) {
-	h.responseWriter().WriteError(w, r, http.StatusNotImplemented,
-		apiresp.ErrCodeNotImplemented, configuration.ErrSchedulingNotImplemented.Error(), nil)
-}
-
 // decodeScheduleInput reads a schedule write body. An unknown field is refused, so a filter key no
 // column has (device_type) fails at write time and not as a failed run later.
 func (h *Handler) decodeScheduleInput(w http.ResponseWriter, r *http.Request) (configuration.ScheduleInput, bool) {
@@ -1438,10 +1431,44 @@ func (h *Handler) ToggleDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, schedule)
 }
 
-// GetDriftScheduleRuns handles GET /api/v1/config/drift-schedules/{id}/runs.
-// Fails closed with 501 — see writeSchedulingNotImplemented.
+// Run list bounds: the scheduler keeps 100 runs per schedule, so a larger limit asks for nothing more.
+const (
+	driftRunsDefaultLimit = 20
+	driftRunsMaxLimit     = 100
+)
+
+// GetDriftScheduleRuns handles GET /api/v1/config/drift-schedules/{id}/runs?limit=N: the newest runs
+// first, without their results.
 func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
-	h.writeSchedulingNotImplemented(w, r)
+	id, ok := h.scheduleID(w, r)
+	if !ok {
+		return
+	}
+	limit := driftRunsDefaultLimit
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > driftRunsMaxLimit {
+			h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("limit must be a whole number from 1 to %d", driftRunsMaxLimit))
+			return
+		}
+		limit = n
+	}
+	runs, err := h.Service.GetDriftScheduleRuns(id, limit)
+	if err != nil {
+		h.writeScheduleError(w, r, "Failed to get drift schedule runs", id, err)
+		return
+	}
+	h.responseWriter().WriteSuccess(w, r, runs)
+}
+
+// SetDriftSchedulerEnabled tells the handler whether this process runs the drift scheduler
+// (drift.scheduler_enabled). A handler never told answers false.
+func (h *Handler) SetDriftSchedulerEnabled(enabled bool) { h.driftSchedulerEnabled = enabled }
+
+// GetDriftSchedulerStatus handles GET /api/v1/config/drift-scheduler. It reports the configuration of
+// the replica that answers, so replicas configured differently answer differently.
+func (h *Handler) GetDriftSchedulerStatus(w http.ResponseWriter, r *http.Request) {
+	h.responseWriter().WriteSuccess(w, r, map[string]bool{"enabled": h.driftSchedulerEnabled})
 }
 
 // GetDriftReports handles GET /api/v1/config/drift-reports

@@ -1443,6 +1443,11 @@ func (s *ShellyService) ToggleDriftSchedule(scheduleID uint) (*configuration.Dri
 	return s.ConfigSvc.ToggleDriftSchedule(scheduleID)
 }
 
+// GetDriftScheduleRuns returns the newest runs of a drift detection schedule, without their results
+func (s *ShellyService) GetDriftScheduleRuns(scheduleID uint, limit int) ([]configuration.DriftDetectionRun, error) {
+	return s.ConfigSvc.ListDriftScheduleRuns(scheduleID, limit)
+}
+
 // DeleteDriftSchedule removes a drift detection schedule with its device list and runs
 func (s *ShellyService) DeleteDriftSchedule(scheduleID uint) error {
 	return s.ConfigSvc.DeleteDriftSchedule(scheduleID)

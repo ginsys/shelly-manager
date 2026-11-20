@@ -334,6 +334,8 @@ func startServer() {
 	if cfg != nil && cfg.Security.AgentAPIKey != "" {
 		apiHandler.SetAgentAPIKey(cfg.Security.AgentAPIKey)
 	}
+	// The status route reports this, so the UI can say a stored schedule is not running here.
+	apiHandler.SetDriftSchedulerEnabled(cfg != nil && cfg.Drift.SchedulerEnabled)
 
 	// Wire integration (7.2.d): emit notifications from configuration drift detection
 	if notificationHandler != nil && apiHandler.ConfigService != nil {

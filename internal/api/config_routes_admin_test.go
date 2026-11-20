@@ -73,6 +73,7 @@ var adminGuardedConfigRoutes = []struct{ method, path string }{
 	{"DELETE", "/api/v1/config/drift-schedules/1"},
 	{"POST", "/api/v1/config/drift-schedules/1/toggle"},
 	{"GET", "/api/v1/config/drift-schedules/1/runs"},
+	{"GET", "/api/v1/config/drift-scheduler"},
 	{"GET", "/api/v1/config/drift-reports"},
 	{"GET", "/api/v1/config/drift-trends"},
 	{"POST", "/api/v1/config/drift-trends/1/resolve"},
