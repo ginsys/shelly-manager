@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -13,6 +14,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database/provider"
+	"github.com/ginsys/shelly-manager/internal/database/restore"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/notification"
 )
@@ -43,6 +45,29 @@ func NewManagerWithLogger(config provider.DatabaseConfig, logger *logging.Logger
 		return nil, fmt.Errorf("invalid database configuration: %w", err)
 	}
 
+	// A restore staged before the last stop is swapped in now, before anything opens the file. If the
+	// restored database then cannot be opened or migrated, the previous one is put back and opened.
+	livePath, restorable := RestoreTarget(config)
+	applied := restorable && restore.ApplyPending(livePath, logger)
+	m, err := openManager(factory, config, logger)
+	if err != nil && applied && restore.Rollback(livePath, err, logger) {
+		return openManager(factory, config, logger)
+	}
+	return m, err
+}
+
+// RestoreTarget returns the SQLite file a restore replaces for this configuration, or false when the
+// provider is not SQLite or its DSN is not a plain file path.
+func RestoreTarget(config provider.DatabaseConfig) (string, bool) {
+	switch strings.ToLower(config.Provider) {
+	case "sqlite", "sqlite3":
+		return restore.LivePath(config.DSN)
+	}
+	return "", false
+}
+
+// openManager creates the provider, connects, and migrates the schema.
+func openManager(factory *provider.Factory, config provider.DatabaseConfig, logger *logging.Logger) (*Manager, error) {
 	// Create provider instance
 	dbProvider, err := factory.Create(config.Provider)
 	if err != nil {

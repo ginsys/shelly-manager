@@ -19,8 +19,6 @@ import (
 type MockBackupProvider struct {
 	createBackupResult   *provider.BackupResult
 	createBackupError    error
-	restoreBackupResult  *provider.RestoreResult
-	restoreBackupError   error
 	validateBackupResult *provider.ValidationResult
 	validateBackupError  error
 }
@@ -44,25 +42,6 @@ func (m *MockBackupProvider) CreateBackup(ctx context.Context, config provider.B
 		RecordCount: 10,
 		TableCount:  3,
 		Checksum:    "test-checksum",
-	}, nil
-}
-
-func (m *MockBackupProvider) RestoreBackup(ctx context.Context, config provider.RestoreConfig) (*provider.RestoreResult, error) {
-	if m.restoreBackupError != nil {
-		return nil, m.restoreBackupError
-	}
-	if m.restoreBackupResult != nil {
-		return m.restoreBackupResult, nil
-	}
-	return &provider.RestoreResult{
-		Success:         true,
-		RestoreID:       "test-restore-123",
-		BackupPath:      config.BackupPath,
-		StartTime:       time.Now().Add(-time.Minute),
-		EndTime:         time.Now(),
-		Duration:        time.Minute,
-		TablesRestored:  []string{"devices", "configurations"},
-		RecordsRestored: 10,
 	}, nil
 }
 
@@ -395,53 +374,6 @@ func TestBackupExporter_Capabilities(t *testing.T) {
 
 	if caps.ConcurrencyLevel != 1 {
 		t.Error("Backup should have concurrency level 1")
-	}
-}
-
-func TestBackupExporter_RestoreBackup(t *testing.T) {
-	// Create temporary backup file
-	tmpDir, err := os.MkdirTemp("", "restore_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() {
-		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
-			t.Logf("Failed to remove temp directory: %v", removeErr)
-		}
-	}()
-
-	backupPath := filepath.Join(tmpDir, "test-backup.sma")
-
-	// Create dummy backup file
-	if writeErr := os.WriteFile(backupPath, []byte("dummy backup data"), 0644); writeErr != nil {
-		t.Fatalf("Failed to create backup file: %v", writeErr)
-	}
-
-	mockProvider := &MockBackupProvider{}
-	mockDB := &MockDatabaseManager{provider: mockProvider}
-	exporter := NewBackupExporter(mockDB)
-	if initErr := exporter.Initialize(logging.GetDefault()); initErr != nil {
-		t.Logf("Failed to initialize exporter: %v", initErr)
-	}
-
-	ctx := context.Background()
-	options := map[string]interface{}{
-		"dry_run":       false,
-		"preserve_data": true,
-	}
-
-	result, err := exporter.RestoreBackup(ctx, backupPath, options)
-
-	if err != nil {
-		t.Fatalf("Restore failed: %v", err)
-	}
-
-	if !result.Success {
-		t.Error("Restore should succeed")
-	}
-
-	if result.RecordsImported != 10 { // From mock
-		t.Errorf("Expected 10 records imported, got %d", result.RecordsImported)
 	}
 }
 

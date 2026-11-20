@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,6 +52,34 @@ func TestNewImportEngine(t *testing.T) {
 
 	if importEngine.logger != logger {
 		t.Error("Import engine logger not set correctly")
+	}
+}
+
+// The engine never restores a backup from a client-named path: every backup import is refused,
+// whatever the source or the flags, and the database provider is never reached.
+func TestImportEngine_BackupImportIsRefused(t *testing.T) {
+	logger := logging.GetDefault()
+	mockDB := &MockDBForImport{} // a nil provider: any use of it would panic
+	importEngine := NewImportEngine(NewExportEngine(mockDB, logger), mockDB, logger)
+
+	for name, opts := range map[string]ImportOptions{
+		"restore":       {},
+		"dry run":       {DryRun: true},
+		"validate only": {ValidateOnly: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := importEngine.Import(context.Background(), ImportRequest{
+				PluginName: "backup",
+				Source:     ImportSource{Type: "file", Path: "/etc/passwd"},
+				Options:    opts,
+			})
+			if !errors.Is(err, ErrImportNotImplemented) {
+				t.Fatalf("want ErrImportNotImplemented, got %v", err)
+			}
+			if result == nil || result.Success {
+				t.Fatalf("want a failed result, got %+v", result)
+			}
+		})
 	}
 }
 

@@ -149,7 +149,6 @@ type HealthStatus struct {
 type BackupProvider interface {
 	// Backup Operations
 	CreateBackup(ctx context.Context, config BackupConfig) (*BackupResult, error)
-	RestoreBackup(ctx context.Context, config RestoreConfig) (*RestoreResult, error)
 	ValidateBackup(ctx context.Context, backupPath string) (*ValidationResult, error)
 
 	// Backup Management
@@ -166,16 +165,6 @@ type BackupConfig struct {
 	IncludeTables []string          `json:"include_tables,omitempty"`
 	ExcludeTables []string          `json:"exclude_tables,omitempty"`
 	Options       map[string]string `json:"options,omitempty"`
-}
-
-// RestoreConfig defines restore operation configuration
-type RestoreConfig struct {
-	BackupPath      string            `json:"backup_path"`
-	TargetDatabase  string            `json:"target_database,omitempty"`
-	PreserveData    bool              `json:"preserve_data"`
-	SelectiveTables []string          `json:"selective_tables,omitempty"`
-	DryRun          bool              `json:"dry_run"`
-	Options         map[string]string `json:"options,omitempty"`
 }
 
 // BackupType defines the type of backup
@@ -203,21 +192,6 @@ type BackupResult struct {
 	Error       string                 `json:"error,omitempty"`
 	Warnings    []string               `json:"warnings,omitempty"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// RestoreResult contains the result of a restore operation
-type RestoreResult struct {
-	Success         bool                   `json:"success"`
-	RestoreID       string                 `json:"restore_id"`
-	BackupPath      string                 `json:"backup_path"`
-	StartTime       time.Time              `json:"start_time"`
-	EndTime         time.Time              `json:"end_time"`
-	Duration        time.Duration          `json:"duration"`
-	TablesRestored  []string               `json:"tables_restored"`
-	RecordsRestored int64                  `json:"records_restored"`
-	Error           string                 `json:"error,omitempty"`
-	Warnings        []string               `json:"warnings,omitempty"`
-	Metadata        map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ValidationResult contains backup validation results

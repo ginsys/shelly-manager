@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -60,103 +59,18 @@ func (i *ImportEngine) PreviewImport(ctx context.Context, request ImportRequest)
 	return i.Import(ctx, previewRequest)
 }
 
-// importBackup handles backup file imports using the backup plugin
-func (i *ImportEngine) importBackup(ctx context.Context, request ImportRequest, importID string, startTime time.Time) (*ImportResult, error) {
-	// For now, backup import is handled using the database provider directly
-	// TODO: Integrate with proper backup plugin interface when available
-
-	// Get backup provider from database manager
-	dbProvider := i.dbManager.GetProvider()
-	backupProvider, ok := dbProvider.(provider.BackupProvider)
-	if !ok {
-		return &ImportResult{
-			Success:   false,
-			ImportID:  importID,
-			Errors:    []string{"database provider does not support backup operations"},
-			Duration:  time.Since(startTime),
-			CreatedAt: time.Now(),
-		}, fmt.Errorf("database provider does not support backup operations")
-	}
-
-	// Determine source path
-	var sourcePath string
-	switch request.Source.Type {
-	case "file":
-		sourcePath = request.Source.Path
-	case "url":
-		return nil, fmt.Errorf("URL source not yet supported for backup import")
-	case "data":
-		return nil, fmt.Errorf("data source not yet supported for backup import")
-	default:
-		return nil, fmt.Errorf("invalid source type: %s", request.Source.Type)
-	}
-
-	// If validation only, validate the backup file
-	if request.Options.ValidateOnly {
-		validation, err := backupProvider.ValidateBackup(ctx, sourcePath)
-		if err != nil {
-			return &ImportResult{
-				Success:   false,
-				ImportID:  importID,
-				Errors:    []string{fmt.Sprintf("backup validation failed: %v", err)},
-				Duration:  time.Since(startTime),
-				CreatedAt: time.Now(),
-			}, err
-		}
-
-		return &ImportResult{
-			Success:         validation.Valid,
-			ImportID:        importID,
-			RecordsImported: int(validation.RecordCount),
-			Duration:        time.Since(startTime),
-			Errors:          validation.Errors,
-			Warnings:        validation.Warnings,
-			Metadata: map[string]interface{}{
-				"validation_only": true,
-				"backup_valid":    validation.Valid,
-				"backup_size":     validation.Size,
-				"backup_type":     string(validation.BackupType),
-			},
-			CreatedAt: time.Now(),
-		}, nil
-	}
-
-	// Prepare restore configuration
-	restoreConfig := provider.RestoreConfig{
-		BackupPath:   sourcePath,
-		DryRun:       request.Options.DryRun,
-		PreserveData: !request.Options.ForceOverwrite,
-	}
-
-	// Perform the restore
-	restoreResult, err := backupProvider.RestoreBackup(ctx, restoreConfig)
-	if err != nil {
-		return &ImportResult{
-			Success:   false,
-			ImportID:  importID,
-			Errors:    []string{err.Error()},
-			Duration:  time.Since(startTime),
-			CreatedAt: time.Now(),
-		}, err
-	}
-
+// importBackup refuses every backup import.
+func (i *ImportEngine) importBackup(_ context.Context, _ ImportRequest, importID string, startTime time.Time) (*ImportResult, error) {
+	// A client-named path never reaches the database: a backup is restored by id through the
+	// restore routes, which stage it for the next start (ginsys/shelly-manager#748).
+	err := fmt.Errorf("restoring a backup through the import engine is not offered; stage it with POST /api/v1/import/restore: %w", ErrImportNotImplemented)
 	return &ImportResult{
-		Success:         restoreResult.Success,
-		ImportID:        importID,
-		PluginName:      request.PluginName,
-		Format:          request.Format,
-		RecordsImported: int(restoreResult.RecordsRestored),
-		Duration:        time.Since(startTime),
-		Changes:         []ImportChange{}, // Backup restore doesn't track individual changes
-		Errors:          []string{restoreResult.Error},
-		Warnings:        restoreResult.Warnings,
-		Metadata: map[string]interface{}{
-			"restore_id":      restoreResult.RestoreID,
-			"tables_restored": restoreResult.TablesRestored,
-			"dry_run":         request.Options.DryRun,
-		},
+		Success:   false,
+		ImportID:  importID,
+		Errors:    []string{err.Error()},
+		Duration:  time.Since(startTime),
 		CreatedAt: time.Now(),
-	}, nil
+	}, err
 }
 
 // importGitOps handles GitOps YAML imports

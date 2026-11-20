@@ -28,6 +28,7 @@ type restoreRig struct {
 	dir    string
 	engine *sync.SyncEngine
 	logger *logging.Logger
+	imp    *ImportHandlers
 }
 
 // newRestoreRig builds the import routes over a real engine with the real backup plugin, and
@@ -48,7 +49,7 @@ func newRestoreRig(t *testing.T, withBase bool) *restoreRig {
 	}
 	r := mux.NewRouter()
 	imp.AddImportRoutes(r.PathPrefix("/api/v1").Subrouter())
-	return &restoreRig{router: r, db: db, dir: dir, engine: engine, logger: logger}
+	return &restoreRig{router: r, db: db, dir: dir, engine: engine, logger: logger, imp: imp}
 }
 
 func (rg *restoreRig) record(t *testing.T, id, plugin, path string, success bool) {

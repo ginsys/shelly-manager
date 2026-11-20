@@ -372,6 +372,10 @@ func startServer() {
 	if cfg != nil && cfg.Export.OutputDirectory != "" {
 		importHandlers.SetExportBaseDir(cfg.Export.OutputDirectory)
 	}
+	// A restore replaces the SQLite file at the next start; other databases answer 501
+	if cfg != nil {
+		importHandlers.SetRestoreDatabase(cfg.GetDatabaseConfig())
+	}
 	apiHandler.ImportHandlers = importHandlers
 	// Protect the export, import and metrics endpoints with the one admin key
 	apiHandler.ShareAdminKey()
