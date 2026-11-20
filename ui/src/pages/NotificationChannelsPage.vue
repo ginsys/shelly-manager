@@ -55,7 +55,7 @@
     </DataTable>
 
     <!-- Simple create form modal -->
-    <div v-if="showCreateForm" class="modal-overlay" @click="showCreateForm = false">
+    <div v-if="showCreateForm" class="modal-overlay" @click="closeCreateForm">
       <div class="modal" @click.stop>
         <h2>Create Notification Channel</h2>
         <p v-if="createError" class="form-error" role="alert" data-testid="channel-create-error">{{ createError }}</p>
@@ -164,7 +164,7 @@
           </div>
           <div style="display:flex;gap:8px;margin-top:16px">
             <button type="submit" class="primary-button">Create</button>
-            <button type="button" class="secondary-button" @click="showCreateForm = false">
+            <button type="button" class="secondary-button" data-testid="channel-cancel" @click="closeCreateForm">
               Cancel
             </button>
           </div>
@@ -219,6 +219,12 @@ function removeHeader(index: number) {
 function resetForm() {
   newChannel.value = { name: '', type: 'email', enabled: true, config: {} }
   fields.value = emptyChannelFields()
+}
+
+// Cancel and a click on the backdrop end the form: what was typed, credentials included, goes with it.
+function closeCreateForm() {
+  showCreateForm.value = false
+  resetForm()
 }
 
 onMounted(() => {
