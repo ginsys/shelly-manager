@@ -163,7 +163,8 @@ export async function getChannels(): Promise<NotificationChannel[]> {
 }
 
 export async function getChannel(id: string): Promise<NotificationChannel> {
-  const res = await api.get<APIResponse<ChannelWire>>(`/notifications/channels/${wireId(id)}`)
+  const n = wireId(id)
+  const res = await api.get<APIResponse<ChannelWire>>(`/notifications/channels/${n}`)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Notification channel not found'
     throw new Error(msg)
@@ -184,7 +185,8 @@ export async function createChannel(data: NotificationChannelInput): Promise<Not
 // {status: "updated"}, not the channel: callers read the channel again. The only caller is
 // setChannelEnabled: no page edits a channel's other fields.
 async function updateChannel(id: string, data: NotificationChannelInput): Promise<void> {
-  const res = await api.put<APIResponse<{ status: string }>>(`/notifications/channels/${wireId(id)}`, channelToWire(data))
+  const n = wireId(id)
+  const res = await api.put<APIResponse<{ status: string }>>(`/notifications/channels/${n}`, channelToWire(data))
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to update notification channel'
     throw new Error(msg)
@@ -200,7 +202,8 @@ export async function setChannelEnabled(id: string, enabled: boolean): Promise<v
 }
 
 export async function deleteChannel(id: string): Promise<void> {
-  const res = await api.delete<APIResponse<void>>(`/notifications/channels/${wireId(id)}`)
+  const n = wireId(id)
+  const res = await api.delete<APIResponse<void>>(`/notifications/channels/${n}`)
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to delete notification channel'
     throw new Error(msg)
@@ -209,7 +212,8 @@ export async function deleteChannel(id: string): Promise<void> {
 
 // Sends one synthetic notification through the channel. Resolves with the server's message.
 export async function testChannel(id: string): Promise<string> {
-  const res = await api.post<APIResponse<{ status: string; message: string }>>(`/notifications/channels/${wireId(id)}/test`)
+  const n = wireId(id)
+  const res = await api.post<APIResponse<{ status: string; message: string }>>(`/notifications/channels/${n}/test`)
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to send the test notification'
     throw new Error(msg)
@@ -237,7 +241,8 @@ export async function createRule(data: NotificationRuleInput): Promise<Notificat
 }
 
 export async function deleteRule(id: string): Promise<void> {
-  const res = await api.delete<APIResponse<void>>(`/notifications/rules/${wireId(id)}`)
+  const n = wireId(id)
+  const res = await api.delete<APIResponse<void>>(`/notifications/rules/${n}`)
   if (!res.data.success) {
     const msg = res.data.error?.message || 'Failed to delete notification rule'
     throw new Error(msg)
