@@ -249,6 +249,33 @@ database:
 	}
 }
 
+// The drift scheduler contacts devices on a timer, so it is off unless an operator turns it on,
+// in the file or through the environment (a key is read from the environment only if a default
+// registers it).
+func TestLoad_DriftSchedulerIsOffUnlessTurnedOn(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "drift.yaml")
+	if err := os.WriteFile(configPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Drift.SchedulerEnabled {
+		t.Error("drift.scheduler_enabled must default to false")
+	}
+
+	t.Setenv("SHELLY_DRIFT_SCHEDULER_ENABLED", "true")
+	cfg, err = Load(configPath)
+	if err != nil {
+		t.Fatalf("Load with env: %v", err)
+	}
+	if !cfg.Drift.SchedulerEnabled {
+		t.Error("SHELLY_DRIFT_SCHEDULER_ENABLED=true did not turn the scheduler on")
+	}
+}
+
 func TestLoad_DefaultConfig(t *testing.T) {
 	// Create minimal config file
 	tempDir := t.TempDir()

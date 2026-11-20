@@ -341,15 +341,39 @@ type DriftDetectionSchedule struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
+// Status of a drift detection run.
+const (
+	DriftRunRunning     = "running"
+	DriftRunCompleted   = "completed"
+	DriftRunFailed      = "failed"
+	DriftRunSkipped     = "skipped"     // the previous run of the schedule was still running
+	DriftRunInterrupted = "interrupted" // the process that started it ended without finishing it
+)
+
+// DriftScheduleDevice is one device a schedule checks. A schedule with no rows here and no
+// device_filter checks every device. There is no foreign key: a device deleted later drops out of
+// the run, where a cascade would shrink the list unseen.
+type DriftScheduleDevice struct {
+	ScheduleID uint `json:"schedule_id" gorm:"primaryKey;autoIncrement:false"`
+	DeviceID   uint `json:"device_id" gorm:"primaryKey;autoIncrement:false"`
+}
+
+// DriftDeviceFilter selects the devices of a schedule by columns of the devices table. It is the
+// value of DriftDetectionSchedule.DeviceFilter; an unknown key is refused, never read as "all".
+type DriftDeviceFilter struct {
+	Type   string `json:"type,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
 // DriftDetectionRun represents a single execution of a drift detection schedule
 type DriftDetectionRun struct {
 	ID          uint            `json:"id" gorm:"primaryKey"`
 	ScheduleID  uint            `json:"schedule_id" gorm:"index;not null"`
-	Status      string          `json:"status"` // "running", "completed", "failed"
+	Status      string          `json:"status"`
 	StartedAt   time.Time       `json:"started_at"`
 	CompletedAt *time.Time      `json:"completed_at"`
 	Duration    *time.Duration  `json:"duration"`
-	Results     json.RawMessage `json:"results" gorm:"type:text"` // BulkDriftResult JSON
+	Results     json.RawMessage `json:"results" gorm:"serializer:json"` // BulkDriftResult JSON; a serializer column is text, longtext on MySQL
 	Error       string          `json:"error,omitempty"`
 	CreatedAt   time.Time       `json:"created_at"`
 }

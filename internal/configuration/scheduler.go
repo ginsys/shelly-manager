@@ -1,10 +1,12 @@
 package configuration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,430 +17,333 @@ import (
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
 
-// ErrSchedulingNotImplemented is the canonical message for drift-schedule
-// operations that imply execution. The scheduler in this file has zero callers
-// (NewScheduler is never wired), so schedules are stored but never run. Until
-// the real execution vertical lands (#279), the API fails these operations
-// closed with an HTTP 501 rather than faking success or asserting run history
-// that cannot exist (#270). Handlers short-circuit on this message; it is not
-// propagated as an error through the service layer.
+// ErrSchedulingNotImplemented is the message of the 501 the schedule routes return until the write
+// path lands (ginsys/shelly-manager#279, slice 2).
 var ErrSchedulingNotImplemented = errors.New("drift schedule execution is not implemented in this release")
 
-// Scheduler manages automated drift detection schedules
-type Scheduler struct {
-	db           *gorm.DB
-	service      *Service
-	cron         *cron.Cron
-	logger       *logging.Logger
-	mu           sync.RWMutex
-	scheduleJobs map[uint]cron.EntryID // maps schedule ID to cron job ID
-	running      bool
-}
+const (
+	driftPollInterval = 30 * time.Second // how often the scheduler asks which schedules are due
+	driftRunTimeout   = 10 * time.Minute // a run left running longer than this is interrupted
+	driftRunsKept     = 100              // run rows kept per schedule
+)
 
-// NewScheduler creates a new drift detection scheduler
-func NewScheduler(db *gorm.DB, service *Service, logger *logging.Logger) *Scheduler {
-	return &Scheduler{
-		db:           db,
-		service:      service,
-		cron:         cron.New(cron.WithSeconds()),
-		logger:       logger,
-		scheduleJobs: make(map[uint]cron.EntryID),
-		running:      false,
+// driftCronParser reads exactly five fields: no seconds and no descriptors such as @hourly.
+var driftCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+// NextRun is the first instant after the given one that the spec names, in the server's time zone,
+// returned in UTC. A spec that never fires (0 0 30 2 *) is an error.
+func NextRun(spec string, after time.Time) (time.Time, error) {
+	// The parser reads a zone prefix whatever its options say; the zone is the server's.
+	if strings.HasPrefix(spec, "TZ=") || strings.HasPrefix(spec, "CRON_TZ=") {
+		return time.Time{}, errors.New("a time zone prefix is not allowed: the schedule runs in the server's time zone")
 	}
+	schedule, err := driftCronParser.Parse(spec)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid cron spec (five fields: minute hour day-of-month month day-of-week): %w", err)
+	}
+	next := schedule.Next(after.In(time.Local))
+	if next.IsZero() {
+		return time.Time{}, fmt.Errorf("cron spec %q never fires", spec)
+	}
+	return next.UTC(), nil
 }
 
-// Start begins the scheduler and loads existing schedules
+// ValidateCronSpec accepts exactly five-field standard cron that fires at some time.
+func ValidateCronSpec(spec string) error {
+	_, err := NextRun(spec, time.Now())
+	return err
+}
+
+// Scheduler runs the drift detection schedules stored in the database. The rows are the only copy
+// of the schedule: every poll reads which enabled schedules are due, so a replica that starts, stops
+// or crashes loses nothing, and several replicas on one database share the work through claim.
+type Scheduler struct {
+	db     *gorm.DB
+	svc    *Service
+	logger *logging.Logger
+
+	// ticks replaces the poll timer (tests); nil means a timer of driftPollInterval.
+	ticks <-chan time.Time
+	// clientFor builds the client a run reads a device through. It must only read: the default is
+	// the service's own builder, never the one that saves device logins.
+	clientFor func(uint) (shelly.Client, error)
+
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+// NewScheduler creates a scheduler over the schedule rows.
+func NewScheduler(db *gorm.DB, svc *Service, logger *logging.Logger) *Scheduler {
+	return &Scheduler{db: db, svc: svc, logger: logger, clientFor: svc.createClientForDevice}
+}
+
+// Start begins polling. It fails when the schedule table cannot be read, and when already started.
 func (s *Scheduler) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.running {
-		return fmt.Errorf("scheduler is already running")
+	if s.cancel != nil {
+		return errors.New("the drift scheduler is already running")
 	}
-
-	s.logger.Info("Starting drift detection scheduler")
-
-	// Load existing schedules from database
-	if err := s.loadSchedules(); err != nil {
-		return fmt.Errorf("failed to load schedules: %w", err)
+	var enabled int64
+	if err := s.db.Model(&DriftDetectionSchedule{}).Where("enabled = ?", true).Count(&enabled).Error; err != nil {
+		return fmt.Errorf("read drift schedules: %w", err)
 	}
+	s.logger.WithFields(map[string]any{"enabled_schedules": enabled, "component": "configuration"}).
+		Info("Starting drift detection scheduler")
 
-	s.cron.Start()
-	s.running = true
-
-	s.logger.Info("Drift detection scheduler started successfully")
+	runCtx, cancel := context.WithCancel(ctx)
+	ticks := s.ticks
+	stopTimer := func() {}
+	if ticks == nil {
+		timer := time.NewTicker(driftPollInterval)
+		ticks, stopTimer = timer.C, timer.Stop
+	}
+	done := make(chan struct{})
+	s.cancel, s.done = cancel, done
+	go func() {
+		defer close(done)
+		defer stopTimer()
+		for {
+			select {
+			case <-runCtx.Done():
+				return
+			case now := <-ticks:
+				s.tick(runCtx, now)
+			}
+		}
+	}()
 	return nil
 }
 
-// Stop gracefully stops the scheduler
+// Stop ends polling and the run in flight: the devices it has not read yet are reported skipped. It
+// waits for the loop, at most 30 seconds, and is a no-op when not running.
 func (s *Scheduler) Stop() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.running {
+	cancel, done := s.cancel, s.done
+	s.cancel, s.done = nil, nil
+	s.mu.Unlock()
+	if cancel == nil {
 		return nil
 	}
-
-	s.logger.Info("Stopping drift detection scheduler")
-
-	ctx := s.cron.Stop()
+	cancel()
 	select {
-	case <-ctx.Done():
-		s.logger.Info("Scheduler stopped gracefully")
+	case <-done:
+		return nil
 	case <-time.After(30 * time.Second):
-		s.logger.Warn("Scheduler stop timeout exceeded")
-	}
-
-	s.running = false
-	s.scheduleJobs = make(map[uint]cron.EntryID)
-
-	s.logger.Info("Drift detection scheduler stopped")
-	return nil
-}
-
-// loadSchedules loads all active schedules from the database and adds them to cron
-func (s *Scheduler) loadSchedules() error {
-	var schedules []DriftDetectionSchedule
-	if err := s.db.Where("enabled = ?", true).Find(&schedules).Error; err != nil {
-		return fmt.Errorf("failed to query schedules: %w", err)
-	}
-
-	s.logger.Info("Loading drift detection schedules", "count", len(schedules))
-
-	for _, schedule := range schedules {
-		if err := s.addScheduleToCron(schedule); err != nil {
-			s.logger.Error("Failed to add schedule to cron", "schedule_id", schedule.ID, "error", err)
-			continue
-		}
-		s.logger.Debug("Added schedule to cron", "schedule_id", schedule.ID, "name", schedule.Name, "cron_spec", schedule.CronSpec)
-	}
-
-	return nil
-}
-
-// addScheduleToCron adds a single schedule to the cron scheduler
-func (s *Scheduler) addScheduleToCron(schedule DriftDetectionSchedule) error {
-	job := func() {
-		s.executeSchedule(schedule.ID)
-	}
-
-	entryID, err := s.cron.AddFunc(schedule.CronSpec, job)
-	if err != nil {
-		return fmt.Errorf("failed to add cron job: %w", err)
-	}
-
-	s.scheduleJobs[schedule.ID] = entryID
-
-	// Update next run time
-	nextRun := s.cron.Entry(entryID).Next
-	if err := s.db.Model(&schedule).Update("next_run", nextRun).Error; err != nil {
-		s.logger.Error("Failed to update next run time", "schedule_id", schedule.ID, "error", err)
-	}
-
-	return nil
-}
-
-// executeSchedule runs drift detection for a specific schedule
-func (s *Scheduler) executeSchedule(scheduleID uint) {
-	s.logger.Info("Executing drift detection schedule", "schedule_id", scheduleID)
-
-	// Get schedule details
-	var schedule DriftDetectionSchedule
-	if err := s.db.First(&schedule, scheduleID).Error; err != nil {
-		s.logger.Error("Failed to get schedule", "schedule_id", scheduleID, "error", err)
-		return
-	}
-
-	// Check if schedule is still enabled
-	if !schedule.Enabled {
-		s.logger.Debug("Schedule is disabled, skipping", "schedule_id", scheduleID)
-		return
-	}
-
-	// Create drift detection run record
-	run := DriftDetectionRun{
-		ScheduleID: scheduleID,
-		Status:     "running",
-		StartedAt:  time.Now(),
-	}
-
-	if err := s.db.Create(&run).Error; err != nil {
-		s.logger.Error("Failed to create drift detection run record", "schedule_id", scheduleID, "error", err)
-		return
-	}
-
-	// Execute drift detection
-	startTime := time.Now()
-	result, err := s.executeDriftDetection(schedule)
-	duration := time.Since(startTime)
-
-	// Update run record
-	completedAt := startTime.Add(duration)
-	run.CompletedAt = &completedAt
-	run.Duration = &duration
-
-	if err != nil {
-		run.Status = "failed"
-		run.Error = err.Error()
-		s.logger.Error("Drift detection failed", "schedule_id", scheduleID, "run_id", run.ID, "error", err)
-	} else {
-		run.Status = "completed"
-		if resultJSON, err := json.Marshal(result); err == nil {
-			run.Results = resultJSON
-		}
-		s.logger.Info("Drift detection completed",
-			"schedule_id", scheduleID,
-			"run_id", run.ID,
-			"total", result.Total,
-			"drifted", result.Drifted,
-			"errors", result.Errors,
-			"duration", duration)
-	}
-
-	// Save run record
-	if err := s.db.Save(&run).Error; err != nil {
-		s.logger.Error("Failed to update drift detection run record", "run_id", run.ID, "error", err)
-	}
-
-	// Update schedule statistics
-	now := time.Now()
-	updates := map[string]interface{}{
-		"last_run":   now,
-		"run_count":  gorm.Expr("run_count + 1"),
-		"updated_at": now,
-	}
-
-	// Calculate next run time
-	if entryID, exists := s.scheduleJobs[scheduleID]; exists {
-		if entry := s.cron.Entry(entryID); entry.Valid() {
-			updates["next_run"] = entry.Next
-		}
-	}
-
-	if err := s.db.Model(&schedule).Updates(updates).Error; err != nil {
-		s.logger.Error("Failed to update schedule statistics", "schedule_id", scheduleID, "error", err)
+		return errors.New("the drift scheduler did not stop within 30 seconds")
 	}
 }
 
-// executeDriftDetection performs the actual drift detection
-func (s *Scheduler) executeDriftDetection(schedule DriftDetectionSchedule) (*BulkDriftResult, error) {
-	// Get devices to check
-	deviceIDs, err := s.getDevicesForSchedule(schedule)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get devices for schedule: %w", err)
-	}
-
-	if len(deviceIDs) == 0 {
-		s.logger.Debug("No devices to check for schedule", "schedule_id", schedule.ID)
-		return &BulkDriftResult{
-			Total:       0,
-			InSync:      0,
-			Drifted:     0,
-			Errors:      0,
-			Results:     []DriftResult{},
-			StartedAt:   time.Now(),
-			CompletedAt: time.Now(),
-			Duration:    0,
-		}, nil
-	}
-
-	// Use the service to perform bulk drift detection
-	clientGetter := func(deviceID uint) (shelly.Client, error) {
-		return s.service.createClientForDevice(deviceID)
-	}
-
-	return s.service.BulkDetectDrift(context.Background(), deviceIDs, clientGetter, false)
-}
-
-// getDevicesForSchedule determines which devices to check for a given schedule
-func (s *Scheduler) getDevicesForSchedule(schedule DriftDetectionSchedule) ([]uint, error) {
-	// If specific device IDs are stored in the schedule, use those
-	if len(schedule.DeviceIDs) > 0 {
-		return schedule.DeviceIDs, nil
-	}
-
-	// Parse device filter if present
-	if len(schedule.DeviceFilter) > 0 {
-		var filter map[string]interface{}
-		if err := json.Unmarshal(schedule.DeviceFilter, &filter); err != nil {
-			return nil, fmt.Errorf("failed to parse device filter: %w", err)
-		}
-
-		// Apply filter to get device IDs
-		return s.getDevicesWithFilter(filter)
-	}
-
-	// Default: get all devices
-	return s.getAllDeviceIDs()
-}
-
-// getDevicesWithFilter applies filter criteria to get matching device IDs
-func (s *Scheduler) getDevicesWithFilter(filter map[string]interface{}) ([]uint, error) {
-	query := s.db.Model(&struct {
-		ID uint `json:"id"`
-	}{}).Table("devices")
-
-	// Apply filter conditions
-	if deviceType, ok := filter["device_type"].(string); ok && deviceType != "" {
-		query = query.Where("device_type = ?", deviceType)
-	}
-
-	if generation, ok := filter["generation"].(float64); ok {
-		query = query.Where("generation = ?", int(generation))
-	}
-
-	if enabled, ok := filter["enabled"].(bool); ok {
-		query = query.Where("enabled = ?", enabled)
-	}
-
-	var deviceIDs []uint
-	if err := query.Pluck("id", &deviceIDs).Error; err != nil {
-		return nil, fmt.Errorf("failed to query devices with filter: %w", err)
-	}
-
-	return deviceIDs, nil
-}
-
-// getAllDeviceIDs gets all device IDs
-func (s *Scheduler) getAllDeviceIDs() ([]uint, error) {
-	var deviceIDs []uint
-	if err := s.db.Model(&struct {
-		ID uint `json:"id"`
-	}{}).Table("devices").Pluck("id", &deviceIDs).Error; err != nil {
-		return nil, fmt.Errorf("failed to get all device IDs: %w", err)
-	}
-
-	return deviceIDs, nil
-}
-
-// AddSchedule creates a new drift detection schedule
-func (s *Scheduler) AddSchedule(schedule DriftDetectionSchedule) (*DriftDetectionSchedule, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Validate cron expression
-	if _, err := cron.ParseStandard(schedule.CronSpec); err != nil {
-		return nil, fmt.Errorf("invalid cron expression: %w", err)
-	}
-
-	// Save to database
-	if err := s.db.Create(&schedule).Error; err != nil {
-		return nil, fmt.Errorf("failed to create schedule: %w", err)
-	}
-
-	// Add to cron if enabled and scheduler is running
-	if schedule.Enabled && s.running {
-		if err := s.addScheduleToCron(schedule); err != nil {
-			s.logger.Error("Failed to add new schedule to cron", "schedule_id", schedule.ID, "error", err)
-		}
-	}
-
-	s.logger.Info("Created new drift detection schedule", "schedule_id", schedule.ID, "name", schedule.Name)
-	return &schedule, nil
-}
-
-// UpdateSchedule updates an existing drift detection schedule
-func (s *Scheduler) UpdateSchedule(scheduleID uint, updates DriftDetectionSchedule) (*DriftDetectionSchedule, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Get existing schedule
-	var schedule DriftDetectionSchedule
-	if err := s.db.First(&schedule, scheduleID).Error; err != nil {
-		return nil, fmt.Errorf("schedule not found: %w", err)
-	}
-
-	// Validate cron expression if changed
-	if updates.CronSpec != "" && updates.CronSpec != schedule.CronSpec {
-		if _, err := cron.ParseStandard(updates.CronSpec); err != nil {
-			return nil, fmt.Errorf("invalid cron expression: %w", err)
-		}
-	}
-
-	// Remove from cron if it exists
-	if entryID, exists := s.scheduleJobs[scheduleID]; exists {
-		s.cron.Remove(entryID)
-		delete(s.scheduleJobs, scheduleID)
-	}
-
-	// Update database record
-	if err := s.db.Model(&schedule).Updates(updates).Error; err != nil {
-		return nil, fmt.Errorf("failed to update schedule: %w", err)
-	}
-
-	// Reload the updated schedule
-	if err := s.db.First(&schedule, scheduleID).Error; err != nil {
-		return nil, fmt.Errorf("failed to reload updated schedule: %w", err)
-	}
-
-	// Add back to cron if enabled and scheduler is running
-	if schedule.Enabled && s.running {
-		if err := s.addScheduleToCron(schedule); err != nil {
-			s.logger.Error("Failed to re-add updated schedule to cron", "schedule_id", schedule.ID, "error", err)
-		}
-	}
-
-	s.logger.Info("Updated drift detection schedule", "schedule_id", schedule.ID, "name", schedule.Name)
-	return &schedule, nil
-}
-
-// DeleteSchedule removes a drift detection schedule
-func (s *Scheduler) DeleteSchedule(scheduleID uint) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Remove from cron if it exists
-	if entryID, exists := s.scheduleJobs[scheduleID]; exists {
-		s.cron.Remove(entryID)
-		delete(s.scheduleJobs, scheduleID)
-	}
-
-	// Delete from database
-	if err := s.db.Delete(&DriftDetectionSchedule{}, scheduleID).Error; err != nil {
-		return fmt.Errorf("failed to delete schedule: %w", err)
-	}
-
-	s.logger.Info("Deleted drift detection schedule", "schedule_id", scheduleID)
-	return nil
-}
-
-// GetSchedules returns all drift detection schedules
-func (s *Scheduler) GetSchedules() ([]DriftDetectionSchedule, error) {
-	var schedules []DriftDetectionSchedule
-	if err := s.db.Find(&schedules).Error; err != nil {
-		return nil, fmt.Errorf("failed to get schedules: %w", err)
-	}
-	return schedules, nil
-}
-
-// GetSchedule returns a specific drift detection schedule
-func (s *Scheduler) GetSchedule(scheduleID uint) (*DriftDetectionSchedule, error) {
-	var schedule DriftDetectionSchedule
-	if err := s.db.First(&schedule, scheduleID).Error; err != nil {
-		return nil, fmt.Errorf("schedule not found: %w", err)
-	}
-	return &schedule, nil
-}
-
-// GetScheduleRuns returns the execution history for a schedule
-func (s *Scheduler) GetScheduleRuns(scheduleID uint, limit int) ([]DriftDetectionRun, error) {
-	var runs []DriftDetectionRun
-	query := s.db.Where("schedule_id = ?", scheduleID).Order("created_at DESC")
-
-	if limit > 0 {
-		query = query.Limit(limit)
-	}
-
-	if err := query.Find(&runs).Error; err != nil {
-		return nil, fmt.Errorf("failed to get schedule runs: %w", err)
-	}
-
-	return runs, nil
-}
-
-// IsRunning returns whether the scheduler is currently running
+// IsRunning reports whether Start has been called and Stop has not.
 func (s *Scheduler) IsRunning() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.running
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cancel != nil
+}
+
+// tick handles every schedule that is due at now: it first ends runs another process left running.
+func (s *Scheduler) tick(ctx context.Context, now time.Time) {
+	now = now.UTC()
+	s.interruptStaleRuns(now)
+
+	var due []DriftDetectionSchedule
+	if err := s.db.Where("enabled = ? AND (next_run IS NULL OR next_run <= ?)", true, now).
+		Order("id").Find(&due).Error; err != nil {
+		s.logError("read due drift schedules", 0, err)
+		return
+	}
+	for _, sc := range due {
+		if ctx.Err() != nil {
+			return
+		}
+		s.handle(ctx, sc, now)
+	}
+}
+
+// interruptStaleRuns marks a run that has been running longer than the run timeout interrupted: its
+// process ended without finishing it, and no other tick would ever close the row.
+func (s *Scheduler) interruptStaleRuns(now time.Time) {
+	err := s.db.Model(&DriftDetectionRun{}).
+		Where("status = ? AND started_at < ?", DriftRunRunning, now.Add(-driftRunTimeout)).
+		Updates(map[string]any{
+			"status":       DriftRunInterrupted,
+			"error":        "the process that started this run ended before the run finished",
+			"completed_at": now,
+		}).Error
+	if err != nil {
+		s.logError("interrupt stale drift runs", 0, err)
+	}
+}
+
+func (s *Scheduler) handle(ctx context.Context, sc DriftDetectionSchedule, now time.Time) {
+	next, err := NextRun(sc.CronSpec, now)
+	if err != nil {
+		s.failSchedule(sc, now, err)
+		return
+	}
+	if sc.NextRun == nil {
+		// Never armed (a row from before the scheduler ran): arm it, run it at its next instant.
+		armErr := s.db.Model(&DriftDetectionSchedule{}).Where("id = ? AND next_run IS NULL", sc.ID).
+			Update("next_run", next).Error
+		if armErr != nil {
+			s.logError("arm drift schedule", sc.ID, armErr)
+		}
+		return
+	}
+	won, err := s.claim(sc, next)
+	if err != nil {
+		s.logError("claim drift schedule", sc.ID, err)
+		return
+	}
+	if won {
+		s.runClaimed(ctx, sc, now)
+	}
+}
+
+// claim takes one due tick of a schedule that was read earlier. It compares and sets the integer
+// run_count, which counts claimed ticks (skipped ones too), so of several replicas that read the same
+// row exactly one wins: a timestamp would be read back in another precision than it was written.
+func (s *Scheduler) claim(sc DriftDetectionSchedule, next time.Time) (bool, error) {
+	res := s.db.Model(&DriftDetectionSchedule{}).
+		Where("id = ? AND enabled = ? AND run_count = ?", sc.ID, true, sc.RunCount).
+		Updates(map[string]any{"next_run": next, "run_count": gorm.Expr("run_count + 1")})
+	return res.RowsAffected == 1, res.Error
+}
+
+// failSchedule records one failed run for a schedule that cannot run and disables it, so it is
+// reported once and not on every tick.
+func (s *Scheduler) failSchedule(sc DriftDetectionSchedule, now time.Time, cause error) {
+	s.logError("drift schedule cannot run", sc.ID, cause)
+	run := DriftDetectionRun{ScheduleID: sc.ID, Status: DriftRunFailed, StartedAt: now, CompletedAt: &now, Error: cause.Error()}
+	if err := s.db.Create(&run).Error; err != nil {
+		s.logError("record failed drift run", sc.ID, err)
+	}
+	if err := s.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("enabled", false).Error; err != nil {
+		s.logError("disable drift schedule", sc.ID, err)
+	}
+}
+
+// runClaimed records and executes one claimed tick: a skipped run when the previous one is still
+// running, otherwise a read-only drift check of the schedule's devices.
+func (s *Scheduler) runClaimed(ctx context.Context, sc DriftDetectionSchedule, now time.Time) {
+	defer s.pruneRuns(sc.ID)
+
+	var running int64
+	if err := s.db.Model(&DriftDetectionRun{}).
+		Where("schedule_id = ? AND status = ?", sc.ID, DriftRunRunning).Count(&running).Error; err != nil {
+		s.logError("read running drift runs", sc.ID, err)
+		return
+	}
+	run := DriftDetectionRun{ScheduleID: sc.ID, StartedAt: now}
+	if running > 0 {
+		run.Status, run.CompletedAt = DriftRunSkipped, &now
+		run.Error = "the previous run of this schedule is still running"
+		if err := s.db.Create(&run).Error; err != nil {
+			s.logError("record skipped drift run", sc.ID, err)
+		}
+		return
+	}
+	run.Status = DriftRunRunning
+	if err := s.db.Create(&run).Error; err != nil {
+		s.logError("record drift run", sc.ID, err)
+		return
+	}
+	if err := s.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("last_run", now).Error; err != nil {
+		s.logError("record last drift run", sc.ID, err)
+	}
+
+	started := time.Now()
+	result, err := s.execute(ctx, sc)
+	completed := now.Add(time.Since(started))
+	run.CompletedAt = &completed
+	duration := completed.Sub(now)
+	run.Duration = &duration
+	if err != nil {
+		run.Status, run.Error = DriftRunFailed, err.Error()
+	} else {
+		run.Status = DriftRunCompleted
+		run.Results, err = json.Marshal(result)
+		if err != nil {
+			run.Status, run.Error = DriftRunFailed, fmt.Sprintf("encode the run result: %v", err)
+		}
+	}
+	if err := s.db.Save(&run).Error; err != nil {
+		s.logError("save drift run", sc.ID, err)
+	}
+}
+
+// execute reads the drift of the schedule's devices. A panic in the read path fails the run and not
+// the process.
+func (s *Scheduler) execute(ctx context.Context, sc DriftDetectionSchedule) (result *BulkDriftResult, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			result, err = nil, fmt.Errorf("drift check panicked: %v", r)
+		}
+	}()
+	ids, err := s.resolveDevices(sc)
+	if err != nil {
+		return nil, err
+	}
+	runCtx, cancel := context.WithTimeout(ctx, driftRunTimeout)
+	defer cancel()
+	return s.svc.BulkDetectDrift(runCtx, ids, s.clientFor, false)
+}
+
+// resolveDevices is the stored list when the schedule has one, else the devices its filter selects,
+// else every device. A stored list is never widened: devices deleted since drop out of the check and
+// show in it as not found.
+func (s *Scheduler) resolveDevices(sc DriftDetectionSchedule) ([]uint, error) {
+	var listed []uint
+	if err := s.db.Model(&DriftScheduleDevice{}).Where("schedule_id = ?", sc.ID).
+		Order("device_id").Pluck("device_id", &listed).Error; err != nil {
+		return nil, fmt.Errorf("read the schedule's devices: %w", err)
+	}
+	if len(listed) > 0 {
+		return listed, nil
+	}
+
+	query := s.db.Table("devices")
+	if raw := bytes.TrimSpace(sc.DeviceFilter); len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		var filter DriftDeviceFilter
+		if err := decoder.Decode(&filter); err != nil {
+			return nil, fmt.Errorf("device filter: %w", err)
+		}
+		if filter.Type != "" {
+			query = query.Where("type = ?", filter.Type)
+		}
+		if filter.Status != "" {
+			query = query.Where("status = ?", filter.Status)
+		}
+	}
+	var ids []uint
+	if err := query.Order("id").Pluck("id", &ids).Error; err != nil {
+		return nil, fmt.Errorf("read the devices of the schedule: %w", err)
+	}
+	return ids, nil
+}
+
+// pruneRuns keeps the newest driftRunsKept runs of a schedule: each row holds a result document.
+func (s *Scheduler) pruneRuns(scheduleID uint) {
+	var keep []uint
+	if err := s.db.Model(&DriftDetectionRun{}).Where("schedule_id = ?", scheduleID).
+		Order("started_at DESC, id DESC").Limit(driftRunsKept).Pluck("id", &keep).Error; err != nil {
+		s.logError("read drift runs to keep", scheduleID, err)
+		return
+	}
+	if len(keep) < driftRunsKept {
+		return
+	}
+	if err := s.db.Where("schedule_id = ? AND id NOT IN ?", scheduleID, keep).
+		Delete(&DriftDetectionRun{}).Error; err != nil {
+		s.logError("prune drift runs", scheduleID, err)
+	}
+}
+
+func (s *Scheduler) logError(what string, scheduleID uint, err error) {
+	s.logger.WithFields(map[string]any{
+		"schedule_id": scheduleID, "error": err.Error(), "component": "configuration",
+	}).Error("Drift scheduler: " + what)
 }

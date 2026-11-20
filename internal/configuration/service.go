@@ -29,13 +29,11 @@ type Service struct {
 
 // NewService creates a new configuration service
 func NewService(db *gorm.DB, logger *logging.Logger) *Service {
-	// config_templates is not migrated here: the database Manager owns it and stops startup
-	// when its migration fails, which this call would only log.
+	// config_templates and the drift schedule tables are not migrated here: the database Manager
+	// owns them and stops startup when its migration fails, which this call would only log.
 	if err := db.AutoMigrate(
 		&DeviceConfig{},
 		&ConfigHistory{},
-		&DriftDetectionSchedule{},
-		&DriftDetectionRun{},
 		&DriftReport{},
 		&DriftTrend{},
 	); err != nil && logger != nil {

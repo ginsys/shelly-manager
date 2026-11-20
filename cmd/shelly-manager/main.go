@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -351,6 +353,13 @@ func startServer() {
 		})
 	}
 
+	// Run the stored drift schedules when the operator turned the scheduler on
+	scheduler, err := startScheduler(context.Background(), cfg, dbManager.GetDB(), apiHandler.ConfigService, logger)
+	if err != nil {
+		logger.WithFields(map[string]any{"error": err.Error(), "component": "drift"}).Error("Drift scheduler failed to start")
+		log.Fatal("Drift scheduler failed to start:", err)
+	}
+
 	// Wire sync handlers for export/import functionality
 	syncHandlers := api.NewSyncHandlers(syncEngine, logger)
 	// Restrict export downloads to configured directory if provided
@@ -501,13 +510,29 @@ func startServer() {
 	// Note: Legacy dashboard removed. New SPA is served from Vite (dev) or ui/dist (prod).
 	fmt.Printf("API base URL: http://%s/api/v1\n", address)
 
-	if err := newHTTPServer(address, router).ListenAndServe(); err != nil {
+	// A signal ends the server cleanly only when the scheduler runs, so that no run is cut mid-device;
+	// with the scheduler off nothing here changes.
+	serveCtx := context.Background()
+	if scheduler != nil {
+		var stopSignals context.CancelFunc
+		serveCtx, stopSignals = signal.NotifyContext(serveCtx, os.Interrupt, syscall.SIGTERM)
+		defer stopSignals()
+	}
+	stopScheduler := func() {
+		if scheduler == nil {
+			return
+		}
+		if err := scheduler.Stop(); err != nil {
+			logger.WithFields(map[string]any{"error": err.Error(), "component": "drift"}).Warn("Drift scheduler did not stop cleanly")
+		}
+	}
+	if err := serve(serveCtx, newHTTPServer(address, router), stopScheduler, shutdownTimeout); err != nil {
 		logger.WithFields(map[string]any{
 			"address":   address,
 			"error":     err.Error(),
 			"component": "server",
-		}).Error("Server failed to start")
-		log.Fatal("Server failed to start:", err)
+		}).Error("Server failed")
+		log.Fatal("Server failed:", err)
 	}
 }
 

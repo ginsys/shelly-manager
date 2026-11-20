@@ -8,7 +8,7 @@ server:
   host: "0.0.0.0"           # Bind address (0.0.0.0 = all interfaces)
   log_level: "info"         # Server log level (debug, info, warn, error)
 
-# Application logging configuration  
+# Application logging configuration
 logging:
   level: "info"             # Log level (debug, info, warn, error)
   format: "text"            # Log format (text, json)
@@ -36,7 +36,7 @@ database:
   # max_open_conns: 25      # Maximum open connections
   # max_idle_conns: 5       # Maximum idle connections
   conn_max_lifetime: 300    # Connection max lifetime (seconds)
-  conn_max_idle_time: 600   # Connection max idle time (seconds) 
+  conn_max_idle_time: 600   # Connection max idle time (seconds)
   slow_query_time: 500      # Slow query threshold (milliseconds)
   log_level: "warn"         # Database log level
   options:                  # Provider-specific options
@@ -54,7 +54,7 @@ discovery:
   interval: 300             # Discovery interval (seconds)
   timeout: 5                # Discovery timeout per device (seconds)
   enable_mdns: true         # Send an mDNS multicast query during discovery; false keeps discovery to the HTTP scan of the networks
-  enable_ssdp: true         # Enable SSDP discovery  
+  enable_ssdp: true         # Enable SSDP discovery
   concurrent_scans: 20      # Maximum concurrent device scans
 
 # Device provisioning configuration
@@ -69,7 +69,7 @@ provisioning:
   auto_provision: false     # Automatically provision discovered devices
   provision_interval: 600   # Auto-provision check interval (seconds)
 
-# DHCP reservation configuration  
+# DHCP reservation configuration
 dhcp:
   network: "192.168.1.0/24" # Network for DHCP reservations
   start_ip: "192.168.1.100" # Start of IP range for reservations
@@ -102,7 +102,7 @@ api:
 # Notification system configuration
 notifications:
   enabled: true             # Enable notifications
-  
+
   # Email notifications
   email:
     smtp_host: ""           # SMTP server host
@@ -111,18 +111,18 @@ notifications:
     smtp_password: ""       # SMTP password (SHELLY_NOTIFICATIONS_EMAIL_SMTP_PASSWORD or _FILE; a _FILE that cannot be read stops start-up)
     from_address: ""        # From email address
     tls: true              # Use TLS encryption
-  
+
   # Webhook notifications
   webhooks:
     - url: ""               # Webhook URL
       secret: ""            # Webhook secret for signing
       headers:              # Additional HTTP headers
         Content-Type: "application/json"
-  
+
   # Notification thresholds
   thresholds:
     critical_drift_count: 5     # Critical config drift threshold
-    warning_drift_count: 10     # Warning config drift threshold  
+    warning_drift_count: 10     # Warning config drift threshold
     max_per_hour: 20           # Maximum notifications per hour
 
 # Auto-resolution configuration
@@ -136,6 +136,10 @@ resolution:
   excluded_paths:           # Paths excluded from auto-resolution
     - "/debug"
     - "/test"
+
+# Drift detection scheduler
+drift:
+  scheduler_enabled: false  # Run stored drift schedules (reads devices on a timer; env SHELLY_DRIFT_SCHEDULER_ENABLED)
 
 # Metrics and monitoring configuration
 metrics:

@@ -113,6 +113,11 @@ type Config struct {
 		AutoFixCategories []string `mapstructure:"auto_fix_categories"`
 		ExcludedPaths     []string `mapstructure:"excluded_paths"`
 	} `mapstructure:"resolution"`
+	Drift struct {
+		// SchedulerEnabled runs the stored drift schedules. It reads devices on a timer, so an operator
+		// turns it on; with it off schedules are only stored.
+		SchedulerEnabled bool `mapstructure:"scheduler_enabled"`
+	} `mapstructure:"drift"`
 	Metrics struct {
 		Enabled              bool `mapstructure:"enabled"`
 		PrometheusEnabled    bool `mapstructure:"prometheus_enabled"`
@@ -319,6 +324,9 @@ func setDefaults() {
 	viper.SetDefault("resolution.approval_required", true)
 	viper.SetDefault("resolution.auto_fix_categories", []string{"network", "time"})
 	viper.SetDefault("resolution.excluded_paths", []string{"/debug", "/test"})
+
+	// Drift scheduler: off until an operator turns it on (SHELLY_DRIFT_SCHEDULER_ENABLED)
+	viper.SetDefault("drift.scheduler_enabled", false)
 
 	// Security defaults
 	viper.SetDefault("security.use_proxy_headers", false)
