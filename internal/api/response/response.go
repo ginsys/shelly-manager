@@ -303,6 +303,16 @@ func (rw *ResponseWriter) WriteCreated(w http.ResponseWriter, r *http.Request, d
 	rw.writeJSONResponse(w, http.StatusCreated, response)
 }
 
+// WriteAccepted writes an accepted response (202): the request is taken and its effect comes later
+func (rw *ResponseWriter) WriteAccepted(w http.ResponseWriter, r *http.Request, data interface{}) {
+	builder := NewResponseBuilder(rw.logger)
+	if requestID := getRequestIDFromContext(r); requestID != "" {
+		builder.WithRequestID(requestID)
+	}
+
+	rw.writeJSONResponse(w, http.StatusAccepted, builder.Success(data))
+}
+
 // WriteNoContent writes a no content response (204)
 func (rw *ResponseWriter) WriteNoContent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)

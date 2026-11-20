@@ -334,13 +334,11 @@ func (b *BackupPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 	}, nil
 }
 
-// Import refuses every source. Restoring a backup replaces the live database and is not safe
-// today (the provider ignores dry run, copies a compressed backup over the database without
-// unpacking it, and reconnects with writers running), and POST /import and POST /import/preview
-// would reach it with a client-named path, the preview included. RestoreBackup stays for the safe
-// restore tracked in ginsys/shelly-manager#748.
+// Import refuses every source. POST /import and POST /import/preview would reach it with a
+// client-named path, the preview included; a backup is restored by id through
+// POST /api/v1/import/restore, which stages it for the next start.
 func (b *BackupPlugin) Import(_ context.Context, _ sync.ImportSource, _ sync.ImportConfig) (*sync.ImportResult, error) {
-	return nil, fmt.Errorf("restoring a backup is not offered yet because it replaces the live database unsafely: %w",
+	return nil, fmt.Errorf("restoring a backup through the import route is not offered; stage it with POST /api/v1/import/restore: %w",
 		sync.ErrImportNotImplemented)
 }
 
@@ -366,87 +364,6 @@ func (b *BackupPlugin) Initialize(logger *logging.Logger) error {
 func (b *BackupPlugin) Cleanup() error {
 	b.logger.Info("Cleaning up backup exporter plugin")
 	return nil
-}
-
-// RestoreBackup restores a backup file
-func (b *BackupPlugin) RestoreBackup(ctx context.Context, backupPath string, options map[string]interface{}) (*sync.ImportResult, error) {
-	startTime := time.Now()
-
-	if b != nil && b.logger != nil {
-		b.logger.Info("Starting backup restore", "path", backupPath)
-	}
-
-	// Get backup provider from database manager
-	if b == nil || b.dbManager == nil {
-		return nil, fmt.Errorf("backup plugin is not initialized with a database manager")
-	}
-	dbProvider := b.dbManager.GetProvider()
-	backupProvider, ok := dbProvider.(provider.BackupProvider)
-	if !ok {
-		return nil, fmt.Errorf("database provider does not support backup operations")
-	}
-
-	// Validate backup file exists
-	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-		if b.logger != nil {
-			b.logger.Warn("Backup file does not exist", "path", backupPath)
-		}
-		return nil, fmt.Errorf("backup file does not exist: %s", backupPath)
-	}
-
-	// Parse restore options
-	dryRun, _ := options["dry_run"].(bool)
-	preserveData, _ := options["preserve_data"].(bool)
-
-	restoreConfig := provider.RestoreConfig{
-		BackupPath:   backupPath,
-		PreserveData: preserveData,
-		DryRun:       dryRun,
-		Options:      make(map[string]string),
-	}
-
-	// Perform restore
-	restoreResult, err := backupProvider.RestoreBackup(ctx, restoreConfig)
-	if err != nil {
-		return nil, fmt.Errorf("restore operation failed: %w", err)
-	}
-
-	if !restoreResult.Success {
-		return &sync.ImportResult{
-			Success:   false,
-			Duration:  time.Since(startTime),
-			Errors:    []string{restoreResult.Error},
-			CreatedAt: time.Now(),
-		}, fmt.Errorf("restore failed: %s", restoreResult.Error)
-	}
-
-	if b != nil && b.logger != nil {
-		b.logger.Info("Backup restore completed",
-			"path", backupPath,
-			"tables_restored", len(restoreResult.TablesRestored),
-			"records_restored", restoreResult.RecordsRestored,
-			"duration", restoreResult.Duration,
-		)
-	}
-
-	// Resolve provider name safely
-	providerName := "unknown"
-	if b.dbManager != nil && b.dbManager.GetProvider() != nil {
-		providerName = b.dbManager.GetProvider().Name()
-	}
-	return &sync.ImportResult{
-		Success:         true,
-		RecordsImported: int(restoreResult.RecordsRestored),
-		Duration:        time.Since(startTime),
-		Warnings:        restoreResult.Warnings,
-		Metadata: map[string]interface{}{
-			"restore_id":      restoreResult.RestoreID,
-			"tables_restored": restoreResult.TablesRestored,
-			"provider":        providerName,
-			"dry_run":         dryRun,
-		},
-		CreatedAt: time.Now(),
-	}, nil
 }
 
 // ValidateBackup validates a backup file

@@ -346,64 +346,6 @@ func (s *SQLiteProvider) CreateBackup(ctx context.Context, config BackupConfig) 
 	}, nil
 }
 
-// RestoreBackup replaces the SQLite DB file with the provided backup.
-func (s *SQLiteProvider) RestoreBackup(ctx context.Context, config RestoreConfig) (*RestoreResult, error) {
-	if s == nil {
-		return nil, fmt.Errorf("sqlite provider not initialized")
-	}
-	if s.config.DSN == ":memory:" {
-		return nil, fmt.Errorf("cannot restore into in-memory SQLite database")
-	}
-	if _, err := os.Stat(config.BackupPath); err != nil {
-		return nil, fmt.Errorf("backup file not accessible: %w", err)
-	}
-
-	start := time.Now()
-
-	// Close connection to release file lock
-	_ = s.Close()
-
-	// Restore by copying over the DB file
-	tmpDst := s.config.DSN + ".restore.tmp"
-	if err := s.copyFile(config.BackupPath, tmpDst); err != nil {
-		return nil, fmt.Errorf("failed to copy backup to temp: %w", err)
-	}
-	// Atomically replace
-	if err := os.Rename(tmpDst, s.config.DSN); err != nil {
-		_ = os.Remove(tmpDst)
-		return nil, fmt.Errorf("failed to replace database file: %w", err)
-	}
-
-	// Reconnect
-	if err := s.Connect(s.config); err != nil {
-		return nil, fmt.Errorf("failed to reconnect database after restore: %w", err)
-	}
-
-	// Basic stats
-	recs := int64(0)
-	tables := []string{}
-	if s.db != nil {
-		type row struct{ Name string }
-		var rows []row
-		_ = s.db.Raw("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").Scan(&rows).Error
-		for _, r := range rows {
-			tables = append(tables, r.Name)
-		}
-	}
-
-	return &RestoreResult{
-		Success:         true,
-		RestoreID:       fmt.Sprintf("sqlite-restore-%d", time.Now().UnixNano()),
-		BackupPath:      config.BackupPath,
-		StartTime:       start,
-		EndTime:         time.Now(),
-		Duration:        time.Since(start),
-		TablesRestored:  tables,
-		RecordsRestored: recs,
-		Warnings:        nil,
-	}, nil
-}
-
 // ValidateBackup performs basic file validations for a SQLite backup.
 func (s *SQLiteProvider) ValidateBackup(ctx context.Context, backupPath string) (*ValidationResult, error) {
 	if backupPath == "" {

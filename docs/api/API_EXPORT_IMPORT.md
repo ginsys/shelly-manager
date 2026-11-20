@@ -146,9 +146,21 @@ POST /api/v1/export/preview
   unknown id, or an id of another plugin, answers `404`; a failed export, or a file that is
   missing, outside the export directory or not a regular backup file, answers `422`; a body
   with any other field answers `400`.
-- Restoring a backup is not offered yet: restoring replaces the live database and is not safe
-  today. `POST /api/v1/import` and `/import/preview` refuse every source for the backup plugin
-  with `501`.
+- Restore a stored SQLite backup: `POST /api/v1/import/restore` with
+  `{"backup_id": "<export id>", "dry_run": false}`. Like the check above it takes no path, and
+  `dry_run` is read from this body field only. The server unpacks a `.sqlite.gz` or `.sqlite.zip`
+  backup into a staging directory beside the database, checks the SQLite header, runs
+  `PRAGMA integrity_check` and looks for the `devices` table, then answers `202` "applies at the
+  next start". It never replaces the live database while the server runs; the operator restarts
+  the server (in Kubernetes, restart the pod). A dry run runs the same checks, stages nothing
+  and answers `200`. A backup that fails a check, or that needs more free space than the
+  database's directory has, answers `422` with the reason (never a path); a body with any other
+  field answers `400`. Staging a second backup replaces the first.
+  `GET /api/v1/import/restore` answers `{pending, last_result}`: the staged backup, and what
+  the last start did with one (`applied`, or `failed` with the reason). `DELETE
+  /api/v1/import/restore` cancels a staged restore (`204`, or `404` when none is staged).
+  With PostgreSQL or MySQL all three answer `501`. `POST /api/v1/import` and `/import/preview`
+  still refuse every source for the backup plugin with `501`.
 - GitOps import: `POST /api/v1/import/gitops`
 - GitOps preview: `POST /api/v1/import/gitops/preview`
 - History: `GET /api/v1/import/history` (pagination: `page`, `page_size`; filters: `plugin`, `success`)

@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
+	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/security"
@@ -29,6 +30,9 @@ type ImportHandlers struct {
 	// exportBaseDir, when set, is the directory stored backups must lie in. It is the same
 	// directory export downloads are confined to (export.output_directory).
 	exportBaseDir string
+	// restoreLive is the SQLite file a restore replaces at the next start. Empty for any other
+	// database, which answers 501.
+	restoreLive string
 }
 
 // NewImportHandlers creates new import handlers
@@ -70,6 +74,11 @@ func (ih *ImportHandlers) requireAdmin(w http.ResponseWriter, r *http.Request) b
 func (ih *ImportHandlers) AddImportRoutes(api *mux.Router) {
 	// Backup check: a stored backup is named by its export id, and is never restored
 	api.HandleFunc("/import/restore-preview", ih.PreviewRestore).Methods("POST")
+
+	// Restore: stage a checked copy, and the server applies it at its next start
+	api.HandleFunc("/import/restore", ih.StageRestore).Methods("POST")
+	api.HandleFunc("/import/restore", ih.GetRestoreStatus).Methods("GET")
+	api.HandleFunc("/import/restore", ih.CancelRestore).Methods("DELETE")
 
 	// GitOps import endpoints
 	api.HandleFunc("/import/gitops", ih.ImportGitOps).Methods("POST")
@@ -120,9 +129,37 @@ func (ih *ImportHandlers) backupFile(stored string) (string, bool) {
 	return path, true
 }
 
+// storedBackup finds the backup a request names, and the file it points at. It writes the error
+// answer itself and returns false when the backup is unknown, did not complete, or its file is not
+// one this server wrote. what names the caller in the log.
+func (ih *ImportHandlers) storedBackup(w http.ResponseWriter, r *http.Request, backupID, what string) (*database.ExportHistory, string, bool) {
+	rw := apiresp.NewResponseWriter(ih.logger)
+	rec, err := ih.syncEngine.GetExportHistory(r.Context(), backupID)
+	if err != nil {
+		ih.logger.Error(what+": history read failed", "error", err)
+		rw.WriteInternalError(w, r, err)
+		return nil, "", false
+	}
+	if rec == nil || rec.PluginName != "backup" {
+		rw.WriteNotFoundError(w, r, "Backup")
+		return nil, "", false
+	}
+	if !rec.Success {
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "This backup did not complete, so it cannot be checked", nil)
+		return nil, "", false
+	}
+	path, ok := ih.backupFile(rec.FilePath)
+	if !ok {
+		ih.logger.Warn(what+": stored backup file refused", "export_id", rec.ExportID)
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "The backup file is not available", nil)
+		return nil, "", false
+	}
+	return rec, path, true
+}
+
 // PreviewRestore checks a stored backup without restoring it. The client names the backup by its
 // export id only; the path comes from the export history, so no request field reaches the file
-// system. Restoring is not offered: it replaces the live database and is not safe today.
+// system. It restores nothing: StageRestore stages a backup for the next start.
 func (ih *ImportHandlers) PreviewRestore(w http.ResponseWriter, r *http.Request) {
 	if !ih.requireAdmin(w, r) {
 		return
@@ -143,24 +180,8 @@ func (ih *ImportHandlers) PreviewRestore(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	rec, err := ih.syncEngine.GetExportHistory(r.Context(), requestBody.BackupID)
-	if err != nil {
-		ih.logger.Error("Restore preview: history read failed", "error", err)
-		rw.WriteInternalError(w, r, err)
-		return
-	}
-	if rec == nil || rec.PluginName != "backup" {
-		rw.WriteNotFoundError(w, r, "Backup")
-		return
-	}
-	if !rec.Success {
-		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "This backup did not complete, so it cannot be checked", nil)
-		return
-	}
-	path, ok := ih.backupFile(rec.FilePath)
+	rec, path, ok := ih.storedBackup(w, r, requestBody.BackupID, "Restore preview")
 	if !ok {
-		ih.logger.Warn("Restore preview: stored backup file refused", "export_id", rec.ExportID)
-		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "The backup file is not available", nil)
 		return
 	}
 	plugin, err := ih.syncEngine.GetPlugin("backup")

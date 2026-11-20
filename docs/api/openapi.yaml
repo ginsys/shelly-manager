@@ -2940,7 +2940,7 @@ paths:
         The request takes no path. The file must be a regular file named like a backup
         inside the export directory. The check confirms that the file is present and can be
         opened. It does not read the contents and it restores nothing.
-        Restoring a backup is not offered yet.
+        `POST /api/v1/import/restore` stages a backup for restore.
       operationId: previewRestore
       security:
         - BearerAuth: []
@@ -2999,6 +2999,79 @@ paths:
           description: >
             The export failed, or its file is missing, outside the export directory or not a regular
             backup file. An empty or unopenable file is a 200 with `valid` false.
+
+  /api/v1/import/restore:
+    post:
+      tags: [Import]
+      summary: Stage a stored backup for restore
+      description: >
+        Checks the stored SQLite backup that the export history records for `backup_id` and stages
+        a copy beside the database; the server applies it at its next start, before the database is
+        opened. The request takes no path. The live database is never replaced while the server
+        runs. A `.sqlite.gz` or `.sqlite.zip` backup is unpacked; the copy must have a SQLite header,
+        pass `PRAGMA integrity_check` and hold a `devices` table. Staging a second backup replaces
+        the first. With `dry_run` true the checks run and nothing is staged. PostgreSQL and MySQL
+        answer 501.
+      operationId: stageRestore
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [backup_id]
+              properties:
+                backup_id:
+                  type: string
+                dry_run:
+                  type: boolean
+      responses:
+        '200':
+          description: Dry run result; nothing was staged
+        '202':
+          description: The backup is staged and applies at the next start
+        '400':
+          description: Missing backup id, invalid JSON or an unknown field
+        '404':
+          description: No backup export with that id
+        '422':
+          description: >
+            The export failed, its file is missing or not a regular backup file, the backup fails a
+            check, or it needs more free space than the database directory has
+        '501':
+          description: The database is not SQLite
+    get:
+      tags: [Import]
+      summary: The staged restore and the result of the last start
+      operationId: getRestoreStatus
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: >
+            `pending` (backup_id, staged_at, size, sha256) or null, and `last_result` (status
+            `applied` or `failed`, backup_id, at, error) or null
+        '501':
+          description: The database is not SQLite
+    delete:
+      tags: [Import]
+      summary: Cancel a staged restore
+      operationId: cancelRestore
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      responses:
+        '204':
+          description: The staged restore was removed
+        '404':
+          description: Nothing is staged
+        '501':
+          description: The database is not SQLite
 
   /api/v1/import:
     post:

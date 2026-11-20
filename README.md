@@ -64,8 +64,10 @@ Shelly Manager supports multiple export formats for backing up and sharing devic
 - **Import**: The browser and `POST /api/v1/import/preview` show a dry-run
   preview and write nothing. `POST /api/v1/import` without a preview option
   restores devices, templates and discovered devices into the database in one
-  transaction. A backup is not imported this way: restoring one is not offered
-  yet, and `POST /api/v1/import/restore-preview` only checks a stored backup. See [SMA format](docs/guides/sma-format.md) for matching,
+  transaction. A backup is not imported this way: `POST /api/v1/import/restore`
+  stages a stored SQLite backup and the server applies it at its next start (see
+  [export and import](docs/guides/export-import-system.md)), and
+  `POST /api/v1/import/restore-preview` only checks that a stored backup file can be opened. See [SMA format](docs/guides/sma-format.md) for matching,
   `force_overwrite` and the limits
 
 ### Compression Options

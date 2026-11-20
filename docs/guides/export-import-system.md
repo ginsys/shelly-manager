@@ -78,10 +78,41 @@ SMA then applies its 100 MiB normalized-data limit. An SMA import without a
 preview option restores devices, templates and discovered devices in one
 transaction. Preview and validation do not persist.
 
-A backup is not imported through these routes: restoring one replaces the live
-database and is not offered yet, so both routes answer `501` for the backup
-plugin. `POST /api/v1/import/restore-preview` with `{"backup_id": "..."}` only
+A backup is not imported through these routes: both routes answer `501` for the
+backup plugin. `POST /api/v1/import/restore-preview` with `{"backup_id": "..."}` only
 checks that the stored backup file is present and can be opened.
+
+### Restoring a backup (SQLite)
+
+A backup is restored in two steps, because the server never replaces its database
+while it runs: services hold the database handle they took at start, and nothing holds
+their writers back.
+
+1. `POST /api/v1/import/restore` with `{"backup_id": "..."}` checks the stored backup and
+   stages a copy. The server unpacks a `.sqlite.gz` or `.sqlite.zip` backup into
+   `<database file>.restore/`, beside the database, checks the SQLite header, runs
+   `PRAGMA integrity_check` and looks for the `devices` table. It answers `202` and changes
+   nothing else. `"dry_run": true` runs the checks and stages nothing.
+2. Restart the server (in Kubernetes, restart the pod; run one replica on the data volume).
+   Before the database is opened, the start keeps one copy of the live file as
+   `<database file>.pre-restore` (and its `-wal` as `.pre-restore-wal`), removes the stale
+   `-wal` and `-shm` files, moves the staged file into place, then connects and migrates.
+
+If the restored file cannot be opened or migrated, the start puts the `.pre-restore` copy
+back and runs on it. Any failed apply keeps the old database and records the reason:
+`GET /api/v1/import/restore` shows the staged restore and the result of the last start.
+`DELETE /api/v1/import/restore` cancels a staged restore. To undo a restore by hand, stop the
+server and copy `.pre-restore` (and `.pre-restore-wal`) back over the database file.
+
+Space: staging needs room for the unpacked backup, and the apply needs room for one copy
+of the live database and its `-wal`, all beside the database file. The check refuses a
+backup that does not fit, with the numbers. The `.pre-restore` copy stays until the next
+restore replaces it. PostgreSQL and MySQL answer `501`: restore is for SQLite only.
+
+Not detected: a backup made by a newer version. The schema has no version number; extra
+columns in a newer backup are ignored and missing ones are added at start. A backup made
+while the database had uncheckpointed writes can miss them, because the backup copies the
+file as it is.
 
 ## Errors
 

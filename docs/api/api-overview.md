@@ -381,11 +381,14 @@ connects to the host first, and it fails with the connection error when they are
 
 ---
 
-### 12. Import Operations (9 endpoints)
+### 12. Import Operations (12 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/v1/import/restore-preview` | Check a stored backup by `backup_id` (nothing is restored) |
+| POST | `/api/v1/import/restore` | Stage a stored SQLite backup by `backup_id`; the server applies it at its next start (`dry_run` checks only) |
+| GET | `/api/v1/import/restore` | The staged restore, and what the last start did with one |
+| DELETE | `/api/v1/import/restore` | Cancel a staged restore |
 | POST | `/api/v1/import/gitops` | Import GitOps config |
 | POST | `/api/v1/import/gitops/preview` | Preview GitOps import |
 | GET | `/api/v1/import/history` | List import history |
