@@ -12,7 +12,7 @@ state. It reads the state in the `C` locale, so a translated `nmcli` does not ch
 | State | Line | Meaning |
 |---|---|---|
 | `connected`, `disconnected` | `✅ Network Interface: wlo1 (disconnected)` | The radio is on. `disconnected` means joined to no network, the normal state of a host that scans. |
-| `unavailable` | `❌ Network Interface: ... is unavailable ...` | The radio is off or blocked. Check `nmcli radio wifi` and `rfkill list`. |
+| `unavailable` | `❌ Network Interface: ... is unavailable ...` | The radio may be off or blocked (NetworkManager also reports this state for other causes, such as missing firmware). Check `nmcli radio wifi` and `rfkill list`. |
 | `unmanaged` | `❌ Network Interface: ... is unmanaged ...` | NetworkManager ignores the device. Run `nmcli device set <device> managed yes`. |
 | no Wi-Fi device | `❌ Network Interface: no Wi-Fi device found ...` | The host has no Wi-Fi device in NetworkManager. |
 | `nmcli` fails or takes longer than 10 s | `❌ Network Interface: ... cannot be read ...` | Check that NetworkManager runs. |
@@ -37,5 +37,5 @@ unavailable, unmanaged, unreadable or missing, the scan fails with the reason ab
 
 ## Log level
 
-The shipped `configs/shelly-provisioner.yaml` logs at `info`. Set `logging.level: debug` to see every `nmcli`
-output line.
+The shipped `configs/shelly-provisioner.yaml` logs at `info`. Set `logging.level: debug` to see the raw
+`nmcli` network list and how each of its lines is read.
