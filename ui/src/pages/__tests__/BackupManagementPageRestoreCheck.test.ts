@@ -150,6 +150,80 @@ describe('BackupManagementPage backup check', () => {
       wrapper.unmount()
     })
 
+    it('does not say nothing was staged when the answer never arrived, and reads the status', async () => {
+      vi.mocked(api.post as any).mockImplementation((path: string) =>
+        path === '/import/restore' ? Promise.reject(new Error('Network Error')) : Promise.resolve(checkAnswer('b', 2048)),
+      )
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await openChecked(wrapper)
+      const before = restoreStatusCalls()
+      // The server did stage it; only the answer was lost.
+      restoreStatus = statusAnswer({ pending: { backup_id: 'b', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })
+
+      await wrapper.get('.restore-modal .stage-button').trigger('click')
+      await flushPromises()
+
+      const text = wrapper.get('.restore-modal').text()
+      expect(text).toContain('not known whether the restore was staged')
+      expect(text).not.toContain('Nothing was staged')
+      expect(restoreStatusCalls()).toBe(before + 1)
+      expect(wrapper.find('[data-testid="restore-cancel"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('learns from a 501 on the stage call that the database is not SQLite', async () => {
+      restoreStatus = () => Promise.reject(refused(500, 'Internal error'))
+      vi.mocked(api.post as any).mockImplementation((path: string) =>
+        path === '/import/restore'
+          ? Promise.reject(refused(501, 'Restore is available for SQLite databases only'))
+          : Promise.resolve(checkAnswer('b', 2048)),
+      )
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await openChecked(wrapper)
+
+      await wrapper.get('.restore-modal .stage-button').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.stage-button').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="restore-unsupported"]').text()).toContain(SQLITE_ONLY)
+      expect(wrapper.findAll('.restore-btn')[1].attributes('disabled')).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('keeps the newest status when an older read answers late', async () => {
+      let answerFirst: (v: unknown) => void = () => {}
+      let reads = 0
+      restoreStatus = () => {
+        reads++
+        if (reads === 1) {
+          return new Promise((resolve) => {
+            answerFirst = resolve
+          })
+        }
+        return statusAnswer({ pending: { backup_id: 'b', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })()
+      }
+      vi.mocked(api.post as any).mockImplementation((path: string) =>
+        path === '/import/restore'
+          ? Promise.resolve({ status: 202, data: { success: true, data: {} } })
+          : Promise.resolve(checkAnswer('b', 2048)),
+      )
+      const wrapper = mount(BackupManagementPage)
+      await flushPromises()
+      await openChecked(wrapper)
+      await wrapper.get('.restore-modal .stage-button').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
+
+      // The first read, taken before the restore was staged, answers now.
+      answerFirst({ data: { success: true, data: { pending: null, last_result: null } } })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="restore-pending"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
     it('shows a pending restore with its backup and time, and Cancel calls DELETE', async () => {
       restoreStatus = statusAnswer({ pending: { backup_id: 'a', staged_at: '2026-11-20T18:00:00Z', sha256: 'x' }, last_result: null })
       vi.mocked(api.delete as any).mockResolvedValue({ status: 204 })
@@ -159,6 +233,7 @@ describe('BackupManagementPage backup check', () => {
       const pending = wrapper.get('[data-testid="restore-pending"]')
       expect(pending.text()).toContain('first')
       expect(pending.text()).toContain('restart')
+      expect(pending.text()).toContain(new Date('2026-11-20T18:00:00Z').toLocaleString())
       restoreStatus = statusAnswer({ pending: null, last_result: null })
 
       await wrapper.get('[data-testid="restore-cancel"]').trigger('click')
