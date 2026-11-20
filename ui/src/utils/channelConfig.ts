@@ -39,20 +39,23 @@ function optional(config: Record<string, unknown>, name: string, value: string) 
   if (text) config[name] = text
 }
 
+// The request goes through axios, whose config merge drops these three names from a body, so a header with
+// one of them would be silently lost. They are refused here, where the user can see the row.
+const UNSENDABLE_HEADER_NAMES = new Set(['__proto__', 'constructor', 'prototype'])
+
 // Headers are a name-to-value object, so two rows with one name (HTTP names ignore case) would silently
-// keep one of them: that is refused here, where the user can see both rows.
+// keep one of them: that is refused here too.
 function headerObject(rows: ChannelFields['headers']): { headers?: Record<string, string>; error?: string } {
   const entries: [string, string][] = []
   const seen = new Set<string>()
   for (const row of rows) {
     const name = row.key.trim()
     if (!name) continue
+    if (UNSENDABLE_HEADER_NAMES.has(name.toLowerCase())) return { error: `Header name ${name} cannot be used` }
     if (seen.has(name.toLowerCase())) return { error: `Header ${name} appears twice` }
     seen.add(name.toLowerCase())
     entries.push([name, row.value])
   }
-  // fromEntries makes an own property of each name; assigning into {} would turn "__proto__" into a prototype
-  // change and drop the header.
   return { headers: Object.fromEntries(entries) }
 }
 

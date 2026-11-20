@@ -187,18 +187,19 @@ describe('NotificationChannelsPage create form', () => {
     }
   })
 
-  it('keeps a header named __proto__ instead of dropping it', async () => {
+  // axios drops these three names from a request body (its config merge), so the form refuses them instead
+  // of sending a channel that silently lacks the header.
+  it.each(['__proto__', 'constructor', 'prototype'])('refuses a header named %s and posts nothing', async (name) => {
     const { wrapper, store } = await openForm()
     await field(wrapper, 'channel-name').setValue('Hook')
     await field(wrapper, 'channel-type').setValue('webhook')
     await field(wrapper, 'channel-webhook-url').setValue('https://hooks.example.com/x')
-    await field(wrapper, 'channel-header-name').setValue('__proto__')
+    await field(wrapper, 'channel-header-name').setValue(name)
     await field(wrapper, 'channel-header-value').setValue('fixture-token')
     await submit(wrapper)
 
-    const headers = vi.mocked(store.addChannel).mock.calls[0][0].config.headers as Record<string, string>
-    expect(Object.getOwnPropertyNames(headers)).toEqual(['__proto__'])
-    expect(JSON.stringify(headers)).toBe('{"__proto__":"fixture-token"}')
+    expect(store.addChannel).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="channel-create-error"]').text()).toBe(`Header name ${name} cannot be used`)
   })
 
   it('Cancel and the backdrop drop what was typed, credentials included', async () => {
