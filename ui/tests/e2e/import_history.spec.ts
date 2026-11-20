@@ -19,7 +19,7 @@ test.describe('mocked import history and SMA preview', () => {
           version: '2026.1',
           category: 'backup',
           capabilities: ['sma'],
-          status: { available: true, configured: true, enabled: true },
+          status: { available: true, enabled: true },
         }],
         categories: [],
       })),

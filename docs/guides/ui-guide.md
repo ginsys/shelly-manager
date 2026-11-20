@@ -42,10 +42,10 @@ The Shelly Manager UI provides a comprehensive, user-friendly interface for mana
 ### 🛠️ Advanced Features
 
 #### Plugin Integration
-- **Plugin Discovery**: Automatic detection of available plugins
-- **Configuration UI**: Dynamic configuration forms for each plugin
-- **Status Monitoring**: Real-time plugin status and health checks
-- **Custom Plugins**: Support for custom plugin registration
+- **Plugin Discovery**: The list of plugins compiled into the server
+- **Schema viewer**: A read-only view of each plugin's configuration schema
+- **Status**: A neutral "Registered" badge; the UI reads no other status
+- **Custom Plugins**: None can be added at run time; plugins are registered at start-up
 
 #### Metrics Integration
 - **WebSocket Connection**: Real-time metrics via WebSocket
@@ -401,7 +401,8 @@ Similar to export history, with import-specific features:
 > model for stored plugin configuration (plugin config is supplied per
 > export/import request). A real product model is tracked as a design vertical
 > (#290). The former `PluginConfigForm`, "Test" and enable/disable controls have
-> been removed.
+> been removed. To test a plugin, use `POST /api/v1/export/preview`, a dry run:
+> for the OPNsense plugin it does not check the API key and secret.
 
 ### Plugin Discovery and Inspection
 
@@ -409,8 +410,8 @@ Similar to export history, with import-specific features:
 
 **Plugin List View**:
 - **Registered Plugins**: All plugins compiled into the server, grouped by
-  category, with a neutral **"Registered"** badge. Status is not presented as
-  configured/enabled — the backend does not track that.
+  category, with a neutral **"Registered"** badge. The list answer has only
+  `available` and `enabled`, both always true, and the UI reads neither.
 - **Search and Category filter**: Narrow the list by name/capability or category.
 - **Per-plugin actions**: **View schema** and **Details** only (both read-only).
 

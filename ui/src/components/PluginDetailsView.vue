@@ -23,8 +23,8 @@
           </div>
 
           <div class="row q-gutter-md">
-            <!-- Backend hardcodes status; present registration only, not
-                 configured/enabled state (#266). -->
+            <!-- The backend sends available and enabled as true for every listed
+                 plugin; present registration only (#266). -->
             <q-chip color="blue-grey" text-color="white" icon="check_circle">
               Registered
             </q-chip>
@@ -150,7 +150,7 @@ const activeTab = ref('overview')
 
 // This view is read-only and renders entirely from the list-DTO `plugin` prop
 // (GET /export/plugins). Status is presented as "Registered" only — the backend
-// hardcodes configured/enabled, so those are not shown as meaningful (#266).
+// sends available and enabled as true for every listed plugin (#266).
 // Configuration/enable/disable are not here; their backend routes do not exist
 // (#264).
 

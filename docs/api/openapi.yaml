@@ -2521,6 +2521,10 @@ paths:
     get:
       tags: [Export]
       summary: List export plugins
+      description: |
+        Each plugin has a `status` with two keys, `available` and `enabled`, both `true`: plugins are
+        compiled into the server. There is no `configured` key, because plugin configuration is not
+        stored; it is part of each export or import request.
       operationId: listExportPlugins
       security:
         - BearerAuth: []
@@ -2692,6 +2696,10 @@ paths:
     post:
       tags: [Export]
       summary: Preview export
+      description: |
+        The way to test a plugin: a dry run that validates the request and builds the preview from the
+        stored data. For the OPNsense plugin it does not contact the OPNsense host, so it does not
+        check the API key and secret; an export does.
       operationId: previewExport
       security:
         - BearerAuth: []

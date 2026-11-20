@@ -11,8 +11,8 @@
       </div>
 
       <div class="plugin-status">
-        <!-- Backend hardcodes status; present registration only, not
-             configured/enabled state (#266). -->
+        <!-- The backend sends available and enabled as true for every listed
+             plugin; present registration only (#266). -->
         <span class="status-indicator registered" title="Registered">Registered</span>
       </div>
     </div>

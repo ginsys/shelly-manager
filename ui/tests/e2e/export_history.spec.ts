@@ -19,7 +19,7 @@ test.describe('mocked export history and preview', () => {
           version: '1',
           category: 'custom',
           capabilities: ['json'],
-          status: { available: true, configured: true, enabled: true },
+          status: { available: true, enabled: true },
         }],
         categories: [],
       })),

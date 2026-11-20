@@ -161,12 +161,11 @@ func (eh *SyncHandlers) ListPlugins(w http.ResponseWriter, r *http.Request) {
 		pageInfos = infos[start:end]
 	}
 
+	// Plugins are compiled in and registered at start-up, so a listed plugin is always available and
+	// enabled. There is no stored plugin configuration, so there is no "configured" to report.
 	type pluginStatus struct {
-		Available  bool   `json:"available"`
-		Configured bool   `json:"configured"`
-		Enabled    bool   `json:"enabled"`
-		Error      string `json:"error,omitempty"`
-		LastUsed   string `json:"last_used,omitempty"`
+		Available bool `json:"available"`
+		Enabled   bool `json:"enabled"`
 	}
 	type pluginDTO struct {
 		Name         string       `json:"name"`
@@ -192,7 +191,7 @@ func (eh *SyncHandlers) ListPlugins(w http.ResponseWriter, r *http.Request) {
 			Version:      pi.Version,
 			Category:     string(pi.Category),
 			Capabilities: pi.SupportedFormats,
-			Status:       pluginStatus{Available: true, Configured: true, Enabled: true},
+			Status:       pluginStatus{Available: true, Enabled: true},
 		}
 		dtos = append(dtos, dto)
 		categoriesCount[dto.Category]++

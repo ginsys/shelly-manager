@@ -39,7 +39,6 @@ describe('Plugin API Client', () => {
         capabilities: ['backup', 'export'],
         status: {
           available: true,
-          configured: true,
           enabled: true,
         }
       },
@@ -52,7 +51,6 @@ describe('Plugin API Client', () => {
         capabilities: ['gitops', 'iac'],
         status: {
           available: true,
-          configured: false,
           enabled: false,
         }
       }

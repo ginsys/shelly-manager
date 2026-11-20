@@ -26,7 +26,7 @@ describe('ImportPreviewForm', () => {
           version: '2026.1',
           category: 'backup',
           capabilities: ['sma'],
-          status: { available: true, configured: true, enabled: true },
+          status: { available: true, enabled: true },
         },
         {
           name: 'json',
@@ -35,7 +35,7 @@ describe('ImportPreviewForm', () => {
           version: '1',
           category: 'custom',
           capabilities: ['json'],
-          status: { available: true, configured: true, enabled: true },
+          status: { available: true, enabled: true },
         },
       ],
       categories: [],
@@ -89,7 +89,7 @@ describe('ImportPreviewForm', () => {
         version: '1',
         category: 'custom',
         capabilities: ['json'],
-        status: { available: true, configured: true, enabled: true },
+        status: { available: true, enabled: true },
       }],
       categories: [],
     })

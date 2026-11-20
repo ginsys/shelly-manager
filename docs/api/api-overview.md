@@ -335,6 +335,14 @@ The call is not atomic: device 3 can be applied while device 4 is refused, and n
 | GET | `/api/v1/export/history/{id}` | Get history item |
 | GET | `/api/v1/export/statistics` | Get export statistics |
 
+**Plugin status, and what "test" means.** Each plugin in `GET /api/v1/export/plugins` has a `status` with two keys,
+`available` and `enabled`. Both are `true`: plugins are compiled into the server and registered at start-up, so a
+listed plugin is always both. There is no `configured` key and no stored plugin configuration; the configuration is
+part of each export or import request. There is no route that tests a plugin. To test one, send the same request to
+`POST /api/v1/export/preview`: it validates the request and builds the preview from your data. For the OPNsense
+plugin the preview does not contact the OPNsense host, so it does not check the API key and secret. Only an export
+connects to the host first, and it fails with the connection error when they are wrong.
+
 **Export Request Model:**
 ```json
 {

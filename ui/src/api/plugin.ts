@@ -17,13 +17,12 @@ export interface Plugin {
   status: PluginStatus
 }
 
-// Backend hardcodes available/configured/enabled to true today
-// (internal/api/sync_handlers.go); the UI treats a listed plugin as "Registered"
-// and does not present configured/enabled as meaningful state. Fields the
-// backend never emits (error, last_used) are intentionally not modelled.
+// A listed plugin is compiled in, so the backend sends available and enabled as
+// true (internal/api/sync_handlers.go). The UI shows a listed plugin as
+// "Registered" and reads neither. There is no stored plugin configuration, so
+// the answer has no "configured".
 export interface PluginStatus {
   available: boolean
-  configured: boolean
   enabled: boolean
 }
 
