@@ -1,4 +1,5 @@
 import api from './client'
+import { DEVICE_CALL_TIMEOUT_MS } from './deviceCallTimeout'
 import type { APIResponse } from './types'
 
 // Configuration interfaces
@@ -34,7 +35,7 @@ export async function updateDeviceConfig(id: number | string, config: DeviceConf
 
 // Get current live configuration from device
 export async function getCurrentDeviceConfig(id: number | string): Promise<DeviceConfig> {
-  const res = await api.get<APIResponse<DeviceConfig>>(`/devices/${id}/config/current`)
+  const res = await api.get<APIResponse<DeviceConfig>>(`/devices/${id}/config/current`, { timeout: DEVICE_CALL_TIMEOUT_MS })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get current device configuration'
     throw new Error(msg)

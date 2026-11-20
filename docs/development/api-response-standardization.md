@@ -203,6 +203,7 @@ const (
     // Device management errors
     ErrCodeDeviceNotFound      = "DEVICE_NOT_FOUND"
     ErrCodeDeviceOffline       = "DEVICE_OFFLINE"
+    ErrCodeDeviceUnreachable   = "DEVICE_UNREACHABLE"
     ErrCodeDeviceTimeout       = "DEVICE_TIMEOUT"
     ErrCodeDeviceUnavailable   = "DEVICE_UNAVAILABLE"
     ErrCodeInvalidDeviceType   = "INVALID_DEVICE_TYPE"

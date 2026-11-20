@@ -698,6 +698,9 @@ func (h *Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request) {
 			h.responseWriter().WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
 			return
 		}
+		if h.writeDeviceUnanswered(w, r, err) {
+			return
+		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"error":     err.Error(),
@@ -731,6 +734,9 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, service.ErrDeviceOffline) {
 			h.responseWriter().WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
+			return
+		}
+		if h.writeDeviceUnanswered(w, r, err) {
 			return
 		}
 		h.logger.WithFields(map[string]any{
@@ -769,15 +775,35 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, maskDeviceConfig(config))
 }
 
+// writeDeviceUnanswered answers a device that did not answer in time with 504 and the error's text,
+// which names the device and its address (ginsys/shelly-manager#755), and reports whether it did. It
+// matches the service's own DeviceUnansweredError and not the timeout itself, so only a read that the
+// service wrapped as one reads "did not answer": an apply that may have written is never told so.
+func (h *Handler) writeDeviceUnanswered(w http.ResponseWriter, r *http.Request, err error) bool {
+	var unanswered *service.DeviceUnansweredError
+	if !errors.As(err, &unanswered) {
+		return false
+	}
+	h.logger.WithFields(map[string]any{
+		"device_id": unanswered.DeviceID,
+		"device_ip": unanswered.IP,
+	}).Warn("Device did not answer")
+	h.responseWriter().WriteError(w, r, http.StatusGatewayTimeout, apiresp.ErrCodeDeviceUnreachable, unanswered.Error(), nil)
+	return true
+}
+
 // writeDeviceReadError reports a failed read from a physical device. A device
 // that rejects our login is an upstream problem the caller can act on (fix the
 // stored credentials), so it gets 502 with a specific message instead of a
 // generic 500. It is not 401, which would read as the caller's own login to
-// this API failing.
+// this API failing. A device that did not answer gets 504 (writeDeviceUnanswered).
 func (h *Handler) writeDeviceReadError(w http.ResponseWriter, r *http.Request, err error) {
 	if shelly.IsAuthError(err) {
 		h.responseWriter().WriteError(w, r, http.StatusBadGateway, apiresp.ErrCodeExternalServiceError,
 			"The device rejected the stored credentials; update them with PUT /devices/{id}/config/auth", nil)
+		return
+	}
+	if h.writeDeviceUnanswered(w, r, err) {
 		return
 	}
 	h.responseWriter().WriteInternalError(w, r, err)

@@ -704,6 +704,7 @@ func TestErrorCodes(t *testing.T) {
 		ErrCodeExternalServiceError,
 		ErrCodeDeviceNotFound,
 		ErrCodeDeviceOffline,
+		ErrCodeDeviceUnreachable,
 		ErrCodeConfigurationError,
 		ErrCodeTemplateError,
 		ErrCodeProvisioningError,

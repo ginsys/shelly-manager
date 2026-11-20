@@ -131,7 +131,7 @@
             <td v-if="store.visibleColumns.mac" class="mono">{{ d.mac }}</td>
             <td v-if="store.visibleColumns.type">{{ d.type }}</td>
             <td v-if="store.visibleColumns.status">
-              <span :class="['chip', d.status]" data-testid="device-status">{{ d.status || 'unknown' }}</span>
+              <span :class="['chip', shownDeviceStatus(d).cssClass]" :title="shownDeviceStatus(d).title" data-testid="device-status">{{ shownDeviceStatus(d).label }}</span>
             </td>
             <td v-if="store.visibleColumns.last_seen">{{ formatDate(d.last_seen) }}</td>
             <td v-if="store.visibleColumns.firmware" class="mono small">{{ d.firmware || '-' }}</td>
@@ -192,6 +192,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import ColumnToggle from '../components/shared/ColumnToggle.vue'
 import BulkOperationsDialog from '../components/bulk/BulkOperationsDialog.vue'
 import { usePageError } from '../composables/useNotice'
+import { shownDeviceStatus } from '../utils/deviceStatus'
 
 const store = useDevicesStore()
 // A failed delete or control command. The list load keeps its own ErrorState above.
@@ -403,6 +404,7 @@ export default {
 .chip { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #e2e8f0; color: #334155; }
 .chip.online { background: #dcfce7; color: #065f46; }
 .chip.offline { background: #fee2e2; color: #991b1b; }
+.chip.stale { background: #fef3c7; color: #92400e; }
 .sort { margin-left: 4px; font-size: 12px; color: #64748b; }
 .pagination { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 8px; color: #334155; }
 .btn { padding: 6px 10px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; }

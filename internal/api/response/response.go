@@ -88,6 +88,7 @@ const (
 	// Application-specific errors
 	ErrCodeDeviceNotFound     = "DEVICE_NOT_FOUND"
 	ErrCodeDeviceOffline      = "DEVICE_OFFLINE"
+	ErrCodeDeviceUnreachable  = "DEVICE_UNREACHABLE" // 504: the device did not answer in time
 	ErrCodeConfigurationError = "CONFIGURATION_ERROR"
 	ErrCodeTemplateError      = "TEMPLATE_ERROR"
 	ErrCodeProvisioningError  = "PROVISIONING_ERROR"

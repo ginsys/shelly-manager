@@ -1,4 +1,5 @@
 import api from './client'
+import { DEVICE_CALL_TIMEOUT_MS } from './deviceCallTimeout'
 import type { APIResponse, Device, Metadata } from './types'
 
 export interface ListDevicesParams {
@@ -116,7 +117,8 @@ export interface DeviceStatus {
 }
 
 export async function getDeviceStatus(id: number | string, signal?: AbortSignal): Promise<DeviceStatus> {
-  const res = await api.get<APIResponse<DeviceStatus>>(`/devices/${id}/status`, { signal })
+  // A live read: the server may wait for the device up to its own deadline.
+  const res = await api.get<APIResponse<DeviceStatus>>(`/devices/${id}/status`, { signal, timeout: DEVICE_CALL_TIMEOUT_MS })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get device status'
     throw new Error(msg)
@@ -136,6 +138,7 @@ export async function getDeviceEnergy(id: number | string, channel: number = 0, 
   const res = await api.get<APIResponse<DeviceEnergy>>(`/devices/${id}/energy`, {
     params: { channel },
     signal,
+    timeout: DEVICE_CALL_TIMEOUT_MS,
   })
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to get energy metrics'

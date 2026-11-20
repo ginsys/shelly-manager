@@ -388,6 +388,7 @@ components:
             - INTERNAL_SERVER_ERROR
             - DEVICE_NOT_FOUND
             - DEVICE_OFFLINE
+            - DEVICE_UNREACHABLE
             - CONFIGURATION_ERROR
             - TEMPLATE_ERROR
             - EXTERNAL_SERVICE_ERROR
@@ -1348,6 +1349,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '504':
+          description: >-
+            The device did not answer in time (error code DEVICE_UNREACHABLE).
+            The message names the device and its address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/devices/{id}/energy:
     get:
@@ -1366,6 +1375,14 @@ paths:
       responses:
         '200':
           description: Energy metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '504':
+          description: >-
+            The device did not answer in time (error code DEVICE_UNREACHABLE).
+            The message names the device and its address.
           content:
             application/json:
               schema:
@@ -1458,6 +1475,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '504':
+          description: >-
+            The device did not answer in time (error code DEVICE_UNREACHABLE).
+            The message names the device and its address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/devices/{id}/config/current/normalized:
     get:
@@ -1493,6 +1518,14 @@ paths:
           description: >-
             The device rejected the stored login (error code EXTERNAL_SERVICE_ERROR).
             Store the right login with PUT /api/v1/devices/{id}/config/auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '504':
+          description: >-
+            The device did not answer in time (error code DEVICE_UNREACHABLE).
+            The message names the device and its address.
           content:
             application/json:
               schema:

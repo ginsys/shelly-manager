@@ -33,7 +33,7 @@
         <div class="row"><div class="k">IP</div><div class="v">{{ d.ip || '-' }}</div></div>
         <div class="row"><div class="k">MAC</div><div class="v mono">{{ d.mac }}</div></div>
         <div class="row"><div class="k">Status</div><div class="v">
-          <span :class="['chip', d.status]">{{ d.status || 'unknown' }}</span>
+          <span :class="['chip', shown.cssClass]" :title="shown.title" data-testid="device-status">{{ shown.label }}</span>
         </div></div>
         <div class="row"><div class="k">Last Seen</div><div class="v">{{ formatDate(d.last_seen) }}</div></div>
         <div class="row"><div class="k">Firmware</div><div class="v mono small">{{ d.firmware || '-' }}</div></div>
@@ -42,7 +42,15 @@
       </div>
 
       <!-- Device Status -->
-      <div class="card" v-if="status">
+      <div class="card" v-if="statusRead.state === 'pending'" data-testid="status-pending">
+        <h2 class="section-title">Device Status</h2>
+        <div class="status-text">Reading from the device...</div>
+      </div>
+      <div class="card" v-else-if="statusRead.state === 'failed'" data-testid="status-failed">
+        <h2 class="section-title">Device Status</h2>
+        <div class="state error">{{ statusRead.message }}</div>
+      </div>
+      <div class="card" v-else-if="status">
         <h2 class="section-title">Device Status</h2>
         <div class="status-grid">
           <div class="status-item">
@@ -74,8 +82,13 @@
         </div>
       </div>
 
-      <!-- Energy Metrics -->
-      <div class="card" v-if="energy && hasEnergyData">
+      <!-- Energy Metrics. A device without a meter fails this read as a matter of course, so only
+           "the device did not answer" is shown here (the status card says the same, once). -->
+      <div class="card" v-if="energyRead.state === 'failed' && energyRead.message" data-testid="energy-failed">
+        <h2 class="section-title">Energy Metrics</h2>
+        <div class="state error">{{ energyRead.message }}</div>
+      </div>
+      <div class="card" v-else-if="energy && hasEnergyData">
         <h2 class="section-title">Energy Metrics</h2>
         <div class="energy-grid">
           <div class="energy-item" v-if="energy.power !== undefined">
@@ -186,6 +199,8 @@ import { getDeviceCapabilities } from '../api/typedConfig'
 import DeviceLoginCard from '../components/devices/DeviceLoginCard.vue'
 import ErrorDisplay from '../components/shared/ErrorDisplay.vue'
 import { usePageError } from '../composables/useNotice'
+import { shownDeviceStatus } from '../utils/deviceStatus'
+import { describeReadFailure } from '../utils/readFailure'
 import type { Device } from '../api/types'
 import type { DeviceStatus, DeviceEnergy } from '../api/devices'
 import type { ConfigDrift } from '../api/deviceConfig'
@@ -198,6 +213,13 @@ const d = ref<Device>({
 })
 const status = ref<DeviceStatus | null>(null)
 const energy = ref<DeviceEnergy | null>(null)
+// A live read asks the device and may take as long as the server waits for it. Its card shows
+// "pending" until the first answer and the failure text if it failed; a later refresh keeps the
+// last answer on screen while it runs.
+type ReadState = { state: 'pending' | 'done' | 'failed'; message?: string }
+const statusRead = ref<ReadState>({ state: 'pending' })
+const energyRead = ref<ReadState>({ state: 'pending' })
+const shown = computed(() => shownDeviceStatus(d.value))
 const drift = ref<ConfigDrift | null>(null)
 const driftLoading = ref(false)
 const showEditDialog = ref(false)
@@ -293,14 +315,26 @@ async function fetchDrift() {
   }
 }
 
+// As with the device read, only the newest status or energy read may change its card: a slow
+// answer must not put back a value a newer read has replaced.
+let statusReadSeq = 0
+let energyReadSeq = 0
+
 async function fetchStatus() {
+  const seq = ++statusReadSeq
+  if (statusRead.value.state !== 'done') statusRead.value = { state: 'pending' }
   try {
     const id = route.params.id as string
-    status.value = await getDeviceStatus(id, abortController.signal)
+    const fetched = await getDeviceStatus(id, abortController.signal)
+    if (seq !== statusReadSeq) return
+    status.value = fetched
+    statusRead.value = { state: 'done' }
   } catch (e: any) {
-    if (isAbortError(e)) return
-    // Status might not be available for all devices
+    if (isAbortError(e) || seq !== statusReadSeq) return
     console.warn('Failed to load status:', e)
+    // The last answer is dropped: "Online: Yes" next to a failed read would be the old lie.
+    status.value = null
+    statusRead.value = { state: 'failed', message: await describeReadFailure(e, 'the device status') }
   }
 }
 
@@ -324,25 +358,35 @@ async function fetchCapabilities() {
 }
 
 async function fetchEnergy() {
+  const seq = ++energyReadSeq
   try {
     const id = route.params.id as string
-    energy.value = await getDeviceEnergy(id, 0, abortController.signal)
+    const fetched = await getDeviceEnergy(id, 0, abortController.signal)
+    if (seq !== energyReadSeq) return
+    energy.value = fetched
+    energyRead.value = { state: 'done' }
   } catch (e: any) {
-    if (isAbortError(e)) return
-    // Energy metrics not available for all devices
+    if (isAbortError(e) || seq !== energyReadSeq) return
+    // Energy metrics are not available for all devices
     console.warn('Failed to load energy metrics:', e)
+    energy.value = null
+    // Only a device that did not answer (504) is shown: no meter is an ordinary failure.
+    energyRead.value = e?.response?.status === 504
+      ? { state: 'failed', message: await describeReadFailure(e, 'the energy metrics') }
+      : { state: 'failed' }
   }
 }
 
 async function fetchData() {
-  loading.value = true
   error.value = null
+  // Only the stored device read holds the page. The live reads fill in as they arrive, and a
+  // refresh keeps what is on screen while they run.
+  loading.value = !d.value.id
+  const stored = fetchDevice().finally(() => { loading.value = false })
   try {
-    await Promise.all([fetchDevice(), fetchStatus(), fetchEnergy(), fetchDrift(), fetchCapabilities()])
+    await Promise.all([stored, fetchStatus(), fetchEnergy(), fetchDrift(), fetchCapabilities()])
   } catch (e: any) {
     error.value = e?.message || 'Failed to load device'
-  } finally {
-    loading.value = false
   }
 }
 
@@ -433,6 +477,7 @@ onUnmounted(() => {
 .chip { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: #e2e8f0; color: #334155; }
 .chip.online { background: #dcfce7; color: #065f46; }
 .chip.offline { background: #fee2e2; color: #991b1b; }
+.chip.stale { background: #fef3c7; color: #92400e; }
 
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .status-item { display: flex; flex-direction: column; gap: 4px; }

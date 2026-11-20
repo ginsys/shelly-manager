@@ -24,6 +24,36 @@ import (
 // ErrDeviceOffline is returned when a device is known to be offline and communication is skipped.
 var ErrDeviceOffline = errors.New("device is offline")
 
+// DeviceUnansweredError says a device did not answer in time (ginsys/shelly-manager#755): the call's
+// deadline passed or the network gave up waiting. It names the device and its address so the person
+// reading it knows which one. A device that answered with a refusal, a bad login or an error status
+// is none of this, so a caller that wrote something never reads "did not answer" from it by accident:
+// only a read that this package wraps returns it.
+type DeviceUnansweredError struct {
+	DeviceID uint
+	Name     string
+	IP       string
+	Err      error
+}
+
+func (e *DeviceUnansweredError) Error() string {
+	if e.Name == "" {
+		return fmt.Sprintf("device %s did not answer", e.IP)
+	}
+	return fmt.Sprintf("device %q (%s) did not answer", e.Name, e.IP)
+}
+
+func (e *DeviceUnansweredError) Unwrap() error { return e.Err }
+
+// unansweredOr returns err as a DeviceUnansweredError for the device when the device did not answer,
+// and err itself otherwise.
+func unansweredOr(device *database.Device, err error) error {
+	if !shelly.IsUnanswered(err) {
+		return err
+	}
+	return &DeviceUnansweredError{DeviceID: device.ID, Name: device.Name, IP: device.IP, Err: err}
+}
+
 // ErrInvalidChannel is returned when an action's channel parameter is not a whole number of 0 or more.
 var ErrInvalidChannel = errors.New("invalid channel: must be a whole number of 0 or more")
 
@@ -1088,7 +1118,7 @@ func (s *ShellyService) GetDeviceStatus(deviceID uint) (map[string]interface{}, 
 	// Get status from device
 	status, err := client.GetStatus(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get status: %w", err)
+		return nil, unansweredOr(device, fmt.Errorf("failed to get status: %w", err))
 	}
 
 	// Convert to map for JSON response
@@ -1138,7 +1168,7 @@ func (s *ShellyService) GetDeviceEnergy(deviceID uint, channel int) (*shelly.Ene
 	// Get energy data
 	energy, err := client.GetEnergyData(ctx, channel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get energy data: %w", err)
+		return nil, unansweredOr(device, fmt.Errorf("failed to get energy data: %w", err))
 	}
 
 	return energy, nil
@@ -1198,10 +1228,14 @@ func (s *ShellyService) ReadDeviceConfig(deviceID uint) (*configuration.DeviceCo
 			"error":     err.Error(),
 			"component": "service",
 		}).Error("ReadDeviceConfig: Failed to get client")
-		return nil, fmt.Errorf("failed to create client: %w", err)
+		return nil, unansweredOr(device, fmt.Errorf("failed to create client: %w", err))
 	}
 
-	return s.ConfigSvc.ReadFromDevice(deviceID, client)
+	config, err := s.ConfigSvc.ReadFromDevice(deviceID, client)
+	if err != nil {
+		return nil, unansweredOr(device, err)
+	}
+	return config, nil
 }
 
 // ApplyDesiredConfig pushes the device's desired configuration to the physical
