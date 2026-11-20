@@ -18,8 +18,8 @@ import {
   getCurrentDeviceConfig,
   detectConfigDrift,
   getConfigHistory,
-  type DeviceConfig,
-  type ConfigHistoryEntry
+  getStoredDeviceConfig,
+  type DeviceConfig
 } from '../deviceConfig'
 
 describe('deviceConfig API', () => {
@@ -185,66 +185,114 @@ describe('deviceConfig API', () => {
     })
   })
 
-  describe('getConfigHistory', () => {
-    it('returns configuration change history', async () => {
-      const history: ConfigHistoryEntry[] = [
-        {
-          id: 1,
-          deviceId: 123,
-          timestamp: '2023-01-01T12:00:00Z',
-          config: { wifi: { ssid: 'Network1' } },
-          source: 'manual',
-          user: 'admin'
-        },
-        {
-          id: 2,
-          deviceId: 123,
-          timestamp: '2023-01-02T12:00:00Z',
-          config: { wifi: { ssid: 'Network2' } },
-          source: 'template',
-          user: 'admin'
-        }
-      ]
 
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { history },
-          timestamp: new Date().toISOString()
-        }
-      })
+  // The server answers the stored rows as a bare list (internal/configuration ConfigHistory), newest
+  // first, with the configuration as an object under old_config and new_config.
+  describe('getConfigHistory', () => {
+    const row = (over: Record<string, unknown> = {}) => ({
+      id: 7,
+      device_id: 123,
+      config_id: 1,
+      action: 'manual',
+      old_config: { mqtt: { user: 'iot' } },
+      new_config: { mqtt: { user: 'iot2' } },
+      changes: [{ path: 'mqtt.user', expected: 'iot', actual: 'iot2', type: 'modified' }],
+      changed_by: 'user',
+      created_at: '2026-11-20T10:00:00Z',
+      ...over
+    })
+    const respond = (data: unknown) =>
+      (api.get as any).mockResolvedValue({ data: { success: true, data, timestamp: new Date().toISOString() } })
+
+    it('maps the stored rows to history entries', async () => {
+      respond([row(), row({ id: 6, action: 'updated', old_config: null, changes: null, changed_by: 'api' })])
 
       const result = await getConfigHistory(123)
-      expect(result).toHaveLength(2)
-      expect(result[0].source).toBe('manual')
-      expect(result[1].source).toBe('template')
+
       expect(api.get).toHaveBeenCalledWith('/devices/123/config/history')
+      expect(result).toHaveLength(2)
+      expect(result[0]).toEqual({
+        id: 7,
+        deviceId: 123,
+        timestamp: '2026-11-20T10:00:00Z',
+        source: 'manual',
+        user: 'user',
+        config: { mqtt: { user: 'iot2' } },
+        oldConfig: { mqtt: { user: 'iot' } },
+        changes: [{ path: 'mqtt.user', expected: 'iot', actual: 'iot2', type: 'modified' }]
+      })
+      expect(result[1].source).toBe('updated')
+      expect(result[1].oldConfig).toBeNull()
+      expect(result[1].changes).toBeNull()
     })
 
     it('returns empty history when none exists', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: { history: [] },
-          timestamp: new Date().toISOString()
-        }
-      })
+      respond([])
 
-      const result = await getConfigHistory(123)
-      expect(result).toEqual([])
+      expect(await getConfigHistory(123)).toEqual([])
     })
 
-    it('handles missing history field gracefully', async () => {
-      ;(api.get as any).mockResolvedValue({
-        data: {
-          success: true,
-          data: {},
-          timestamp: new Date().toISOString()
-        }
+    it('keeps a configuration the server sent as text, so it is shown and never dropped', async () => {
+      respond([row({ new_config: '********' })])
+
+      expect((await getConfigHistory(123))[0].config).toBe('********')
+    })
+
+    it.each([
+      ['the old wrapped shape', { history: [] }],
+      ['an empty object', {}],
+      ['null', null]
+    ])('rejects %s instead of showing an empty history', async (_label, payload) => {
+      respond(payload)
+
+      await expect(getConfigHistory(123)).rejects.toThrow('Unexpected configuration history response')
+    })
+
+    it('throws the backend message when the request fails', async () => {
+      ;(api.get as any).mockResolvedValue({ data: { success: false, error: { message: 'Forbidden' } } })
+
+      await expect(getConfigHistory(123)).rejects.toThrow('Forbidden')
+    })
+  })
+
+  describe('getStoredDeviceConfig', () => {
+    const stored = {
+      id: 3,
+      device_id: 123,
+      template_id: null,
+      config: { mqtt: { user: 'iot', pass: '********' } },
+      last_synced: '2026-11-20T09:00:00Z',
+      sync_status: 'synced',
+      created_at: '2026-11-19T09:00:00Z',
+      updated_at: '2026-11-20T09:00:00Z'
+    }
+
+    it('returns the stored import', async () => {
+      ;(api.get as any).mockResolvedValue({ data: { success: true, data: stored } })
+
+      expect(await getStoredDeviceConfig(123)).toEqual(stored)
+      expect(api.get).toHaveBeenCalledWith('/devices/123/config')
+    })
+
+    it('answers null for a device that was never imported (404)', async () => {
+      ;(api.get as any).mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 404, data: { success: false, error: { code: 'NOT_FOUND', message: 'not found' } } }
       })
 
-      const result = await getConfigHistory(123)
-      expect(result).toEqual([])
+      expect(await getStoredDeviceConfig(123)).toBeNull()
+    })
+
+    it('rethrows any other failure, so a broken store is not shown as nothing imported', async () => {
+      ;(api.get as any).mockRejectedValue({ isAxiosError: true, response: { status: 500, data: {} } })
+
+      await expect(getStoredDeviceConfig(123)).rejects.toMatchObject({ response: { status: 500 } })
+    })
+
+    it('throws the backend message on an unsuccessful answer', async () => {
+      ;(api.get as any).mockResolvedValue({ data: { success: false, error: { message: 'Broken' } } })
+
+      await expect(getStoredDeviceConfig(123)).rejects.toThrow('Broken')
     })
   })
 })

@@ -67,8 +67,11 @@
 
       <div class="card">
         <div class="header-row">
-          <h2 class="h2">{{ editMode ? 'Config' : 'Config (JSON)' }}</h2>
+          <h2 class="h2">Config</h2>
           <div class="spacer" />
+          <button v-if="!editMode" class="btn" @click="showRawJson = !showRawJson">
+            {{ showRawJson ? 'Structured View' : 'Raw JSON' }}
+          </button>
           <button class="btn" :disabled="busy" @click="copyConfig">Copy</button>
         </div>
 
@@ -89,7 +92,8 @@
             <li v-for="err in saveErrors" :key="err.path"><code>{{ err.path }}</code>: {{ err.message }}</li>
           </ul>
         </template>
-        <textarea v-else :value="configJson" class="code" rows="18" readonly spellcheck="false" />
+        <textarea v-else-if="showRawJson" :value="configJson" class="code" rows="18" readonly spellcheck="false" />
+        <ConfigView v-else :config="template?.config || {}" :expand-all="true" />
         <div v-if="lastAffectedDevices !== null" class="hint">
           Update impacts ~{{ lastAffectedDevices }} devices.
         </div>
@@ -145,6 +149,7 @@ import {
   type TemplateScope,
 } from '@/api/templates'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
+import ConfigView from '@/components/config/ConfigView.vue'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { usePageError, useLateFailure } from '@/composables/useNotice'
 import { clone, sameValue, savedSecretBaseline, templateSchemaTarget, type ConfigBody } from '@/utils/config-form'
@@ -165,6 +170,7 @@ const edit = ref<{ name: string; description?: string; scope: TemplateScope; dev
 })
 
 const configJson = ref<string>('{}')
+const showRawJson = ref(false)
 const configBody = ref<ConfigBody>({})
 const configValid = ref(true)
 const saveErrors = ref<FieldError[]>([])

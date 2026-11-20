@@ -184,6 +184,62 @@
       </div>
     </template>
 
+    <!-- What an import stored, and what changed it since. Own state, so a refresh of the page above
+         neither hides these nor closes an open entry. -->
+    <div class="card" data-testid="stored-card">
+      <div class="header-row">
+        <h2>Last imported configuration</h2>
+      </div>
+      <div v-if="storedError" class="live-error" data-testid="stored-config-error">{{ storedError }}</div>
+      <div v-else-if="stored" data-testid="stored-config">
+        <div class="status-row">
+          <span class="status-label">Imported:</span>
+          <span data-testid="stored-config-time">{{ stored.last_synced ? formatDate(stored.last_synced) : 'unknown' }}</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Last changed:</span>
+          <span data-testid="stored-config-changed">{{ formatDate(stored.updated_at) }}</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Status:</span>
+          <span data-testid="stored-config-status">{{ stored.sync_status }}</span>
+        </div>
+        <ConfigView v-if="isSettings(stored.config)" :config="stored.config" :expand-all="true" />
+        <pre v-else class="code-view">{{ stored.config }}</pre>
+      </div>
+      <div v-else-if="storedLoaded" class="empty-state" data-testid="stored-config-empty">
+        Nothing was imported from this device yet.
+      </div>
+    </div>
+
+    <div class="card" data-testid="history-card">
+      <div class="header-row">
+        <h2>History</h2>
+      </div>
+      <div v-if="historyError" class="live-error" data-testid="history-error">{{ historyError }}</div>
+      <div v-else-if="history.length > 0" class="history-list">
+        <div v-for="entry in history" :key="entry.id" class="history-item" data-testid="history-entry">
+          <div class="history-head">
+            <span>{{ formatDate(entry.timestamp) }}</span>
+            <span class="pill">{{ entry.source }}</span>
+            <span class="history-user">{{ entry.user || '-' }}</span>
+            <div class="spacer" />
+            <button class="btn" :data-testid="`history-toggle-${entry.id}`" @click="toggleHistoryEntry(entry.id)">
+              {{ openEntries.has(entry.id) ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+          <template v-if="openEntries.has(entry.id)">
+            <ConfigView v-if="isSettings(entry.config)" :config="entry.config" :expand-all="true" />
+            <pre v-else-if="entry.config" class="code-view">{{ entry.config }}</pre>
+            <div v-else class="empty-state">No configuration was recorded for this change.</div>
+          </template>
+        </div>
+      </div>
+      <div v-else-if="historyLoaded" class="empty-state" data-testid="history-empty">
+        No history yet.
+      </div>
+    </div>
+
     <div v-if="showAddTemplate" class="modal-overlay" @click.self="closeAddTemplate">
       <div class="modal">
         <h2>Add Template</h2>
@@ -226,8 +282,14 @@ import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useError } from '@/composables/useError'
 import { usePageError, useLateResult } from '@/composables/useNotice'
-import { getCurrentDeviceConfig } from '@/api/deviceConfig'
-import { formErrorKey, nullRemovedSecrets } from '@/utils/config-form'
+import {
+  getCurrentDeviceConfig,
+  getStoredDeviceConfig,
+  getConfigHistory,
+  type StoredDeviceConfig,
+  type ConfigHistoryEntry,
+} from '@/api/deviceConfig'
+import { formErrorKey, isSettings, nullRemovedSecrets } from '@/utils/config-form'
 import { TemplateSaveError, type FieldError } from '@/api/templates'
 
 const route = useRoute()
@@ -258,6 +320,14 @@ const newTemplatePosition = ref<number | null>(null)
 const liveConfig = ref<Record<string, any> | null>(null)
 const liveError = ref<string | null>(null)
 const liveLoading = ref(false)
+// The stored import and its history. A card shows its own failed read, never an alert.
+const stored = ref<StoredDeviceConfig | null>(null)
+const storedLoaded = ref(false)
+const storedError = ref<string | null>(null)
+const history = ref<ConfigHistoryEntry[]>([])
+const historyLoaded = ref(false)
+const historyError = ref<string | null>(null)
+const openEntries = ref<Set<number>>(new Set())
 
 // A failed action shows as an error panel under the toolbar. A failed template add shows inside the
 // add-template dialog instead, which is open and covers the page when it happens.
@@ -307,9 +377,66 @@ function formatDate(iso: string) {
 // the same id: it must not reload, close or fill anything for what is on screen now.
 let routeGeneration = 0
 
+function toggleHistoryEntry(entryId: number) {
+  const next = new Set(openEntries.value)
+  if (!next.delete(entryId)) next.add(entryId)
+  openEntries.value = next
+}
+
+function resetStored() {
+  stored.value = null
+  storedLoaded.value = false
+  storedError.value = null
+  history.value = []
+  historyLoaded.value = false
+  historyError.value = null
+  openEntries.value = new Set()
+}
+
+// Counts the reads of the stored import and its history. An answer fills the cards only while it is
+// the newest read: an older refresh that answers last must not replace a newer one.
+let storedReadSeq = 0
+
+// Reads what the import stored and its history. The two reads fail apart, and an answer that arrives
+// after the device on screen changed belongs to the old device and fills nothing.
+async function loadStored() {
+  const id = deviceId.value
+  const generation = routeGeneration
+  const seq = ++storedReadSeq
+  const current = () => routeGeneration === generation && storedReadSeq === seq
+  const readStored = getStoredDeviceConfig(id).then(
+    (row) => {
+      if (!current()) return
+      stored.value = row
+      storedError.value = null
+      storedLoaded.value = true
+    },
+    (e: any) => {
+      if (!current()) return
+      stored.value = null
+      storedError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the imported configuration'
+    },
+  )
+  const readHistory = getConfigHistory(id).then(
+    (rows) => {
+      if (!current()) return
+      history.value = rows
+      historyError.value = null
+      historyLoaded.value = true
+    },
+    (e: any) => {
+      if (!current()) return
+      history.value = []
+      historyError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the configuration history'
+    },
+  )
+  await Promise.all([readStored, readHistory])
+}
+
 async function handleRefresh() {
   const id = deviceId.value
   const generation = routeGeneration
+  void loadStored()
   try {
     await store.refresh(id)
     if (routeGeneration !== generation) return
@@ -546,6 +673,7 @@ watch(deviceId, (next, previous) => {
   liveConfig.value = null
   liveError.value = null
   liveLoading.value = false
+  resetStored()
   handleRefresh()
 })
 </script>
@@ -594,6 +722,11 @@ watch(deviceId, (next, previous) => {
 .live-error { padding: 12px; background: #fee2e2; color: #991b1b; border-radius: 6px; }
 
 .empty-state { padding: 24px; text-align: center; color: #64748b; background: #f9fafb; border-radius: 6px; }
+
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-item { padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }
+.history-head { display: flex; align-items: center; gap: 12px; }
+.history-user { color: #64748b; }
 
 .templates-list { display: flex; flex-direction: column; gap: 8px; }
 .template-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }

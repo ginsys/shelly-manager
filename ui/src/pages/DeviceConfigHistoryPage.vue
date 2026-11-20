@@ -7,15 +7,6 @@
       <button class="btn" @click="handleRefresh">Refresh</button>
     </div>
 
-    <!-- A failed restore. While the viewer is open it covers the page, so the error shows in the viewer. -->
-    <ErrorDisplay
-      v-if="!viewingConfig"
-      :error="restoreError"
-      :show-retry="false"
-      data-testid="restore-error"
-      @dismiss="clearRestoreError"
-    />
-
     <!-- Loading/Error states -->
     <div v-if="loading" class="card state">Loading...</div>
     <div v-else-if="error" class="card state error">{{ error }}</div>
@@ -40,7 +31,6 @@
             <td>{{ entry.user || '-' }}</td>
             <td>
               <button class="action-btn" @click="viewConfig(entry)">View</button>
-              <button class="action-btn" @click="restoreConfig(entry)">Restore</button>
             </td>
           </tr>
         </tbody>
@@ -52,16 +42,10 @@
     <div v-if="viewingConfig" class="modal-overlay" @click.self="viewingConfig = null">
       <div class="modal">
         <h2>Configuration from {{ formatDate(viewingConfig.timestamp) }}</h2>
-        <ErrorDisplay
-          :error="restoreError"
-          :show-retry="false"
-          data-testid="restore-error"
-          @dismiss="clearRestoreError"
-        />
-        <pre class="config-view">{{ JSON.stringify(viewingConfig.config, null, 2) }}</pre>
+        <ConfigView v-if="isSettings(viewingConfig.config)" :config="viewingConfig.config" :expand-all="true" />
+        <pre v-else class="config-view">{{ viewingConfig.config ?? 'No configuration was recorded for this change.' }}</pre>
         <div class="modal-actions">
           <button class="btn" @click="viewingConfig = null">Close</button>
-          <button class="btn primary" @click="restoreConfig(viewingConfig)">Restore This Version</button>
         </div>
       </div>
     </div>
@@ -70,14 +54,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { getConfigHistory, updateDeviceConfig, type ConfigHistoryEntry } from '@/api/deviceConfig'
-import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
-import { usePageError } from '@/composables/useNotice'
+import { useRoute } from 'vue-router'
+import { getConfigHistory, type ConfigHistoryEntry } from '@/api/deviceConfig'
+import ConfigView from '@/components/config/ConfigView.vue'
+import { isSettings } from '@/utils/config-form'
 
 const route = useRoute()
-const router = useRouter()
-const { error: restoreError, setError: setRestoreError, clearError: clearRestoreError } = usePageError()
 
 const deviceId = ref<number | string>(route.params.id as string)
 const history = ref<ConfigHistoryEntry[]>([])
@@ -95,20 +77,6 @@ function formatDate(iso: string) {
 
 function viewConfig(entry: ConfigHistoryEntry) {
   viewingConfig.value = entry
-}
-
-async function restoreConfig(entry: ConfigHistoryEntry) {
-  if (!confirm('Are you sure you want to restore this configuration?')) return
-
-  clearRestoreError()
-  try {
-    await updateDeviceConfig(deviceId.value, entry.config)
-    viewingConfig.value = null
-    // The configuration page opens next and shows the device's status: that is the confirmation.
-    router.push(`/devices/${deviceId.value}/config`)
-  } catch (e: any) {
-    setRestoreError(e, { action: 'Restore configuration', resource: 'Device', resourceId: deviceId.value })
-  }
 }
 
 async function handleRefresh() {
@@ -135,8 +103,6 @@ onMounted(() => {
 .spacer { flex: 1; }
 .btn { padding: 6px 12px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; text-decoration: none; color: inherit; }
 .btn:hover { background: #f8fafc; }
-.btn.primary { background: #2563eb; color: white; border-color: #2563eb; }
-.btn.primary:hover { background: #1d4ed8; }
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
 .state { text-align: center; color: #64748b; padding: 32px; }
 .state.error { color: #b91c1c; }

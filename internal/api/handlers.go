@@ -765,6 +765,11 @@ func (h *Handler) GetDeviceConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Get device configuration
 	config, err := h.Service.GetDeviceConfig(uint(id))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// A device that was never imported has no stored configuration.
+		h.responseWriter().WriteNotFoundError(w, r, "Imported device configuration")
+		return
+	}
 	if err != nil {
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
@@ -1185,7 +1190,8 @@ func (h *Handler) GetConfigHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.responseWriter().WriteSuccess(w, r, history)
+	// The stored rows keep the real values; only the answer is masked.
+	h.responseWriter().WriteSuccess(w, r, maskConfigHistory(history))
 }
 
 // UpdateDeviceConfig handles PUT /api/v1/devices/{id}/config

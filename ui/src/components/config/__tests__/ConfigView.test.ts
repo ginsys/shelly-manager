@@ -40,6 +40,16 @@ describe('ConfigView nested values', () => {
     expect(mountView().text()).toContain('0800-0123456-on, 2200-0123456-off')
   })
 
+  // A list that mixes objects and other values cannot be one group per item. Its objects must not
+  // read as "[object Object]": a stored configuration is shown as it is, whatever its shape.
+  it('keeps the fields of an object inside a list of mixed values readable', () => {
+    const text = mountView({ config: { custom: [{ name: 'visible-name', timeout: 30 }, null, 'plain'] } }).text()
+    expect(text).not.toContain('[object Object]')
+    expect(text).toContain('visible-name')
+    expect(text).toContain('30')
+    expect(text).toContain('plain')
+  })
+
   it('shows an empty list as (empty) and a boolean as Yes or No', () => {
     const wrapper = mountView({ config: { relay: { relays: [], has_timer: true } } })
     expect(wrapper.text()).toContain('(empty)')

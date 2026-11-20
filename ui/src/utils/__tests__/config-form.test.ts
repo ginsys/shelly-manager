@@ -17,6 +17,24 @@ import {
   validateValue,
 } from '../config-form'
 import type { SchemaProperty } from '@/api/typedConfig'
+import { isSettings } from '../config-form'
+
+describe('isSettings', () => {
+  it('is true for an object that holds settings, empty or not', () => {
+    expect(isSettings({ mqtt: { user: 'iot' } })).toBe(true)
+    expect(isSettings({})).toBe(true)
+  })
+
+  it.each([
+    ['text the server could not read as settings', '********'],
+    ['a list', [{ a: 1 }]],
+    ['null (nothing recorded)', null],
+    ['undefined', undefined],
+    ['a number', 7],
+  ])('is false for %s', (_label, value) => {
+    expect(isSettings(value)).toBe(false)
+  })
+})
 
 describe('templateSchemaTarget', () => {
   it('uses the model schema for a device_type template, and none until the type is set', () => {

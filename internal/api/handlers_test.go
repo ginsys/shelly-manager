@@ -841,8 +841,9 @@ func TestGetDeviceConfig(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.GetDeviceConfig(w, req)
 
-	// Should get an error since we're not actually connecting to a device
-	testutil.AssertEqual(t, http.StatusInternalServerError, w.Code)
+	// The route answers the stored import and no device is contacted. A device that was never
+	// imported has none, and that is "not found", not a server failure.
+	testutil.AssertEqual(t, http.StatusNotFound, w.Code)
 }
 
 func TestGetCurrentDeviceConfig(t *testing.T) {
