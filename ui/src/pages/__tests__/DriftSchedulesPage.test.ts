@@ -206,6 +206,34 @@ describe('DriftSchedulesPage', () => {
     expect(useDriftStore().toggle).toHaveBeenCalledWith(2)
   })
 
+  it('holds the toggle of a schedule while its request runs, so a second click cannot flip it back', async () => {
+    const wrapper = mountPage({ schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }] })
+    await flushPromises()
+    let finish: () => void = () => {}
+    vi.mocked(useDriftStore().toggle).mockImplementationOnce(
+      () => new Promise<void>(resolve => (finish = resolve)) as never
+    )
+    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
+    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
+    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
+    expect(useDriftStore().toggle).toHaveBeenCalledTimes(1)
+    // another schedule is not held
+    expect(wrapper.find('[data-testid="toggle-2"]').attributes('disabled')).toBeUndefined()
+
+    finish()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('releases the toggle after a failed request', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    vi.mocked(useDriftStore().toggle).mockRejectedValueOnce(new Error('toggle refused'))
+    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeUndefined()
+  })
+
   it('a failed toggle shows its failure above the list and keeps the page', async () => {
     const wrapper = mountPage()
     await flushPromises()
