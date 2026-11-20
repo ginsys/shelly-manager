@@ -1,7 +1,7 @@
 <template>
   <section v-if="visible" class="restore-status" data-testid="restore-status">
     <div v-if="!status?.supported" class="status-row info" data-testid="restore-unsupported">
-      Restore is only available for SQLite. Backups can still be checked.
+      {{ RESTORE_SQLITE_ONLY }}. Backups can still be checked.
     </div>
 
     <div v-if="status?.pending" class="status-row pending" data-testid="restore-pending">
@@ -35,7 +35,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { BackupItem, RestoreStatus } from '@/api/export'
+import { RESTORE_SQLITE_ONLY, type BackupItem, type RestoreStatus } from '@/api/export'
 
 interface Props {
   status: RestoreStatus | null

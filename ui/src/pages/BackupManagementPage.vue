@@ -121,7 +121,6 @@ import {
   stageRestore,
   getRestoreStatus,
   cancelRestore,
-  RESTORE_SQLITE_ONLY,
   type BackupItem,
   type BackupStatistics,
     type RestorePreview,
@@ -319,7 +318,8 @@ async function refreshData() {
   await Promise.all([
     fetchBackups(),
     fetchStatistics(),
-    fetchAvailableDevices()
+    fetchAvailableDevices(),
+    loadRestoreStatus()
   ])
   showMessage('Data refreshed successfully', 'success')
 }
@@ -448,7 +448,7 @@ async function handleStageRestore() {
     if (mine === restoreCheckId) restoreStaged.value = true
     await loadRestoreStatus()
   } catch (err: any) {
-    if (err.message === RESTORE_SQLITE_ONLY) {
+    if (err.status === 501) {
       restoreStatus.value = { supported: false, pending: null, lastResult: null }
     }
     const reason = err.message || 'Failed to stage the restore'

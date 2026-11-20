@@ -394,18 +394,23 @@ export async function previewRestore(backupId: string): Promise<RestorePreview> 
 }
 
 // The server's reason for a refused restore call: the SQLite-only sentence for a 501, else the
-// message of its error envelope.
-async function restoreFailure(e: any, fallback: string): Promise<Error> {
-  if (e?.response?.status === 501) return new Error(RESTORE_SQLITE_ONLY)
-  return new Error((await errorEnvelopeMessage(e?.response?.data)) || e?.message || fallback)
+// message of its error envelope. The error carries the HTTP status (undefined without a response).
+async function restoreFailure(e: any, fallback: string): Promise<Error & { status?: number }> {
+  const status: number | undefined = e?.response?.status
+  if (status === 501) return Object.assign(new Error(RESTORE_SQLITE_ONLY), { status })
+  return Object.assign(new Error((await errorEnvelopeMessage(e?.response?.data)) || e?.message || fallback), { status })
 }
 
 export async function stageRestore(backupId: string): Promise<void> {
   try {
     await api.post('/import/restore', { backup_id: backupId })
   } catch (e: any) {
-    // `answered` is false when no response arrived: the server may have staged the restore.
-    throw Object.assign(await restoreFailure(e, 'Failed to stage the restore'), { answered: !!e?.response })
+    const err = await restoreFailure(e, 'Failed to stage the restore')
+    // `answered` is true only for a refusal that staged nothing (4xx, or the 501 of a database that
+    // is not SQLite). No response, a 408 or another 5xx leaves the outcome unknown: the server's
+    // timeout answer can be written while the handler goes on to stage the restore.
+    const refused = err.status !== undefined && (err.status < 500 || err.status === 501) && err.status !== 408
+    throw Object.assign(err, { answered: refused })
   }
 }
 
