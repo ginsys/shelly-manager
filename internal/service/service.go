@@ -1384,30 +1384,34 @@ func (s *ShellyService) ApplyConfigTemplate(deviceID uint, templateID uint, vari
 
 // Drift Schedule Management Methods
 
-// GetDriftSchedules returns all drift detection schedules
+// GetDriftSchedules returns all drift detection schedules with their device lists
 func (s *ShellyService) GetDriftSchedules() ([]configuration.DriftDetectionSchedule, error) {
-	var schedules []configuration.DriftDetectionSchedule
-	if err := s.DB.GetDB().Find(&schedules).Error; err != nil {
-		return nil, fmt.Errorf("failed to get drift schedules: %w", err)
-	}
-	return schedules, nil
+	return s.ConfigSvc.ListDriftSchedules()
 }
 
 // GetDriftSchedule returns a specific drift detection schedule
 func (s *ShellyService) GetDriftSchedule(scheduleID uint) (*configuration.DriftDetectionSchedule, error) {
-	var schedule configuration.DriftDetectionSchedule
-	if err := s.DB.GetDB().First(&schedule, scheduleID).Error; err != nil {
-		return nil, fmt.Errorf("drift schedule not found: %w", err)
-	}
-	return &schedule, nil
+	return s.ConfigSvc.GetDriftSchedule(scheduleID)
 }
 
-// DeleteDriftSchedule removes a drift detection schedule
+// CreateDriftSchedule validates and stores a drift detection schedule
+func (s *ShellyService) CreateDriftSchedule(in configuration.ScheduleInput) (*configuration.DriftDetectionSchedule, error) {
+	return s.ConfigSvc.CreateDriftSchedule(in)
+}
+
+// UpdateDriftSchedule replaces the editable fields of a drift detection schedule
+func (s *ShellyService) UpdateDriftSchedule(scheduleID uint, in configuration.ScheduleInput) (*configuration.DriftDetectionSchedule, error) {
+	return s.ConfigSvc.UpdateDriftSchedule(scheduleID, in)
+}
+
+// ToggleDriftSchedule enables a disabled schedule or disables an enabled one
+func (s *ShellyService) ToggleDriftSchedule(scheduleID uint) (*configuration.DriftDetectionSchedule, error) {
+	return s.ConfigSvc.ToggleDriftSchedule(scheduleID)
+}
+
+// DeleteDriftSchedule removes a drift detection schedule with its device list and runs
 func (s *ShellyService) DeleteDriftSchedule(scheduleID uint) error {
-	if err := s.DB.GetDB().Delete(&configuration.DriftDetectionSchedule{}, scheduleID).Error; err != nil {
-		return fmt.Errorf("failed to delete drift schedule: %w", err)
-	}
-	return nil
+	return s.ConfigSvc.DeleteDriftSchedule(scheduleID)
 }
 
 // Comprehensive Drift Reporting Methods
