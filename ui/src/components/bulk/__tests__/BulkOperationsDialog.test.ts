@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import BulkOperationsDialog from '../BulkOperationsDialog.vue'
 import { bulkImport, bulkDriftDetect, bulkDownload } from '@/api/bulk'
-import { bulkApply, NothingWrittenError, OUTCOME_UNKNOWN } from '@/api/bulkApply'
+import { applyRunning, bulkApply, NothingWrittenError, OUTCOME_UNKNOWN } from '@/api/bulkApply'
 
 vi.mock('@/api/bulkApply', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/bulkApply')>()
@@ -47,6 +47,8 @@ describe('BulkOperationsDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Module state outlives a component: a test that left a call pending must not reach the next one.
+    applyRunning.value = false
     alertSpy = vi.fn()
     vi.stubGlobal('alert', alertSpy)
   })
@@ -615,6 +617,27 @@ describe('BulkOperationsDialog', () => {
 
       expect(byId(wrapper, 'bulk-apply-running').exists()).toBe(false)
       expect(byId(wrapper, 'bulk-op-apply').attributes('disabled')).toBeUndefined()
+    })
+
+    // Leaving the page unmounts the dialog; a dialog mounted again meanwhile is a new component.
+    it('offers no second apply to a dialog mounted again while the first call still runs', async () => {
+      let answer!: (value: unknown) => void
+      vi.mocked(bulkApply).mockReturnValue(new Promise((resolve) => (answer = resolve)) as any)
+      const first = await confirmation('{"name":"New"}')
+      await byId(first, 'bulk-apply-submit').trigger('click')
+
+      first.unmount()
+      const second = open()
+
+      expect(byId(second, 'bulk-apply-running').exists()).toBe(true)
+      expect(byId(second, 'bulk-op-apply').attributes('disabled')).toBeDefined()
+      expect(bulkApply).toHaveBeenCalledTimes(1)
+
+      answer(applyAnswer)
+      await flushPromises()
+
+      expect(byId(second, 'bulk-apply-running').exists()).toBe(false)
+      expect(byId(second, 'bulk-op-apply').attributes('disabled')).toBeUndefined()
     })
 
     it('offers apply again after a call that failed to answer', async () => {

@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import api from './client'
 import type { APIResponse } from './types'
 import type { BulkRequest, BulkTone, BulkView } from './bulk'
@@ -61,6 +62,11 @@ export interface BulkApplyResult {
 // Anything else (a 408 at the server's deadline, a 5xx, no answer at all) can follow writes to some
 // devices, so it is never reported as a failure that changed nothing.
 const REFUSED_BEFORE_ANY_WRITE = new Set([400, 401, 403, 413, 415, 429])
+
+// Whether an apply call is outstanding. Closing the dialog or leaving the page does not stop the
+// call, so this lives with the module and not with a component: a dialog mounted again meanwhile must
+// not start a second apply on the same devices.
+export const applyRunning = ref(false)
 
 // An answer the route gave before it touched a device. The dialog keeps what the operator typed after
 // this one, so it can be corrected, and forgets it after any other outcome.
