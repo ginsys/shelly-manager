@@ -32,6 +32,10 @@ vi.mock('@/api/drift', async (importOriginal) => {
     ...actual,
     listDriftSchedules: vi.fn(),
     deleteDriftSchedule: vi.fn(),
+    createDriftSchedule: vi.fn(),
+    updateDriftSchedule: vi.fn(),
+    toggleDriftSchedule: vi.fn(),
+    listDriftScheduleRuns: vi.fn(),
     getDriftSchedulerStatus: vi.fn(),
     getDriftTrends: vi.fn(),
     resolveDriftTrend: vi.fn(),
@@ -159,6 +163,10 @@ describe('provisioning store', () => {
 describe('drift store', () => {
   it.each([
     ['remove', () => vi.mocked(driftApi.deleteDriftSchedule), (s: any) => s.remove(1)],
+    ['create', () => vi.mocked(driftApi.createDriftSchedule), (s: any) => s.create({ name: 'N', cron_spec: '0 * * * *' })],
+    ['update', () => vi.mocked(driftApi.updateDriftSchedule), (s: any) => s.update(1, { name: 'N', cron_spec: '0 * * * *' })],
+    ['toggle', () => vi.mocked(driftApi.toggleDriftSchedule), (s: any) => s.toggle(1)],
+    ['fetchRuns', () => vi.mocked(driftApi.listDriftScheduleRuns), (s: any) => s.fetchRuns(1)],
     ['resolveTrend', () => vi.mocked(driftApi.resolveDriftTrend), (s: any) => s.resolveTrend(1)],
     ['generateReport', () => vi.mocked(driftApi.generateDeviceDriftReport), (s: any) => s.generateReport(1)],
   ])('%s that fails keeps the list and sets no error', async (_name, api, run) => {
@@ -171,6 +179,33 @@ describe('drift store', () => {
     expect(store.trends).toEqual([{ id: 1, resolved: false }])
     expect(store.error).toBeNull()
     expect(store.loading).toBe(false)
+  })
+
+  it('create adds the answered schedule; update and toggle replace the row with the same id', async () => {
+    const store = useDriftStore()
+    store.schedules = [{ id: 1, name: 'A', enabled: true } as any, { id: 2, name: 'B', enabled: true } as any]
+
+    vi.mocked(driftApi.createDriftSchedule).mockResolvedValueOnce({ id: 3, name: 'C' } as any)
+    await expect(store.create({ name: 'C', cron_spec: '0 * * * *' })).resolves.toEqual({ id: 3, name: 'C' })
+    expect(store.schedules.map(s => s.id)).toEqual([1, 2, 3])
+
+    vi.mocked(driftApi.updateDriftSchedule).mockResolvedValueOnce({ id: 2, name: 'B2', enabled: true } as any)
+    await store.update(2, { name: 'B2', cron_spec: '0 * * * *' })
+    expect(store.schedules.map(s => s.name)).toEqual(['A', 'B2', 'C'])
+
+    vi.mocked(driftApi.toggleDriftSchedule).mockResolvedValueOnce({ id: 1, name: 'A', enabled: false } as any)
+    await store.toggle(1)
+    expect(store.schedules[0].enabled).toBe(false)
+    expect(store.schedules).toHaveLength(3)
+    expect(store.error).toBeNull()
+  })
+
+  it('fetchRuns returns the runs and keeps none of them', async () => {
+    const store = useDriftStore()
+    vi.mocked(driftApi.listDriftScheduleRuns).mockResolvedValueOnce([{ id: 5 } as any])
+    await expect(store.fetchRuns(2, 10)).resolves.toEqual([{ id: 5 }])
+    expect(driftApi.listDriftScheduleRuns).toHaveBeenCalledWith(2, 10)
+    expect(store.schedules).toEqual([])
   })
 
   it('fetchSchedulerStatus keeps the answer, and a failed read leaves null and no error', async () => {

@@ -14,6 +14,10 @@ import {
   listDriftSchedules,
   getDriftSchedule,
   deleteDriftSchedule,
+  createDriftSchedule,
+  updateDriftSchedule,
+  toggleDriftSchedule,
+  listDriftScheduleRuns,
   getDriftSchedulerStatus,
   getDriftReports,
   getDriftTrends,
@@ -21,6 +25,7 @@ import {
   generateDeviceDriftReport,
   computeDailyAggregates,
   type DriftSchedule,
+  type DriftRun,
   type DriftTrend,
   type DriftReport
 } from '../drift'
@@ -88,6 +93,87 @@ describe('Drift API client', () => {
       vi.mocked(api.delete).mockResolvedValueOnce(ok({ status: 'deleted' }))
       await expect(deleteDriftSchedule(5)).resolves.toBeUndefined()
       expect(api.delete).toHaveBeenCalledWith('/config/drift-schedules/5')
+    })
+  })
+
+  describe('createDriftSchedule', () => {
+    const input = { name: 'Nightly', cron_spec: '0 3 * * *', device_ids: [1, 2] }
+    const stored: DriftSchedule = {
+      id: 9, name: 'Nightly', enabled: true, cron_spec: '0 3 * * *', device_ids: [1, 2],
+      run_count: 0, created_at: 'x', updated_at: 'x'
+    }
+
+    it('posts the input and returns the stored schedule', async () => {
+      vi.mocked(api.post).mockResolvedValueOnce(ok(stored))
+      await expect(createDriftSchedule(input)).resolves.toEqual(stored)
+      expect(api.post).toHaveBeenCalledWith('/config/drift-schedules', input)
+    })
+
+    it('throws the server message, and a default when there is none or no data', async () => {
+      vi.mocked(api.post).mockResolvedValueOnce(fail('invalid cron spec'))
+      await expect(createDriftSchedule(input)).rejects.toThrow('invalid cron spec')
+      vi.mocked(api.post).mockResolvedValueOnce(ok(undefined))
+      await expect(createDriftSchedule(input)).rejects.toThrow('Failed to create drift schedule')
+    })
+  })
+
+  describe('updateDriftSchedule', () => {
+    const input = { name: 'Nightly', cron_spec: '0 3 * * *', device_filter: { type: 'plug' } }
+
+    it('puts the whole input to the schedule and returns the answer', async () => {
+      const stored = { id: 4, ...input, enabled: true, run_count: 1, created_at: 'x', updated_at: 'y' }
+      vi.mocked(api.put).mockResolvedValueOnce(ok(stored))
+      await expect(updateDriftSchedule(4, input)).resolves.toEqual(stored)
+      expect(api.put).toHaveBeenCalledWith('/config/drift-schedules/4', input)
+    })
+
+    it('throws the server message, and a default when there is no data', async () => {
+      vi.mocked(api.put).mockResolvedValueOnce(fail('schedule not found'))
+      await expect(updateDriftSchedule(4, input)).rejects.toThrow('schedule not found')
+      vi.mocked(api.put).mockResolvedValueOnce(ok(undefined))
+      await expect(updateDriftSchedule(4, input)).rejects.toThrow('Failed to update drift schedule')
+    })
+  })
+
+  describe('toggleDriftSchedule', () => {
+    it('posts an empty body to the toggle route and returns the schedule', async () => {
+      const stored = { id: 4, name: 'N', enabled: false, cron_spec: '0 * * * *', run_count: 0, created_at: 'x', updated_at: 'y' }
+      vi.mocked(api.post).mockResolvedValueOnce(ok(stored))
+      await expect(toggleDriftSchedule(4)).resolves.toEqual(stored)
+      expect(api.post).toHaveBeenCalledWith('/config/drift-schedules/4/toggle', {})
+    })
+
+    it('throws the server message, and a default when there is no data', async () => {
+      vi.mocked(api.post).mockResolvedValueOnce(fail('gone'))
+      await expect(toggleDriftSchedule(4)).rejects.toThrow('gone')
+      vi.mocked(api.post).mockResolvedValueOnce(ok(undefined))
+      await expect(toggleDriftSchedule(4)).rejects.toThrow('Failed to toggle drift schedule')
+    })
+  })
+
+  describe('listDriftScheduleRuns', () => {
+    const runs: DriftRun[] = [
+      { id: 2, schedule_id: 4, status: 'skipped', started_at: 'b', created_at: 'b' },
+      { id: 1, schedule_id: 4, status: 'success', started_at: 'a', duration: 1_500_000_000, created_at: 'a' }
+    ]
+
+    it('asks for the server default when no limit is given', async () => {
+      vi.mocked(api.get).mockResolvedValueOnce(ok(runs))
+      await expect(listDriftScheduleRuns(4)).resolves.toEqual(runs)
+      expect(api.get).toHaveBeenCalledWith('/config/drift-schedules/4/runs', undefined)
+    })
+
+    it('sends the limit when one is given', async () => {
+      vi.mocked(api.get).mockResolvedValueOnce(ok(runs))
+      await listDriftScheduleRuns(4, 10)
+      expect(api.get).toHaveBeenCalledWith('/config/drift-schedules/4/runs', { params: { limit: 10 } })
+    })
+
+    it('returns an empty list when data is absent and throws on a failed answer', async () => {
+      vi.mocked(api.get).mockResolvedValueOnce(ok(undefined))
+      await expect(listDriftScheduleRuns(4)).resolves.toEqual([])
+      vi.mocked(api.get).mockResolvedValueOnce(fail('schedule not found'))
+      await expect(listDriftScheduleRuns(4)).rejects.toThrow('schedule not found')
     })
   })
 
