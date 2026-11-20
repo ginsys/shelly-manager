@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -55,8 +56,9 @@ func ValidateCronSpec(spec string) error {
 }
 
 // Scheduler runs the drift detection schedules stored in the database. The rows are the only copy
-// of the schedule: every poll reads which enabled schedules are due, so a replica that starts, stops
-// or crashes loses nothing, and several replicas on one database share the work through claim.
+// of the schedule: every poll reads which enabled schedules are due, so a replica that starts or
+// stops loses nothing, one that crashes mid-run leaves a run row the next tick marks interrupted, and
+// several replicas on one database share the work through claim.
 type Scheduler struct {
 	db     *gorm.DB
 	svc    *Service
@@ -191,66 +193,87 @@ func (s *Scheduler) handle(ctx context.Context, sc DriftDetectionSchedule, now t
 		}
 		return
 	}
-	won, err := s.claim(sc, next)
+	run, err := s.claimAndRecord(sc, next, now)
 	if err != nil {
 		s.logError("claim drift schedule", sc.ID, err)
 		return
 	}
-	if won {
-		s.runClaimed(ctx, sc, now)
+	if run != nil {
+		s.runClaimed(ctx, sc, run, now)
 	}
 }
 
 // claim takes one due tick of a schedule that was read earlier. It compares and sets the integer
 // run_count, which counts claimed ticks (skipped ones too), so of several replicas that read the same
 // row exactly one wins: a timestamp would be read back in another precision than it was written.
-func (s *Scheduler) claim(sc DriftDetectionSchedule, next time.Time) (bool, error) {
-	res := s.db.Model(&DriftDetectionSchedule{}).
+func (s *Scheduler) claim(db *gorm.DB, sc DriftDetectionSchedule, next time.Time) (bool, error) {
+	res := db.Model(&DriftDetectionSchedule{}).
 		Where("id = ? AND enabled = ? AND run_count = ?", sc.ID, true, sc.RunCount).
 		Updates(map[string]any{"next_run": next, "run_count": gorm.Expr("run_count + 1")})
 	return res.RowsAffected == 1, res.Error
 }
 
-// failSchedule records one failed run for a schedule that cannot run and disables it, so it is
-// reported once and not on every tick.
-func (s *Scheduler) failSchedule(sc DriftDetectionSchedule, now time.Time, cause error) {
-	s.logError("drift schedule cannot run", sc.ID, cause)
-	run := DriftDetectionRun{ScheduleID: sc.ID, Status: DriftRunFailed, StartedAt: now, CompletedAt: &now, Error: cause.Error()}
-	if err := s.db.Create(&run).Error; err != nil {
-		s.logError("record failed drift run", sc.ID, err)
-	}
-	if err := s.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("enabled", false).Error; err != nil {
-		s.logError("disable drift schedule", sc.ID, err)
-	}
+// claimAndRecord claims the tick and writes its run row in one transaction, so a process that ends
+// after the claim leaves a row the next tick marks interrupted, never a tick that nobody ran. The
+// row is skipped when a run of the schedule is still running, otherwise running. It returns nil when
+// another replica took the tick.
+func (s *Scheduler) claimAndRecord(sc DriftDetectionSchedule, next, now time.Time) (*DriftDetectionRun, error) {
+	var run *DriftDetectionRun
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		won, err := s.claim(tx, sc, next)
+		if err != nil || !won {
+			return err
+		}
+		var running int64
+		if err := tx.Model(&DriftDetectionRun{}).
+			Where("schedule_id = ? AND status = ?", sc.ID, DriftRunRunning).Count(&running).Error; err != nil {
+			return err
+		}
+		row := DriftDetectionRun{ScheduleID: sc.ID, StartedAt: now, Status: DriftRunRunning}
+		if running > 0 {
+			row.Status, row.CompletedAt = DriftRunSkipped, &now
+			row.Error = "the previous run of this schedule is still running"
+		}
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		if row.Status == DriftRunRunning {
+			if err := tx.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("last_run", now).Error; err != nil {
+				return err
+			}
+		}
+		run = &row
+		return nil
+	})
+	return run, err
 }
 
-// runClaimed records and executes one claimed tick: a skipped run when the previous one is still
-// running, otherwise a read-only drift check of the schedule's devices.
-func (s *Scheduler) runClaimed(ctx context.Context, sc DriftDetectionSchedule, now time.Time) {
-	defer s.pruneRuns(sc.ID)
-
-	var running int64
-	if err := s.db.Model(&DriftDetectionRun{}).
-		Where("schedule_id = ? AND status = ?", sc.ID, DriftRunRunning).Count(&running).Error; err != nil {
-		s.logError("read running drift runs", sc.ID, err)
-		return
-	}
-	run := DriftDetectionRun{ScheduleID: sc.ID, StartedAt: now}
-	if running > 0 {
-		run.Status, run.CompletedAt = DriftRunSkipped, &now
-		run.Error = "the previous run of this schedule is still running"
-		if err := s.db.Create(&run).Error; err != nil {
-			s.logError("record skipped drift run", sc.ID, err)
+// failSchedule records one failed run for a schedule that cannot run and disables it, so it is
+// reported once and not on every tick. The disable is the arbiter: of several replicas that read the
+// same row, only the one that turns enabled off records the failure.
+func (s *Scheduler) failSchedule(sc DriftDetectionSchedule, now time.Time, cause error) {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&DriftDetectionSchedule{}).Where("id = ? AND enabled = ?", sc.ID, true).Update("enabled", false)
+		if res.Error != nil || res.RowsAffected != 1 {
+			return res.Error
 		}
+		return tx.Create(&DriftDetectionRun{
+			ScheduleID: sc.ID, Status: DriftRunFailed, StartedAt: now, CompletedAt: &now, Error: cause.Error(),
+		}).Error
+	})
+	if err != nil {
+		s.logError("record a drift schedule that cannot run", sc.ID, err)
 		return
 	}
-	run.Status = DriftRunRunning
-	if err := s.db.Create(&run).Error; err != nil {
-		s.logError("record drift run", sc.ID, err)
+	s.logError("drift schedule cannot run", sc.ID, cause)
+}
+
+// runClaimed executes a claimed tick whose run row is open: a read-only drift check of the
+// schedule's devices. A skipped row has nothing to run.
+func (s *Scheduler) runClaimed(ctx context.Context, sc DriftDetectionSchedule, run *DriftDetectionRun, now time.Time) {
+	defer s.pruneRuns(sc.ID)
+	if run.Status != DriftRunRunning {
 		return
-	}
-	if err := s.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("last_run", now).Error; err != nil {
-		s.logError("record last drift run", sc.ID, err)
 	}
 
 	started := time.Now()
@@ -268,7 +291,7 @@ func (s *Scheduler) runClaimed(ctx context.Context, sc DriftDetectionSchedule, n
 			run.Status, run.Error = DriftRunFailed, fmt.Sprintf("encode the run result: %v", err)
 		}
 	}
-	if err := s.db.Save(&run).Error; err != nil {
+	if err := s.db.Save(run).Error; err != nil {
 		s.logError("save drift run", sc.ID, err)
 	}
 }
@@ -311,6 +334,9 @@ func (s *Scheduler) resolveDevices(sc DriftDetectionSchedule) ([]uint, error) {
 		if err := decoder.Decode(&filter); err != nil {
 			return nil, fmt.Errorf("device filter: %w", err)
 		}
+		if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+			return nil, errors.New("device filter: unexpected text after the filter")
+		}
 		if filter.Type != "" {
 			query = query.Where("type = ?", filter.Type)
 		}
@@ -336,7 +362,17 @@ func (s *Scheduler) pruneRuns(scheduleID uint) {
 	if len(keep) < driftRunsKept {
 		return
 	}
-	if err := s.db.Where("schedule_id = ? AND id NOT IN ?", scheduleID, keep).
+	s.deleteRunsNotIn(scheduleID, keep)
+}
+
+// deleteRunsNotIn deletes the runs of a schedule that are not in keep and older than its newest row:
+// a run another replica added after keep was read has a higher id and stays.
+func (s *Scheduler) deleteRunsNotIn(scheduleID uint, keep []uint) {
+	var newest uint
+	for _, id := range keep {
+		newest = max(newest, id)
+	}
+	if err := s.db.Where("schedule_id = ? AND id NOT IN ? AND id < ?", scheduleID, keep, newest).
 		Delete(&DriftDetectionRun{}).Error; err != nil {
 		s.logError("prune drift runs", scheduleID, err)
 	}
