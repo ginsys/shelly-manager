@@ -168,7 +168,7 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 func (s *Service) ToggleDriftSchedule(id uint) (*DriftDetectionSchedule, error) {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var sc DriftDetectionSchedule
-		if err := tx.First(&sc, id).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&sc, id).Error; err != nil { // as in the update: an edit waits
 			return err
 		}
 		fields := map[string]any{"enabled": !sc.Enabled, "next_run": nil}
