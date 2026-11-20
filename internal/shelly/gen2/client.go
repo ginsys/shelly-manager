@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -490,8 +491,8 @@ func (c *Client) rpcCallRetrying(ctx context.Context, retries int, method string
 	// Retry logic
 	var lastErr error
 	for attempt := 0; attempt <= retries; attempt++ {
-		if attempt > 0 {
-			time.Sleep(c.config.retryDelay)
+		if attempt > 0 && !shelly.SleepContext(ctx, c.config.retryDelay) {
+			return lastErr
 		}
 
 		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(reqBody))
@@ -510,7 +511,12 @@ func (c *Client) rpcCallRetrying(ctx context.Context, retries int, method string
 			resp, err = c.httpClient.Do(req)
 		}
 		if err != nil {
-			lastErr = err
+			// A transport error never replaces a DeviceError: an earlier attempt that got an HTTP
+			// answer proves the device was reachable (as the Gen1 loops do).
+			var answered *shelly.DeviceError
+			if !errors.As(lastErr, &answered) {
+				lastErr = err
+			}
 			continue
 		}
 		defer func() { _ = resp.Body.Close() }()
@@ -531,6 +537,11 @@ func (c *Client) rpcCallRetrying(ctx context.Context, retries int, method string
 
 		var rpcResp RPCResponse
 		if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+			// A body that stalls until the deadline does not undo an earlier HTTP answer.
+			var answered *shelly.DeviceError
+			if shelly.IsUnanswered(err) && errors.As(lastErr, &answered) {
+				return lastErr
+			}
 			return &shelly.DeviceError{
 				IP:         c.ip,
 				Generation: c.generation,

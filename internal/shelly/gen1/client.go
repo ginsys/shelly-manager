@@ -729,8 +729,10 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 	// Retry logic
 	var lastErr error
 	for attempt := 0; attempt <= c.config.retryAttempts; attempt++ {
-		if attempt > 0 {
-			time.Sleep(c.config.retryDelay)
+		if attempt > 0 && !shelly.SleepContext(ctx, c.config.retryDelay) {
+			// The context ended while waiting: stop with the last attempt's failure (never nil here,
+			// every path that reaches the next attempt sets it).
+			return lastErr
 		}
 
 		resp, err := c.httpClient.Do(req)
@@ -765,6 +767,11 @@ func (c *Client) getJSON(ctx context.Context, url string, result interface{}) er
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			// A body that stalls until the deadline does not undo an earlier HTTP answer.
+			var answered *shelly.DeviceError
+			if shelly.IsUnanswered(err) && errors.As(lastErr, &answered) {
+				return lastErr
+			}
 			return &shelly.DeviceError{
 				IP:         c.ip,
 				Generation: c.generation,
@@ -810,8 +817,8 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 	// Retry logic
 	var lastErr error
 	for attempt := 0; attempt <= c.config.retryAttempts; attempt++ {
-		if attempt > 0 {
-			time.Sleep(c.config.retryDelay)
+		if attempt > 0 && !shelly.SleepContext(ctx, c.config.retryDelay) {
+			return lastErr
 		}
 
 		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(formData.Encode()))
