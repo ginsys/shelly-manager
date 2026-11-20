@@ -1445,8 +1445,8 @@ func (h *Handler) GetDriftScheduleRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := driftRunsDefaultLimit
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		n, err := strconv.Atoi(raw)
+	if r.URL.Query().Has("limit") { // an empty value is a bad limit, not an absent one
+		n, err := strconv.Atoi(r.URL.Query().Get("limit"))
 		if err != nil || n < 1 || n > driftRunsMaxLimit {
 			h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("limit must be a whole number from 1 to %d", driftRunsMaxLimit))
 			return

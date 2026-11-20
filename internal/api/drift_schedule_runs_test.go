@@ -72,9 +72,9 @@ func TestDriftScheduleRunsRoute_LimitDefaultsToTwentyAndIsBounded(t *testing.T) 
 	assert.Len(t, byDefault, 20)
 	assert.Len(t, three, 3)
 	assert.Len(t, all, 25)
-	for _, bad := range []string{"0", "-1", "101", "abc", "1.5"} {
-		w, _ := a.runs(id, "?limit="+bad)
-		assert.Equal(t, http.StatusBadRequest, w.Code, "limit=%s", bad)
+	for _, query := range []string{"?limit=0", "?limit=-1", "?limit=101", "?limit=abc", "?limit=1.5", "?limit=", "?limit"} {
+		w, _ := a.runs(id, query)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "query %q", query)
 	}
 }
 
