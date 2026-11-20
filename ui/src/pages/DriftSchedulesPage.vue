@@ -182,27 +182,21 @@ async function handleDelete(id: number) {
   }
 }
 
-// The schedules whose toggle request is running. The server flips the stored flag on every call, so a
-// second click while one runs would flip it back.
-const toggling = ref<number[]>([])
-
-// Edit and Enable/Disable of a card are held while its own toggle runs, while the form opens and while it
-// is open: the form carries its own `enabled`, so a toggle in any of those spans would be overwritten by
-// the next save, or the form would start from a state the card no longer shows.
+// Edit and Enable/Disable of a card are held while its own toggle runs (the store keeps that list, because
+// the request outlives this page), while the form opens and while it is open: the form carries its own
+// `enabled`, so a toggle in any of those spans would be overwritten by the next save, or the form would
+// start from a state the card no longer shows.
 function held(id: number): boolean {
-  return opening.value || formOpen.value || toggling.value.includes(id)
+  return opening.value || formOpen.value || store.togglingIds.includes(id)
 }
 
 async function handleToggle(id: number) {
-  if (toggling.value.includes(id)) return
-  toggling.value.push(id)
+  if (held(id)) return
   clearActionError()
   try {
     await store.toggle(id)
   } catch (e) {
     setActionError(e, { action: 'Toggle drift schedule', resource: 'Drift schedule', resourceId: String(id) })
-  } finally {
-    toggling.value = toggling.value.filter(t => t !== id)
   }
 }
 

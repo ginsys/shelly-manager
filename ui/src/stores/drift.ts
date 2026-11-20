@@ -112,8 +112,20 @@ export const useDriftStore = defineStore('drift', () => {
     return putSchedule(await updateDriftSchedule(id, input))
   }
 
+  // The schedules whose toggle request is running. The server flips the stored flag on every call, so a
+  // second request while one runs would flip it back. The store keeps the list because the request
+  // outlives the page that sent it.
+  const togglingIds = ref<number[]>([])
+
   async function toggle(id: number | string) {
-    return putSchedule(await toggleDriftSchedule(id))
+    const n = Number(id)
+    if (togglingIds.value.includes(n)) return
+    togglingIds.value.push(n)
+    try {
+      return putSchedule(await toggleDriftSchedule(id))
+    } finally {
+      togglingIds.value = togglingIds.value.filter(t => t !== n)
+    }
   }
 
   // The runs of one schedule are not kept here: the page holds them per card.
@@ -202,6 +214,7 @@ export const useDriftStore = defineStore('drift', () => {
     scheduleMeta,
     reportMeta,
     schedulerEnabled,
+    togglingIds,
     fetchSchedules,
     fetchSchedule,
     fetchSchedulerStatus,
