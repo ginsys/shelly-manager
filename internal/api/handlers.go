@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1318,6 +1319,10 @@ func (h *Handler) decodeScheduleInput(w http.ResponseWriter, r *http.Request) (c
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&in); err != nil {
 		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body: "+err.Error())
+		return in, false
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) { // one JSON value, nothing after it
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body: unexpected text after the JSON value")
 		return in, false
 	}
 	return in, true

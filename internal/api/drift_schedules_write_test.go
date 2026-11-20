@@ -99,6 +99,7 @@ func TestCreateDriftScheduleRoute_RefusesABadBodyAndWritesNothing(t *testing.T) 
 		"no name":             `{"cron_spec":"* * * * *"}`,
 		"a legacy filter key": `{"name":"n","cron_spec":"* * * * *","device_filter":{"device_type":"SHSW-1"}}`,
 		"an unknown field":    `{"name":"n","cron_spec":"* * * * *","schedule":"x"}`,
+		"text after the body": `{"name":"n","cron_spec":"* * * * *"} garbage`,
 		"list and filter":     `{"name":"n","cron_spec":"* * * * *","device_ids":[1],"device_filter":{"type":"SHSW-1"}}`,
 		"an unknown device":   `{"name":"n","cron_spec":"* * * * *","device_ids":[1,99]}`,
 	}

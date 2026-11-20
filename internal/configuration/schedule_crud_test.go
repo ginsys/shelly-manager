@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -287,4 +288,93 @@ func TestSchedulerFailSchedule_AReplacedSpecIsNotDisabledFromAnEarlierRead(t *te
 
 	assert.True(t, fx.schedule(id).Enabled, "the fixed schedule stays enabled")
 	assert.Empty(t, fx.runs(id), "and no failed run is written for a spec that is gone")
+}
+
+// A poll that read an enabled, unarmed row must not arm it after the user turned it off: arming
+// would put a next_run on a disabled schedule, which a toggle on is the only thing meant to do.
+func TestSchedulerArm_AStaleReadDoesNotArmADisabledSchedule(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", nil, "", 1) // enabled, never armed
+	read := fx.schedule(id)
+	_, err := fx.svc.ToggleDriftSchedule(id) // off
+	require.NoError(t, err)
+
+	fx.s.handle(context.Background(), read, at(0))
+
+	assert.False(t, fx.schedule(id).Enabled)
+	assert.Nil(t, fx.schedule(id).NextRun, "a disabled schedule has no next_run")
+}
+
+func TestSchedulerArm_AStaleReadDoesNotArmAReplacedSpec(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", nil, "", 1)
+	read := fx.schedule(id)
+	updated, err := fx.svc.UpdateDriftSchedule(id, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
+	require.NoError(t, err)
+
+	fx.s.handle(context.Background(), read, at(0))
+
+	assert.True(t, fx.schedule(id).NextRun.Equal(*updated.NextRun), "the edit's next_run stands")
+}
+
+// A schedule that cannot run is disabled with no next_run, so a disabled schedule never shows one.
+func TestSchedulerFailSchedule_ClearsTheNextRunItDisables(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("0 */5 * * * *", ptr(at(0)), "", 1) // six fields, due
+	fx.s.tick(context.Background(), at(time.Minute))
+
+	assert.False(t, fx.schedule(id).Enabled)
+	assert.Nil(t, fx.schedule(id).NextRun)
+}
+
+// The row of a run whose schedule was deleted while it ran must not come back when the run ends.
+func TestSchedulerRun_ADeletedSchedulesRunIsNotRecreated(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	sc := fx.schedule(id)
+	run, err := fx.s.claimAndRecord(sc, at(5*time.Minute), at(time.Minute))
+	require.NoError(t, err)
+	require.NotNil(t, run)
+	require.NoError(t, fx.svc.DeleteDriftSchedule(id))
+
+	fx.s.runClaimed(context.Background(), sc, run, at(time.Minute))
+
+	assert.Zero(t, fx.count(&DriftDetectionRun{}, "schedule_id = ?", id))
+}
+
+// An update whose schedule is deleted between its read and its write must leave no device rows.
+func TestUpdateDriftSchedule_ADeleteInTheMiddleWritesNoDeviceRows(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(0)), "") // no device list yet
+	fired := false
+	require.NoError(t, fx.db.Callback().Query().After("gorm:query").Register("test:delete-after-read", func(tx *gorm.DB) {
+		if fired || tx.Statement.Table != "drift_detection_schedules" {
+			return
+		}
+		fired = true
+		_, err := tx.Statement.ConnPool.ExecContext(tx.Statement.Context, "DELETE FROM drift_detection_schedules")
+		require.NoError(t, err)
+	}))
+
+	_, err := fx.svc.UpdateDriftSchedule(id, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{2, 3}})
+
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	assert.True(t, fired)
+	assert.Zero(t, fx.count(&DriftScheduleDevice{}, "schedule_id = ?", id))
+}
+
+func TestDriftSchedule_ANoDeviceListIsAnEmptyArrayInJSON(t *testing.T) {
+	fx := newSchedFixture(t)
+	created, err := fx.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *"})
+	require.NoError(t, err)
+	got, err := fx.svc.GetDriftSchedule(created.ID)
+	require.NoError(t, err)
+	list, err := fx.svc.ListDriftSchedules()
+	require.NoError(t, err)
+
+	for name, v := range map[string]any{"create": created, "get": got, "list": list[0]} {
+		raw, err := json.Marshal(v)
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), `"device_ids":[]`, name)
+	}
 }

@@ -677,13 +677,11 @@ components:
         device_filter:
           $ref: '#/components/schemas/DriftDeviceFilter'
         last_run:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
         next_run:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: Null while the schedule is disabled.
         run_count:
           type: integer
@@ -696,8 +694,7 @@ components:
           format: date-time
 
     DriftDeviceFilter:
-      type: object
-      nullable: true
+      type: [object, 'null']
       additionalProperties: false
       description: Selects devices by column. A key other than these is refused.
       properties:
