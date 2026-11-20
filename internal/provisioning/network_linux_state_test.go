@@ -131,11 +131,11 @@ func TestGetAvailableNetworks_AGoodScanWithNoNetworksIsEmpty(t *testing.T) {
 }
 
 // nmcli prints its states in the caller's language unless it is told otherwise. The stand-in answers in
-// Dutch when LC_ALL is not C, so a read that does not set it sees "niet beschikbaar" and calls the device
+// Dutch when LC_ALL is not C.UTF-8, so a read that does not set it sees "niet beschikbaar" and calls the device
 // usable.
 func TestGetInterfaceInfo_ReadsTheStateInTheCLocale(t *testing.T) {
 	dir := t.TempDir()
-	script := "#!/bin/sh\nif [ \"$LC_ALL\" = C ]; then printf 'wlo1:wifi:unavailable\\n'; else printf 'wlo1:wifi:niet beschikbaar\\n'; fi\n"
+	script := "#!/bin/sh\nif [ \"$LC_ALL\" = C.UTF-8 ]; then printf 'wlo1:wifi:unavailable\\n'; else printf 'wlo1:wifi:niet beschikbaar\\n'; fi\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "nmcli"), []byte(script), 0o755))
 	t.Setenv("PATH", dir)
 	t.Setenv("LC_ALL", "nl_BE.UTF-8")
@@ -150,9 +150,10 @@ func TestGetInterfaceInfo_ReadsTheStateInTheCLocale(t *testing.T) {
 	assert.Contains(t, err.Error(), "unavailable")
 }
 
-// dutchNmcli puts a stand-in nmcli on PATH that answers in English only when LC_ALL is C and in Dutch
-// otherwise ("geactiveerd", "niet beschikbaar"), and logs LC_ALL with the arguments of every call. The
-// parent environment is Dutch. It returns the call log path.
+// dutchNmcli puts a stand-in nmcli on PATH that answers in English when LC_ALL is C or C.UTF-8 and in
+// Dutch otherwise ("geactiveerd", "niet beschikbaar"). Under plain C it also prints a non-ASCII profile
+// name with "?" for each such character, as nmcli does. It logs LC_ALL with the arguments of every call.
+// The parent environment is Dutch. It returns the call log path.
 func dutchNmcli(t *testing.T) string {
 	t.Helper()
 
@@ -160,12 +161,17 @@ func dutchNmcli(t *testing.T) string {
 	callLog := filepath.Join(dir, "calls.log")
 	script := `#!/bin/sh
 echo "LC_ALL=$LC_ALL $*" >> "$NMCLI_CALL_LOG"
-if [ "$LC_ALL" = C ]; then active=activated; dev=disconnected; else active=geactiveerd; dev='niet beschikbaar'; fi
+name=${NMCLI_ACTIVE_NAME-HomeNet}
+case "$LC_ALL" in
+  C|C.UTF-8) active=activated; dev=disconnected ;;
+  *) active=geactiveerd; dev='niet beschikbaar' ;;
+esac
+if [ "$LC_ALL" != C.UTF-8 ]; then case "$name" in *é*) name="${name%é*}?${name#*é}" ;; esac; fi
 case "$*" in
   *"device status") printf 'wlo1:wifi:%s\n' "$dev" ;;
   *"device wifi list") printf 'HomeNet:WPA2:70:6:2437\n' ;;
   *"-f NAME connection show") printf '%s\n' "${NMCLI_PROFILES-HomeNet}" ;;
-  *"connection show --active") printf 'HomeNet:802-11-wireless:%s\n' "$active" ;;
+  *"connection show --active") printf '%s:802-11-wireless:%s\n' "$name" "$active" ;;
   *"connection show HomeNet") printf '802-11-wireless.ssid:HomeNet\n802-11-wireless.security:wpa-psk\n' ;;
 esac
 `
@@ -194,7 +200,18 @@ func TestDisconnectFromNetwork_BringsDownTheActiveConnectionUnderANonEnglishLoca
 	assert.Contains(t, standInCalls(t, callLog), "connection down HomeNet")
 }
 
-// Every nmcli call of the file runs in the C locale, because the file compares nmcli's words in English.
+// LC_ALL=C makes nmcli print every non-ASCII character of a profile name as "?", so the disconnect would
+// bring down a profile that does not exist and report success. The locale must keep UTF-8.
+func TestDisconnectFromNetwork_BringsDownAProfileWithANonASCIIName(t *testing.T) {
+	callLog := dutchNmcli(t)
+	t.Setenv("NMCLI_ACTIVE_NAME", "Café")
+
+	require.NoError(t, newTestLinuxInterface(t).DisconnectFromNetwork(context.Background()))
+
+	assert.Contains(t, standInCalls(t, callLog), "connection down Café")
+}
+
+// Every nmcli call of the file runs in the C.UTF-8 locale, because the file compares nmcli's words in English.
 // The case calls every method that runs nmcli and reads the locale of each call from the log.
 func TestEveryNmcliCallRunsInTheCLocale(t *testing.T) {
 	callLog := dutchNmcli(t)
@@ -220,7 +237,7 @@ func TestEveryNmcliCallRunsInTheCLocale(t *testing.T) {
 		assert.Contains(t, calls, want, "control: the case did not reach %q", want)
 	}
 	for _, line := range strings.Split(strings.TrimSpace(calls), "\n") {
-		assert.True(t, strings.HasPrefix(line, "LC_ALL=C "), "nmcli ran in the caller's locale: %q", line)
+		assert.True(t, strings.HasPrefix(line, "LC_ALL=C.UTF-8 "), "nmcli ran in the caller's locale: %q", line)
 	}
 }
 

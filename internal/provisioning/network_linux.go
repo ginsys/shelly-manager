@@ -20,12 +20,12 @@ type LinuxNetworkInterface struct {
 	logger *logging.Logger
 }
 
-// nmcliCommand builds an nmcli command that runs in the C locale. nmcli translates its states and
-// messages, and this file compares them in English (nmcli's own advice for parsing its output). Every
-// nmcli call of the file goes through it.
+// nmcliCommand builds an nmcli command that runs in the C.UTF-8 locale. nmcli translates its states and
+// messages, and this file compares them in English. Plain C would also print every non-ASCII character of
+// a profile or network name as "?", so the locale keeps UTF-8. Every nmcli call of the file goes through it.
 func nmcliCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "nmcli", args...)
-	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
 	return cmd
 }
 
