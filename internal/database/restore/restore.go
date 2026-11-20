@@ -103,7 +103,8 @@ func LivePath(dsn string) (string, bool) {
 // database at the next start. A staged restore that already exists is replaced. Every check runs on
 // a copy in the restore directory; a failure removes the copy and leaves the live file and any
 // pending restore as they were. The copy is capped by the free space, after reserving what the apply
-// will need for the copy of the live file.
+// will need for the copy of the live file. A staged file that exists stays until the new one is
+// checked, so its bytes count as used.
 func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -113,9 +114,6 @@ func Stage(ctx context.Context, live, backupPath, backupID string, dryRun bool) 
 	free, err := freeBytes(filepath.Dir(live))
 	if err != nil {
 		return fmt.Errorf("read the free space: %w", err)
-	}
-	if fi, statErr := os.Stat(staged); statErr == nil {
-		free += uint64(fi.Size()) //nolint:gosec // a file size is not negative
 	}
 	reserve := liveSize(live)
 	need := reserve + free/20
