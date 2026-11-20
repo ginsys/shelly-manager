@@ -21,7 +21,8 @@
 
 <script setup lang="ts">
 // One value of a configuration, shown by its shape and never as JSON: an object is its fields, a list
-// of objects is one group per item, a list of plain values is a comma list. `path` is the dotted key
+// of objects is one group per item, a list of plain values is a comma list (an object in a list of
+// mixed values shows as its JSON, so no field is lost). `path` is the dotted key
 // of the value in the server's sources map, where a list item is keyed by its position.
 import { computed } from 'vue'
 import { formatLabel } from '@/utils/config-form'
@@ -54,6 +55,8 @@ function formatEntry(entry: any): string {
   if (entry === null || entry === undefined) return '—'
   if (typeof entry === 'boolean') return entry ? 'Yes' : 'No'
   if (Array.isArray(entry)) return `[${entry.map(formatEntry).join(', ')}]`
+  // An object in a list that is not all objects: JSON keeps its fields, where String() gives "[object Object]".
+  if (typeof entry === 'object') return JSON.stringify(entry)
   return String(entry)
 }
 

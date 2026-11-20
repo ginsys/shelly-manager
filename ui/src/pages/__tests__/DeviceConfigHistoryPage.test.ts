@@ -1,166 +1,113 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router'
 import DeviceConfigHistoryPage from '../DeviceConfigHistoryPage.vue'
 
 vi.mock('@/api/deviceConfig', () => ({
   getConfigHistory: vi.fn(),
-  updateDeviceConfig: vi.fn(),
 }))
 
-import { getConfigHistory, updateDeviceConfig } from '@/api/deviceConfig'
-import { notice, dismissNotice } from '@/composables/useNotice'
+import { getConfigHistory } from '@/api/deviceConfig'
+
+// ginsys/shelly-manager#747 slice 1: the page lists the history the server answers and shows an
+// entry's configuration as fields. It offers no Restore: the call it made merged the entry into the
+// stored row, and the history answer is masked, so no old secret could come back. A real restore is
+// ginsys/shelly-manager#775.
+const stubs = {
+  RouterLink: true,
+  ConfigView: {
+    props: ['config'],
+    template: '<div class="stub-view" data-testid="entry-view">{{ Object.keys(config || {}).join(",") }}</div>',
+  },
+}
 
 const entry = {
   id: 1,
-  device_id: 7,
+  deviceId: 7,
   config: { mqtt: { port: 1883 } },
+  oldConfig: null,
+  changes: null,
   source: 'manual',
   user: 'serge',
   timestamp: '2026-11-18T20:00:00Z',
 }
 
-// ginsys/shelly-manager#614: a failed restore shows an error panel and a restore that worked
-// leaves the page for the configuration page. Neither opens a browser dialog.
-describe('DeviceConfigHistoryPage restore', () => {
-  let alertSpy: ReturnType<typeof vi.spyOn>
+async function openPage() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/devices/:id/config/history', component: DeviceConfigHistoryPage }],
+  })
+  router.push('/devices/7/config/history')
+  await router.isReady()
+  const wrapper = mount(RouterView, { global: { plugins: [router], stubs } })
+  await flushPromises()
+  return wrapper
+}
 
+describe('DeviceConfigHistoryPage', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.mocked(getConfigHistory).mockResolvedValue([entry] as any)
   })
 
-  afterEach(() => {
-    vi.restoreAllMocks()
+  it('lists the entries of the device', async () => {
+    const wrapper = await openPage()
+
+    expect(getConfigHistory).toHaveBeenCalledWith('7')
+    const row = wrapper.get('tbody tr')
+    expect(row.text()).toContain(new Date(entry.timestamp).toLocaleString())
+    expect(row.text()).toContain('manual')
+    expect(row.text()).toContain('serge')
+    expect(wrapper.text()).not.toContain('No configuration history found')
   })
 
-  async function openPage() {
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [
-        { path: '/devices/:id/config/history', component: DeviceConfigHistoryPage },
-        { path: '/devices/:id/config', component: { template: '<div>config page</div>' } },
-      ],
-    })
-    router.push('/devices/7/config/history')
-    await router.isReady()
-    const wrapper = mount(RouterView, { global: { plugins: [router], stubs: { RouterLink: true } } })
-    await flushPromises()
-    return { wrapper, router }
-  }
+  it('shows the configuration of an entry as fields in the viewer', async () => {
+    const wrapper = await openPage()
 
-  it('shows a failed restore as an error panel under the toolbar', async () => {
-    vi.mocked(updateDeviceConfig).mockRejectedValue(new Error('device refused the configuration'))
-    const { wrapper } = await openPage()
+    await wrapper.findAll('button').find((b) => b.text() === 'View')!.trigger('click')
 
-    const restore = wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!
-    await restore.trigger('click')
-    await flushPromises()
-
-    const panel = wrapper.get('[data-testid="restore-error"]')
-    expect(panel.text()).toContain('device refused the configuration')
-    expect(panel.text()).toContain('Restore configuration')
-    expect(alertSpy).not.toHaveBeenCalled()
+    expect(wrapper.get('.modal [data-testid="entry-view"]').text()).toBe('mqtt')
+    expect(wrapper.find('.modal pre').exists()).toBe(false)
   })
 
-  it('shows the failure inside the viewer when the restore started from the viewer', async () => {
-    vi.mocked(updateDeviceConfig).mockRejectedValue(new Error('device refused the configuration'))
-    const { wrapper } = await openPage()
-    await wrapper.findAll('button').find((b) => b.text().trim() === 'View')!.trigger('click')
+  it('closes the viewer', async () => {
+    const wrapper = await openPage()
+    await wrapper.findAll('button').find((b) => b.text() === 'View')!.trigger('click')
 
-    await wrapper.findAll('button').find((b) => b.text().trim() === 'Restore This Version')!.trigger('click')
-    await flushPromises()
+    await wrapper.findAll('.modal button').find((b) => b.text() === 'Close')!.trigger('click')
 
-    expect(wrapper.get('.modal [data-testid="restore-error"]').text()).toContain('device refused the configuration')
-    expect(wrapper.findAll('[data-testid="restore-error"]')).toHaveLength(1)
-    expect(alertSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('.modal').exists()).toBe(false)
   })
 
-  it('goes to the configuration page after a restore that worked, with no dialog', async () => {
-    vi.mocked(updateDeviceConfig).mockResolvedValue(undefined as any)
-    const { wrapper, router } = await openPage()
+  it('offers no Restore, in the list or in the viewer', async () => {
+    const wrapper = await openPage()
+    expect(wrapper.text()).not.toContain('Restore')
 
-    const restore = wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!
-    await restore.trigger('click')
-    await flushPromises()
-
-    expect(router.currentRoute.value.path).toBe('/devices/7/config')
-    expect(alertSpy).not.toHaveBeenCalled()
+    await wrapper.findAll('button').find((b) => b.text() === 'View')!.trigger('click')
+    expect(wrapper.text()).not.toContain('Restore')
   })
 
-  it('clears the failure as soon as the next restore starts, before it finishes', async () => {
-    vi.mocked(updateDeviceConfig).mockRejectedValueOnce(new Error('device refused the configuration'))
-    let finishSecond: (value: any) => void = () => {}
-    vi.mocked(updateDeviceConfig).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finishSecond = resolve
-        }) as any,
-    )
-    const { wrapper, router } = await openPage()
-    const restore = () => wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!
+  it('says there is no history when the list is empty', async () => {
+    vi.mocked(getConfigHistory).mockResolvedValue([])
+    const wrapper = await openPage()
 
-    await restore().trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(true)
-
-    await restore().trigger('click')
-    await flushPromises() // the second restore is still open
-    expect(vi.mocked(updateDeviceConfig)).toHaveBeenCalledTimes(2)
-    expect(router.currentRoute.value.path).toBe('/devices/7/config/history')
-    expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(false)
-
-    finishSecond(undefined)
-    await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/devices/7/config')
+    expect(wrapper.text()).toContain('No configuration history found')
   })
 
-  it('dismisses the failure with its Dismiss button', async () => {
-    vi.mocked(updateDeviceConfig).mockRejectedValue(new Error('device refused the configuration'))
-    const { wrapper } = await openPage()
+  it('shows the failure of the read', async () => {
+    vi.mocked(getConfigHistory).mockRejectedValue(new Error('Unexpected configuration history response'))
+    const wrapper = await openPage()
 
-    await wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!.trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="restore-error"] .dismiss-button').trigger('click')
-
-    expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(false)
+    expect(wrapper.get('.state.error').text()).toContain('Unexpected configuration history response')
   })
 
-  it('shows no Retry button on a retryable failure, since nothing handles it', async () => {
-    vi.mocked(updateDeviceConfig).mockRejectedValue(
-      Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', isAxiosError: true }),
-    )
-    const { wrapper } = await openPage()
+  it('reads the history again on Refresh', async () => {
+    const wrapper = await openPage()
+    vi.mocked(getConfigHistory).mockClear()
 
-    await wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!.trigger('click')
+    await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="restore-error"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="restore-error"] .retry-button').exists()).toBe(false)
-  })
-
-  // ginsys/shelly-manager#648: the page panel is gone once the page is left, so the failure goes to
-  // the app notice.
-  it('shows a restore that fails after the page was left in the notice', async () => {
-    dismissNotice()
-    let rejectRestore: (reason: any) => void = () => {}
-    vi.mocked(updateDeviceConfig).mockImplementation(
-      () =>
-        new Promise((_resolve, reject) => {
-          rejectRestore = reject
-        }) as any,
-    )
-    const { wrapper } = await openPage()
-    await wrapper.findAll('button').find((b) => b.text().trim() === 'Restore')!.trigger('click')
-    await flushPromises() // the restore is open
-    wrapper.unmount()
-
-    rejectRestore(new Error('device refused the configuration'))
-    await flushPromises()
-
-    expect(notice.value?.message).toContain('device refused the configuration')
-    expect(notice.value?.context?.action).toBe('Restore configuration')
+    expect(getConfigHistory).toHaveBeenCalledTimes(1)
   })
 })

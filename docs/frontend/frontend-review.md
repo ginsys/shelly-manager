@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250 and ginsys/shelly-manager#748, and a unit test keeps them equal to the code (section 1)
-**Status:** 131 of 135 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 131 of 136 exported API functions are referenced by the UI (96%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -75,7 +75,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `bulk.ts` | 5 | 5 | |
 | `bulkApply.ts` | 3 | 3 | |
 | `configNew.ts` (per-device templates, overrides, desired config, apply, verify) | 12 | 12 | |
-| `deviceConfig.ts` | 4 | 4 | |
+| `deviceConfig.ts` | 5 | 4 | `updateDeviceConfig` |
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 9 | 9 | |
 | `errorBody.ts` | 4 | 4 | |
@@ -88,7 +88,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **135** | **131** | **4** |
+| **Total** | **136** | **131** | **5** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
@@ -147,10 +147,10 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 |-------|------|-------|-------------|
 | `/` | Devices | 388 | top bar, Device details |
 | `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | 452 | Devices, Device configuration, Drift reports, Task details |
-| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify) | 493 | Device details, Configuration history |
-| `/devices/:id/config/history` | Configuration history | 143 | Device details |
+| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import, history) | 765 | Device details, Configuration history |
+| `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | 132 | Device details |
 | `/templates` | Configuration templates | 395 | top bar, Template detail |
-| `/templates/:id` | Template detail | 375 | Templates |
+| `/templates/:id` | Template detail | 425 | Templates |
 | `/drift/schedules` | Drift schedules (inspect and delete only, see section 5) | 357 | top bar (Drift) |
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
 | `/drift/trends` | Drift trends | 517 | top bar (Drift) |

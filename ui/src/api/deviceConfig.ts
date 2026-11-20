@@ -18,16 +18,36 @@ export interface ConfigDrift {
   liveConfig?: DeviceConfig
 }
 
+// A stored configuration that the server could not read as settings arrives as text (the mask).
+export type StoredConfigBody = DeviceConfig | string | null
+
+// The configuration an import stored for a device (GET /devices/{id}/config), secrets masked.
+export interface StoredDeviceConfig {
+  id: number
+  device_id: number
+  template_id: number | null
+  config: StoredConfigBody
+  last_synced: string | null
+  sync_status: string
+  created_at: string
+  updated_at: string
+}
+
+// One change of the stored configuration. source is the server's action ("manual", "updated", ...)
+// and user is who made it; config is the configuration after the change.
 export interface ConfigHistoryEntry {
   id: number
   deviceId: number
   timestamp: string
-  config: DeviceConfig
+  config: StoredConfigBody
+  oldConfig: StoredConfigBody
+  changes: unknown
   source: string
   user?: string
 }
 
-// Update stored device configuration
+// Update stored device configuration. No page calls it today: the history page's Restore was its only
+// caller and is gone. It stays for a real restore, ginsys/shelly-manager#775.
 export async function updateDeviceConfig(id: number | string, config: DeviceConfig): Promise<DeviceConfig> {
   const res = await api.put<APIResponse<DeviceConfig>>(`/devices/${id}/config`, config)
   if (!res.data.success || !res.data.data) {
@@ -109,12 +129,53 @@ export async function detectConfigDrift(id: number | string, signal?: AbortSigna
   return mapDriftResponse(res.data.data)
 }
 
-// Get configuration change history
-export async function getConfigHistory(id: number | string): Promise<ConfigHistoryEntry[]> {
-  const res = await api.get<APIResponse<{ history: ConfigHistoryEntry[] }>>(`/devices/${id}/config/history`)
+// Get the configuration an import stored for a device. A device that was never imported answers 404,
+// which is "nothing stored" and gives null; any other failure is thrown.
+export async function getStoredDeviceConfig(id: number | string): Promise<StoredDeviceConfig | null> {
+  let res
+  try {
+    res = await api.get<APIResponse<StoredDeviceConfig>>(`/devices/${id}/config`)
+  } catch (e: any) {
+    if (e?.response?.status === 404) return null
+    throw e
+  }
   if (!res.data.success || !res.data.data) {
-    const msg = res.data.error?.message || 'Failed to get configuration history'
+    const msg = res.data.error?.message || 'Failed to get stored device configuration'
     throw new Error(msg)
   }
-  return res.data.data.history || []
+  return res.data.data
+}
+
+// A row of the history answer (internal/configuration ConfigHistory).
+interface ConfigHistoryRow {
+  id: number
+  device_id: number
+  action: string
+  old_config: StoredConfigBody
+  new_config: StoredConfigBody
+  changes: unknown
+  changed_by?: string
+  created_at: string
+}
+
+// Get configuration change history. The answer is a list of stored rows, newest first.
+export async function getConfigHistory(id: number | string): Promise<ConfigHistoryEntry[]> {
+  const res = await api.get<APIResponse<ConfigHistoryRow[]>>(`/devices/${id}/config/history`)
+  if (!res.data.success) {
+    throw new Error(res.data.error?.message || 'Failed to get configuration history')
+  }
+  const rows = res.data.data
+  if (!Array.isArray(rows)) {
+    throw new Error('Unexpected configuration history response')
+  }
+  return rows.map((row) => ({
+    id: row.id,
+    deviceId: row.device_id,
+    timestamp: row.created_at,
+    source: row.action,
+    user: row.changed_by,
+    config: row.new_config,
+    oldConfig: row.old_config,
+    changes: row.changes,
+  }))
 }

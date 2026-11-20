@@ -201,6 +201,12 @@ export function clone<T>(value: T): T {
   return value === undefined ? value : JSON.parse(JSON.stringify(value))
 }
 
+// isSettings is true for a configuration that is an object of settings. A configuration the server
+// could not read as settings arrives as text, and a history entry may hold none (null).
+export function isSettings(config: unknown): config is Record<string, any> {
+  return typeof config === 'object' && config !== null && !Array.isArray(config)
+}
+
 // sameValue compares two JSON values. Objects compare by their serialised form, so only use it on
 // leaves and lists, where key order does not vary.
 export function sameValue(a: any, b: any): boolean {
