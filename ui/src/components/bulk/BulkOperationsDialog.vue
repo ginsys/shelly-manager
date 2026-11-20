@@ -28,7 +28,7 @@
           }}
         </p>
 
-        <p v-if="applying" class="form-note" role="status" data-testid="bulk-apply-running">
+        <p v-if="applyRunning" class="form-note" role="status" data-testid="bulk-apply-running">
           An earlier apply is still running. Closing the window did not stop it. Apply Configuration
           is off until it ends.
         </p>
@@ -104,7 +104,7 @@
 
           <button
             class="operation-card"
-            :disabled="selectedDevices.length === 0 || checking || applying"
+            :disabled="selectedDevices.length === 0 || checking || applyRunning"
             data-testid="bulk-op-apply"
             @click="operation = 'apply'"
           >
@@ -330,6 +330,7 @@ import {
   applyViewOf,
   isApplyResult,
   NothingWrittenError,
+  applyRunning,
   type BulkApplyResult
 } from '@/api/bulkApply'
 import { useError } from '@/composables/useError'
@@ -432,15 +433,12 @@ async function run(
 const handleImport = () => run(bulkImport, 'Bulk import')
 const handleDriftDetect = () => run(bulkDriftDetect, 'Bulk drift detection')
 const handleDriftDetectEnhanced = () => run(bulkDriftDetectEnhanced, 'Drift report')
-// An apply that is still running, whether or not the dialog was closed meanwhile: closing does not stop
-// the call, so a second apply on the same devices must wait for it.
-const applying = ref(false)
-
 // The devices are the ones the operator confirmed in the form, which can differ from the live
 // selection if the page removed a device meanwhile: a device that is gone is answered by the route.
 async function handleApply(p: { deviceIds: number[]; config: Record<string, unknown> }) {
-  if (applying.value) return
-  applying.value = true
+  // A second apply waits for the first, even one started by a dialog that was closed or unmounted.
+  if (applyRunning.value) return
+  applyRunning.value = true
   try {
     await run(
       (request) => bulkApply({ ...request, config: p.config }),
@@ -448,7 +446,7 @@ async function handleApply(p: { deviceIds: number[]; config: Record<string, unkn
       p.deviceIds
     )
   } finally {
-    applying.value = false
+    applyRunning.value = false
   }
 }
 
