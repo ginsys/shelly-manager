@@ -225,6 +225,32 @@ describe('DriftSchedulesPage', () => {
     expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeUndefined()
   })
 
+  it('holds Edit while the toggle of that schedule runs, so the form never opens on the old state', async () => {
+    const wrapper = mountPage({ schedules: [storedSchedule, { ...storedSchedule, id: 2, enabled: false }] })
+    await flushPromises()
+    let finish: () => void = () => {}
+    vi.mocked(useDriftStore().toggle).mockImplementationOnce(
+      () => new Promise<void>(resolve => (finish = resolve)) as never
+    )
+    await wrapper.find('[data-testid="toggle-1"]').trigger('click')
+    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="edit-2"]').attributes('disabled')).toBeUndefined()
+    finish()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="edit-1"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('holds every toggle while the form is opening, so the form never starts from an old state', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    let release: (v: { items: never[] }) => void = () => {}
+    vi.mocked(listDevices).mockImplementationOnce(() => new Promise(resolve => (release = resolve as never)))
+    await wrapper.find('[data-testid="edit-1"]').trigger('click')
+    expect(wrapper.find('[data-testid="toggle-1"]').attributes('disabled')).toBeDefined()
+    release({ items: [] })
+    await flushPromises()
+  })
+
   it('releases the toggle after a failed request', async () => {
     const wrapper = mountPage()
     await flushPromises()
