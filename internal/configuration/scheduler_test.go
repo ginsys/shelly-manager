@@ -448,7 +448,15 @@ func TestSchedulerTick_ALaterScheduleRecordsWhenItReallyStarted(t *testing.T) {
 	fx := newSchedFixture(t)
 	first := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
 	second := fx.add("*/5 * * * *", ptr(at(0)), "", 2)
-	fx.s.since = func(time.Time) time.Duration { return 9*time.Minute + 400*time.Millisecond }
+	// The clock reads 10:00:10 at the start of the poll and 9 min 400 ms later for each schedule.
+	reads := 0
+	fx.s.now = func() time.Time {
+		reads++
+		if reads == 1 {
+			return at(10 * time.Second)
+		}
+		return at(10*time.Second + 9*time.Minute + 400*time.Millisecond)
+	}
 
 	fx.s.tick(context.Background(), at(10*time.Second))
 
@@ -457,6 +465,28 @@ func TestSchedulerTick_ALaterScheduleRecordsWhenItReallyStarted(t *testing.T) {
 		require.Len(t, runs, 1)
 		assert.True(t, runs[0].StartedAt.Equal(at(10*time.Second+9*time.Minute)), "started_at %s", runs[0].StartedAt)
 	}
+}
+
+// Time spent in the database before a schedule is handled counts too: a poll whose due-row query
+// returns two minutes late records the run two minutes after the poll time.
+func TestSchedulerTick_ADatabaseWaitIsPartOfTheElapsedTime(t *testing.T) {
+	fx := newSchedFixture(t)
+	id := fx.add("*/5 * * * *", ptr(at(0)), "", 1)
+	clock := at(10 * time.Second)
+	fx.s.now = func() time.Time { return clock }
+	waited := false
+	require.NoError(t, fx.db.Callback().Query().After("gorm:query").Register("test:slow-query", func(*gorm.DB) {
+		if !waited {
+			waited = true
+			clock = clock.Add(2 * time.Minute)
+		}
+	}))
+
+	fx.s.tick(context.Background(), at(10*time.Second))
+
+	runs := fx.runs(id)
+	require.Len(t, runs, 1)
+	assert.True(t, runs[0].StartedAt.Equal(at(10*time.Second+2*time.Minute)), "started_at %s", runs[0].StartedAt)
 }
 
 // A failure recorded for a schedule that cannot run counts toward the history cap too.

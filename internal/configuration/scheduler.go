@@ -69,9 +69,7 @@ type Scheduler struct {
 	// clientFor builds the client a run reads a device through. It must only read: the default is
 	// the service's own builder, never the one that saves device logins.
 	clientFor func(uint) (shelly.Client, error)
-	// since is the time elapsed from a start instant (tests set it).
-	since func(time.Time) time.Duration
-	// now is the clock read when a poll is received (tests set it).
+	// now is the clock: read when a poll is received and for the time a poll has taken (tests set it).
 	now func() time.Time
 
 	mu     sync.Mutex
@@ -81,7 +79,7 @@ type Scheduler struct {
 
 // NewScheduler creates a scheduler over the schedule rows.
 func NewScheduler(db *gorm.DB, svc *Service, logger *logging.Logger) *Scheduler {
-	return &Scheduler{db: db, svc: svc, logger: logger, clientFor: svc.createClientForDevice, since: time.Since, now: time.Now}
+	return &Scheduler{db: db, svc: svc, logger: logger, clientFor: svc.createClientForDevice, now: time.Now}
 }
 
 // Start begins polling. It fails when the schedule table cannot be read, and when already started.
@@ -153,6 +151,7 @@ func (s *Scheduler) IsRunning() bool {
 // tick handles every schedule that is due at now: it first ends runs another process left running.
 func (s *Scheduler) tick(ctx context.Context, now time.Time) {
 	now = now.UTC()
+	begun := s.now() // before any database call, so a wait there counts as elapsed time too
 	s.interruptStaleRuns(now)
 
 	var due []DriftDetectionSchedule
@@ -161,14 +160,13 @@ func (s *Scheduler) tick(ctx context.Context, now time.Time) {
 		s.logError("read due drift schedules", 0, err)
 		return
 	}
-	begun := time.Now()
 	for _, sc := range due {
 		if ctx.Err() != nil {
 			return
 		}
 		// A schedule behind a long run starts later than the poll that found it due; its run row says
 		// when it really started (whole seconds), or another replica would read the row as a dead run.
-		s.handle(ctx, sc, now.Add(s.since(begun).Truncate(time.Second)))
+		s.handle(ctx, sc, now.Add(s.now().Sub(begun).Truncate(time.Second)))
 	}
 }
 
