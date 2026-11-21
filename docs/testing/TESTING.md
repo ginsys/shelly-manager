@@ -21,7 +21,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 #### `make test`
 **Purpose**: Run basic tests in fast mode, skipping network-dependent tests  
-**Command**: `CGO_ENABLED=1 go test -v -short ./...`  
+**Command**: `SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./...`  
 **When to use**: 
 - During development for quick feedback
 - Default test command for local development
@@ -29,7 +29,7 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 #### `make test-unit` 
 **Purpose**: Run only unit tests (internal packages)  
-**Command**: `CGO_ENABLED=1 go test -v -short ./internal/...`  
+**Command**: `SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./internal/...`  
 **When to use**:
 - Testing business logic in isolation
 - Fastest test execution (11 seconds)
@@ -37,76 +37,34 @@ All test commands are organized into logical groups and defined in the `Makefile
 
 #### `make test-integration`
 **Purpose**: Run integration tests (cmd packages)  
-**Command**: `CGO_ENABLED=1 go test -v -short ./cmd/...`  
+**Command**: `SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short ./cmd/...`  
 **When to use**:
 - Testing CLI commands and their integration
 - After changes to command-line interfaces
 - Verifying end-to-end functionality
 
-#### `make test-full`
-**Purpose**: Run complete test suite including network tests  
-**Command**: `CGO_ENABLED=1 go test -v -timeout=5m ./...`  
-**When to use**:
-- Before committing major changes
-- When network-dependent functionality changes
-- Full validation before releases
-- **Warning**: Slower execution due to network tests, includes 5-minute timeout
-
 ### 2. Race Detection Tests
 
-#### `make test-race` (default)
+#### `make test-race`
 **Purpose**: Run tests with race detection in fast mode  
-**Command**: `CGO_ENABLED=1 go test -v -short -race ./...`  
+**Command**: `SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -race ./...`  
 **When to use**:
 - Detecting concurrency issues during development
-- Default race detection command
 - Before working with goroutines or shared data
-
-#### `make test-race-short`
-**Purpose**: Explicit short mode race detection  
-**Command**: `CGO_ENABLED=1 go test -v -short -race ./...`  
-**When to use**:
-- Same as `make test-race`
-- More explicit about running in short mode
-
-#### `make test-race-full`
-**Purpose**: Full race detection including network tests  
-**Command**: `CGO_ENABLED=1 go test -v -race -timeout=10m ./...`  
-**When to use**:
-- Comprehensive race detection
-- Before releases
-- When debugging race conditions in network code
-- **Warning**: Slowest test execution, includes 10-minute timeout
 
 ### 3. Coverage Tests
 
 #### `make test-coverage`
 **Purpose**: Generate test coverage report in fast mode  
-**Command**: `CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...`  
+**Command**: `SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -coverprofile=coverage.out ./...`  
 **When to use**:
 - Regular coverage checking during development
 - Quick coverage feedback
 - Generates `coverage.html` report
 
-#### `make test-coverage-short`
-**Purpose**: Explicit short mode coverage testing  
-**Command**: Same as `test-coverage`  
-**When to use**:
-- More explicit about running in short mode
-- Same use cases as `test-coverage`
-
-#### `make test-coverage-full`
-**Purpose**: Complete coverage including network tests  
-**Command**: `CGO_ENABLED=1 go test -v -timeout=5m -coverprofile=coverage.out ./...`  
-**When to use**:
-- Comprehensive coverage analysis
-- Before releases
-- When you need complete coverage metrics
-- **Warning**: Includes 5-minute timeout for network tests
-
 #### `make test-coverage-ci`
 **Purpose**: Coverage testing optimized for CI/CD  
-**Command**: `CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...`  
+**Command**: `CGO_ENABLED=1 go test -v -race -short -timeout=20m -coverprofile=coverage.out -covermode=atomic ./...`  
 **When to use**:
 - CI/CD pipelines (used by GitHub Actions)
 - Combines race detection with coverage
@@ -118,13 +76,6 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Quality gates in CI/CD
 - Ensuring minimum test coverage
 - **Requires**: Existing `coverage.out` file
-
-#### `make test-coverage-with-check`
-**Purpose**: Generate coverage and check threshold in one step  
-**When to use**:
-- Complete coverage validation
-- CI/CD quality gates
-- Local validation before commits
 
 ### 4. CI Tests
 
@@ -170,57 +121,25 @@ All test commands are organized into logical groups and defined in the `Makefile
   isolated database per run and are dialect-specific — the SQLite legacy DDL is
   not portable verbatim.
 
-### 5. Performance and Development Tests
+### 5. Performance Tests
 
 #### `make benchmark`
 **Purpose**: Run benchmark tests  
-**Command**: `CGO_ENABLED=1 go test -v -short -bench=. ./...`  
+**Command**: `SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -v -short -bench=. ./...`  
 **When to use**:
 - Performance regression testing
 - Optimizing critical code paths
 - Measuring performance improvements
 
-#### `make test-watch`
-**Purpose**: Watch for file changes and re-run unit tests  
-**Command**: `find . -name "*.go" | entr -c make test-unit`  
-**When to use**:
-- Active development with continuous feedback
-- TDD (Test-Driven Development)
-- **Requires**: `entr` tool installed
-
 ### 6. Quality and Dependencies
 
 #### `make lint`
-**Purpose**: Run basic linting (go fmt + go vet)  
-**Command**: `go fmt ./... && go vet ./...`  
+**Purpose**: Run linting (go vet + golangci-lint)  
+**Command**: `go vet ./... && golangci-lint run --timeout=5m`  
 **When to use**:
 - Basic code quality checking
 - Before commits
 - Quick formatting and basic issue detection
-
-#### `make lint-fix`
-**Purpose**: Run golangci-lint with auto-fix  
-**Command**: `golangci-lint run --fix`  
-**When to use**:
-- Comprehensive linting with automatic fixes
-- Before major commits
-- Catching advanced style and potential issues
-- **Requires**: golangci-lint 2.15.0 (pinned via `mise.toml`)
-
-#### `make format`
-**Purpose**: Format code (gofmt + goimports)  
-**Command**: `go fmt ./... && goimports -w .`  
-**When to use**:
-- Manually format all Go code
-- Fix import organization
-- Standardize code formatting
-
-#### `make format-check`
-**Purpose**: Check if code is properly formatted  
-**When to use**:
-- CI/CD format validation
-- Verify code follows formatting standards
-- Pre-commit validation
 
 #### `make hooks-install`
 **Purpose**: Install git pre-commit hook for automatic formatting  
@@ -244,8 +163,8 @@ All test commands are organized into logical groups and defined in the `Makefile
 - Verifying dependency integrity
 
 #### `make deps-tidy`
-**Purpose**: Download dependencies and clean up go.mod  
-**Command**: `go mod download && go mod tidy`  
+**Purpose**: Clean up go.mod  
+**Command**: `go mod tidy`  
 **When to use**:
 - After adding/removing dependencies
 - Cleaning up unused dependencies
@@ -266,17 +185,13 @@ The GitHub Actions workflow (`test.yml`) uses these steps:
 - Unit testing: `make test-unit`
 - Coverage checking: `make test-coverage`
 - Race detection: `make test-race`
-- Continuous testing: `make test-watch`
 
 **Before Commits**:
-- Full validation: `make test-coverage-with-check`
+- Full validation: `make test-ci`
 - Race detection: `make test-race`
 - Code quality: `make lint`
 
 **Before Releases**:
-- Complete testing: `make test-full`
-- Full race detection: `make test-race-full`
-- Complete coverage: `make test-coverage-full`
 - Performance check: `make benchmark`
 
 **CI/CD Usage**:
@@ -294,7 +209,6 @@ The GitHub Actions workflow (`test.yml`) uses these steps:
 - **CGO_ENABLED=1**: Required for most tests (SQLite database functionality)
 - **Go version**: 1.27+ (pinned in `.go-version`; workflows read it via `go-version-file`)
 - **Optional tools**: 
-  - `entr` for watch mode (`brew install entr`)
   - `golangci-lint 2.15.0` for linting (pinned via `mise.toml`)
   - `bc` for coverage calculations
 
