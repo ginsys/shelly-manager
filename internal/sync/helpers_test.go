@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -285,5 +286,64 @@ func TestHelpersRefuseANameThatLeavesTheRoot(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(outside); len(entries) != 1 {
 		t.Errorf("%d entries below the directory outside the root, want only the one that was there", len(entries))
+	}
+}
+
+// archiveFile is a file that fails where a full disk would: a write after failWriteAfter bytes, a sync or a close.
+type archiveFile struct {
+	buf            bytes.Buffer
+	failWriteAfter int // -1: never
+	syncErr        error
+	closeErr       error
+	closed         bool
+}
+
+func (a *archiveFile) Write(p []byte) (int, error) {
+	if a.failWriteAfter >= 0 && a.buf.Len()+len(p) > a.failWriteAfter {
+		return 0, errors.New("no space left on device")
+	}
+	return a.buf.Write(p)
+}
+func (a *archiveFile) Sync() error  { return a.syncErr }
+func (a *archiveFile) Close() error { a.closed = true; return a.closeErr }
+
+// The gzip trailer and the zip central directory are written when the archive writer is closed, so a failure
+// there, or in the file's own sync or close, must reach the caller: an archive without its end is not an export.
+func TestArchiveWritersReturnTheFirstFailureOfTheEnd(t *testing.T) {
+	writers := map[string]struct {
+		write      func(f syncWriteCloser) error
+		headerSize int // bytes the writer emits before the end, which the file accepts
+	}{
+		"gzip": {func(f syncWriteCloser) error { return gzipTo(f, []byte("data")) }, 10},
+		"zip":  {func(f syncWriteCloser) error { return zipTo(f, "e.json", []byte("data")) }, 0},
+	}
+	for name, w := range writers {
+		t.Run(name, func(t *testing.T) {
+			closeErr, syncErr := errors.New("close failed"), errors.New("sync failed")
+			cases := []struct {
+				desc string
+				file *archiveFile
+				want error // nil: any error
+			}{
+				{"the end cannot be written", &archiveFile{failWriteAfter: w.headerSize}, nil},
+				{"the sync fails", &archiveFile{failWriteAfter: -1, syncErr: syncErr}, syncErr},
+				{"the close fails", &archiveFile{failWriteAfter: -1, closeErr: closeErr}, closeErr},
+			}
+			for _, c := range cases {
+				t.Run(c.desc, func(t *testing.T) {
+					err := w.write(c.file)
+					if err == nil || (c.want != nil && !errors.Is(err, c.want)) {
+						t.Errorf("err = %v, want a failure (%v)", err, c.want)
+					}
+					if !c.file.closed {
+						t.Error("the file was not closed")
+					}
+				})
+			}
+			ok := &archiveFile{failWriteAfter: -1}
+			if err := w.write(ok); err != nil || !ok.closed || ok.buf.Len() == 0 {
+				t.Errorf("a healthy file: err = %v, closed = %v, %d bytes", err, ok.closed, ok.buf.Len())
+			}
+		})
 	}
 }
