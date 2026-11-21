@@ -22,6 +22,13 @@ const identityProbeUserAgent = "shelly-manager/identity-probe"
 // Keying on the user agent reaches the identity read whatever order the client uses.
 func refusingDevice(t *testing.T, probeHangs bool) (addr string) {
 	t.Helper()
+	return refusingDeviceReporting(t, probeHangs, reportedMAC)
+}
+
+// refusingDeviceReporting is refusingDevice whose identity read names mac, which may be another
+// device's MAC or empty (a device that reports none).
+func refusingDeviceReporting(t *testing.T, probeHangs bool, mac string) (addr string) {
+	t.Helper()
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.UserAgent() != identityProbeUserAgent {
@@ -35,7 +42,7 @@ func refusingDevice(t *testing.T, probeHangs bool) (addr string) {
 			}
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"type": "SHPLG-S", "mac": reportedMAC, "auth": true, "fw": "1.14.0"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"type": "SHPLG-S", "mac": mac, "auth": true, "fw": "1.14.0"})
 	}))
 	t.Cleanup(func() { close(release); server.Close() })
 	return strings.TrimPrefix(server.URL, "http://")

@@ -610,18 +610,14 @@ func (h *Handler) writeConfigDeviceError(w http.ResponseWriter, r *http.Request,
 		h.responseWriter().WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeValidationFailed, err.Error(), nil)
 		return
 	}
-	// The device record and the device at its address disagree. The message names the fix and
-	// holds no secret: two MACs.
-	if errors.Is(err, configuration.ErrDeviceIdentity) {
-		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), nil)
-		return
-	}
 	// Another apply to this device is running, in this process or on another replica. The wait
 	// ended, nothing was written, retry.
 	if errors.Is(err, configuration.ErrApplyInProgress) {
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), nil)
 		return
 	}
+	// The rest is a device read error, which also answers a device that is not the stored one with
+	// 409 (the message names the fix and holds no secret: two MACs).
 	h.writeDeviceReadError(w, r, err)
 }
 

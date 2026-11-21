@@ -705,14 +705,11 @@ func (h *Handler) GetDeviceStatus(w http.ResponseWriter, r *http.Request) {
 			h.responseWriter().WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
 			return
 		}
-		if h.writeDeviceLoginRefused(w, r, err) || h.writeDeviceUnanswered(w, r, err) {
-			return
-		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"error":     err.Error(),
 		}).Error("Failed to get device status")
-		h.responseWriter().WriteInternalError(w, r, err)
+		h.writeDeviceReadError(w, r, err)
 		return
 	}
 
@@ -743,15 +740,12 @@ func (h *Handler) GetDeviceEnergy(w http.ResponseWriter, r *http.Request) {
 			h.responseWriter().WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeDeviceOffline, "Device is offline", nil)
 			return
 		}
-		if h.writeDeviceLoginRefused(w, r, err) || h.writeDeviceUnanswered(w, r, err) {
-			return
-		}
 		h.logger.WithFields(map[string]any{
 			"device_id": id,
 			"channel":   channel,
 			"error":     err.Error(),
 		}).Error("Failed to get energy data")
-		h.responseWriter().WriteInternalError(w, r, err)
+		h.writeDeviceReadError(w, r, err)
 		return
 	}
 
@@ -821,9 +815,16 @@ func (h *Handler) writeDeviceLoginRefused(w http.ResponseWriter, r *http.Request
 // that rejects our login is an upstream problem the caller can act on (fix the
 // stored credentials), so it gets 502 with a specific message instead of a
 // generic 500. It is not 401, which would read as the caller's own login to
-// this API failing. A device that did not answer gets 504 (writeDeviceUnanswered).
+// this API failing. A device that is not the stored one (configuration.ErrDeviceIdentity) gets the
+// 409 that control gives; no error carries both that and a refusal (service.loginRefusedBy keeps the
+// identity error alone), so the order of the two checks is free. A device that did not answer gets
+// 504 (writeDeviceUnanswered).
 func (h *Handler) writeDeviceReadError(w http.ResponseWriter, r *http.Request, err error) {
 	if h.writeDeviceLoginRefused(w, r, err) {
+		return
+	}
+	if errors.Is(err, configuration.ErrDeviceIdentity) {
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), nil)
 		return
 	}
 	if h.writeDeviceUnanswered(w, r, err) {
