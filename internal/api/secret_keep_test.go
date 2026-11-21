@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -442,4 +445,22 @@ func TestUpdateTemplateRemovesASecretOnNull(t *testing.T) {
 
 	assert.JSONEq(t, `{"mqtt":{"user":"iot"}}`, storedTemplateConfig(t, handler, id))
 	assert.Empty(t, templateStoredSecrets(t, w))
+}
+
+// The template dialog drops a value in any secret slot, an empty one included, because the server masks
+// only a secret that is set. It reads the slot list from this file, so a slot the server adds must be added
+// there too, or this test fails (ginsys/shelly-manager#747 slice 2).
+func TestUISecretPathsAreTheServerSecretSlots(t *testing.T) {
+	raw, err := os.ReadFile("../../ui/src/utils/secretPaths.json")
+	if err != nil {
+		t.Fatalf("read the UI's secret path list: %v", err)
+	}
+	var ui []string
+	if err := json.Unmarshal(raw, &ui); err != nil {
+		t.Fatalf("parse the UI's secret path list: %v", err)
+	}
+	sort.Strings(ui)
+	if want := allSecretPaths(); !reflect.DeepEqual(ui, want) {
+		t.Errorf("ui/src/utils/secretPaths.json = %v, the server's secret slots are %v", ui, want)
+	}
 }
