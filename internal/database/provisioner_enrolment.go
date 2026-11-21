@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // ErrEnrolmentState is an admin act that the row's enrolment state does not allow: approving a row that is
@@ -172,21 +171,17 @@ func (s *ProvisionerStore) PreapproveFingerprint(ctx context.Context, fingerprin
 	var out ProvisionerAgent
 	created := false
 	err := s.tx(ctx, func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
-			return err
-		}
-		cur, err := lockAgentRow(tx, row.AgentID)
+		cur, wrote, err := s.insertThenLock(tx, &row)
 		// No row at the id after the insert: either the row was deleted in between, which a 409 states
 		// honestly, or the insert was a no-op because another id holds this fingerprint (its own unique
 		// index), a state no register produces, since an id is derived from its fingerprint.
-		if errors.Is(err, ErrAgentNotFound) {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrEnrolmentState
 		}
 		if err != nil {
 			return err
 		}
-		// The token is new and random, so the row holds its hash only if this insert wrote the row.
-		if cur.TokenHash == hash {
+		if wrote {
 			out, created = cur, true
 			return nil
 		}

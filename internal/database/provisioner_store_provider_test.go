@@ -28,6 +28,7 @@ func TestProvisionerStoreProviders(t *testing.T) {
 			checkProvisionerIDRule(t, startProviderManager(t, fixture))
 			checkProvisionerPurgeByState(t, startProviderManager(t, fixture))
 			checkProvisionerAdmin(t, startProviderManager(t, fixture))
+			checkProvisionerKeyed(t, startProviderManager(t, fixture))
 
 			// A restart runs AutoMigrate over a populated database: it must leave the big config in place.
 			t.Run("a restart keeps what the tables hold", func(t *testing.T) {
