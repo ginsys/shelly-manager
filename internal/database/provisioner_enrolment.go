@@ -15,7 +15,9 @@ import (
 // fingerprint that already has a row in any other state than pending.
 var ErrEnrolmentState = errors.New("the agent's enrolment state does not allow this")
 
-// ErrFingerprintInvalid is a fingerprint that is not 32 lowercase hexadecimal characters.
+// ErrFingerprintInvalid is a fingerprint that is neither 32 hexadecimal characters nor eight groups of four
+// joined by hyphens (NormalizeFingerprint), in either case: a wrong length, a character that is not a hexadecimal
+// digit, or hyphens anywhere else.
 var ErrFingerprintInvalid = errors.New("a fingerprint is 32 hexadecimal characters")
 
 // keyedAgentIDPrefix starts the id of an agent enrolled by key: the prefix and the fingerprint.
@@ -174,6 +176,9 @@ func (s *ProvisionerStore) PreapproveFingerprint(ctx context.Context, fingerprin
 			return err
 		}
 		cur, err := lockAgentRow(tx, row.AgentID)
+		// No row at the id after the insert: either the row was deleted in between, which a 409 states
+		// honestly, or the insert was a no-op because another id holds this fingerprint (its own unique
+		// index), a state no register produces, since an id is derived from its fingerprint.
 		if errors.Is(err, ErrAgentNotFound) {
 			return ErrEnrolmentState
 		}

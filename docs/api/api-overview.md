@@ -499,7 +499,7 @@ connects to the host first, and it fails with the connection error when they are
 
 ---
 
-### 16. Provisioner Agent Management (10 endpoints)
+### 16. Provisioner Agent Management (13 endpoints)
 
 Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/provisioning/provision` above, requires a key (`Authorization: Bearer <key>` or `X-API-Key`) when the manager has an admin key configured, and answers `401` without it. The admin key opens every route. The agent key (`security.agent_api_key`, `SHELLY_SECURITY_AGENT_API_KEY`) is accepted on the five routes the agent itself calls: register, poll tasks, update task status, report discovered devices and health. Creating a task and listing agents, tasks or discovered devices need the admin key, and so does everything else; the agent key opens nothing else in the API. The provisioner agent sends the agent key as its `api.key` (`SHELLY_API_KEY`). The `Bearer ` prefix is case-sensitive.
 
