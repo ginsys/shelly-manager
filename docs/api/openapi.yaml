@@ -1477,6 +1477,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '409':
+          description: >-
+            The device refuses the stored login and the device at the stored address is not
+            the stored device (error code CONFLICT). Its MAC differs, it reports none, or the
+            record has none.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
         '504':
           description: >-
             The device did not answer in time (error code DEVICE_UNREACHABLE).
@@ -1503,6 +1512,15 @@ paths:
       responses:
         '200':
           description: Energy metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '409':
+          description: >-
+            The device refuses the stored login and the device at the stored address is not
+            the stored device (error code CONFLICT). Its MAC differs, it reports none, or the
+            record has none.
           content:
             application/json:
               schema:
@@ -1603,6 +1621,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '409':
+          description: >-
+            The device refuses the stored login and the device at the stored address is not
+            the stored device (error code CONFLICT). Its MAC differs, it reports none, or the
+            record has none.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
         '504':
           description: >-
             The device did not answer in time (error code DEVICE_UNREACHABLE).
@@ -1646,6 +1673,15 @@ paths:
           description: >-
             The device rejected the stored login (error code EXTERNAL_SERVICE_ERROR).
             Store the right login with PUT /api/v1/devices/{id}/config/auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '409':
+          description: >-
+            The device refuses the stored login and the device at the stored address is not
+            the stored device (error code CONFLICT). Its MAC differs, it reports none, or the
+            record has none.
           content:
             application/json:
               schema:
