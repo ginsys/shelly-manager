@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
@@ -229,6 +230,10 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 				return fmt.Errorf("device %s configuration row: %w", in.MAC, err)
 			}
 			if desired != "" {
+				// A created device has no earlier desired configuration.
+				if err := configuration.RecordDesiredChange(tx, device.ID, "import", "", desired); err != nil {
+					return fmt.Errorf("device %s: %w", in.MAC, err)
+				}
 				restored[device.ID] = true
 			}
 			result.Imported++
@@ -249,7 +254,16 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 			if !in.LastSeen.IsZero() {
 				updates["last_seen"] = in.LastSeen
 			}
+			// The old side of the history row is the desired_config this update replaces (never the older
+			// device_configs row storedDesiredConfig may return), read under a row lock so a write that
+			// commits meanwhile cannot leave it stale. SQLite drops the lock and serialises writers anyway.
+			var oldDesired string
 			if desired != "" {
+				var current database.Device
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "desired_config").Take(&current, existing.ID).Error; err != nil {
+					return fmt.Errorf("read device %s desired configuration: %w", in.MAC, err)
+				}
+				oldDesired = current.DesiredConfig
 				// A new desired configuration has not reached the device yet.
 				updates["desired_config"] = desired
 				updates["config_applied"] = false
@@ -263,6 +277,9 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 				return fmt.Errorf("device %s configuration row: %w", in.MAC, err)
 			}
 			if desired != "" {
+				if err := configuration.RecordDesiredChange(tx, existing.ID, "import", oldDesired, desired); err != nil {
+					return fmt.Errorf("device %s: %w", in.MAC, err)
+				}
 				restored[existing.ID] = true
 			}
 			result.Imported++

@@ -121,6 +121,7 @@ func openManager(factory *provider.Factory, config provider.DatabaseConfig, logg
 		&configuration.DriftScheduleDevice{},
 		&ConfigTemplate{},
 		&configuration.DbDeviceTag{},
+		&configuration.DesiredConfigHistory{},
 		&ProvisionerAgent{},
 		&ProvisioningTask{},
 	); err != nil {
@@ -534,22 +535,34 @@ func writeDeviceColumns(db *gorm.DB, id uint, columns map[string]any, moveVersio
 // DeleteDevice deletes a device (legacy compatibility)
 func (m *Manager) DeleteDevice(id uint) error {
 	start := time.Now()
-	result := m.GetDB().Delete(&Device{}, id)
+	// The device goes first and its history rows after, in one transaction: a recompute that holds the
+	// device row commits its row before the delete reaches the device, and the delete below takes it.
+	var deleted int64
+	err := m.GetDB().Transaction(func(tx *gorm.DB) error {
+		result := tx.Delete(&Device{}, id)
+		if result.Error != nil {
+			return result.Error
+		}
+		if deleted = result.RowsAffected; deleted == 0 {
+			return nil
+		}
+		return tx.Where("device_id = ?", id).Delete(&configuration.DesiredConfigHistory{}).Error
+	})
 	duration := time.Since(start)
 
-	if result.Error != nil {
+	if err != nil {
 		m.logger.WithFields(map[string]any{
 			"device_id": id,
-			"error":     result.Error.Error(),
+			"error":     err.Error(),
 			"duration":  duration,
 			"operation": "delete",
 			"table":     "devices",
 			"component": "database",
 		}).Error("Database operation failed")
-		return result.Error
+		return err
 	}
 
-	if result.RowsAffected == 0 {
+	if deleted == 0 {
 		m.logger.WithFields(map[string]any{
 			"device_id": id,
 			"duration":  duration,

@@ -16,6 +16,8 @@ import (
 type GormConfigRepository struct {
 	db     *gorm.DB
 	logger *logging.Logger
+	// inTx is true for a repository built on a transaction handle (NewGormConfigRepositoryOn).
+	inTx bool
 
 	// The pinned apply-lock connections one process may hold at once (see takeLockSlot).
 	lockSlotsOnce sync.Once
@@ -92,8 +94,12 @@ func NewGormConfigRepositoryOn(tx *gorm.DB, logger *logging.Logger) *GormConfigR
 	if logger == nil {
 		logger = logging.GetDefault()
 	}
-	return &GormConfigRepository{db: tx, logger: logger}
+	return &GormConfigRepository{db: tx, logger: logger, inTx: true}
 }
+
+// InTransaction reports whether the repository works inside a transaction its caller owns, where a
+// second read can see the same snapshot and miss again.
+func (r *GormConfigRepository) InTransaction() bool { return r.inTx }
 
 // Template CRUD
 
@@ -257,12 +263,63 @@ func (r *GormConfigRepository) UpdateDeviceOverrides(deviceID uint, overrides js
 // changed configuration, after a failed second write or while an apply's compare-and-set
 // (SetDeviceConfigAppliedIfDesired) lands between them. The map form writes config_applied even
 // though false is its zero value.
-func (r *GormConfigRepository) SetDeviceDesiredConfigPending(deviceID uint, config json.RawMessage) error {
-	updates := map[string]any{"desired_config": string(config), "config_applied": false}
-	if err := r.db.Model(&DbDevice{}).Where("id = ?", deviceID).Updates(updates).Error; err != nil {
-		return fmt.Errorf("failed to store device desired config as pending: %w", err)
+//
+// The write applies only while the device still holds what the recompute read (the template ids, the
+// overrides and the desired text, compared byte for byte), otherwise nothing is written and
+// ErrDesiredChanged says so: a rollback or an import that committed in between is not overwritten. The
+// history row is written in the same transaction, when the UPDATE changed a row and the texts differ
+// (ginsys/shelly-manager#775).
+func (r *GormConfigRepository) SetDeviceDesiredConfigPending(deviceID uint, read DesiredRead, config json.RawMessage) error {
+	text := string(config)
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		dialect := tx.Name()
+		updates := map[string]any{"desired_config": text, "config_applied": false}
+		res := tx.Model(&DbDevice{}).
+			Where(deviceReadCondition(dialect), deviceID, read.TemplateIDs, read.Overrides, read.Desired).
+			Updates(updates)
+		if res.Error != nil {
+			return fmt.Errorf("failed to store device desired config as pending: %w", res.Error)
+		}
+		if res.RowsAffected > 0 {
+			return RecordDesiredChange(tx, deviceID, "recompute", read.Desired, text)
+		}
+
+		// MySQL without clientFoundRows reports changed rows, so an UPDATE that changes no column
+		// reports none. A row that already holds what was wanted (the read inputs, the new text, pending)
+		// is done and is no miss.
+		var held int64
+		err := tx.Model(&DbDevice{}).
+			Where(deviceReadCondition(dialect)+" AND config_applied = ?", deviceID, read.TemplateIDs, read.Overrides, text, false).
+			Count(&held).Error
+		if err != nil {
+			return fmt.Errorf("failed to store device desired config as pending: %w", err)
+		}
+		if held > 0 {
+			return nil
+		}
+
+		// A device deleted since the read has nothing to write, as before, and no row to leave behind.
+		var exists int64
+		if err := tx.Model(&DbDevice{}).Where("id = ?", deviceID).Count(&exists).Error; err != nil {
+			return fmt.Errorf("failed to store device desired config as pending: %w", err)
+		}
+		if exists == 0 {
+			return nil
+		}
+		return ErrDesiredChanged
+	})
+}
+
+// deviceReadCondition is the WHERE clause of SetDeviceDesiredConfigPending: the device, and the three
+// columns a recompute reads, byte-exact (see desiredConfigMatchCondition).
+func deviceReadCondition(dialect string) string {
+	equal := func(column string) string {
+		if dialect == "mysql" {
+			return "BINARY COALESCE(" + column + ", '') = ?"
+		}
+		return "COALESCE(" + column + ", '') = ?"
 	}
-	return nil
+	return "id = ? AND " + equal("template_ids") + " AND " + equal("overrides") + " AND " + equal("desired_config")
 }
 
 func (r *GormConfigRepository) SetDeviceConfigApplied(deviceID uint, applied bool) error {

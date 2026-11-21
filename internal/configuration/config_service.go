@@ -25,6 +25,18 @@ var (
 	ErrNoDesiredConfig = errors.New("no desired configuration is set for this device, so there is nothing to compare it with")
 )
 
+// ErrDesiredChanged is returned by SetDeviceDesiredConfigPending when the stored template ids, overrides
+// or desired configuration are no longer what the recompute read: nothing was written.
+var ErrDesiredChanged = errors.New("the device configuration changed during the recompute")
+
+// DesiredRead is the stored state a recompute computed its result from. The write applies only while
+// the device still holds it.
+type DesiredRead struct {
+	TemplateIDs string
+	Overrides   string
+	Desired     string
+}
+
 type ServiceConfigTemplate struct {
 	ID          uint            `json:"id"`
 	Name        string          `json:"name"`
@@ -67,7 +79,7 @@ type ConfigRepository interface {
 	// SetDeviceDesiredConfigPending stores the desired configuration and clears the applied flag
 	// in one write, so no failure or concurrent apply can leave the flag true against a changed
 	// configuration.
-	SetDeviceDesiredConfigPending(deviceID uint, config json.RawMessage) error
+	SetDeviceDesiredConfigPending(deviceID uint, read DesiredRead, config json.RawMessage) error
 	SetDeviceConfigApplied(deviceID uint, applied bool) error
 	// SetDeviceConfigAppliedIfDesired sets the applied flag only while the stored desired
 	// configuration still equals desiredConfig. It reports whether the flag was set.
@@ -590,7 +602,32 @@ func StoredDesiredConfig(raw string) (*DeviceConfiguration, error) {
 	return parseApplicableDesiredConfig(raw)
 }
 
+// recomputeAttempts is how many times a recompute reads and writes before it gives up on a device that
+// keeps changing under it.
+const recomputeAttempts = 3
+
+// transactional is implemented by a repository that works inside a transaction its caller owns.
+type transactional interface{ InTransaction() bool }
+
+// RecomputeDesiredConfig rebuilds the desired configuration from the templates and overrides and
+// stores it, pending. The write applies only to the state it read, so on a miss it reads again, a
+// bounded number of times. Inside a transaction a second read can see the same snapshot and miss
+// again, so there a miss returns the error at once: the caller fails.
 func (s *ConfigurationService) RecomputeDesiredConfig(deviceID uint) error {
+	attempts := recomputeAttempts
+	if tx, ok := s.repo.(transactional); ok && tx.InTransaction() {
+		attempts = 1
+	}
+	var err error
+	for i := 0; i < attempts; i++ {
+		if err = s.recomputeDesiredConfigOnce(deviceID); !errors.Is(err, ErrDesiredChanged) {
+			return err
+		}
+	}
+	return err
+}
+
+func (s *ConfigurationService) recomputeDesiredConfigOnce(deviceID uint) error {
 	device, err := s.repo.GetDevice(deviceID)
 	if err != nil {
 		return fmt.Errorf("failed to get device: %w", err)
@@ -640,7 +677,7 @@ func (s *ConfigurationService) RecomputeDesiredConfig(deviceID uint) error {
 		return fmt.Errorf("failed to marshal desired config: %w", err)
 	}
 
-	if err := s.repo.SetDeviceDesiredConfigPending(deviceID, desiredJSON); err != nil {
+	if err := s.repo.SetDeviceDesiredConfigPending(deviceID, DesiredRead{TemplateIDs: device.TemplateIDs, Overrides: device.Overrides, Desired: device.DesiredConfig}, desiredJSON); err != nil {
 		return fmt.Errorf("failed to store desired config as pending: %w", err)
 	}
 

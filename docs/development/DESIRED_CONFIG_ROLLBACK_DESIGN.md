@@ -282,13 +282,23 @@ and the pending flag in one UPDATE as `SetDeviceDesiredConfigPending` does, and 
 - **A recompute racing a rollback.** The recompute reads at `config_service.go:594-604` and writes at
   `:643` with no check, so a rollback that commits between could be overwritten by a recompute built
   on the old inputs, and Apply would send the old desired. The recompute's write becomes conditional on
-  the template ids and overrides it read (the same shape). On a miss it re-reads and tries again, a
-  bounded number of times, then returns the error.
+  the template ids, the overrides and the desired text it read (the same shape; the desired text so the
+  history row's old side is what the write replaced). On a miss it re-reads and tries again, a
+  bounded number of times (three), then returns the error. A write that changes no column is no miss:
+  MySQL without `clientFoundRows` reports 0 rows for it, so a zero count is recounted before it is read as
+  a miss.
 - **Inside a transaction the retry does not run.** `recomputeTemplateDevices` calls
   `RecomputeDesiredConfig` inside the import transaction (`import_store.go:356-382`), where a second
   read can see the same snapshot and miss again. There a miss returns the error at once, which fails
   the import, as any recompute error does there. A test pins this: a conditional recompute write that
   misses inside a transaction returns its error and does not loop.
+- **What slice 1 stores.** A row is written when the UPDATE changed a row and the two real texts differ
+  byte for byte, and only then; a device deleted after the read leaves no row. An empty side, and a text
+  that is not JSON and so cannot be masked, are stored NULL and never raw, so a row whose `new_desired` is
+  NULL is not a rollback source and the rollback must skip it. The three text columns are unsized
+  (`text` on PostgreSQL and SQLite, `longtext` on MySQL), never narrower than `devices.desired_config`.
+  A device keeps its newest 50 rows (a rollback undoes recent edits; at about 5 KB a text that is about
+  0.5 MB a device), pruned at insert, so a pruned row can be the one a later `restored_from` names.
 - **The history row.** A rollback row names its version through `restored_from`, so the card can say
   "restored to version N" without a free-text field.
 
@@ -355,8 +365,8 @@ Candidates, each with one recommendation:
 
 1. **Detach the templates on rollback** (section 3.2). Recommended: yes, shown in the confirm, with the
    way back.
-2. **Retention of the desired history** (section 3.1). Recommended: decide in slice 1 with a number and
-   a reason; not blocking.
+2. **Retention of the desired history** (section 3.1). Decided in slice 1: the newest 50 rows per device
+   (section 3.4, "What slice 1 stores").
 
 ## 6. What this does not solve
 
