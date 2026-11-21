@@ -1,0 +1,123 @@
+{
+  "configuration": {
+    "wifi": {
+      "enable": true,
+      "ssid": "HomeNet",
+      "password": "golden-sta-key",
+      "ipv4mode": "dhcp",
+      "ap": {
+        "enable": false,
+        "ssid": "shellyswitch25-AABBCC",
+        "key": "golden-ap-key"
+      }
+    },
+    "mqtt": {
+      "enable": true,
+      "server": "broker.example.net:1883",
+      "user": "shelly",
+      "pass": "golden-mqtt-pass",
+      "id": "shellyswitch25-AABBCC",
+      "keep_alive": 60
+    },
+    "auth": {
+      "enable": true,
+      "user": "admin",
+      "pass": "golden-login-pass"
+    },
+    "system": {
+      "device": {
+        "name": "Garage",
+        "mac": "E8DB84AABBCC",
+        "hostname": "shellyswitch25-AABBCC",
+        "profile": "SHSW-25",
+        "tz": "Europe/Brussels"
+      },
+      "location": {
+        "lat": 50.8503,
+        "lng": 4.3517
+      }
+    },
+    "cloud": {
+      "enable": false
+    },
+    "relay": {
+      "default_state": "off",
+      "btn_type": "toggle",
+      "auto_on": 0,
+      "auto_off": 0,
+      "has_timer": false,
+      "relays": [
+        {
+          "id": 0,
+          "name": "Pump",
+          "default_state": "off",
+          "auto_on": 0,
+          "auto_off": 0,
+          "schedule": false,
+          "appliance_type": "General",
+          "schedule_rules": [],
+          "max_power": 0
+        },
+        {
+          "id": 1,
+          "default_state": "last",
+          "auto_on": 0,
+          "auto_off": 30,
+          "schedule": true,
+          "appliance_type": "Heater",
+          "schedule_rules": [
+            "0700-0123456-on",
+            "2200-0123456-off"
+          ],
+          "max_power": 1200
+        }
+      ]
+    },
+    "power_metering": {
+      "power_correction": 1
+    },
+    "roller": {},
+    "coiot": {
+      "enabled": true,
+      "server": "",
+      "port": 0,
+      "period": 0
+    },
+    "raw": {
+      "build_info": {
+        "build_id": "20230913-112316/v1.14.0-gcb84623",
+        "build_timestamp": "2023-09-13T11:23:16Z",
+        "build_version": "1.0"
+      },
+      "eco_mode_enabled": false,
+      "fw": "20230913-112316/v1.14.0-gcb84623",
+      "hwinfo": {
+        "batch_id": 1,
+        "hw_revision": "prod-1.0"
+      },
+      "pin_code": "",
+      "time": "09:15",
+      "tz_dst": false,
+      "tz_dst_auto": true,
+      "tz_utc_offset": 3600,
+      "tzautodetect": false,
+      "wifi_sta1": {
+        "dns": null,
+        "enabled": false,
+        "gw": null,
+        "ip": null,
+        "ipv4_method": "dhcp",
+        "mask": null,
+        "ssid": null
+      }
+    }
+  },
+  "conversion_info": {
+    "has_typed_config": true,
+    "has_raw_config": true,
+    "converted_from": "raw",
+    "warnings": [
+      "Unconverted settings stored in raw field: build_info, eco_mode_enabled, fw, hwinfo, pin_code, time, tz_dst, tz_dst_auto, tz_utc_offset, tzautodetect, wifi_sta1"
+    ]
+  }
+}

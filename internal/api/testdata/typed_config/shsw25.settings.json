@@ -1,0 +1,57 @@
+{
+  "device": {
+    "type": "SHSW-25",
+    "mac": "E8DB84AABBCC",
+    "hostname": "shellyswitch25-AABBCC",
+    "num_outputs": 2,
+    "num_meters": 2,
+    "num_rollers": 1
+  },
+  "wifi_ap": {"enabled": false, "ssid": "shellyswitch25-AABBCC", "key": "golden-ap-key"},
+  "wifi_sta": {
+    "enabled": true, "ssid": "HomeNet", "key": "golden-sta-key", "ipv4_method": "dhcp",
+    "ip": null, "gw": null, "mask": null, "dns": null
+  },
+  "wifi_sta1": {"enabled": false, "ssid": null, "ipv4_method": "dhcp", "ip": null, "gw": null, "mask": null, "dns": null},
+  "mqtt": {
+    "enable": true, "server": "broker.example.net:1883", "user": "shelly", "pass": "golden-mqtt-pass",
+    "reconnect_timeout_max": 60.0, "reconnect_timeout_min": 2.0, "clean_session": true,
+    "keep_alive": 60, "max_qos": 0, "retain": false, "update_period": 30, "id": "shellyswitch25-AABBCC"
+  },
+  "sntp": {"server": "time.google.com"},
+  "login": {"enabled": true, "unprotected": false, "username": "admin", "password": "golden-login-pass"},
+  "pin_code": "",
+  "coiot": {"enabled": true, "update_period": 15, "peer": ""},
+  "name": "Garage",
+  "fw": "20230913-112316/v1.14.0-gcb84623",
+  "build_info": {
+    "build_id": "20230913-112316/v1.14.0-gcb84623",
+    "build_timestamp": "2023-09-13T11:23:16Z",
+    "build_version": "1.0"
+  },
+  "cloud": {"enabled": false, "connected": false},
+  "timezone": "Europe/Brussels",
+  "lat": 50.8503,
+  "lng": 4.3517,
+  "tzautodetect": false,
+  "tz_utc_offset": 3600,
+  "tz_dst": false,
+  "tz_dst_auto": true,
+  "time": "09:15",
+  "hwinfo": {"hw_revision": "prod-1.0", "batch_id": 1},
+  "mode": "relay",
+  "max_power": 0,
+  "eco_mode_enabled": false,
+  "relays": [
+    {
+      "name": "Pump", "appliance_type": "General", "ison": false, "has_timer": false, "default_state": "off",
+      "btn_type": "toggle", "btn_reverse": 0, "auto_on": 0, "auto_off": 0, "power": 0,
+      "schedule": false, "schedule_rules": [], "max_power": 0
+    },
+    {
+      "name": null, "appliance_type": "Heater", "ison": true, "has_timer": false, "default_state": "last",
+      "btn_type": "edge", "btn_reverse": 1, "auto_on": 0, "auto_off": 30, "power": 0,
+      "schedule": true, "schedule_rules": ["0700-0123456-on", "2200-0123456-off"], "max_power": 1200
+    }
+  ]
+}
