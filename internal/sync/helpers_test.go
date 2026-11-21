@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -296,6 +297,7 @@ type archiveFile struct {
 	syncErr        error
 	closeErr       error
 	closed         bool
+	syncedLen      int // bytes in the file when Sync was called
 }
 
 func (a *archiveFile) Write(p []byte) (int, error) {
@@ -304,7 +306,7 @@ func (a *archiveFile) Write(p []byte) (int, error) {
 	}
 	return a.buf.Write(p)
 }
-func (a *archiveFile) Sync() error  { return a.syncErr }
+func (a *archiveFile) Sync() error  { a.syncedLen = a.buf.Len(); return a.syncErr }
 func (a *archiveFile) Close() error { a.closed = true; return a.closeErr }
 
 // The gzip trailer and the zip central directory are written when the archive writer is closed, so a failure
@@ -323,17 +325,22 @@ func TestArchiveWritersReturnTheFirstFailureOfTheEnd(t *testing.T) {
 			cases := []struct {
 				desc string
 				file *archiveFile
-				want error // nil: any error
+				want error  // nil: any error
+				text string // the error must say this, so that a failure elsewhere cannot satisfy the case
 			}{
-				{"the end cannot be written", &archiveFile{failWriteAfter: w.headerSize}, nil},
-				{"the sync fails", &archiveFile{failWriteAfter: -1, syncErr: syncErr}, syncErr},
-				{"the close fails", &archiveFile{failWriteAfter: -1, closeErr: closeErr}, closeErr},
+				// the sync would fail too: the failure of the archive close, which comes first, is the one returned
+				{"the end cannot be written", &archiveFile{failWriteAfter: w.headerSize, syncErr: syncErr}, nil, "failed to finish " + name},
+				{"the sync fails", &archiveFile{failWriteAfter: -1, syncErr: syncErr}, syncErr, ""},
+				{"the close fails", &archiveFile{failWriteAfter: -1, closeErr: closeErr}, closeErr, ""},
 			}
 			for _, c := range cases {
 				t.Run(c.desc, func(t *testing.T) {
 					err := w.write(c.file)
 					if err == nil || (c.want != nil && !errors.Is(err, c.want)) {
 						t.Errorf("err = %v, want a failure (%v)", err, c.want)
+					}
+					if err != nil && !strings.Contains(err.Error(), c.text) {
+						t.Errorf("err = %v, want it to say %q", err, c.text)
 					}
 					if !c.file.closed {
 						t.Error("the file was not closed")
@@ -343,6 +350,10 @@ func TestArchiveWritersReturnTheFirstFailureOfTheEnd(t *testing.T) {
 			ok := &archiveFile{failWriteAfter: -1}
 			if err := w.write(ok); err != nil || !ok.closed || ok.buf.Len() == 0 {
 				t.Errorf("a healthy file: err = %v, closed = %v, %d bytes", err, ok.closed, ok.buf.Len())
+			}
+			// the sync must see the whole archive: a sync before the archive close leaves the end unsynced
+			if ok.syncedLen != ok.buf.Len() {
+				t.Errorf("the file held %d of %d bytes when it was synced", ok.syncedLen, ok.buf.Len())
 			}
 		})
 	}
