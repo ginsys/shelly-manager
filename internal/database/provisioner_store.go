@@ -445,15 +445,25 @@ func failStranded(tx *gorm.DB, agentID, reason string, now time.Time) error {
 // nobody was given, its status reads offline and its stranded tasks fail. The row, its key and its approval
 // stay, so the agent's next start answers a signed challenge with no operator step.
 func endApprovedSession(tx *gorm.DB, agent ProvisionerAgent, now time.Time) error {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	hash, err := neverIssuedTokenHash()
+	if err != nil {
 		return err
 	}
 	if err := failStranded(tx, agent.AgentID, "the agent was silent too long and its session ended", now); err != nil {
 		return err
 	}
 	return tx.Model(&ProvisionerAgent{}).Where("id = ?", agent.ID).
-		Updates(map[string]any{"token_hash": HashAgentToken(hex.EncodeToString(raw)), "status": "offline"}).Error
+		Updates(map[string]any{"token_hash": hash, "status": "offline"}).Error
+}
+
+// neverIssuedTokenHash is the hash of a random token that is discarded at once. The token column is not null
+// and unique, so a row that holds no token still holds a value no caller can present.
+func neverIssuedTokenHash() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return HashAgentToken(hex.EncodeToString(raw)), nil
 }
 
 // purgeSilence is how long a row in this state must be silent before the purge acts on it, and whether the
@@ -602,7 +612,8 @@ type ProvisionerCounts struct {
 	Agents, ActiveAgents, Tasks, PendingTasks int64
 }
 
-// Counts counts agents (active: seen within offlineAfter of now) and tasks (pending: pending or assigned).
+// Counts counts agents (active: legacy or approved, and seen within offlineAfter of now) and tasks
+// (pending: pending or assigned).
 func (s *ProvisionerStore) Counts(ctx context.Context, now time.Time, offlineAfter time.Duration) (ProvisionerCounts, error) {
 	db := s.db.WithContext(ctx)
 	var c ProvisionerCounts
@@ -613,7 +624,10 @@ func (s *ProvisionerStore) Counts(ctx context.Context, now time.Time, offlineAft
 		args  []interface{}
 	}{
 		{&c.Agents, &ProvisionerAgent{}, "1 = 1", nil},
-		{&c.ActiveAgents, &ProvisionerAgent{}, "last_seen >= ?", []interface{}{now.Add(-offlineAfter)}},
+		// Only a legacy (or stateless) or approved row is a working agent: a pending, preapproved or
+		// rejected one is a row the operator has not let in, however recently it was seen.
+		{&c.ActiveAgents, &ProvisionerAgent{}, "last_seen >= ? AND (enrolment_state IS NULL OR enrolment_state IN ?)",
+			[]interface{}{now.Add(-offlineAfter), []string{EnrolmentLegacy, EnrolmentApproved}}},
 		{&c.Tasks, &ProvisioningTask{}, "1 = 1", nil},
 		{&c.PendingTasks, &ProvisioningTask{}, "status IN ?", []interface{}{[]string{"pending", "assigned"}}},
 	} {
