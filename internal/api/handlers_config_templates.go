@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -696,6 +697,11 @@ func restoreMaskedSecrets(incoming, stored *configuration.DeviceConfiguration) {
 	storedSlots := secretSlots(stored)
 	for path, slot := range secretSlots(incoming) {
 		if slot.get() != secretMask {
+			// A URL list that mixes the mask with other lines cannot be stored: the mask stands for a
+			// list the client no longer holds. The list is dropped as not sent, so the stored one stays.
+			if strings.HasPrefix(path, "actions.") && slices.Contains(strings.Split(slot.get(), "\n"), secretMask) {
+				slot.set("")
+			}
 			continue
 		}
 		kept := ""
@@ -815,19 +821,7 @@ func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, rem
 	if incoming == nil {
 		return
 	}
-	if incoming.Actions != nil {
-		// A null found by position is a removal of that entry's list, whatever its key is.
-		gone := map[string]bool{}
-		for path := range removed {
-			gone[path] = removed[path]
-		}
-		for i, key := range actionSlotKeys(*incoming.Actions) {
-			if removed[actionNullMark(i)] {
-				gone[key] = true
-			}
-		}
-		removed = gone
-	}
+	removed = actionRemovals(incoming, removed)
 	storedSlots := secretSlots(stored)
 	for path, old := range storedSlots {
 		if old.present() && !removed[path] {
@@ -836,6 +830,45 @@ func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, rem
 	}
 	for path, slot := range secretSlots(incoming) {
 		if old, ok := storedSlots[path]; ok && restorableSlot(path) && old.present() && !slot.present() && !removed[path] {
+			slot.put(old.get())
+		}
+	}
+}
+
+// actionRemovals adds to removed the slot key of each action whose URL list was sent as null. A null
+// is found by the position of the entry in the body, and the key of an entry holds its identity,
+// which only the decoded body can tell.
+func actionRemovals(incoming *configuration.DeviceConfiguration, removed map[string]bool) map[string]bool {
+	if incoming.Actions == nil {
+		return removed
+	}
+	gone := map[string]bool{}
+	for path := range removed {
+		gone[path] = removed[path]
+	}
+	for i, key := range actionSlotKeys(*incoming.Actions) {
+		if removed[actionNullMark(i)] {
+			gone[key] = true
+		}
+	}
+	return gone
+}
+
+// keepOmittedActionURLs is keepOmittedSecrets for the action lists alone, for a patch: the other
+// sections of a patch are merged by the service and stay as they are sent. An action that the patch
+// sends without its URL list keeps the stored list, the same as a full body does, unless the list
+// was sent as null.
+func keepOmittedActionURLs(incoming, stored *configuration.DeviceConfiguration, removed map[string]bool) {
+	if incoming == nil || stored == nil || incoming.Actions == nil || stored.Actions == nil {
+		return
+	}
+	removed = actionRemovals(incoming, removed)
+	storedSlots := secretSlots(stored)
+	for path, slot := range secretSlots(incoming) {
+		if !strings.HasPrefix(path, "actions.") || !restorableSlot(path) || slot.present() || removed[path] {
+			continue
+		}
+		if old, ok := storedSlots[path]; ok && old.present() {
 			slot.put(old.get())
 		}
 	}

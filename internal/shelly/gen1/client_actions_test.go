@@ -3,6 +3,7 @@ package gen1
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -51,6 +52,46 @@ func TestGen1Client_SetActionFormSendsOneUrlsParameterPerURL(t *testing.T) {
 	}
 	if (*form).Get("index") != "1" || (*form).Get("name") != "out_on_url" || (*form).Get("enabled") != "true" {
 		t.Errorf("form %v does not carry index, name and enabled", *form)
+	}
+}
+
+// The reference writes the key as a literal urls[]=, and a firmware's form parser may compare key
+// names without decoding them, so the key goes out with its brackets as they are. Go's own
+// ParseForm decodes either spelling, so only the raw body can tell.
+func TestGen1Client_SetActionFormSendsTheKeyLiterally(t *testing.T) {
+	cases := map[string]struct {
+		enabled *bool
+		urls    []string
+		want    string
+	}{
+		"a list": {
+			boolPtr(true), []string{"http://192.168.1.4/on?a=b&c=d", "http://192.168.1.5/on"},
+			"enabled=true&index=1&name=out_on_url&urls[]=http%3A%2F%2F192.168.1.4%2Fon%3Fa%3Db%26c%3Dd&urls[]=http%3A%2F%2F192.168.1.5%2Fon",
+		},
+		"a clear": {nil, []string{}, "index=1&name=out_on_url&urls[]="},
+		"no list": {boolPtr(false), nil, "enabled=false&index=1&name=out_on_url"},
+	}
+	for name, tc := range cases {
+		var raw string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("read body: %v", err)
+			}
+			raw = string(body)
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		client := NewClient(strings.TrimPrefix(server.URL, "http://"))
+
+		err := client.SetActionForm(context.Background(), 1, "out_on_url", tc.enabled, tc.urls)
+		server.Close()
+
+		if err != nil {
+			t.Fatalf("%s: SetActionForm: %v", name, err)
+		}
+		if raw != tc.want {
+			t.Errorf("%s: body = %q, want %q", name, raw, tc.want)
+		}
 	}
 }
 

@@ -820,7 +820,7 @@ func (c *Client) postValues(ctx context.Context, endpoint string, formData url.V
 			return lastErr
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(formData.Encode()))
+		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(encodeForm(formData)))
 		if err != nil {
 			return err
 		}
