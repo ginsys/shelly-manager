@@ -1844,7 +1844,8 @@ paths:
             data.history is a list of id, created_at, action (recompute, import or rollback),
             changed_by, restored_from (the version a rollback restored, else null) and
             new_desired (the stored text of that version, with every secret masked as
-            "********", or null where no text could be stored).
+            "********", or null where no text could be stored: a version with a null
+            new_desired cannot be rolled back to, and the rollback route answers 422).
           content:
             application/json:
               schema:
@@ -1942,8 +1943,10 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '422':
           description: >-
-            The version cannot be restored as it is: it holds no stored text, or recomputing it
-            would change it (error.details.paths names the places).
+            The version cannot be restored as it is: it holds no stored text, recomputing it
+            would change it (error.details.paths names the places), or it holds a mask at a path
+            that is no secret slot (error.details.paths names it; nothing can be entered for it,
+            so it is never a 409).
           content:
             application/json:
               schema:

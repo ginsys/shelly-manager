@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -173,15 +174,6 @@ func TestRollbackSecrets_TwoActionsOfOneIdentityAreTwoSlots(t *testing.T) {
 	assert.Equal(t, []string{`actions."a".0.secret_urls#0`, `actions."a".0.secret_urls#1`}, rerr.Paths)
 }
 
-func TestRollbackSecrets_AMaskAnywhereElseIsRefusedByItsPath(t *testing.T) {
-	db := historyDB(t)
-	rollbackDevice(t, db, 1, "[]", `{}`, `{}`)
-	version := addVersion(t, db, 1, str(`{"custom":{"token":"`+mask+`"}}`))
-	_, err := rollbackService(db).RollbackDesired(1, version, nil)
-	rerr := requireRollbackError(t, err, RollbackNeedsSecrets)
-	assert.Equal(t, []string{"custom.token"}, rerr.Paths)
-}
-
 func TestSecretBindingPaths_NameEverySlot(t *testing.T) {
 	assert.Equal(t, []string{
 		"auth.pass", "mqtt.pass", "network.wifi.ap.pass", "network.wifi.sta.pass",
@@ -232,19 +224,22 @@ func TestRollbackSecrets_BoundFieldsCompareExactly(t *testing.T) {
 	}
 }
 
-// Only a secret slot takes an answer. A mask at another path (a stored value that merely equals the
-// mask) is listed and has no way through, so an answer cannot put a secret into a field that history
-// does not mask, and cannot rename an action to make another key.
-func TestRollbackSecrets_OnlyASlotTakesAnAnswer(t *testing.T) {
+// A mask at a path that is no secret slot cannot be satisfied by any entry, so the version is not
+// restorable: it is refused with those paths, whatever was supplied, and the operator is never asked to
+// enter anything for it. A masked action name is such a path, and it never renames a listed key.
+func TestRollbackSecrets_AMaskWhereNoSlotIsIsNotRestorable(t *testing.T) {
 	cases := map[string]struct {
 		target   string
 		supplied map[string]any
 		want     []string
 	}{
-		"a plain field": {`{"system":{"device":{"name":"` + mask + `"}}}`,
-			map[string]any{"system.device.name": "sentinel"}, nil},
+		"a plain field":           {`{"system":{"device":{"name":"` + mask + `"}}}`, nil, []string{"system.device.name"}},
+		"a plain field, answered": {`{"system":{"device":{"name":"` + mask + `"}}}`, map[string]any{"system.device.name": "sentinel"}, []string{"system.device.name"}},
+		"an untyped key":          {`{"custom":{"token":"` + mask + `"}}`, nil, []string{"custom.token"}},
 		"a masked action name": {`{"actions":[{"name":"` + mask + `","index":0,"secret_urls":["` + mask + `"]}]}`,
-			map[string]any{"actions.0.name": "sentinel"}, nil},
+			map[string]any{"actions.0.name": "sentinel"}, []string{"actions.0.name"}},
+		"a slot and a stuck path": {`{"mqtt":{"server":"b.example","pass":"` + mask + `"},"custom":{"token":"` + mask + `"}}`,
+			map[string]any{"mqtt.pass": "new"}, []string{"custom.token"}},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -252,8 +247,10 @@ func TestRollbackSecrets_OnlyASlotTakesAnAnswer(t *testing.T) {
 			rollbackDevice(t, db, 1, "[]", `{}`, `{}`)
 			version := addVersion(t, db, 1, str(c.target))
 			_, err := rollbackService(db).RollbackDesired(1, version, c.supplied)
-			_ = requireRollbackError(t, err, RollbackBadSecrets)
-			assert.Equal(t, `{}`, deviceRow(t, db, 1).Overrides)
+			rerr := requireRollbackError(t, err, RollbackNotRestorable)
+			assert.Equal(t, c.want, rerr.Paths)
+			assert.NotContains(t, strings.Join(rerr.Paths, " "), "sentinel")
+			assert.Equal(t, `{}`, deviceRow(t, db, 1).Overrides, "nothing was written")
 		})
 	}
 }

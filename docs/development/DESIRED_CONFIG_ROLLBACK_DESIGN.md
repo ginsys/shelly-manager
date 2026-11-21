@@ -253,6 +253,11 @@ Notes on the table:
    function builds it (`configuration.ActionSlotKeys`), shared with the secret slots of the API. A mask
    inside the list stands for the whole list, and the answer is a non-empty list of non-empty strings.
    The other paths read in the dotted form of the JSON, with a key that holds a dot or a quote quoted.
+   A mask at a path that is no slot (a stored value that merely equals the mask, or an untyped key) can
+   be satisfied by no entry, so the version is not restorable: the route answers 422 with those paths and
+   never asks the operator to enter anything for them. The typed configuration has no such path today
+   (`secret_invariant_test.go` fails for a secret-named field with no slot), so it can only arise from a
+   stored text that holds a literal mask or an untyped key.
 
 The refusal list is **computed** from the table. The restore helper cannot give it: it drops a list
 entry's secret when any other field differs, can return `ErrAmbiguousEntry`, and reports no dropped
@@ -339,7 +344,8 @@ unchanged until you apply it." When secrets were entered, they are never repeate
   keyed by secret path (`mqtt.pass`).
 - 404 for an id that is not a version of this device. A version with no stored text (`new_desired` NULL,
   note 3.1) is 422: the request is well formed and the version cannot be a source. A version a recompute
-  would change is 422 too, with the paths (note 3.2).
+  would change is 422 too, with the paths (note 3.2), and so is a mask at a path that is no secret slot
+  (note 3.3). The list marks a version with no stored text by `new_desired: null`.
 - A first call that needs secrets gets **409** with the computed list of paths to enter, echoes no
   value and writes nothing. The operator retries with `secrets` for exactly those paths. A key of
   `secrets` that is not on that list gets 400. A value that is empty or the mask gets 400. `secrets`

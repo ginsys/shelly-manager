@@ -38,6 +38,9 @@ const (
 	// RollbackBadSecrets: the secrets entered name a key off the list, or hold an empty value, the mask
 	// or a value of the wrong type. It carries no paths: a refusal never repeats what was sent.
 	RollbackBadSecrets
+	// RollbackNotRestorable: the version holds a mask at a path that is no secret slot, so no entry can
+	// satisfy it. Paths name those places, and the operator is never asked to enter anything.
+	RollbackNotRestorable
 )
 
 // RollbackError is a refusal. Paths name the places in the configuration, never a value, so an error, a
@@ -53,6 +56,8 @@ func (e *RollbackError) Error() string {
 		return fmt.Sprintf("the version holds %d masked value(s) that history cannot restore", len(e.Paths))
 	case RollbackBadSecrets:
 		return "the secrets entered are not an answer to the list"
+	case RollbackNotRestorable:
+		return fmt.Sprintf("the version holds a masked value at %d path(s) that take no secret", len(e.Paths))
 	default:
 		return fmt.Sprintf("the version would change when the configuration is recomputed at %d place(s)", len(e.Paths))
 	}

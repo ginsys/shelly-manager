@@ -221,15 +221,17 @@ func TestRollbackRoute_ABadBodyIsRefusedWithoutEchoingIt(t *testing.T) {
 	putOverrides(t, handler, id, `{"mqtt":{"server":"b.example","pass":"cur-secret"}}`)
 
 	bodies := map[string]string{
-		"truncated json":     fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body`, first),
-		"no history id":      `{"secrets":{"mqtt.pass":"sentinel-body"}}`,
-		"a repeated member":  fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body"},"secrets":{}}`, first),
-		"a key off the list": fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body","auth.pass":"sentinel-body"}}`, first),
-		"an empty value":     fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":""}}`, first),
-		"the mask":           fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"%s"}}`, first, secretMask),
-		"an empty list":      fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":[]}}`, first),
-		"a null secrets":     fmt.Sprintf(`{"history_id":%d,"secrets":null}`, first),
-		"a list for secrets": fmt.Sprintf(`{"history_id":%d,"secrets":["x"]}`, first),
+		"truncated json":      fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body`, first),
+		"no history id":       `{"secrets":{"mqtt.pass":"sentinel-body"}}`,
+		"a repeated member":   fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body"},"secrets":{}}`, first),
+		"a key off the list":  fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body","auth.pass":"sentinel-body"}}`, first),
+		"an empty value":      fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":""}}`, first),
+		"the mask":            fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"%s"}}`, first, secretMask),
+		"an empty list":       fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":[]}}`, first),
+		"a misspelt member":   fmt.Sprintf(`{"history_id":%d,"secret":{"mqtt.pass":"sentinel-body"}}`, first),
+		"data after the body": fmt.Sprintf(`{"history_id":%d} {"history_id":1}`, first),
+		"a null secrets":      fmt.Sprintf(`{"history_id":%d,"secrets":null}`, first),
+		"a list for secrets":  fmt.Sprintf(`{"history_id":%d,"secrets":["x"]}`, first),
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
@@ -267,4 +269,22 @@ func TestDesiredHistoryList_AnswersAtMostFiftyVersions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(callHistory(t, handler, fmt.Sprint(id)).Body.Bytes(), &answer))
 	require.Len(t, answer.Data.History, 50)
 	assert.Contains(t, *answer.Data.History[0].NewDesired, `"n":54`, "the newest first")
+}
+
+// A mask at a path that is no secret slot is not restorable: 422 with the paths, never a 409 that asks
+// the operator to enter something that the next call would refuse.
+func TestRollbackRoute_AMaskWhereNoSlotIsIs422WithThePaths(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := rollbackDeviceWith(t, handler)
+	text := `{"custom":{"token":"` + secretMask + `"}}`
+	row := configuration.DesiredConfigHistory{DeviceID: id, Action: "recompute", NewDesired: &text, ChangedBy: "system"}
+	require.NoError(t, handler.DB.GetDB().Create(&row).Error)
+
+	w := callRollback(t, handler, id, fmt.Sprintf(`{"history_id":%d,"secrets":{"custom.token":"sentinel-body"}}`, row.ID))
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+	var refusal errorAnswer
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &refusal))
+	assert.Equal(t, []any{"custom.token"}, refusal.Error.Details["paths"])
+	assert.NotContains(t, w.Body.String(), "sentinel-body")
 }

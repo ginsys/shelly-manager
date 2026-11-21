@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,8 +95,8 @@ func (h *Handler) RollbackDeviceDesiredConfig(w http.ResponseWriter, r *http.Req
 
 	// The decode error is never put in the answer or a log line: it can quote the body.
 	raw, readErr := io.ReadAll(r.Body)
-	var req rollbackRequest
-	if readErr != nil || redact.HasRepeatedMember(raw) || json.Unmarshal(raw, &req) != nil || req.HistoryID == 0 {
+	req, decoded := decodeRollbackRequest(raw)
+	if readErr != nil || redact.HasRepeatedMember(raw) || !decoded {
 		rw.WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid JSON request body", nil)
 		return
 	}
@@ -141,6 +142,9 @@ func (h *Handler) writeRollbackRefusal(rw *apiresp.ResponseWriter, w http.Respon
 	switch refusal.Kind {
 	case configuration.RollbackNeedsSecrets:
 		rw.WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "This version holds secrets that history does not keep. Enter them for the listed paths and retry.", details)
+	case configuration.RollbackNotRestorable:
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeConfigurationError,
+			"This version holds a masked value at a path that takes no secret, so it cannot be restored. Nothing can be entered for it.", details)
 	case configuration.RollbackBadSecrets:
 		rw.WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
 			"The secrets entered are not an answer to the list: a key off the list, or an empty value, the mask or a value of the wrong type.", nil)
@@ -148,4 +152,16 @@ func (h *Handler) writeRollbackRefusal(rw *apiresp.ResponseWriter, w http.Respon
 		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeConfigurationError,
 			"This version would change when the configuration is recomputed, so it cannot be restored as it is.", details)
 	}
+}
+
+// decodeRollbackRequest reads the body: one object with a history_id and only the members of a request,
+// so a misspelt secrets member is a 400 and never a silent 409 again.
+func decodeRollbackRequest(raw []byte) (rollbackRequest, bool) {
+	var req rollbackRequest
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if dec.Decode(&req) != nil || dec.More() {
+		return req, false
+	}
+	return req, req.HistoryID != 0
 }
