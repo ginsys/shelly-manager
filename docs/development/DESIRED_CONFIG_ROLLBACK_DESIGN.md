@@ -123,7 +123,12 @@ table and its writer live there.
 A row holds: the device id, an action (`recompute`, `import`, `rollback`), `old_desired` and
 `new_desired` (both with the secrets already masked at write, `redact.MaskTree`), the
 `previous_template_ids` of a rollback, a nullable `restored_from` (the id of the version a rollback
-restored), who changed it, and when. **A version is a row's `new_desired`.** The table is created with
+restored), a `changed_by` text, and when. **`changed_by` has no per-person source:** the hook sees only
+`SetDeviceDesiredConfigPending(deviceID, config)` (`repository.go:260`), which takes no actor, and
+neither do its recompute callers, and the only identity the API checks is the one shared admin key (`internal/api/router_routes.go:12-19`).
+So it holds
+the fixed text `system` for `recompute` and `import`, and `admin` for `rollback`. No caller's signature
+changes. **A version is a row's `new_desired`.** The table is created with
 the others by the database manager's migration (`internal/database/manager.go:122`), nullable
 columns only.
 
@@ -160,8 +165,13 @@ Three ways were compared.
 **Recommendation: (b).** The recompute of a device with no templates is the merge of one layer into an
 empty configuration (section 2.2), so the target survives every later recompute, **provided the merge
 returns it unchanged**. It does not for a plain scalar field, so the rollback checks that before it
-writes: it merges the target as the only layer and compares the result with the target. A difference
-refuses the rollback, names each path that would be lost, and writes nothing. It adds no column to
+writes: it merges the target as the only layer and compares the two **decoded JSON trees**, never their
+text, so a version whose keys are in another order, such as one written by an archive import, passes. A
+path the target holds that the merged tree lacks, or holds with another value, is a loss. A path only the
+merged tree holds counts as equal when its value is a JSON zero (`false`, `0`, `""`, `null`, an empty
+object or list), because a plain field without `omitempty` can appear as its zero value; any other extra
+value is a difference. A loss refuses the rollback, names each path that would be lost, and writes
+nothing. It adds no column to
 `devices` and no second mechanism. The rollback row keeps `previous_template_ids`.
 
 **The way back is two steps: re-attach the templates and clear the overrides**
@@ -320,7 +330,9 @@ Each is under about 350 non-test lines.
    finds a row for each; 404 for another device's version; a non-admin is refused; a rollback built on a
    stale read gets 409; a target with a plain scalar field (`system.sntp.server`) is refused with that
    path and writes nothing, until ginsys/shelly-manager#839 is fixed; after a rollback, a recompute leaves
-   desired equal to the target.
+   desired equal to the target; a version written by a recompute always passes the round-trip check; an
+   import-written version that differs only in key order passes it; a path only the merged tree holds, with
+   a zero value, passes, and with any other value is refused.
 3. **The card on `DeviceConfigPage`.** Versions, the confirm, the secret prompts, the notice.
 4. **Retire `ui/src/pages/DeviceConfigHistoryPage.vue`.** Re-point the link at `DeviceDetailPage.vue:142`
    to the card and remove the route at `ui/src/router/routes.ts:28-30`, as the comment on the issue asks.
