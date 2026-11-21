@@ -14,7 +14,7 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 - ✅ **Backend Investment**: 138 API endpoints across 6 handler modules, 19 internal packages
 - ⚠️ **Frontend Progress**: API coverage, unreachable pages and open frontend issues are measured in [Frontend Review](../docs/frontend/frontend-review.md)
 - ✅ **Metrics System**: Real-time WebSocket metrics with a contract-enforced Go/TS message protocol, a freshness watchdog (truthful "LIVE"), and REST fallback (#247)
-- ✅ **Export/Import**: Enhanced preview forms with schema-driven UX (API coverage per module is measured in [Frontend Review](../docs/frontend/frontend-review.md))
+- ✅ **Export/Import**: Enhanced preview forms with schema-driven UX (API coverage per module: run the command in [Frontend Review](../docs/frontend/frontend-review.md), section 1)
 - ✅ **Strict SMA/Previews**: Registry-backed previews and closed SMA `2026.1`
   with RFC 8785 integrity, bounded import normalization, and atomic generation
 - ✅ **TypeScript**: Raw `vue-tsc` passes with a zero-error ratchet
@@ -43,7 +43,7 @@ Comprehensive Golang Shelly smart home device manager with dual-binary Kubernete
 ### Phase 7: Backend-Frontend Integration ⚡ **READY TO BEGIN**
 **Business Impact**: Transform to comprehensive infrastructure platform
 
-See [Frontend Review](../docs/frontend/frontend-review.md) for the measured API coverage, the pages and open frontend work.
+See [Frontend Review](../docs/frontend/frontend-review.md) for the API coverage command, the pages and open frontend work.
 
 ### Phase 8: Vue.js Frontend Modernization ⚡ **STRATEGIC PRIORITY**
 **Technical Impact**: 9,400+ → ~3,500 lines (63% reduction), <5% code duplication  
@@ -130,11 +130,11 @@ See [Frontend Review](../docs/frontend/frontend-review.md) for the current measu
 | Document | Purpose | Keep Updated |
 |----------|---------|--------------|
 | [API Overview](../docs/api/api-overview.md) | Backend API reference (112+ endpoints) | When API changes |
-| [Frontend Review](../docs/frontend/frontend-review.md) | Frontend architecture, measured API coverage, open work | After frontend work |
+| [Frontend Review](../docs/frontend/frontend-review.md) | Frontend architecture, API coverage definition and command, open work | After frontend work |
 | [GitHub Issues](https://github.com/ginsys/shelly-manager/issues) | Development task tracking | Continuously |
 | [Phase 8 Plan](../docs/development/PHASE_8_WEB_UI_PLAN.md) | Vue.js SPA modernization plan | On milestone completion |
 
-**Important**: When completing frontend tasks, update `docs/frontend/frontend-review.md` to reflect new API coverage and resolved issues.
+**Important**: When completing frontend tasks, update `docs/frontend/frontend-review.md` to reflect resolved issues and changed pages. It holds no API coverage figure or other count; run the command it gives (`node ui/scripts/api-coverage/cli.mjs` for API coverage).
 
 ---
 

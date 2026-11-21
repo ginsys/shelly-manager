@@ -1,11 +1,11 @@
 # Frontend Review: Shelly Manager Web Application
 
-**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250 and ginsys/shelly-manager#748, and again with the drift schedule form of ginsys/shelly-manager#279, and again with ginsys/shelly-manager#747 (slice 2), and a unit test keeps them equal to the code (section 1)
-**Status:** 138 of 143 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab. This file holds no count of API functions, pages, components or tests: those move with every pull request, so you run the command (section 1 for API coverage, section 2 for the rest) and read the number from it.
+**Status:** Every routed page can be reached by clicking from the top bar (section 3).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
-Every number below comes from a command in this file, run at the commit above. Re-run the command
-before you quote a number, and change the date and commit in this header when you refresh the file.
+A number you quote comes from a command in this file, run at the commit you name. Re-run the command
+before you quote a number. Change the date and commit in this header when you refresh the findings in the file.
 Tool: ripgrep (`rg` 15.2.0). On this project's host `grep` may be another program; use `rg`.
 
 Preview captures: [registry-backed export](images/registry-export-preview.png)
@@ -28,12 +28,15 @@ HTTP calls (`isAbortError`, `toSaveError`, `assertNever`, `computeDailyAggregate
 `parseMetricsWsMessage`, `isDashboardMessage`).
 
 **The test.** `ui/src/__tests__/api-coverage.test.ts` runs in `make test-ci` and in the CI vitest job. It
-measures the tree with `ui/scripts/api-coverage/measure.mjs` (Node only, no `rg`; run
-`node ui/scripts/api-coverage/cli.mjs` to print the table), and fails when the Status line, a row of the
-table below or the Total row differs from the measurement, or when a module under `ui/src/api` has no row.
-The four controls below are test cases. The measurement is the command below, rewritten without `rg`: the
-two print the same table on this tree (checked at commit 3b1374d). The command stays here as the
-definition for a reader without Node.
+measures the tree with `ui/scripts/api-coverage/measure.mjs` (Node only, no `rg`) and compares no figure
+with this file. It keeps one fact: the functions with no UI caller equal the short `NO_UI_CALLER` list in
+the test, by name, so wiring a function or orphaning one is a visible edit. The four controls below are
+test cases. The measurement is the command below, rewritten without `rg`: the two print the same table on
+this tree (checked at commit 3b1374d). The command stays here as the definition for a reader without Node.
+
+**The current table.** Run `node ui/scripts/api-coverage/cli.mjs` from the repository root. It prints one
+line per module under `ui/src/api` (functions, referenced, and the names with no caller), then a TOTAL
+line. The table is not committed here.
 
 **Command** (run from the repository root; save it as a script, it is `bash`):
 
@@ -66,30 +69,6 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
   and a name only as the start of a longer name reports all seven as unreferenced and the used names
   (plain and `async`) as referenced.
 
-**Result at 3b1374d, with `bulkApply.ts` added by ginsys/shelly-manager#594:**
-
-| Module | Functions | Referenced | Unreferenced |
-|--------|-----------|------------|--------------|
-| `admin.ts` | 1 | 1 | |
-| `adminKey.ts` | 8 | 8 | |
-| `bulk.ts` | 5 | 5 | |
-| `bulkApply.ts` | 3 | 3 | |
-| `configNew.ts` (per-device templates, overrides, desired config, apply, verify) | 12 | 12 | |
-| `deviceConfig.ts` | 6 | 5 | `updateDeviceConfig` |
-| `devices.ts` | 10 | 10 | |
-| `drift.ts` | 13 | 13 | |
-| `errorBody.ts` | 4 | 4 | |
-| `export.ts` | 28 | 26 | `getBackupResult`, `downloadExport` |
-| `import.ts` | 4 | 4 | |
-| `metrics.ts` | 14 | 14 | |
-| `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
-| `notification.ts` | 11 | 11 | |
-| `plugin.ts` | 4 | 3 | `getPlugin` |
-| `provisioning.ts` | 7 | 7 | |
-| `templates.ts` | 8 | 8 | |
-| `typedConfig.ts` | 2 | 2 | |
-| **Total** | **143** | **138** | **5** |
-
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
 functions, 44%) is out of date: it predates the work listed in section 6.
@@ -113,27 +92,28 @@ Versions are the ranges declared in `ui/package.json`, not the installed ones.
 | Playwright | ^1.65.0 | End-to-end tests |
 | Quasar | ^2.35.4 | **Declared but never imported in `ui/src`**; only `vite.config.ts` names it, in a chunk rule |
 
-Counts (commands, from the repository root):
+Counts are not committed here: they change with almost every pull request. Run the command for the one
+you need (from the repository root):
 
-| What | Count | Command |
-|------|-------|---------|
-| Routed page components | 26 | `fd -e vue . ui/src/pages \| wc -l` |
-| Reusable components (excluding tests) | 41 | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
-| Pinia stores (excluding tests) | 11 | `fd -e ts . ui/src/stores \| rg -v '\.test\.ts\|__tests__' \| wc -l` |
-| Composables | 2 | `fd -e ts . ui/src/composables \| rg -v __tests__ \| wc -l` |
-| Unit test files / `it`+`test` calls | 70 / 687 | `fd '\.test\.ts$' ui/src \| wc -l`; `rg --no-filename -c '^\s*(it\|test)\(' ui/src --glob '*.test.ts' \| awk '{s+=$1} END{print s}'` |
-| End-to-end spec files / `test` calls | 20 / 59 | `fd '\.spec\.ts$' ui/tests/e2e \| wc -l`; `rg --no-filename -c '^\s*test\(' ui/tests/e2e --glob '*.spec.ts' \| awk '{s+=$1} END{print s}'` |
+| What | Command |
+|------|---------|
+| Routed page components | `fd -e vue . ui/src/pages \| wc -l` |
+| Reusable components (excluding tests) | `fd -e vue . ui/src/components \| rg -v __tests__ \| wc -l` |
+| Pinia stores (excluding tests) | `fd -e ts . ui/src/stores \| rg -v '\.test\.ts\|__tests__' \| wc -l` |
+| Composables | `fd -e ts . ui/src/composables \| rg -v __tests__ \| wc -l` |
+| Unit test files / `it`+`test` calls | `fd '\.test\.ts$' ui/src \| wc -l`; `rg --no-filename -c '^\s*(it\|test)\(' ui/src --glob '*.test.ts' \| awk '{s+=$1} END{print s}'` |
+| End-to-end spec files / `test` calls | `fd '\.spec\.ts$' ui/tests/e2e \| wc -l`; `rg --no-filename -c '^\s*test\(' ui/tests/e2e --glob '*.spec.ts' \| awk '{s+=$1} END{print s}'` |
 
-The e2e figure counts `test(` calls once. Playwright runs each across the browsers its config lists,
+The e2e command counts `test(` calls once. Playwright runs each across the browsers its config lists,
 so the number of executed scenarios is higher.
 
 ---
 
 ## 3. Pages and routes
 
-Lines are `wc -l` of the page file. "Linked from" is read from the output of the navigation-target
+"Linked from" is read from the output of the navigation-target
 command below (re-run at commit 0648bab for this section); "none" would mean no nav item and no page
-links to that route. The top-bar menu entries are written in `ui/src/layouts/MainLayout.vue` as
+links to that route. The size of a page is `wc -l` of its file, and is not committed here. The top-bar menu entries are written in `ui/src/layouts/MainLayout.vue` as
 `to: '/path'` and drawn by `ui/src/components/NavMenu.vue`, so the pattern includes that form.
 
 **Command:**
@@ -143,34 +123,34 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
   --glob '*.vue' --glob '*.ts' --glob '!**/*.test.ts' --glob '!**/__tests__/**' | sort -u
 ```
 
-| Route | Page | Lines | Linked from |
-|-------|------|-------|-------------|
-| `/` | Devices | 388 | top bar, Device details |
-| `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | 452 | Devices, Device configuration, Drift reports, Task details |
-| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, history) | 765 | Device details, Configuration history |
-| `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | 132 | Device details |
-| `/templates` | Configuration templates | 395 | top bar, Template detail |
-| `/templates/:id` | Template detail | 425 | Templates |
-| `/drift/schedules` | Drift schedules (create, edit, enable or disable, delete, recent runs; see section 5) | 503 | top bar (Drift) |
-| `/drift/reports` | Drift reports | 519 | top bar (Drift) |
-| `/drift/trends` | Drift trends | 517 | top bar (Drift) |
-| `/export/backup` | Backup management | 921 | top bar (Export & Import) |
-| `/export/gitops` | GitOps export | 276 | top bar (Export & Import) |
-| `/export/history` | Export history | 70 | top bar (Export & Import) |
-| `/export/:id` | Export result | 43 | Export history |
-| `/import/history` | Import history | 57 | top bar (Export & Import) |
-| `/import/:id` | Import result | 34 | Import history |
-| `/plugins` | Plugin management (read-only) | 565 | top bar |
-| `/dashboard` | Metrics dashboard | 667 | top bar |
-| `/admin` | Admin settings (admin key rotation) | 45 | top bar |
-| `/notifications/channels` | Notification channels | 276 | top bar (Notifications), Channel detail |
-| `/notifications/channels/:id` | Channel detail | 255 | Channels |
-| `/notifications/rules` | Notification rules | 199 | top bar (Notifications) |
-| `/notifications/history` | Notification history | 156 | top bar (Notifications) |
-| `/provisioning` | Provisioning dashboard | 86 | top bar (Provisioning) |
-| `/provisioning/tasks` | Provisioning tasks | 92 | top bar (Provisioning), Provisioning dashboard, Task details |
-| `/provisioning/tasks/:id` | Task details | 124 | Tasks, dashboard |
-| `/provisioning/agents` | Provisioning agents | 95 | top bar (Provisioning), Provisioning dashboard |
+| Route | Page | Linked from |
+|-------|------|-------------|
+| `/` | Devices | top bar, Device details |
+| `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | Devices, Device configuration, Drift reports, Task details |
+| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, history) | Device details, Configuration history |
+| `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | Device details |
+| `/templates` | Configuration templates | top bar, Template detail |
+| `/templates/:id` | Template detail | Templates |
+| `/drift/schedules` | Drift schedules (create, edit, enable or disable, delete, recent runs; see section 5) | top bar (Drift) |
+| `/drift/reports` | Drift reports | top bar (Drift) |
+| `/drift/trends` | Drift trends | top bar (Drift) |
+| `/export/backup` | Backup management | top bar (Export & Import) |
+| `/export/gitops` | GitOps export | top bar (Export & Import) |
+| `/export/history` | Export history | top bar (Export & Import) |
+| `/export/:id` | Export result | Export history |
+| `/import/history` | Import history | top bar (Export & Import) |
+| `/import/:id` | Import result | Import history |
+| `/plugins` | Plugin management (read-only) | top bar |
+| `/dashboard` | Metrics dashboard | top bar |
+| `/admin` | Admin settings (admin key rotation) | top bar |
+| `/notifications/channels` | Notification channels | top bar (Notifications), Channel detail |
+| `/notifications/channels/:id` | Channel detail | Channels |
+| `/notifications/rules` | Notification rules | top bar (Notifications) |
+| `/notifications/history` | Notification history | top bar (Notifications) |
+| `/provisioning` | Provisioning dashboard | top bar (Provisioning) |
+| `/provisioning/tasks` | Provisioning tasks | top bar (Provisioning), Provisioning dashboard, Task details |
+| `/provisioning/tasks/:id` | Task details | Tasks, dashboard |
+| `/provisioning/agents` | Provisioning agents | top bar (Provisioning), Provisioning dashboard |
 
 Any other path falls through to the Devices page.
 
@@ -202,10 +182,10 @@ page imports still counts. The Playwright spec is what proves the links are rend
 
 ## 4. Components, stores and utilities
 
-- **Components** (`ui/src/components`): `backup/` (7), `bulk/` (the bulk dialog and its apply form, 2), `charts/` (2),
-  `config/` (3), `devices/` (2), `gitops/` (4), `plugin/` (3), `provisioning/` (2), `shared/` (5), and
-  8 top-level files (`DataTable`, `FilterBar`, `PaginationBar`, `ExportPreviewForm`,
-  `ImportPreviewForm`, `GitOpsConfigForm`, `PluginDetailsView`, `PluginSchemaViewer`).
+- **Components** (`ui/src/components`): the directories `backup/`, `bulk/` (the bulk dialog and its apply
+  form), `charts/`, `config/`, `devices/`, `gitops/`, `plugin/`, `provisioning/` and `shared/`, and the
+  top-level files `DataTable`, `FilterBar`, `PaginationBar`, `ExportPreviewForm`, `ImportPreviewForm`,
+  `GitOpsConfigForm`, `PluginDetailsView` and `PluginSchemaViewer`.
 - **Stores** (`ui/src/stores`): devices, deviceConfigNew, drift, export, import, metrics,
   notifications, plugin, provisioning, templates, typedConfig.
 - **Composables:** `useError` (normalises an error into a message, suggestions and a retry flag),
@@ -372,13 +352,14 @@ Found by reading the code at this commit; not a plan.
    route table (`ui/src/router/routes.ts`); the Playwright spec does not, so a new `:id` page is
    checked only if someone adds it to the spec.
 2. **Quasar is a dependency nothing imports** (section 2).
-3. **Large pages:** `BackupManagementPage.vue` (921 lines), `MetricsDashboardPage.vue` (697),
-   `PluginManagementPage.vue` (565).
+3. **Large pages:** `BackupManagementPage.vue`, `MetricsDashboardPage.vue` and
+   `PluginManagementPage.vue`. Read the size with `wc -l ui/src/pages/*.vue | sort -n`.
 4. **One shared form, three forms:** only `ExportPreviewForm` uses `shared/SchemaForm.vue`;
    `ImportPreviewForm` and `GitOpsConfigForm` do not.
-5. **No generated API client.** The API functions counted in section 1 are written by hand. The coverage figure in section 1
-   is checked by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), so it can no longer go
-   stale unnoticed; the test checks the figures, not that a referenced function is called on a live path.
+5. **No generated API client.** The API functions measured in section 1 are written by hand. The coverage
+   is measured by `ui/src/__tests__/api-coverage.test.ts` (ginsys/shelly-manager#643), which also fails when a
+   function gains or loses its last UI caller without `NO_UI_CALLER` changing; it does not check that a
+   referenced function is called on a live path, and no figure of it is committed.
 6. **No page calls `alert(` any more** (ginsys/shelly-manager#614), and
    `ui/src/pages/__tests__/noAlertPages.test.ts` fails if one does. A store action (add, modify,
    remove, cancel, resolve, refresh, bulk, create, update) only rethrows its failure and sets no

@@ -1,18 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { checkApiCoverageDoc, measureApiCoverage } from '../../scripts/api-coverage/measure.mjs'
+import { measureApiCoverage } from '../../scripts/api-coverage/measure.mjs'
 
-// Section 1 of docs/frontend/frontend-review.md quotes the API coverage of the UI. The first block proves
-// the measurement on a fixture tree and on four known functions; the second makes the document equal
-// the measurement, so a change to `ui/src/api` or its callers that moves a figure fails here until the
-// document is re-measured.
+// Section 1 of docs/frontend/frontend-review.md describes the API coverage of the UI and holds no figure
+// of it: `node ui/scripts/api-coverage/cli.mjs` prints the current table. The first blocks prove the
+// measurement on a fixture tree and on four known functions; the last keeps one fact, the names of the
+// functions no file references, so wiring one or orphaning one is a visible edit.
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const docPath = path.join(repoRoot, 'docs', 'frontend', 'frontend-review.md')
 
 const made: string[] = []
 afterEach(() => {
@@ -136,56 +135,28 @@ describe('measureApiCoverage on this repository', () => {
   })
 })
 
-describe('section 1 of the frontend review', () => {
-  const doc = readFileSync(docPath, 'utf8')
-  const result = measureApiCoverage(repoRoot)
+// The API functions no file references. A function that gains its first caller, or loses its last one,
+// changes the measurement and fails the case below until this list says so: reference the function,
+// delete it, or change the list. Names only; the counts are never committed.
+const NO_UI_CALLER = [
+  'downloadExport',
+  'getBackupResult',
+  'getPlugin',
+  'isDashboardMessage',
+  'updateDeviceConfig',
+]
 
-  it('states the figures the measurement gives', () => {
+describe('the API functions with no UI caller', () => {
+  it('are the ones NO_UI_CALLER names', () => {
+    const measured = measureApiCoverage(repoRoot)
+      .functions.filter((f: { referenced: boolean }) => !f.referenced)
+      .map((f: { name: string }) => f.name)
+      .sort()
+    const wiredOrGone = NO_UI_CALLER.filter(name => !measured.includes(name))
+    const orphaned = measured.filter((name: string) => !NO_UI_CALLER.includes(name))
     expect(
-      checkApiCoverageDoc(doc, result),
-      'docs/frontend/frontend-review.md section 1 differs from the measurement: run `node ui/scripts/api-coverage/cli.mjs`, update the table, the Status line and the header',
-    ).toEqual([])
-  })
-
-  // The check itself is proven by changing one figure at a time in a copy of the text.
-  it('reports a changed module count', () => {
-    const changed = doc.replace(/(\| `devices\.ts` \| )10( \| )10/, '$111$211')
-    expect(changed).not.toBe(doc)
-    expect(checkApiCoverageDoc(changed, result).join('\n')).toContain('devices.ts')
-  })
-
-  it('reports a changed Total row', () => {
-    const changed = doc.replace(/\| \*\*Total\*\* \| \*\*\d+\*\*/, '| **Total** | **1**')
-    expect(changed).not.toBe(doc)
-    expect(checkApiCoverageDoc(changed, result).join('\n')).toContain('Total functions 1')
-  })
-
-  it('reports a changed unreferenced name', () => {
-    const changed = doc.replace('`getPlugin`', '`getPlugins`')
-    expect(changed).not.toBe(doc)
-    expect(checkApiCoverageDoc(changed, result).join('\n')).toContain('plugin.ts')
-  })
-
-  it('reports a module with no row', () => {
-    const changed = doc.replace(/\| `errorBody\.ts` .*\n/, '')
-    expect(changed).not.toBe(doc)
-    expect(checkApiCoverageDoc(changed, result).join('\n')).toContain('module errorBody.ts')
-  })
-
-  it('reports a changed Status line', () => {
-    const changed = doc.replace(/\*\*Status:\*\* \d+ of \d+/, '**Status:** 1 of 2')
-    expect(changed).not.toBe(doc)
-    expect(checkApiCoverageDoc(changed, result).join('\n')).toContain('Status line')
-  })
-
-  it('reports a wrong Status line even when the right sentence stands elsewhere in the file', () => {
-    const sentence = `${result.referenced} of ${result.total} exported API functions are referenced by the UI`
-    const changed = doc.replace(/\*\*Status:\*\* \d+ of \d+/, '**Status:** 1 of 2') + `\n<!-- ${sentence} (97%) -->\n`
-    expect(changed).toContain(sentence)
-    expect(checkApiCoverageDoc(changed, result).join('\n')).toContain('Status line')
-  })
-
-  it('reports a missing section', () => {
-    expect(checkApiCoverageDoc('# nothing', result)).toHaveLength(1)
+      { wiredOrGone, orphaned },
+      'wiredOrGone: named in NO_UI_CALLER but now referenced, or no longer exported (remove it from the list); orphaned: unreferenced but not in the list (reference it, delete it, or add it to NO_UI_CALLER)',
+    ).toEqual({ wiredOrGone: [], orphaned: [] })
   })
 })
