@@ -7,7 +7,7 @@
       <button class="btn" data-testid="rollback-notice-dismiss" @click="notice = null">Dismiss</button>
     </div>
     <div v-if="listError" class="live-error" data-testid="versions-error">{{ listError }}</div>
-    <div v-else-if="versions.length > 0" class="list">
+    <div v-if="versions.length > 0" class="list">
       <div v-for="v in versions" :key="v.id" class="item" data-testid="version-entry">
         <span class="strong">Version {{ v.id }}</span>
         <span>{{ formatDate(v.created_at) }}</span>
@@ -28,7 +28,7 @@
         </button>
       </div>
     </div>
-    <div v-else-if="loaded" class="empty-state" data-testid="versions-empty">No versions yet.</div>
+    <div v-else-if="loaded && !listError" class="empty-state" data-testid="versions-empty">No versions yet.</div>
 
     <div v-if="target" class="modal-overlay" data-testid="rollback-dialog">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rollback-title">
@@ -170,7 +170,7 @@ async function loadVersions() {
     loaded.value = true
   } catch (e: any) {
     if (gone || seq !== readSeq) return
-    versions.value = []
+    // A list already shown stays: a read that fails is not a reason to take versions away.
     listError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the desired configuration versions'
   }
 }

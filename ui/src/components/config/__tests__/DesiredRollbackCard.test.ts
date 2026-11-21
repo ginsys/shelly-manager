@@ -111,6 +111,48 @@ describe('DesiredRollbackCard', () => {
       expect(empty.get('[data-testid="versions-empty"]').exists()).toBe(true)
     })
 
+    // A read that fails is not a reason to take versions away: the list is immutable rows the server reads by id.
+    it('keeps a list that is shown when a later read fails, shows the error, and a later good read clears it and updates the rows', async () => {
+      const wrapper = mountCard()
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="version-entry"]')).toHaveLength(2)
+
+      vi.mocked(getDesiredHistory).mockRejectedValueOnce(new Error('boom'))
+      await wrapper.setProps({ ready: false })
+      await wrapper.setProps({ ready: true })
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="version-entry"]')).toHaveLength(2)
+      expect(wrapper.get('[data-testid="versions-error"]').text()).toBe('boom')
+      expect(wrapper.find('[data-testid="versions-empty"]').exists()).toBe(false)
+
+      vi.mocked(getDesiredHistory).mockResolvedValueOnce([version(6), version(5), version(4)] as any)
+      await wrapper.setProps({ ready: false })
+      await wrapper.setProps({ ready: true })
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="version-entry"]')).toHaveLength(3)
+      expect(wrapper.find('[data-testid="versions-error"]').exists()).toBe(false)
+    })
+
+    it('never says "No versions yet." beside an error: not after a failed first read, nor after a failed read of an empty list', async () => {
+      vi.mocked(getDesiredHistory).mockRejectedValueOnce(new Error('first'))
+      const wrapper = mountCard()
+      await flushPromises()
+      expect(wrapper.get('[data-testid="versions-error"]').text()).toBe('first')
+      expect(wrapper.find('[data-testid="versions-empty"]').exists()).toBe(false)
+
+      vi.mocked(getDesiredHistory).mockResolvedValueOnce([])
+      await wrapper.setProps({ ready: false })
+      await wrapper.setProps({ ready: true })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="versions-empty"]').exists()).toBe(true)
+      vi.mocked(getDesiredHistory).mockRejectedValueOnce(new Error('again'))
+      await wrapper.setProps({ ready: false })
+      await wrapper.setProps({ ready: true })
+      await flushPromises()
+      expect(wrapper.get('[data-testid="versions-error"]').text()).toBe('again')
+      expect(wrapper.find('[data-testid="versions-empty"]').exists()).toBe(false)
+    })
+
     it('keeps Roll back off, with its reason, while the overrides editor is open, and opens nothing', async () => {
       const wrapper = mountCard({ editing: true })
       await flushPromises()

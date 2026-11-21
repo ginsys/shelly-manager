@@ -231,7 +231,8 @@ page imports still counts. The Playwright spec is what proves the links are rend
   (`utils/desiredDiff.ts`; secrets are not compared), the templates that are detached and the way back. A 409
   with paths keeps the dialog open with one input per path, and the typed secrets live in that dialog only.
   Roll back is off while the overrides editor is open and until the page has read the current configuration, and
-  the card reads its versions again each time the page finishes a read. No device is contacted: the operator
+  the card reads its versions again each time the page finishes a read, and a failed read leaves the list it
+  already shows. No device is contacted: the operator
   applies afterwards. The History card below it lists imports, not these versions.
 
   ![The desired configuration versions card, newest first](images/desired-rollback-versions.png)
