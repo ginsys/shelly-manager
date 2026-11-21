@@ -121,7 +121,9 @@ func checkDesiredRollback(t *testing.T, manager *Manager) {
 	})
 
 	t.Run("a write that changes no column is done", func(t *testing.T) {
+		before := rows()
 		require.NoError(t, repo.RollbackDeviceDesired(device.ID, configuration.DesiredRead(write), write, 1))
+		assert.Equal(t, before, rows(), "no row for a write that changes nothing")
 	})
 
 	t.Run("a stale read is a miss", func(t *testing.T) {
