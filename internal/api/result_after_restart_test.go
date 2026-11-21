@@ -22,8 +22,10 @@ import (
 func restartedRouter(t *testing.T, db *database.Manager, logger *logging.Logger) *mux.Router {
 	t.Helper()
 	engine := sync.NewSyncEngine(db, logger)
+	engine.SetExportBaseDir(string(filepath.Separator)) // the tests write to t.TempDir(); the root has its own tests
 	h := NewHandlerWithLogger(db, nil, nil, nil, logger)
 	h.ExportHandlers = NewSyncHandlers(engine, logger)
+	h.ExportHandlers.SetExportBaseDir(string(filepath.Separator))
 	h.ImportHandlers = NewImportHandlers(engine, logger)
 	r := mux.NewRouter()
 	api := r.PathPrefix("/api/v1").Subrouter()

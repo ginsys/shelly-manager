@@ -1,0 +1,87 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/gorilla/mux"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/sync"
+	"github.com/ginsys/shelly-manager/internal/testutil"
+)
+
+// With no export root configured, exports and downloads use ./data/exports: a file under it is served, a
+// file outside it (one recorded earlier, or one a request names now) is not.
+func TestExportAndDownloadUseTheDefaultRootWhenNoneIsConfigured(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+	require.NoError(t, err)
+	engine := sync.NewSyncEngine(db, logger)
+	engine.SetExportBaseDir(string(filepath.Separator)) // only to record an export outside the default root
+	require.NoError(t, engine.RegisterPlugin(&mockSyncPlugin{}))
+	h := NewHandlerWithLogger(db, nil, nil, nil, logger)
+	exp := NewSyncHandlers(engine, logger)
+	exp.SetExportBaseDir(string(filepath.Separator))
+	h.ExportHandlers = exp
+	r := mux.NewRouter()
+	exp.AddExportRoutes(r.PathPrefix("/api/v1").Subrouter())
+
+	work := t.TempDir()
+	t.Chdir(work)
+	require.NoError(t, os.MkdirAll(filepath.Join(work, "data", "exports"), 0o755))
+
+	export := func(destination string) (*httptest.ResponseRecorder, string) {
+		body, err := json.Marshal(map[string]interface{}{
+			"plugin_name": "mockfile", "format": "txt",
+			"config": map[string]interface{}{}, "filters": map[string]interface{}{},
+			"output":  map[string]interface{}{"type": "file", "destination": destination},
+			"options": map[string]interface{}{},
+		})
+		require.NoError(t, err)
+		req := httptest.NewRequest("POST", "/api/v1/export", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		var wrap map[string]interface{}
+		_ = json.Unmarshal(rr.Body.Bytes(), &wrap)
+		id := ""
+		if data, ok := wrap["data"].(map[string]interface{}); ok {
+			id, _ = data["export_id"].(string)
+		}
+		return rr, id
+	}
+	download := func(id string) int {
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, httptest.NewRequest("GET", "/api/v1/export/"+id+"/download", nil))
+		return rr.Code
+	}
+
+	// An export recorded while the root was wide open, outside ./data/exports
+	outside := filepath.Join(t.TempDir(), "earlier.txt")
+	rr, earlierID := export(outside)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	// No root configured from here on: the engine and the handlers use the default one
+	engine.SetExportBaseDir("")
+	exp.SetExportBaseDir("")
+
+	require.Equal(t, http.StatusForbidden, download(earlierID), "an export outside the default root was served")
+
+	rr, id := export("inside.txt")
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.FileExists(t, filepath.Join(work, "data", "exports", "inside.txt"))
+	require.Equal(t, http.StatusOK, download(id))
+
+	refused := filepath.Join(t.TempDir(), "refused.txt")
+	rr, _ = export(refused)
+	require.GreaterOrEqual(t, rr.Code, 400, rr.Body.String())
+	require.NoFileExists(t, refused)
+}

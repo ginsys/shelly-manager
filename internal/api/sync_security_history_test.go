@@ -24,10 +24,12 @@ func setupSecuredRouter(t *testing.T, adminKey string) (*mux.Router, *SyncHandle
 	require.NoError(t, err)
 
 	engine := sync.NewSyncEngine(db, logger)
+	engine.SetExportBaseDir(string(filepath.Separator)) // the tests write to t.TempDir(); the root has its own tests
 	require.NoError(t, engine.RegisterPlugin(&mockSyncPlugin{}))
 
 	h := NewHandlerWithLogger(db, nil, nil, nil, logger)
 	exp := NewSyncHandlers(engine, logger)
+	exp.SetExportBaseDir(string(filepath.Separator))
 	imp := NewImportHandlers(engine, logger)
 	exp.SetAdminAPIKey(adminKey)
 	imp.SetAdminAPIKey(adminKey)

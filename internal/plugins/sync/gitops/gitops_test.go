@@ -12,7 +12,7 @@ import (
 )
 
 func TestGitOpsExporter_Info(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 
 	info := exporter.Info()
 
@@ -42,7 +42,7 @@ func TestGitOpsExporter_Info(t *testing.T) {
 }
 
 func TestGitOpsExporter_ConfigSchema(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 
 	schema := exporter.ConfigSchema()
 
@@ -64,7 +64,7 @@ func TestGitOpsExporter_ConfigSchema(t *testing.T) {
 }
 
 func TestGitOpsExporter_ValidateConfig(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 
 	// Test valid config
 	validConfig := map[string]interface{}{
@@ -101,7 +101,7 @@ func TestGitOpsExporter_ValidateConfig(t *testing.T) {
 }
 
 func TestGitOpsExporter_GroupDevices(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestGitOpsExporter_GroupDevices(t *testing.T) {
 }
 
 func TestGitOpsExporter_GroupDevicesByType(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestGitOpsExporter_GroupDevicesByType(t *testing.T) {
 }
 
 func TestGitOpsExporter_ExtractLocationFromName(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestGitOpsExporter_ExtractLocationFromName(t *testing.T) {
 }
 
 func TestGitOpsExporter_GenerateCommonConfig(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestGitOpsExporter_GenerateCommonConfig(t *testing.T) {
 }
 
 func TestGitOpsExporter_GenerateDeviceConfig(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestGitOpsExporter_GenerateDeviceConfig(t *testing.T) {
 }
 
 func TestGitOpsExporter_SanitizeFilename(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestGitOpsExporter_Export(t *testing.T) {
 		}
 	}()
 
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if initErr := exporter.Initialize(logging.GetDefault()); initErr != nil {
 		t.Logf("Failed to initialize exporter: %v", initErr)
 	}
@@ -419,7 +419,7 @@ func TestGitOpsExporter_Export(t *testing.T) {
 }
 
 func TestGitOpsExporter_Preview(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -474,7 +474,7 @@ func TestGitOpsExporter_Preview(t *testing.T) {
 }
 
 func TestGitOpsExporter_Capabilities(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 
 	caps := exporter.Capabilities()
 

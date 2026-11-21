@@ -1128,48 +1128,19 @@ func (e *SyncEngine) validateImportPath(path string) (string, error) {
 	return validatedPath, nil
 }
 
-// validateExportPath validates a file path for export operations.
-// If exportBaseDir is set, it ensures the path is within that directory.
-// Returns the validated absolute path or an error.
+// validateExportPath validates a file path for export operations: it must lie inside the export root
+// (sync.DefaultExportRoot when none is set). Returns the validated absolute path or an error.
 func (e *SyncEngine) validateExportPath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("export path cannot be empty")
 	}
-
-	// If no base directory is configured, validate that the path is absolute
-	if e.exportBaseDir == "" {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return "", fmt.Errorf("invalid export path: %w", err)
-		}
-		return absPath, nil
-	}
-
-	// Use security.ValidatePath for comprehensive validation
-	validatedPath, err := security.ValidatePath(e.exportBaseDir, path)
-	if err != nil {
-		return "", fmt.Errorf("export path validation failed: %w", err)
-	}
-
-	return validatedPath, nil
+	return ResolveUnderRoot(e.exportBaseDir, path)
 }
 
-// validateOutputPath validates output_path from plugin config.
-// Returns the validated path or an error.
+// validateOutputPath validates output_path from plugin config the same way. An empty path is left to the plugin.
 func (e *SyncEngine) validateOutputPath(outputPath string) (string, error) {
 	if outputPath == "" {
-		return "", nil // Empty is allowed, plugin will use default
+		return "", nil
 	}
-
-	// If no export base directory is configured, validate basic safety
-	if e.exportBaseDir == "" {
-		// Ensure path doesn't contain traversal sequences
-		cleanPath := filepath.Clean(outputPath)
-		if strings.Contains(cleanPath, "..") {
-			return "", fmt.Errorf("path traversal not allowed")
-		}
-		return filepath.Abs(cleanPath)
-	}
-
-	return security.ValidatePath(e.exportBaseDir, outputPath)
+	return ResolveUnderRoot(e.exportBaseDir, outputPath)
 }

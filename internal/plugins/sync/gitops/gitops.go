@@ -20,7 +20,31 @@ const markerName = sync.ExportDirMarker
 
 // GitOpsPlugin implements the SyncPlugin interface for GitOps YAML exports
 type GitOpsPlugin struct {
-	logger *logging.Logger
+	logger  *logging.Logger
+	baseDir string // the export root; empty means sync.DefaultExportRoot
+}
+
+// SetExportBaseDir sets the export root (the engine hands it over).
+func (g *GitOpsPlugin) SetExportBaseDir(baseDir string) {
+	g.baseDir = baseDir
+}
+
+// resolveOutputDir returns the export directory for an output_path. A GitOps export cleans the directory it
+// writes into, so it never writes into the export root itself, where other exports live: an empty path
+// means the "gitops" directory under the root.
+func (g *GitOpsPlugin) resolveOutputDir(path string) (string, error) {
+	if path == "" {
+		path = "gitops"
+	}
+	resolved, err := sync.ResolveUnderRoot(g.baseDir, path)
+	if err != nil {
+		return "", err
+	}
+	if root, rootErr := sync.ResolveUnderRoot(g.baseDir, ""); rootErr == nil && resolved == root {
+		return "", fmt.Errorf("%w: output_path must be a directory below the export directory %s, not the directory itself",
+			sync.ErrInvalidExportPath, root)
+	}
+	return resolved, nil
 }
 
 // NewPlugin creates a new GitOps plugin (for registry)
@@ -57,8 +81,8 @@ func (g *GitOpsPlugin) ConfigSchema() sync.ConfigSchema {
 		Properties: map[string]sync.PropertySchema{
 			"output_path": {
 				Type:        "string",
-				Description: "Directory path for GitOps YAML files. A new or empty directory, or one an earlier GitOps export wrote, is used and its previous files are replaced; any other directory is refused",
-				Default:     "./gitops",
+				Description: "Directory under the export root for GitOps YAML files (empty is its gitops directory, never the root itself). A new or empty directory, or one an earlier GitOps export wrote, is used and its previous files are replaced; any other directory is refused",
+				Default:     "gitops",
 			},
 			"group_by": {
 				Type:        "string",
@@ -98,7 +122,7 @@ func (g *GitOpsPlugin) ConfigSchema() sync.ConfigSchema {
 		Required: []string{},
 		Examples: []map[string]interface{}{
 			{
-				"output_path":       "./config/devices",
+				"output_path":       "config/devices",
 				"group_by":          "location",
 				"include_common":    true,
 				"include_templates": true,
@@ -111,8 +135,14 @@ func (g *GitOpsPlugin) ConfigSchema() sync.ConfigSchema {
 // ValidateConfig validates the plugin configuration
 func (g *GitOpsPlugin) ValidateConfig(config map[string]interface{}) error {
 	if outputPath, exists := config["output_path"]; exists {
-		if _, ok := outputPath.(string); !ok {
+		path, ok := outputPath.(string)
+		if !ok {
 			return fmt.Errorf("output_path must be a string")
+		}
+		if path != "" {
+			if _, err := g.resolveOutputDir(path); err != nil {
+				return fmt.Errorf("invalid output_path: %w", err)
+			}
 		}
 	}
 
@@ -161,9 +191,10 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	)
 
 	// Parse configuration
-	outputPath, _ := config.Config["output_path"].(string)
-	if outputPath == "" {
-		outputPath = "./gitops"
+	requested, _ := config.Config["output_path"].(string)
+	outputPath, pathErr := g.resolveOutputDir(requested)
+	if pathErr != nil {
+		return nil, fmt.Errorf("path validation failed: %w", pathErr)
 	}
 
 	groupBy, _ := config.Config["group_by"].(string)

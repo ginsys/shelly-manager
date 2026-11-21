@@ -19,7 +19,6 @@ const (
 	FormatVersion           = "2026.1"
 	defaultNormalizedLimit  = int64(100 * 1024 * 1024)
 	defaultCompressionLevel = 6
-	defaultOutputDirectory  = "shelly-sma"
 )
 
 // SMAPlugin implements the registry-backed SMA export/import format.
@@ -165,10 +164,7 @@ func (s *SMAPlugin) ValidateConfig(config map[string]interface{}) error {
 			return fmt.Errorf("output_path must be a string")
 		}
 		if path != "" {
-			if s.exportBaseDir == "" {
-				return fmt.Errorf("approved export base directory is required for output_path")
-			}
-			if _, err := security.ValidatePath(s.exportBaseDir, path); err != nil {
+			if _, err := security.ValidatePath(s.exportRoot(), path); err != nil {
 				return fmt.Errorf("invalid output_path: %w", err)
 			}
 		}
@@ -199,6 +195,14 @@ func (s *SMAPlugin) SetExportBaseDir(baseDir string) {
 	s.exportBaseDir = baseDir
 }
 
+// exportRoot is the export root: the handed-over directory, else sync.DefaultExportRoot.
+func (s *SMAPlugin) exportRoot() string {
+	if s.exportBaseDir == "" {
+		return sync.DefaultExportRoot
+	}
+	return s.exportBaseDir
+}
+
 func (s *SMAPlugin) SetImportBaseDir(baseDir string) {
 	s.importBaseDir = baseDir
 }
@@ -215,12 +219,10 @@ func (s *SMAPlugin) Export(_ context.Context, data *sync.ExportData, config sync
 	}
 
 	outputPath, _ := config.Config["output_path"].(string)
-	var destination *approvedRootPath
 	if outputPath == "" {
-		destination, err = openDefaultExportRoot()
-	} else {
-		destination, err = openApprovedRoot(s.exportBaseDir, outputPath, "export")
+		outputPath = "." // the export root itself
 	}
+	destination, err := openApprovedRoot(s.exportRoot(), outputPath, "export")
 	if err != nil {
 		return nil, err
 	}

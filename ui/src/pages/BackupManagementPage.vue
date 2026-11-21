@@ -115,6 +115,7 @@ import {
   createYAMLExport,
   createSMAExport,
   buildSMAExportConfig,
+  outputPathField,
   deleteBackup,
   downloadBackupWithName,
   downloadExportWithName,
@@ -188,7 +189,8 @@ const deleteConfirm = ref<BackupItem | null>(null)
   const createDesc = ref('')
   const createCompression = ref<'none' | 'gzip' | 'zip'>('gzip')
   const createOutputDir = ref('./data/backups')
-  const exportOutputDir = ref('./data/exports')
+  // A directory under the server's export directory; empty writes into the export directory itself
+  const exportOutputDir = ref('')
   const createSubmitting = ref(false)
   const createError2 = ref('')
   const providerName = ref('')
@@ -345,8 +347,8 @@ async function createBackupPanel() {
         showMessage(`Backup "${createName.value || 'snapshot'}" created successfully`, 'success')
         await Promise.all([fetchBackups(), fetchStatistics()])
     } else if (createType.value === 'json') {
-      await createJSONExport({ 
-        output_path: exportOutputDir.value, 
+      await createJSONExport({
+        ...outputPathField(exportOutputDir.value),
         ...jsonOptions,
         compression: jsonCompression.value !== 'none',
         compression_algo: jsonCompression.value === 'zip' ? 'zip' : 'gzip',
@@ -354,8 +356,8 @@ async function createBackupPanel() {
       showMessage('JSON export created successfully', 'success')
       await fetchContentExports()
     } else if (createType.value === 'yaml') {
-      await createYAMLExport({ 
-        output_path: exportOutputDir.value, 
+      await createYAMLExport({
+        ...outputPathField(exportOutputDir.value),
         ...yamlOptions,
         compression: yamlCompression.value !== 'none',
         compression_algo: yamlCompression.value === 'zip' ? 'zip' : 'gzip',

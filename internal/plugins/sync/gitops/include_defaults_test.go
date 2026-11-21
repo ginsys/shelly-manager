@@ -34,7 +34,7 @@ func TestExportReadsAMissingIncludeKeyAsTheSchemaDefault(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			exporter := NewGitOpsExporter()
+			exporter := newTestExporter()
 			if err := exporter.Initialize(logging.GetDefault()); err != nil {
 				t.Fatalf("Initialize: %v", err)
 			}
@@ -85,7 +85,7 @@ func TestPreviewReadsAMissingIncludeKeyAsTheSchemaDefault(t *testing.T) {
 
 // A present value of the wrong type is refused, as a wrong group_by or output_path is.
 func TestValidateConfigRefusesANonBooleanInclude(t *testing.T) {
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	for _, key := range []string{"include_common", "include_templates"} {
 		err := exporter.ValidateConfig(map[string]interface{}{key: "yes"})
 		if err == nil || !strings.Contains(err.Error(), key) {
