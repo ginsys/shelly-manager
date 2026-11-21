@@ -328,6 +328,11 @@ func (r *GormConfigRepository) GetDesiredHistory(deviceID, historyID uint) (*Des
 // would call its own committed write a miss. An unchanged row reports no rows on MySQL without
 // clientFoundRows, and is done. A device deleted since the read is ErrDeviceNotFound, with no row.
 func (r *GormConfigRepository) RollbackDeviceDesired(deviceID uint, read DesiredRead, write DesiredWrite, restoredFrom uint) error {
+	if read == DesiredRead(write) {
+		// The device already holds it: the service calls this NoChange and leaves the pending flag and
+		// the history alone, so the repository writes nothing either, on every server.
+		return nil
+	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		dialect := tx.Name()
 		res := tx.Model(&DbDevice{}).
@@ -340,11 +345,6 @@ func (r *GormConfigRepository) RollbackDeviceDesired(deviceID uint, read Desired
 			return fmt.Errorf("failed to store the rolled back desired config: %w", res.Error)
 		}
 		if res.RowsAffected > 0 {
-			// Nothing but the pending flag changed: the service writes nothing for this, and a server
-			// that counts matched rows must not make a history row of it either.
-			if read == DesiredRead(write) {
-				return nil
-			}
 			return recordRollback(tx, deviceID, restoredFrom, read.TemplateIDs, read.Desired, write.Desired)
 		}
 

@@ -78,7 +78,7 @@ func templateIDsNone(text string) bool {
 func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint) (*RollbackResult, error) {
 	device, err := s.repo.GetDevice(deviceID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get device: %w", err)
 	}
 	version, err := s.repo.GetDesiredHistory(deviceID, historyID)
 	if err != nil {

@@ -88,8 +88,8 @@ func checkDesiredHistory(t *testing.T, manager *Manager) {
 
 // checkDesiredRollback is the rollback write on each server. A rollback changes the template ids and the
 // overrides as well as the desired text, so its recount must read the values it WRITES: a write that an
-// identical rollback already committed matches no row and is done. A write that changes no column reports
-// no row on MySQL without clientFoundRows and one with it, and succeeds either way.
+// identical rollback already committed matches no row and is done, with no second row. A write equal to what
+// was read writes nothing.
 func checkDesiredRollback(t *testing.T, manager *Manager) {
 	t.Helper()
 	db := manager.GetDB()
@@ -120,7 +120,7 @@ func checkDesiredRollback(t *testing.T, manager *Manager) {
 		assert.EqualValues(t, 1, rows(), "no second row")
 	})
 
-	t.Run("a write that changes no column is done", func(t *testing.T) {
+	t.Run("a write equal to what was read writes nothing", func(t *testing.T) {
 		before := rows()
 		require.NoError(t, repo.RollbackDeviceDesired(device.ID, configuration.DesiredRead(write), write, 1))
 		assert.Equal(t, before, rows(), "no row for a write that changes nothing")
