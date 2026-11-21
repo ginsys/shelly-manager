@@ -31,7 +31,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
-| [frontend-review.md](frontend/frontend-review.md) | Frontend architecture, measured API coverage, and open frontend work |
+| [frontend-review.md](frontend/frontend-review.md) | Frontend architecture, the API coverage definition and command, and open frontend work |
 
 ---
 
