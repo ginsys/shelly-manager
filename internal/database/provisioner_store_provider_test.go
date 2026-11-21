@@ -25,6 +25,7 @@ func TestProvisionerStoreProviders(t *testing.T) {
 			fixture := spec.setup(t)
 			checkProvisionerStore(t, startProviderManager(t, fixture))
 			checkProvisionerEnrolment(t, startProviderManager(t, fixture))
+			checkProvisionerIDRule(t, startProviderManager(t, fixture))
 
 			// A restart runs AutoMigrate over a populated database: it must leave the big config in place.
 			t.Run("a restart keeps what the tables hold", func(t *testing.T) {

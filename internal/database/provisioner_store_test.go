@@ -67,7 +67,11 @@ func checkProvisionerStore(t *testing.T, manager *Manager) {
 	now := time.Now()
 
 	t.Run("ids are compared byte for byte", func(t *testing.T) {
-		for _, id := range []string{"alpha", "Alpha", "alpha "} {
+		// "alpha " is a row from before the id rule (a new id with a space is refused now), so it is written
+		// directly; the other two register after it and must not be read as it, whatever the collation pads.
+		old := agentRow("alpha ", "tok-alpha ", now)
+		require.NoError(t, manager.GetDB().Create(&old).Error, "insert the pre-rule row")
+		for _, id := range []string{"alpha", "Alpha"} {
 			_, created, err := s.RegisterAgent(ctx, adminActor, agentRow(id, "tok-"+id, now), testOfflineAfter)
 			require.NoError(t, err, "register %q", id)
 			assert.True(t, created, "%q must be a new agent, not a re-register of another id", id)
