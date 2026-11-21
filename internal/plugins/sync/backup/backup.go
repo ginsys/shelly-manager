@@ -73,10 +73,9 @@ func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
 
 // insideRoot returns path as an absolute path when it is absRoot or lies under it, and an error
 // otherwise. It is the same lexical check as security.ValidatePath, written with filepath.Rel and
-// filepath.IsLocal in the plugin because CodeQL's go/path-injection model does not clear a path
-// that another package's function validated (code-scanning alert 106 on ginsys/shelly-manager#793
-// at the security.ValidatePath version). It reads no file system state: a symlink inside the root
-// is trusted host configuration.
+// filepath.IsLocal in the plugin: with security.ValidatePath here, CodeQL raised go/path-injection
+// on the MkdirAll call (code-scanning alert 106 on ginsys/shelly-manager#793). It reads no file
+// system state: a symlink inside the root is trusted host configuration.
 func insideRoot(absRoot, path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
