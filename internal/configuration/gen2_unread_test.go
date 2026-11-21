@@ -66,3 +66,25 @@ func TestGen2Converter_UnreadSettingsKeepsATimerWithoutATypedValue(t *testing.T)
 	assert.Equal(t, []string{"switch:0.auto_off", "switch:0.auto_off_delay", "switch:0.id"}, paths)
 	assert.Equal(t, map[string]interface{}{"auto_off": true, "auto_off_delay": 0.5, "id": float64(0)}, rest["switch:0"])
 }
+
+// A delay of 0 or null on an enabled timer reads as unset like a fractional one, so the flag and the
+// delay both stay in the rest.
+func TestGen2Converter_UnreadSettingsKeepsATimerWithAZeroOrNullDelay(t *testing.T) {
+	for _, delay := range []string{`0`, `null`} {
+		doc := `{"sys":{},"switch:0":{"id":0,"name":"x","auto_off":true,"auto_off_delay":` + delay + `}}`
+		paths, _, err := NewGen2Converter(nil).UnreadSettings(json.RawMessage(doc))
+		require.NoError(t, err)
+		assert.Equal(t, []string{"switch:0.auto_off", "switch:0.auto_off_delay", "switch:0.id"}, paths, "delay %s", delay)
+	}
+}
+
+// An empty string reads as unset, the same as an absent key, so it has no typed value: it stays in the
+// rest with its key and a typed save loses no setting the stored document held.
+func TestGen2Converter_UnreadSettingsKeepsAnEmptyString(t *testing.T) {
+	doc := `{"sys":{"sntp":{"server":""}},"mqtt":{"server":""},"cloud":{"server":""},"wifi":{"sta":{"ssid":"","ip":""},"ap":{"ssid":""}}}`
+	paths, rest, err := NewGen2Converter(nil).UnreadSettings(json.RawMessage(doc))
+	require.NoError(t, err)
+	// Nothing is read inside these keys, so each is named whole.
+	assert.Equal(t, []string{"cloud", "mqtt", "sys", "wifi"}, paths)
+	assert.Equal(t, "", rest["mqtt"].(map[string]interface{})["server"])
+}
