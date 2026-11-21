@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250 and ginsys/shelly-manager#748, and again with the drift schedule form of ginsys/shelly-manager#279, and again with ginsys/shelly-manager#747 (slice 2), and a unit test keeps them equal to the code (section 1)
-**Status:** 138 of 143 exported API functions are referenced by the UI (96%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 138 of 143 exported API functions are referenced by the UI (97%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
