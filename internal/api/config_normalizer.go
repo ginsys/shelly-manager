@@ -445,6 +445,13 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 		normalized.Relay.State = "off"
 	}
 
+	// The top-level location is where the Gen2 reader puts the time zone and the position.
+	if loc := typedConfig.Location; loc != nil {
+		normalized.Time.Timezone = configuration.StringVal(loc.Timezone, normalized.Time.Timezone)
+		normalized.Location.Lat = configuration.Float64Val(loc.Latitude, normalized.Location.Lat)
+		normalized.Location.Lng = configuration.Float64Val(loc.Longitude, normalized.Location.Lng)
+	}
+
 	// Extract raw fields if available
 	if typedConfig.Raw != nil {
 		var rawData map[string]interface{}
@@ -524,11 +531,24 @@ func (n *ConfigNormalizer) NormalizeTypedConfig(typedConfig *configuration.Typed
 				handledFields["tzautodetect"] = true
 			}
 
+			// A Gen2 document lists only the keys that no reader takes a value from: the typed form
+			// already holds the rest, and a second copy would go stale after an edit.
+			var gen2Unread map[string]bool
+			if isGen2Document(rawData) {
+				if keys, err := configuration.NewGen2Converter(nil).UnreadKeys(typedConfig.Raw); err == nil {
+					gen2Unread = make(map[string]bool, len(keys))
+					for _, key := range keys {
+						gen2Unread[key] = true
+					}
+				}
+			}
+
 			// Add all remaining fields to Additional map
 			for key, value := range rawData {
-				if !handledFields[key] {
-					normalized.Raw.Additional[key] = value
+				if handledFields[key] || (gen2Unread != nil && !gen2Unread[key]) {
+					continue
 				}
+				normalized.Raw.Additional[key] = value
 			}
 		}
 	}
