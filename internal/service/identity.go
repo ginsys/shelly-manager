@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -50,6 +51,21 @@ func (s *ShellyService) checkStoredIdentity(device *database.Device) error {
 	ctx, cancel := context.WithTimeout(s.ctx, 3*time.Second)
 	defer cancel()
 	return configuration.CheckDeviceIdentity(ctx, probe, device.MAC)
+}
+
+// loginRefusedBy is the error of a refused saved login whose identity read then failed. The refusal
+// comes first, so a caller that classifies by it (shelly.IsAuthError) still sees a device that
+// rejects the login, and the failed read stays reachable with errors.Is.
+//
+// A configuration.ErrDeviceIdentity keeps the identity text alone. It has three causes: another
+// MAC answered, the record has no MAC, the device reported none. The text already says the login
+// was rejected and names the fix, setting the MAC. The identity handlers own that answer, and only
+// the first cause means that some other device refused the login.
+func loginRefusedBy(refusal, idErr error) error {
+	if errors.Is(idErr, configuration.ErrDeviceIdentity) {
+		return fmt.Errorf("the login was rejected and is left as it is: %w", idErr)
+	}
+	return fmt.Errorf("the login was rejected and is left as it is (%w); the identity check then failed: %w", refusal, idErr)
 }
 
 // mayAdoptConfigLogin reports whether a client built for this record could end by saving the global
