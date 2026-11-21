@@ -1,11 +1,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/ginsys/shelly-manager/internal/configuration"
 )
@@ -226,6 +228,64 @@ func TestKeepOmittedActionURLs_NilSidesAreLeftAlone(t *testing.T) {
 	keepOmittedActionURLs(&configuration.DeviceConfiguration{}, actionsOf(actionEntryOf("out_on_url", 0, secretActionURLs[0])), nil)
 
 	assert.Nil(t, (*incoming.Actions)[0].SecretURLs)
+}
+
+// failDeviceReadNumber makes the nth read of the devices table after the call fail once, and returns
+// how many times it fired. The PATCH route reads the device to check the body, then reads the stored
+// overrides, then the service reads them again: the second is the one that must not be skipped.
+func failDeviceReadNumber(t *testing.T, handler *Handler, n int) *int {
+	t.Helper()
+	const name = "test:fail-device-read"
+	seen, fired := 0, 0
+	require.NoError(t, handler.DB.GetDB().Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table != "devices" {
+			return
+		}
+		seen++
+		if seen == n {
+			fired++
+			_ = tx.AddError(errors.New("injected read failure"))
+		}
+	}))
+	// The database belongs to this test alone and is closed with it, so the callback is not removed.
+	return &fired
+}
+
+// When the stored overrides cannot be read, a patch that carries actions is refused: the action list
+// replaces the stored one whole, so a store that went on would drop the URLs the body only masks or
+// leaves out. A patch without actions merges field by field and goes on as before.
+func TestActionURLs_APatchWithActionsIsRefusedWhenTheStoredOverridesCannotBeRead(t *testing.T) {
+	for name, body := range map[string]string{
+		"an action sent without its list": `{"actions":[{"name":"out_on_url","index":0,"enabled":false}]}`,
+		"an action sent as the mask":      `{"actions":[{"name":"out_on_url","index":0,"secret_urls":["********"]}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			handler, cleanup := setupTestHandler(t)
+			defer cleanup()
+			id := keepOverrideDevice(t, handler, storedActionOverrides)
+			fired := failDeviceReadNumber(t, handler, 2)
+
+			w := sendOverrides(t, handler, "PATCH", id, body)
+
+			require.Equal(t, 1, *fired, "the injected failure did not reach the read under test")
+			assert.Equal(t, http.StatusInternalServerError, w.Code, w.Body.String())
+			assert.Equal(t, []string{"http://admin:hunter2@192.168.1.4/on?token=s3cr3t"}, storedActionURLs(t, handler, id),
+				"the stored list was replaced")
+		})
+	}
+
+	t.Run("a patch without actions goes on", func(t *testing.T) {
+		handler, cleanup := setupTestHandler(t)
+		defer cleanup()
+		id := keepOverrideDevice(t, handler, storedActionOverrides)
+		fired := failDeviceReadNumber(t, handler, 2)
+
+		w := sendOverrides(t, handler, "PATCH", id, `{"mqtt":{"user":"iot"}}`)
+
+		require.Equal(t, 1, *fired, "the injected failure did not reach the read under test")
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Equal(t, []string{"http://admin:hunter2@192.168.1.4/on?token=s3cr3t"}, storedActionURLs(t, handler, id))
+	})
 }
 
 // The bulk apply route stores its patch as the PATCH route does, so an action sent without its list

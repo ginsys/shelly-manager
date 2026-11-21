@@ -420,10 +420,19 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// A secret sent back as the mask leaves the stored one as it is.
+	// A secret sent back as the mask leaves the stored one as it is. The other secrets merge field by
+	// field, so an unreadable record costs them nothing. An action list replaces the stored one whole,
+	// so a patch that carries actions is refused and nothing is stored when the record cannot be read.
 	if stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id)); err == nil {
 		restoreMaskedSecrets(&patch, stored)
 		keepOmittedActionURLs(&patch, stored, matchSecretNulls(removed))
+	} else if patch.Actions != nil {
+		if errors.Is(err, configuration.ErrDeviceNotFound) {
+			rw.WriteNotFoundError(w, r, "Device")
+			return
+		}
+		rw.WriteInternalError(w, r, err)
+		return
 	} else {
 		restoreMaskedSecrets(&patch, nil)
 	}
