@@ -202,6 +202,21 @@ func TestMergeConfigurations_PlainScalarLaterLayerWins(t *testing.T) {
 	assert.Equal(t, "device", result.Sources["system.sntp.server"])
 }
 
+// refusedSection is the section Apply names when a template holds the plain field at path next to
+// system.device.name: the section the field belongs to, as it is the part that does not survive.
+func refusedSection(t *testing.T, path string) string {
+	t.Helper()
+	for _, section := range []string{
+		"system.debug", "system.device.ble", "system.rpc_udp", "system.sleep_mode", "system.ui_data",
+	} {
+		if strings.HasPrefix(path, section+".") {
+			return section
+		}
+	}
+	require.Failf(t, "no section", "%s belongs to no section Apply refuses", path)
+	return ""
+}
+
 // Apply refuses a populated field that does not survive the round trip. The merge used to drop the
 // plain fields and leave an empty section, which Apply refused as well, so a device whose template holds
 // a field Apply cannot write was never appliable. It still is not, with the refusal naming the same
@@ -230,8 +245,12 @@ func TestApplyRefusalsFollowPlainScalars(t *testing.T) {
 					assert.Empty(t, gen2)
 					return
 				}
-				assert.NotEmpty(t, gen1, "a field Apply cannot write must still be refused on Gen1")
-				assert.NotEmpty(t, gen2, "a field Apply cannot write must still be refused on Gen2")
+				want := []string{"system"}
+				if withName {
+					want = []string{refusedSection(t, tc.path)}
+				}
+				assert.Equal(t, want, gen1, "a field Apply cannot write must still be refused on Gen1, naming the same section")
+				assert.Equal(t, want, gen2, "a field Apply cannot write must still be refused on Gen2, naming the same section")
 			})
 		}
 	}
