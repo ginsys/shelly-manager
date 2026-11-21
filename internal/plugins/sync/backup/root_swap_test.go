@@ -25,52 +25,50 @@ func liveProvider(t *testing.T) (*BackupPlugin, provider.BackupProvider, string)
 
 // ginsys/shelly-manager#815: the path check (ResolveUnderRoot) can pass and a link be swapped in before the
 // write. The backup file is created and written through the opened backup root, so a link that leads out of
-// it is refused, and nothing is created outside: neither the file nor a snapshot of the database.
+// it is refused, and nothing is created outside it.
 func TestBackupRefusesALinkSwappedInAfterTheCheck(t *testing.T) {
 	for _, swapped := range []string{"the output directory", "a directory below it"} {
-		{ // one block per case
-			t.Run(swapped+" swapped for a link", func(t *testing.T) {
-				plugin, bp, _ := liveProvider(t)
-				base := t.TempDir()
-				rootDir := filepath.Join(base, "root")
-				outside := filepath.Join(base, "outside")
-				for _, d := range []string{rootDir, outside} {
-					if err := os.MkdirAll(d, 0o755); err != nil {
-						t.Fatal(err)
-					}
-				}
-				plugin.SetExportBaseDir(rootDir)
-
-				requested := "export"
-				if swapped == "a directory below it" {
-					requested = filepath.Join("export", "below")
-					if err := os.MkdirAll(filepath.Join(rootDir, "export"), 0o755); err != nil {
-						t.Fatal(err)
-					}
-				}
-				outputPath, err := plugin.resolveOutputDir(requested) // passes: nothing is there yet
-				if err != nil {
+		t.Run(swapped+" swapped for a link", func(t *testing.T) {
+			plugin, bp, _ := liveProvider(t)
+			base := t.TempDir()
+			rootDir := filepath.Join(base, "root")
+			outside := filepath.Join(base, "outside")
+			for _, d := range []string{rootDir, outside} {
+				if err := os.MkdirAll(d, 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err = os.Symlink(outside, outputPath); err != nil {
-					t.Skipf("symlink: %v", err)
-				}
-				root, rel, err := sync.OpenOutputRoot(plugin.backupRoot(), outputPath)
-				if err != nil {
+			}
+			plugin.SetExportBaseDir(rootDir)
+
+			requested := "export"
+			if swapped == "a directory below it" {
+				requested = filepath.Join("export", "below")
+				if err := os.MkdirAll(filepath.Join(rootDir, "export"), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				defer func() { _ = root.Close() }()
+			}
+			outputPath, err := plugin.resolveOutputDir(requested) // passes: nothing is there yet
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Symlink(outside, outputPath); err != nil {
+				t.Skipf("symlink: %v", err)
+			}
+			root, rel, err := sync.OpenOutputRoot(plugin.backupRoot(), outputPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = root.Close() }()
 
-				name := "backup.sqlite"
-				cfg := provider.BackupConfig{BackupPath: filepath.Join(outputPath, name), BackupType: provider.BackupTypeFull}
-				if _, err = plugin.writeBackup(context.Background(), bp, root, rel, name, cfg); err == nil {
-					t.Error("the backup was written through a link that leads out of the backup root")
-				}
-				if entries, _ := os.ReadDir(outside); len(entries) > 0 {
-					t.Errorf("%d entries were created outside the backup root", len(entries))
-				}
-			})
-		}
+			name := "backup.sqlite"
+			cfg := provider.BackupConfig{BackupPath: filepath.Join(outputPath, name), BackupType: provider.BackupTypeFull}
+			if _, err = plugin.writeBackup(context.Background(), bp, root, rel, name, cfg); err == nil {
+				t.Error("the backup was written through a link that leads out of the backup root")
+			}
+			if entries, _ := os.ReadDir(outside); len(entries) > 0 {
+				t.Errorf("%d entries were created outside the backup root", len(entries))
+			}
+		})
 	}
 }
 
