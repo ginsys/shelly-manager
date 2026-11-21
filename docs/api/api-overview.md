@@ -576,7 +576,7 @@ All API responses follow this envelope:
 | `REQUEST_TOO_LARGE` | 413 | Payload too large |
 | `INTERNAL_SERVER_ERROR` | 500 | Server error |
 | `DEVICE_NOT_FOUND` | 404 | Device does not exist |
-| `DEVICE_OFFLINE` | 503 | Device unreachable |
+| `DEVICE_OFFLINE` | 503 | The stored status of the device is offline (control, status, energy and config drift). Control, energy and drift send nothing to it; control accepts `"force": true` to try anyway. Status probes a device last seen within 5 minutes once first and answers 503 if that probe fails; for any other offline device it sends nothing. Not `DEVICE_UNREACHABLE` (504), which is a read that got no answer in time |
 | `DEVICE_UNREACHABLE` | 504 | Device did not answer in time (status, energy and current-config reads) |
 | `CONFIGURATION_ERROR` | 400 | Config operation failed |
 | `TEMPLATE_ERROR` | 400 | Template processing error |
