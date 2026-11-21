@@ -206,7 +206,7 @@ func importDevices(tx *gorm.DB, data *ExportData, opts ImportOptions, result *Im
 		}
 		desired := ""
 		if in.Configuration != nil && in.Configuration.Config != nil {
-			if desired, err = restoreObject(in.Configuration.Config, storedDesired, result); err != nil {
+			if desired, err = restoreConfiguration(in.Configuration.Config, storedDesired, result); err != nil {
 				return fmt.Errorf("device %s configuration: %w", in.MAC, err)
 			}
 		}
@@ -289,7 +289,7 @@ func importTemplates(tx *gorm.DB, data *ExportData, opts ImportOptions, result *
 		if lookup.Error == nil {
 			storedConfig, storedVariables = string(existing.Config), string(existing.Variables)
 		}
-		config, err := restoreObject(in.Config, storedConfig, result)
+		config, err := restoreConfiguration(in.Config, storedConfig, result)
 		if err != nil {
 			return fmt.Errorf("template %s config: %w", in.Name, err)
 		}
@@ -505,12 +505,24 @@ func writeDeviceConfigRow(tx *gorm.DB, deviceID uint, desired string) error {
 // stored JSON object at the same path, or removed when there is none. It adds the number of
 // redacted values to result.
 func restoreObject(m map[string]interface{}, stored string, result *ImportApplyResult) (string, error) {
+	return restoreWith(resolveRedacted, m, stored, result)
+}
+
+// restoreConfiguration is restoreObject for the JSON of a DeviceConfiguration: a device's desired
+// configuration and a template's config. Only there is the list under the top-level actions key a
+// list of Gen1 actions.
+func restoreConfiguration(m map[string]interface{}, stored string, result *ImportApplyResult) (string, error) {
+	return restoreWith(resolveConfiguration, m, stored, result)
+}
+
+func restoreWith(resolve func(config, current map[string]interface{}) int, m map[string]interface{}, stored string,
+	result *ImportApplyResult) (string, error) {
 	var current map[string]interface{}
 	if strings.TrimSpace(stored) != "" {
 		// A stored value that is not an object has nothing to keep.
 		_ = json.Unmarshal([]byte(stored), &current)
 	}
-	result.Redacted += resolveRedacted(m, current)
+	result.Redacted += resolve(m, current)
 	return marshalObject(m)
 }
 
@@ -536,10 +548,37 @@ func resolveRedacted(config, current map[string]interface{}) int {
 			found += resolveRedacted(v, child)
 		case []interface{}:
 			stored, _ := current[key].([]interface{})
-			resolved, n := resolveRedactedList(v, stored)
+			resolved, n := resolveRedactedList(v, stored, false)
 			config[key] = resolved
 			found += n
 		}
+	}
+	return found
+}
+
+// resolveConfiguration is resolveRedacted for the JSON of a DeviceConfiguration. The list under its
+// top-level actions key (in any casing) is a list of Gen1 actions, so its elements are resolved by
+// the action rule, whatever keys they hold: an entry is known by where it is, never by what it
+// contains. The stored list is the one stored actions key, and two stored spellings are no list.
+// Every other key, and every list below the top level, is resolved as resolveRedacted does.
+func resolveConfiguration(config, current map[string]interface{}) int {
+	lists := map[string][]interface{}{}
+	for _, key := range keysFolded(config, actionsKey) {
+		if list, ok := config[key].([]interface{}); ok {
+			lists[key] = list
+			delete(config, key)
+		}
+	}
+	found := resolveRedacted(config, current)
+
+	var stored []interface{}
+	if keys := keysFolded(current, actionsKey); len(keys) == 1 {
+		stored, _ = current[keys[0]].([]interface{})
+	}
+	for key, list := range lists {
+		resolved, n := resolveRedactedList(list, stored, true)
+		config[key] = resolved
+		found += n
 	}
 	return found
 }
@@ -571,7 +610,7 @@ func holdsPlaceholder(value interface{}) bool {
 // takes the stored element when that is a string or a number that is not a placeholder, and is left out
 // otherwise. A stored list that was reordered since the export pairs the wrong elements, which is
 // the limit of matching by position.
-func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
+func resolveRedactedList(list, stored []interface{}, actions bool) ([]interface{}, int) {
 	found := 0
 	out := make([]interface{}, 0, len(list))
 	for i, item := range list {
@@ -595,14 +634,14 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 			continue
 		case map[string]interface{}:
 			child, _ := kept.(map[string]interface{})
-			if isActionEntry(v) && len(keysFolded(v, actionURLsKey)) > 0 {
+			if actions {
 				found += resolveActionURLs(v, child)
 			} else {
 				found += resolveRedacted(v, child)
 			}
 		case []interface{}:
 			child, _ := kept.([]interface{})
-			resolved, n := resolveRedactedList(v, child)
+			resolved, n := resolveRedactedList(v, child, false)
 			found += n
 			item = resolved
 		}
@@ -611,8 +650,12 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 	return out, found
 }
 
-// actionURLsKey is the key of a Gen1 action's URL list in a stored configuration.
-const actionURLsKey = "secret_urls"
+// actionsKey is the key of the list of Gen1 actions in a configuration, and actionURLsKey the key of
+// an action's URL list.
+const (
+	actionsKey    = "actions"
+	actionURLsKey = "secret_urls"
+)
 
 // keysFolded returns the keys of m that match name without regard to case. The configuration decoder
 // matches keys that way, so an archive may spell a key another way and still state it.
@@ -624,13 +667,6 @@ func keysFolded(m map[string]interface{}, name string) []string {
 		}
 	}
 	return keys
-}
-
-// isActionEntry reports whether the object is an action entry of a configuration: it holds a name and
-// an index, which a real entry always writes. Only such an object is resolved by the action rule; any
-// other object goes to the generic rule, whatever keys it holds.
-func isActionEntry(m map[string]interface{}) bool {
-	return len(keysFolded(m, "name")) > 0 && len(keysFolded(m, "index")) > 0
 }
 
 // countPlaceholders counts the placeholders in the value of a URL list, as a bare string (the SMA
