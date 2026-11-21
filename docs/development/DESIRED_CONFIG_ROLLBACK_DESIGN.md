@@ -298,7 +298,9 @@ and the pending flag in one UPDATE as `SetDeviceDesiredConfigPending` does, and 
   NULL is not a rollback source and the rollback must skip it. The three text columns are unsized
   (`text` on PostgreSQL and SQLite, `longtext` on MySQL), never narrower than `devices.desired_config`.
   A device keeps its newest 50 rows (a rollback undoes recent edits; at about 5 KB a text that is about
-  0.5 MB a device), pruned at insert, so a pruned row can be the one a later `restored_from` names.
+  0.5 MB a device), pruned at insert, so a pruned row can be the one a later `restored_from` names. The
+  prune reads its cutoff without a lock (a stale cutoff only removes fewer rows, so a device can hold a few
+  over 50 until its next change), because a locking read would lock a range of the `device_id` index.
 - **The history row.** A rollback row names its version through `restored_from`, so the card can say
   "restored to version N" without a free-text field.
 

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 	secrets "github.com/ginsys/shelly-manager/internal/redact"
@@ -23,12 +22,12 @@ const desiredHistoryKeep = 50
 type DesiredConfigHistory struct {
 	ID                  uint      `gorm:"primaryKey"`
 	DeviceID            uint      `gorm:"index;not null"`
-	Action              string    `gorm:"not null"` // recompute, import or rollback
+	Action              string    `gorm:"size:32;not null"` // recompute, import or rollback
 	OldDesired          *string   // masked, NULL when empty or not JSON
 	NewDesired          *string   // masked, NULL when not JSON
 	PreviousTemplateIDs *string   // a rollback's detached template ids
 	RestoredFrom        *uint     // the version a rollback restored
-	ChangedBy           string    `gorm:"not null"` // "system": no per-person source exists
+	ChangedBy           string    `gorm:"size:64;not null"` // "system": no per-person source exists
 	CreatedAt           time.Time `gorm:"not null"`
 }
 
@@ -81,12 +80,14 @@ func maskedDesired(deviceID uint, action, text string) *string {
 }
 
 // pruneDesiredHistory deletes the rows of a device older than its newest desiredHistoryKeep. The cutoff
-// is read first, so MySQL needs no subquery on the table it deletes from, and under FOR UPDATE so it sees
-// the latest committed rows: a plain read in the import's REPEATABLE READ transaction keeps its first
-// snapshot, misses a row a concurrent recompute added and pruned, and leaves more than the newest 50.
+// is read first, so MySQL needs no subquery on the table it deletes from. It is a plain read on purpose:
+// a stale cutoff is always an older id, so the delete removes fewer rows and never the newest, and a
+// device may hold a few rows over 50 until its next change prunes them. FOR UPDATE would lock a range of
+// the device_id index on every insert, which on InnoDB reaches the neighbouring device's rows and could
+// deadlock two devices' writers: a desired write that succeeds today would fail.
 func pruneDesiredHistory(tx *gorm.DB, deviceID uint) error {
 	var cutoff []uint
-	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Model(&DesiredConfigHistory{}).Where("device_id = ?", deviceID).
+	err := tx.Model(&DesiredConfigHistory{}).Where("device_id = ?", deviceID).
 		Order("id DESC").Offset(desiredHistoryKeep).Limit(1).Pluck("id", &cutoff).Error
 	if err != nil {
 		return fmt.Errorf("failed to prune the desired configuration history: %w", err)
