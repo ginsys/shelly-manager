@@ -151,7 +151,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | 132 | Device details |
 | `/templates` | Configuration templates | 395 | top bar, Template detail |
 | `/templates/:id` | Template detail | 425 | Templates |
-| `/drift/schedules` | Drift schedules (create, edit, enable or disable, delete, recent runs; see section 5) | 501 | top bar (Drift) |
+| `/drift/schedules` | Drift schedules (create, edit, enable or disable, delete, recent runs; see section 5) | 503 | top bar (Drift) |
 | `/drift/reports` | Drift reports | 519 | top bar (Drift) |
 | `/drift/trends` | Drift trends | 517 | top bar (Drift) |
 | `/export/backup` | Backup management | 921 | top bar (Export & Import) |
