@@ -111,9 +111,11 @@ from this import** on that card opens a dialog that makes a configuration templa
   the name, hostname, MAC, MQTT client id and topic prefix, the login realm, the access-point name, the name of
   each relay and input channel (the channel ids stay), and every static address (the address mode goes with it).
   A password slot is left out whatever its value, so an empty password never reaches a template.
-- The dialog reads the import through the server's typed form, which does not yet read every key of a
-  second-generation device (`sys`, `switch:0` and similar). Such an import can offer few sections, often only
-  `cloud`. Build the template on its template page instead.
+- The dialog reads the import through the server's typed form. For a second-generation device that form holds
+  the device name and time settings, the Wi-Fi station and access point, MQTT, cloud, and the switch and input
+  channels. A setting with no typed home, such as the Bluetooth, WebSocket or script settings, is not offered; the
+  typed form names each in its `conversion_info` warnings. The sections you can tick are still those that the
+  device's schema lists.
 - Enter a name and a description. The scope is the model of the device's schema (`GET /config/schema?device_id=...`) when
   the server lists it (`GET /config/device-types`); otherwise the template is for all devices. A refusal from the server shows its
   reason, and the field list when the server names fields. After a save, the dialog says **Template saved** and links to the new template; it goes nowhere by itself. If you leave the page while the save runs, a notice says whether it went through.

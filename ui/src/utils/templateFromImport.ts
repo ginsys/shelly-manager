@@ -23,6 +23,7 @@ const PER_DEVICE_PATHS = [
   'network.wifi.sta.ip',
   'network.wifi.sta.ipv4mode',
   'network.wifi.ap.ssid',
+  'wifi.ap.ssid',
   // `*` stands for any list index, so a channel keeps its id and loses its name.
   'relay.relays.*.name',
   'input.inputs.*.name',

@@ -1,0 +1,43 @@
+{
+  "ble": {"enable": true, "rpc": {"enable": true}, "observer": {"enable": false}},
+  "cloud": {"enable": true, "server": "iot.shelly.cloud:6012/jrpc"},
+  "mqtt": {
+    "enable": true, "server": "broker.example.net:1883", "client_id": "shellyplus1pm-AABBCC",
+    "user": "shelly", "ssl_ca": null, "topic_prefix": "shellyplus1pm-AABBCC", "rpc_ntf": true,
+    "status_ntf": false, "use_client_cert": false, "enable_control": true
+  },
+  "wifi": {
+    "ap": {"ssid": "ShellyPlus1PM-AABBCC", "is_open": true, "enable": true, "range_extender": {"enable": false}},
+    "sta": {
+      "ssid": "HomeNet", "pass": "gen2-sta-pass", "is_open": false, "enable": true, "ipv4mode": "dhcp",
+      "ip": null, "netmask": null, "gw": null, "nameserver": null
+    },
+    "sta1": {
+      "ssid": null, "pass": "gen2-sta1-pass", "is_open": true, "enable": false, "ipv4mode": "dhcp",
+      "ip": null, "netmask": null, "gw": null, "nameserver": null
+    },
+    "roam": {"rssi_thr": -80, "interval": 60}
+  },
+  "ws": {"enable": false, "server": null, "ssl_ca": "ca.pem"},
+  "sys": {
+    "device": {
+      "name": "Porch", "mac": "AABBCCDDEEFF", "fw_id": "20231107-164738/1.0.8-g8b7c0ab",
+      "eco_mode": false, "discoverable": true
+    },
+    "location": {"tz": "Europe/Brussels", "lat": 50.85, "lon": 4.35},
+    "debug": {"level": 2, "file_level": null, "mqtt": {"enable": false}, "websocket": {"enable": false}, "udp": {"addr": null}},
+    "ui_data": {},
+    "rpc_udp": {"dst_addr": null, "listen_port": null},
+    "sntp": {"server": "time.cloudflare.com"},
+    "cfg_rev": 14
+  },
+  "switch:0": {
+    "id": 0, "name": "Pump", "in_mode": "follow", "initial_state": "restore_last",
+    "auto_on": false, "auto_on_delay": 60, "auto_off": true, "auto_off_delay": 300,
+    "autorecover_voltage_errors": false, "input_id": 0, "power_limit": 4480, "voltage_limit": 280,
+    "undervoltage_limit": 0, "current_limit": 16
+  },
+  "input:0": {"id": 0, "name": null, "type": "switch", "enable": true, "invert": false, "factory_reset": true},
+  "script:1": {"id": 1, "name": "night", "enable": true},
+  "modbus": {"enable": false, "pass": "gen2-modbus-pass"}
+}
