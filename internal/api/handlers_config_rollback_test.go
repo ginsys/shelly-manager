@@ -221,17 +221,19 @@ func TestRollbackRoute_ABadBodyIsRefusedWithoutEchoingIt(t *testing.T) {
 	putOverrides(t, handler, id, `{"mqtt":{"server":"b.example","pass":"cur-secret"}}`)
 
 	bodies := map[string]string{
-		"truncated json":      fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body`, first),
-		"no history id":       `{"secrets":{"mqtt.pass":"sentinel-body"}}`,
-		"a repeated member":   fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body"},"secrets":{}}`, first),
-		"a key off the list":  fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body","auth.pass":"sentinel-body"}}`, first),
-		"an empty value":      fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":""}}`, first),
-		"the mask":            fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"%s"}}`, first, secretMask),
-		"an empty list":       fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":[]}}`, first),
-		"a misspelt member":   fmt.Sprintf(`{"history_id":%d,"secret":{"mqtt.pass":"sentinel-body"}}`, first),
-		"data after the body": fmt.Sprintf(`{"history_id":%d} {"history_id":1}`, first),
-		"a null secrets":      fmt.Sprintf(`{"history_id":%d,"secrets":null}`, first),
-		"a list for secrets":  fmt.Sprintf(`{"history_id":%d,"secrets":["x"]}`, first),
+		"truncated json":          fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body`, first),
+		"no history id":           `{"secrets":{"mqtt.pass":"sentinel-body"}}`,
+		"a repeated member":       fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body"},"secrets":{}}`, first),
+		"a key off the list":      fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"sentinel-body","auth.pass":"sentinel-body"}}`, first),
+		"an empty value":          fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":""}}`, first),
+		"the mask":                fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"%s"}}`, first, secretMask),
+		"an empty list":           fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":[]}}`, first),
+		"a misspelt member":       fmt.Sprintf(`{"history_id":%d,"secret":{"mqtt.pass":"sentinel-body"}}`, first),
+		"data after the body":     fmt.Sprintf(`{"history_id":%d} {"history_id":1}`, first),
+		"a closing bracket after": fmt.Sprintf(`{"history_id":%d}]`, first),
+		"a closing brace after":   fmt.Sprintf(`{"history_id":%d}}`, first),
+		"a null secrets":          fmt.Sprintf(`{"history_id":%d,"secrets":null}`, first),
+		"a list for secrets":      fmt.Sprintf(`{"history_id":%d,"secrets":["x"]}`, first),
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
