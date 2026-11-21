@@ -98,9 +98,19 @@ UI, the device list answers 401 and the UI opens the key dialog.
 | POST | `/api/v1/devices/{id}/config/apply-template` | Apply template to device |
 | GET | `/api/v1/devices/{id}/config/history` | Get config change history: a list of rows (`action`, `old_config`, `new_config`, `changes`, `changed_by`, `created_at`), newest first, `?limit=` (default 50). Secrets are masked in all three of `old_config`, `new_config` and `changes` |
 | GET | `/api/v1/devices/{id}/desired-config` | Get the desired configuration and what the device inherits from its templates |
+| GET | `/api/v1/devices/{id}/desired-config/history` | List the versions of the desired configuration, newest first, with every secret masked |
+| POST | `/api/v1/devices/{id}/config/new/rollback` | Set the desired configuration back to a stored version, `{"history_id": 12, "secrets": {...}}`; the device is not contacted |
 | GET | `/api/v1/devices/{id}/config/new/status` | Get whether the desired configuration is applied |
 | POST | `/api/v1/devices/{id}/config/new/apply` | Write the desired configuration to the device (admin key) |
 | POST | `/api/v1/devices/{id}/config/new/verify` | Compare the desired configuration with the device; 409 when the device's MAC is not the stored one |
+
+#### Rolling the desired configuration back
+
+`GET /devices/{id}/desired-config/history` lists the last 50 versions of a device's desired configuration, newest first: `id`, `created_at`, `action` (`recompute`, `import` or `rollback`), `changed_by`, `restored_from` and `new_desired`, the stored text with every secret masked as `********` (null where no text could be stored).
+
+`POST /devices/{id}/config/new/rollback` takes `{"history_id": 12, "secrets": {...}}`. The version becomes the whole overrides text, the templates are detached, the desired configuration is recomputed from it, and the device is pending until an apply. No device is contacted. The answer says "Desired configuration set to version N. The device is unchanged until you apply it." A rollback to what the device already holds writes nothing and records no version.
+
+History holds no secret, so a secret is kept from the current desired configuration only where the place it is sent to is unchanged: `wifi.password` while `wifi.ssid` is equal, `wifi.ap.pass` while `wifi.ap.ssid` is equal, `mqtt.pass` while `mqtt.server`, `port`, `user`, `ssl_ca` and `enable_sni` are equal, `auth.pass` while `auth.user` is equal, and the two `network.wifi` passwords while their `ssid` is equal. `wifi.ap.key` and every action URL list (`actions."<name>".<index>.secret_urls`) are always entered. Every other masked value is a 409 with `error.details.paths`; nothing is written and no value is echoed. Retry with `secrets` keyed by those paths: a non-empty string, or for an action URL list a non-empty list of non-empty strings. The mask, an empty value (never a clear), an empty list or a key that is not on the list is 400. Other statuses: 404 for a version of another device, 409 when the desired configuration changed while the rollback was prepared, 422 when the version holds no stored text or a recompute would change it (`details.paths`). The routes need the admin key like the other desired-configuration routes. The secrets of a request are never logged, echoed or stored in the history.
 
 #### The desired configuration and its inherited part
 

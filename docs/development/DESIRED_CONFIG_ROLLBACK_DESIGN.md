@@ -247,8 +247,12 @@ Notes on the table:
    `redact.go:13`) remains anywhere in the target, whatever its path, and names that path. A slot with
    no row in the table counts as changed. A test loops over every path `allSecretPaths` returns and
    fails for one with neither a binding row nor an explicit "no binding" row, so a new secret field
-   cannot be added unbound. A list slot has no key to bind, so it counts as changed: ginsys/shelly-manager#381
-   plans such a slot (`actions.<name>.<index>.secret_urls`); that plan is not read here.
+   cannot be added unbound. A list slot has no key to bind, so it counts as changed. The Gen1 action URL
+   list is such a slot (`actions."<name>".<index>.secret_urls`, with `.secret_urls#<position>` where two
+   entries share an identity), and that key is what the refusal lists and `secrets` answers with. One
+   function builds it (`configuration.ActionSlotKeys`), shared with the secret slots of the API. A mask
+   inside the list stands for the whole list, and the answer is a non-empty list of non-empty strings.
+   The other paths read in the dotted form of the JSON, with a key that holds a dot or a quote quoted.
 
 The refusal list is **computed** from the table. The restore helper cannot give it: it drops a list
 entry's secret when any other field differs, can return `ErrAmbiguousEntry`, and reports no dropped
@@ -333,7 +337,9 @@ unchanged until you apply it." When secrets were entered, they are never repeate
   routes (`router_routes.go:156-159`), under `admin(...)` like its neighbours (`router_routes.go:156`,
   `:158`, `:159`; apply checks the key in its own handler, `:155`). `secrets` is an optional object
   keyed by secret path (`mqtt.pass`).
-- 404 for an id that is not a version of this device.
+- 404 for an id that is not a version of this device. A version with no stored text (`new_desired` NULL,
+  note 3.1) is 422: the request is well formed and the version cannot be a source. A version a recompute
+  would change is 422 too, with the paths (note 3.2).
 - A first call that needs secrets gets **409** with the computed list of paths to enter, echoes no
   value and writes nothing. The operator retries with `secrets` for exactly those paths. A key of
   `secrets` that is not on that list gets 400. A value that is empty or the mask gets 400. `secrets`

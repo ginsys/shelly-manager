@@ -30,10 +30,14 @@ type DesiredWrite struct {
 type RollbackKind int
 
 const (
-	// RollbackNeedsSecrets: the version holds a masked value, and a history row never holds a secret.
+	// RollbackNeedsSecrets: the version holds a masked value that cannot be kept, and a history row never
+	// holds a secret. Paths are the keys the operator answers with.
 	RollbackNeedsSecrets RollbackKind = iota + 1
 	// RollbackLoss: storing the version and recomputing it would change it.
 	RollbackLoss
+	// RollbackBadSecrets: the secrets entered name a key off the list, or hold an empty value, the mask
+	// or a value of the wrong type. It carries no paths: a refusal never repeats what was sent.
+	RollbackBadSecrets
 )
 
 // RollbackError is a refusal. Paths name the places in the configuration, never a value, so an error, a
@@ -47,6 +51,8 @@ func (e *RollbackError) Error() string {
 	switch e.Kind {
 	case RollbackNeedsSecrets:
 		return fmt.Sprintf("the version holds %d masked value(s) that history cannot restore", len(e.Paths))
+	case RollbackBadSecrets:
+		return "the secrets entered are not an answer to the list"
 	default:
 		return fmt.Sprintf("the version would change when the configuration is recomputed at %d place(s)", len(e.Paths))
 	}
@@ -72,10 +78,12 @@ func templateIDsNone(text string) bool {
 
 // RollbackDesired makes a stored version the device's desired configuration: the whole version becomes
 // the device's overrides, the templates are detached, and the device is pending until an apply. No device
-// is contacted. It writes nothing when the version holds a masked value (the secrets are never restored
-// from history), when the recompute would change it, or when the device changed since the read. A rollback
-// to what the device already holds writes nothing and records no row.
-func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint) (*RollbackResult, error) {
+// is contacted. A secret is never restored from history: the current secret is kept where its destination
+// is unchanged, and every other masked value is refused until the operator enters it in supplied, keyed by
+// the path the refusal listed. It writes nothing when a masked value is left, when the recompute would
+// change the version, or when the device changed since the read. A rollback to what the device already
+// holds writes nothing and records no row.
+func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint, supplied map[string]any) (*RollbackResult, error) {
 	device, err := s.repo.GetDevice(deviceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device: %w", err)
@@ -94,8 +102,13 @@ func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint) (*Rollb
 		return nil, ErrVersionNotRestorable
 	}
 
-	if paths := placeholderPaths(target); len(paths) > 0 {
-		return nil, &RollbackError{Kind: RollbackNeedsSecrets, Paths: paths}
+	current, _ := secrets.DecodeJSON([]byte(device.DesiredConfig))
+	needed, bad := resolveSecrets(target, current, supplied)
+	if bad != nil {
+		return nil, bad
+	}
+	if len(needed) > 0 {
+		return nil, &RollbackError{Kind: RollbackNeedsSecrets, Paths: needed}
 	}
 
 	encoded, err := secrets.EncodeJSON(target)
@@ -143,31 +156,6 @@ func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint) (*Rollb
 		"component":  "config_service",
 	}).Info("Desired configuration rolled back")
 	return result, nil
-}
-
-// placeholderPaths returns the path of every value that is the mask, sorted.
-func placeholderPaths(root any) []string {
-	var out []string
-	var walk func(v any, path []string)
-	walk = func(v any, path []string) {
-		switch x := v.(type) {
-		case map[string]any:
-			for k, child := range x {
-				walk(child, append(path[:len(path):len(path)], k))
-			}
-		case []any:
-			for i, child := range x {
-				walk(child, append(path[:len(path):len(path)], strconv.Itoa(i)))
-			}
-		case string:
-			if x == secrets.Placeholder {
-				out = append(out, formatPath(path))
-			}
-		}
-	}
-	walk(root, nil)
-	sort.Strings(out)
-	return out
 }
 
 // treeLoss is the round trip of note 3.2: the paths where the recomputed tree is not the target. A path

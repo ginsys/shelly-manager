@@ -1,0 +1,132 @@
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gorilla/mux"
+
+	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
+	"github.com/ginsys/shelly-manager/internal/configuration"
+	"github.com/ginsys/shelly-manager/internal/redact"
+)
+
+// DesiredHistoryEntry is one version of a device's desired configuration. NewDesired is the stored text,
+// masked again on the way out, and null where no text could be stored.
+type DesiredHistoryEntry struct {
+	ID           uint      `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	Action       string    `json:"action"`
+	ChangedBy    string    `json:"changed_by"`
+	RestoredFrom *uint     `json:"restored_from"`
+	NewDesired   *string   `json:"new_desired"`
+}
+
+// rollbackRequest is the body of a rollback. Secrets is keyed by the paths a 409 listed.
+type rollbackRequest struct {
+	HistoryID uint           `json:"history_id"`
+	Secrets   map[string]any `json:"secrets"`
+}
+
+// GetDeviceDesiredHistory lists the versions of a device's desired configuration, newest first.
+func (h *Handler) GetDeviceDesiredHistory(w http.ResponseWriter, r *http.Request) {
+	rw := h.responseWriter()
+
+	id, err := strconv.ParseUint(mux.Vars(r)["id"], 10, 32)
+	if err != nil {
+		rw.WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+		return
+	}
+	rows, err := h.ConfigService.ConfigurationSvc.ListDesiredHistory(uint(id))
+	if err != nil {
+		if errors.Is(err, configuration.ErrDeviceNotFound) {
+			rw.WriteNotFoundError(w, r, "Device")
+			return
+		}
+		rw.WriteInternalError(w, r, err)
+		return
+	}
+
+	entries := make([]DesiredHistoryEntry, 0, len(rows))
+	for _, row := range rows {
+		entry := DesiredHistoryEntry{
+			ID: row.ID, CreatedAt: row.CreatedAt, Action: row.Action,
+			ChangedBy: row.ChangedBy, RestoredFrom: row.RestoredFrom,
+		}
+		if row.NewDesired != nil {
+			masked := maskJSONText(*row.NewDesired)
+			entry.NewDesired = &masked
+		}
+		entries = append(entries, entry)
+	}
+	rw.WriteSuccess(w, r, map[string]any{"history": entries})
+}
+
+// RollbackDeviceDesiredConfig makes a stored version the device's desired configuration. It contacts no
+// device: the device stays as it is until an apply. A secret the version cannot supply is refused with
+// the list of paths to enter, and the body's secrets are never logged, echoed or put in an error.
+func (h *Handler) RollbackDeviceDesiredConfig(w http.ResponseWriter, r *http.Request) {
+	rw := h.responseWriter()
+
+	id, err := strconv.ParseUint(mux.Vars(r)["id"], 10, 32)
+	if err != nil {
+		rw.WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid device ID", nil)
+		return
+	}
+
+	// The decode error is never put in the answer or a log line: it can quote the body.
+	raw, readErr := io.ReadAll(r.Body)
+	var req rollbackRequest
+	if readErr != nil || redact.HasRepeatedMember(raw) || json.Unmarshal(raw, &req) != nil || req.HistoryID == 0 {
+		rw.WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid JSON request body", nil)
+		return
+	}
+
+	result, err := h.ConfigService.ConfigurationSvc.RollbackDesired(uint(id), req.HistoryID, req.Secrets)
+	var refusal *configuration.RollbackError
+	switch {
+	case err == nil:
+		message := fmt.Sprintf("Desired configuration set to version %d. The device is unchanged until you apply it.", result.VersionID)
+		if result.NoChange {
+			message = fmt.Sprintf("Desired configuration already is version %d. Nothing was written.", result.VersionID)
+		}
+		rw.WriteSuccess(w, r, map[string]any{
+			"version_id":            result.VersionID,
+			"no_change":             result.NoChange,
+			"detached_template_ids": append([]uint{}, result.DetachedTemplateIDs...),
+			"message":               message,
+		})
+	case errors.Is(err, configuration.ErrDeviceNotFound):
+		rw.WriteNotFoundError(w, r, "Device")
+	case errors.Is(err, configuration.ErrHistoryNotFound):
+		rw.WriteNotFoundError(w, r, "Desired configuration version")
+	case errors.Is(err, configuration.ErrDesiredChanged):
+		rw.WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "The desired configuration changed while the rollback was prepared. Read it again and retry.", nil)
+	case errors.Is(err, configuration.ErrVersionNotRestorable):
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeConfigurationError, err.Error(), nil)
+	case errors.As(err, &refusal):
+		h.writeRollbackRefusal(rw, w, r, refusal)
+	default:
+		rw.WriteInternalError(w, r, err)
+	}
+}
+
+// writeRollbackRefusal answers a refusal with paths and no value.
+func (h *Handler) writeRollbackRefusal(rw *apiresp.ResponseWriter, w http.ResponseWriter, r *http.Request, refusal *configuration.RollbackError) {
+	details := map[string]any{"paths": append([]string{}, refusal.Paths...)}
+	switch refusal.Kind {
+	case configuration.RollbackNeedsSecrets:
+		rw.WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "This version holds secrets that history does not keep. Enter them for the listed paths and retry.", details)
+	case configuration.RollbackBadSecrets:
+		rw.WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
+			"The secrets entered are not an answer to the list: a key off the list, or an empty value, the mask or a value of the wrong type.", nil)
+	default:
+		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeConfigurationError,
+			"This version would change when the configuration is recomputed, so it cannot be restored as it is.", details)
+	}
+}
