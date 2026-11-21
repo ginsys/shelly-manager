@@ -142,7 +142,9 @@ func (s *ProvisionerStore) RegisterKeyed(ctx context.Context, reg KeyedRegistrat
 				if _, err = rand.Read(raw); err != nil {
 					return err
 				}
-				challenge, expires := hex.EncodeToString(raw), now.Add(challengeLifetime)
+				// Truncated to the millisecond: MySQL stores datetime(3) and rounds, so an unrounded expiry could
+				// read back up to half a millisecond after the 60 seconds it promised.
+				challenge, expires := hex.EncodeToString(raw), now.Add(challengeLifetime).Truncate(time.Millisecond)
 				cur.Challenge, cur.ChallengeExpiresAt = &challenge, &expires
 				out = KeyedResult{Outcome: OutcomeChallenge, Agent: cur, Challenge: challenge}
 				// UpdateColumns, not Updates: Updates also moves updated_at, and the note says nothing but the
