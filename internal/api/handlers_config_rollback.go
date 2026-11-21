@@ -29,8 +29,21 @@ type DesiredHistoryEntry struct {
 
 // rollbackRequest is the body of a rollback. Secrets is keyed by the paths a 409 listed.
 type rollbackRequest struct {
-	HistoryID uint           `json:"history_id"`
-	Secrets   map[string]any `json:"secrets"`
+	HistoryID uint            `json:"history_id"`
+	Secrets   json.RawMessage `json:"secrets"`
+}
+
+// secretsOf reads the secrets of a request: absent is none, and anything but an object (null included)
+// is an error.
+func (r rollbackRequest) secretsOf() (map[string]any, bool) {
+	if len(r.Secrets) == 0 {
+		return nil, true
+	}
+	var out map[string]any
+	if json.Unmarshal(r.Secrets, &out) != nil || out == nil {
+		return nil, false
+	}
+	return out, true
 }
 
 // GetDeviceDesiredHistory lists the versions of a device's desired configuration, newest first.
@@ -87,7 +100,13 @@ func (h *Handler) RollbackDeviceDesiredConfig(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	result, err := h.ConfigService.ConfigurationSvc.RollbackDesired(uint(id), req.HistoryID, req.Secrets)
+	supplied, valid := req.secretsOf()
+	if !valid {
+		rw.WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest, "Invalid JSON request body", nil)
+		return
+	}
+
+	result, err := h.ConfigService.ConfigurationSvc.RollbackDesired(uint(id), req.HistoryID, supplied)
 	var refusal *configuration.RollbackError
 	switch {
 	case err == nil:
