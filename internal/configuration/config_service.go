@@ -812,5 +812,6 @@ func isEmptyConfig(config *DeviceConfiguration) bool {
 		config.Dimming == nil &&
 		config.Roller == nil &&
 		config.Input == nil &&
-		config.LED == nil
+		config.LED == nil &&
+		config.Actions == nil
 }

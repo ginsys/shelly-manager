@@ -103,11 +103,12 @@ func TestDeviceSchemaHoldsOnlyStoredFields(t *testing.T) {
 
 func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 	cases := map[string][]string{
-		"SHPLG-S": {"auth", "cloud", "coiot", "led", "location", "mqtt", "network", "power_metering", "relay", "system", "wifi"},
-		"SHSW-1":  {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "relay", "system", "wifi"},
-		"SHSW-25": {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
+		"SHPLG-S": {"actions", "auth", "cloud", "coiot", "led", "location", "mqtt", "network", "power_metering", "relay", "system", "wifi"},
+		"SHSW-1":  {"actions", "auth", "cloud", "coiot", "input", "location", "mqtt", "network", "relay", "system", "wifi"},
+		"SHSW-25": {"actions", "auth", "cloud", "coiot", "input", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
+		// The i3 has no actions section in this slice: apply refuses it whole.
 		"SHIX3-1": {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "system", "wifi"},
-		"unknown": {"auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
+		"unknown": {"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 	}
 	for deviceType, want := range cases {
 		schema := GetDeviceConfigurationSchema(deviceType)
@@ -205,6 +206,31 @@ func configWithLeaf(t *testing.T, path string, value interface{}) *DeviceConfigu
 	return &cfg
 }
 
+// actionsLeafConfig builds one action entry of a model with a single field of the schema set from the
+// leaf. An action is identified by its name and index, so the entry always holds a name the model
+// has and index 0, and the leaf under test overrides one of them.
+func actionsLeafConfig(t *testing.T, deviceType, field string, leaf map[string]interface{}) *DeviceConfiguration {
+	t.Helper()
+	row, ok := gen1ActionTable(deviceType)
+	if !ok {
+		return &DeviceConfiguration{Actions: &[]ActionConfig{{Name: "btn_on_url"}}}
+	}
+	entry := ActionConfig{Name: row.names[0]}
+	switch field {
+	case "name":
+		entry.Name = sampleValue(leaf).(string)
+	case "index":
+		entry.Index = leaf["maximum"].(int)
+	case "enabled":
+		entry.Enabled = BoolPtr(true)
+	case "secret_urls":
+		entry.SecretURLs = &[]string{"http://192.168.1.4/on"}
+	default:
+		t.Fatalf("actions[].%s has no sample", field)
+	}
+	return &DeviceConfiguration{Actions: &[]ActionConfig{entry}}
+}
+
 // TestDeviceSchemaApplicableMatchesApply sets each schema field alone and asks apply's own
 // refusal check whether it would write it. A field is applicable in the schema exactly when
 // apply accepts it.
@@ -219,6 +245,9 @@ func TestDeviceSchemaApplicableMatchesApply(t *testing.T) {
 				continue // an array item's index, not a setting
 			}
 			cfg := configWithLeaf(t, path, sampleValue(leaf))
+			if strings.HasPrefix(path, "actions[].") {
+				cfg = actionsLeafConfig(t, deviceType, strings.TrimPrefix(path, "actions[]."), leaf)
+			}
 			unsupported, err := unsupportedApplySettings(converter, cfg, deviceType, true)
 			if err != nil {
 				t.Fatalf("%s %s: %v", deviceType, path, err)

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -575,7 +576,82 @@ func secretSlots(config *configuration.DeviceConfiguration) map[string]secretSlo
 			slots["network.wifi.ap.pass"] = ptrSlot(&ap.Password)
 		}
 	}
+	addActionSlots(slots, config)
 	return slots
+}
+
+// urlListSlot is the slot of an action's URL list. The list reads as one string so that the slot
+// walks (mask, redact, restore) work on it unchanged: no list is "", one URL is that URL, several
+// are joined by a newline (a URL holds none, apply refuses one that does). The mask is a one-element
+// list, however long the list it stands for. set("") removes the list, which stays unset; put("")
+// stores an empty list, the explicit clear a device must keep.
+func urlListSlot(p **[]string) secretSlot {
+	store := func(v string) {
+		urls := strings.Split(v, "\n")
+		*p = &urls
+	}
+	return secretSlot{
+		present: func() bool { return *p != nil },
+		get: func() string {
+			if *p == nil {
+				return ""
+			}
+			return strings.Join(**p, "\n")
+		},
+		set: func(v string) {
+			if v == "" {
+				*p = nil
+				return
+			}
+			store(v)
+		},
+		put: func(v string) {
+			if v == "" {
+				empty := []string{}
+				*p = &empty
+				return
+			}
+			store(v)
+		},
+	}
+}
+
+// actionSlotBase is the slot key of an action by its identity. The name is quoted, so a dotted name
+// cannot read as another key.
+func actionSlotBase(entry configuration.ActionConfig) string {
+	return fmt.Sprintf("actions.%q.%d.secret_urls", entry.Name, entry.Index)
+}
+
+// duplicateActionSlotMark follows the base key of an entry whose identity is shared with another
+// entry of the same config, then the entry's list position.
+const duplicateActionSlotMark = ".secret_urls#"
+
+// addActionSlots adds one slot per action entry, so every entry is masked whatever its identity. The
+// key is the identity where it is unique in the config. Where two entries share one (stored data can:
+// only apply refuses it), each gets the key with its list position, and a key like that is never
+// restored, because no stored entry can be told apart from its twin.
+func addActionSlots(slots map[string]secretSlot, config *configuration.DeviceConfiguration) {
+	if config.Actions == nil {
+		return
+	}
+	entries := *config.Actions
+	count := map[string]int{}
+	for _, entry := range entries {
+		count[actionSlotBase(entry)]++
+	}
+	for i := range entries {
+		key := actionSlotBase(entries[i])
+		if count[key] > 1 {
+			key = strings.TrimSuffix(key, ".secret_urls") + duplicateActionSlotMark + strconv.Itoa(i)
+		}
+		slots[key] = urlListSlot(&entries[i].SecretURLs)
+	}
+}
+
+// restorableSlot reports whether the stored slot at path may hand its value to an incoming one. An
+// action whose identity is shared by two entries on either side has no counterpart to restore from.
+func restorableSlot(path string) bool {
+	return !strings.Contains(path, duplicateActionSlotMark)
 }
 
 // maskSecrets replaces each secret that is set with secretMask. A secret that is absent or empty
@@ -605,7 +681,7 @@ func restoreMaskedSecrets(incoming, stored *configuration.DeviceConfiguration) {
 			continue
 		}
 		kept := ""
-		if old, ok := storedSlots[path]; ok {
+		if old, ok := storedSlots[path]; ok && restorableSlot(path) {
 			kept = old.get()
 		}
 		slot.set(kept)
@@ -719,14 +795,15 @@ func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, rem
 		}
 	}
 	for path, slot := range secretSlots(incoming) {
-		if old, ok := storedSlots[path]; ok && old.present() && !slot.present() && !removed[path] {
+		if old, ok := storedSlots[path]; ok && restorableSlot(path) && old.present() && !slot.present() && !removed[path] {
 			slot.put(old.get())
 		}
 	}
 }
 
 // ensureSecretSection creates the sections on the way to the secret at path, so that its slot
-// exists in config.
+// exists in config. An action's list needs no section: its entry is the client's own, and an entry
+// the client dropped stays dropped, so no case creates one.
 func ensureSecretSection(config *configuration.DeviceConfiguration, path string) {
 	switch {
 	case strings.HasPrefix(path, "wifi."):
