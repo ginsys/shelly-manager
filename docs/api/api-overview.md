@@ -50,7 +50,7 @@ UI, the device list answers 401 and the UI opens the key dialog.
 | Method | Endpoint | Description | Input | Output |
 |--------|----------|-------------|-------|--------|
 | GET | `/api/v1/devices` | List all devices | Query: `page`, `page_size` | Paginated device list |
-| POST | `/api/v1/devices` | Add new device | `{ip, mac, type, name, firmware, settings}` | Created device |
+| POST | `/api/v1/devices` | Add new device. When `settings` holds no `gen`, the server asks the device at `ip` once (up to 2 s) and stores the generation it reports; a device that does not answer is stored as Gen 1. `PUT /devices/{id}` keeps the stored `gen` and never adds one | `{ip, mac, type, name, firmware, settings}` | Created device |
 | GET | `/api/v1/devices/{id}` | Get single device | Path: `id` | Device object |
 | PUT | `/api/v1/devices/{id}` | Update device | Path: `id`, Body: device fields | Updated device |
 | DELETE | `/api/v1/devices/{id}` | Delete device | Path: `id` | Success confirmation |

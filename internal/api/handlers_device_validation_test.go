@@ -20,12 +20,40 @@ func TestValidateDeviceSettings(t *testing.T) {
 		inputSettings  string
 		expectedValid  bool
 		expectedOutput string
+		fallbackGen    func() int
 	}{
 		{
-			name:           "Empty settings should get defaults",
+			name:           "Empty settings get the defaults and no gen nobody gave",
 			inputSettings:  "",
 			expectedValid:  true,
-			expectedOutput: `{"auth_enabled":false,"gen":1,"model":"Unknown"}`,
+			expectedOutput: `{"auth_enabled":false,"model":"Unknown"}`,
+		},
+		{
+			name:           "Empty settings take the fallback gen",
+			inputSettings:  "",
+			expectedValid:  true,
+			expectedOutput: `{"auth_enabled":false,"gen":2,"model":"Unknown"}`,
+			fallbackGen:    func() int { return 2 },
+		},
+		{
+			name:           "A fallback of 0 writes no gen",
+			inputSettings:  `{"model":"SHPLG-S"}`,
+			expectedValid:  true,
+			expectedOutput: `{"auth_enabled":false,"model":"SHPLG-S"}`,
+			fallbackGen:    func() int { return 0 },
+		},
+		{
+			name:           "A given gen is kept and the fallback is not asked",
+			inputSettings:  `{"model":"SHPLG-S","gen":3}`,
+			expectedValid:  true,
+			expectedOutput: `{"auth_enabled":false,"gen":3,"model":"SHPLG-S"}`,
+			fallbackGen:    func() int { t.Error("the fallback was asked for a given gen"); return 1 },
+		},
+		{
+			name:          "Invalid JSON does not ask the fallback",
+			inputSettings: `{"model":`,
+			expectedValid: false,
+			fallbackGen:   func() int { t.Error("the fallback was asked for invalid JSON"); return 1 },
 		},
 		{
 			name:           "Valid JSON settings should be normalized",
@@ -53,7 +81,7 @@ func TestValidateDeviceSettings(t *testing.T) {
 				Settings: tt.inputSettings,
 			}
 
-			err := handler.validateDeviceSettings(device)
+			err := handler.validateDeviceSettings(device, tt.fallbackGen)
 
 			if tt.expectedValid {
 				require.NoError(t, err, "Expected validation to succeed")
