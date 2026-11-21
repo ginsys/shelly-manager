@@ -1,4 +1,5 @@
 import type { ConfigSchema, SchemaProperty } from '@/api/typedConfig'
+import secretPaths from './secretPaths.json'
 
 // The string the server sends in place of a saved secret (internal/redact Placeholder). It is the
 // only thing this file knows about secrets: the server decides what is one, and a template body must
@@ -29,17 +30,10 @@ const PER_DEVICE_PATHS = [
 export const PER_DEVICE_NOTE =
   'per-device name, hostname, MAC, MQTT client id and topic prefix, access-point name, channel names and static address'
 
-// The slots the server treats as secrets (internal/api secretSlots). A value there is never copied,
-// whatever it is: an empty one would clear the password of every device the template is applied to.
-const SECRET_PATHS = [
-  'wifi.password',
-  'wifi.ap.pass',
-  'wifi.ap.key',
-  'mqtt.pass',
-  'auth.pass',
-  'network.wifi.sta.pass',
-  'network.wifi.ap.pass',
-]
+// The slots the server treats as secrets. A value there is never copied, whatever it is: an empty one
+// would clear the password of every device the template is applied to. The list is one file that a Go
+// test holds equal to the server's own list, so a slot the server adds fails that test until it is here.
+const SECRET_PATHS: string[] = secretPaths
 
 // Sections that start unticked: they hold the Wi-Fi network and the login of one site.
 const UNTICKED_SECTIONS = ['wifi', 'network', 'auth']
