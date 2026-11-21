@@ -261,14 +261,25 @@ func leafPaths(prefix string, v any, out *[]string) {
 	*out = append(*out, prefix)
 }
 
-// Every setting of the document is either read into a typed field or kept in the raw part. The settings
-// that count as read are listed, so a reader that starts or stops reading one changes this test, and a
-// setting can never fall between the two.
+// Every setting of the document is either read into a typed field or kept in the raw part. The read ones
+// are listed, and the converter's own raw part is compared with the document leaf by leaf, so a setting
+// that the reader starts or stops reading, or that falls between the two, changes this test.
 func TestConvertToTypedConfig_Gen2EverySettingIsReadOrKept(t *testing.T) {
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(gen2Fixture(t), &doc))
 	var all []string
 	leafPaths("", doc, &all)
+
+	typed, _, err := (&Handler{}).convertToTypedConfig(gen2Fixture(t), &database.Device{})
+	require.NoError(t, err)
+	var rawDoc map[string]any
+	require.NoError(t, json.Unmarshal(typed.Raw, &rawDoc))
+	var rawLeaves []string
+	leafPaths("", rawDoc, &rawLeaves)
+	inRaw := map[string]bool{}
+	for _, p := range rawLeaves {
+		inRaw[p] = true
+	}
 
 	kept := map[string]bool{}
 	for _, p := range plus1PMUnread {
@@ -282,7 +293,8 @@ func TestConvertToTypedConfig_Gen2EverySettingIsReadOrKept(t *testing.T) {
 				covered = true
 			}
 		}
-		if !covered {
+		assert.Equal(t, covered, inRaw[p], "%s: the raw part and the unread list disagree", p)
+		if !inRaw[p] {
 			read = append(read, p)
 		}
 	}
@@ -299,4 +311,5 @@ func TestConvertToTypedConfig_Gen2EverySettingIsReadOrKept(t *testing.T) {
 	}
 	sort.Strings(want)
 	assert.Equal(t, want, read)
+	assert.Len(t, rawLeaves, len(all)-len(want), "the raw part holds a leaf the document does not")
 }

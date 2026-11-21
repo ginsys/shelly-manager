@@ -56,3 +56,13 @@ func TestGen2Converter_UnreadSettingsKeepsInputID(t *testing.T) {
 	assert.Contains(t, paths, "switch:0.input_id")
 	assert.Equal(t, float64(1), rest["switch:0"].(map[string]interface{})["input_id"])
 }
+
+// An enabled auto timer with a delay that is not a whole number above 0 reads as unset, so the flag has
+// no typed value: it stays in the rest beside its delay, and a typed save loses neither.
+func TestGen2Converter_UnreadSettingsKeepsATimerWithoutATypedValue(t *testing.T) {
+	doc := `{"sys":{},"switch:0":{"id":0,"auto_off":true,"auto_off_delay":0.5,"auto_on":true,"auto_on_delay":30}}`
+	paths, rest, err := NewGen2Converter(nil).UnreadSettings(json.RawMessage(doc))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"switch:0.auto_off", "switch:0.auto_off_delay", "switch:0.id"}, paths)
+	assert.Equal(t, map[string]interface{}{"auto_off": true, "auto_off_delay": 0.5, "id": float64(0)}, rest["switch:0"])
+}

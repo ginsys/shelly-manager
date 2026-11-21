@@ -191,6 +191,13 @@ func (p *readProbe) isRead(parent map[string]interface{}, key string) bool {
 	if key == "input_id" {
 		return false
 	}
+	// An enabled auto timer whose delay is not a whole number above 0 has no typed value, so the flag
+	// is not read: it stays in the raw part beside its delay.
+	if key == "auto_on" || key == "auto_off" {
+		if enabled, ok := parent[key].(bool); ok && enabled && gen2AutoTimerFromDoc(parent, key) == nil {
+			return false
+		}
+	}
 	original := parent[key]
 	defer func() { parent[key] = original }()
 	delete(parent, key)
