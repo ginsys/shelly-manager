@@ -503,6 +503,12 @@ components:
           example: toggle
         params:
           type: object
+        force:
+          type: boolean
+          default: false
+          description: >-
+            Control a device that is marked offline anyway. Without it, a request for an
+            offline device is answered 503 (DEVICE_OFFLINE) and nothing is sent.
       required:
         - action
 
@@ -1455,6 +1461,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '503':
+          description: >-
+            The stored device is marked offline and the request does not set `force` to true
+            (error code DEVICE_OFFLINE). Nothing is sent to the device. Repeat the request with
+            `"force": true` to try anyway.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/devices/{id}/status:
     get:
@@ -1490,6 +1505,15 @@ paths:
             The device refuses the stored login and the device at the stored address is not
             the stored device (error code CONFLICT). Its MAC differs, it reports none, or the
             record has none.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '503':
+          description: >-
+            The stored device is marked offline (error code DEVICE_OFFLINE). A device last seen
+            within 5 minutes is probed once first, for up to 3 seconds, and this answer follows
+            only if that probe fails. Otherwise nothing is sent to the device.
           content:
             application/json:
               schema:
@@ -1537,6 +1561,14 @@ paths:
             The device refuses the stored login and the device at the stored address is not
             the stored device (error code CONFLICT). Its MAC differs, it reports none, or the
             record has none.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '503':
+          description: >-
+            The stored device is marked offline (error code DEVICE_OFFLINE). Nothing is sent
+            to the device.
           content:
             application/json:
               schema:
@@ -2116,6 +2148,14 @@ paths:
           description: >-
             The device has no desired configuration, so there is nothing to
             compare it with (this is never reported as "no drift").
+        '503':
+          description: >-
+            The stored device is marked offline (error code DEVICE_OFFLINE). Nothing is sent
+            to the device.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
 
   /api/v1/devices/{id}/config/apply-template:
     post:
