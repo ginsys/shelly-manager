@@ -57,7 +57,7 @@ func TestConfigSchemaForPlugModel(t *testing.T) {
 	code, data := getSchema(t, handler, "?device_type=SHPLG-S")
 	require.Equal(t, http.StatusOK, code)
 	assert.Equal(t,
-		[]string{"auth", "cloud", "coiot", "led", "location", "mqtt", "network", "power_metering", "relay", "system", "wifi"},
+		[]string{"actions", "auth", "cloud", "coiot", "led", "location", "mqtt", "network", "power_metering", "relay", "system", "wifi"},
 		schemaSections(data))
 	assert.Equal(t, "SHPLG-S", data[configuration.SchemaKeyDeviceType])
 	assert.Equal(t, true, data[configuration.SchemaKeyApplySupported])
@@ -92,7 +92,7 @@ func TestConfigSchemaForGlobalTemplate(t *testing.T) {
 	code, data := getSchema(t, handler, "?scope=global")
 	require.Equal(t, http.StatusOK, code)
 	assert.Equal(t,
-		[]string{"auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
+		[]string{"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 		schemaSections(data), "a global template holds every stored section, and no generic-only section")
 	assert.Equal(t, true, data[configuration.SchemaKeyApplySupported])
 

@@ -160,7 +160,7 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	routeGen1MaxPower(apiConfig, liveRaw, deviceType)
 
 	// Count settings
-	result.SettingsCount = a.countSettings(apiConfig)
+	result.SettingsCount = a.countSettings(apiConfig) + countActionSettings(config)
 
 	// Refuse a Wi-Fi change that could take the device off its network, before the first write of
 	// any section.
@@ -203,7 +203,7 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 
 	// Apply configuration sections. A rejected login is an error, not a failed setting: the caller
 	// maps it to "the device rejected the stored credentials".
-	if err := a.applyConfigSections(ctx, client, apiConfig, liveRaw, deviceType, result); err != nil {
+	if err := a.applyConfigSections(ctx, client, config, apiConfig, liveRaw, deviceType, result); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
 	}
 
@@ -227,7 +227,7 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 // applyConfigSections applies each section of the configuration. A section the device refuses
 // is recorded in result and the next section is tried, except when the device rejects the login:
 // every later write would be rejected too, so that error stops the apply and is returned.
-func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, live json.RawMessage, deviceType string, result *ApplyResult) error {
+func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyClient, config *DeviceConfiguration, apiConfig map[string]interface{}, live json.RawMessage, deviceType string, result *ApplyResult) error {
 	// For Gen1 devices, we can send settings to /settings endpoint
 	// Different setting groups go to different endpoints
 	sections := []struct {
@@ -247,6 +247,11 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		// Inputs follow the relays: on a relay model they are keys of the same channel.
 		{"Input", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
 			return a.applyInputSettings(ctx, client, apiConfig, deviceType, result)
+		}},
+		// Actions are not part of the converted document: they have their own route, written from
+		// the typed configuration.
+		{"Actions", func(ctx context.Context, client ShellyClient, _ map[string]interface{}, result *ApplyResult) error {
+			return a.applyActionSettings(ctx, client, config, result)
 		}},
 		// The login goes last: it changes the credentials every later request needs, and an
 		// earlier failure then never leaves a changed login behind.

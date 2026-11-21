@@ -33,6 +33,7 @@ var gen1NoDocumentedDefault = []string{
 	"wifi.enable", "wifi.ssid", "wifi.password", "wifi.ipv4mode",
 	"wifi.static_ip.ip", "wifi.static_ip.netmask", "wifi.static_ip.gw", "wifi.static_ip.nameserver",
 	"wifi.ap.enable", "wifi.ap.pass",
+	"actions[].name", "actions[].index", "actions[].enabled", "actions[].secret_urls",
 }
 
 // The form shows 1883 as a placeholder for an empty port. Apply must not turn that into a value:

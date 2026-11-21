@@ -3,9 +3,11 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -524,6 +526,21 @@ type secretSlot struct {
 	// put stores v even when it is "", where set("") removes a pointer secret. An empty override
 	// secret is a value: it keeps beating the secret of a template.
 	put func(string)
+	// list and setList are set on a URL list slot only. They hand the list over as it is, where the
+	// string of get cannot tell the list [""] from the empty list.
+	list    func() *[]string
+	setList func(*[]string)
+}
+
+// carryStored gives slot the value of the stored slot old. A URL list is copied as it is, so a
+// stored list that apply refuses (an empty URL) is not turned into a clear on its way.
+func carryStored(slot, old secretSlot) {
+	if slot.setList != nil && old.list != nil && old.list() != nil {
+		kept := slices.Clone(*old.list())
+		slot.setList(&kept)
+		return
+	}
+	slot.put(old.get())
 }
 
 func ptrSlot(p **string) secretSlot {
@@ -575,7 +592,97 @@ func secretSlots(config *configuration.DeviceConfiguration) map[string]secretSlo
 			slots["network.wifi.ap.pass"] = ptrSlot(&ap.Password)
 		}
 	}
+	addActionSlots(slots, config)
 	return slots
+}
+
+// urlListSlot is the slot of an action's URL list. The list reads as one string so that the slot
+// walks (mask, redact, restore) work on it unchanged: no list is "", one URL is that URL, several
+// are joined by a newline (a URL holds none, apply refuses one that does). The mask is a one-element
+// list, however long the list it stands for. set("") removes the list, which stays unset; put("")
+// stores an empty list, the explicit clear a device must keep.
+func urlListSlot(p **[]string) secretSlot {
+	store := func(v string) {
+		urls := strings.Split(v, "\n")
+		*p = &urls
+	}
+	return secretSlot{
+		present: func() bool { return *p != nil },
+		list:    func() *[]string { return *p },
+		setList: func(v *[]string) { *p = v },
+		get: func() string {
+			if *p == nil {
+				return ""
+			}
+			return strings.Join(**p, "\n")
+		},
+		set: func(v string) {
+			if v == "" {
+				*p = nil
+				return
+			}
+			store(v)
+		},
+		put: func(v string) {
+			if v == "" {
+				empty := []string{}
+				*p = &empty
+				return
+			}
+			store(v)
+		},
+	}
+}
+
+// actionSlotBase is the slot key of an action by its identity. The name is quoted, so a dotted name
+// cannot read as another key.
+func actionSlotBase(entry configuration.ActionConfig) string {
+	return fmt.Sprintf("actions.%q.%d.secret_urls", entry.Name, entry.Index)
+}
+
+// duplicateActionSlotMark follows the base key of an entry whose identity is shared with another
+// entry of the same config, then the entry's list position.
+const duplicateActionSlotMark = ".secret_urls#"
+
+// addActionSlots adds one slot per action entry, so every entry is masked whatever its identity. The
+// key is the identity where it is unique in the config. Where two entries share one (stored data can:
+// only apply refuses it), each gets the key with its list position, and a key like that is never
+// restored, because no stored entry can be told apart from its twin.
+func addActionSlots(slots map[string]secretSlot, config *configuration.DeviceConfiguration) {
+	if config.Actions == nil {
+		return
+	}
+	entries := *config.Actions
+	for i, key := range actionSlotKeys(entries) {
+		slots[key] = urlListSlot(&entries[i].SecretURLs)
+	}
+}
+
+// actionSlotKeys returns the slot key of each entry, by position.
+func actionSlotKeys(entries []configuration.ActionConfig) []string {
+	count := map[string]int{}
+	for _, entry := range entries {
+		count[actionSlotBase(entry)]++
+	}
+	keys := make([]string, len(entries))
+	for i, entry := range entries {
+		key := actionSlotBase(entry)
+		if count[key] > 1 {
+			key = strings.TrimSuffix(key, ".secret_urls") + duplicateActionSlotMark + strconv.Itoa(i)
+		}
+		keys[i] = key
+	}
+	return keys
+}
+
+// actionNullMark names the list of the action at a position of the body, as matchSecretNulls finds it
+// there. The slot key of an action holds its identity, which only the decoded body can tell.
+func actionNullMark(position int) string { return "actions#" + strconv.Itoa(position) }
+
+// restorableSlot reports whether the stored slot at path may hand its value to an incoming one. An
+// action whose identity is shared by two entries on either side has no counterpart to restore from.
+func restorableSlot(path string) bool {
+	return !strings.Contains(path, duplicateActionSlotMark)
 }
 
 // maskSecrets replaces each secret that is set with secretMask. A secret that is absent or empty
@@ -590,7 +697,12 @@ func maskSecrets(config *configuration.DeviceConfiguration) {
 
 // redactSecrets removes every secret.
 func redactSecrets(config *configuration.DeviceConfiguration) {
-	for _, slot := range secretSlots(config) {
+	for path, slot := range secretSlots(config) {
+		// An empty URL list is the explicit clear. It holds no secret, and removing it would turn
+		// "no URLs" into "leave alone".
+		if strings.HasPrefix(path, "actions.") && slot.present() && slot.get() == "" {
+			continue
+		}
 		slot.set("")
 	}
 }
@@ -602,10 +714,15 @@ func restoreMaskedSecrets(incoming, stored *configuration.DeviceConfiguration) {
 	storedSlots := secretSlots(stored)
 	for path, slot := range secretSlots(incoming) {
 		if slot.get() != secretMask {
+			// A URL list that mixes the mask with other lines cannot be stored: the mask stands for a
+			// list the client no longer holds. The list is dropped as not sent, so the stored one stays.
+			if strings.HasPrefix(path, "actions.") && slices.Contains(strings.Split(slot.get(), "\n"), secretMask) {
+				slot.set("")
+			}
 			continue
 		}
 		kept := ""
-		if old, ok := storedSlots[path]; ok {
+		if old, ok := storedSlots[path]; ok && restorableSlot(path) {
 			kept = old.get()
 		}
 		slot.set(kept)
@@ -699,6 +816,15 @@ func matchSecretNulls(found [][]string) map[string]bool {
 			}
 		}
 	}
+	// The actions are a list, so the null of an entry's URL list is found by its position.
+	for _, path := range found {
+		if len(path) != 3 || !strings.EqualFold(path[0], "actions") || !strings.EqualFold(path[2], "secret_urls") {
+			continue
+		}
+		if position, err := strconv.Atoi(path[1]); err == nil {
+			nulls[actionNullMark(position)] = true
+		}
+	}
 	return nulls
 }
 
@@ -712,6 +838,7 @@ func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, rem
 	if incoming == nil {
 		return
 	}
+	removed = actionRemovals(incoming, removed)
 	storedSlots := secretSlots(stored)
 	for path, old := range storedSlots {
 		if old.present() && !removed[path] {
@@ -719,14 +846,54 @@ func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, rem
 		}
 	}
 	for path, slot := range secretSlots(incoming) {
-		if old, ok := storedSlots[path]; ok && old.present() && !slot.present() && !removed[path] {
-			slot.put(old.get())
+		if old, ok := storedSlots[path]; ok && restorableSlot(path) && old.present() && !slot.present() && !removed[path] {
+			carryStored(slot, old)
+		}
+	}
+}
+
+// actionRemovals adds to removed the slot key of each action whose URL list was sent as null. A null
+// is found by the position of the entry in the body, and the key of an entry holds its identity,
+// which only the decoded body can tell.
+func actionRemovals(incoming *configuration.DeviceConfiguration, removed map[string]bool) map[string]bool {
+	if incoming.Actions == nil {
+		return removed
+	}
+	gone := map[string]bool{}
+	for path := range removed {
+		gone[path] = removed[path]
+	}
+	for i, key := range actionSlotKeys(*incoming.Actions) {
+		if removed[actionNullMark(i)] {
+			gone[key] = true
+		}
+	}
+	return gone
+}
+
+// keepOmittedActionURLs is keepOmittedSecrets for the action lists alone, for a patch: the other
+// sections of a patch are merged by the service and stay as they are sent. An action that the patch
+// sends without its URL list keeps the stored list, the same as a full body does, unless the list
+// was sent as null.
+func keepOmittedActionURLs(incoming, stored *configuration.DeviceConfiguration, removed map[string]bool) {
+	if incoming == nil || stored == nil || incoming.Actions == nil || stored.Actions == nil {
+		return
+	}
+	removed = actionRemovals(incoming, removed)
+	storedSlots := secretSlots(stored)
+	for path, slot := range secretSlots(incoming) {
+		if !strings.HasPrefix(path, "actions.") || !restorableSlot(path) || slot.present() || removed[path] {
+			continue
+		}
+		if old, ok := storedSlots[path]; ok && old.present() {
+			carryStored(slot, old)
 		}
 	}
 }
 
 // ensureSecretSection creates the sections on the way to the secret at path, so that its slot
-// exists in config.
+// exists in config. An action's list needs no section: its entry is the client's own, and an entry
+// the client dropped stays dropped, so no case creates one.
 func ensureSecretSection(config *configuration.DeviceConfiguration, path string) {
 	switch {
 	case strings.HasPrefix(path, "wifi."):

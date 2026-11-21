@@ -45,6 +45,9 @@ var defaultCompareRules = []FieldCompareRule{
 	// A schedule is the whole list the device keeps: a rule left on the device is not the desired schedule.
 	{Path: "relay.relays.*.schedule_rules", ExactList: true},
 	{Path: "roller.schedule_rules", ExactList: true},
+	// An action keeps the whole URL list that is desired: a URL left on the device, or a list that was
+	// cleared and is not empty, is a difference. Without the rule a device-only URL reads as a match.
+	{Path: "actions.*.secret_urls", ExactList: true},
 
 	// A Gen1 word and the Gen2 word of the same meaning are one value (gen2_channels.go).
 	{Path: "relay.relays.*.default_state", Normalize: gen2InitialStateWord},
@@ -106,8 +109,8 @@ func (c *ConfigComparator) Compare(expected, actual *DeviceConfiguration) *Compa
 		result.Match = false
 		result.Differences = append(result.Differences, ConfigDifference{
 			Path:     "",
-			Expected: expected,
-			Actual:   actual,
+			Expected: scrubActionValue("", expected),
+			Actual:   scrubActionValue("", actual),
 			Type:     "modified",
 			Severity: "critical",
 			Category: "system",
@@ -340,10 +343,12 @@ func (c *ConfigComparator) addDifference(result *CompareResult, path string, exp
 	}
 
 	result.Match = false
+	// No difference ever holds an action URL: it can carry a password or a token, and a difference
+	// reaches the drift and verify responses and the stored drift report as it is built here.
 	result.Differences = append(result.Differences, ConfigDifference{
 		Path:        path,
-		Expected:    expected,
-		Actual:      actual,
+		Expected:    scrubActionValue(path, expected),
+		Actual:      scrubActionValue(path, actual),
 		Type:        diffType,
 		Severity:    severity,
 		Category:    category,
