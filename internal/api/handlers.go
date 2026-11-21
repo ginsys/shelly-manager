@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -348,10 +349,7 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate and normalize device settings
-	if err := h.validateDeviceSettings(&device, func() (any, bool) {
-		gen := h.probeGeneration(r.Context(), device.IP)
-		return gen, gen != nil
-	}); err != nil {
+	if err := h.validateDeviceSettings(&device, func() (any, bool) { return h.probeGeneration(r.Context(), device.IP), true }); err != nil {
 		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
 		return
 	}
@@ -1737,29 +1735,39 @@ func (h *Handler) validateDeviceSettings(device *database.Device, fallbackGen fu
 
 // probeGeneration asks the device at ip which generation it is, for a create that was given none
 // (ginsys/shelly-manager#811). The probe makes two requests and its client's timeout is per request, so
-// the 2 s deadline is taken from the request's context here: it bounds both together, and a caller
-// that goes away ends the probe. A device that cannot be asked stays Gen 1, as every manual add did
-// before; the log says whether it did not answer or is not a Shelly.
-func (h *Handler) probeGeneration(ctx context.Context, ip string) any {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+// its own 2 s deadline bounds both together. It does not follow the request's cancellation: a client
+// that hangs up must not decide what is stored (ginsys/shelly-manager#820). A device that cannot be asked,
+// or reports a generation below 1, stays Gen 1 as every manual add did before; the log says why.
+func (h *Handler) probeGeneration(ctx context.Context, ip string) int {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	gen, err := detectGeneration(ctx, ip)
+	if err == nil && gen < 1 {
+		err = fmt.Errorf("generation %d: %w", gen, shelly.ErrInvalidGeneration)
+	}
 	if err != nil {
-		reason := "the device did not answer"
-		if errors.Is(err, shelly.ErrInvalidGeneration) {
-			reason = "the address answered but is not a Shelly device"
-		}
 		h.logger.WithFields(map[string]any{
 			"device_ip": ip,
-			"reason":    reason,
+			"reason":    probeFailureReason(err),
 			"error":     err.Error(),
 		}).Warn("Device generation not detected at create; storing gen 1")
 		return 1
 	}
-	if gen < 1 {
-		return nil
-	}
 	return gen
+}
+
+// probeFailureReason names the cause of a failed probe. An address that parses but does not resolve or
+// route fails at the dial, so it reads as no answer.
+func probeFailureReason(err error) string {
+	var urlErr *url.Error
+	switch {
+	case errors.Is(err, shelly.ErrInvalidGeneration):
+		return "the address answered but is not a Shelly device"
+	case errors.As(err, &urlErr) && urlErr.Op == "parse":
+		return "the address is not a valid URL host"
+	default:
+		return "the device did not answer"
+	}
 }
 
 // storedGen is the gen of the stored settings of a device exactly as stored, whatever its JSON type
