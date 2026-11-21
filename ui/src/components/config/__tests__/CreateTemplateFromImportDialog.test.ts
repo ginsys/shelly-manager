@@ -223,6 +223,24 @@ describe('CreateTemplateFromImportDialog', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
+  it('does not report a failed save when only the move to the new template page fails', async () => {
+    dismissNotice()
+    let refuse: (e: unknown) => void = () => {}
+    push.mockReturnValue(new Promise((_, reject) => (refuse = reject)))
+    const wrapper = await ready()
+    await wrapper.get('[data-testid="from-import-name"]').setValue('Made')
+    await wrapper.get('[data-testid="from-import-save"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('close')).toBeTruthy()
+
+    wrapper.unmount() // the page closes the dialog on `close`
+    refuse(new Error('Loading chunk failed'))
+    await flushPromises()
+
+    expect(notice.value?.message).toBe('Template saved. Find it on the Templates page.')
+    expect(noticeSeverity.value).toBe('info')
+  })
+
   it('keeps Save off until there is a name and something ticked', async () => {
     const wrapper = await ready()
     const save = () => (wrapper.get('[data-testid="from-import-save"]').element as HTMLButtonElement).disabled
