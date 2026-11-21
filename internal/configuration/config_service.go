@@ -80,6 +80,12 @@ type ConfigRepository interface {
 	// in one write, so no failure or concurrent apply can leave the flag true against a changed
 	// configuration.
 	SetDeviceDesiredConfigPending(deviceID uint, read DesiredRead, config json.RawMessage) error
+	// GetDesiredHistory returns one version of the device's desired configuration, or
+	// ErrHistoryNotFound when the id is not one of this device's.
+	GetDesiredHistory(deviceID, historyID uint) (*DesiredConfigHistory, error)
+	// RollbackDeviceDesired stores a rollback's template ids, overrides and desired configuration,
+	// pending, with its history row, in one transaction, and only while the device still holds read.
+	RollbackDeviceDesired(deviceID uint, read DesiredRead, write DesiredWrite, restoredFrom uint) error
 	SetDeviceConfigApplied(deviceID uint, applied bool) error
 	// SetDeviceConfigAppliedIfDesired sets the applied flag only while the stored desired
 	// configuration still equals desiredConfig. It reports whether the flag was set.
@@ -652,29 +658,13 @@ func (s *ConfigurationService) recomputeDesiredConfigOnce(deviceID uint) error {
 		layers = append(layers, ConfigLayer{Name: tmpl.Name, Config: &tmplConfig})
 	}
 
-	if device.Overrides != "" && device.Overrides != "{}" {
-		var overrides DeviceConfiguration
-		if parseErr := json.Unmarshal([]byte(device.Overrides), &overrides); parseErr == nil {
-			if !isEmptyConfig(&overrides) {
-				layers = append(layers, ConfigLayer{Name: "device-override", Config: &overrides})
-			}
-		}
+	if layer, ok := overrideLayer(device.Overrides); ok {
+		layers = append(layers, layer)
 	}
 
-	var desiredConfig *DeviceConfiguration
-	if len(layers) > 0 {
-		result, mergeErr := s.merger.Merge(layers)
-		if mergeErr != nil {
-			return fmt.Errorf("failed to merge configurations: %w", mergeErr)
-		}
-		desiredConfig = result.Config
-	} else {
-		desiredConfig = &DeviceConfiguration{}
-	}
-
-	desiredJSON, err := json.Marshal(desiredConfig)
+	desiredJSON, err := s.desiredFromLayers(layers)
 	if err != nil {
-		return fmt.Errorf("failed to marshal desired config: %w", err)
+		return err
 	}
 
 	if err := s.repo.SetDeviceDesiredConfigPending(deviceID, DesiredRead{TemplateIDs: device.TemplateIDs, Overrides: device.Overrides, Desired: device.DesiredConfig}, desiredJSON); err != nil {
@@ -682,6 +672,38 @@ func (s *ConfigurationService) recomputeDesiredConfigOnce(deviceID uint) error {
 	}
 
 	return nil
+}
+
+// overrideLayer is how the recompute reads a device's overrides text: an empty text, "{}", text that does
+// not parse and a configuration with no section are no layer. A rollback reads its target the same way,
+// so it never accepts a text the recompute would read differently.
+func overrideLayer(text string) (ConfigLayer, bool) {
+	if text == "" || text == "{}" {
+		return ConfigLayer{}, false
+	}
+	var overrides DeviceConfiguration
+	if json.Unmarshal([]byte(text), &overrides) != nil || isEmptyConfig(&overrides) {
+		return ConfigLayer{}, false
+	}
+	return ConfigLayer{Name: "device-override", Config: &overrides}, true
+}
+
+// desiredFromLayers merges the layers and marshals the result, the recompute's own step: no layer is the
+// empty configuration.
+func (s *ConfigurationService) desiredFromLayers(layers []ConfigLayer) (json.RawMessage, error) {
+	desiredConfig := &DeviceConfiguration{}
+	if len(layers) > 0 {
+		result, err := s.merger.Merge(layers)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge configurations: %w", err)
+		}
+		desiredConfig = result.Config
+	}
+	desiredJSON, err := json.Marshal(desiredConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal desired config: %w", err)
+	}
+	return desiredJSON, nil
 }
 
 func (s *ConfigurationService) GetAffectedDevices(templateID uint) ([]uint, error) {

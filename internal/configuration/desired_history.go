@@ -42,18 +42,39 @@ func RecordDesiredChange(tx *gorm.DB, deviceID uint, action, oldText, newText st
 	if oldText == newText {
 		return nil
 	}
-	row := DesiredConfigHistory{
+	return insertDesiredHistory(tx, DesiredConfigHistory{
 		DeviceID:   deviceID,
 		Action:     action,
 		OldDesired: maskedDesired(deviceID, action, oldText),
 		NewDesired: maskedDesired(deviceID, action, newText),
 		ChangedBy:  "system",
-		CreatedAt:  time.Now().UTC(),
+	})
+}
+
+// recordRollback stores the row of a rollback, in the caller's transaction. It always writes: a rollback
+// that detaches templates is a change even where the desired text is equal. changedBy is "admin", the
+// only caller a rollback has (the route needs the admin key); no per-person source exists.
+func recordRollback(tx *gorm.DB, deviceID, restoredFrom uint, previousTemplateIDs, oldText, newText string) error {
+	row := DesiredConfigHistory{
+		DeviceID:     deviceID,
+		Action:       "rollback",
+		OldDesired:   maskedDesired(deviceID, "rollback", oldText),
+		NewDesired:   maskedDesired(deviceID, "rollback", newText),
+		RestoredFrom: &restoredFrom,
+		ChangedBy:    "admin",
 	}
+	if !templateIDsNone(previousTemplateIDs) {
+		row.PreviousTemplateIDs = &previousTemplateIDs
+	}
+	return insertDesiredHistory(tx, row)
+}
+
+func insertDesiredHistory(tx *gorm.DB, row DesiredConfigHistory) error {
+	row.CreatedAt = time.Now().UTC()
 	if err := tx.Create(&row).Error; err != nil {
 		return fmt.Errorf("failed to record the desired configuration change: %w", err)
 	}
-	return pruneDesiredHistory(tx, deviceID)
+	return pruneDesiredHistory(tx, row.DeviceID)
 }
 
 // maskedDesired returns the text with every secret masked, as the API masks a desired configuration. An
