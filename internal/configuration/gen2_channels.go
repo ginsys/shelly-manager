@@ -51,18 +51,27 @@ func gen2InModeWord(v interface{}) interface{} {
 	return v
 }
 
-// gen2ChannelID returns the id of a "switch:2" or "input:2" key of the given kind.
+// gen2ChannelID returns the id of a "switch:2" or "input:2" key of the given kind. Only the canonical
+// spelling counts: "switch:02" and "switch:+2" are not channels, so no two keys name one channel and
+// the section a reader looks up by "kind:id" is the section that was found.
 func gen2ChannelID(key, kind string) (int, bool) {
 	rest, ok := strings.CutPrefix(key, kind+":")
 	if !ok {
 		return 0, false
 	}
 	id, err := strconv.Atoi(rest)
-	return id, err == nil && id >= 0
+	if err != nil || id < 0 || strconv.Itoa(id) != rest {
+		return 0, false
+	}
+	return id, true
 }
 
-// gen2KeyApplies reports whether apply writes a top-level key of a Gen2 config document.
-func gen2KeyApplies(key string) bool {
+// gen2KeyApplies reports whether apply writes a top-level key of a Gen2 config document: a fixed key
+// or a channel key, and only when its value is an object, as every section is.
+func gen2KeyApplies(key string, value interface{}) bool {
+	if _, isObject := value.(map[string]interface{}); !isObject {
+		return false
+	}
 	if gen2ApplyKeys[key] {
 		return true
 	}
@@ -73,7 +82,8 @@ func gen2KeyApplies(key string) bool {
 	return ok
 }
 
-// gen2ChannelIDs returns the ids of one kind of channel in a document, ascending.
+// gen2ChannelIDs returns the ids of one kind of channel in a document, ascending. An id is listed
+// once, because only the canonical key of a channel is read.
 func gen2ChannelIDs(doc map[string]interface{}, kind string) []int {
 	var ids []int
 	for key := range doc {

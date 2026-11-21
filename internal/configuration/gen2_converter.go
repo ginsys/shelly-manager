@@ -108,13 +108,13 @@ func (c *Gen2Converter) FromAPIConfig(apiJSON json.RawMessage, _ string) (*Devic
 // nothing from. It looks at keys only, so a setting under a key that is read, such as sys.cfg_rev, is
 // not named.
 func (c *Gen2Converter) UnreadKeys(apiJSON json.RawMessage) ([]string, error) {
-	var doc map[string]json.RawMessage
+	var doc map[string]interface{}
 	if err := json.Unmarshal(apiJSON, &doc); err != nil {
 		return nil, fmt.Errorf("failed to parse Gen2 config: %w", err)
 	}
 	var keys []string
-	for key := range doc {
-		if !gen2KeyApplies(key) {
+	for key, value := range doc {
+		if !gen2KeyApplies(key, value) {
 			keys = append(keys, key)
 		}
 	}
