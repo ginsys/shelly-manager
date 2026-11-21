@@ -1,0 +1,2 @@
+Fixed
+- A streaming download that fails after its first byte now reaches the client as a failed transfer. The recovery and request-timeout layers used to swallow `http.ErrAbortHandler` and, once the response had started, ended it `200`, so a GitOps export download that lost a file midway (or ran past its request deadline) was saved as a truncated zip with no error. Both layers now let the abort through, the GitOps download aborts on a failure after the first byte, and a failure before the first byte is still the normal `500`. Fixes ginsys/shelly-manager#796.

@@ -74,9 +74,11 @@ func (eh *SyncHandlers) serveDirZip(w http.ResponseWriter, r *http.Request, path
 		// Nothing has reached the client: answer with the normal error instead of an empty zip.
 		w.Header().Del("Content-Disposition")
 		rw.WriteInternalError(w, r, errors.New("could not build the export archive"))
+		return
 	}
-	// Otherwise the status is sent. A zip with no central directory is rejected by every reader, so
-	// the client sees a failed download and not a short one that looks whole.
+	// The status is sent and a normal return would end the response 200: abort, so the client sees a
+	// failed transfer and not an archive with no central directory that was saved without an error.
+	panic(http.ErrAbortHandler)
 }
 
 // openExportRoot opens path as a root and keeps it only if it is the directory seen holds, so a path

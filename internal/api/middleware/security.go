@@ -582,12 +582,18 @@ func TimeoutMiddlewareFor(config *SecurityConfig, logger *logging.Logger, overri
 			// that after a timeout exactly one party writes the response.
 			tw := newTimeoutWriter(w)
 			done := make(chan struct{})
+			aborted := false // the handler panicked with http.ErrAbortHandler; read only after done
 			go func() {
 				// One deferred func, in this order: recover, answer, then close
 				// done. Closing done first would let this request return and
 				// net/http send an empty 200 before the 500 is written.
 				defer func() {
-					if rec := recover(); rec != nil {
+					if rec := recover(); rec == http.ErrAbortHandler {
+						// The handler cut its own transfer. net/http aborts only a panic in the
+						// request goroutine, and one raised here would end the process, so the
+						// request goroutine raises it after done.
+						aborted = true
+					} else if rec != nil {
 						answered := tw.fail()
 						if logger != nil {
 							logger.WithFields(map[string]any{
@@ -608,9 +614,19 @@ func TimeoutMiddlewareFor(config *SecurityConfig, logger *logging.Logger, overri
 			select {
 			case <-done:
 				tw.finish()
+				if aborted {
+					panic(http.ErrAbortHandler)
+				}
 			case <-ctx.Done():
 				expired, started := tw.expire(done, writeTimeoutAnswer)
-				if expired && logger != nil && config.LogSecurityEvents {
+				if !expired {
+					// The handler finished first: done is closed, so aborted is safe to read.
+					if aborted {
+						panic(http.ErrAbortHandler)
+					}
+					return
+				}
+				if logger != nil && config.LogSecurityEvents {
 					logger.WithFields(map[string]any{
 						"method":           r.Method,
 						"path":             r.URL.Path,
@@ -620,6 +636,11 @@ func TimeoutMiddlewareFor(config *SecurityConfig, logger *logging.Logger, overri
 						"component":        "security_timeout",
 						"security_event":   "request_timeout",
 					}).Warn("Request timed out")
+				}
+				if started {
+					// No 408 can follow a started response, and ending it here would read as a
+					// complete one: cut the transfer instead.
+					panic(http.ErrAbortHandler)
 				}
 			}
 		})
