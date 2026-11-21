@@ -91,7 +91,7 @@ UI, the device list answers 401 and the UI opens the key dialog.
 | PUT | `/api/v1/devices/{id}/config` | Update stored config |
 | GET | `/api/v1/devices/{id}/config/current` | Get live config from device (stores nothing; drift keeps its baseline) |
 | GET | `/api/v1/devices/{id}/config/current/normalized` | Get normalized live config (stores nothing) |
-| GET | `/api/v1/devices/{id}/config/typed/normalized` | Get typed normalized config. `data.configuration` holds the normalized configuration, as on `/config/current/normalized` |
+| GET | `/api/v1/devices/{id}/config/typed/normalized` | Get typed normalized config. `data.configuration` holds the normalized configuration, as on `/config/current/normalized`. For a Gen2 device the time zone and position come from the typed `location`, and `raw.additional` lists only the top-level keys that nothing is read from, such as `ble`, `modbus`, `script:N` and `ws` |
 | POST | `/api/v1/devices/{id}/config/import` | Import config to device |
 | GET | `/api/v1/devices/{id}/config/status` | Get import status: the state that an import or restore last stored (`synced` or `pending`), not drift. Use `/config/drift` for drift |
 | GET | `/api/v1/devices/{id}/config/drift` | Detect configuration drift |
