@@ -165,6 +165,82 @@ func TestActionSecrets_StoredSecretPathsNameNoURL(t *testing.T) {
 	assertNoURLSecret(t, "the stored secret paths", paths[0])
 }
 
+// A clear holds no secret, and dropping it from a response changes what the entry means from
+// "no URLs" to "leave alone".
+func TestRedactSecrets_RemovesURLsButKeepsAClear(t *testing.T) {
+	config := actionsOf(
+		actionEntryOf("btn_on_url", 0, secretActionURLs...),
+		configuration.ActionConfig{Name: "out_on_url", Index: 0, SecretURLs: &[]string{}},
+		configuration.ActionConfig{Name: "out_off_url", Index: 0, Enabled: configuration.BoolPtr(true)},
+	)
+
+	redactSecrets(config)
+
+	entries := *config.Actions
+	assert.Nil(t, entries[0].SecretURLs, "the URLs are removed")
+	require.NotNil(t, entries[1].SecretURLs, "the clear was dropped")
+	assert.Empty(t, *entries[1].SecretURLs)
+	assert.Nil(t, entries[2].SecretURLs, "an entry with no list gains none")
+	assertNoURLSecret(t, "redacted config", marshalActions(t, config))
+	assert.Contains(t, marshalActions(t, config), `"secret_urls":[]`)
+}
+
+// An explicit null removes the stored override, as it does for every other secret: the stored list
+// is not brought back, and a null on one entry reaches that entry only.
+func TestKeepOmittedActionSecrets_AnExplicitNullRemovesTheStoredList(t *testing.T) {
+	stored := actionsOf(
+		actionEntryOf("btn_on_url", 0, secretActionURLs[0]),
+		configuration.ActionConfig{Name: "out_on_url", Index: 0, SecretURLs: &[]string{}},
+		actionEntryOf("out_off_url", 0, secretActionURLs[1]),
+	)
+	body := func(second string) []byte {
+		return []byte(`{"actions":[{"name":"btn_on_url","index":0},{"name":"out_on_url","index":0` + second +
+			`},{"name":"out_off_url","index":0}]}`)
+	}
+	decode := func(raw []byte) *configuration.DeviceConfiguration {
+		var c configuration.DeviceConfiguration
+		require.NoError(t, json.Unmarshal(raw, &c))
+		return &c
+	}
+
+	t.Run("a null on the stored clear", func(t *testing.T) {
+		raw := body(`,"secret_urls":null`)
+		removed, err := nullSecretPaths(raw)
+		require.NoError(t, err)
+		incoming := decode(raw)
+
+		keepOmittedSecrets(incoming, stored, removed)
+
+		entries := *incoming.Actions
+		assert.Equal(t, secretActionURLs[:1], urlsOf(entries[0]), "an omitted list still keeps its stored one")
+		assert.Nil(t, entries[1].SecretURLs, "the null was overridden by the stored clear")
+		assert.Equal(t, secretActionURLs[1:], urlsOf(entries[2]))
+	})
+
+	t.Run("an omitted key keeps the stored clear, as the control", func(t *testing.T) {
+		raw := body("")
+		removed, err := nullSecretPaths(raw)
+		require.NoError(t, err)
+		incoming := decode(raw)
+
+		keepOmittedSecrets(incoming, stored, removed)
+
+		require.NotNil(t, (*incoming.Actions)[1].SecretURLs)
+		assert.Empty(t, *(*incoming.Actions)[1].SecretURLs)
+	})
+
+	t.Run("a null under the wrapper of a template body", func(t *testing.T) {
+		raw := []byte(`{"config":{"actions":[{"name":"btn_on_url","index":0,"secret_urls":null}]}}`)
+		removed, err := wrappedNullSecretPaths(raw, "config")
+		require.NoError(t, err)
+		incoming := decode([]byte(`{"actions":[{"name":"btn_on_url","index":0}]}`))
+
+		keepOmittedSecrets(incoming, stored, removed)
+
+		assert.Nil(t, (*incoming.Actions)[0].SecretURLs)
+	})
+}
+
 func TestKeepOmittedActionSecrets(t *testing.T) {
 	removed := map[string]bool{}
 

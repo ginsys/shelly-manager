@@ -92,6 +92,16 @@ func TestMaskConfigHistory_MasksActionURLs(t *testing.T) {
 	assert.Contains(t, string(row.Changes), "hunter2", "the stored row is not changed")
 }
 
+// A clear holds no secret: the raw masking the history, the bulk download and the live reads use
+// keeps it as it is, so a reader still sees "no URLs" and not "left alone".
+func TestMaskRawJSON_KeepsAnActionClear(t *testing.T) {
+	raw := json.RawMessage(`{"actions":[{"name":"btn_on_url","index":0,"secret_urls":[]}]}`)
+
+	masked := maskRawJSON(raw)
+
+	assert.JSONEq(t, string(raw), string(masked))
+}
+
 // A difference the comparator reports, passed through the API's own redaction, holds no URL.
 func TestRedactDifference_HoldsNoActionURL(t *testing.T) {
 	desired, _ := actionsDesired(actionSecretURL, actionSecretURL2)

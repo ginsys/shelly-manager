@@ -635,18 +635,31 @@ func addActionSlots(slots map[string]secretSlot, config *configuration.DeviceCon
 		return
 	}
 	entries := *config.Actions
+	for i, key := range actionSlotKeys(entries) {
+		slots[key] = urlListSlot(&entries[i].SecretURLs)
+	}
+}
+
+// actionSlotKeys returns the slot key of each entry, by position.
+func actionSlotKeys(entries []configuration.ActionConfig) []string {
 	count := map[string]int{}
 	for _, entry := range entries {
 		count[actionSlotBase(entry)]++
 	}
-	for i := range entries {
-		key := actionSlotBase(entries[i])
+	keys := make([]string, len(entries))
+	for i, entry := range entries {
+		key := actionSlotBase(entry)
 		if count[key] > 1 {
 			key = strings.TrimSuffix(key, ".secret_urls") + duplicateActionSlotMark + strconv.Itoa(i)
 		}
-		slots[key] = urlListSlot(&entries[i].SecretURLs)
+		keys[i] = key
 	}
+	return keys
 }
+
+// actionNullMark names the list of the action at a position of the body, as matchSecretNulls finds it
+// there. The slot key of an action holds its identity, which only the decoded body can tell.
+func actionNullMark(position int) string { return "actions#" + strconv.Itoa(position) }
 
 // restorableSlot reports whether the stored slot at path may hand its value to an incoming one. An
 // action whose identity is shared by two entries on either side has no counterpart to restore from.
@@ -666,7 +679,12 @@ func maskSecrets(config *configuration.DeviceConfiguration) {
 
 // redactSecrets removes every secret.
 func redactSecrets(config *configuration.DeviceConfiguration) {
-	for _, slot := range secretSlots(config) {
+	for path, slot := range secretSlots(config) {
+		// An empty URL list is the explicit clear. It holds no secret, and removing it would turn
+		// "no URLs" into "leave alone".
+		if strings.HasPrefix(path, "actions.") && slot.present() && slot.get() == "" {
+			continue
+		}
 		slot.set("")
 	}
 }
@@ -775,6 +793,15 @@ func matchSecretNulls(found [][]string) map[string]bool {
 			}
 		}
 	}
+	// The actions are a list, so the null of an entry's URL list is found by its position.
+	for _, path := range found {
+		if len(path) != 3 || !strings.EqualFold(path[0], "actions") || !strings.EqualFold(path[2], "secret_urls") {
+			continue
+		}
+		if position, err := strconv.Atoi(path[1]); err == nil {
+			nulls[actionNullMark(position)] = true
+		}
+	}
 	return nulls
 }
 
@@ -787,6 +814,19 @@ func matchSecretNulls(found [][]string) map[string]bool {
 func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, removed map[string]bool) {
 	if incoming == nil {
 		return
+	}
+	if incoming.Actions != nil {
+		// A null found by position is a removal of that entry's list, whatever its key is.
+		gone := map[string]bool{}
+		for path := range removed {
+			gone[path] = removed[path]
+		}
+		for i, key := range actionSlotKeys(*incoming.Actions) {
+			if removed[actionNullMark(i)] {
+				gone[key] = true
+			}
+		}
+		removed = gone
 	}
 	storedSlots := secretSlots(stored)
 	for path, old := range storedSlots {

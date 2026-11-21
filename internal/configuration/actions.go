@@ -345,14 +345,24 @@ func failActionEntry(result *ApplyResult, position int, entry ActionConfig, mess
 	}
 }
 
-// hideActionURLs removes every URL of the entry from an error's text.
+// withheldError replaces the text of a device error that may echo a URL. The cause stays reachable
+// for errors.Is, so an authentication failure is still told apart.
+type withheldError struct{ cause error }
+
+func (e *withheldError) Error() string {
+	return "the device answer is withheld because the request carried action URLs"
+}
+
+func (e *withheldError) Unwrap() error { return e.cause }
+
+// hideActionURLs withholds the text of an error from a request that carried a URL. A device can
+// echo what it was sent in any shape (form-encoded, percent-encoded, cut short), so replacing the
+// exact URL would miss it. A request with no URL (a clear, or no list) echoes nothing and is shown.
 func hideActionURLs(err error, entry ActionConfig) error {
-	if entry.SecretURLs != nil {
-		for _, u := range *entry.SecretURLs {
-			err = redact(err, u)
-		}
+	if entry.SecretURLs == nil || !slices.ContainsFunc(*entry.SecretURLs, func(u string) bool { return u != "" }) {
+		return err
 	}
-	return err
+	return &withheldError{cause: err}
 }
 
 // applyActionSettings writes each listed action with POST /settings/actions and reads it back with
