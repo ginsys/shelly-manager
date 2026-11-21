@@ -289,6 +289,35 @@ describe('buildTemplateBody', () => {
     expect(leftOut).toContain('auth.realm')
   })
 
+  it('leaves out the access-point name of a second-generation import, and no part of its raw part reaches the body', () => {
+    // The server reads a Gen2 import into wifi.ap.ssid, and keeps what it has no typed home for, secrets
+    // masked, in raw. The device schema names no raw section, so a ticked raw adds nothing.
+    const typed = {
+      wifi: { enable: true, ssid: 'Home', ap: { enable: true, ssid: 'ShellyPlus1PM-AABBCC' } },
+      raw: { wifi: { sta: { pass: MASK } }, modbus: { pass: MASK } },
+    }
+    const gen2 = {
+      type: 'object',
+      properties: {
+        wifi: {
+          type: 'object',
+          properties: {
+            enable: { type: 'boolean' },
+            ssid: { type: 'string' },
+            ap: { type: 'object', properties: { enable: { type: 'boolean' }, ssid: { type: 'string' } } },
+          },
+        },
+      },
+    } as unknown as ConfigSchema
+
+    const { config, leftOut } = buildTemplateBody(typed, gen2, ['wifi', 'raw'])
+
+    expect(config).toEqual({ wifi: { enable: true, ssid: 'Home', ap: { enable: true } } })
+    expect(leftOut).toContain('wifi.ap.ssid')
+    expect(JSON.stringify(config)).not.toContain(MASK)
+    expect(JSON.stringify(config)).not.toContain('ShellyPlus1PM')
+  })
+
   it('drops a secret slot whatever its value, an empty one included: an empty password would clear the target\'s', () => {
     const typed = {
       mqtt: { enable: true, pass: '' },

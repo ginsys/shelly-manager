@@ -635,6 +635,10 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 		return nil, conversionInfo, fmt.Errorf("invalid JSON configuration: %w", err)
 	}
 
+	if isGen2Document(rawData) {
+		return convertGen2ToTypedConfig(rawConfig, conversionInfo)
+	}
+
 	// Convert from raw JSON to typed configuration
 	typedConfig = &configuration.TypedConfiguration{}
 	conversionInfo.ConvertedFrom = "raw"
@@ -826,6 +830,46 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 	}
 
 	conversionInfo.HasTypedConfig = true
+	return typedConfig, conversionInfo, nil
+}
+
+// isGen2Document reports whether a stored configuration is a Shelly.GetConfig document of a second or
+// later generation, which always has a sys object. A Gen1 /settings document has none. The device row
+// is not read: its firmware and gen cannot tell the generations apart (ginsys/shelly-manager#798).
+func isGen2Document(rawData map[string]interface{}) bool {
+	_, ok := rawData["sys"].(map[string]interface{})
+	return ok
+}
+
+// convertGen2ToTypedConfig reads a second-generation document with the reader the Gen2 apply uses. What
+// the reader has no typed home for stays in the raw part and is named in a warning, so a typed save
+// keeps it.
+func convertGen2ToTypedConfig(rawConfig json.RawMessage, conversionInfo *ConfigurationConversionInfo) (*configuration.TypedConfiguration, *ConfigurationConversionInfo, error) {
+	converter := configuration.NewGen2Converter(nil)
+	config, err := converter.FromAPIConfig(rawConfig, "")
+	if err != nil {
+		return nil, conversionInfo, err
+	}
+	unread, rest, err := converter.UnreadSettings(rawConfig)
+	if err != nil {
+		return nil, conversionInfo, err
+	}
+
+	typedConfig := &configuration.TypedConfiguration{
+		WiFi: config.WiFi, MQTT: config.MQTT, System: config.System, Cloud: config.Cloud,
+		Location: config.Location, Relay: config.Relay, Input: config.Input,
+	}
+	conversionInfo.ConvertedFrom = "raw"
+	conversionInfo.HasTypedConfig = true
+	if len(unread) > 0 {
+		typedConfig.Raw, err = json.Marshal(rest)
+		if err != nil {
+			return nil, conversionInfo, err
+		}
+		conversionInfo.Warnings = []string{
+			"Unconverted settings stored in raw field: " + strings.Join(unread, ", "),
+		}
+	}
 	return typedConfig, conversionInfo, nil
 }
 
