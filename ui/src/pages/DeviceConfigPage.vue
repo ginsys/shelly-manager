@@ -238,6 +238,7 @@
       :current="store.desiredConfig"
       :templates="store.templates"
       :editing="editOverrides"
+      :ready="!store.loading && !store.error && store.status !== null"
       @refresh="handleRefresh"
     />
 

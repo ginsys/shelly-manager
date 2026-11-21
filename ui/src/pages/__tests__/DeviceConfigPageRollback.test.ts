@@ -45,7 +45,10 @@ async function mountPage(id = '7') {
   await router.isReady()
   const wrapper = mount(RouterView, { global: { plugins: [router], stubs }, attachTo: document.body })
   await flushPromises()
-  return { wrapper, router, refresh, apply, verify }
+  // The mocked refresh reads nothing: say the page has read its state, as a real refresh does.
+  store.status = { config_applied: true, pending_changes: false } as any
+  await flushPromises()
+  return { wrapper, router, refresh, apply, verify, store }
 }
 
 describe('DeviceConfigPage rollback card', () => {
@@ -81,6 +84,32 @@ describe('DeviceConfigPage rollback card', () => {
     expect(apply).not.toHaveBeenCalled()
     expect(verify).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="rollback-notice"]').text()).toContain('done')
+  })
+
+  // The card sits outside the part of the page that waits for its data, so it must wait for it itself.
+  it('keeps Roll back off while the page is reading, or when its read failed or gave nothing, and reads the versions again after each read', async () => {
+    const { wrapper, store } = await mountPage()
+    const off = () => wrapper.get('[data-testid="rollback-5"]').attributes('disabled') !== undefined
+    const reads = () => vi.mocked(getDesiredHistory).mock.calls.length
+    expect(off()).toBe(false)
+
+    const before = reads()
+    store.loading = true
+    await flushPromises()
+    expect(off()).toBe(true)
+    expect(reads()).toBe(before)
+    store.loading = false
+    await flushPromises()
+    expect(off()).toBe(false)
+    expect(reads()).toBe(before + 1)
+
+    store.error = 'Failed to load new config state'
+    await flushPromises()
+    expect(off()).toBe(true)
+    store.error = null
+    store.status = null
+    await flushPromises()
+    expect(off()).toBe(true)
   })
 
   // A rollback replaces the overrides, so it is not started over an open edit.

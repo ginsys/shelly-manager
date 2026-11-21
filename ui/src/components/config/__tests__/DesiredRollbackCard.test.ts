@@ -42,7 +42,7 @@ enableAutoUnmount(afterEach)
 
 function mountCard(over: Record<string, unknown> = {}) {
   return mount(DesiredRollbackCard, {
-    props: { deviceId: '7', current, templates, editing: false, ...over },
+    props: { deviceId: '7', current, templates, editing: false, ready: true, ...over },
     global: { plugins: [pinia] },
     attachTo: document.body,
   })
@@ -168,6 +168,35 @@ describe('DesiredRollbackCard', () => {
       await (wrapper.vm as any).confirm()
       expect(rollbackDesired).not.toHaveBeenCalled()
       expect(wrapper.get('[data-testid="rollback-refusal"]').text()).toContain('Save or cancel the overrides edit first')
+    })
+
+    // The card is always on the page, so it can be used before the page has read the current configuration: the
+    // difference and the detach list would then compare with nothing.
+    it('keeps Roll back off, with its reason, until the page has read the configuration, and confirm refuses when it is being read again', async () => {
+      const wrapper = mountCard({ ready: false })
+      await flushPromises()
+      const button = wrapper.get('[data-testid="rollback-5"]')
+      expect(button.attributes('disabled')).toBeDefined()
+      expect(button.attributes('title')).toBe('Wait until the configuration has been read')
+      await wrapper.setProps({ ready: true })
+      await open(wrapper)
+      await wrapper.setProps({ ready: false })
+      expect(wrapper.get('[data-testid="rollback-confirm"]').attributes('disabled')).toBeDefined()
+      await (wrapper.vm as any).confirm()
+      expect(rollbackDesired).not.toHaveBeenCalled()
+      expect(wrapper.get('[data-testid="rollback-refusal"]').text()).toContain('being read again')
+    })
+
+    it('reads the versions again each time the page finishes reading, and not when it starts to', async () => {
+      const wrapper = mountCard()
+      await flushPromises()
+      const reads = () => vi.mocked(getDesiredHistory).mock.calls.length
+      const first = reads()
+      await wrapper.setProps({ ready: false })
+      expect(reads()).toBe(first)
+      await wrapper.setProps({ ready: true })
+      await flushPromises()
+      expect(reads()).toBe(first + 1)
     })
 
     it('cancel closes the dialog and posts nothing', async () => {
