@@ -53,7 +53,9 @@ func TestPreviewListsUngroupedDevices(t *testing.T) {
 		{ID: 3, Name: "plug-1", Type: "shellyplug"},
 	}}
 	res, err := NewGitOpsExporter().Preview(context.Background(), data, sync.ExportConfig{Config: map[string]interface{}{
-		"group_by": "location",
+		"group_by":          "location",
+		"include_common":    false,
+		"include_templates": false,
 	}})
 	if err != nil {
 		t.Fatal(err)
