@@ -166,9 +166,10 @@ Three ways were compared.
 
 **Recommendation: (b).** The recompute of a device with no templates is the merge of one layer into an
 empty configuration (section 2.2), so the target survives every later recompute, **provided the merge
-returns it unchanged**. It does not for a plain scalar field that holds a zero (`"server":""`,
-`"level":0`): the merge does not copy a zero, and the field is `omitempty`, so the merged tree lacks that
-path. The rollback checks that before it writes: it merges the target as the only layer and compares the two **decoded JSON trees**, never their
+returns it unchanged**. It does not for a plain `omitempty` scalar field that holds a zero
+(`"server":""`, `"level":0`): the merge does not copy a zero, and the field is dropped when written, so
+the merged tree lacks that path. A zero in a field without `omitempty` (the `enable` of `SleepConfig` and
+`BLEConfig`) is written anyway and passes. The rollback checks that before it writes: it merges the target as the only layer and compares the two **decoded JSON trees**, never their
 text, so a version whose keys are in another order, such as one written by an archive import, passes. A
 path the target holds that the merged tree lacks, or holds with another value, is a loss. A path only the
 merged tree holds counts as equal when its value is a JSON zero (`false`, `0`, `""`, `null`, an empty
@@ -337,7 +338,7 @@ Each is under about 350 non-test lines.
    names every path and echoes no value; a placeholder left anywhere refuses; the loop over `allSecretPaths`
    finds a row for each; 404 for another device's version; a non-admin is refused; a rollback built on a
    stale read gets 409; a target with a non-zero plain scalar field (`system.sntp.server`) passes, and one
-   with a plain zero (`"server":""`) is refused with that path and writes nothing; after a rollback, a recompute leaves
+   with a zero in a plain `omitempty` field (`"server":""`) is refused with that path and writes nothing; after a rollback, a recompute leaves
    desired equal to the target; a version written by a recompute always passes the round-trip check; an
    import-written version that differs only in key order passes it; a path only the merged tree holds, with
    a zero value, passes, and with any other value is refused.
@@ -363,7 +364,7 @@ Candidates, each with one recommendation:
 - Versions that existed before the first slice is deployed: they are not recorded and cannot be rolled
   back to.
 - The orphaned `ConfigHistory` rows of a deleted device.
-- A plain scalar zero (`"server":""`, `"level":0`): the merge does not copy it, so a version holding one
+- A zero in a plain `omitempty` scalar field (`"server":""`, `"level":0`): the merge does not copy it, so a version holding one
   cannot be rolled back to, and the refusal says which path.
 - Restoring the stored `device_configs` copy: it is a record of the last import, and the issue's old
   Restore button is not rebuilt.
