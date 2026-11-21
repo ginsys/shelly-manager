@@ -358,8 +358,12 @@ unchanged until you apply it." When secrets were entered, they are never repeate
 - 409 also for the conditional write (section 3.4). No device is contacted.
 - The card, next to the History card (`DeviceConfigPage.vue:228-254`): a list of versions, a Roll back
   button per version, and a confirm that shows the difference with the current desired, the templates
-  that will be detached, the way back and that it is two recomputes (section 3.2), and the fields that
-  need a secret. A target the merge cannot return unchanged is refused with its paths (section 3.2).
+  that will be detached, the way back and that it is two recomputes (section 3.2). No route says which
+  secrets a version needs before a write, so the confirm comes first: its POST is the operator's decision,
+  and a 409 with paths keeps the same dialog open with one input per path (a `secret_urls` path takes one
+  URL per line). The difference does not compare secrets: a history version holds them masked and the
+  current desired configuration holds none. A target the merge cannot return unchanged is refused with its
+  paths (section 3.2).
 
 ## 4. Slices, one pull request each
 

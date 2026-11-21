@@ -225,6 +225,18 @@
       </div>
     </div>
 
+    <!-- Keyed by device: a device change re-creates the card, so a late answer and the secrets typed for the
+         old device never reach the new one. A rollback replaces the overrides, and the editor's watch below
+         rewrites an open edit on every refresh, so the card keeps Roll back off while the editor is open. -->
+    <DesiredRollbackCard
+      :key="String(deviceId)"
+      :device-id="deviceId"
+      :current="store.desiredConfig"
+      :templates="store.templates"
+      :editing="editOverrides"
+      @refresh="handleRefresh"
+    />
+
     <div class="card" data-testid="history-card">
       <div class="header-row">
         <h2>History</h2>
@@ -293,6 +305,7 @@ import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
 import ConfigEditor from '@/components/config/ConfigEditor.vue'
 import CreateTemplateFromImportDialog from '@/components/config/CreateTemplateFromImportDialog.vue'
+import DesiredRollbackCard from '@/components/config/DesiredRollbackCard.vue'
 import ErrorDisplay from '@/components/shared/ErrorDisplay.vue'
 import { useError } from '@/composables/useError'
 import { usePageError, useLateResult } from '@/composables/useNotice'
