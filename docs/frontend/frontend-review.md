@@ -232,7 +232,8 @@ page imports still counts. The Playwright spec is what proves the links are rend
   with paths keeps the dialog open with one input per path, and the typed secrets live in that dialog only.
   Roll back is off while the overrides editor is open. No device is contacted: the operator applies afterwards. The History card below it lists imports, not these versions.
 - **An open overrides edit survives a refresh** (ginsys/shelly-manager#855). The page reloads the overrides into
-  the editor only while the editor is closed. If the saved overrides change under an open edit (a rollback does
+  the editor only while the editor is closed, and the page stays mounted while it loads, so an unfinished JSON
+  draft in the editor is not dropped. If the saved overrides change under an open edit (a rollback does
   this), the edit is kept, a notice says so, and Save is off until Cancel loads the saved overrides. It sees a
   change this page has read: one made from another browser, or one whose refresh failed, is not seen.
 - **Drift compares with the desired configuration**, the one apply writes and verify reads, and no

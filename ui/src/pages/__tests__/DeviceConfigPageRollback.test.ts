@@ -154,6 +154,34 @@ describe('DeviceConfigPage rollback card', () => {
       store.overrides = { b: { d: 3, c: 2 }, a: 1 } as any
       await flushPromises()
       expect(wrapper.find('[data-testid="overrides-stale"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="save-overrides"]').attributes('disabled')).toBeUndefined()
+      // the edit and its baseline were not replaced by the reordered saved overrides
+      expect(page(wrapper).overridesData).toEqual(typed)
+      expect(page(wrapper).overridesHeld).toEqual({ a: 1, b: { c: 2, d: 3 } })
+    })
+
+    // The editor holds the text of an unfinished JSON edit that no one else has, so a load that removes it loses
+    // the draft: while the editor is open the page stays mounted under "Loading...".
+    it('keeps the same editor element through a load, and still replaces the page by Loading... when no editor is open', async () => {
+      const { wrapper } = await mountPage()
+      const store = useDeviceConfigNewStore()
+      expect(wrapper.text()).toContain('Device Overrides')
+      store.loading = true
+      await flushPromises()
+      expect(wrapper.text()).not.toContain('Device Overrides')
+      store.loading = false
+      await flushPromises()
+
+      await openEditor(wrapper, typed)
+      const editor = wrapper.find('config-editor-stub').element
+      store.loading = true
+      await flushPromises()
+      expect(wrapper.text()).toContain('Loading...')
+      expect(wrapper.find('config-editor-stub').element).toBe(editor)
+      store.loading = false
+      await flushPromises()
+      expect(wrapper.find('config-editor-stub').element).toBe(editor)
+      expect(page(wrapper).overridesData).toEqual(typed)
     })
 
     // With saved overrides a device change reloads through the watch anyway, so only empty ones tell a guard in
