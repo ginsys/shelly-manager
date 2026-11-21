@@ -20,7 +20,7 @@ func TestValidateDeviceSettings(t *testing.T) {
 		inputSettings  string
 		expectedValid  bool
 		expectedOutput string
-		fallbackGen    func() int
+		fallbackGen    func() any
 	}{
 		{
 			name:           "Empty settings get the defaults and no gen nobody gave",
@@ -33,27 +33,41 @@ func TestValidateDeviceSettings(t *testing.T) {
 			inputSettings:  "",
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"gen":2,"model":"Unknown"}`,
-			fallbackGen:    func() int { return 2 },
+			fallbackGen:    func() any { return 2 },
 		},
 		{
-			name:           "A fallback of 0 writes no gen",
+			name:           "A fallback of nil writes no gen",
 			inputSettings:  `{"model":"SHPLG-S"}`,
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"model":"SHPLG-S"}`,
-			fallbackGen:    func() int { return 0 },
+			fallbackGen:    func() any { return nil },
+		},
+		{
+			name:           "A fallback that is not a number is written as it is",
+			inputSettings:  `{"model":"SHPLG-S"}`,
+			expectedValid:  true,
+			expectedOutput: `{"auth_enabled":false,"gen":"2","model":"SHPLG-S"}`,
+			fallbackGen:    func() any { return "2" },
 		},
 		{
 			name:           "A given gen is kept and the fallback is not asked",
 			inputSettings:  `{"model":"SHPLG-S","gen":3}`,
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"gen":3,"model":"SHPLG-S"}`,
-			fallbackGen:    func() int { t.Error("the fallback was asked for a given gen"); return 1 },
+			fallbackGen:    func() any { t.Error("the fallback was asked for a given gen"); return 1 },
+		},
+		{
+			name:           "A given gen that is not a positive number is kept and the fallback is not asked",
+			inputSettings:  `{"model":"SHPLG-S","gen":null}`,
+			expectedValid:  true,
+			expectedOutput: `{"auth_enabled":false,"gen":null,"model":"SHPLG-S"}`,
+			fallbackGen:    func() any { t.Error("the fallback was asked for a given gen"); return 1 },
 		},
 		{
 			name:          "Invalid JSON does not ask the fallback",
 			inputSettings: `{"model":`,
 			expectedValid: false,
-			fallbackGen:   func() int { t.Error("the fallback was asked for invalid JSON"); return 1 },
+			fallbackGen:   func() any { t.Error("the fallback was asked for invalid JSON"); return 1 },
 		},
 		{
 			name:           "Valid JSON settings should be normalized",
