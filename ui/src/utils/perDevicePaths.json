@@ -1,6 +1,8 @@
 [
   "auth.realm",
   "input.inputs.*.name",
+  "location.lat",
+  "location.lng",
   "mqtt.id",
   "mqtt.topic_prefix",
   "network.eth.ip",
@@ -12,6 +14,8 @@
   "system.device.hostname",
   "system.device.mac",
   "system.device.name",
+  "system.location.lat",
+  "system.location.lng",
   "wifi.ap.ssid",
   "wifi.ipv4mode",
   "wifi.static_ip"

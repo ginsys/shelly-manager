@@ -107,7 +107,7 @@ describe('CreateTemplateFromImportDialog', () => {
 
     const note = wrapper.get('[data-testid="from-import-left-out"]').text()
     expect(note).toContain('per-device name, hostname, MAC, MQTT client id and topic prefix')
-    expect(note).toContain('access-point name, channel names and static address')
+    expect(note).toContain('access-point name, channel names, coordinates and static address')
     expect(note).toContain('mqtt.pass')
   })
 

@@ -271,6 +271,38 @@ describe('buildTemplateBody', () => {
     )
   })
 
+  it('leaves out the device\'s coordinates, in both places a device keeps them, and keeps the time zone', () => {
+    const typed = {
+      location: { tz: 'Europe/Brussels', lat: 51.05, lng: 3.72 },
+      system: { location: { tz: 'Europe/Brussels', lat: 51.05, lng: 3.72 } },
+    }
+    const place = {
+      type: 'object',
+      properties: {
+        tz: { type: 'string' },
+        lat: { type: 'number' },
+        lng: { type: 'number' },
+      },
+    }
+    const withLocation = {
+      type: 'object',
+      properties: {
+        location: place,
+        system: { type: 'object', properties: { location: place } },
+      },
+    } as unknown as ConfigSchema
+
+    const { config, leftOut } = buildTemplateBody(typed, withLocation, ['location', 'system'])
+
+    expect(config.location).toEqual({ tz: 'Europe/Brussels' })
+    expect(config.system).toEqual({ location: { tz: 'Europe/Brussels' } })
+    expect(JSON.stringify(config)).not.toContain('51.05')
+    expect(leftOut).toEqual(
+      expect.arrayContaining(['location.lat', 'location.lng', 'system.location.lat', 'system.location.lng']),
+    )
+    expect(PER_DEVICE_NOTE).toContain('coordinates')
+  })
+
   it('leaves out the auth realm, which is the device\'s own id', () => {
     const typed = { auth: { enable: true, user: 'admin', realm: 'shellyplus1-aabbccddeeff' } }
     const withRealm = {

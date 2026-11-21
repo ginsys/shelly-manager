@@ -14,7 +14,7 @@ export const MASK = '********'
 // channel keeps its id and loses its name.
 const PER_DEVICE_PATHS: string[] = perDevicePaths
 export const PER_DEVICE_NOTE =
-  'per-device name, hostname, MAC, MQTT client id and topic prefix, access-point name, channel names and static address'
+  'per-device name, hostname, MAC, MQTT client id and topic prefix, access-point name, channel names, coordinates and static address'
 
 // The slots the server treats as secrets. A value there is never copied, whatever it is: an empty one
 // would clear the password of every device the template is applied to. The list is one file that a Go

@@ -108,6 +108,33 @@ func commonAt(m map[string]any, path ...string) (any, bool) {
 	return cur, true
 }
 
+// A site's coordinates are one device's own even where every compared device holds the same ones: a
+// template shared by a model must not place every device at one point. The time zone is the site's, so
+// it stays.
+func TestCommonSettings_StripsTheDevicesCoordinatesAndKeepsTheTimeZone(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	place := `{"tz":"Europe/Brussels","lat":51.05,"lng":3.72}`
+	same := `{"location":` + place + `,"system":{"location":` + place + `,"device":{"eco_mode":true}}}`
+	a := commonDevice(t, h, 1, "SHPLG-S", same)
+	b := commonDevice(t, h, 2, "SHPLG-S", same)
+
+	answer, body := commonFor(t, h, a, b)
+
+	for _, path := range [][]string{
+		{"location", "lat"}, {"location", "lng"}, {"system", "location", "lat"}, {"system", "location", "lng"},
+	} {
+		_, found := commonAt(answer.Common, path...)
+		assert.False(t, found, "%s is one device's own: %s", strings.Join(path, "."), body)
+	}
+	assert.NotContains(t, body, "51.05", body)
+	// Control: the time zone is equal and not one device's own, so it stays in both places.
+	tz, ok := commonAt(answer.Common, "location", "tz")
+	assert.True(t, ok && tz == "Europe/Brussels", body)
+	tz, ok = commonAt(answer.Common, "system", "location", "tz")
+	assert.True(t, ok && tz == "Europe/Brussels", body)
+}
+
 // The trap: a Wi-Fi password, an MQTT password or a login password that is the same on every device is
 // "common", and must never come back, nor the mask that stands for it.
 func TestCommonSettings_NeverReturnsASecretEqualOnEveryDevice(t *testing.T) {
