@@ -595,7 +595,7 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 			continue
 		case map[string]interface{}:
 			child, _ := kept.(map[string]interface{})
-			if hasActionURLs(v) {
+			if isActionEntry(v) && len(keysFolded(v, actionURLsKey)) > 0 {
 				found += resolveActionURLs(v, child)
 			} else {
 				found += resolveRedacted(v, child)
@@ -614,33 +614,43 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 // actionURLsKey is the key of a Gen1 action's URL list in a stored configuration.
 const actionURLsKey = "secret_urls"
 
-// hasActionURLs reports whether the object holds the URL list of an action, and spells its key as
-// actionURLsKey. The configuration decoder matches keys without regard to case, so an archive may
-// spell the key another way and still state a list: that spelling is renamed here. An entry that
-// holds the key in more than one casing loses all of them, because the decoder and this reading could
-// not agree which one counts, and apply reads a missing list as "leave alone". An entry is found by
-// its key alone.
-func hasActionURLs(entry map[string]interface{}) bool {
-	var spellings []string
-	for key := range entry {
-		if strings.EqualFold(key, actionURLsKey) {
-			spellings = append(spellings, key)
+// keysFolded returns the keys of m that match name without regard to case. The configuration decoder
+// matches keys that way, so an archive may spell a key another way and still state it.
+func keysFolded(m map[string]interface{}, name string) []string {
+	var keys []string
+	for key := range m {
+		if strings.EqualFold(key, name) {
+			keys = append(keys, key)
 		}
 	}
-	switch {
-	case len(spellings) == 0:
-		return false
-	case len(spellings) > 1:
-		for _, key := range spellings {
-			delete(entry, key)
+	return keys
+}
+
+// isActionEntry reports whether the object is an action entry of a configuration: it holds a name and
+// an index, which a real entry always writes. Only such an object is resolved by the action rule; any
+// other object goes to the generic rule, whatever keys it holds.
+func isActionEntry(m map[string]interface{}) bool {
+	return len(keysFolded(m, "name")) > 0 && len(keysFolded(m, "index")) > 0
+}
+
+// countPlaceholders counts the placeholders in the value of a URL list, as a bare string (the SMA
+// export) or as list elements (the other exports), and the other elements.
+func countPlaceholders(urls interface{}) (placeholders, real int) {
+	switch v := urls.(type) {
+	case string:
+		if v == RedactedValue {
+			placeholders = 1
 		}
-		return false
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s == RedactedValue {
+				placeholders++
+			} else {
+				real++
+			}
+		}
 	}
-	if spellings[0] != actionURLsKey {
-		entry[actionURLsKey] = entry[spellings[0]]
-		delete(entry, spellings[0])
-	}
-	return true
+	return placeholders, real
 }
 
 // resolveActionURLs resolves the URL list of one action entry of an archive. The generic rule would
@@ -657,38 +667,40 @@ func hasActionURLs(entry map[string]interface{}) bool {
 //     agrees with it on everything but its secrets (and, for the list shape, holds as many URLs).
 //     Any other entry loses the key, which apply reads as "leave alone".
 //
+// The key is read in any casing and kept as spelled, on the entry and on the stored entry alike. An
+// entry that holds it in more than one casing loses all of them, and so does a stored entry (it holds
+// no list): the decoder and this reading could not agree which one counts.
+//
 // It returns how many placeholders it found.
 func resolveActionURLs(entry, stored map[string]interface{}) int {
-	urls := entry[actionURLsKey]
+	keys := keysFolded(entry, actionURLsKey)
+	if len(keys) != 1 {
+		found := 0
+		for _, key := range keys {
+			placeholders, _ := countPlaceholders(entry[key])
+			found += placeholders
+			delete(entry, key)
+		}
+		return found + resolveRedacted(entry, stored)
+	}
+	key := keys[0]
+	urls := entry[key]
 	paired := stored != nil && redact.SameWithoutSecrets(entry, stored)
-	delete(entry, actionURLsKey)
+	delete(entry, key)
 	found := resolveRedacted(entry, stored)
 
-	placeholders, real := 0, 0
-	switch v := urls.(type) {
-	case string:
-		if v == RedactedValue {
-			placeholders = 1
-		}
-	case []interface{}:
-		for _, item := range v {
-			if s, ok := item.(string); ok && s == RedactedValue {
-				placeholders++
-			} else {
-				real++
-			}
-		}
-	}
-
+	placeholders, real := countPlaceholders(urls)
 	switch {
 	case placeholders == 0:
-		entry[actionURLsKey] = urls
+		entry[key] = urls
 	case real > 0:
 		// mixed: the key is lost
 	default:
-		if kept, ok := stored[actionURLsKey].([]interface{}); ok && paired && !holdsPlaceholder(kept) {
-			if list, isList := urls.([]interface{}); !isList || len(list) == len(kept) {
-				entry[actionURLsKey] = kept
+		if storedKeys := keysFolded(stored, actionURLsKey); len(storedKeys) == 1 {
+			if kept, ok := stored[storedKeys[0]].([]interface{}); ok && paired && !holdsPlaceholder(kept) {
+				if list, isList := urls.([]interface{}); !isList || len(list) == len(kept) {
+					entry[key] = kept
+				}
 			}
 		}
 	}
