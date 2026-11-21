@@ -50,8 +50,8 @@ func TestMergeInto_AStructWithNoExportedFieldIsTakenWhole(t *testing.T) {
 
 	got := &leafRoot{}
 	sources := map[string]string{}
-	mergeInto(got, a, sources, "a", "")
-	mergeInto(got, b, sources, "b", "")
+	mergeInto(got, a, sources, "a", "", true)
+	mergeInto(got, b, sources, "b", "", true)
 
 	require.NotNil(t, got.Ptr)
 	assert.Equal(t, 2, got.Ptr.n)
