@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -85,17 +86,31 @@ func TestProvisionerEnrolment_KeylessRegisterNeverReplacesAnEnrolledRow(t *testi
 // row. A row that exists keeps registering whatever its id holds.
 func TestProvisionerEnrolment_NewIDMustBePrintableASCII(t *testing.T) {
 	srv, db := idServer(t)
-	for _, id := range []string{"a b", " lead", "trail ", "tab\tid", "nul\x00id", "café", "日本", " nbsp", "Provisioner-a b"} {
+	// register marshals the body, so a control byte reaches the handler as valid JSON.
+	register := func(id string, headers map[string]string) (int, string, string) {
+		payload, err := json.Marshal(map[string]string{"id": id, "hostname": "h"})
+		require.NoError(t, err)
+		code, body := idCall(t, srv, "POST", "/api/v1/provisioner/agents/register", string(payload), headers)
+		var out struct {
+			Data struct {
+				Token string `json:"agent_token"`
+			} `json:"data"`
+		}
+		_ = json.Unmarshal([]byte(body), &out)
+		return code, out.Data.Token, body
+	}
+	for _, id := range []string{"a b", " lead", "trail ", "tab\tid", "nul\x00id", "del\x7fid", "café", "日本", " nbsp", "Provisioner-a b"} {
 		for name, hdr := range map[string]map[string]string{"agent key": idAgentHdr(""), "admin key": idAdminHdr()} {
-			code, token, body := idRegister(t, srv, id, hdr)
+			code, token, body := register(id, hdr)
 			assert.Equal(t, http.StatusBadRequest, code, "%q with the %s: %s", id, name, body)
+			assert.Contains(t, body, "printable ASCII", "%q with the %s: the refusal is the id rule, not a parse error", id, name)
 			assert.Empty(t, token, "%q: no token may be issued", id)
 		}
 		assert.EqualValues(t, 0, idRows(t, db, id), "%q must leave no row", id)
 	}
 
-	for _, id := range []string{"provisioner-host with space", "provisioner-café", "provisioner-", "plain-1", "p~!{}"} {
-		code, _, body := idRegister(t, srv, id, idAgentHdr(""))
+	for _, id := range []string{"provisioner-host with space", "provisioner-café", "provisioner-tab\tid", "provisioner-", "plain-1", "p~!{}"} {
+		code, _, body := register(id, idAgentHdr(""))
 		assert.Equal(t, http.StatusCreated, code, "%q: %s", id, body)
 	}
 
@@ -106,7 +121,7 @@ func TestProvisionerEnrolment_NewIDMustBePrintableASCII(t *testing.T) {
 			LastSeen: silent, RegisteredAt: silent,
 		}
 		require.NoError(t, db.GetDB().Create(&row).Error)
-		code, token, body := idRegister(t, srv, id, idAgentHdr(""))
+		code, token, body := register(id, idAgentHdr(""))
 		assert.Equal(t, http.StatusCreated, code, "%q: an existing row registers as before: %s", id, body)
 		assert.NotEmpty(t, token, id)
 	}
