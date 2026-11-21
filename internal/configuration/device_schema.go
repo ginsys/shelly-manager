@@ -57,6 +57,9 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	if !supported || HasRollerMode(deviceType) {
 		sections["roller"] = getRollerSchema()
 	}
+	if _, hasActions := gen1ActionTable(deviceType); !supported || hasActions {
+		sections["actions"] = getActionsSchema(deviceType)
+	}
 	if !supported {
 		// No supported Gen1 model is a dimmer.
 		sections["dimming"] = getDimmingSchema()

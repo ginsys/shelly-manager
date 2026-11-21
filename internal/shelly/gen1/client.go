@@ -626,12 +626,6 @@ func (c *Client) GetInputStatus(ctx context.Context, input int) (map[string]inte
 	return result, nil
 }
 
-// SetActions configures device actions and scenes
-func (c *Client) SetActions(ctx context.Context, actions map[string]interface{}) error {
-	url := fmt.Sprintf("http://%s/settings/actions", c.ip)
-	return c.postForm(ctx, url, actions)
-}
-
 // SetLEDSettings configures LED indicator behavior
 func (c *Client) SetLEDSettings(ctx context.Context, settings map[string]interface{}) error {
 	url := fmt.Sprintf("http://%s/settings/led", c.ip)
@@ -813,7 +807,12 @@ func (c *Client) postForm(ctx context.Context, endpoint string, params map[strin
 			formData.Set(key, fmt.Sprintf("%v", v))
 		}
 	}
+	return c.postValues(ctx, endpoint, formData)
+}
 
+// postValues posts an already built form. A key that holds several values goes out once per value,
+// which postForm's map cannot express.
+func (c *Client) postValues(ctx context.Context, endpoint string, formData url.Values) error {
 	// Retry logic
 	var lastErr error
 	for attempt := 0; attempt <= c.config.retryAttempts; attempt++ {

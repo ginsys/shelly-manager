@@ -99,7 +99,7 @@
 - **API Endpoints**:
   - ✅ `/status` - Input states
   - ✅ `/settings/input/0-2` - Configure inputs (button type and reverse flag)
-  - ❌ `/settings/actions` - Configure actions
+  - ❌ `/settings/actions` - Not written by the manager for this model yet: its action names are not confirmed, so a desired configuration with actions is refused for it
 
 #### **Shelly Plug/Plug S**
 - **Type ID**: `SHPLG-1`, `SHPLG-S`
