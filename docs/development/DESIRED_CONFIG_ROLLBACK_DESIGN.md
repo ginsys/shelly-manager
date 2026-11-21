@@ -72,6 +72,13 @@ rows can hold real secrets, and the history answer can never bring one back.
   (`config_service.go:405-425`).
 - Merging one layer into an empty configuration keeps its channel lists as they are
   ("an empty dst takes src as it is", `internal/configuration/merge.go:214-215`, `:259-281`).
+  **It does not keep a plain, non-pointer scalar field.** `mergeInto` copies pointer fields, nested
+  structs and slices and skips every other field kind (`merge.go:88-116`). `SNTPConfig.Server` is a plain
+  `string` (`internal/configuration/typed_models.go:210-212`), so a layer holding
+  `{"system":{"sntp":{"server":"time.example"}}}` merges to `{"system":{"sntp":{}}}`. A desired value
+  that came straight from an archive import (`import_store.go:222`, `:254`) can hold such a field; a
+  recompute never rebuilds it. This is an existing limit of the merge, filed as
+  ginsys/shelly-manager#839; the note does not fix it (section 6).
 - Bulk apply already writes a partial configuration into the overrides and applies it
   (`internal/api/bulk_apply.go:292-310`).
 
@@ -83,7 +90,9 @@ The key rule that masks a document is `redact.IsKey` (`internal/redact/redact.go
 `redact.MaskTree` masks by key name (`internal/redact/walker.go:125`); `redact.RestoreTree` gives a
 placeholder the stored value at the same key, drops it when none is stored, and for a list entry
 keeps the stored secret only when the entry agrees with the stored one on everything but its secrets
-(`walker.go:171-196`). It never compares a secret's sibling fields, and it reports no path it dropped.
+(`walker.go:171-196`, `:224-234`: `SameWithoutSecrets` compares the entry's other fields). A secret in a
+map, such as `wifi.password` or `mqtt.pass`, gets the stored value at the same key with no look at its
+sibling fields. It reports no path it dropped.
 The PUT routes use it so a client that sends the mask back keeps the stored secret
 (`internal/api/handlers.go:1231`, `internal/api/handlers_config_device.go:355-368`).
 
@@ -149,14 +158,19 @@ Three ways were compared.
 | (c) | A stored pin that recompute returns | A new column that every edit path must clear; a silent override of the templates with no owner. |
 
 **Recommendation: (b).** The recompute of a device with no templates is the merge of one layer into an
-empty configuration, which returns that layer (section 2.2), so the target survives every later
-recompute by construction. It adds no column to `devices` and no second mechanism. The rollback row
-keeps `previous_template_ids`.
+empty configuration (section 2.2), so the target survives every later recompute, **provided the merge
+returns it unchanged**. It does not for a plain scalar field, so the rollback checks that before it
+writes: it merges the target as the only layer and compares the result with the target. A difference
+refuses the rollback, names each path that would be lost, and writes nothing. It adds no column to
+`devices` and no second mechanism. The rollback row keeps `previous_template_ids`.
 
 **The way back is two steps: re-attach the templates and clear the overrides**
-(`ClearDeviceOverrides`, `config_service.go:428`). Re-attaching alone does nothing visible: the full
-overrides are the top layer and shadow every template (`config_service.go:604-625`). The confirm
-dialog and the answer say so.
+(`ClearDeviceOverrides`, `config_service.go:428`). Re-attaching alone is not harmless:
+`SetDeviceTemplates` recomputes at once (`config_service.go:243-254`), the overrides win only where the
+target holds a value, and a template value shows through wherever the target holds none, so desired
+changes and the device is pending again. Clearing the overrides then leaves the templates alone as the
+source. Each step is a recompute, so each may add a history row; neither touches the device. The
+confirm dialog and the answer say so.
 
 ### 3.3 Secrets
 
@@ -164,8 +178,8 @@ dialog and the answer say so.
 Otherwise it is refused until the operator enters the secret. A stored old secret is never restored,
 even when its old destination comes back. History secrets stay out of desired.
 
-**Why "keep the current secret" is not enough.** The restore helper takes a secret by key and never
-compares its sibling fields (section 2.3). Apply posts the MQTT form built from desired
+**Why "keep the current secret" is not enough.** The restore helper takes a map secret by key and
+never compares its sibling fields (section 2.3). Apply posts the MQTT form built from desired
 (`internal/configuration/apply.go:327-345`). A rollback to an old broker with today's password kept
 would post today's password to whatever answers at the old address; a rollback to an old SSID would send
 today's Wi-Fi key to that network. That is a secret reaching a place it does not reach now.
@@ -286,7 +300,8 @@ unchanged until you apply it." When secrets were entered, they are never repeate
 - 409 also for the conditional write (section 3.4). No device is contacted.
 - The card, next to the History card (`DeviceConfigPage.vue:228-254`): a list of versions, a Roll back
   button per version, and a confirm that shows the difference with the current desired, the templates
-  that will be detached with the way back (section 3.2), and the fields that need a secret.
+  that will be detached, the way back and that it is two recomputes (section 3.2), and the fields that
+  need a secret. A target the merge cannot return unchanged is refused with its paths (section 3.2).
 
 ## 4. Slices, one pull request each
 
@@ -303,7 +318,9 @@ Each is under about 350 non-test lines.
    lacked is gone, template ids detached); a secret kept only when its bound fields are equal; a refusal
    names every path and echoes no value; a placeholder left anywhere refuses; the loop over `allSecretPaths`
    finds a row for each; 404 for another device's version; a non-admin is refused; a rollback built on a
-   stale read gets 409.
+   stale read gets 409; a target with a plain scalar field (`system.sntp.server`) is refused with that
+   path and writes nothing, until ginsys/shelly-manager#839 is fixed; after a rollback, a recompute leaves
+   desired equal to the target.
 3. **The card on `DeviceConfigPage`.** Versions, the confirm, the secret prompts, the notice.
 4. **Retire `ui/src/pages/DeviceConfigHistoryPage.vue`.** Re-point the link at `DeviceDetailPage.vue:142`
    to the card and remove the route at `ui/src/router/routes.ts:28-30`, as the comment on the issue asks.
@@ -326,6 +343,8 @@ Candidates, each with one recommendation:
 - Versions that existed before the first slice is deployed: they are not recorded and cannot be rolled
   back to.
 - The orphaned `ConfigHistory` rows of a deleted device.
+- The merge dropping plain scalar fields (ginsys/shelly-manager#839): a version holding one cannot be
+  rolled back to until that is fixed, and the refusal says which path.
 - Restoring the stored `device_configs` copy: it is a record of the last import, and the issue's old
   Restore button is not rebuilt.
 - A list slot among the secrets (ginsys/shelly-manager#381): counted as changed until its plan is read.
