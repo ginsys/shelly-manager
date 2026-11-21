@@ -203,6 +203,26 @@ func TestUpdateDevice_KeepsTheStoredGenerationAndNeverWritesOne(t *testing.T) {
 	}
 }
 
+// A create keeps `gen: null`, so a row can hold it, and an update keeps the key too: absent and null are
+// two different stored states, which the table above cannot tell apart.
+func TestUpdateDevice_KeepsAStoredNullGen(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	p := withProbe(t, 3, nil)
+	device := &database.Device{IP: "192.0.2.12", MAC: "AA:BB:CC:DD:EE:03", Type: "Test Device", Name: "Manual", Settings: `{"model":"M","gen":null}`}
+	require.NoError(t, h.DB.AddDevice(device))
+	body, err := json.Marshal(database.Device{IP: device.IP, MAC: device.MAC, Type: device.Type, Name: "Renamed", Settings: `{"model":"M2"}`})
+	require.NoError(t, err)
+
+	w := serve(h.UpdateDevice, "PUT", "/api/v1/devices/"+idString(device), idString(device), string(body))
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.EqualValues(t, 0, p.calls.Load(), "an update never asks the device")
+	settings := storedSettings(t, h, device.ID)
+	require.Contains(t, settings, "gen", "the stored null is carried, never dropped")
+	assert.Nil(t, settings["gen"])
+}
+
 // The symptom of ginsys/shelly-manager#811: a Gen2 device added by hand listed Gen1's capabilities.
 func TestAddDevice_AGen2DeviceAddedByHandReadsAsGen2(t *testing.T) {
 	for _, tc := range []struct {
