@@ -164,7 +164,7 @@ func (s *SMAPlugin) ValidateConfig(config map[string]interface{}) error {
 			return fmt.Errorf("output_path must be a string")
 		}
 		if path != "" {
-			if _, err := security.ValidatePath(s.exportRoot(), path); err != nil {
+			if _, err := sync.ResolveUnderRoot(s.exportRoot(), path); err != nil {
 				return fmt.Errorf("invalid output_path: %w", err)
 			}
 		}

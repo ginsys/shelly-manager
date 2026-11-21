@@ -254,7 +254,7 @@ Common error codes include `VALIDATION_FAILED`, `INTERNAL_SERVER_ERROR`, and `NO
 
 - Exports and downloads are confined to one export directory. It is `sync.export_base_dir` if set, else `export.output_directory`, else `./data/exports`. The server creates it at start-up.
 - A relative `output_path` (or output destination) is joined under the export directory; empty means the directory itself. An absolute path must already be inside it. A path that leaves it, by `..`, an absolute path elsewhere or a symbolic link, is refused with `400` and a message naming the export directory.
-- A download is served only for a file inside the export directory; otherwise the API returns `403 FORBIDDEN`. An export recorded earlier outside it can no longer be downloaded.
+- A download is served only for a file inside the export directory; otherwise the API returns `403 FORBIDDEN`. An export recorded earlier outside it can no longer be downloaded. The one exception is a backup with no export directory configured: it is served from `./data/backups`, where the backup plugin writes it.
 - The check is made before the write. It does not close the gap between the check and the write for GitOps exports (a link swapped in between).
 ### Backup export (Provider snapshot)
 
@@ -271,7 +271,7 @@ The Backup plugin takes a database snapshot via the active DB provider.
     directory is removed afterwards. A crash can leave it behind; delete it by hand.
   - The database has one connection, so every other query waits until the snapshot is written.
     For a small database that is seconds.
-- Backup directory: a backup is written only inside one directory. That is `sync.export_base_dir` when it is set, and `./data/backups` (relative to the working directory) when it is not. `config.output_path` is optional; empty means that directory. A relative `output_path` joins under `sync.export_base_dir` when it is set, and is relative to the working directory when it is not. An `output_path` that is not inside the backup directory answers `400` with the directory in the reason, and nothing is created. The check reads the path text only: a symbolic link inside the backup directory is followed, so only the host's own administrator should create one. The result's `output_path` is an absolute path. To keep backups elsewhere, set `sync.export_base_dir`; the download and restore routes check `export.output_directory`, so set both to the same directory.
+- Backup directory: a backup is written only inside one directory. That is the export directory (`sync.export_base_dir`, else `export.output_directory`) when one of them is set, and `./data/backups` (relative to the working directory) when neither is. `config.output_path` is optional; empty means that directory. A relative `output_path` joins under the export directory when one is set, and is relative to the working directory when it is not. An `output_path` that is not inside the backup directory answers `400` with the directory in the reason, and nothing is created. The check reads the path text only: a symbolic link inside the backup directory is followed, so only the host's own administrator should create one. The result's `output_path` is an absolute path. A backup is downloaded from that same directory. To keep backups elsewhere, set `sync.export_base_dir`; the restore routes check `export.output_directory`, so set both to the same directory.
 
 Request example (SQLite):
 
