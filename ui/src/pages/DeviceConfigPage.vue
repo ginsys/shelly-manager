@@ -393,7 +393,9 @@ watch(() => store.overrides, (newOverrides) => {
 }, { immediate: true, deep: true })
 
 // The saved overrides differ from the ones this edit started from, so a Save would overwrite them. It sees a
-// change this page has read, not one made elsewhere or one whose refresh failed.
+// change this page has read, not one made elsewhere or one whose refresh failed. Key order is ignored by sorting
+// the keys. `canonicalize` in utils/jcs.ts is not used: it throws on a lone surrogate, a depth over 64 and an
+// undefined member, and a throw inside a computed would break the page.
 const canonical = (v: unknown) =>
   JSON.stringify(v, (_k, x) => (isSettings(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x))
 const overridesStale = computed(() => editOverrides.value && canonical(store.overrides ?? {}) !== canonical(overridesHeld.value))
