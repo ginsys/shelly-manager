@@ -37,6 +37,12 @@ func checkProvisionerPurgeByState(t *testing.T, manager *Manager) {
 	register(t, s, adminActor, "ps-null-31d", "tok-ps-null-31d", ago(31*day))
 	require.NoError(t, manager.GetDB().Model(&ProvisionerAgent{}).Where("agent_id = ?", "ps-null-31d").
 		UpdateColumn("enrolment_state", nil).Error)
+	register(t, s, adminActor, "ps-null-29d", "tok-ps-null-29d", ago(29*day))
+	require.NoError(t, manager.GetDB().Model(&ProvisionerAgent{}).Where("agent_id = ?", "ps-null-29d").
+		UpdateColumn("enrolment_state", nil).Error)
+	// A state this code does not know, and the empty string, are never purged.
+	insert("ps-unknown-100d", "something-else", "tok-ps-unknown", ago(100*day))
+	insert("ps-empty-100d", "", "tok-ps-empty", ago(100*day))
 	require.NoError(t, s.CreateTask(ctx, newTask("ps-pending-task", "pending", "ps-pending-8d-task", 0, ago(8*day))))
 
 	// Three approved rows: past the cutoff and online, inside it, and past it but already ended.
@@ -58,6 +64,7 @@ func checkProvisionerPurgeByState(t *testing.T, manager *Manager) {
 		return a
 	}
 	preapproved, rejected := before("ps-preapproved-100d"), before("ps-rejected-100d")
+	unknown, empty := before("ps-unknown-100d"), before("ps-empty-100d")
 	approvedEnded, approvedRecent := before("ps-approved-31d-ended"), before("ps-approved-29d")
 
 	res, err := s.Purge(ctx, now, month, week, month)
@@ -67,14 +74,17 @@ func checkProvisionerPurgeByState(t *testing.T, manager *Manager) {
 		assert.False(t, exists("ps-legacy-31d"), "a legacy row silent for 31 days is removed")
 		assert.False(t, exists("ps-null-31d"), "a row with no state counts as legacy")
 		assert.True(t, exists("ps-legacy-29d"), "a legacy row silent for 29 days stays")
+		assert.True(t, exists("ps-null-29d"), "a row with no state silent for 29 days stays")
 		assert.False(t, exists("ps-pending-8d"), "a pending row silent for 8 days is removed")
 		assert.True(t, exists("ps-pending-6d"), "a pending row silent for 6 days stays")
 		assert.True(t, exists("ps-pending-8d-task"), "a pending row with a pending task stays")
 		assert.GreaterOrEqual(t, res.Agents, int64(3), "the legacy, stateless and pending rows removed")
 	})
 
-	t.Run("preapproved and rejected rows are never purged and never touched", func(t *testing.T) {
-		for id, was := range map[string]ProvisionerAgent{"ps-preapproved-100d": preapproved, "ps-rejected-100d": rejected} {
+	t.Run("preapproved, rejected, unknown and empty states are never purged and never touched", func(t *testing.T) {
+		for id, was := range map[string]ProvisionerAgent{
+			"ps-preapproved-100d": preapproved, "ps-rejected-100d": rejected, "ps-unknown-100d": unknown, "ps-empty-100d": empty,
+		} {
 			now := before(id)
 			assert.Equal(t, was.TokenHash, now.TokenHash, id)
 			assert.Equal(t, was.Status, now.Status, id)
@@ -128,6 +138,16 @@ func checkProvisionerPurgeByState(t *testing.T, manager *Manager) {
 		assert.True(t, row.UpdatedAt.Equal(after.UpdatedAt), "the row is not written again")
 	})
 
+	// The candidate query uses the shorter of the two periods, whichever it is: with the legacy period the
+	// shorter one, a pending row silent for 8 days stays and a legacy row silent for 8 days goes.
+	t.Run("the periods are read per state when the pending period is the longer", func(t *testing.T) {
+		register(t, s, adminActor, "ps-rev-legacy-8d", "tok-ps-rev-legacy", ago(8*day))
+		insert("ps-rev-pending-8d", EnrolmentPending, "tok-ps-rev-pending", ago(8*day))
+		_, err := s.Purge(ctx, now, week, month, month)
+		require.NoError(t, err)
+		assert.False(t, exists("ps-rev-legacy-8d"), "a legacy row silent for 8 days goes when its period is 7")
+		assert.True(t, exists("ps-rev-pending-8d"), "a pending row silent for 8 days stays when its period is 30")
+	})
 }
 
 func TestProvisionerPurgeByState_SQLite(t *testing.T) {
