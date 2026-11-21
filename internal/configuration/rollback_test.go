@@ -267,7 +267,7 @@ func (injectingMerger) Merge(layers []ConfigLayer) (*MergeResult, error) {
 
 func TestRollbackDesired_AnEqualRollbackWritesNothing(t *testing.T) {
 	target := `{"mqtt":{"server":"a.example"}}`
-	for _, templates := range []string{"", "null", "[]", " [] "} {
+	for _, templates := range []string{"", "null", "[]", " [] ", "[ ]", "[\n]"} {
 		t.Run("templates "+templates, func(t *testing.T) {
 			db := historyDB(t)
 			rollbackDevice(t, db, 1, templates, target, target)
@@ -351,4 +351,17 @@ func TestRollbackDeviceDesired_AMissAndADeletedDevice(t *testing.T) {
 	assert.ErrorIs(t, repo.RollbackDeviceDesired(404, stale, write, 5), ErrDeviceNotFound)
 	assert.Empty(t, historyRows(t, db, 1))
 	assert.JSONEq(t, `{"a":1}`, deviceRow(t, db, 1).DesiredConfig)
+}
+
+// A write whose three texts equal what the device holds changes at most the pending flag. A server that
+// reports matched rows (SQLite, PostgreSQL, MySQL with clientFoundRows) must not turn that into a row.
+func TestRollbackDeviceDesired_AnUnchangedWriteRecordsNoRow(t *testing.T) {
+	db := historyDB(t)
+	text := `{"mqtt":{"server":"b.example"}}`
+	rollbackDevice(t, db, 1, "[]", text, text)
+	require.NoError(t, db.Model(&DbDevice{}).Where("id = ?", 1).Update("config_applied", false).Error)
+	same := DesiredWrite{TemplateIDs: "[]", Overrides: text, Desired: text}
+
+	require.NoError(t, NewGormConfigRepository(db, nil).RollbackDeviceDesired(1, DesiredRead(same), same, 5))
+	assert.Empty(t, historyRows(t, db, 1))
 }

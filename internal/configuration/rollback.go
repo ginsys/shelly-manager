@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -61,11 +62,12 @@ type RollbackResult struct {
 
 // templateIDsNone reports whether a stored template id text means no templates.
 func templateIDsNone(text string) bool {
-	switch strings.TrimSpace(text) {
-	case "", "null", "[]":
+	text = strings.TrimSpace(text)
+	if text == "" || text == "null" {
 		return true
 	}
-	return false
+	var ids []uint
+	return json.Unmarshal([]byte(text), &ids) == nil && len(ids) == 0
 }
 
 // RollbackDesired makes a stored version the device's desired configuration: the whole version becomes
