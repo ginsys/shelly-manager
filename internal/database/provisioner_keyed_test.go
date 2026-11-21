@@ -181,6 +181,20 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 		assert.Equal(t, was.Status, got.Status)
 		assert.Equal(t, was.TokenHash, got.TokenHash)
 		assert.True(t, was.LastSeen.Equal(got.LastSeen), "last_seen does not move, so a silent row still reaches the purge")
+		assert.True(t, was.UpdatedAt.Equal(got.UpdatedAt), "updated_at does not move: the challenge columns are the only write")
+
+		// Every column but the two challenge ones is as it was, for a preapproved row as for an approved one.
+		pre := keyedSeed(0x9a)
+		preFP := KeyFingerprint(keyedPub(pre))
+		_, _, err = s.PreapproveFingerprint(ctx, preFP, now.Add(-time.Hour))
+		require.NoError(t, err)
+		preWas := row(KeyedAgentID(preFP))
+		_, err = s.RegisterKeyed(ctx, keyedReg(pre, nil, "g3", 1000), now)
+		require.NoError(t, err)
+		preGot := row(KeyedAgentID(preFP))
+		require.NotNil(t, preGot.Challenge)
+		preGot.Challenge, preGot.ChallengeExpiresAt = nil, nil
+		assert.Equal(t, preWas, preGot, "an unsigned register of a preapproved row writes only the challenge")
 
 		again, err := s.RegisterKeyed(ctx, keyedReg(priv, nil, "g2", 1000), now)
 		require.NoError(t, err)
@@ -291,6 +305,41 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 		ch := challenge(t, priv, now)
 		_, err := s.RegisterKeyed(ctx, keyedReg(priv, keyedSign(t, priv, id, ch), "l", 1000), now)
 		assert.ErrorIs(t, err, ErrChallengeFailed)
+	})
+
+	t.Run("a preapproved row whose fingerprint is not the key's refuses a valid signature", func(t *testing.T) {
+		priv, other := keyedSeed(0x9b), keyedSeed(0x9c)
+		id := keyedID(priv)
+		// The row has the id derived from priv, but holds another key's fingerprint (or none): no register
+		// makes that, so a signature must not turn it into an approved row.
+		for name, fp := range map[string]any{"another fingerprint": KeyFingerprint(keyedPub(other)), "no fingerprint": nil} {
+			require.NoError(t, manager.GetDB().Where("agent_id = ?", id).Delete(&ProvisionerAgent{}).Error)
+			state := EnrolmentPreapproved
+			ch := hex.EncodeToString(bytes.Repeat([]byte{0x5c}, 32))
+			exp := now.Add(30 * time.Second)
+			bad := ProvisionerAgent{
+				AgentID: id, TokenHash: HashAgentToken("tok-fpguard-" + name), Status: state, LastSeen: now, RegisteredAt: now,
+				EnrolmentState: &state, Challenge: &ch, ChallengeExpiresAt: &exp,
+			}
+			if s, ok := fp.(string); ok {
+				bad.Fingerprint = &s
+			}
+			require.NoError(t, manager.GetDB().Create(&bad).Error)
+			was := row(id)
+			_, err := s.RegisterKeyed(ctx, keyedReg(priv, keyedSign(t, priv, id, ch), "n", 1000), now)
+			assert.ErrorIs(t, err, ErrChallengeFailed, name)
+			assert.Equal(t, was, row(id), "%s: the row is unchanged", name)
+		}
+	})
+
+	t.Run("a signed register of a pending row is answered pending and issues nothing", func(t *testing.T) {
+		priv := keyedSeed(0x9d)
+		_, err := s.RegisterKeyed(ctx, keyedReg(priv, nil, "o1", 1000), now)
+		require.NoError(t, err)
+		res, err := s.RegisterKeyed(ctx, keyedReg(priv, bytes.Repeat([]byte{7}, 64), "o2", 1000), now)
+		require.NoError(t, err)
+		assert.Equal(t, OutcomePending, res.Outcome)
+		assert.NotEqual(t, HashAgentToken("issued-o2"), row(keyedID(priv)).TokenHash)
 	})
 
 	t.Run("a key or signature of the wrong length is refused before any row is read", func(t *testing.T) {

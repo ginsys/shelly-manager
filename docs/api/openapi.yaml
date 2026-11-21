@@ -4315,8 +4315,9 @@ paths:
             The request is refused. Either the id starts with `key-` in any case without a public key (that prefix
             is reserved for agents enrolled by key), or it would create a new agent and holds a space or a byte
             outside printable ASCII (`0x21` to `0x7E`) without starting with `provisioner-`, or a keyed register
-            has a `public_key` or `signature` of the wrong length, upper case or not hexadecimal, or an id that the
-            key does not derive. No agent is created.
+            has a `public_key` or `signature` of the wrong length, upper case or not hexadecimal, an id that the
+            key does not derive, or a NUL character in the hostname, version, capabilities or metadata. No agent is
+            created.
         '401':
           description: >-
             A signed register with no stored challenge, an expired or already used one, a key that is not the
@@ -4329,7 +4330,9 @@ paths:
             register replaces, the admin key included. A keyed register that finds a `legacy` row at its id is a
             `409` too.
         '429':
-          description: A keyed register of a new key while 20 agents already wait for the operator. No row is created.
+          description: >-
+            A keyed register of a new key while 20 agents already wait for the operator. No row is created. The cap
+            is soft: registers that arrive at the same moment can take it a little past 20.
 
   /api/v1/provisioner/agents/{id}/tasks:
     get:

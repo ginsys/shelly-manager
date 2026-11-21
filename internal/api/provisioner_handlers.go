@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -144,6 +146,8 @@ func registerClientIP(r *http.Request) string {
 // cap is a 429. The count and the insert are separate statements, so concurrent registers can overshoot it.
 const registryPendingCap = 20
 
+func hasNUL(s string) bool { return strings.ContainsRune(s, 0) }
+
 // decodeLowerHex decodes exactly n bytes written as lowercase hexadecimal: any other length, any non-hex
 // character and any upper case is refused, so each value has one spelling.
 func decodeLowerHex(s string, n int) ([]byte, bool) {
@@ -171,6 +175,13 @@ func (h *Handler) registerKeyed(w http.ResponseWriter, r *http.Request, id, host
 			return
 		}
 	}
+	// PostgreSQL refuses a NUL in a text or JSON value, and the insert runs before the row's state is read, so
+	// every reported value is checked here: a NUL is a 400, never a 500.
+	if hasNUL(hostname) || hasNUL(version) || slices.ContainsFunc(capabilities, hasNUL) ||
+		slices.ContainsFunc(slices.Collect(maps.Keys(metadata)), hasNUL) || slices.ContainsFunc(slices.Collect(maps.Values(metadata)), hasNUL) {
+		h.responseWriter().WriteValidationError(w, r, "hostname, version, capabilities and metadata must not contain a NUL character")
+		return
+	}
 	fingerprint := database.KeyFingerprint(key)
 	if id != database.KeyedAgentID(fingerprint) {
 		h.responseWriter().WriteValidationError(w, r, "The agent id must be the one derived from the public key")
@@ -194,11 +205,17 @@ func (h *Handler) registerKeyed(w http.ResponseWriter, r *http.Request, id, host
 	}
 	h.logger.WithFields(map[string]any{"agent_id": id, "outcome": string(res.Outcome), "hostname": hostname}).Info("Keyed provisioning agent registered")
 
+	if res.Outcome == database.OutcomeRegistered {
+		// The same four fields and message as a keyless register's 201.
+		h.responseWriter().WriteCreated(w, r, map[string]any{
+			"agent_id": id, "agent_token": token, "registered_at": res.Agent.RegisteredAt,
+			"status": "registered", "message": "Agent registered successfully",
+		})
+		h.purgeRegistryIfDue(r.Context())
+		return
+	}
 	body := map[string]any{"status": string(res.Outcome), "agent_id": id, "fingerprint": database.FormatFingerprint(fingerprint)}
 	switch res.Outcome {
-	case database.OutcomeRegistered:
-		body["agent_token"], body["registered_at"], body["status"], body["message"] = token, res.Agent.RegisteredAt, "registered", "Agent registered successfully"
-		h.responseWriter().WriteCreated(w, r, body)
 	case database.OutcomeChallenge:
 		body["challenge"], body["message"] = res.Challenge, "Sign the challenge with the agent key and register again within 60 seconds"
 		h.responseWriter().WriteSuccess(w, r, body)
