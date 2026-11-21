@@ -46,3 +46,13 @@ func TestGen2Converter_UnreadSettingsRefusesAnythingButAnObject(t *testing.T) {
 	_, _, err := NewGen2Converter(nil).UnreadSettings(json.RawMessage(`[1]`))
 	assert.Error(t, err)
 }
+
+// input_id changes what is read (it picks the input that takes the switch's in_mode) but has no typed
+// home, so it stays in the rest: a typed save must not lose it.
+func TestGen2Converter_UnreadSettingsKeepsInputID(t *testing.T) {
+	doc := `{"sys":{},"switch:0":{"id":0,"in_mode":"flip","input_id":1},"input:0":{"id":0},"input:1":{"id":1}}`
+	paths, rest, err := NewGen2Converter(nil).UnreadSettings(json.RawMessage(doc))
+	require.NoError(t, err)
+	assert.Contains(t, paths, "switch:0.input_id")
+	assert.Equal(t, float64(1), rest["switch:0"].(map[string]interface{})["input_id"])
+}

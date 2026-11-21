@@ -125,6 +125,12 @@ func (c *Gen2Converter) UnreadSettings(apiJSON json.RawMessage) ([]string, map[s
 	rest := map[string]interface{}{}
 	var paths []string
 	for _, key := range sortedKeys(doc) {
+		// FromAPIConfig reads only the keys apply writes, so any other key is unread whole, without a probe.
+		if !gen2KeyApplies(key) {
+			rest[key] = doc[key]
+			paths = append(paths, key)
+			continue
+		}
 		r := probe.walk(doc, key, key)
 		if r.unread {
 			rest[key] = r.rest
@@ -180,6 +186,11 @@ func (p *readProbe) walk(parent map[string]interface{}, key, path string) probeR
 // isRead reports whether the setting changes the result when it is removed or changed. The setting is
 // put back before it returns.
 func (p *readProbe) isRead(parent map[string]interface{}, key string) bool {
+	// input_id only chooses which input receives the in_mode of a switch. It has no typed home, so it
+	// stays in the raw part although changing it changes the result.
+	if key == "input_id" {
+		return false
+	}
 	original := parent[key]
 	defer func() { parent[key] = original }()
 	delete(parent, key)
@@ -206,13 +217,15 @@ func (p *readProbe) isRead(parent map[string]interface{}, key string) bool {
 	return false
 }
 
+// changed reports whether the document now reads differently. A document that cannot be read counts as
+// unchanged, so the setting stays in the raw part and is never dropped.
 func (p *readProbe) changed() bool {
 	data, err := json.Marshal(p.doc)
 	if err != nil {
-		return true
+		return false
 	}
 	got, err := p.converter.FromAPIConfig(data, "")
-	return err != nil || !reflect.DeepEqual(p.base, got)
+	return err == nil && !reflect.DeepEqual(p.base, got)
 }
 
 // redactedSecret is the text the API shows in place of a secret that is set.
