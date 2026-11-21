@@ -131,14 +131,61 @@ func TestResolveRedactedActions_AnotherSpellingOfTheKeyFollowsTheSameRule(t *tes
 			restored, found := resolveActionsArchive(t,
 				`{"actions":[{"name":"btn_on_url","index":0,"`+spelling+`":`+listShape+`}]}`,
 				`{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["http://a:hunter2@h/1","http://a/2"]}]}`)
-			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["http://a:hunter2@h/1","http://a/2"]}]}`,
+			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0,"`+spelling+`":["http://a:hunter2@h/1","http://a/2"]}]}`,
 				restored, "the stored list was not restored under the other spelling")
 			assert.Equal(t, 2, found)
 
 			kept, _ := resolveActionsArchive(t,
 				`{"actions":[{"name":"btn_on_url","index":0,"`+spelling+`":["http://new/1"]}]}`, `{}`)
-			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["http://new/1"]}]}`, kept,
-				"a list the author wrote is kept, under the key the decoder reads")
+			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0,"`+spelling+`":["http://new/1"]}]}`, kept,
+				"a list the author wrote is kept as it is, under the spelling it came with")
+		})
+	}
+}
+
+// The rule is for an action entry, which holds a name and an index. Any other object that happens to
+// carry a key like it is left exactly as the generic rule leaves it, whatever its casing.
+func TestResolveRedactedActions_AnObjectThatIsNotAnActionIsLeftAlone(t *testing.T) {
+	const variables = `{"targets":[{"SECRET_URLS":["http://a"],"Secret_Urls":[]},` +
+		`{"name":"x","SECRET_URLS":["http://c"],"Secret_Urls":[]},` +
+		`{"index":1,"SECRET_URLS":["http://d"],"Secret_Urls":[]}],"other":{"SECRET_URLS":["http://b"]}}`
+
+	got, found := resolveActionsArchive(t, variables, `{}`)
+
+	assert.JSONEq(t, variables, got)
+	assert.Zero(t, found)
+}
+
+// A stored list under another spelling is the stored list, so a placeholder takes it, and a stored
+// empty list under another spelling is kept as the clear it is. Two spellings in the stored entry are
+// no list: nothing is taken and the key is lost.
+func TestResolveRedactedActions_TheStoredKeyIsFoundInAnyCasing(t *testing.T) {
+	cases := map[string]struct{ archive, stored, want string }{
+		"a stored list": {
+			`{"actions":[{"name":"a","index":0,"SECRET_URLS":["[REDACTED]"]}]}`,
+			`{"actions":[{"name":"a","index":0,"SECRET_URLS":["http://a"]}]}`,
+			`{"actions":[{"name":"a","index":0,"SECRET_URLS":["http://a"]}]}`,
+		},
+		"a stored clear under the bare placeholder": {
+			`{"actions":[{"name":"a","index":0,"secret_urls":"[REDACTED]"}]}`,
+			`{"actions":[{"name":"a","index":0,"Secret_Urls":[]}]}`,
+			`{"actions":[{"name":"a","index":0,"secret_urls":[]}]}`,
+		},
+		"two stored spellings": {
+			`{"actions":[{"name":"a","index":0,"secret_urls":["[REDACTED]"]}]}`,
+			`{"actions":[{"name":"a","index":0,"secret_urls":["http://a"],"SECRET_URLS":["http://b"]}]}`,
+			`{"actions":[{"name":"a","index":0}]}`,
+		},
+		"a fully upper case entry with nothing stored": {
+			`{"actions":[{"NAME":"a","INDEX":0,"SECRET_URLS":["[REDACTED]","[REDACTED]"]}]}`,
+			`{}`,
+			`{"actions":[{"NAME":"a","INDEX":0}]}`,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, _ := resolveActionsArchive(t, tc.archive, tc.stored)
+			assert.JSONEq(t, tc.want, got)
 		})
 	}
 }
