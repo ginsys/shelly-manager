@@ -519,6 +519,8 @@ func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, 
 		note(err)
 	}
 	for _, id := range silent {
+		// What this row's transaction did, counted only once it has committed.
+		var expired, removed bool
 		err := s.tx(ctx, func(tx *gorm.DB) error {
 			var agent ProvisionerAgent
 			err := tx.Clauses(forUpdate()).Where("agent_id = ?", id).First(&agent).Error
@@ -543,7 +545,7 @@ func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, 
 				if err := endApprovedSession(tx, agent, now); err != nil {
 					return err
 				}
-				res.Expired++
+				expired = true
 				return nil
 			}
 			if s.afterLock != nil {
@@ -558,11 +560,16 @@ func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, 
 			if err := removeAgent(tx, agent, "the agent was removed after it stayed silent too long", now); err != nil {
 				return err
 			}
-			res.Agents++
+			removed = true
 			return nil
 		})
-		if err != nil {
+		switch {
+		case err != nil:
 			note(err)
+		case expired:
+			res.Expired++
+		case removed:
+			res.Agents++
 		}
 	}
 	done := s.db.WithContext(ctx).Where("status IN ? AND updated_at < ?", []string{"completed", "failed"}, now.Add(-keepFinished)).Delete(&ProvisioningTask{})
