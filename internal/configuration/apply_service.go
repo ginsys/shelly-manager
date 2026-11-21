@@ -164,6 +164,14 @@ var gen1ApplicablePaths = map[string]bool{
 	"wifi.static_ip.nameserver": true,
 	"wifi.ap.enable":            true,
 	"wifi.ap.pass":              true,
+
+	// Actions are written with POST /settings/actions and read back from GET /settings/actions. The
+	// name and index identify an entry and are written with it. The URL scheme rule and the plug name
+	// list are unverified until the hardware readback; the i3 has no actions section in this slice.
+	"actions[].name":        true,
+	"actions[].index":       true,
+	"actions[].enabled":     true,
+	"actions[].secret_urls": true,
 }
 
 // gen1LoginMaxLength is the longest username or password POST /settings/login accepts. The
@@ -262,7 +270,8 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	if err != nil {
 		return nil, fmt.Errorf("failed to check converted config: %w", err)
 	}
-	for _, diff := range NewConfigComparator().Compare(desired, back).Differences {
+	// The converter carries no actions, so the round trip never sees them: unsupportedActions rules.
+	for _, diff := range NewConfigComparator().Compare(withoutActions(desired), back).Differences {
 		if diff.Actual == nil {
 			unsupported = append(unsupported, diff.Path)
 		}
@@ -335,6 +344,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 
 	unsupported = append(unsupported, unsupportedInputs(desired, deviceType)...)
 	unsupported = append(unsupported, unsupportedWiFi(desired.WiFi)...)
+	unsupported = append(unsupported, unsupportedActions(desired, deviceType)...)
 
 	sort.Strings(unsupported)
 	return slices.Compact(unsupported), nil

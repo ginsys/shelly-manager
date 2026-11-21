@@ -16,6 +16,10 @@ type DeviceConfiguration struct {
 	Roller        *RollerConfig        `json:"roller,omitempty"`
 	Input         *InputConfig         `json:"input,omitempty"`
 	LED           *LEDConfig           `json:"led,omitempty"`
+
+	// Actions are the Gen1 button and output actions (HTTP calls). A layer that lists actions
+	// replaces the list of the layer below, so a layer that names actions names all of them.
+	Actions *[]ActionConfig `json:"actions,omitempty"`
 }
 
 type CoIoTConfiguration struct {

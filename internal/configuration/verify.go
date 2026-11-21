@@ -122,6 +122,12 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 
 	result.Imported = imported
 
+	if desired.Actions != nil {
+		if err = readActions(ctx, client, desired, deviceType, imported); err != nil {
+			return nil, err
+		}
+	}
+
 	if desired.Auth != nil {
 		if err = v.readGen2Login(ctx, client, imported); err != nil {
 			return nil, err

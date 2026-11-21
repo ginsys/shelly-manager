@@ -16,6 +16,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/redact"
 )
 
 // ErrImportStoreUnavailable means the engine has no database to import into.
@@ -611,7 +612,11 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 			continue
 		case map[string]interface{}:
 			child, _ := kept.(map[string]interface{})
-			found += resolveRedacted(v, child)
+			if _, isAction := v[actionURLsKey]; isAction {
+				found += resolveActionURLs(v, child)
+			} else {
+				found += resolveRedacted(v, child)
+			}
 		case []interface{}:
 			child, _ := kept.([]interface{})
 			resolved, n := resolveRedactedList(v, child)
@@ -621,6 +626,61 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 		out = append(out, item)
 	}
 	return out, found
+}
+
+// actionURLsKey is the key of a Gen1 action's URL list in a stored configuration.
+const actionURLsKey = "secret_urls"
+
+// resolveActionURLs resolves the URL list of one action entry of an archive. The generic rule would
+// restore by position and drop an element it cannot restore, so a list of placeholders with nothing
+// stored becomes [], and for an action [] is the explicit clear that erases the device's URLs at the
+// next apply. An action entry is therefore resolved by its own rule, and only where the value holds
+// the placeholder, as a bare string (the SMA export) or as list elements (the other exports):
+//
+//   - a list with no placeholder is a value the archive's author wrote: it stays as it is, a clear
+//     included;
+//   - a list that mixes placeholders and URLs loses the key, because no element's position is to be
+//     trusted;
+//   - otherwise the entry takes the stored list whole, only when the stored entry at its position
+//     agrees with it on everything but its secrets (and, for the list shape, holds as many URLs).
+//     Any other entry loses the key, which apply reads as "leave alone".
+//
+// It returns how many placeholders it found.
+func resolveActionURLs(entry, stored map[string]interface{}) int {
+	urls := entry[actionURLsKey]
+	paired := stored != nil && redact.SameWithoutSecrets(entry, stored)
+	delete(entry, actionURLsKey)
+	found := resolveRedacted(entry, stored)
+
+	placeholders, real := 0, 0
+	switch v := urls.(type) {
+	case string:
+		if v == RedactedValue {
+			placeholders = 1
+		}
+	case []interface{}:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s == RedactedValue {
+				placeholders++
+			} else {
+				real++
+			}
+		}
+	}
+
+	switch {
+	case placeholders == 0:
+		entry[actionURLsKey] = urls
+	case real > 0:
+		// mixed: the key is lost
+	default:
+		if kept, ok := stored[actionURLsKey].([]interface{}); ok && paired && !holdsPlaceholder(kept) {
+			if list, isList := urls.([]interface{}); !isList || len(list) == len(kept) {
+				entry[actionURLsKey] = kept
+			}
+		}
+	}
+	return found + placeholders
 }
 
 // marshalObject returns the JSON text of m, with a nil map stored as an empty object.
