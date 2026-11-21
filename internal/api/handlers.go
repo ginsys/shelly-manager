@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -347,7 +348,7 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate and normalize device settings
-	if err := h.validateDeviceSettings(&device); err != nil {
+	if err := h.validateDeviceSettings(&device, func() int { return h.probeGeneration(r.Context(), device.IP) }); err != nil {
 		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
 		return
 	}
@@ -436,7 +437,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate and normalize device settings
-	if err := h.validateDeviceSettings(&updatedDevice); err != nil {
+	if err := h.validateDeviceSettings(&updatedDevice, func() int { return storedGeneration(existingDevice) }); err != nil {
 		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
 		return
 	}
@@ -1687,17 +1688,22 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 	h.responseWriter().WriteSuccess(w, r, report)
 }
 
-// validateDeviceSettings ensures device settings are valid JSON or sets defaults
-func (h *Handler) validateDeviceSettings(device *database.Device) error {
-	// If settings are empty, provide minimal valid JSON
-	if device.Settings == "" {
-		device.Settings = `{"model":"Unknown","gen":1,"auth_enabled":false}`
-		return nil
+// detectGeneration is the generation probe of a create. It is a variable so that tests send nothing.
+var detectGeneration = shelly.DetectGeneration
+
+// validateDeviceSettings ensures device settings are valid JSON or sets defaults. Settings that carry
+// no gen get fallbackGen(), and none where that is nil or returns 0: a generation nobody gave is
+// never guessed here (ginsys/shelly-manager#811). The func runs only for valid JSON with no gen.
+func (h *Handler) validateDeviceSettings(device *database.Device, fallbackGen func() int) error {
+	// Empty settings are read as an empty document, so they take the same defaults.
+	text := device.Settings
+	if text == "" {
+		text = "{}"
 	}
 
 	// Validate that settings is valid JSON
 	var settings map[string]interface{}
-	if err := json.Unmarshal([]byte(device.Settings), &settings); err != nil {
+	if err := json.Unmarshal([]byte(text), &settings); err != nil {
 		return fmt.Errorf("settings must be valid JSON: %w", err)
 	}
 
@@ -1705,8 +1711,10 @@ func (h *Handler) validateDeviceSettings(device *database.Device) error {
 	if _, exists := settings["model"]; !exists {
 		settings["model"] = "Unknown"
 	}
-	if _, exists := settings["gen"]; !exists {
-		settings["gen"] = 1
+	if _, exists := settings["gen"]; !exists && fallbackGen != nil {
+		if gen := fallbackGen(); gen > 0 {
+			settings["gen"] = gen
+		}
 	}
 	if _, exists := settings["auth_enabled"]; !exists {
 		settings["auth_enabled"] = false
@@ -1720,4 +1728,37 @@ func (h *Handler) validateDeviceSettings(device *database.Device) error {
 	device.Settings = string(normalizedSettings)
 
 	return nil
+}
+
+// probeGeneration asks the device at ip which generation it is, for a create that was given none
+// (ginsys/shelly-manager#811). The probe makes two requests and its client's timeout is per request, so
+// the 2 s deadline is taken from the request's context here: it bounds both together, and a caller
+// that goes away ends the probe. A device that cannot be asked stays Gen 1, as every manual add did
+// before; the log says whether it did not answer or is not a Shelly.
+func (h *Handler) probeGeneration(ctx context.Context, ip string) int {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	gen, err := detectGeneration(ctx, ip)
+	if err != nil {
+		reason := "the device did not answer"
+		if errors.Is(err, shelly.ErrInvalidGeneration) {
+			reason = "the address answered but is not a Shelly device"
+		}
+		h.logger.WithFields(map[string]any{
+			"device_ip": ip,
+			"reason":    reason,
+			"error":     err.Error(),
+		}).Warn("Device generation not detected at create; storing gen 1")
+		return 1
+	}
+	return gen
+}
+
+// storedGeneration is the gen in the stored settings of a device, or 0 where there is none.
+func storedGeneration(device *database.Device) int {
+	var settings map[string]interface{}
+	if json.Unmarshal([]byte(device.Settings), &settings) != nil {
+		return 0
+	}
+	return generationFromSettings(settings, 0)
 }
