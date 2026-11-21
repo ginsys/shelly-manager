@@ -122,3 +122,35 @@ func TestEnsureExportRoot(t *testing.T) {
 		t.Fatalf("the default root was not created (stat err %v)", err)
 	}
 }
+
+// backupLikePlugin reports the backup category, as the backup plugin does.
+type backupLikePlugin struct{ MockPlugin }
+
+func (b *backupLikePlugin) Info() PluginInfo {
+	info := b.MockPlugin.Info()
+	info.Category = CategoryBackup
+	return info
+}
+
+// The backup plugin confines its own output_path to its own directory, so the engine leaves that path as
+// sent. Rewriting it under the export root would make the plugin refuse the result when no key is set.
+func TestValidateRequestLeavesTheBackupOutputPathToThePlugin(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(filepath.Join("data", "exports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	engine := &SyncEngine{plugins: map[string]SyncPlugin{
+		"backup": &backupLikePlugin{MockPlugin{name: "backup", formats: []string{"sqlite"}}},
+		"other":  &MockPlugin{name: "other", formats: []string{"sqlite"}},
+	}}
+	for name, wantKept := range map[string]bool{"backup": true, "other": false} {
+		request := &ExportRequest{PluginName: name, Format: "sqlite", Config: map[string]interface{}{"output_path": "./data/backups"}}
+		if _, err := engine.validateRequest(request, true); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got, _ := request.Config["output_path"].(string)
+		if kept := got == "./data/backups"; kept != wantKept {
+			t.Errorf("%s: output_path = %q, kept as sent = %v, want %v", name, got, kept, wantKept)
+		}
+	}
+}
