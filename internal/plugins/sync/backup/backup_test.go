@@ -174,10 +174,12 @@ func TestBackupExporter_ConfigSchema(t *testing.T) {
 func TestBackupExporter_ValidateConfig(t *testing.T) {
 	mockDB := &MockDatabaseManager{}
 	exporter := NewBackupExporter(mockDB)
+	backupRoot := t.TempDir()
+	exporter.SetExportBaseDir(backupRoot)
 
 	// Test valid config
 	validConfig := map[string]interface{}{
-		"output_path": "/tmp/test-backup",
+		"output_path": filepath.Join(backupRoot, "test-backup"),
 		"compression": true,
 		"backup_type": "full",
 	}
@@ -224,6 +226,7 @@ func TestBackupExporter_Export(t *testing.T) {
 	mockProvider := &MockBackupProvider{}
 	mockDB := &MockDatabaseManager{provider: mockProvider}
 	exporter := NewBackupExporter(mockDB)
+	exporter.SetExportBaseDir(tmpDir)
 	if initErr := exporter.Initialize(logging.GetDefault()); initErr != nil {
 		t.Logf("Failed to initialize exporter: %v", initErr)
 	}
@@ -277,6 +280,8 @@ func TestBackupExporter_ExportWithProviderError(t *testing.T) {
 	}
 	mockDB := &MockDatabaseManager{provider: mockProvider}
 	exporter := NewBackupExporter(mockDB)
+	backupRoot := t.TempDir()
+	exporter.SetExportBaseDir(backupRoot)
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Logf("Failed to initialize exporter: %v", err)
 	}
@@ -290,15 +295,15 @@ func TestBackupExporter_ExportWithProviderError(t *testing.T) {
 	config := sync.ExportConfig{
 		Format: "sma",
 		Config: map[string]interface{}{
-			"output_path": "/tmp",
+			"output_path": backupRoot,
 		},
 	}
 
 	ctx := context.Background()
 	result, err := exporter.Export(ctx, testData, config)
 
-	if err == nil {
-		t.Error("Should return error when backup provider fails")
+	if err == nil || !strings.Contains(err.Error(), "backup failed") {
+		t.Errorf("Should return the provider's error, got %v", err)
 	}
 
 	if result != nil && result.Success {

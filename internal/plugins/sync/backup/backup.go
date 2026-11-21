@@ -24,15 +24,66 @@ type DatabaseManagerInterface interface {
 	Close() error
 }
 
+// defaultBackupDir is the backup root when sync.export_base_dir is not set.
+const defaultBackupDir = "./data/backups"
+
 // BackupPlugin implements the SyncPlugin interface for database backups
 type BackupPlugin struct {
-	dbManager DatabaseManagerInterface
-	logger    *logging.Logger
+	dbManager     DatabaseManagerInterface
+	logger        *logging.Logger
+	exportBaseDir string
 }
 
 // SetDatabaseManager injects the database manager dependency.
 func (b *BackupPlugin) SetDatabaseManager(dbManager DatabaseManagerInterface) {
 	b.dbManager = dbManager
+}
+
+// SetExportBaseDir receives the engine's export root (sync.export_base_dir). Backups are written
+// under it; when it is empty they are written under ./data/backups.
+func (b *BackupPlugin) SetExportBaseDir(dir string) {
+	b.exportBaseDir = dir
+}
+
+// resolveOutputDir returns the absolute directory a backup is written to. An empty output_path is
+// the backup root. A relative one joins under a configured root, and is relative to the working
+// directory otherwise (the engine has already made it absolute). Anything that is not inside the
+// root after cleaning is refused.
+func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
+	root := defaultBackupDir
+	if b.exportBaseDir != "" {
+		root = b.exportBaseDir
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve the backup directory: %w", err)
+	}
+	dir := absRoot
+	if outputPath != "" {
+		dir = filepath.Clean(outputPath)
+		if b.exportBaseDir != "" && !filepath.IsAbs(dir) {
+			dir = filepath.Join(absRoot, dir)
+		}
+	}
+	dir, err = insideRoot(absRoot, dir)
+	if err != nil {
+		return "", fmt.Errorf("output_path must be inside the backup directory %s", absRoot)
+	}
+	return dir, nil
+}
+
+// insideRoot returns path as an absolute path when it is absRoot or lies under it, and an error
+// otherwise. It reads no file system state: a symlink inside the root is trusted host configuration.
+func insideRoot(absRoot, path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absRoot, abs)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("%q is outside %q", path, absRoot)
+	}
+	return filepath.Join(absRoot, rel), nil
 }
 
 // NewPlugin creates a new backup plugin (for registry)
@@ -71,7 +122,7 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 		Properties: map[string]sync.PropertySchema{
 			"output_path": {
 				Type:        "string",
-				Description: "Directory path for backup files",
+				Description: "Directory for backup files; must be inside sync.export_base_dir when set, else inside ./data/backups",
 				Default:     "./data/backups",
 			},
 			"compression": {
@@ -100,7 +151,7 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 		Required: []string{},
 		Examples: []map[string]interface{}{
 			{
-				"output_path":        "/backup/shelly",
+				"output_path":        "./data/backups",
 				"compression":        true,
 				"include_discovered": true,
 				"backup_type":        "full",
@@ -112,8 +163,12 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 // ValidateConfig validates the plugin configuration
 func (b *BackupPlugin) ValidateConfig(config map[string]interface{}) error {
 	if outputPath, exists := config["output_path"]; exists {
-		if _, ok := outputPath.(string); !ok {
+		path, ok := outputPath.(string)
+		if !ok {
 			return fmt.Errorf("output_path must be a string")
+		}
+		if _, err := b.resolveOutputDir(path); err != nil {
+			return err
 		}
 	}
 
@@ -157,9 +212,10 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	}
 
 	// Parse configuration
-	outputPath, _ := config.Config["output_path"].(string)
-	if outputPath == "" {
-		outputPath = "./data/backups"
+	requested, _ := config.Config["output_path"].(string)
+	outputPath, err := b.resolveOutputDir(requested)
+	if err != nil {
+		return nil, err
 	}
 
 	compression, _ := config.Config["compression"].(bool)
@@ -169,7 +225,7 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	}
 
 	// Ensure output directory exists
-	if err := os.MkdirAll(outputPath, 0755); err != nil {
+	if err = os.MkdirAll(outputPath, 0755); err != nil {
 		if b.logger != nil {
 			b.logger.WithFields(map[string]any{"path": outputPath, "error": err}).Error("Failed to create output directory for backup")
 		}

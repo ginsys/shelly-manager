@@ -262,6 +262,7 @@ The Backup plugin performs a raw database snapshot via the active DB provider.
   - `config.compression = false` → output file `*.sqlite`
   - `config.compression = true`  → output file `*.sqlite.gz`
   - No `.tar.gz` container; single-file outputs only.
+- Backup directory: a backup is written only inside one directory. That is `sync.export_base_dir` when it is set, and `./data/backups` (relative to the working directory) when it is not. `config.output_path` is optional; empty means that directory. A relative `output_path` joins under `sync.export_base_dir` when it is set, and is relative to the working directory when it is not. An `output_path` that is not inside the backup directory answers `400` with the directory in the reason, and nothing is created. The check reads the path text only: a symbolic link inside the backup directory is followed, so only the host's own administrator should create one. The result's `output_path` is an absolute path. To keep backups elsewhere, set `sync.export_base_dir`; the download and restore routes check `export.output_directory`, so set both to the same directory.
 
 Request example (SQLite):
 

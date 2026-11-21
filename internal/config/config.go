@@ -156,8 +156,9 @@ type Config struct {
 		// ImportBaseDir restricts file imports to paths within this directory.
 		// If empty, no restriction is applied.
 		ImportBaseDir string `mapstructure:"import_base_dir"`
-		// ExportBaseDir restricts file exports to paths within this directory.
-		// If empty, no restriction is applied.
+		// ExportBaseDir restricts file exports to paths within this directory, and is the
+		// backup directory. If empty, no restriction is applied to other exports, and
+		// backups go under ./data/backups only.
 		ExportBaseDir string `mapstructure:"export_base_dir"`
 	} `mapstructure:"sync"`
 }
