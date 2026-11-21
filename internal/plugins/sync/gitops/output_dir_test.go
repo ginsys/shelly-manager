@@ -15,7 +15,7 @@ import (
 
 func exportInto(t *testing.T, outputPath string, devices []sync.DeviceData, extra map[string]interface{}) error {
 	t.Helper()
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}

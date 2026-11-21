@@ -18,7 +18,7 @@ import (
 func TestGitOpsSummaryCarriesNoRequestConfig(t *testing.T) {
 	dir := t.TempDir()
 
-	exporter := NewGitOpsExporter()
+	exporter := newTestExporter()
 	if err := exporter.Initialize(logging.GetDefault()); err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}

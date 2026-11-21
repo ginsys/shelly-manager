@@ -95,11 +95,15 @@ func setupSyncTestRouter(t *testing.T) (*mux.Router, *sync.SyncEngine, *logging.
 	require.NoError(t, err)
 
 	engine := sync.NewSyncEngine(db, logger)
+	// The export root is the file system root here, so the tests that write to a t.TempDir() exercise
+	// the handlers and not the root; the tests of the root set their own.
+	engine.SetExportBaseDir(string(filepath.Separator))
 	require.NoError(t, engine.RegisterPlugin(&mockSyncPlugin{}))
 
 	// Build a minimal router without heavy middleware to focus on handler behavior
 	h := NewHandlerWithLogger(db, nil, nil, nil, logger)
 	h.ExportHandlers = NewSyncHandlers(engine, logger)
+	h.ExportHandlers.SetExportBaseDir(string(filepath.Separator))
 	h.ImportHandlers = NewImportHandlers(engine, logger)
 
 	r := mux.NewRouter()

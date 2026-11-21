@@ -63,7 +63,7 @@
       </div>
       <div class="form-field">
         <label class="field-label">Output Directory</label>
-        <input v-model="localExportOutputDir" class="form-input" placeholder="./data/exports" />
+        <input v-model="localExportOutputDir" class="form-input" placeholder="Directory under the export directory (empty: the export directory)" />
       </div>
     </div>
 
@@ -83,7 +83,7 @@
       </div>
       <div class="form-field">
         <label class="field-label">Output Directory</label>
-        <input v-model="localExportOutputDir" class="form-input" placeholder="./data/exports" />
+        <input v-model="localExportOutputDir" class="form-input" placeholder="Directory under the export directory (empty: the export directory)" />
       </div>
     </div>
 
@@ -110,7 +110,7 @@
       </div>
       <div class="form-field">
         <label class="field-label">Output Directory</label>
-        <input v-model="localExportOutputDir" class="form-input" placeholder="./data/exports" />
+        <input v-model="localExportOutputDir" class="form-input" placeholder="Directory under the export directory (empty: the export directory)" />
       </div>
     </div>
 

@@ -25,6 +25,7 @@ import {
   cancelRestore,
   RESTORE_SQLITE_ONLY,
   buildSMAExportConfig,
+  outputPathField,
   type BackupRequest 
 } from './export'
 
@@ -44,6 +45,14 @@ describe('backup api', () => {
       include_discovered: false,
       exclude_sensitive: true,
     })
+  })
+
+  it('leaves an empty export output path out of the config', () => {
+    const options = { compression_level: 7, include_discovered: false, exclude_sensitive: true }
+    expect(buildSMAExportConfig('', options)).not.toHaveProperty('output_path')
+    expect(buildSMAExportConfig('  ', options)).not.toHaveProperty('output_path')
+    expect(outputPathField('')).toEqual({})
+    expect(outputPathField(' sub ')).toEqual({ output_path: 'sub' })
   })
 
   describe('createBackup', () => {

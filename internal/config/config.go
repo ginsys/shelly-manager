@@ -147,7 +147,8 @@ type Config struct {
 
 	// Export settings
 	Export struct {
-		// Optional base directory for generated export files. If set, downloads are restricted to this directory.
+		// Export directory when sync.export_base_dir is not set (see ExportRoot). Exports are written
+		// under it and downloads are served only from it. Default ./data/exports.
 		OutputDirectory string `mapstructure:"output_directory"`
 	} `mapstructure:"export"`
 
@@ -156,9 +157,9 @@ type Config struct {
 		// ImportBaseDir restricts file imports to paths within this directory.
 		// If empty, no restriction is applied.
 		ImportBaseDir string `mapstructure:"import_base_dir"`
-		// ExportBaseDir restricts file exports to paths within this directory, and is the
-		// backup directory. If empty, no restriction is applied to other exports, and
-		// backups go under ./data/backups only.
+		// ExportBaseDir is the export directory and wins over export.output_directory. Exports
+		// are confined to it, downloads are served only from it, and it is the backup directory.
+		// If both keys are empty the export directory is ./data/exports.
 		ExportBaseDir string `mapstructure:"export_base_dir"`
 	} `mapstructure:"sync"`
 }

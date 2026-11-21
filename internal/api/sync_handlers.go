@@ -52,8 +52,8 @@ func (eh *SyncHandlers) SetAdminAPIKey(key string) {
 	eh.adminKey.Set(key)
 }
 
-// SetExportBaseDir sets an optional base directory for export downloads.
-// When set, any served file must be within this directory (after path resolution).
+// SetExportBaseDir sets the export directory for downloads. Empty means the default
+// (./data/exports). Any served file must be within it (after path resolution).
 func (eh *SyncHandlers) SetExportBaseDir(dir string) {
 	eh.exportBaseDir = dir
 }
@@ -697,14 +697,9 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 		// Fallback to persisted history for file path
 		if rec, err := eh.syncEngine.GetExportHistory(r.Context(), id); err == nil && rec != nil {
 			if rec.FilePath != "" {
-				if eh.exportBaseDir != "" {
-					absBase, _ := filepath.Abs(eh.exportBaseDir)
-					absFile, _ := filepath.Abs(rec.FilePath)
-					rel, err := filepath.Rel(absBase, absFile)
-					if err != nil || strings.HasPrefix(rel, "..") {
-						rw.WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "Download path not allowed", nil)
-						return
-					}
+				if _, err := sync.ResolveUnderRoot(eh.exportBaseDir, rec.FilePath); err != nil {
+					rw.WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "Download path not allowed", nil)
+					return
 				}
 				eh.serveExportPath(w, r, rec.FilePath)
 				return
@@ -717,15 +712,10 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 		rw.WriteError(w, r, http.StatusUnprocessableEntity, apiresp.ErrCodeBadRequest, "No output file available for this export", nil)
 		return
 	}
-	// If a base dir is configured, ensure the file is within it
-	if eh.exportBaseDir != "" {
-		absBase, _ := filepath.Abs(eh.exportBaseDir)
-		absFile, _ := filepath.Abs(res.OutputPath)
-		rel, err := filepath.Rel(absBase, absFile)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			rw.WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "Download path not allowed", nil)
-			return
-		}
+	// The file must lie inside the export root (the default one when none is configured)
+	if _, err := sync.ResolveUnderRoot(eh.exportBaseDir, res.OutputPath); err != nil {
+		rw.WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "Download path not allowed", nil)
+		return
 	}
 	eh.serveExportPath(w, r, res.OutputPath)
 }

@@ -165,9 +165,9 @@ security:
 
 # Export subsystem configuration (safe download base directory)
 export:
-  output_directory: ""              # Optional base dir for generated files. If set, downloads are restricted here.
+  output_directory: ""              # The export directory when sync.export_base_dir is empty (default ./data/exports). Exports are written under it; downloads are served only from it.
 
 # Sync subsystem configuration (path traversal protection for import/export)
 sync:
   import_base_dir: ""               # Optional: restrict file imports to this directory
-  export_base_dir: ""               # Optional: restrict file exports to this directory; also the backup directory (default ./data/backups)
+  export_base_dir: ""               # The export directory; wins over export.output_directory (default ./data/exports). Exports stay inside it; also the backup directory

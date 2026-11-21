@@ -42,7 +42,7 @@ func (p *Plugin) ConfigSchema() sync.ConfigSchema {
 	return sync.ConfigSchema{
 		Version: "1.0",
 		Properties: map[string]sync.PropertySchema{
-			"output_path":        {Type: "string", Description: "Directory for export files", Default: "./data/exports"},
+			"output_path":        {Type: "string", Description: "Directory under the export root (empty is the root itself)", Default: ""},
 			"include_discovered": {Type: "boolean", Description: "Include discovered devices", Default: true},
 			"compression":        {Type: "boolean", Description: "Enable compression", Default: false},
 			"compression_algo":   {Type: "string", Description: "Compression algorithm (gzip|zip)", Default: "gzip", Enum: []interface{}{"gzip", "zip"}},
@@ -53,17 +53,14 @@ func (p *Plugin) ConfigSchema() sync.ConfigSchema {
 
 func (p *Plugin) ValidateConfig(config map[string]interface{}) error {
 	if v, ok := config["output_path"].(string); ok && v != "" {
-		// Validate path is within allowed base directory
-		if p.baseDir != "" {
-			if _, err := security.ValidatePath(p.baseDir, v); err != nil {
-				return fmt.Errorf("invalid output_path: %w", err)
-			}
+		if _, err := sync.ResolveUnderRoot(p.baseDir, v); err != nil {
+			return fmt.Errorf("invalid output_path: %w", err)
 		}
 	}
 	return nil
 }
 
-// SetBaseDir sets the base directory for path validation
+// SetBaseDir sets the export root; empty means sync.DefaultExportRoot
 func (p *Plugin) SetBaseDir(baseDir string) {
 	p.baseDir = baseDir
 }
@@ -81,9 +78,6 @@ type yamlEnvelope struct {
 func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.ExportConfig) (*sync.ExportResult, error) {
 	start := time.Now()
 	outputPath, _ := config.Config["output_path"].(string)
-	if outputPath == "" {
-		outputPath = "./data/exports"
-	}
 	includeDiscovered, _ := config.Config["include_discovered"].(bool)
 	compression, _ := config.Config["compression"].(bool)
 	algo := "gzip"
@@ -91,16 +85,13 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 		algo = v
 	}
 
-	// Validate output path against base directory to prevent path traversal
-	if p.baseDir != "" {
-		validatedPath, err := security.ValidatePath(p.baseDir, outputPath)
-		if err != nil {
-			return nil, fmt.Errorf("path validation failed: %w", err)
-		}
-		outputPath = validatedPath
+	// The output directory lies inside the export root: an empty path is the root itself
+	outputPath, err := sync.ResolveUnderRoot(p.baseDir, outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("path validation failed: %w", err)
 	}
 
-	if err := os.MkdirAll(outputPath, 0755); err != nil {
+	if err = os.MkdirAll(outputPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 

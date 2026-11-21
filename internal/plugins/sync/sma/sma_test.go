@@ -93,7 +93,8 @@ func TestFileOperationsRequireApprovedRoots(t *testing.T) {
 		Format: "sma",
 		Config: map[string]interface{}{"output_path": output},
 	})
-	require.ErrorContains(t, err, "approved export base directory is required")
+	// With no export root handed over, the default root applies and a directory outside it is refused
+	require.ErrorContains(t, err, "export path validation failed")
 
 	input := filepath.Join(output, "archive.sma")
 	require.NoError(t, os.WriteFile(input, []byte(`{}`), 0o600))

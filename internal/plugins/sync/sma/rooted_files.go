@@ -37,22 +37,6 @@ func openApprovedRoot(baseDir, userPath, purpose string) (*approvedRootPath, err
 	return &approvedRootPath{root: root, base: absoluteBase, relative: relative}, nil
 }
 
-func openDefaultExportRoot() (*approvedRootPath, error) {
-	temporaryBase, err := filepath.Abs(os.TempDir())
-	if err != nil {
-		return nil, fmt.Errorf("resolve temporary base directory: %w", err)
-	}
-	root, err := os.OpenRoot(temporaryBase)
-	if err != nil {
-		return nil, fmt.Errorf("open temporary base directory: %w", err)
-	}
-	return &approvedRootPath{
-		root:     root,
-		base:     temporaryBase,
-		relative: defaultOutputDirectory,
-	}, nil
-}
-
 func (path *approvedRootPath) absolute() string {
 	if path.relative == "." {
 		return path.base

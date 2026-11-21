@@ -364,9 +364,9 @@ func startServer() {
 
 	// Wire sync handlers for export/import functionality
 	syncHandlers := api.NewSyncHandlers(syncEngine, logger)
-	// Restrict export downloads to configured directory if provided
-	if cfg != nil && cfg.Export.OutputDirectory != "" {
-		syncHandlers.SetExportBaseDir(cfg.Export.OutputDirectory)
+	// Downloads are served only from the export root (the default one when none is configured)
+	if cfg != nil {
+		syncHandlers.SetExportBaseDir(cfg.ExportRoot())
 	}
 	apiHandler.ExportHandlers = syncHandlers
 	importHandlers := api.NewImportHandlers(syncEngine, logger)
@@ -742,10 +742,15 @@ func initApp() {
 			"component":       "sync_engine",
 		}).Info("Import base directory configured for path validation")
 	}
-	if cfg.Sync.ExportBaseDir != "" {
-		syncEngine.SetExportBaseDir(cfg.Sync.ExportBaseDir)
+	// One export root for plugins and downloads: sync.export_base_dir, else export.output_directory, else
+	// sync.DefaultExportRoot. It is created here, so the path checks run against a directory that exists.
+	if err := sync.EnsureExportRoot(cfg.ExportRoot()); err != nil {
+		log.Fatal("Export directory cannot be created: ", err)
+	}
+	if root := cfg.ExportRoot(); root != "" {
+		syncEngine.SetExportBaseDir(root)
 		logger.WithFields(map[string]any{
-			"export_base_dir": cfg.Sync.ExportBaseDir,
+			"export_base_dir": root,
 			"component":       "sync_engine",
 		}).Info("Export base directory configured for path validation")
 	}

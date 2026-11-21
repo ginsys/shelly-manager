@@ -59,6 +59,7 @@ func TestPlugin_Initialize(t *testing.T) {
 }
 
 func TestPlugin_ValidateConfig(t *testing.T) {
+	root := t.TempDir()
 	tests := []struct {
 		name      string
 		config    map[string]interface{}
@@ -72,22 +73,30 @@ func TestPlugin_ValidateConfig(t *testing.T) {
 		{
 			name: "valid output path",
 			config: map[string]interface{}{
-				"output_path": t.TempDir(),
+				"output_path": root,
 			},
 			wantError: false,
 		},
 		{
-			name: "nonexistent output path is side effect free",
+			name: "a directory under the root that does not exist yet is side effect free",
+			config: map[string]interface{}{
+				"output_path": "not/created/yet",
+			},
+			wantError: false,
+		},
+		{
+			name: "a path outside the root is refused",
 			config: map[string]interface{}{
 				"output_path": "/nonexistent/invalid/path/that/cannot/be/created",
 			},
-			wantError: false,
+			wantError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := NewPlugin()
+			p := NewPlugin().(*Plugin)
+			p.SetBaseDir(root)
 			err := p.ValidateConfig(tt.config)
 			if (err != nil) != tt.wantError {
 				t.Errorf("ValidateConfig() error = %v, wantError %v", err, tt.wantError)
@@ -145,6 +154,7 @@ func TestPlugin_Export_Success(t *testing.T) {
 
 	// Temp directory for output
 	tmpDir := t.TempDir()
+	p.SetBaseDir(tmpDir)
 
 	config := sync.ExportConfig{
 		Format: "yaml",
@@ -231,6 +241,7 @@ func TestPlugin_Export_Compression(t *testing.T) {
 			}
 
 			tmpDir := t.TempDir()
+			p.SetBaseDir(tmpDir)
 			config := sync.ExportConfig{
 				Format: "yaml",
 				Config: map[string]interface{}{
@@ -318,6 +329,7 @@ func TestPlugin_Export_IncludeDiscovered(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
+	p.SetBaseDir(tmpDir)
 
 	// Test with include_discovered = true
 	t.Run("with discovered devices", func(t *testing.T) {

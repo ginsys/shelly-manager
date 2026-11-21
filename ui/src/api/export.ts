@@ -235,12 +235,18 @@ export interface SMAExportCreationOptions {
   exclude_sensitive: boolean
 }
 
+// An empty output path is left out: the server then writes into its export directory.
+export function outputPathField(outputPath: string): { output_path?: string } {
+  const trimmed = outputPath.trim()
+  return trimmed ? { output_path: trimmed } : {}
+}
+
 export function buildSMAExportConfig(
   outputPath: string,
   options: SMAExportCreationOptions,
 ): Record<string, unknown> {
   return {
-    output_path: outputPath,
+    ...outputPathField(outputPath),
     compression_level: options.compression_level,
     include_discovered: options.include_discovered,
     exclude_sensitive: options.exclude_sensitive,
