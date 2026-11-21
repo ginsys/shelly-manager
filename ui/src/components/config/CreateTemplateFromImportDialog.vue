@@ -10,6 +10,13 @@
         {{ loadError }}
       </p>
 
+      <div v-else-if="created" class="saved" data-testid="from-import-saved">
+        <p role="status">Template saved.</p>
+        <router-link :to="{ name: 'template-detail', params: { id: created.id } }" data-testid="from-import-open">
+          Open "{{ created.name }}"
+        </router-link>
+      </div>
+
       <template v-else>
         <p v-if="sections.length === 0" class="hint" data-testid="from-import-empty">
           Nothing in this import can go into a template for this model.
@@ -52,8 +59,12 @@
       <p v-if="saveError" class="save-error" role="alert" data-testid="from-import-save-error">{{ saveError }}</p>
 
       <div class="modal-actions">
-        <button class="btn" data-testid="from-import-cancel" :disabled="saving" @click="close">Cancel</button>
-        <button class="btn primary" data-testid="from-import-save" :disabled="!canSave" @click="save">Save</button>
+        <button class="btn" data-testid="from-import-cancel" :disabled="saving" @click="close">
+          {{ created ? 'Close' : 'Cancel' }}
+        </button>
+        <button v-if="!created" class="btn primary" data-testid="from-import-save" :disabled="!canSave" @click="save">
+          Save
+        </button>
       </div>
     </div>
   </div>
@@ -61,17 +72,21 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useLateFailure, useLateResult } from '@/composables/useNotice'
 import { getTypedDeviceConfig } from '@/api/deviceConfig'
 import { getConfigSchema, type ConfigSchema } from '@/api/typedConfig'
-import { createTemplate, listDeviceTypes, TemplateSaveError, type FieldError } from '@/api/templates'
+import {
+  createTemplate,
+  listDeviceTypes,
+  TemplateSaveError,
+  type ConfigTemplate,
+  type FieldError,
+} from '@/api/templates'
 import { PER_DEVICE_NOTE, buildTemplateBody, defaultTicked, importSections } from '@/utils/templateFromImport'
 
 const props = defineProps<{ deviceId: number | string }>()
 const emit = defineEmits<{ close: [] }>()
 
-const router = useRouter()
 const reportLate = useLateFailure()
 const reportLateResult = useLateResult()
 // A save that ends after the user left the page has no form to show it in, and what the form or the answer
@@ -93,6 +108,8 @@ const name = ref('')
 const description = ref('')
 const scope = ref<'global' | 'device_type'>('global')
 const saving = ref(false)
+// The template once it is saved: the dialog then shows the result and a link to it, and goes nowhere by itself.
+const created = ref<ConfigTemplate | null>(null)
 const saveError = ref('')
 const fieldErrors = ref<FieldError[]>([])
 
@@ -152,35 +169,27 @@ async function save() {
   saving.value = true
   saveError.value = ''
   fieldErrors.value = []
-  try {
-    const template = await createTemplate({
-      name: name.value.trim(),
-      description: description.value.trim() || undefined,
-      scope: scope.value,
-      device_type: scope.value === 'device_type' ? model.value : undefined,
-      config: body.value.config,
-    })
-    if (!alive) {
-      reportLateResult('info', SAVED, LATE)
-      return
-    }
-    emit('close')
-    // The template exists from here on: a failed move to its page is not a failed save.
-    try {
-      await router.push({ name: 'template-detail', params: { id: template.id } })
-    } catch {
-      reportLateResult('info', SAVED, LATE)
-    }
-  } catch (e: any) {
-    if (!alive) {
-      // The user left the page while the save ran: the dialog is gone, so the app notice is the only place left.
-      reportLate(new Error('Template save failed. Open the Templates page to check.'), LATE)
-      return
-    }
-    if (e instanceof TemplateSaveError) fieldErrors.value = e.fields
-    saveError.value = e?.message || 'Failed to create the template'
-  } finally {
-    if (alive) saving.value = false
+  // One answer, one place to read it: the saved template, or the reason it was not.
+  const answer = await createTemplate({
+    name: name.value.trim(),
+    description: description.value.trim() || undefined,
+    scope: scope.value,
+    device_type: scope.value === 'device_type' ? model.value : undefined,
+    config: body.value.config,
+  }).catch((e: any) => (e instanceof Error ? e : new Error(e?.message || 'Failed to create the template')))
+  const failed = answer instanceof Error
+
+  if (!alive) {
+    // The user left the page while the save ran: the dialog is gone, so the app notice is the only place left.
+    if (failed) reportLate(new Error('Template save failed. Open the Templates page to check.'), LATE)
+    else reportLateResult('info', SAVED, LATE)
+    return
+  }
+  saving.value = false
+  if (!failed) created.value = answer
+  else {
+    if (answer instanceof TemplateSaveError) fieldErrors.value = answer.fields
+    saveError.value = answer.message || 'Failed to create the template'
   }
 }
 

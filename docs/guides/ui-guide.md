@@ -116,7 +116,7 @@ from this import** on that card opens a dialog that makes a configuration templa
   `cloud`. Build the template on its template page instead.
 - Enter a name and a description. The scope is the model of the device's schema (`GET /config/schema?device_id=...`) when
   the server lists it (`GET /config/device-types`); otherwise the template is for all devices. A refusal from the server shows its
-  reason, and the field list when the server names fields. After a save, the page of the new template opens.
+  reason, and the field list when the server names fields. After a save, the dialog says **Template saved** and links to the new template; it goes nowhere by itself. If you leave the page while the save runs, a notice says whether it went through.
 
 ### Export/Import Section
 
