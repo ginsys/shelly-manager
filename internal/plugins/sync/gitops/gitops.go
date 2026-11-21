@@ -3,8 +3,10 @@ package gitops
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -206,7 +208,15 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	includeTemplates := boolOption(config.Config, "include_templates", true)
 	excludeFields := g.parseExcludeFields(config.Config["exclude_fields"])
 
-	if err := g.prepareOutputDir(outputPath); err != nil {
+	// From here every write goes through the opened export root, so a link swapped in after the check
+	// above cannot redirect it.
+	root, rel, openErr := openOutputRoot(g.baseDir, outputPath)
+	if openErr != nil {
+		return nil, openErr
+	}
+	defer func() { _ = root.Close() }()
+
+	if err := g.prepareOutputDir(root, rel); err != nil {
 		return nil, err
 	}
 
@@ -218,8 +228,8 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	// Generate common configuration
 	if includeCommon {
 		commonConfig := g.generateCommonConfig(data)
-		commonPath := filepath.Join(outputPath, "common.yaml")
-		if err := g.writeYAMLFile(commonPath, commonConfig); err != nil {
+		commonPath := filepath.Join(rel, "common.yaml")
+		if err := g.writeYAMLFile(root, commonPath, commonConfig); err != nil {
 			return nil, fmt.Errorf("failed to write common config: %w", err)
 		}
 		recordCount++
@@ -229,15 +239,15 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	// Generate group and device configurations
 	totalDeviceFiles := 0
 	for groupName, devices := range deviceGroups {
-		groupPath := filepath.Join(outputPath, "groups", g.segment(groupName))
-		if err := os.MkdirAll(groupPath, 0755); err != nil {
+		groupPath := filepath.Join(rel, "groups", g.segment(groupName))
+		if err := root.MkdirAll(groupPath, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create group directory %s: %w", groupPath, err)
 		}
 
 		// Generate group-level configuration
 		groupConfig := g.generateGroupConfig(groupName, devices, data)
 		groupConfigPath := filepath.Join(groupPath, "group.yaml")
-		if err := g.writeYAMLFile(groupConfigPath, groupConfig); err != nil {
+		if err := g.writeYAMLFile(root, groupConfigPath, groupConfig); err != nil {
 			return nil, fmt.Errorf("failed to write group config: %w", err)
 		}
 		recordCount++
@@ -247,14 +257,14 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 
 		for deviceType, typeDevices := range typeGroups {
 			typePath := filepath.Join(groupPath, g.segment(deviceType))
-			if err := os.MkdirAll(typePath, 0755); err != nil {
+			if err := root.MkdirAll(typePath, 0755); err != nil {
 				return nil, fmt.Errorf("failed to create type directory %s: %w", typePath, err)
 			}
 
 			// Generate type-level common configuration
 			typeCommonConfig := g.generateTypeCommonConfig(deviceType, groupName)
 			typeCommonPath := filepath.Join(typePath, "common.yaml")
-			if err := g.writeYAMLFile(typeCommonPath, typeCommonConfig); err != nil {
+			if err := g.writeYAMLFile(root, typeCommonPath, typeCommonConfig); err != nil {
 				return nil, fmt.Errorf("failed to write type common config: %w", err)
 			}
 			recordCount++
@@ -265,7 +275,7 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 				deviceFileName := g.sanitizeFilename(device.Name) + ".yaml"
 				devicePath := filepath.Join(typePath, deviceFileName)
 
-				if err := g.writeYAMLFile(devicePath, deviceConfig); err != nil {
+				if err := g.writeYAMLFile(root, devicePath, deviceConfig); err != nil {
 					return nil, fmt.Errorf("failed to write device config for %s: %w", device.Name, err)
 				}
 				recordCount++
@@ -277,15 +287,15 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	// Generate ungrouped devices
 	ungroupedDevices := g.getUngroupedDevices(data.Devices, deviceGroups)
 	if len(ungroupedDevices) > 0 {
-		ungroupedPath := filepath.Join(outputPath, "ungrouped")
-		if err := os.MkdirAll(ungroupedPath, 0755); err != nil {
+		ungroupedPath := filepath.Join(rel, "ungrouped")
+		if err := root.MkdirAll(ungroupedPath, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create ungrouped directory: %w", err)
 		}
 
 		typeGroups := g.groupDevicesByType(ungroupedDevices)
 		for deviceType, typeDevices := range typeGroups {
 			typePath := filepath.Join(ungroupedPath, g.segment(deviceType))
-			if err := os.MkdirAll(typePath, 0755); err != nil {
+			if err := root.MkdirAll(typePath, 0755); err != nil {
 				return nil, fmt.Errorf("failed to create ungrouped type directory: %w", err)
 			}
 
@@ -294,7 +304,7 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 				deviceFileName := g.sanitizeFilename(device.Name) + ".yaml"
 				devicePath := filepath.Join(typePath, deviceFileName)
 
-				if err := g.writeYAMLFile(devicePath, deviceConfig); err != nil {
+				if err := g.writeYAMLFile(root, devicePath, deviceConfig); err != nil {
 					return nil, fmt.Errorf("failed to write ungrouped device config: %w", err)
 				}
 				recordCount++
@@ -305,8 +315,8 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 
 	// Generate templates if requested
 	if includeTemplates && len(data.Templates) > 0 {
-		templatesPath := filepath.Join(outputPath, "templates")
-		if err := os.MkdirAll(templatesPath, 0755); err != nil {
+		templatesPath := filepath.Join(rel, "templates")
+		if err := root.MkdirAll(templatesPath, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create templates directory: %w", err)
 		}
 
@@ -324,7 +334,7 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 			templateFileName := g.sanitizeFilename(template.Name) + ".yaml"
 			templatePath := filepath.Join(templatesPath, templateFileName)
 
-			if err := g.writeYAMLFile(templatePath, templateConfig); err != nil {
+			if err := g.writeYAMLFile(root, templatePath, templateConfig); err != nil {
 				return nil, fmt.Errorf("failed to write template %s: %w", template.Name, err)
 			}
 			recordCount++
@@ -346,15 +356,15 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 		"generated_at": time.Now(),
 	}
 
-	summaryPath := filepath.Join(outputPath, "export-summary.yaml")
-	if err := g.writeYAMLFile(summaryPath, summary); err != nil {
+	summaryPath := filepath.Join(rel, "export-summary.yaml")
+	if err := g.writeYAMLFile(root, summaryPath, summary); err != nil {
 		g.logger.Warn("Failed to write export summary", "error", err)
 	} else {
 		recordCount++
 	}
 
 	// Calculate total size
-	totalSize, err := g.calculateDirectorySize(outputPath)
+	totalSize, err := g.calculateDirectorySize(root, rel)
 	if err != nil {
 		g.logger.Warn("Failed to calculate directory size", "error", err)
 	}
@@ -648,55 +658,92 @@ func (g *GitOpsPlugin) parseExcludeFields(fieldsInterface interface{}) []string 
 // keeps an empty one, and cleans one an earlier export wrote (the marker, or the summary file every
 // earlier version wrote, either as a regular file). It refuses any other directory, so a request
 // cannot make the plugin delete files it did not write.
-func (g *GitOpsPlugin) prepareOutputDir(outputPath string) error {
-	info, err := os.Stat(outputPath)
+func (g *GitOpsPlugin) prepareOutputDir(root *os.Root, rel string) error {
+	info, err := root.Stat(rel)
 	switch {
 	case os.IsNotExist(err):
-		if mkErr := os.MkdirAll(outputPath, 0o755); mkErr != nil {
+		if mkErr := root.MkdirAll(rel, 0o755); mkErr != nil {
 			return fmt.Errorf("failed to create output directory: %w", mkErr)
 		}
-		return writeMarker(outputPath)
+		return writeMarker(root, rel)
 	case err != nil:
 		return fmt.Errorf("failed to inspect output directory: %w", err)
 	case !info.IsDir():
-		return fmt.Errorf("%w: output_path %q is not a directory", sync.ErrInvalidExportPath, outputPath)
+		return fmt.Errorf("%w: output_path %q is not a directory", sync.ErrInvalidExportPath, filepath.Join(root.Name(), rel))
 	}
 
-	entries, err := os.ReadDir(outputPath)
+	entries, err := readDirIn(root, rel)
 	if err != nil {
 		return fmt.Errorf("failed to read output directory: %w", err)
 	}
-	if len(entries) > 0 && !isRegularFile(filepath.Join(outputPath, markerName)) &&
-		!isRegularFile(filepath.Join(outputPath, "export-summary.yaml")) {
+	if len(entries) > 0 && !isRegularFile(root, filepath.Join(rel, markerName)) &&
+		!isRegularFile(root, filepath.Join(rel, "export-summary.yaml")) {
 		return fmt.Errorf("%w: output_path %q is not empty and was not written by a GitOps export; "+
-			"refusing to clean it. Use an empty or new directory", sync.ErrInvalidExportPath, outputPath)
+			"refusing to clean it. Use an empty or new directory", sync.ErrInvalidExportPath, filepath.Join(root.Name(), rel))
 	}
 	// The marker goes first, so a clean that stops halfway leaves a directory the next run may replace.
-	if err := writeMarker(outputPath); err != nil {
+	if err := writeMarker(root, rel); err != nil {
 		return err
 	}
 	for _, e := range entries {
 		if e.Name() == markerName {
 			continue
 		}
-		if err := os.RemoveAll(filepath.Join(outputPath, e.Name())); err != nil {
+		if err := root.RemoveAll(filepath.Join(rel, e.Name())); err != nil {
 			return fmt.Errorf("failed to clean output directory: %w", err)
 		}
 	}
 	return nil
 }
 
+// openOutputRoot opens the export root with os.Root and returns it with the output directory's path
+// below it. The output directory was resolved by resolveOutputDir, so it is a subdirectory of the root.
+func openOutputRoot(baseDir, outputPath string) (*os.Root, string, error) {
+	if baseDir == "" {
+		baseDir = sync.DefaultExportRoot
+	}
+	absRoot, err := filepath.Abs(baseDir)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve the export directory: %w", err)
+	}
+	rel, err := filepath.Rel(absRoot, outputPath)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, "", fmt.Errorf("%w: output_path must be inside the export directory %s", sync.ErrInvalidExportPath, absRoot)
+	}
+	root, err := os.OpenRoot(absRoot)
+	if err != nil {
+		return nil, "", fmt.Errorf("open the export directory %s: %w", absRoot, err)
+	}
+	return root, rel, nil
+}
+
+// readDirIn lists a directory below the root, sorted by name as os.ReadDir does (File.ReadDir does not
+// sort, and the clean must remove entries in a fixed order).
+func readDirIn(root *os.Root, dir string) ([]os.DirEntry, error) {
+	f, err := root.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	entries, err := f.ReadDir(-1)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	return entries, nil
+}
+
 // writeMarker makes the marker a regular file of our own. Whatever else holds that name (a symlink
 // into another directory, say) is removed first, never written through.
-func writeMarker(dir string) error {
+func writeMarker(root *os.Root, dir string) error {
 	path := filepath.Join(dir, markerName)
-	if isRegularFile(path) {
+	if isRegularFile(root, path) {
 		return nil
 	}
-	if err := os.RemoveAll(path); err != nil {
+	if err := root.RemoveAll(path); err != nil {
 		return fmt.Errorf("failed to replace output directory marker: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to write output directory marker: %w", err)
 	}
@@ -712,8 +759,8 @@ func writeMarker(dir string) error {
 
 // isRegularFile is false for a symlink or a directory: a request must not be able to plant either
 // as a marker.
-func isRegularFile(path string) bool {
-	info, err := os.Lstat(path)
+func isRegularFile(root *os.Root, path string) bool {
+	info, err := root.Lstat(path)
 	return err == nil && info.Mode().IsRegular()
 }
 
@@ -753,8 +800,8 @@ func (g *GitOpsPlugin) sanitizeFilename(name string) string {
 	return strings.ToLower(replacer.Replace(name))
 }
 
-func (g *GitOpsPlugin) writeYAMLFile(filePath string, data interface{}) error {
-	file, err := os.Create(filePath)
+func (g *GitOpsPlugin) writeYAMLFile(root *os.Root, filePath string, data interface{}) error {
+	file, err := root.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filePath, err)
 	}
@@ -777,13 +824,17 @@ func (g *GitOpsPlugin) writeYAMLFile(filePath string, data interface{}) error {
 	return encoder.Encode(data)
 }
 
-func (g *GitOpsPlugin) calculateDirectorySize(dirPath string) (int64, error) {
+func (g *GitOpsPlugin) calculateDirectorySize(root *os.Root, dir string) (int64, error) {
 	var totalSize int64
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+	err := fs.WalkDir(root.FS(), filepath.ToSlash(dir), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() {
+		if !d.IsDir() {
+			info, infoErr := d.Info()
+			if infoErr != nil {
+				return infoErr
+			}
 			totalSize += info.Size()
 		}
 		return nil
