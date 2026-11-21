@@ -14,6 +14,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
@@ -64,26 +65,16 @@ func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
 		if b.exportBaseDir != "" && !filepath.IsAbs(dir) {
 			dir = filepath.Join(absRoot, dir)
 		}
+		// ValidatePath joins a relative path under its base, so it is given an absolute one.
+		if dir, err = filepath.Abs(dir); err != nil {
+			return "", fmt.Errorf("resolve output_path: %w", err)
+		}
 	}
-	dir, err = insideRoot(absRoot, dir)
-	if err != nil {
+	// ValidatePath reads no file system state: a symlink inside the root is trusted host configuration.
+	if dir, err = security.ValidatePath(absRoot, dir); err != nil {
 		return "", fmt.Errorf("output_path must be inside the backup directory %s", absRoot)
 	}
 	return dir, nil
-}
-
-// insideRoot returns path as an absolute path when it is absRoot or lies under it, and an error
-// otherwise. It reads no file system state: a symlink inside the root is trusted host configuration.
-func insideRoot(absRoot, path string) (string, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(absRoot, abs)
-	if err != nil || !filepath.IsLocal(rel) {
-		return "", fmt.Errorf("%q is outside %q", path, absRoot)
-	}
-	return filepath.Join(absRoot, rel), nil
 }
 
 // NewPlugin creates a new backup plugin (for registry)
@@ -123,7 +114,7 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 			"output_path": {
 				Type:        "string",
 				Description: "Directory for backup files; must be inside sync.export_base_dir when set, else inside ./data/backups",
-				Default:     "./data/backups",
+				Default:     defaultBackupDir,
 			},
 			"compression": {
 				Type:        "boolean",
@@ -151,7 +142,7 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 		Required: []string{},
 		Examples: []map[string]interface{}{
 			{
-				"output_path":        "./data/backups",
+				"output_path":        defaultBackupDir,
 				"compression":        true,
 				"include_discovered": true,
 				"backup_type":        "full",
