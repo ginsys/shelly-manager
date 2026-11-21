@@ -86,6 +86,26 @@ func checkProvisionerAdmin(t *testing.T, manager *Manager) {
 		assert.ErrorIs(t, err, ErrAgentNotFound)
 	})
 
+	t.Run("a stateless row and a row in an unknown state are refused by all three acts", func(t *testing.T) {
+		stateless := insertKeyedRow(t, manager, testFingerprint(0x15), EnrolmentPending, "tok-adm-null", true, now.Add(-time.Hour))
+		require.NoError(t, manager.GetDB().Model(&ProvisionerAgent{}).Where("agent_id = ?", stateless).UpdateColumn("enrolment_state", nil).Error)
+		unknown := insertKeyedRow(t, manager, testFingerprint(0x16), "something-else", "tok-adm-unknown", true, now.Add(-time.Hour))
+		for name, id := range map[string]string{"no state": stateless, "unknown state": unknown} {
+			was := row(id)
+			_, err := s.ApproveAgent(ctx, id, now)
+			assert.ErrorIs(t, err, ErrEnrolmentState, "approve, %s", name)
+			_, err = s.RejectAgent(ctx, id, now)
+			assert.ErrorIs(t, err, ErrEnrolmentState, "reject, %s", name)
+			_, _, err = s.PreapproveFingerprint(ctx, strings.TrimPrefix(id, keyedAgentIDPrefix), now)
+			assert.ErrorIs(t, err, ErrEnrolmentState, "pre-approve, %s", name)
+			after := row(id)
+			assert.Equal(t, was.EnrolmentState, after.EnrolmentState, name)
+			assert.Equal(t, was.Status, after.Status, name)
+			assert.Equal(t, was.TokenHash, after.TokenHash, name)
+			assert.True(t, was.UpdatedAt.Equal(after.UpdatedAt), "%s: nothing is written", name)
+		}
+	})
+
 	t.Run("reject ends the session, clears the challenge and fails the stranded tasks", func(t *testing.T) {
 		for i, from := range []string{EnrolmentPending, EnrolmentPreapproved, EnrolmentApproved} {
 			id := insertKeyedRow(t, manager, testFingerprint(byte(0x20+i)), from, "tok-adm-reject-"+from, from != EnrolmentPreapproved, now.Add(-time.Minute))

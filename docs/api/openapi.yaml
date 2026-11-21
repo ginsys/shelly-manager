@@ -1141,9 +1141,11 @@ components:
           type: string
           enum: [legacy, pending, preapproved, approved, rejected]
           description: >-
-            Where the agent is in enrolment by key. A row with no state reads `legacy`. The agent's `status` carries
-            the state name while the row is `pending`, `preapproved`, `approved` or `rejected` and the agent has not
-            registered or polled since; a pending, preapproved or rejected row never counts as an active agent.
+            Where the agent is in enrolment by key. A row with no state reads `legacy`. Each admin transition stores
+            the state name as the agent's `status`, and a register or poll stores `online`. The list shows `offline`
+            for any agent not seen for five minutes, whatever is stored, so a row that nobody has registered shows
+            `offline` soon after its transition. A pending, preapproved or rejected row never counts as an active
+            agent.
         fingerprint:
           type: string
           description: >-
