@@ -4019,10 +4019,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: >-
+            The id is refused. Either it starts with `key-` in any case (that prefix is reserved for agents enrolled
+            by key), or it would create a new agent and holds a space or a byte outside printable ASCII (`0x21` to
+            `0x7E`) without starting with `provisioner-`. No agent is created.
         '409':
           description: >-
             The id is online (seen within 5 minutes) and the request carries neither that agent's token nor the
-            admin key.
+            admin key, or the id belongs to an agent enrolled by key (any state but legacy), which no keyless
+            register replaces, the admin key included.
 
   /api/v1/provisioner/agents/{id}/tasks:
     get:
