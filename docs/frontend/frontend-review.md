@@ -127,7 +127,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 |-------|------|-------------|
 | `/` | Devices | top bar, Device details |
 | `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | Devices, Device configuration, Drift reports, Task details |
-| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, history) | Device details, Configuration history |
+| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, desired configuration versions and rollback, import history) | Device details, Configuration history |
 | `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | Device details |
 | `/templates` | Configuration templates | top bar, Template detail |
 | `/templates/common-settings` | Common settings (compare the imports of several devices, save what they share as a template) | Templates |
@@ -224,6 +224,14 @@ page imports still counts. The Playwright spec is what proves the links are rend
   ![New drift schedule with chosen devices and nothing chosen: Save waits](images/drift-schedule-form-chosen.png)
   ![A schedule card with its recent runs open](images/drift-schedules-recent-runs.png)
 
+- **Rolling the desired configuration back** (ginsys/shelly-manager#775). The "Desired configuration versions"
+  card on the device configuration page (`components/config/DesiredRollbackCard.vue`) lists the versions that
+  `GET /devices/{id}/desired-config/history` returns and rolls one back with `POST
+  /devices/{id}/config/new/rollback`. The confirm shows the difference with the current desired configuration
+  (`utils/desiredDiff.ts`; secrets are not compared), the templates that are detached and the way back. A 409
+  with paths keeps the dialog open with one input per path, and the typed secrets live in that dialog only.
+  Roll back is off while the overrides editor is open, because a refresh rewrites an unsaved edit. No device is
+  contacted: the operator applies afterwards. The History card below it lists imports, not these versions.
 - **Drift compares with the desired configuration**, the one apply writes and verify reads, and no
   longer with the stored import record (ginsys/shelly-manager#606). A device with no desired
   configuration cannot be checked: the drift route answers 404 and a bulk run marks it skipped.

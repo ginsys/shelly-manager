@@ -1,0 +1,2 @@
+Added
+- The device configuration page has a "Desired configuration versions" card: it lists the versions of the desired configuration and rolls the device back to one. The confirm shows the difference with the current configuration (secrets are not compared), the templates that will be detached and the way back; a version that needs secrets asks for them in the same dialog. The device is not contacted and stays pending until you apply. Refs ginsys/shelly-manager#775.
