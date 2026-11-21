@@ -77,6 +77,7 @@ const reportLateResult = useLateResult()
 // A save that ends after the user left the page has no form to show it in, and what the form or the answer
 // holds then (a name, field reasons) may be stale, so the app notice says only whether it went through.
 const LATE = { action: 'Create template', resource: 'Template' }
+const SAVED = 'Template saved. Find it on the Templates page.'
 
 const loading = ref(true)
 const loadError = ref('')
@@ -160,11 +161,16 @@ async function save() {
       config: body.value.config,
     })
     if (!alive) {
-      reportLateResult('info', 'Template saved. Find it on the Templates page.', LATE)
+      reportLateResult('info', SAVED, LATE)
       return
     }
     emit('close')
-    await router.push({ name: 'template-detail', params: { id: template.id } })
+    // The template exists from here on: a failed move to its page is not a failed save.
+    try {
+      await router.push({ name: 'template-detail', params: { id: template.id } })
+    } catch {
+      reportLateResult('info', SAVED, LATE)
+    }
   } catch (e: any) {
     if (!alive) {
       // The user left the page while the save ran: the dialog is gone, so the app notice is the only place left.
