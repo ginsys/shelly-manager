@@ -135,6 +135,34 @@ func TestCommonSettings_StripsTheDevicesCoordinatesAndKeepsTheTimeZone(t *testin
 	assert.True(t, ok && tz == "Europe/Brussels", body)
 }
 
+// The other places a device keeps what is its own: the access-point name in the Gen1 shape (wifi.ap.ssid),
+// the Gen2 coordinate pair (system.device.lat_lon) and the sunrise/sunset coordinates of the schedule.
+func TestCommonSettings_StripsTheOtherPerDevicePlaces(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	same := `{"wifi":{"enable":true,"ap":{"enable":true,"ssid":"same-ap"}},` +
+		`"system":{"device":{"eco_mode":true,"lat_lon":[51.05,3.72]}},` +
+		`"schedule":{"enabled":true,"latitude":51.05,"longitude":3.72,"timezone":"Europe/Brussels"}}`
+	a := commonDevice(t, h, 1, "SHPLG-S", same)
+	b := commonDevice(t, h, 2, "SHPLG-S", same)
+
+	answer, body := commonFor(t, h, a, b)
+
+	for _, path := range [][]string{
+		{"wifi", "ap", "ssid"}, {"system", "device", "lat_lon"}, {"schedule", "latitude"}, {"schedule", "longitude"},
+	} {
+		_, found := commonAt(answer.Common, path...)
+		assert.False(t, found, "%s is one device's own: %s", strings.Join(path, "."), body)
+	}
+	assert.NotContains(t, body, "same-ap", body)
+	assert.NotContains(t, body, "51.05", body)
+	// Control: what is equal and not one device's own stays.
+	tz, ok := commonAt(answer.Common, "schedule", "timezone")
+	assert.True(t, ok && tz == "Europe/Brussels", body)
+	enabled, ok := commonAt(answer.Common, "wifi", "enable")
+	assert.True(t, ok && enabled == true, body)
+}
+
 // The trap: a Wi-Fi password, an MQTT password or a login password that is the same on every device is
 // "common", and must never come back, nor the mask that stands for it.
 func TestCommonSettings_NeverReturnsASecretEqualOnEveryDevice(t *testing.T) {

@@ -126,22 +126,30 @@ const chosen = computed(() =>
 
 // A result belongs to the devices it was asked for.
 watch(chosen, () => {
+  asked++
+  comparing.value = false
   result.value = null
   compareError.value = ''
   showSave.value = false
 })
 
+// The answer to the last compare, and nobody else's: a selection that changed meanwhile asked for other devices.
+let asked = 0
+
 async function compare() {
+  const mine = ++asked
   comparing.value = true
   compareError.value = ''
   result.value = null
   try {
     const answer = await getCommonSettings(chosen.value)
-    if (alive) result.value = answer
+    if (alive && mine === asked) result.value = answer
   } catch (e: any) {
-    if (alive) compareError.value = e?.response?.data?.error?.message || e?.message || 'Failed to compare the devices'
+    if (alive && mine === asked) {
+      compareError.value = e?.response?.data?.error?.message || e?.message || 'Failed to compare the devices'
+    }
   } finally {
-    if (alive) comparing.value = false
+    if (alive && mine === asked) comparing.value = false
   }
 }
 

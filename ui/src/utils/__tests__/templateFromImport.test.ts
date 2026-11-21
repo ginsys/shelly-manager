@@ -303,6 +303,53 @@ describe('buildTemplateBody', () => {
     expect(PER_DEVICE_NOTE).toContain('coordinates')
   })
 
+  it('also leaves out the Gen1 access-point name, the Gen2 coordinate pair and the schedule coordinates', () => {
+    const typed = {
+      wifi: { enable: true, ap: { enable: true, ssid: 'shelly1-AABBCC' } },
+      system: { device: { eco_mode: true, lat_lon: [51.05, 3.72] } },
+      schedule: { enabled: true, latitude: 51.05, longitude: 3.72, timezone: 'Europe/Brussels' },
+    }
+    const wide = {
+      type: 'object',
+      properties: {
+        wifi: {
+          type: 'object',
+          properties: {
+            enable: { type: 'boolean' },
+            ap: { type: 'object', properties: { enable: { type: 'boolean' }, ssid: { type: 'string' } } },
+          },
+        },
+        system: {
+          type: 'object',
+          properties: {
+            device: {
+              type: 'object',
+              properties: { eco_mode: { type: 'boolean' }, lat_lon: { type: 'array', items: { type: 'number' } } },
+            },
+          },
+        },
+        schedule: {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            latitude: { type: 'number' },
+            longitude: { type: 'number' },
+            timezone: { type: 'string' },
+          },
+        },
+      },
+    } as unknown as ConfigSchema
+
+    const { config, leftOut } = buildTemplateBody(typed, wide, ['wifi', 'system', 'schedule'])
+
+    expect(config.wifi).toEqual({ enable: true, ap: { enable: true } })
+    expect(config.system).toEqual({ device: { eco_mode: true } })
+    expect(config.schedule).toEqual({ enabled: true, timezone: 'Europe/Brussels' })
+    expect(leftOut).toEqual(
+      expect.arrayContaining(['wifi.ap.ssid', 'system.device.lat_lon', 'schedule.latitude', 'schedule.longitude']),
+    )
+  })
+
   it('leaves out the auth realm, which is the device\'s own id', () => {
     const typed = { auth: { enable: true, user: 'admin', realm: 'shellyplus1-aabbccddeeff' } }
     const withRealm = {

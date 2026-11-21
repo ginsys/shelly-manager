@@ -166,6 +166,22 @@ describe('CommonSettingsPage', () => {
     expect(wrapper.get('[data-testid="devices-error"]').text()).toContain('Failed to load devices')
   })
 
+  it('shows no answer for devices that are no longer chosen when the selection changes during a compare', async () => {
+    let finish: (v: typeof answer) => void = () => {}
+    ;(getCommonSettings as any).mockReset().mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const wrapper = await open()
+    await wrapper.get('[data-testid="model-select"]').setValue('SHPLG-S')
+    await wrapper.get('[data-testid="compare"]').trigger('click')
+
+    await wrapper.get('[data-testid="model-select"]').setValue('SHSW-25')
+    finish(answer)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="common-result"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="common-create"]').exists()).toBe(false)
+    expect((wrapper.get('[data-testid="compare"]').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
   it('saves the ticked sections of the common settings as a template', async () => {
     const wrapper = await open()
     await wrapper.get('[data-testid="model-select"]').setValue('SHPLG-S')
