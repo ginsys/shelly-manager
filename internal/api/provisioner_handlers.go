@@ -104,7 +104,7 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 	case errors.Is(err, database.ErrAgentEnrolled):
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id belongs to an agent enrolled by key", nil)
 	case errors.Is(err, database.ErrAgentIDInvalid):
-		h.responseWriter().WriteValidationError(w, r, "Agent id must use printable ASCII characters without a space")
+		h.responseWriter().WriteValidationError(w, r, `Agent id must use printable ASCII characters without a space, unless it starts with "provisioner-"`)
 	case errors.Is(err, database.ErrAgentNotFound):
 		h.responseWriter().WriteNotFoundError(w, r, "Agent")
 	case errors.Is(err, database.ErrTaskNotFound):
