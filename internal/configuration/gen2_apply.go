@@ -125,8 +125,8 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 		return nil, fmt.Errorf("failed to parse converted config: %w", err)
 	}
 
-	for key := range apiConfig {
-		if !gen2KeyApplies(key) {
+	for key, value := range apiConfig {
+		if !gen2KeyApplies(key, value) {
 			unsupported = append(unsupported, key)
 		}
 	}
