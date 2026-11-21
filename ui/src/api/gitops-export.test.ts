@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   createGitOpsExport,
   deleteGitOpsExport,
+  downloadGitOpsExportWithName,
   previewGitOpsExport,
   countGitOpsExports,
   decodePreviewSample,
@@ -86,6 +87,17 @@ describe('GitOps export API', () => {
     await deleteGitOpsExport('e1')
 
     expect(mockApi.delete).toHaveBeenCalledWith('/export/gitops/e1')
+  })
+
+  it('downloads through the gitops download route, as a blob with the name the server sends', async () => {
+    const blob = new Blob(['zip'])
+    mockApi.get.mockResolvedValue({ data: blob, headers: { 'content-disposition': 'attachment; filename="nightly.zip"' } })
+
+    const res = await downloadGitOpsExportWithName('e1')
+
+    expect(mockApi.get).toHaveBeenCalledWith('/export/gitops/e1/download', { responseType: 'blob' })
+    expect(res.blob).toBe(blob)
+    expect(res.filename).toBe('nightly.zip')
   })
 
   it('passes on the error when the delete is refused', async () => {

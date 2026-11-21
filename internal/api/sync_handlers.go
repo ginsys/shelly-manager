@@ -706,10 +706,7 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 						return
 					}
 				}
-				// Set a helpful filename for download
-				w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(rec.FilePath)))
-				setContentTypeForPath(w, rec.FilePath)
-				http.ServeFile(w, r, rec.FilePath)
+				eh.serveExportPath(w, r, rec.FilePath)
 				return
 			}
 		}
@@ -730,10 +727,7 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	// Set download filename and content type
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(res.OutputPath)))
-	setContentTypeForPath(w, res.OutputPath)
-	http.ServeFile(w, r, res.OutputPath)
+	eh.serveExportPath(w, r, res.OutputPath)
 }
 
 // setContentTypeForPath sets Content-Type header based on file extension for better UX

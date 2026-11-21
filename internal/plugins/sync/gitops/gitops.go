@@ -16,7 +16,7 @@ import (
 
 // markerName is the file an export writes into its output directory. A directory that holds it
 // was written by an export and may be cleaned by the next one.
-const markerName = ".shelly-manager-gitops"
+const markerName = sync.ExportDirMarker
 
 // GitOpsPlugin implements the SyncPlugin interface for GitOps YAML exports
 type GitOpsPlugin struct {

@@ -19,6 +19,7 @@
       :loading="loading"
       :error="error"
       @details="showDetails"
+      @download="downloadZip"
       @delete="deleteConfirm = $event"
     />
 
@@ -81,6 +82,7 @@ import {
   countGitOpsExports,
   createGitOpsExport,
   deleteGitOpsExport,
+  downloadGitOpsExportWithName,
   previewGitOpsExport,
   decodePreviewSample,
   type ExportHistoryItem,
@@ -229,6 +231,22 @@ async function showDetails(item: ExportHistoryItem) {
     detailsItem.value = item
   } catch (err: any) {
     if (mine === detailsRequest) showMessage(err.message || 'Failed to load the export record', 'error')
+  }
+}
+
+// The download route needs the admin key, which a plain link cannot send: fetch the zip through the
+// API client and save the blob.
+async function downloadZip(item: ExportHistoryItem) {
+  try {
+    const { blob, filename } = await downloadGitOpsExportWithName(item.export_id)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || `${item.name || item.export_id}.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (err: any) {
+    showMessage(err.message || 'Failed to download the export', 'error')
   }
 }
 

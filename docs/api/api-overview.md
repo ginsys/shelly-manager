@@ -344,7 +344,7 @@ alike. Deleting a schedule also deletes its device list and its runs.
 | POST | `/api/v1/export/sma` | Create SMA format export |
 | POST | `/api/v1/export/yaml` | Create YAML export |
 | POST | `/api/v1/export/gitops` | Create GitOps export |
-| GET | `/api/v1/export/gitops/{id}/download` | Download GitOps export |
+| GET | `/api/v1/export/gitops/{id}/download` | Download GitOps export (a zip of the export directory) |
 | DELETE | `/api/v1/export/gitops/{id}` | Delete the history record of a GitOps export (the files stay) |
 | POST | `/api/v1/export` | Generic export |
 | POST | `/api/v1/export/preview` | Preview export |
