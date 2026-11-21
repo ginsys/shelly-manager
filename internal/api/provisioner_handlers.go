@@ -202,13 +202,17 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	h.purgeRegistryIfDue(r.Context())
 }
 
-// How the registry forgets: an agent silent this long with no pending task is removed, and a task that
-// finished (completed or failed) this long ago is deleted. The purge runs at most once an hour per process.
+// How the registry forgets: a legacy agent silent for registryAgentSilentFor, or a pending one silent for
+// registryPendingSilentFor, with no pending task, is removed; an approved agent silent for
+// registryAgentSilentFor keeps its row and loses its session; a preapproved or rejected row stays. A task that
+// finished (completed or failed) registryKeepFinished ago is deleted. The purge runs at most once an hour per
+// process.
 const (
-	registryAgentSilentFor = 30 * 24 * time.Hour
-	registryKeepFinished   = 30 * 24 * time.Hour
-	registryPurgeEvery     = time.Hour
-	registryPurgeTimeout   = time.Minute
+	registryAgentSilentFor   = 30 * 24 * time.Hour
+	registryPendingSilentFor = 7 * 24 * time.Hour
+	registryKeepFinished     = 30 * 24 * time.Hour
+	registryPurgeEvery       = time.Hour
+	registryPurgeTimeout     = time.Minute
 )
 
 // purgeRegistryIfDue starts the purge in the background group when the last one began over an hour ago. It
@@ -226,12 +230,12 @@ func (h *Handler) purgeRegistryIfDue(ctx context.Context) {
 		defer h.background.Done()
 		purgeCtx, cancel := context.WithTimeout(detached, registryPurgeTimeout)
 		defer cancel()
-		res, err := store.Purge(purgeCtx, now, registryAgentSilentFor, registryKeepFinished)
-		fields := map[string]any{"agents": res.Agents, "tasks": res.Tasks, "component": "provisioner_handler"}
+		res, err := store.Purge(purgeCtx, now, registryAgentSilentFor, registryPendingSilentFor, registryKeepFinished)
+		fields := map[string]any{"agents": res.Agents, "expired": res.Expired, "tasks": res.Tasks, "component": "provisioner_handler"}
 		if err != nil {
 			fields["error"] = err.Error()
 			h.logger.WithFields(fields).Warn("Provisioner registry purge failed")
-		} else if res.Agents > 0 || res.Tasks > 0 {
+		} else if res.Agents > 0 || res.Expired > 0 || res.Tasks > 0 {
 			h.logger.WithFields(fields).Info("Provisioner registry purge removed old rows")
 		}
 	}()

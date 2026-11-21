@@ -1,0 +1,2 @@
+Changed
+- The hourly registry purge now goes by an agent's enrolment state. Agents that register without a key (state `legacy`) are removed after 30 days of silence as before; a `pending` agent after 7 days; an `approved` agent keeps its row, key and approval and only loses its session after 30 days; a `preapproved` or `rejected` row is never purged. No row is in a state other than `legacy` until the admin routes exist, so today's behaviour does not change. Refs ginsys/shelly-manager#638.
