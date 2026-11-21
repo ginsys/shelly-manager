@@ -353,15 +353,15 @@ func TestRollbackDeviceDesired_AMissAndADeletedDevice(t *testing.T) {
 	assert.JSONEq(t, `{"a":1}`, deviceRow(t, db, 1).DesiredConfig)
 }
 
-// A write whose three texts equal what the device holds changes at most the pending flag. A server that
-// reports matched rows (SQLite, PostgreSQL, MySQL with clientFoundRows) must not turn that into a row.
-func TestRollbackDeviceDesired_AnUnchangedWriteRecordsNoRow(t *testing.T) {
+// A write whose three texts equal what the device holds writes nothing, as the service's NoChange does:
+// no row, and an applied device stays applied, on every server.
+func TestRollbackDeviceDesired_AnUnchangedWriteWritesNothing(t *testing.T) {
 	db := historyDB(t)
 	text := `{"mqtt":{"server":"b.example"}}`
-	rollbackDevice(t, db, 1, "[]", text, text)
-	require.NoError(t, db.Model(&DbDevice{}).Where("id = ?", 1).Update("config_applied", false).Error)
+	rollbackDevice(t, db, 1, "[]", text, text) // config_applied is true
 	same := DesiredWrite{TemplateIDs: "[]", Overrides: text, Desired: text}
 
 	require.NoError(t, NewGormConfigRepository(db, nil).RollbackDeviceDesired(1, DesiredRead(same), same, 5))
 	assert.Empty(t, historyRows(t, db, 1))
+	assert.True(t, deviceRow(t, db, 1).ConfigApplied, "an applied device is not turned pending for a change of nothing")
 }
