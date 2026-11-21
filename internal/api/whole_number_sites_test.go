@@ -250,7 +250,7 @@ func TestGetDeviceCapabilities_GenerationReadsAWholeNumberOnly(t *testing.T) {
 		device := testutil.TestDevice()
 		device.IP = fmt.Sprintf("192.0.2.%d", next)
 		device.MAC = fmt.Sprintf("AABBCCDDEE%02X", next)
-		device.Firmware = "1.14.0"
+		device.Firmware = "v1.14.0"
 		settings, err := json.Marshal(map[string]interface{}{"model": "SHSW-1", "gen": gen})
 		require.NoError(t, err)
 		device.Settings = string(settings)

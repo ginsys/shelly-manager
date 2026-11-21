@@ -275,14 +275,7 @@ func (h *Handler) ValidateTypedConfig(w http.ResponseWriter, r *http.Request) {
 
 	var validator *configuration.ConfigurationValidator
 	if req.DeviceModel != "" {
-		// Create mock device for validation context
-		device := &database.Device{
-			Type: req.DeviceModel,
-		}
-		if req.Generation > 0 {
-			device.Firmware = fmt.Sprintf("v%d.0.0", req.Generation)
-		}
-		validator = h.createValidator(validationLevel, device)
+		validator = h.createValidator(validationLevel, requestDevice(req.DeviceModel, req.Generation))
 	} else {
 		validator = h.createGenericValidator(validationLevel, req.Capabilities)
 	}
@@ -315,17 +308,8 @@ func (h *Handler) ConvertConfigToTyped(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create mock device for conversion context
-	device := &database.Device{}
-	if req.DeviceModel != "" {
-		device.Type = req.DeviceModel
-	}
-	if req.Generation > 0 {
-		device.Firmware = fmt.Sprintf("v%d.0.0", req.Generation)
-	}
-
-	// Convert to typed configuration
-	typedConfig, conversionInfo, err := h.convertToTypedConfig(req.Configuration, device)
+	// Convert to typed configuration, in the device context the request names
+	typedConfig, conversionInfo, err := h.convertToTypedConfig(req.Configuration, requestDevice(req.DeviceModel, req.Generation))
 	if err != nil {
 		h.responseWriter().WriteInternalError(w, r, fmt.Errorf("failed to convert configuration: %w", err))
 		return
@@ -497,11 +481,7 @@ func (h *Handler) BulkValidateConfigs(w http.ResponseWriter, r *http.Request) {
 		// Create validator
 		var validator *configuration.ConfigurationValidator
 		if configReq.DeviceModel != "" {
-			device := &database.Device{Type: configReq.DeviceModel}
-			if configReq.Generation > 0 {
-				device.Firmware = fmt.Sprintf("v%d.0.0", configReq.Generation)
-			}
-			validator = h.createValidator(validationLevel, device)
+			validator = h.createValidator(validationLevel, requestDevice(configReq.DeviceModel, configReq.Generation))
 		} else {
 			validator = h.createGenericValidator(validationLevel, configReq.Capabilities)
 		}
@@ -593,7 +573,7 @@ func (h *Handler) GetDeviceCapabilities(w http.ResponseWriter, r *http.Request) 
 		model = modelStr
 	}
 
-	generation := generationFromSettings(settings, h.extractGeneration(device.Firmware))
+	generation := deviceGeneration(device)
 
 	capabilities := h.getDeviceCapabilities(model, generation)
 
@@ -726,13 +706,12 @@ func (h *Handler) convertToTypedConfig(rawConfig json.RawMessage, device *databa
 	// Extract model from device settings for accurate capability detection
 	var settings map[string]interface{}
 	model := device.Type // fallback to device type
-	generation := h.extractGeneration(device.Firmware)
+	generation := deviceGeneration(device)
 
 	if err := json.Unmarshal([]byte(device.Settings), &settings); err == nil {
 		if modelStr, ok := settings["model"].(string); ok && modelStr != "" {
 			model = modelStr
 		}
-		generation = generationFromSettings(settings, generation)
 	}
 
 	// Convert capability-specific configurations based on device model
@@ -883,7 +862,7 @@ func (h *Handler) createValidator(validationLevel string, device *database.Devic
 	}
 
 	deviceModel := device.Type
-	generation := h.extractGeneration(device.Firmware)
+	generation := deviceGeneration(device)
 	capabilities := h.getDeviceCapabilities(device.Type, generation)
 
 	return configuration.NewConfigurationValidator(level, deviceModel, generation, capabilities)
@@ -908,12 +887,45 @@ func (h *Handler) createGenericValidator(validationLevel string, capabilities []
 	return configuration.NewConfigurationValidator(level, "generic", 2, capabilities)
 }
 
-// extractGeneration extracts generation from firmware version
-func (h *Handler) extractGeneration(firmware string) int {
-	if strings.Contains(firmware, "v1.") || strings.Contains(firmware, "1.") {
+// generationUnknown is what deviceGeneration answers when neither the settings nor the firmware say.
+// A caller makes no claim for it: getDeviceCapabilities lists no ble or ethernet, and the validator
+// draws no Gen1 warning.
+const generationUnknown = 0
+
+// deviceGeneration reads a device's generation from its "gen" setting, then from the shape of its
+// firmware, and answers generationUnknown where neither says (ginsys/shelly-manager#798).
+func deviceGeneration(device *database.Device) int {
+	var settings map[string]interface{}
+	if json.Unmarshal([]byte(device.Settings), &settings) == nil {
+		if gen := generationFromSettings(settings, generationUnknown); gen >= 1 {
+			return gen
+		}
+	}
+	return generationFromFirmware(device.Firmware)
+}
+
+// generationFromFirmware reads the generation from the shape of a firmware string. A Gen1 "fw" is
+// "<build>/v<semver>-<hash>", so "v1." is tested first: such a string also starts with a digit and holds a
+// dot. A Gen2 or later version is bare ("1.4.4", or "<build>/1.4.4-<hash>" as fw_id). An empty string, or a
+// build id with no version, says nothing.
+func generationFromFirmware(firmware string) int {
+	if strings.Contains(firmware, "v1.") {
 		return 1
 	}
-	return 2 // Default to Gen2+
+	if firmware != "" && firmware[0] >= '0' && firmware[0] <= '9' && strings.Contains(firmware, ".") {
+		return 2
+	}
+	return generationUnknown
+}
+
+// requestDevice is the device context of a request that names a model and a generation. The generation
+// goes in the settings, where deviceGeneration reads it first.
+func requestDevice(model string, generation int) *database.Device {
+	device := &database.Device{Type: model}
+	if generation > 0 {
+		device.Settings = fmt.Sprintf(`{"gen":%d}`, generation)
+	}
+	return device
 }
 
 // generationFromSettings reads a device's "gen" setting, or returns fallback where there is none or
