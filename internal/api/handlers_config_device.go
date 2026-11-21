@@ -364,6 +364,17 @@ func (h *Handler) SetDeviceNewOverrides(w http.ResponseWriter, r *http.Request) 
 	if h.writeOverrideFieldErrors(rw, w, r, uint(id), &overrides) {
 		return
 	}
+	// The other secrets are kept field by field and a record that cannot be read can still be
+	// replaced. An action list is replaced whole, so a body that carries actions is refused and
+	// nothing is stored when the record cannot be read, as PATCH does.
+	if readErr != nil && overrides.Actions != nil {
+		if errors.Is(readErr, configuration.ErrDeviceNotFound) {
+			rw.WriteNotFoundError(w, r, "Device")
+			return
+		}
+		rw.WriteInternalError(w, r, readErr)
+		return
+	}
 	restoreMaskedSecrets(&overrides, stored)
 	keepOmittedSecrets(&overrides, stored, removed)
 
