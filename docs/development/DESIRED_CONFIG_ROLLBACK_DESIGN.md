@@ -170,7 +170,10 @@ text, so a version whose keys are in another order, such as one written by an ar
 path the target holds that the merged tree lacks, or holds with another value, is a loss. A path only the
 merged tree holds counts as equal when its value is a JSON zero (`false`, `0`, `""`, `null`, an empty
 object or list), because a plain field without `omitempty` can appear as its zero value; any other extra
-value is a difference. A loss refuses the rollback, names each path that would be lost, and writes
+value is a difference. Today only the `enable` field of `SleepConfig` and `BLEConfig` can appear this
+way (`typed_models.go:216`, `:223`), and Apply reads neither: the only other reader is the validator's
+presence check on `BleConfig` (`validator.go:508`). A change that sends either to a device must revisit
+this rule, because an added `false` would then be sent. A loss refuses the rollback, names each path that would be lost, and writes
 nothing. It adds no column to
 `devices` and no second mechanism. The rollback row keeps `previous_template_ids`.
 
