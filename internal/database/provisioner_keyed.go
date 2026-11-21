@@ -145,8 +145,10 @@ func (s *ProvisionerStore) RegisterKeyed(ctx context.Context, reg KeyedRegistrat
 				challenge, expires := hex.EncodeToString(raw), now.Add(challengeLifetime)
 				cur.Challenge, cur.ChallengeExpiresAt = &challenge, &expires
 				out = KeyedResult{Outcome: OutcomeChallenge, Agent: cur, Challenge: challenge}
+				// UpdateColumns, not Updates: Updates also moves updated_at, and the note says nothing but the
+				// challenge is written here.
 				return tx.Model(&ProvisionerAgent{}).Where("id = ?", cur.ID).
-					Updates(map[string]any{"challenge": challenge, "challenge_expires_at": expires}).Error
+					UpdateColumns(map[string]any{"challenge": challenge, "challenge_expires_at": expires}).Error
 			}
 			if err = verifyChallenge(cur, reg, fp, key, now); err != nil {
 				return err

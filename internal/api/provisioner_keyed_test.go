@@ -89,6 +89,27 @@ func TestKeyedRegister_FormatIsCheckedBeforeAnyRow(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, code)
 }
 
+// PostgreSQL refuses a NUL in text, and a keyed register inserts before it reads the row's state, so a NUL in
+// any reported value is a 400 at the handler for every state, never a 500.
+func TestKeyedRegister_NULInAReportedValueIs400(t *testing.T) {
+	srv, db := idServer(t)
+	priv := kdKey(0xa7)
+	id := kdID(priv)
+	key := hex.EncodeToString(priv.Public().(ed25519.PublicKey))
+	for name, fields := range map[string]string{
+		"hostname":       `"hostname":"h\u0000"`,
+		"version":        `"hostname":"h","version":"v\u0000"`,
+		"a capability":   `"hostname":"h","capabilities":["a\u0000"]`,
+		"a metadata key": `"hostname":"h","metadata":{"k\u0000":"v"}`,
+		"a metadata val": `"hostname":"h","metadata":{"k":"v\u0000"}`,
+	} {
+		code, resp := idCall(t, srv, "POST", "/api/v1/provisioner/agents/register",
+			`{"id":"`+id+`","public_key":"`+key+`",`+fields+`}`, idAgentHdr(""))
+		assert.Equal(t, http.StatusBadRequest, code, "%s: %s", name, resp)
+	}
+	assert.EqualValues(t, 0, kdRows(t, db), "a refused value writes no row")
+}
+
 func TestKeyedRegister_TheWholeEnrolment(t *testing.T) {
 	srv, db := idServer(t)
 	admin := idAdminHdr()
@@ -138,6 +159,12 @@ func TestKeyedRegister_TheWholeEnrolment(t *testing.T) {
 	require.NotEmpty(t, token, body)
 	assert.Equal(t, "registered", data["status"])
 	assert.NotEmpty(t, data["registered_at"])
+	fields := make([]string, 0, len(data))
+	for k := range data {
+		fields = append(fields, k)
+	}
+	assert.ElementsMatch(t, []string{"agent_id", "agent_token", "registered_at", "status", "message"}, fields,
+		"the 201 has the fields of a keyless register's, no more")
 	code, _ = idCall(t, srv, "GET", "/api/v1/provisioner/agents/"+id+"/tasks", "", idAgentHdr(token))
 	assert.Equal(t, http.StatusOK, code, "the issued token polls")
 
