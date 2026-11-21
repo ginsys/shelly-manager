@@ -272,17 +272,9 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 		}, fmt.Errorf("backup failed: %s", backupResult.Error)
 	}
 
-	// Calculate file size and checksum
-	file := filepath.Join(rel, filename)
-	fileInfo, err := root.Stat(file)
-	if err != nil {
-		return nil, fmt.Errorf("backup file cannot be read back through the backup directory: %w", err)
-	}
-	fileSize := fileInfo.Size()
-	checksum, err := sync.FileSHA256(root, file)
-	if err != nil {
-		return nil, fmt.Errorf("backup file cannot be read back through the backup directory: %w", err)
-	}
+	// The provider counted and hashed the bytes it wrote to the file opened through the root.
+	fileSize := backupResult.Size
+	checksum := backupResult.Checksum
 
 	if b != nil && b.logger != nil {
 		b.logger.Info("Backup export completed",

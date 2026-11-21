@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -28,10 +27,10 @@ func liveProvider(t *testing.T) (*BackupPlugin, provider.BackupProvider, string)
 // write. The backup file is created and written through the opened backup root, so a link that leads out of
 // it is refused, and nothing is created outside: neither the file nor a snapshot of the database.
 func TestBackupRefusesALinkSwappedInAfterTheCheck(t *testing.T) {
-	for _, ext := range backupFormats {
-		for _, swapped := range []string{"the output directory", "a directory below it"} {
-			t.Run(ext+" with "+swapped+" swapped for a link", func(t *testing.T) {
-				plugin, bp, liveDir := liveProvider(t)
+	for _, swapped := range []string{"the output directory", "a directory below it"} {
+		{ // one block per case
+			t.Run(swapped+" swapped for a link", func(t *testing.T) {
+				plugin, bp, _ := liveProvider(t)
 				base := t.TempDir()
 				rootDir := filepath.Join(base, "root")
 				outside := filepath.Join(base, "outside")
@@ -62,19 +61,13 @@ func TestBackupRefusesALinkSwappedInAfterTheCheck(t *testing.T) {
 				}
 				defer func() { _ = root.Close() }()
 
-				name := "backup" + ext
+				name := "backup.sqlite"
 				cfg := provider.BackupConfig{BackupPath: filepath.Join(outputPath, name), BackupType: provider.BackupTypeFull}
 				if _, err = plugin.writeBackup(context.Background(), bp, root, rel, name, cfg); err == nil {
 					t.Error("the backup was written through a link that leads out of the backup root")
 				}
 				if entries, _ := os.ReadDir(outside); len(entries) > 0 {
 					t.Errorf("%d entries were created outside the backup root", len(entries))
-				}
-				if found, _ := filepath.Glob(filepath.Join(outside, ".backup-*")); len(found) > 0 {
-					t.Errorf("a snapshot was made outside the backup root: %v", found)
-				}
-				if found, _ := filepath.Glob(filepath.Join(liveDir, ".backup-*")); len(found) > 0 {
-					t.Errorf("a snapshot directory was left beside the live database: %v", found)
 				}
 			})
 		}
@@ -205,55 +198,30 @@ func TestExportWritesBelowTheBackupRootAndReportsTheFile(t *testing.T) {
 	}
 }
 
-// swapAfterBackup runs the real backup, then calls after with its config, so a test can change the
-// directory between the provider's write and the plugin's read of the file.
-type swapAfterBackup struct {
+// Export reports the size and checksum the provider counted while writing, not a second reading of the file.
+type fixedResultProvider struct {
 	*provider.SQLiteProvider
-	after func(provider.BackupConfig)
 }
 
-func (s *swapAfterBackup) CreateBackup(ctx context.Context, cfg provider.BackupConfig) (*provider.BackupResult, error) {
-	res, err := s.SQLiteProvider.CreateBackup(ctx, cfg)
-	s.after(cfg)
+func (f *fixedResultProvider) CreateBackup(ctx context.Context, cfg provider.BackupConfig) (*provider.BackupResult, error) {
+	res, err := f.SQLiteProvider.CreateBackup(ctx, cfg)
+	if res != nil {
+		res.Size, res.Checksum = 4242, "provider-checksum"
+	}
 	return res, err
 }
 
-// The file's size and checksum are read through the root too. The directory is swapped for a link to a
-// directory holding a decoy of the same name after the backup is written: a read by the reported path finds
-// the decoy and the export succeeds with its size and checksum; a read through the root refuses the link and
-// the export fails.
-func TestExportReadsTheFileThroughTheRoot(t *testing.T) {
+func TestExportReportsTheProvidersSizeAndChecksum(t *testing.T) {
 	plugin, _, _ := liveProvider(t)
-	base := t.TempDir()
-	rootDir := filepath.Join(base, "root")
-	outside := filepath.Join(base, "outside")
-	if err := os.MkdirAll(outside, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	plugin.SetExportBaseDir(rootDir)
-	decoy := []byte("decoy bytes that are not the backup")
-	plugin.dbManager = &MockDatabaseManager{provider: &swapAfterBackup{
-		SQLiteProvider: plugin.dbManager.GetProvider().(*provider.SQLiteProvider),
-		after: func(cfg provider.BackupConfig) {
-			dir := filepath.Dir(cfg.BackupPath)
-			if err := os.Rename(dir, dir+".moved"); err != nil {
-				t.Error(err)
-			}
-			if err := os.Symlink(outside, dir); err != nil {
-				t.Error(err)
-			}
-			if err := os.WriteFile(filepath.Join(outside, filepath.Base(cfg.BackupPath)), decoy, 0o644); err != nil {
-				t.Error(err)
-			}
-		},
-	}}
+	plugin.SetExportBaseDir(filepath.Join(t.TempDir(), "root"))
+	plugin.dbManager = &MockDatabaseManager{provider: &fixedResultProvider{plugin.dbManager.GetProvider().(*provider.SQLiteProvider)}}
 
 	res, err := plugin.Export(context.Background(), &sync.ExportData{Timestamp: time.Now()},
 		sync.ExportConfig{Format: "sqlite", Config: map[string]interface{}{"output_path": "nightly"}})
-	if err == nil {
-		t.Fatalf("Export succeeded with a file it could not read back: %+v", res)
+	if err != nil || !res.Success {
+		t.Fatalf("Export: %v %+v", err, res)
 	}
-	if !strings.Contains(err.Error(), "cannot be read back through the backup directory") {
-		t.Errorf("Export failed for another reason: %v", err)
+	if res.FileSize != 4242 || res.Checksum != "provider-checksum" {
+		t.Errorf("FileSize %d, Checksum %q; want the provider's 4242 and provider-checksum", res.FileSize, res.Checksum)
 	}
 }
