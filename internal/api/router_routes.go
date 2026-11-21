@@ -154,6 +154,8 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 
 	// Desired config and apply routes. Apply also checks the key in its own handler.
 	api.HandleFunc("/devices/{id}/desired-config", admin(handler.GetDeviceDesiredConfig)).Methods("GET")
+	api.HandleFunc("/devices/{id}/desired-config/history", admin(handler.GetDeviceDesiredHistory)).Methods("GET")
+	api.HandleFunc("/devices/{id}/config/new/rollback", admin(handler.RollbackDeviceDesiredConfig)).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/new/apply", handler.ApplyDeviceNewConfig).Methods("POST")
 	api.HandleFunc("/devices/{id}/config/new/status", admin(handler.GetDeviceNewConfigStatus)).Methods("GET")
 	api.HandleFunc("/devices/{id}/config/new/verify", admin(handler.VerifyDeviceNewConfig)).Methods("POST")

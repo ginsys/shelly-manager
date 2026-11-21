@@ -321,6 +321,15 @@ func (r *GormConfigRepository) GetDesiredHistory(deviceID, historyID uint) (*Des
 	return &row, nil
 }
 
+// ListDesiredHistory reads a device's versions, newest first. The id breaks a tie of equal times.
+func (r *GormConfigRepository) ListDesiredHistory(deviceID uint) ([]DesiredConfigHistory, error) {
+	var rows []DesiredConfigHistory
+	if err := r.db.Where("device_id = ?", deviceID).Order("created_at DESC, id DESC").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("failed to list the desired configuration versions: %w", err)
+	}
+	return rows, nil
+}
+
 // RollbackDeviceDesired is SetDeviceDesiredConfigPending for a rollback, which changes the template ids
 // and the overrides as well as the desired text. It applies only while the device still holds read and
 // writes the history row in the same transaction. On a miss the recount asks whether the device already

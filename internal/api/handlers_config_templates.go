@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -634,16 +633,6 @@ func urlListSlot(p **[]string) secretSlot {
 	}
 }
 
-// actionSlotBase is the slot key of an action by its identity. The name is quoted, so a dotted name
-// cannot read as another key.
-func actionSlotBase(entry configuration.ActionConfig) string {
-	return fmt.Sprintf("actions.%q.%d.secret_urls", entry.Name, entry.Index)
-}
-
-// duplicateActionSlotMark follows the base key of an entry whose identity is shared with another
-// entry of the same config, then the entry's list position.
-const duplicateActionSlotMark = ".secret_urls#"
-
 // addActionSlots adds one slot per action entry, so every entry is masked whatever its identity. The
 // key is the identity where it is unique in the config. Where two entries share one (stored data can:
 // only apply refuses it), each gets the key with its list position, and a key like that is never
@@ -653,26 +642,9 @@ func addActionSlots(slots map[string]secretSlot, config *configuration.DeviceCon
 		return
 	}
 	entries := *config.Actions
-	for i, key := range actionSlotKeys(entries) {
+	for i, key := range configuration.ActionSlotKeys(entries) {
 		slots[key] = urlListSlot(&entries[i].SecretURLs)
 	}
-}
-
-// actionSlotKeys returns the slot key of each entry, by position.
-func actionSlotKeys(entries []configuration.ActionConfig) []string {
-	count := map[string]int{}
-	for _, entry := range entries {
-		count[actionSlotBase(entry)]++
-	}
-	keys := make([]string, len(entries))
-	for i, entry := range entries {
-		key := actionSlotBase(entry)
-		if count[key] > 1 {
-			key = strings.TrimSuffix(key, ".secret_urls") + duplicateActionSlotMark + strconv.Itoa(i)
-		}
-		keys[i] = key
-	}
-	return keys
 }
 
 // actionNullMark names the list of the action at a position of the body, as matchSecretNulls finds it
@@ -682,7 +654,7 @@ func actionNullMark(position int) string { return "actions#" + strconv.Itoa(posi
 // restorableSlot reports whether the stored slot at path may hand its value to an incoming one. An
 // action whose identity is shared by two entries on either side has no counterpart to restore from.
 func restorableSlot(path string) bool {
-	return !strings.Contains(path, duplicateActionSlotMark)
+	return !strings.Contains(path, configuration.DuplicateActionSlotMark)
 }
 
 // maskSecrets replaces each secret that is set with secretMask. A secret that is absent or empty
@@ -869,7 +841,7 @@ func actionRemovals(incoming *configuration.DeviceConfiguration, removed map[str
 	for path := range removed {
 		gone[path] = removed[path]
 	}
-	for i, key := range actionSlotKeys(*incoming.Actions) {
+	for i, key := range configuration.ActionSlotKeys(*incoming.Actions) {
 		if removed[actionNullMark(i)] {
 			gone[key] = true
 		}

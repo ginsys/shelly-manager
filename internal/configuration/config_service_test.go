@@ -165,6 +165,10 @@ func (m *mockRepository) GetDesiredHistory(uint, uint) (*DesiredConfigHistory, e
 	return nil, ErrHistoryNotFound
 }
 
+func (m *mockRepository) ListDesiredHistory(uint) ([]DesiredConfigHistory, error) {
+	return nil, nil
+}
+
 func (m *mockRepository) RollbackDeviceDesired(uint, DesiredRead, DesiredWrite, uint) error {
 	return errors.New("the mock repository keeps no history")
 }

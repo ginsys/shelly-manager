@@ -83,6 +83,8 @@ type ConfigRepository interface {
 	// GetDesiredHistory returns one version of the device's desired configuration, or
 	// ErrHistoryNotFound when the id is not one of this device's.
 	GetDesiredHistory(deviceID, historyID uint) (*DesiredConfigHistory, error)
+	// ListDesiredHistory returns the device's versions, newest first.
+	ListDesiredHistory(deviceID uint) ([]DesiredConfigHistory, error)
 	// RollbackDeviceDesired stores a rollback's template ids, overrides and desired configuration,
 	// pending, with its history row, in one transaction, and only while the device still holds read.
 	RollbackDeviceDesired(deviceID uint, read DesiredRead, write DesiredWrite, restoredFrom uint) error
@@ -398,6 +400,15 @@ func (s *ConfigurationService) SetDeviceOverrides(deviceID uint, overrides *Devi
 	}).Info("Device overrides updated")
 
 	return nil
+}
+
+// ListDesiredHistory returns the device's desired configuration versions, newest first, with the stored
+// (already masked) texts. A device that does not exist is ErrDeviceNotFound.
+func (s *ConfigurationService) ListDesiredHistory(deviceID uint) ([]DesiredConfigHistory, error) {
+	if _, err := s.repo.GetDevice(deviceID); err != nil {
+		return nil, fmt.Errorf("failed to get device: %w", err)
+	}
+	return s.repo.ListDesiredHistory(deviceID)
 }
 
 func (s *ConfigurationService) GetDeviceOverrides(deviceID uint) (*DeviceConfiguration, error) {

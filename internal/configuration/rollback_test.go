@@ -47,7 +47,7 @@ func TestRollbackDesired_ReplacesAndDetachesTemplates(t *testing.T) {
 	rollbackDevice(t, db, 1, "[7]", `{"wifi":{"ssid":"x"}}`, `{"mqtt":{"server":"a.example"},"wifi":{"ssid":"x"}}`)
 	version := addVersion(t, db, 1, str(`{"mqtt":{"server":"b.example"}}`))
 
-	res, err := rollbackService(db).RollbackDesired(1, version)
+	res, err := rollbackService(db).RollbackDesired(1, version, nil)
 	require.NoError(t, err)
 	assert.False(t, res.NoChange)
 	assert.Equal(t, []uint{7}, res.DetachedTemplateIDs)
@@ -64,7 +64,7 @@ func TestRollbackDesired_SurvivesARecompute(t *testing.T) {
 	rollbackDevice(t, db, 1, "[7]", `{"wifi":{"ssid":"x"}}`, `{"mqtt":{"server":"a.example"},"wifi":{"ssid":"x"}}`)
 	version := addVersion(t, db, 1, str(`{"mqtt":{"server":"b.example"}}`))
 	svc := rollbackService(db)
-	_, err := svc.RollbackDesired(1, version)
+	_, err := svc.RollbackDesired(1, version, nil)
 	require.NoError(t, err)
 
 	require.NoError(t, svc.RecomputeDesiredConfig(1))
@@ -75,7 +75,7 @@ func TestRollbackDesired_WritesTheRollbackRow(t *testing.T) {
 	db := historyDB(t)
 	rollbackDevice(t, db, 1, "[7]", `{}`, `{"mqtt":{"server":"a.example"}}`)
 	version := addVersion(t, db, 1, str(`{"mqtt":{"server":"b.example"}}`))
-	_, err := rollbackService(db).RollbackDesired(1, version)
+	_, err := rollbackService(db).RollbackDesired(1, version, nil)
 	require.NoError(t, err)
 
 	rows := historyRows(t, db, 1)
@@ -100,15 +100,15 @@ func TestRollbackDesired_AVersionIsNoSourceWhenNullOrAnotherDevices(t *testing.T
 	svc := rollbackService(db)
 
 	null := addVersion(t, db, 1, nil)
-	_, err := svc.RollbackDesired(1, null)
+	_, err := svc.RollbackDesired(1, null, nil)
 	assert.ErrorIs(t, err, ErrVersionNotRestorable)
 
 	other := addVersion(t, db, 2, str(`{"mqtt":{"server":"z.example"}}`))
-	_, err = svc.RollbackDesired(1, other)
+	_, err = svc.RollbackDesired(1, other, nil)
 	assert.ErrorIs(t, err, ErrHistoryNotFound, "another device's version")
-	_, err = svc.RollbackDesired(1, 9999)
+	_, err = svc.RollbackDesired(1, 9999, nil)
 	assert.ErrorIs(t, err, ErrHistoryNotFound)
-	_, err = svc.RollbackDesired(77, null)
+	_, err = svc.RollbackDesired(77, null, nil)
 	assert.ErrorIs(t, err, ErrDeviceNotFound)
 
 	assert.JSONEq(t, `{"mqtt":{"server":"a.example"}}`, deviceRow(t, db, 1).DesiredConfig)
@@ -121,7 +121,7 @@ func TestRollbackDesired_AnyPlaceholderRefusesAndNamesItsPath(t *testing.T) {
 		paths  []string
 	}{
 		"a secret slot":         {`{"mqtt":{"server":"a","pass":"` + secrets.Placeholder + `"}}`, []string{"mqtt.pass"}},
-		"a list entry":          {`{"actions":[{"name":"x","secret_urls":"` + secrets.Placeholder + `"}]}`, []string{"actions.0.secret_urls"}},
+		"a list entry":          {`{"actions":[{"name":"x","secret_urls":"` + secrets.Placeholder + `"}]}`, []string{`actions."x".0.secret_urls`}},
 		"a key that is no slot": {`{"system":{"device":{"name":"` + secrets.Placeholder + `"}}}`, []string{"system.device.name"}},
 		"several, sorted": {`{"wifi":{"password":"` + secrets.Placeholder + `"},"auth":{"pass":"` + secrets.Placeholder + `"}}`,
 			[]string{"auth.pass", "wifi.password"}},
@@ -132,7 +132,7 @@ func TestRollbackDesired_AnyPlaceholderRefusesAndNamesItsPath(t *testing.T) {
 			rollbackDevice(t, db, 1, "[7]", `{}`, `{"mqtt":{"server":"a.example"}}`)
 			version := addVersion(t, db, 1, str(tc.target))
 
-			_, err := rollbackService(db).RollbackDesired(1, version)
+			_, err := rollbackService(db).RollbackDesired(1, version, nil)
 			rerr := requireRollbackError(t, err, RollbackNeedsSecrets)
 			assert.Equal(t, tc.paths, rerr.Paths)
 
@@ -154,7 +154,7 @@ func TestRollbackDesired_AStaleReadLosesAndWritesNoRow(t *testing.T) {
 	}}
 	svc := NewConfigurationService(repo, Engine{}, nil)
 
-	_, err := svc.RollbackDesired(1, version)
+	_, err := svc.RollbackDesired(1, version, nil)
 	assert.ErrorIs(t, err, ErrDesiredChanged)
 	assert.Equal(t, 1, repo.writes, "one attempt, no retry")
 	assert.JSONEq(t, `{"mqtt":{"server":"edited.example"}}`, deviceRow(t, db, 1).Overrides)
@@ -180,7 +180,7 @@ func TestRollbackDesired_TheRoundTrip(t *testing.T) {
 		db := historyDB(t)
 		rollbackDevice(t, db, 1, "[]", `{}`, `{}`)
 		version := addVersion(t, db, 1, str(`{"system":{"sntp":{"server":"time.example"}}}`))
-		_, err := rollbackService(db).RollbackDesired(1, version)
+		_, err := rollbackService(db).RollbackDesired(1, version, nil)
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"system":{"sntp":{"server":"time.example"}}}`, deviceRow(t, db, 1).DesiredConfig)
 	})
@@ -189,7 +189,7 @@ func TestRollbackDesired_TheRoundTrip(t *testing.T) {
 		db := historyDB(t)
 		rollbackDevice(t, db, 1, "[7]", `{}`, `{"mqtt":{"server":"a.example"}}`)
 		version := addVersion(t, db, 1, str(`{"system":{"sntp":{"server":""}}}`))
-		_, err := rollbackService(db).RollbackDesired(1, version)
+		_, err := rollbackService(db).RollbackDesired(1, version, nil)
 		rerr := requireRollbackError(t, err, RollbackLoss)
 		assert.Equal(t, []string{"system.sntp.server"}, rerr.Paths)
 		device := deviceRow(t, db, 1)
@@ -202,7 +202,7 @@ func TestRollbackDesired_TheRoundTrip(t *testing.T) {
 		db := historyDB(t)
 		rollbackDevice(t, db, 1, "[]", `{}`, `{}`)
 		version := addVersion(t, db, 1, str(`{"mqtt":{"server":"a"},"made_up":{"x":1}}`))
-		_, err := rollbackService(db).RollbackDesired(1, version)
+		_, err := rollbackService(db).RollbackDesired(1, version, nil)
 		rerr := requireRollbackError(t, err, RollbackLoss)
 		assert.Equal(t, []string{"made_up"}, rerr.Paths)
 	})
@@ -217,7 +217,7 @@ func TestRollbackDesired_TheRoundTrip(t *testing.T) {
 
 		setOverrides(t, db, 1, mqttOverride("b.example", ""))
 		require.NoError(t, svc.RecomputeDesiredConfig(1))
-		_, err := svc.RollbackDesired(1, written.ID)
+		_, err := svc.RollbackDesired(1, written.ID, nil)
 		require.NoError(t, err)
 		assert.JSONEq(t, *written.NewDesired, deviceRow(t, db, 1).DesiredConfig)
 	})
@@ -226,7 +226,7 @@ func TestRollbackDesired_TheRoundTrip(t *testing.T) {
 		db := historyDB(t)
 		rollbackDevice(t, db, 1, "[]", `{}`, `{}`)
 		version := addVersion(t, db, 1, str(`{"system":{"sntp":{"server":"t"}},"mqtt":{"server":"m"},"wifi":{"ssid":"s"}}`))
-		_, err := rollbackService(db).RollbackDesired(1, version)
+		_, err := rollbackService(db).RollbackDesired(1, version, nil)
 		require.NoError(t, err)
 	})
 
@@ -235,7 +235,7 @@ func TestRollbackDesired_TheRoundTrip(t *testing.T) {
 		rollbackDevice(t, db, 1, "[]", `{}`, `{}`)
 		// The typed model writes system.sleep_mode.enable without omitempty.
 		version := addVersion(t, db, 1, str(`{"system":{"sleep_mode":{"period":5}}}`))
-		_, err := rollbackService(db).RollbackDesired(1, version)
+		_, err := rollbackService(db).RollbackDesired(1, version, nil)
 		require.NoError(t, err)
 		assert.Contains(t, deviceRow(t, db, 1).DesiredConfig, `"enable":false`)
 	})
@@ -245,7 +245,7 @@ func TestRollbackDesired_TheRoundTrip(t *testing.T) {
 		rollbackDevice(t, db, 1, "[7]", `{}`, `{}`)
 		version := addVersion(t, db, 1, str(`{"mqtt":{"server":"m"}}`))
 		svc := NewConfigurationService(NewGormConfigRepository(db, nil), injectingMerger{}, nil)
-		_, err := svc.RollbackDesired(1, version)
+		_, err := svc.RollbackDesired(1, version, nil)
 		rerr := requireRollbackError(t, err, RollbackLoss)
 		assert.Equal(t, []string{"wifi.ssid"}, rerr.Paths)
 		assert.Equal(t, "[7]", deviceRow(t, db, 1).TemplateIDs)
@@ -272,7 +272,7 @@ func TestRollbackDesired_AnEqualRollbackWritesNothing(t *testing.T) {
 			db := historyDB(t)
 			rollbackDevice(t, db, 1, templates, target, target)
 			version := addVersion(t, db, 1, str(target))
-			res, err := rollbackService(db).RollbackDesired(1, version)
+			res, err := rollbackService(db).RollbackDesired(1, version, nil)
 			require.NoError(t, err)
 			assert.True(t, res.NoChange)
 			device := deviceRow(t, db, 1)
@@ -286,7 +286,7 @@ func TestRollbackDesired_AnEqualRollbackWritesNothing(t *testing.T) {
 		db := historyDB(t)
 		rollbackDevice(t, db, 1, "[3]", target, target)
 		version := addVersion(t, db, 1, str(target))
-		res, err := rollbackService(db).RollbackDesired(1, version)
+		res, err := rollbackService(db).RollbackDesired(1, version, nil)
 		require.NoError(t, err)
 		assert.False(t, res.NoChange)
 		assert.Equal(t, "[]", deviceRow(t, db, 1).TemplateIDs)
@@ -304,16 +304,16 @@ func TestRollbackDesired_ASecretStaysOutOfEveryOutput(t *testing.T) {
 	current := `{"mqtt":{"server":"a.example","pass":"` + sentinel + `"}}`
 	rollbackDevice(t, db, 1, "[]", current, current)
 	svc := rollbackService(db)
-	maskedVersion := addVersion(t, db, 1, str(`{"mqtt":{"server":"a.example","pass":"`+secrets.Placeholder+`"}}`))
+	maskedVersion := addVersion(t, db, 1, str(`{"mqtt":{"server":"b.example","pass":"`+secrets.Placeholder+`"}}`))
 	cleanVersion := addVersion(t, db, 1, str(`{"mqtt":{"server":"c.example"}}`))
 
-	_, err := svc.RollbackDesired(1, maskedVersion)
+	_, err := svc.RollbackDesired(1, maskedVersion, nil)
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), sentinel)
 	rerr := requireRollbackError(t, err, RollbackNeedsSecrets)
 	assert.NotContains(t, strings.Join(rerr.Paths, " "), sentinel)
 
-	res, err := svc.RollbackDesired(1, cleanVersion)
+	res, err := svc.RollbackDesired(1, cleanVersion, nil)
 	require.NoError(t, err)
 	assert.NotContains(t, fmt.Sprintf("%+v", res), sentinel)
 	for _, row := range historyRows(t, db, 1) {

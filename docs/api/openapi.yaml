@@ -1824,6 +1824,131 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
 
+  /api/v1/devices/{id}/desired-config/history:
+    get:
+      tags: [Configuration]
+      summary: List the versions of the desired configuration of a device
+      operationId: getDeviceDesiredHistory
+      description: >-
+        Needs the admin key when the server has one configured. The last 50 versions, newest
+        first. A rollback is one of them, with action "rollback".
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: >-
+            data.history is a list of id, created_at, action (recompute, import or rollback),
+            changed_by, restored_from (the version a rollback restored, else null) and
+            new_desired (the stored text of that version, with every secret masked as
+            "********", or null where no text could be stored).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: Invalid device ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
+  /api/v1/devices/{id}/config/new/rollback:
+    post:
+      tags: [Configuration]
+      summary: Make a stored version the desired configuration of a device
+      operationId: rollbackDeviceDesiredConfig
+      description: >-
+        Needs the admin key when the server has one configured. No device is contacted: the
+        device keeps what it has until an apply, and is shown as pending. The version becomes the
+        whole overrides text, the templates are detached, and the desired configuration is
+        recomputed from it. A history row with action "rollback" is written with it. A rollback
+        to what the device already holds writes nothing.
+
+        A history version holds no secret, so a secret is kept from the current desired
+        configuration only where the place it is sent to is unchanged: wifi.password while
+        wifi.ssid is equal, wifi.ap.pass while wifi.ap.ssid is equal, mqtt.pass while mqtt.server,
+        port, user, ssl_ca and enable_sni are equal, auth.pass while auth.user is equal, and
+        the two network.wifi passwords while their ssid is equal. wifi.ap.key and every action
+        URL list are always entered by the operator. For every other secret the route answers 409
+        with the paths, and the retry carries them in secrets.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [history_id]
+              properties:
+                history_id:
+                  type: integer
+                  description: A version of this device, from the history route.
+                secrets:
+                  type: object
+                  description: >-
+                    The secrets the 409 listed, keyed by its paths (mqtt.pass). A value is a
+                    non-empty string, or for an action URL list (actions."<name>".<index>.secret_urls)
+                    a non-empty list of non-empty strings. The mask, an empty value, an empty
+                    list or a key that is not on the list is 400. A value is never logged,
+                    echoed or stored in the history.
+                  additionalProperties: true
+      responses:
+        '200':
+          description: >-
+            data holds version_id, no_change, detached_template_ids and message: "Desired
+            configuration set to version N. The device is unchanged until you apply it."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '400':
+          description: >-
+            Invalid device ID, or a body that is not a JSON object with a non-zero history_id
+            and no repeated member, or secrets that are not an answer to the list. The answer
+            never repeats a value that was sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: Device not found, or the version is not one of this device's
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '409':
+          description: >-
+            Either the version holds secrets that must be entered (error.details.paths lists the
+            keys, nothing was written and no value is echoed), or the desired configuration
+            changed while the rollback was prepared: read it again and retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '422':
+          description: >-
+            The version cannot be restored as it is: it holds no stored text, or recomputing it
+            would change it (error.details.paths names the places).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+
   /api/v1/devices/{id}/config/new/status:
     get:
       tags: [Configuration]
