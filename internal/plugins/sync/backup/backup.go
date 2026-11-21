@@ -218,7 +218,7 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 		backupType = "full"
 	}
 
-	// The directory, the file, its size and its checksum go through the opened backup root.
+	// The directory and the file go through the opened backup root.
 	root, rel, err := sync.OpenOutputRoot(b.backupRoot(), outputPath)
 	if err != nil {
 		return nil, err
