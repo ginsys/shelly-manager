@@ -24,8 +24,8 @@ type DatabaseManagerInterface interface {
 	Close() error
 }
 
-// defaultBackupDir is the backup root when sync.export_base_dir is not set.
-const defaultBackupDir = "./data/backups"
+// DefaultBackupDir is the backup root when sync.export_base_dir is not set.
+const DefaultBackupDir = "./data/backups"
 
 // BackupPlugin implements the SyncPlugin interface for database backups
 type BackupPlugin struct {
@@ -50,7 +50,7 @@ func (b *BackupPlugin) SetExportBaseDir(dir string) {
 // directory otherwise (the engine has already made it absolute). Anything that is not inside the
 // root after cleaning is refused.
 func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
-	root := defaultBackupDir
+	root := DefaultBackupDir
 	if b.exportBaseDir != "" {
 		root = b.exportBaseDir
 	}
@@ -125,7 +125,7 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 			"output_path": {
 				Type:        "string",
 				Description: "Directory for backup files; must be inside sync.export_base_dir when set, else inside ./data/backups",
-				Default:     defaultBackupDir,
+				Default:     DefaultBackupDir,
 			},
 			"compression": {
 				Type:        "boolean",
@@ -153,7 +153,7 @@ func (b *BackupPlugin) ConfigSchema() sync.ConfigSchema {
 		Required: []string{},
 		Examples: []map[string]interface{}{
 			{
-				"output_path":        defaultBackupDir,
+				"output_path":        DefaultBackupDir,
 				"compression":        true,
 				"include_discovered": true,
 				"backup_type":        "full",

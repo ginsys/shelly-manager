@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/sync"
 	"github.com/ginsys/shelly-manager/internal/testutil"
@@ -84,4 +85,41 @@ func TestExportAndDownloadUseTheDefaultRootWhenNoneIsConfigured(t *testing.T) {
 	rr, _ = export(refused)
 	require.GreaterOrEqual(t, rr.Code, 400, rr.Body.String())
 	require.NoFileExists(t, refused)
+}
+
+// With no export root configured a backup is written to ./data/backups by the backup plugin, so a backup
+// recorded in the history is served from there, while any other plugin's file outside ./data/exports is not.
+func TestBackupDownloadWithNoRootIsServedFromTheBackupDirectory(t *testing.T) {
+	db, cleanup := testutil.TestDatabase(t)
+	defer cleanup()
+	logger, err := logging.New(logging.Config{Level: "error", Format: "text"})
+	require.NoError(t, err)
+	exp := NewSyncHandlers(sync.NewSyncEngine(db, logger), logger)
+	r := mux.NewRouter()
+	exp.AddExportRoutes(r.PathPrefix("/api/v1").Subrouter())
+
+	work := t.TempDir()
+	t.Chdir(work)
+	for _, dir := range []string{"exports", "backups", "elsewhere"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(work, "data", dir), 0o755))
+	}
+	record := func(id, plugin, dir string) {
+		file := filepath.Join(work, "data", dir, id+".txt")
+		require.NoError(t, os.WriteFile(file, []byte("x"), 0o600))
+		require.NoError(t, db.GetDB().Create(&database.ExportHistory{
+			ExportID: id, PluginName: plugin, Format: "txt", Success: true, FilePath: file,
+		}).Error)
+	}
+	record("bk", "backup", "backups")
+	record("bk-elsewhere", "backup", "elsewhere")
+	record("other", "mockfile", "backups")
+
+	download := func(path string) int {
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, httptest.NewRequest("GET", path, nil))
+		return rr.Code
+	}
+	require.Equal(t, http.StatusOK, download("/api/v1/export/backup/bk/download"))
+	require.Equal(t, http.StatusForbidden, download("/api/v1/export/backup/bk-elsewhere/download"))
+	require.Equal(t, http.StatusForbidden, download("/api/v1/export/json/other/download"), "only a backup may be served from the backup directory")
 }

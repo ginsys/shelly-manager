@@ -16,6 +16,7 @@ import (
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/plugins/sync/backup"
 	"github.com/ginsys/shelly-manager/internal/security/apikey"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
@@ -689,6 +690,15 @@ func (eh *SyncHandlers) DeleteGitOpsExport(w http.ResponseWriter, r *http.Reques
 	apiresp.NewResponseWriter(eh.logger).WriteNoContent(w, r)
 }
 
+// downloadRoot is the directory a file of the named plugin may be served from: the export root, except that
+// with none configured a backup lives where the backup plugin writes it, in its own default directory.
+func (eh *SyncHandlers) downloadRoot(pluginName string) string {
+	if eh.exportBaseDir == "" && pluginName == "backup" {
+		return backup.DefaultBackupDir
+	}
+	return eh.exportBaseDir
+}
+
 // serveExportByID fetches an export by ID and serves its file (if available)
 func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, id string) {
 	rw := apiresp.NewResponseWriter(eh.logger)
@@ -697,7 +707,7 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 		// Fallback to persisted history for file path
 		if rec, err := eh.syncEngine.GetExportHistory(r.Context(), id); err == nil && rec != nil {
 			if rec.FilePath != "" {
-				if _, err := sync.ResolveUnderRoot(eh.exportBaseDir, rec.FilePath); err != nil {
+				if _, err := sync.ResolveUnderRoot(eh.downloadRoot(rec.PluginName), rec.FilePath); err != nil {
 					rw.WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "Download path not allowed", nil)
 					return
 				}
@@ -713,7 +723,7 @@ func (eh *SyncHandlers) serveExportByID(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	// The file must lie inside the export root (the default one when none is configured)
-	if _, err := sync.ResolveUnderRoot(eh.exportBaseDir, res.OutputPath); err != nil {
+	if _, err := sync.ResolveUnderRoot(eh.downloadRoot(res.PluginName), res.OutputPath); err != nil {
 		rw.WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "Download path not allowed", nil)
 		return
 	}
