@@ -198,12 +198,15 @@ const fields = computed(() => {
 // A list of objects with an id (relays) is one fieldset per item, each item addressed by its id
 // (see config-form.ts). It shows the items of the inherited list and of the override list, and
 // offers no add or remove: the schema fixes no length, and how many channels there are is the
-// device's own. A list that cannot be addressed by id (two items of one id) stays a JSON box.
+// device's own. A list that cannot be addressed by id (two items of one id) stays a JSON box, and so does
+// a list whose items have no id field (actions, tariffs): the server merges a list by id only for items
+// that carry one, so an item edited by position would reach it without the fields the user did not touch.
 const inheritedList = computed(() => getAt(props.inherited, props.path))
 const ownList = computed(() => getAt(props.overrides, props.path))
 const addressable = computed(() =>
   [ownList.value, inheritedList.value].every(list => list === undefined || (Array.isArray(list) && listIds(list) !== null)))
-const isItemList = computed(() => props.schema.type === 'array' && !!props.schema.items?.properties && addressable.value)
+const isItemList = computed(() =>
+  props.schema.type === 'array' && !!props.schema.items?.properties?.id && addressable.value)
 const itemIds = computed(() => {
   const ids = new Set<number>()
   for (const list of [inheritedList.value, ownList.value]) {

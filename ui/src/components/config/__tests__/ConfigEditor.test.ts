@@ -762,6 +762,76 @@ describe('ConfigEditor', () => {
     })
   })
 
+  // A list whose items have no id (actions, tariffs) is one JSON box: the server merges a list by id only for
+  // items that carry one, and a first item cannot be added to a fieldset list.
+  describe('a list whose items have no id', () => {
+    const noIdSchema: ConfigSchema = {
+      type: 'object',
+      'x-device-type': 'SHPLG-S',
+      'x-apply-supported': true,
+      properties: {
+        actions: {
+          type: 'array',
+          title: 'Actions',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', enum: ['btn_on_url', 'out_on_url'], 'x-applicable': true },
+              index: { type: 'integer', minimum: 0, 'x-applicable': true },
+              secret_urls: { type: 'array', items: { type: 'string' }, 'x-applicable': true },
+            },
+          },
+        },
+        power_metering: {
+          type: 'object',
+          title: 'Power Metering',
+          properties: {
+            tariffs: {
+              type: 'array',
+              title: 'Tariffs',
+              items: {
+                type: 'object',
+                properties: { name: { type: 'string', 'x-applicable': false }, rate: { type: 'number', 'x-applicable': false } },
+              },
+            },
+          },
+        },
+      },
+    }
+
+    async function mountNoId(inherited: Record<string, any>) {
+      vi.mocked(getConfigSchema).mockResolvedValue(noIdSchema)
+      const wrapper = mountEditor({}, { inherited })
+      await flushPromises()
+      await openSection(wrapper, 'actions')
+      await openSection(wrapper, 'power_metering')
+      return wrapper
+    }
+
+    it('shows actions with nothing stored as a JSON box a first action can be written in', async () => {
+      const wrapper = await mountNoId({})
+      expect(wrapper.find('[data-path="actions"] textarea').exists()).toBe(true)
+      expect(wrapper.find('[data-note="no-items"]').exists()).toBe(false)
+    })
+
+    it('shows two inherited actions as a JSON box, and no edit puts an id in', async () => {
+      const wrapper = await mountNoId({ actions: [
+        { name: 'btn_on_url', index: 0, secret_urls: ['[REDACTED]'] },
+        { name: 'out_on_url', index: 0, secret_urls: ['[REDACTED]'] },
+      ] })
+      expect(wrapper.find('[data-path="actions"] textarea').exists()).toBe(true)
+      expect(wrapper.find('fieldset.item-list').exists()).toBe(false)
+      await wrapper.find('[data-path="actions"] textarea').setValue('[{"name":"btn_on_url","index":0,"secret_urls":[]}]')
+      expect(JSON.stringify(lastModel(wrapper) ?? {})).not.toContain('"id"')
+    })
+
+    it('shows tariffs without an id as a JSON box', async () => {
+      const wrapper = await mountNoId({ power_metering: { tariffs: [{ name: 'day', rate: 0.3 }, { name: 'night', rate: 0.2 }] } })
+      expect(wrapper.find('[data-path="power_metering.tariffs"] textarea').exists()).toBe(true)
+      expect(wrapper.find('fieldset.item-list').exists()).toBe(false)
+    })
+  })
+
   it('a field apply cannot write is read-only but its override can be reset', async () => {
     const wrapper = mountEditor({ relay: { default_state: 'on' } })
     await flushPromises()
