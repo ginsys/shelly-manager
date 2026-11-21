@@ -341,7 +341,7 @@ func checkDeleteAndPurge(t *testing.T, manager *Manager) {
 	assert.Equal(t, "failed", got.Status)
 	assert.NotEmpty(t, got.Config["_error"])
 
-	res, err := s.Purge(ctx, now, month, month)
+	res, err := s.Purge(ctx, now, month, 7*24*time.Hour, month)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, res.Agents, int64(2), "pg-gone and pg-gone-assigned")
 	assert.GreaterOrEqual(t, res.Tasks, int64(2), "pg-old-completed and pg-old-failed")
@@ -443,7 +443,7 @@ func checkCreateWaitsForPurge(t *testing.T, manager *Manager) {
 	}
 	purgeDone := make(chan error, 1)
 	go func() {
-		_, err := holder.Purge(ctx, now, month, month)
+		_, err := holder.Purge(ctx, now, month, 7*24*time.Hour, month)
 		purgeDone <- err
 	}()
 	<-locked

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -412,8 +413,17 @@ func (s *ProvisionerStore) CancelTask(ctx context.Context, taskID string, now ti
 // with config["_error"] = reason: nobody will deliver them again, and the UI shows why. A pending task
 // stays, so an agent that registers the id again still receives it.
 func removeAgent(tx *gorm.DB, agent ProvisionerAgent, reason string, now time.Time) error {
+	if err := failStranded(tx, agent.AgentID, reason, now); err != nil {
+		return err
+	}
+	return tx.Delete(&ProvisionerAgent{}, agent.ID).Error
+}
+
+// failStranded fails the assigned and in-progress tasks of the agent, with config["_error"] = reason. The
+// agent's row is locked by the caller. Delete, purge and reject share it.
+func failStranded(tx *gorm.DB, agentID, reason string, now time.Time) error {
 	var stranded []ProvisioningTask
-	if err := tx.Clauses(forUpdate()).Where("agent_id = ? AND status IN ?", agent.AgentID, []string{"assigned", "in_progress"}).
+	if err := tx.Clauses(forUpdate()).Where("agent_id = ? AND status IN ?", agentID, []string{"assigned", "in_progress"}).
 		Find(&stranded).Error; err != nil {
 		return err
 	}
@@ -428,7 +438,34 @@ func removeAgent(tx *gorm.DB, agent ProvisionerAgent, reason string, now time.Ti
 			return err
 		}
 	}
-	return tx.Delete(&ProvisionerAgent{}, agent.ID).Error
+	return nil
+}
+
+// endApprovedSession ends the session of an approved agent that stayed silent: its token is replaced by one
+// nobody was given, its status reads offline and its stranded tasks fail. The row, its key and its approval
+// stay, so the agent's next start answers a signed challenge with no operator step.
+func endApprovedSession(tx *gorm.DB, agent ProvisionerAgent, now time.Time) error {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return err
+	}
+	if err := failStranded(tx, agent.AgentID, "the agent was silent too long and its session ended", now); err != nil {
+		return err
+	}
+	return tx.Model(&ProvisionerAgent{}).Where("id = ?", agent.ID).
+		Updates(map[string]any{"token_hash": HashAgentToken(hex.EncodeToString(raw)), "status": "offline"}).Error
+}
+
+// purgeSilence is how long a row in this state must be silent before the purge acts on it, and whether the
+// purge ever acts on it. A preapproved or rejected row, and a state this code does not know, is never touched.
+func purgeSilence(state string, silentFor, pendingSilentFor time.Duration) (time.Duration, bool) {
+	switch state {
+	case EnrolmentLegacy, EnrolmentApproved:
+		return silentFor, true
+	case EnrolmentPending:
+		return pendingSilentFor, true
+	}
+	return 0, false
 }
 
 // DeleteAgent removes an agent, which frees its id and revokes its token (ErrAgentNotFound if there is
@@ -447,17 +484,21 @@ func (s *ProvisionerStore) DeleteAgent(ctx context.Context, agentID string, now 
 	})
 }
 
-// PurgeResult is what one Purge removed.
+// PurgeResult is what one Purge did: Agents rows removed, Expired approved rows whose session it ended (the
+// rows stay), Tasks finished tasks deleted.
 type PurgeResult struct {
-	Agents, Tasks int64
+	Agents, Expired, Tasks int64
 }
 
-// Purge removes the agents last seen before now-silentFor that have no pending task (their assigned and
-// in-progress tasks are failed, as in DeleteAgent), and the completed and failed tasks last updated before
-// now-keepFinished. Each agent goes in its own transaction, which locks the agent row first as every other
-// operation does and checks the conditions again under that lock, so an agent that registered or polled
-// meanwhile stays. It keeps going past a failure and returns the first error.
-func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, keepFinished time.Duration) (PurgeResult, error) {
+// Purge acts on the agents that stayed silent, by enrolment state, and deletes the completed and failed
+// tasks last updated before now-keepFinished. A legacy row (or one with no state) silent for silentFor, and
+// a pending row silent for pendingSilentFor, is removed when it has no pending task, and its assigned and
+// in-progress tasks are failed, as in DeleteAgent. An approved row silent for silentFor keeps its row, key
+// and approval: its session ends once (see endApprovedSession) and Expired counts it. A preapproved or
+// rejected row is never touched. Each agent goes in its own transaction, which locks the agent row first as
+// every other operation does and reads its state and age again under that lock, so an agent that registered
+// or polled meanwhile stays. It keeps going past a failure and returns the first error.
+func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, pendingSilentFor, keepFinished time.Duration) (PurgeResult, error) {
 	var res PurgeResult
 	var first error
 	note := func(err error) {
@@ -465,20 +506,45 @@ func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, 
 			first = err
 		}
 	}
-	cutoff := now.Add(-silentFor)
+	// The candidates are the rows silent for the shortest of the two periods; the row's own state and period
+	// are read again under its lock.
+	shortest := silentFor
+	if pendingSilentFor < shortest {
+		shortest = pendingSilentFor
+	}
 	var silent []string
-	if err := s.db.WithContext(ctx).Model(&ProvisionerAgent{}).Where("last_seen < ?", cutoff).Pluck("agent_id", &silent).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&ProvisionerAgent{}).
+		Where("last_seen < ? AND (enrolment_state IS NULL OR enrolment_state NOT IN ?)", now.Add(-shortest), []string{EnrolmentPreapproved, EnrolmentRejected}).
+		Pluck("agent_id", &silent).Error; err != nil {
 		note(err)
 	}
 	for _, id := range silent {
 		err := s.tx(ctx, func(tx *gorm.DB) error {
 			var agent ProvisionerAgent
-			err := tx.Clauses(forUpdate()).Where("agent_id = ? AND last_seen < ?", id, cutoff).First(&agent).Error
+			err := tx.Clauses(forUpdate()).Where("agent_id = ?", id).First(&agent).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil
 			}
 			if err != nil {
 				return err
+			}
+			period, acts := purgeSilence(agent.State(), silentFor, pendingSilentFor)
+			if !acts || !agent.LastSeen.Before(now.Add(-period)) {
+				return nil
+			}
+			if agent.State() == EnrolmentApproved {
+				// The status offline is what marks a session the purge already ended, so the next pass skips it.
+				if agent.Status == "offline" {
+					return nil
+				}
+				if s.afterLock != nil {
+					s.afterLock()
+				}
+				if err := endApprovedSession(tx, agent, now); err != nil {
+					return err
+				}
+				res.Expired++
+				return nil
 			}
 			if s.afterLock != nil {
 				s.afterLock()
