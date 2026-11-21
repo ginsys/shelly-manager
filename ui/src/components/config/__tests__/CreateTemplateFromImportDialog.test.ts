@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-
-const push = vi.fn()
-vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+import { defineComponent, h } from 'vue'
 
 vi.mock('@/api/deviceConfig', () => ({ getTypedDeviceConfig: vi.fn() }))
 vi.mock('@/api/typedConfig', () => ({ getConfigSchema: vi.fn() }))
@@ -40,21 +38,29 @@ const typed = {
   raw: { anything: '********' },
 }
 
+// The global test setup replaces every <a> with a plain object, so the stub for the router link renders a span.
+const LinkStub = defineComponent({
+  props: ['to'],
+  setup: (p, { slots }) => () => h('span', { 'data-to': JSON.stringify(p.to) }, slots.default?.()),
+})
+
 async function ready() {
-  const wrapper = mount(CreateTemplateFromImportDialog, { props: { deviceId: 7 } })
+  const wrapper = mount(CreateTemplateFromImportDialog, {
+    props: { deviceId: 7 },
+    global: { stubs: { RouterLink: LinkStub } },
+  })
   await flushPromises()
   return wrapper
 }
 
 describe('CreateTemplateFromImportDialog', () => {
   beforeEach(() => {
-    push.mockReset()
     ;(getTypedDeviceConfig as any).mockReset().mockResolvedValue(typed)
     ;(getConfigSchema as any).mockReset().mockResolvedValue(schema)
     ;(listDeviceTypes as any)
       .mockReset()
       .mockResolvedValue([{ device_type: 'SHPLG-S', name: 'Shelly Plug S', generation: 1 }])
-    ;(createTemplate as any).mockReset().mockResolvedValue({ id: 42 })
+    ;(createTemplate as any).mockReset().mockResolvedValue({ id: 42, name: 'Good' })
   })
 
   it('starts wifi and auth unticked and the other sections ticked, and offers no section the schema lacks', async () => {
@@ -143,7 +149,6 @@ describe('CreateTemplateFromImportDialog', () => {
     expect(wrapper.get('[data-testid="from-import-save-error"]').text()).toBe('Validation failed')
     expect(wrapper.get('[data-testid="from-import-field-errors"]').text()).toContain('mqtt.server')
     expect(wrapper.get('[data-testid="from-import-field-errors"]').text()).toContain('Not a host name')
-    expect(push).not.toHaveBeenCalled()
   })
 
   it('shows the message of any other refusal', async () => {
@@ -164,7 +169,17 @@ describe('CreateTemplateFromImportDialog', () => {
     await wrapper.get('[data-testid="from-import-save"]').trigger('click')
     await flushPromises()
 
-    expect(push).toHaveBeenCalledWith({ name: 'template-detail', params: { id: 42 } })
+    // Saving navigates nowhere: the dialog shows the result and links to the new template.
+    expect(wrapper.get('[data-testid="from-import-saved"]').text()).toContain('Template saved')
+    expect(wrapper.get('[data-testid="from-import-open"]').attributes('data-to')).toBe(
+      JSON.stringify({ name: 'template-detail', params: { id: 42 } }),
+    )
+    expect(wrapper.find('[data-testid="from-import-save"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="from-import-name"]').exists()).toBe(false)
+    expect(wrapper.emitted('close')).toBeFalsy()
+
+    await wrapper.get('[data-testid="from-import-cancel"]').trigger('click')
+    expect(wrapper.get('[data-testid="from-import-cancel"]').text()).toBe('Close')
     expect(wrapper.emitted('close')).toBeTruthy()
   })
 
@@ -189,9 +204,9 @@ describe('CreateTemplateFromImportDialog', () => {
     await wrapper.get('[data-testid="from-import-dialog"]').trigger('click')
     expect(wrapper.emitted('close')).toBeFalsy()
 
-    finish({ id: 9 })
+    finish({ id: 9, name: 'Slow' })
     await flushPromises()
-    expect(push).toHaveBeenCalledWith({ name: 'template-detail', params: { id: 9 } })
+    expect(wrapper.get('[data-testid="from-import-saved"]').exists()).toBe(true)
   })
 
   // After the user left the page nothing of the form is shown any more, so the app notice says only that
@@ -218,25 +233,6 @@ describe('CreateTemplateFromImportDialog', () => {
     second.unmount()
     finish({ id: 5 })
     await flushPromises()
-    expect(notice.value?.message).toBe('Template saved. Find it on the Templates page.')
-    expect(noticeSeverity.value).toBe('info')
-    expect(push).not.toHaveBeenCalled()
-  })
-
-  it('does not report a failed save when only the move to the new template page fails', async () => {
-    dismissNotice()
-    let refuse: (e: unknown) => void = () => {}
-    push.mockReturnValue(new Promise((_, reject) => (refuse = reject)))
-    const wrapper = await ready()
-    await wrapper.get('[data-testid="from-import-name"]').setValue('Made')
-    await wrapper.get('[data-testid="from-import-save"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.emitted('close')).toBeTruthy()
-
-    wrapper.unmount() // the page closes the dialog on `close`
-    refuse(new Error('Loading chunk failed'))
-    await flushPromises()
-
     expect(notice.value?.message).toBe('Template saved. Find it on the Templates page.')
     expect(noticeSeverity.value).toBe('info')
   })
