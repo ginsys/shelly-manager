@@ -119,6 +119,24 @@ describe('DeviceConfigPage rollback card', () => {
     expect(edit().attributes('disabled')).toBeUndefined()
   })
 
+  // The card's request is done once the answer arrives, but the page's read of the new state is not: its refresh
+  // rewrites the edit buffer. Edit stays off, whatever else clears store.loading meanwhile (a verify in flight).
+  it('keeps the overrides editor shut until the refresh after a rollback has finished', async () => {
+    vi.mocked(rollbackDesired).mockResolvedValue({ version_id: 9, no_change: false, detached_template_ids: [], message: 'done' } as any)
+    const { wrapper, refresh } = await mountPage()
+    const edit = () => wrapper.findAll('button').find((b) => b.text() === 'Edit')
+    let finish: () => void = () => {}
+    refresh.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve)) as never)
+
+    await wrapper.get('[data-testid="rollback-5"]').trigger('click')
+    await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
+    await flushPromises()
+    expect(edit()?.attributes('disabled')).toBeDefined()
+    finish()
+    await flushPromises()
+    expect(edit()?.attributes('disabled')).toBeUndefined()
+  })
+
   it('leaves nothing of the old device on the new one: a late answer fills nothing and the typed secrets are gone', async () => {
     let release: (v: unknown) => void = () => {}
     vi.mocked(rollbackDesired)
