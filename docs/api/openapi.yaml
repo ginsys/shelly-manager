@@ -1513,7 +1513,7 @@ paths:
           description: >-
             The stored device is marked offline (error code DEVICE_OFFLINE). A device last seen
             within 5 minutes is probed once first, for up to 3 seconds, and this answer follows
-            only if that probe fails. Otherwise nothing is sent to the device.
+            if that probe fails or cannot be set up. For any other offline device nothing is sent.
           content:
             application/json:
               schema:
@@ -2151,7 +2151,8 @@ paths:
         '503':
           description: >-
             The stored device is marked offline (error code DEVICE_OFFLINE). Nothing is sent
-            to the device.
+            to the device. The offline check comes before the desired-configuration check, so an
+            offline device with no desired configuration answers this 503 and not the 404.
           content:
             application/json:
               schema:
