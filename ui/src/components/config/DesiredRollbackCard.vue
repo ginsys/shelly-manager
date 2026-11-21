@@ -175,8 +175,9 @@ async function loadVersions() {
   }
 }
 onMounted(loadVersions)
-// Every other action of the page records versions too (a save, a template change), and a failed first read can only
-// be retried by the page's Refresh: the page finishing a read is the card's cue to read again.
+// The one cue to read the versions again: the page finishing a read. A rollback asks the page to read (the refresh
+// event) and so reads the versions through this; a save or a template change on the page records versions too, and
+// a failed first read can only be retried by the page's Refresh.
 watch(() => props.ready, (now) => {
   if (now) void loadVersions()
 })
@@ -234,7 +235,6 @@ async function confirm() {
     closeDialog()
     notice.value = { kind: 'success', text: result.message }
     emit('refresh')
-    void loadVersions()
   } catch (e) {
     if (gone) return
     const err = e instanceof RollbackRefused ? e : new RollbackRefused(0, '', 'The rollback failed.', [])
@@ -247,7 +247,6 @@ async function confirm() {
       closeDialog()
       notice.value = { kind: 'error', text: err.message }
       emit('refresh')
-      void loadVersions()
     } else {
       refusal.value = { message: err.message, paths: err.status === 422 ? err.paths : [] }
     }

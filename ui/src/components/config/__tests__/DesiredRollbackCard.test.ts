@@ -210,7 +210,7 @@ describe('DesiredRollbackCard', () => {
   })
 
   describe('the answer', () => {
-    it('shows the server message word for word, asks the page to read again and reads the versions again', async () => {
+    it('shows the server message word for word and asks the page to read again; the page finishing is the cue to read the versions', async () => {
       vi.mocked(rollbackDesired).mockResolvedValue(result() as any)
       const wrapper = mountCard()
       await flushPromises()
@@ -221,7 +221,7 @@ describe('DesiredRollbackCard', () => {
         'Desired configuration set to version 9. The device is unchanged until you apply it.',
       )
       expect(wrapper.emitted('refresh')).toHaveLength(1)
-      expect(getDesiredHistory).toHaveBeenCalledTimes(2)
+      expect(getDesiredHistory).toHaveBeenCalledTimes(1)
       expect(wrapper.find('[data-testid="rollback-dialog"]').exists()).toBe(false)
     })
 
@@ -369,7 +369,7 @@ describe('DesiredRollbackCard', () => {
       ])
     })
 
-    it('reads a 409 with no paths as "changed while prepared": shows it, reads again and shows no form', async () => {
+    it('reads a 409 with no paths as "changed while prepared": shows it, asks the page to read again and shows no form', async () => {
       vi.mocked(rollbackDesired).mockRejectedValue(refused(409, 'The desired configuration changed while the rollback was prepared. Read it again and retry.'))
       const wrapper = mountCard()
       await flushPromises()
@@ -379,7 +379,7 @@ describe('DesiredRollbackCard', () => {
       expect(wrapper.find('[data-testid="rollback-dialog"]').exists()).toBe(false)
       expect(wrapper.get('[data-testid="rollback-notice"]').text()).toContain('changed while the rollback was prepared')
       expect(wrapper.emitted('refresh')).toHaveLength(1)
-      expect(getDesiredHistory).toHaveBeenCalledTimes(2)
+      expect(getDesiredHistory).toHaveBeenCalledTimes(1)
     })
   })
 
