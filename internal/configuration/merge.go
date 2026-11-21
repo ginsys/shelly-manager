@@ -113,6 +113,11 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 			}
 
 			mergeSlices(dstField, srcField, sources, sourceName, fieldPath)
+		} else if isBasicKind(srcField.Kind()) && !srcField.IsZero() {
+			// A plain scalar cannot tell unset from false, 0 or "", so a zero is unset: a later layer
+			// cannot clear an earlier layer's value with it.
+			dstField.Set(srcField)
+			sources[fieldPath] = sourceName
 		}
 	}
 }
@@ -513,9 +518,10 @@ func isPointerToBasicType(t reflect.Type) bool {
 		return false
 	}
 
-	elem := t.Elem()
-	kind := elem.Kind()
+	return isBasicKind(t.Elem().Kind())
+}
 
+func isBasicKind(kind reflect.Kind) bool {
 	return kind == reflect.Bool ||
 		kind == reflect.Int || kind == reflect.Int8 || kind == reflect.Int16 ||
 		kind == reflect.Int32 || kind == reflect.Int64 ||

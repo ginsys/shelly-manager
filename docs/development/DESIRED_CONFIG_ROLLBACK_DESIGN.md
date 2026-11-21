@@ -71,14 +71,16 @@ rows can hold real secrets, and the history answer can never bring one back.
   `PatchDeviceOverrides` removes a path from the overrides, not from the merged result
   (`config_service.go:405-425`).
 - Merging one layer into an empty configuration keeps its channel lists as they are
-  ("an empty dst takes src as it is", `internal/configuration/merge.go:214-215`, `:259-281`).
-  **It does not keep a plain, non-pointer scalar field.** `mergeInto` copies pointer fields, nested
-  structs and slices and skips every other field kind (`merge.go:88-116`). `SNTPConfig.Server` is a plain
-  `string` (`internal/configuration/typed_models.go:210-212`), so a layer holding
-  `{"system":{"sntp":{"server":"time.example"}}}` merges to `{"system":{"sntp":{}}}`. A desired value
-  that came straight from an archive import (`import_store.go:222`, `:254`) can hold such a field; a
-  recompute never rebuilds it. This is an existing limit of the merge, filed as
-  ginsys/shelly-manager#839; the note does not fix it (section 6).
+  ("an empty dst takes src as it is", `internal/configuration/merge.go:219-220`, `:264-286`).
+  **It keeps a plain, non-pointer scalar field only when its value is not a zero.** `mergeInto` copies
+  pointer fields, nested structs, slices and a non-zero plain scalar (`merge.go:116-121`), and records its
+  source. `SNTPConfig.Server` is a plain `string` (`internal/configuration/typed_models.go:210-212`), so a
+  layer holding `{"system":{"sntp":{"server":"time.example"}}}` merges to the same value, and a layer
+  holding `"server":""` merges to nothing, because a plain field cannot tell an empty value from an unset
+  one (ginsys/shelly-manager#839 made the merge copy them; before it the merge dropped every plain
+  scalar). A desired value that came straight from an archive import (`import_store.go:222`, `:254`) can
+  hold a plain value that no layer holds; a recompute never rebuilds it, whatever the field kind, because
+  it builds from the layers only (`config_service.go:596-643`).
 - Bulk apply already writes a partial configuration into the overrides and applies it
   (`internal/api/bulk_apply.go:292-310`).
 
@@ -164,8 +166,9 @@ Three ways were compared.
 
 **Recommendation: (b).** The recompute of a device with no templates is the merge of one layer into an
 empty configuration (section 2.2), so the target survives every later recompute, **provided the merge
-returns it unchanged**. It does not for a plain scalar field, so the rollback checks that before it
-writes: it merges the target as the only layer and compares the two **decoded JSON trees**, never their
+returns it unchanged**. It does not for a plain scalar field that holds a zero (`"server":""`,
+`"level":0`): the merge does not copy a zero, and the field is `omitempty`, so the merged tree lacks that
+path. The rollback checks that before it writes: it merges the target as the only layer and compares the two **decoded JSON trees**, never their
 text, so a version whose keys are in another order, such as one written by an archive import, passes. A
 path the target holds that the merged tree lacks, or holds with another value, is a loss. A path only the
 merged tree holds counts as equal when its value is a JSON zero (`false`, `0`, `""`, `null`, an empty
@@ -333,8 +336,8 @@ Each is under about 350 non-test lines.
    lacked is gone, template ids detached); a secret kept only when its bound fields are equal; a refusal
    names every path and echoes no value; a placeholder left anywhere refuses; the loop over `allSecretPaths`
    finds a row for each; 404 for another device's version; a non-admin is refused; a rollback built on a
-   stale read gets 409; a target with a plain scalar field (`system.sntp.server`) is refused with that
-   path and writes nothing, until ginsys/shelly-manager#839 is fixed; after a rollback, a recompute leaves
+   stale read gets 409; a target with a non-zero plain scalar field (`system.sntp.server`) passes, and one
+   with a plain zero (`"server":""`) is refused with that path and writes nothing; after a rollback, a recompute leaves
    desired equal to the target; a version written by a recompute always passes the round-trip check; an
    import-written version that differs only in key order passes it; a path only the merged tree holds, with
    a zero value, passes, and with any other value is refused.
@@ -360,8 +363,8 @@ Candidates, each with one recommendation:
 - Versions that existed before the first slice is deployed: they are not recorded and cannot be rolled
   back to.
 - The orphaned `ConfigHistory` rows of a deleted device.
-- The merge dropping plain scalar fields (ginsys/shelly-manager#839): a version holding one cannot be
-  rolled back to until that is fixed, and the refusal says which path.
+- A plain scalar zero (`"server":""`, `"level":0`): the merge does not copy it, so a version holding one
+  cannot be rolled back to, and the refusal says which path.
 - Restoring the stored `device_configs` copy: it is a record of the last import, and the issue's old
   Restore button is not rebuilt.
 - A list slot among the secrets (ginsys/shelly-manager#381): counted as changed until its plan is read.

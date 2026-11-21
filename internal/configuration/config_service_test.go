@@ -620,6 +620,47 @@ func TestConfigurationService_RecomputeDesiredConfig(t *testing.T) {
 	assert.Equal(t, "global.broker", *desired.MQTT.Server)
 }
 
+// A plain scalar a template or an override sets reaches the desired configuration, a PATCH with an
+// empty value does not clear it, and a PATCH with null removes it from the override
+// (ginsys/shelly-manager#839).
+func TestConfigurationService_RecomputeDesiredConfig_PlainScalar(t *testing.T) {
+	desiredServer := func(t *testing.T, repo *mockRepository) string {
+		t.Helper()
+		device, err := repo.GetDevice(1)
+		require.NoError(t, err)
+		var desired DeviceConfiguration
+		require.NoError(t, json.Unmarshal([]byte(device.DesiredConfig), &desired))
+		if desired.System == nil || desired.System.SNTP == nil {
+			return ""
+		}
+		return desired.System.SNTP.Server
+	}
+
+	repo := newMockRepository()
+	repo.addDevice(1)
+	svc := NewConfigurationService(repo, Engine{}, nil)
+
+	configJSON, err := json.Marshal(&DeviceConfiguration{
+		System: &SystemConfiguration{SNTP: &SNTPConfig{Server: "time.example.org"}},
+	})
+	require.NoError(t, err)
+	template := &ServiceConfigTemplate{Name: "Time", Scope: "global", Config: configJSON}
+	require.NoError(t, svc.CreateTemplate(template))
+	require.NoError(t, svc.SetDeviceTemplates(1, []uint{template.ID}))
+	assert.Equal(t, "time.example.org", desiredServer(t, repo))
+
+	override := &DeviceConfiguration{System: &SystemConfiguration{SNTP: &SNTPConfig{Server: "ntp.example.net"}}}
+	require.NoError(t, svc.PatchDeviceOverrides(1, override, nil))
+	assert.Equal(t, "ntp.example.net", desiredServer(t, repo))
+
+	empty := &DeviceConfiguration{System: &SystemConfiguration{SNTP: &SNTPConfig{}}}
+	require.NoError(t, svc.PatchDeviceOverrides(1, empty, nil))
+	assert.Equal(t, "ntp.example.net", desiredServer(t, repo), "an empty value must not clear the override's own value")
+
+	require.NoError(t, svc.PatchDeviceOverrides(1, &DeviceConfiguration{}, [][]string{{"system", "sntp", "server"}}))
+	assert.Equal(t, "time.example.org", desiredServer(t, repo), "null removes the override and the template's value returns")
+}
+
 // A recompute that changes the desired configuration must never leave an applied device reading
 // applied against it, whichever of its writes fails (ginsys/shelly-manager#716).
 func TestConfigurationService_RecomputeDesiredConfig_FailedFlagWriteLeavesNoAppliedDevice(t *testing.T) {
