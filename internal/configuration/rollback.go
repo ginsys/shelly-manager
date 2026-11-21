@@ -231,19 +231,23 @@ func treeLoss(target, merged, typed any) []string {
 }
 
 // lostUnder gives the paths of a key the recomputed tree lacks. The key is a loss whole, at its own path,
-// unless it holds only zeros the typed model holds at the same place: then the merge left it out on
-// purpose (a zero of a plain field sets nothing, ginsys/shelly-manager#843) and the walk goes on beside
-// the typed tree, so a zero the typed model drops (an empty string, `omitempty`) is still reported at its
-// own leaf. A list is a loss at its own path, since the merge leaves an empty plain list nil.
+// when the typed model does not hold it or it holds any non-zero value. Otherwise it holds only zeros, the
+// merge left it out on purpose (a zero of a plain field sets nothing, ginsys/shelly-manager#843) and the
+// walk goes on beside the typed tree (zerosLost), so a zero the typed model drops (an empty string,
+// `omitempty`) is still reported at its own leaf.
 func lostUnder(t, typed any, typedHeld bool, path []string) []string {
-	if !typedHeld {
-		return []string{formatPath(path)}
-	}
 	var nonZero []string
 	nonZeroPaths(t, nil, &nonZero)
-	if len(nonZero) > 0 {
+	if !typedHeld || len(nonZero) > 0 {
 		return []string{formatPath(path)}
 	}
+	return zerosLost(t, typed, path)
+}
+
+// zerosLost walks a target subtree that holds only zeros beside the typed tree: a place the typed model does
+// not hold, a list, or a zero that is not the one the typed model writes (a null where it writes false) is
+// a loss at that place.
+func zerosLost(t, typed any, path []string) []string {
 	switch tv := t.(type) {
 	case map[string]any:
 		typedMap, ok := typed.(map[string]any)
@@ -252,11 +256,19 @@ func lostUnder(t, typed any, typedHeld bool, path []string) []string {
 		}
 		var out []string
 		for k, child := range tv {
+			p := append(path[:len(path):len(path)], k)
 			typedChild, held := typedMap[k]
-			out = append(out, lostUnder(child, typedChild, held, append(path[:len(path):len(path)], k))...)
+			if !held {
+				out = append(out, formatPath(p))
+				continue
+			}
+			out = append(out, zerosLost(child, typedChild, p)...)
 		}
 		return out
 	case []any:
+		return []string{formatPath(path)}
+	}
+	if !sameScalar(t, typed) {
 		return []string{formatPath(path)}
 	}
 	return nil
