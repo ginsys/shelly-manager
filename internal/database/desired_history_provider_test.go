@@ -121,9 +121,13 @@ func checkDesiredRollback(t *testing.T, manager *Manager) {
 	})
 
 	t.Run("a write equal to what was read writes nothing", func(t *testing.T) {
+		require.NoError(t, db.Model(&Device{}).Where("id = ?", device.ID).Update("config_applied", true).Error)
 		before := rows()
 		require.NoError(t, repo.RollbackDeviceDesired(device.ID, configuration.DesiredRead(write), write, 1))
 		assert.Equal(t, before, rows(), "no row for a write that changes nothing")
+		var got Device
+		require.NoError(t, db.First(&got, device.ID).Error)
+		assert.True(t, got.ConfigApplied, "an applied device is not turned pending for a change of nothing")
 	})
 
 	t.Run("a stale read is a miss", func(t *testing.T) {
