@@ -120,15 +120,31 @@ func TestAddDevice_ADeviceThatCannotBeAskedStaysGen1(t *testing.T) {
 }
 
 func TestAddDevice_AGivenGenerationIsKeptAndNothingIsAsked(t *testing.T) {
-	h, cleanup := typedHandler(t)
-	defer cleanup()
-	p := withProbe(t, 3, nil)
+	for name, tc := range map[string]struct {
+		given string
+		want  any
+	}{
+		"a number":         {`2`, float64(2)},
+		"zero":             {`0`, float64(0)},
+		"null":             {`null`, nil},
+		"a string":         {`"3"`, "3"},
+		"a negative gen":   {`-1`, float64(-1)},
+		"a fractional gen": {`2.5`, 2.5},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, cleanup := typedHandler(t)
+			defer cleanup()
+			p := withProbe(t, 3, nil)
 
-	id, code := createDevice(t, h, `{"model":"SNSW-001X16EU","gen":2}`)
+			id, code := createDevice(t, h, `{"model":"SNSW-001X16EU","gen":`+tc.given+`}`)
 
-	require.Equal(t, http.StatusCreated, code)
-	assert.EqualValues(t, 0, p.calls.Load(), "a given gen is not asked about")
-	assert.EqualValues(t, 2, storedSettings(t, h, id)["gen"])
+			require.Equal(t, http.StatusCreated, code)
+			assert.EqualValues(t, 0, p.calls.Load(), "a given gen is not asked about")
+			settings := storedSettings(t, h, id)
+			assert.Contains(t, settings, "gen")
+			assert.Equal(t, tc.want, settings["gen"])
+		})
+	}
 }
 
 func TestAddDevice_InvalidSettingsAreRefusedBeforeTheDeviceIsAsked(t *testing.T) {
@@ -154,6 +170,12 @@ func TestUpdateDevice_KeepsTheStoredGenerationAndNeverWritesOne(t *testing.T) {
 		{"stored Gen2, empty body settings", `{"model":"M","gen":2,"auth_enabled":false}`, ``, float64(2), nil},
 		{"stored with no gen, body with no gen", `{"model":"M","auth_enabled":false}`, `{"model":"M2"}`, nil, []string{"model"}},
 		{"a gen in the body wins", `{"model":"M","gen":2,"auth_enabled":false}`, `{"model":"M","gen":3}`, float64(3), nil},
+		// A create keeps any gen it is given, so a stored one need not be a positive whole number.
+		// An update keeps it exactly as it was.
+		{"stored gen is a string", `{"model":"M","gen":"2"}`, `{"model":"M2"}`, "2", []string{"model"}},
+		{"stored gen is 0", `{"model":"M","gen":0}`, `{"model":"M2"}`, float64(0), []string{"model"}},
+		{"stored gen is negative", `{"model":"M","gen":-1}`, `{"model":"M2"}`, float64(-1), []string{"model"}},
+		{"stored gen is fractional", `{"model":"M","gen":2.5}`, `{"model":"M2"}`, 2.5, []string{"model"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, cleanup := typedHandler(t)
@@ -242,6 +264,7 @@ func TestProbeGeneration_IsBoundedByTheRequestAndSaysWhyItFellBack(t *testing.T)
 		assert.Equal(t, 2, h.probeGeneration(context.Background(), "192.0.2.10"))
 		assert.True(t, hasDeadline, "the probe has a deadline")
 		assert.LessOrEqual(t, remaining, 2*time.Second)
+		assert.Greater(t, remaining, time.Second, "the deadline is 2 s, not a shorter one")
 
 		cancelled, cancel := context.WithCancel(context.Background())
 		cancel()
