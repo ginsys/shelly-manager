@@ -106,7 +106,8 @@ func maskedRefs(target map[string]any) []secretRef {
 	return out
 }
 
-// treeActionKeys reads the identity of each action entry of a decoded tree.
+// treeActionKeys reads the identity of each action entry of a tree decoded by redact.DecodeJSON, which
+// keeps a number as json.Number: a tree decoded another way reads every index as 0.
 func treeActionKeys(tree map[string]any) []string {
 	list, _ := tree["actions"].([]any)
 	entries := make([]ActionConfig, len(list))
@@ -205,8 +206,14 @@ func suppliedSecret(v any, list bool) (any, bool) {
 // mask or of the wrong type. Nothing it returns holds a secret.
 func resolveSecrets(target map[string]any, current any, supplied map[string]any) ([]string, *RollbackError) {
 	var listed []secretRef
+	var stuck []string
 	for _, ref := range maskedRefs(target) {
 		bound, hasRow := secretBindings[ref.key]
+		if !hasRow && !ref.list {
+			// A mask where no secret slot is: history cannot give it back and nothing can be entered.
+			stuck = append(stuck, ref.key)
+			continue
+		}
 		held, _ := valueAt(current, ref.path)
 		if str, isStr := held.(string); hasRow && len(bound) > 0 && isStr && str != "" &&
 			str != secrets.Placeholder && sameBinding(target, current, bound) {
@@ -216,12 +223,13 @@ func resolveSecrets(target map[string]any, current any, supplied map[string]any)
 		listed = append(listed, ref)
 	}
 
-	// Only a slot can be answered: a mask at any other path is listed and has no way through.
+	if len(stuck) > 0 {
+		return nil, &RollbackError{Kind: RollbackNotRestorable, Paths: stuck}
+	}
+
 	onList := map[string]secretRef{}
 	for _, ref := range listed {
-		if _, isSlot := secretBindings[ref.key]; isSlot || ref.list {
-			onList[ref.key] = ref
-		}
+		onList[ref.key] = ref
 	}
 	for key, value := range supplied {
 		ref, ok := onList[key]

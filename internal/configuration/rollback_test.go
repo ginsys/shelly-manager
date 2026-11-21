@@ -119,12 +119,13 @@ func TestRollbackDesired_AnyPlaceholderRefusesAndNamesItsPath(t *testing.T) {
 	cases := map[string]struct {
 		target string
 		paths  []string
+		kind   RollbackKind
 	}{
-		"a secret slot":         {`{"mqtt":{"server":"a","pass":"` + secrets.Placeholder + `"}}`, []string{"mqtt.pass"}},
-		"a list entry":          {`{"actions":[{"name":"x","secret_urls":"` + secrets.Placeholder + `"}]}`, []string{`actions."x".0.secret_urls`}},
-		"a key that is no slot": {`{"system":{"device":{"name":"` + secrets.Placeholder + `"}}}`, []string{"system.device.name"}},
+		"a secret slot":         {`{"mqtt":{"server":"a","pass":"` + secrets.Placeholder + `"}}`, []string{"mqtt.pass"}, RollbackNeedsSecrets},
+		"a list entry":          {`{"actions":[{"name":"x","secret_urls":"` + secrets.Placeholder + `"}]}`, []string{`actions."x".0.secret_urls`}, RollbackNeedsSecrets},
+		"a key that is no slot": {`{"system":{"device":{"name":"` + secrets.Placeholder + `"}}}`, []string{"system.device.name"}, RollbackNotRestorable},
 		"several, sorted": {`{"wifi":{"password":"` + secrets.Placeholder + `"},"auth":{"pass":"` + secrets.Placeholder + `"}}`,
-			[]string{"auth.pass", "wifi.password"}},
+			[]string{"auth.pass", "wifi.password"}, RollbackNeedsSecrets},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -133,7 +134,7 @@ func TestRollbackDesired_AnyPlaceholderRefusesAndNamesItsPath(t *testing.T) {
 			version := addVersion(t, db, 1, str(tc.target))
 
 			_, err := rollbackService(db).RollbackDesired(1, version, nil)
-			rerr := requireRollbackError(t, err, RollbackNeedsSecrets)
+			rerr := requireRollbackError(t, err, tc.kind)
 			assert.Equal(t, tc.paths, rerr.Paths)
 
 			device := deviceRow(t, db, 1)
