@@ -157,7 +157,7 @@ async function save() {
       config: body.value.config,
     })
     if (!alive) {
-      reportLateResult('info', `Template "${name.value.trim()}" was created.`, { action: 'Create template', resource: 'Template' })
+      reportLateResult('info', `Template "${template.name}" was created.`, { action: 'Create template', resource: 'Template' })
       return
     }
     emit('close')
@@ -165,7 +165,9 @@ async function save() {
   } catch (e: any) {
     if (!alive) {
       // The user left the page while the save ran: the dialog is gone, so the app notice is the only place left.
-      reportLate(e, { action: 'Create template', resource: 'Template' })
+      // The notice keeps only the message, so the field reasons go into it.
+      const reasons = e instanceof TemplateSaveError ? e.fields.map((f) => `${f.path}: ${f.message}`).join('; ') : ''
+      reportLate(reasons ? new Error(`${e.message} (${reasons})`) : e, { action: 'Create template', resource: 'Template' })
       return
     }
     if (e instanceof TemplateSaveError) fieldErrors.value = e.fields
