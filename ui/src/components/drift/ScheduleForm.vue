@@ -73,7 +73,7 @@
 
         <p v-if="blocked" class="hint" role="status" data-testid="save-blocked">{{ blocked }}</p>
         <div class="actions">
-          <button type="submit" class="primary-button" :disabled="saving || !!blocked" data-testid="schedule-save">
+          <button type="submit" class="primary-button" :disabled="saving || stale || !!blocked" data-testid="schedule-save">
             {{ saving ? 'Saving...' : 'Save' }}
           </button>
           <button type="button" class="secondary-button" :disabled="saving" data-testid="schedule-cancel" @click="emit('cancel')">
@@ -91,7 +91,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useDriftStore } from '@/stores/drift'
-import type { DriftDeviceFilter, DriftSchedule, DriftScheduleInput } from '@/api/drift'
+import { StaleScheduleError, type DriftDeviceFilter, type DriftSchedule, type DriftScheduleInput } from '@/api/drift'
 import type { Device } from '@/api/types'
 
 const props = defineProps<{
@@ -149,6 +149,8 @@ const mode = ref<'all' | 'devices' | 'filter'>(
 
 const saving = ref(false)
 const failure = ref('')
+// Set once the server refused the save as stale: this form holds the old revision, so Save stays off.
+const stale = ref(false)
 
 const deviceTypes = computed(() => [...new Set(props.devices.map(d => d.type).filter(Boolean))].sort())
 const unlistedIds = computed(() => selectedIds.value.filter(id => !props.devices.some(d => d.id === id)))
@@ -185,15 +187,20 @@ function buildInput(): DriftScheduleInput {
 }
 
 async function save() {
-  if (blocked.value || saving.value) return
+  if (blocked.value || saving.value || stale.value) return
   saving.value = true
   failure.value = ''
   try {
     const input = buildInput()
-    const result = stored ? await store.update(stored.id, input) : await store.create(input)
+    const result = stored ? await store.update(stored.id, input, stored.revision) : await store.create(input)
     emit('saved', result)
   } catch (e: any) {
-    failure.value = e?.message || 'The schedule could not be saved'
+    if (e instanceof StaleScheduleError) {
+      stale.value = true
+      failure.value = 'This schedule changed since you opened it. Close this form and open the schedule again.'
+    } else {
+      failure.value = e?.message || 'The schedule could not be saved'
+    }
   } finally {
     saving.value = false
   }

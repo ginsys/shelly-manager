@@ -289,6 +289,15 @@ and is disabled; it cannot be enabled again until an update gives it a valid
 spec. `run_count` counts the ticks the scheduler claimed, runs and skipped ticks
 alike. Deleting a schedule also deletes its device list and its runs.
 
+Every schedule answer carries a `revision`. It moves when a user updates or toggles
+the schedule, and when the scheduler disables it after a failure; a scheduler run
+does not move it. An update (`PUT`) takes the `revision` the caller read in its body
+and writes only if it is still the stored one. Another revision is `409` with the
+current schedule in `error.details`, and nothing is written, so an old copy of a
+schedule can never put its fields back. A body without `revision` is `400`. Create
+has no `revision`, and sending one there is `400` as an unknown key. A toggle needs
+no revision: it flips the stored flag.
+
 | Method | Endpoint | Description | Status |
 |--------|----------|-------------|--------|
 | GET | `/api/v1/config/drift-schedules` | List drift schedules | ✅ Functional |

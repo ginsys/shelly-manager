@@ -22,6 +22,7 @@ const storedSchedule: DriftSchedule = {
   last_run: null,
   next_run: null,
   run_count: 0,
+  revision: 0,
   created_at: '2026-07-01T00:00:00Z',
   updated_at: '2026-07-01T00:00:00Z'
 }

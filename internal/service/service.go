@@ -1434,8 +1434,8 @@ func (s *ShellyService) CreateDriftSchedule(in configuration.ScheduleInput) (*co
 }
 
 // UpdateDriftSchedule replaces the editable fields of a drift detection schedule
-func (s *ShellyService) UpdateDriftSchedule(scheduleID uint, in configuration.ScheduleInput) (*configuration.DriftDetectionSchedule, error) {
-	return s.ConfigSvc.UpdateDriftSchedule(scheduleID, in)
+func (s *ShellyService) UpdateDriftSchedule(scheduleID uint, revision int, in configuration.ScheduleInput) (*configuration.DriftDetectionSchedule, error) {
+	return s.ConfigSvc.UpdateDriftSchedule(scheduleID, revision, in)
 }
 
 // ToggleDriftSchedule enables a disabled schedule or disables an enabled one

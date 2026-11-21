@@ -164,7 +164,7 @@ describe('drift store', () => {
   it.each([
     ['remove', () => vi.mocked(driftApi.deleteDriftSchedule), (s: any) => s.remove(1)],
     ['create', () => vi.mocked(driftApi.createDriftSchedule), (s: any) => s.create({ name: 'N', cron_spec: '0 * * * *' })],
-    ['update', () => vi.mocked(driftApi.updateDriftSchedule), (s: any) => s.update(1, { name: 'N', cron_spec: '0 * * * *' })],
+    ['update', () => vi.mocked(driftApi.updateDriftSchedule), (s: any) => s.update(1, { name: 'N', cron_spec: '0 * * * *' }, 1)],
     ['toggle', () => vi.mocked(driftApi.toggleDriftSchedule), (s: any) => s.toggle(1)],
     ['fetchRuns', () => vi.mocked(driftApi.listDriftScheduleRuns), (s: any) => s.fetchRuns(1)],
     ['resolveTrend', () => vi.mocked(driftApi.resolveDriftTrend), (s: any) => s.resolveTrend(1)],
@@ -190,7 +190,8 @@ describe('drift store', () => {
     expect(store.schedules.map(s => s.id)).toEqual([1, 2, 3])
 
     vi.mocked(driftApi.updateDriftSchedule).mockResolvedValueOnce({ id: 2, name: 'B2', enabled: true } as any)
-    await store.update(2, { name: 'B2', cron_spec: '0 * * * *' })
+    await store.update(2, { name: 'B2', cron_spec: '0 * * * *' }, 5)
+    expect(driftApi.updateDriftSchedule).toHaveBeenLastCalledWith(2, { name: 'B2', cron_spec: '0 * * * *' }, 5)
     expect(store.schedules.map(s => s.name)).toEqual(['A', 'B2', 'C'])
 
     vi.mocked(driftApi.toggleDriftSchedule).mockResolvedValueOnce({ id: 1, name: 'A', enabled: false } as any)

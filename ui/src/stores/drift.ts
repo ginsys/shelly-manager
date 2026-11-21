@@ -14,6 +14,7 @@ import {
   resolveDriftTrend,
   generateDeviceDriftReport,
   computeDailyAggregates,
+  StaleScheduleError,
   type DriftSchedule,
   type DriftScheduleInput,
   type DriftRun,
@@ -108,8 +109,15 @@ export const useDriftStore = defineStore('drift', () => {
     return putSchedule(await createDriftSchedule(input))
   }
 
-  async function update(id: number | string, input: DriftScheduleInput) {
-    return putSchedule(await updateDriftSchedule(id, input))
+  // An update names the revision its form was opened on. A refusal as stale writes nothing: the schedule the
+  // server answered with is the current one, so it goes into the list and the error is rethrown.
+  async function update(id: number | string, input: DriftScheduleInput, revision: number) {
+    try {
+      return putSchedule(await updateDriftSchedule(id, input, revision))
+    } catch (e) {
+      if (e instanceof StaleScheduleError) putSchedule(e.current)
+      throw e
+    }
   }
 
   // The schedules whose toggle request is running. The server flips the stored flag on every call, so a

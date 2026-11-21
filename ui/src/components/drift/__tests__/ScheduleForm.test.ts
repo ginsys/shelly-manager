@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createTestingPinia } from '@pinia/testing'
 import ScheduleForm from '../ScheduleForm.vue'
 import { useDriftStore } from '@/stores/drift'
-import type { DriftSchedule } from '@/api/drift'
+import { StaleScheduleError, type DriftSchedule } from '@/api/drift'
 import type { Device } from '@/api/types'
 
 const devices = [
@@ -23,6 +23,7 @@ const stored: DriftSchedule = {
   last_run: null,
   next_run: null,
   run_count: 4,
+  revision: 3,
   created_at: '2026-07-01T00:00:00Z',
   updated_at: '2026-07-01T00:00:00Z'
 }
@@ -181,14 +182,51 @@ describe('ScheduleForm', () => {
 
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-    expect(store.update).toHaveBeenCalledWith(7, {
-      name: 'Nightly',
-      description: 'every night',
-      cron_spec: '0 3 * * *',
-      device_ids: [2]
-    })
+    // The save names the revision the form was opened on.
+    expect(store.update).toHaveBeenCalledWith(
+      7,
+      { name: 'Nightly', description: 'every night', cron_spec: '0 3 * * *', device_ids: [2] },
+      3
+    )
     expect('enabled' in vi.mocked(store.update).mock.calls[0][1]).toBe(false)
     expect(store.create).not.toHaveBeenCalled()
+  })
+
+  it('shows that the schedule changed, and does not close or overwrite, when the server refuses it as stale', async () => {
+    const { wrapper, store } = mountForm({ schedule: stored })
+    vi.mocked(store.update).mockRejectedValue(new StaleScheduleError('changed', { ...stored, name: 'Renamed elsewhere', revision: 4 }))
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="schedule-form-error"]').text()).toBe(
+      'This schedule changed since you opened it. Close this form and open the schedule again.'
+    )
+    expect(wrapper.emitted('saved')).toBeUndefined()
+    expect((wrapper.find('[data-testid="schedule-name"]').element as HTMLInputElement).value).toBe('Nightly')
+  })
+
+  it('turns Save off after a stale refusal, since this form holds the old revision', async () => {
+    const { wrapper, store } = mountForm({ schedule: stored })
+    vi.mocked(store.update).mockRejectedValue(new StaleScheduleError('changed', { ...stored, revision: 4 }))
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="schedule-save"]').attributes('disabled')).toBeDefined()
+
+    await wrapper.find('form').trigger('submit') // Enter in a field still submits a form with a disabled button
+    await flushPromises()
+    expect(store.update).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps Save on after an ordinary failure', async () => {
+    const { wrapper, store } = mountForm({ schedule: stored })
+    vi.mocked(store.update).mockRejectedValue(new Error('cron spec is invalid'))
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="schedule-save"]').attributes('disabled')).toBeUndefined()
   })
 
   it('create has an Enabled box, checked, and sends it', async () => {

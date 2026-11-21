@@ -16,6 +16,7 @@ import {
   deleteDriftSchedule,
   createDriftSchedule,
   updateDriftSchedule,
+  StaleScheduleError,
   toggleDriftSchedule,
   listDriftScheduleRuns,
   getDriftSchedulerStatus,
@@ -48,7 +49,7 @@ describe('Drift API client', () => {
       const schedules: DriftSchedule[] = [{
         id: 1, name: 'Daily', enabled: true, cron_spec: '0 0 * * *',
         device_ids: [1, 2], device_filter: null, last_run: null, next_run: null,
-        run_count: 0, created_at: '2026-04-13T00:00:00Z', updated_at: '2026-04-13T00:00:00Z'
+        run_count: 0, revision: 0, created_at: '2026-04-13T00:00:00Z', updated_at: '2026-04-13T00:00:00Z'
       }]
       vi.mocked(api.get).mockResolvedValueOnce(ok(schedules))
 
@@ -77,7 +78,7 @@ describe('Drift API client', () => {
     it('fetches one schedule by id', async () => {
       const schedule: DriftSchedule = {
         id: 7, name: 'Hourly', enabled: true, cron_spec: '0 * * * *',
-        run_count: 3, created_at: '2026-04-13T00:00:00Z', updated_at: '2026-04-13T00:00:00Z'
+        run_count: 3, revision: 0, created_at: '2026-04-13T00:00:00Z', updated_at: '2026-04-13T00:00:00Z'
       }
       vi.mocked(api.get).mockResolvedValueOnce(ok(schedule))
 
@@ -100,7 +101,7 @@ describe('Drift API client', () => {
     const input = { name: 'Nightly', cron_spec: '0 3 * * *', device_ids: [1, 2] }
     const stored: DriftSchedule = {
       id: 9, name: 'Nightly', enabled: true, cron_spec: '0 3 * * *', device_ids: [1, 2],
-      run_count: 0, created_at: 'x', updated_at: 'x'
+      run_count: 0, revision: 0, created_at: 'x', updated_at: 'x'
     }
 
     it('posts the input and returns the stored schedule', async () => {
@@ -134,7 +135,7 @@ describe('Drift API client', () => {
 
     it('throws the message of a 404 on update, toggle and runs', async () => {
       vi.mocked(api.put).mockRejectedValueOnce(refused(404, { code: 'NOT_FOUND', message: 'Schedule not found' }))
-      await expect(updateDriftSchedule(4, input)).rejects.toThrow('Schedule not found')
+      await expect(updateDriftSchedule(4, input, 0)).rejects.toThrow('Schedule not found')
       vi.mocked(api.post).mockRejectedValueOnce(refused(404, { code: 'NOT_FOUND', message: 'Schedule not found' }))
       await expect(toggleDriftSchedule(4)).rejects.toThrow('Schedule not found')
       vi.mocked(api.get).mockRejectedValueOnce(refused(404, { code: 'NOT_FOUND', message: 'Schedule not found' }))
@@ -151,18 +152,56 @@ describe('Drift API client', () => {
   describe('updateDriftSchedule', () => {
     const input = { name: 'Nightly', cron_spec: '0 3 * * *', device_filter: { type: 'plug' } }
 
-    it('puts the whole input to the schedule and returns the answer', async () => {
-      const stored = { id: 4, ...input, enabled: true, run_count: 1, created_at: 'x', updated_at: 'y' }
+    it('puts the whole input and the revision read to the schedule and returns the answer', async () => {
+      const stored = { id: 4, ...input, enabled: true, run_count: 1, revision: 6, created_at: 'x', updated_at: 'y' }
       vi.mocked(api.put).mockResolvedValueOnce(ok(stored))
-      await expect(updateDriftSchedule(4, input)).resolves.toEqual(stored)
-      expect(api.put).toHaveBeenCalledWith('/config/drift-schedules/4', input)
+      await expect(updateDriftSchedule(4, input, 5)).resolves.toEqual(stored)
+      expect(api.put).toHaveBeenCalledWith('/config/drift-schedules/4', { ...input, revision: 5 })
     })
 
     it('throws the server message, and a default when there is no data', async () => {
       vi.mocked(api.put).mockResolvedValueOnce(fail('schedule not found'))
-      await expect(updateDriftSchedule(4, input)).rejects.toThrow('schedule not found')
+      await expect(updateDriftSchedule(4, input, 0)).rejects.toThrow('schedule not found')
       vi.mocked(api.put).mockResolvedValueOnce(ok(undefined))
-      await expect(updateDriftSchedule(4, input)).rejects.toThrow('Failed to update drift schedule')
+      await expect(updateDriftSchedule(4, input, 0)).rejects.toThrow('Failed to update drift schedule')
+    })
+
+    it('throws a StaleScheduleError with the current schedule on a 409', async () => {
+      const current = { id: 4, name: 'Changed elsewhere', revision: 7 }
+      vi.mocked(api.put).mockRejectedValueOnce(
+        Object.assign(new Error('Request failed with status code 409'), {
+          response: {
+            status: 409,
+            data: { success: false, error: { code: 'CONFLICT', message: 'drift schedule changed since it was read', details: current } }
+          }
+        })
+      )
+      const error = await updateDriftSchedule(4, input, 5).catch(e => e)
+      expect(error).toBeInstanceOf(StaleScheduleError)
+      expect(error.current).toEqual(current)
+      expect(error.message).toBe('drift schedule changed since it was read')
+    })
+
+    it('treats a 409 with no schedule in it as an ordinary refusal', async () => {
+      vi.mocked(api.put).mockRejectedValueOnce(
+        Object.assign(new Error('x'), {
+          response: { status: 409, data: { success: false, error: { code: 'CONFLICT', message: 'busy' } } }
+        })
+      )
+      const error = await updateDriftSchedule(4, input, 5).catch(e => e)
+      expect(error).not.toBeInstanceOf(StaleScheduleError)
+      expect(error.message).toBe('busy')
+    })
+
+    it('treats a 409 whose details are not a schedule as an ordinary refusal', async () => {
+      vi.mocked(api.put).mockRejectedValueOnce(
+        Object.assign(new Error('x'), {
+          response: { status: 409, data: { success: false, error: { code: 'CONFLICT', message: 'busy', details: { reason: 'locked' } } } }
+        })
+      )
+      const error = await updateDriftSchedule(4, input, 5).catch(e => e)
+      expect(error).not.toBeInstanceOf(StaleScheduleError)
+      expect(error.message).toBe('busy')
     })
   })
 
