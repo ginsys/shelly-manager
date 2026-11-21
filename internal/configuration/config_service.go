@@ -103,6 +103,8 @@ type ConfigRepository interface {
 	ListAllTags() ([]string, error)
 }
 
+// Merger makes the desired configuration of a device from its layers. A result has no section nothing was
+// set in (ginsys/shelly-manager#843).
 type Merger interface {
 	Merge(layers []ConfigLayer) (*MergeResult, error)
 }
@@ -442,7 +444,9 @@ func (s *ConfigurationService) PatchDeviceOverrides(deviceID uint, patch *Device
 		{Name: "patch", Config: patch},
 	}
 
-	result, err := s.merger.Merge(layers)
+	// Not s.merger: its result is a desired configuration, which has no section nothing was set in, and
+	// these overrides are stored as they are.
+	result, err := mergeStored(layers)
 	if err != nil {
 		return fmt.Errorf("failed to merge overrides: %w", err)
 	}

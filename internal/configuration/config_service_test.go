@@ -673,6 +673,65 @@ func TestConfigurationService_RecomputeDesiredConfig_PlainScalar(t *testing.T) {
 	assert.Equal(t, "time.example.org", desiredServer(t, repo), "null removes the override and the template's value returns")
 }
 
+// A device row that already holds the empty section is refused by apply until a recompute rewrites it,
+// and an override of only an empty value stores and produces no section (ginsys/shelly-manager#843).
+func TestConfigurationService_RecomputeDesiredConfig_EmptySectionStoredBeforeIsRewritten(t *testing.T) {
+	repo := newMockRepository()
+	repo.addDevice(1)
+	repo.devices[1].Overrides = `{"system":{"sntp":{}}}`
+	repo.devices[1].DesiredConfig = `{"system":{"sntp":{}}}`
+	svc := NewConfigurationService(repo, Engine{}, nil)
+
+	before, err := parseDesiredConfig(repo.devices[1].DesiredConfig)
+	require.NoError(t, err)
+	gen1, gen2 := plainScalarRefusals(t, before)
+	require.NotEmpty(t, gen1, "the stored row must be refused before the recompute, or this proves nothing")
+	require.NotEmpty(t, gen2)
+
+	require.NoError(t, svc.RecomputeDesiredConfig(1))
+
+	after, err := parseDesiredConfig(repo.devices[1].DesiredConfig)
+	require.NoError(t, err)
+	assert.Nil(t, after.System)
+	gen1, gen2 = plainScalarRefusals(t, after)
+	assert.Empty(t, gen1)
+	assert.Empty(t, gen2)
+}
+
+// The stored overrides keep what the body sent, as a PUT does; only the desired configuration has no section.
+func TestConfigurationService_PatchDeviceOverrides_AnEmptyValueAloneLeavesNoDesiredSection(t *testing.T) {
+	repo := newMockRepository()
+	repo.addDevice(1)
+	svc := NewConfigurationService(repo, Engine{}, nil)
+
+	empty := &DeviceConfiguration{System: &SystemConfiguration{SNTP: &SNTPConfig{}}}
+	require.NoError(t, svc.PatchDeviceOverrides(1, empty, nil))
+
+	desired, err := parseDesiredConfig(repo.devices[1].DesiredConfig)
+	require.NoError(t, err)
+	assert.Nil(t, desired.System)
+}
+
+// A PATCH rewrites the stored overrides, so it keeps a section of them that holds nothing set
+// (ginsys/shelly-manager#462 pinned this for a null; the desired configuration drops such a section).
+func TestConfigurationService_PatchDeviceOverrides_KeepsAStoredSectionHoldingNothingSet(t *testing.T) {
+	repo := newMockRepository()
+	repo.addDevice(1)
+	repo.devices[1].Overrides = `{"system":{"sleep_mode":{"enable":false}},"mqtt":{}}`
+	svc := NewConfigurationService(repo, Engine{}, nil)
+
+	patch := &DeviceConfiguration{System: &SystemConfiguration{SNTP: &SNTPConfig{Server: "time.example.org"}}}
+	require.NoError(t, svc.PatchDeviceOverrides(1, patch, nil))
+
+	overrides, err := svc.GetDeviceOverrides(1)
+	require.NoError(t, err)
+	require.NotNil(t, overrides.System)
+	require.NotNil(t, overrides.System.Sleep, "the stored sleep_mode section was dropped by an unrelated PATCH")
+	assert.False(t, overrides.System.Sleep.Enable)
+	assert.NotNil(t, overrides.MQTT, "the stored empty mqtt section was dropped by an unrelated PATCH")
+	assert.Equal(t, "time.example.org", overrides.System.SNTP.Server)
+}
+
 // A recompute that changes the desired configuration must never leave an applied device reading
 // applied against it, whichever of its writes fails (ginsys/shelly-manager#716).
 func TestConfigurationService_RecomputeDesiredConfig_FailedFlagWriteLeavesNoAppliedDevice(t *testing.T) {

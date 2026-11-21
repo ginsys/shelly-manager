@@ -24,7 +24,20 @@ func (Engine) Merge(layers []ConfigLayer) (*MergeResult, error) {
 	return MergeConfigurations(layers)
 }
 
+// MergeConfigurations merges layers into a desired configuration: a section nothing was set in is not in
+// the result (ginsys/shelly-manager#843).
 func MergeConfigurations(layers []ConfigLayer) (*MergeResult, error) {
+	return mergeLayers(layers, true)
+}
+
+// mergeStored merges layers into a configuration that is stored as it is, the overrides of a PATCH: it
+// keeps a section a layer sent even when nothing in it is set, because a PATCH rewrites what an operator
+// stored and must not drop it (ginsys/shelly-manager#462).
+func mergeStored(layers []ConfigLayer) (*MergeResult, error) {
+	return mergeLayers(layers, false)
+}
+
+func mergeLayers(layers []ConfigLayer, dropEmpty bool) (*MergeResult, error) {
 	if len(layers) == 0 {
 		return &MergeResult{
 			Config:  &DeviceConfiguration{},
@@ -39,7 +52,7 @@ func MergeConfigurations(layers []ConfigLayer) (*MergeResult, error) {
 		if layer.Config == nil {
 			continue
 		}
-		mergeInto(result, layer.Config, sources, layer.Name, "")
+		mergeInto(result, layer.Config, sources, layer.Name, "", dropEmpty)
 	}
 
 	return &MergeResult{
@@ -48,7 +61,7 @@ func MergeConfigurations(layers []ConfigLayer) (*MergeResult, error) {
 	}, nil
 }
 
-func mergeInto(dst, src interface{}, sources map[string]string, sourceName, pathPrefix string) {
+func mergeInto(dst, src interface{}, sources map[string]string, sourceName, pathPrefix string, dropEmpty bool) {
 	dstVal := reflect.ValueOf(dst)
 	srcVal := reflect.ValueOf(src)
 
@@ -98,10 +111,17 @@ func mergeInto(dst, src interface{}, sources map[string]string, sourceName, path
 				dstField.Set(cloneValue(srcField))
 				sources[fieldPath] = sourceName
 			} else if srcField.Elem().Kind() == reflect.Struct {
-				if dstField.IsNil() {
+				fresh := dstField.IsNil()
+				if fresh {
 					dstField.Set(reflect.New(dstField.Type().Elem()))
 				}
-				mergeInto(dstField.Interface(), srcField.Interface(), sources, sourceName, fieldPath)
+				mergeInto(dstField.Interface(), srcField.Interface(), sources, sourceName, fieldPath, dropEmpty)
+				// A section this call made and nothing was set in is no section: the merge sets only a
+				// non-zero plain value or a non-nil pointer, so a zero struct is exactly "nothing was set".
+				// (Not a test of the section's JSON: a field without omitempty writes its zero.)
+				if dropEmpty && fresh && dstField.Elem().IsZero() {
+					dstField.Set(reflect.Zero(dstField.Type()))
+				}
 			} else if srcField.Elem().Kind() == reflect.Slice {
 				// A pointer to a list replaces the list whole, an empty one included: nil leaves it alone.
 				dstField.Set(cloneValue(srcField))

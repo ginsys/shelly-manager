@@ -124,8 +124,17 @@ func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint, supplie
 
 	// The recompute's own path, on the target as the only layer.
 	var layers []ConfigLayer
+	var typed any = map[string]any{}
 	if layer, found := overrideLayer(overrides); found {
 		layers = append(layers, layer)
+		raw, marshalErr := json.Marshal(layer.Config)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("failed to encode the version as the typed model: %w", marshalErr)
+		}
+		var typedOK bool
+		if typed, typedOK = secrets.DecodeJSON(raw); !typedOK {
+			return nil, errors.New("failed to read the version as the typed model")
+		}
 	}
 	desired, err := s.desiredFromLayers(layers)
 	if err != nil {
@@ -135,7 +144,7 @@ func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint, supplie
 	if !ok {
 		return nil, errors.New("failed to read the recomputed configuration")
 	}
-	if paths := treeLoss(target, merged); len(paths) > 0 {
+	if paths := treeLoss(target, merged, typed); len(paths) > 0 {
 		return nil, &RollbackError{Kind: RollbackLoss, Paths: paths}
 	}
 
@@ -164,13 +173,15 @@ func (s *ConfigurationService) RollbackDesired(deviceID, historyID uint, supplie
 }
 
 // treeLoss is the round trip of note 3.2: the paths where the recomputed tree is not the target. A path
-// the target holds that the recomputed tree lacks or holds with another value is a loss. A path only the
-// recomputed tree holds is no loss when it is a JSON zero (the typed model writes `enable:false`), and
-// is one when it holds anything else.
-func treeLoss(target, merged any) []string {
+// the target holds that the recomputed tree lacks or holds with another value is a loss, except a key
+// that holds only zeros the typed model also holds (see lostUnder): the merge sets no zero of a plain
+// field, so it leaves out a section made of nothing else. A path only the recomputed tree holds is no loss
+// when it is a JSON zero (the typed model writes `enable:false`), and is one when it holds anything else.
+// typed is the target as the typed model writes it, decoded like the other two trees.
+func treeLoss(target, merged, typed any) []string {
 	var out []string
-	var walk func(t, m any, path []string)
-	walk = func(t, m any, path []string) {
+	var walk func(t, m, ty any, path []string)
+	walk = func(t, m, ty any, path []string) {
 		switch tv := t.(type) {
 		case map[string]any:
 			mv, ok := m.(map[string]any)
@@ -178,14 +189,16 @@ func treeLoss(target, merged any) []string {
 				out = append(out, formatPath(path))
 				return
 			}
+			tyv, _ := ty.(map[string]any)
 			for k, child := range tv {
 				p := append(path[:len(path):len(path)], k)
 				other, held := mv[k]
+				tyChild, tyHeld := tyv[k]
 				if !held {
-					out = append(out, formatPath(p))
+					out = append(out, lostUnder(child, tyChild, tyHeld, p)...)
 					continue
 				}
-				walk(child, other, p)
+				walk(child, other, tyChild, p)
 			}
 			for k, other := range mv {
 				if _, held := tv[k]; !held {
@@ -198,8 +211,13 @@ func treeLoss(target, merged any) []string {
 				out = append(out, formatPath(path))
 				return
 			}
+			tyv, _ := ty.([]any)
 			for i, child := range tv {
-				walk(child, mv[i], append(path[:len(path):len(path)], strconv.Itoa(i)))
+				var tyChild any
+				if i < len(tyv) {
+					tyChild = tyv[i]
+				}
+				walk(child, mv[i], tyChild, append(path[:len(path):len(path)], strconv.Itoa(i)))
 			}
 		default:
 			if !sameScalar(t, m) {
@@ -207,9 +225,41 @@ func treeLoss(target, merged any) []string {
 			}
 		}
 	}
-	walk(target, merged, nil)
+	walk(target, merged, typed, nil)
 	sort.Strings(out)
 	return out
+}
+
+// lostUnder gives the paths of a key the recomputed tree lacks. The key is a loss whole, at its own path,
+// unless it holds only zeros the typed model holds at the same place: then the merge left it out on
+// purpose (a zero of a plain field sets nothing, ginsys/shelly-manager#843) and the walk goes on beside
+// the typed tree, so a zero the typed model drops (an empty string, `omitempty`) is still reported at its
+// own leaf. A list is a loss at its own path, since the merge leaves an empty plain list nil.
+func lostUnder(t, typed any, typedHeld bool, path []string) []string {
+	if !typedHeld {
+		return []string{formatPath(path)}
+	}
+	var nonZero []string
+	nonZeroPaths(t, nil, &nonZero)
+	if len(nonZero) > 0 {
+		return []string{formatPath(path)}
+	}
+	switch tv := t.(type) {
+	case map[string]any:
+		typedMap, ok := typed.(map[string]any)
+		if !ok {
+			return []string{formatPath(path)}
+		}
+		var out []string
+		for k, child := range tv {
+			typedChild, held := typedMap[k]
+			out = append(out, lostUnder(child, typedChild, held, append(path[:len(path):len(path)], k))...)
+		}
+		return out
+	case []any:
+		return []string{formatPath(path)}
+	}
+	return nil
 }
 
 // nonZeroPaths appends the path of every value under v that is not a JSON zero.

@@ -220,10 +220,10 @@ func refusedSection(t *testing.T, path string) string {
 	return ""
 }
 
-// Apply refuses a populated field that does not survive the round trip. The merge used to drop the
-// plain fields and leave an empty section, which Apply refused as well, so a device whose template holds
-// a field Apply cannot write was never appliable. It still is not, with the refusal naming the same
-// section; only the SNTP server, which Apply writes, is now accepted.
+// Apply refuses a populated field that does not survive the round trip, so a device whose template holds
+// a field Apply cannot write is not appliable, with the refusal naming its section; only the SNTP
+// server, which Apply writes, is accepted. A layer that holds only zeros of these fields leaves no
+// section to refuse (merge_zero_section_test.go).
 func TestApplyRefusalsFollowPlainScalars(t *testing.T) {
 	for _, withName := range []bool{false, true} {
 		for _, tc := range plainScalarCases {
