@@ -52,16 +52,32 @@ func WriteGzip(root *os.Root, name string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	return gzipTo(f, data)
+}
+
+// syncWriteCloser is what the archive writers need of a file; *os.File satisfies it.
+type syncWriteCloser interface {
+	io.WriteCloser
+	Sync() error
+}
+
+// gzipTo writes data as one gzip stream to f and closes f. The trailer is written by the gzip writer's Close,
+// so that Close runs before the Sync, and the file's own Close error is returned too: a full disk shows up in
+// one of them, and an archive without its trailer is not a successful export.
+func gzipTo(f syncWriteCloser, data []byte) (err error) {
+	defer func() {
+		if cerr := f.Close(); err == nil && cerr != nil {
+			err = fmt.Errorf("failed to close file: %w", cerr)
+		}
+	}()
 
 	gz := gzip.NewWriter(f)
-	defer func() { _ = gz.Close() }()
-
-	if _, err := gz.Write(data); err != nil {
+	if _, err = gz.Write(data); err != nil {
 		return fmt.Errorf("failed to write gzip: %w", err)
 	}
-
-	// Let defer handle gz.Close()
+	if err = gz.Close(); err != nil {
+		return fmt.Errorf("failed to finish gzip: %w", err)
+	}
 	return f.Sync()
 }
 
@@ -80,21 +96,28 @@ func WriteZipSingle(root *os.Root, name string, entryName string, data []byte) e
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	return zipTo(f, entryName, data)
+}
+
+// zipTo writes data as a one-entry zip archive to f and closes f, in the order gzipTo explains: the zip
+// writer's Close writes the central directory, so it runs before the Sync.
+func zipTo(f syncWriteCloser, entryName string, data []byte) (err error) {
+	defer func() {
+		if cerr := f.Close(); err == nil && cerr != nil {
+			err = fmt.Errorf("failed to close file: %w", cerr)
+		}
+	}()
 
 	zw := zip.NewWriter(f)
-	defer func() { _ = zw.Close() }()
-
-	hdr := &zip.FileHeader{Name: entryName, Method: zip.Deflate}
-	w, err := zw.CreateHeader(hdr)
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Deflate})
 	if err != nil {
 		return fmt.Errorf("failed to create zip entry: %w", err)
 	}
-
-	if _, err := w.Write(data); err != nil {
+	if _, err = w.Write(data); err != nil {
 		return fmt.Errorf("failed to write zip entry: %w", err)
 	}
-
-	// Let defer handle zw.Close()
+	if err = zw.Close(); err != nil {
+		return fmt.Errorf("failed to finish zip: %w", err)
+	}
 	return f.Sync()
 }
