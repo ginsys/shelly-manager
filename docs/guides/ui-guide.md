@@ -114,8 +114,8 @@ from this import** on that card opens a dialog that makes a configuration templa
 - The dialog reads the import through the server's typed form. For a second-generation device that form holds
   the device name and time settings, the Wi-Fi station and access point, MQTT, cloud, and the switch and input
   channels. A setting with no typed home, such as the Bluetooth, WebSocket or script settings, is not offered; the
-  typed form names each in its `conversion_info` warnings. The sections you can tick are still those that the
-  device's schema lists.
+  typed form names each such top-level key in its `conversion_info` warnings, and does not name a single setting
+  inside a key it reads. The sections you can tick are still those that the device's schema lists.
 - Enter a name and a description. The scope is the model of the device's schema (`GET /config/schema?device_id=...`) when
   the server lists it (`GET /config/device-types`); otherwise the template is for all devices. A refusal from the server shows its
   reason, and the field list when the server names fields. After a save, the dialog says **Template saved** and links to the new template; it goes nowhere by itself. If you leave the page while the save runs, a notice says whether it went through.

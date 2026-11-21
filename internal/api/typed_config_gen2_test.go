@@ -17,8 +17,8 @@ import (
 )
 
 // The typed read of a second-generation import (ginsys/shelly-manager#789). The input is a real-shaped
-// Shelly.GetConfig document of a Plus 1PM. Its sections get their typed homes, and every setting the
-// typed model has no home for is named in a warning and kept in the raw part.
+// Shelly.GetConfig document of a Plus 1PM. Its sections get their typed homes, the raw part holds the
+// whole document, and a warning names each top-level key that nothing is read from.
 
 func gen2Fixture(t *testing.T) []byte {
 	t.Helper()
@@ -63,21 +63,8 @@ var plus1PMSections = map[string]string{
 	"input":    `{"inputs":[{"id":0,"type":"switch","mode":"follow","inverted":false}]}`,
 }
 
-// Every setting of the Plus 1PM document that has no typed home. A top-level key that nothing in it is
-// read from is named as the key.
-var plus1PMUnread = []string{
-	"ble", "ws", "script:1", "modbus",
-	"mqtt.ssl_ca", "mqtt.use_client_cert", "mqtt.enable_control",
-	"wifi.ap.is_open", "wifi.ap.range_extender.enable", "wifi.sta.is_open", "wifi.sta.pass", "wifi.roam.interval",
-	"wifi.sta1.ssid", "wifi.sta1.pass", "wifi.sta1.is_open", "wifi.sta1.enable", "wifi.sta1.ipv4mode",
-	"wifi.sta1.ip", "wifi.sta1.netmask", "wifi.sta1.gw", "wifi.sta1.nameserver",
-	"sys.cfg_rev", "sys.device.fw_id", "sys.device.mac",
-	"sys.debug.level", "sys.debug.file_level", "sys.debug.mqtt.enable", "sys.debug.websocket.enable", "sys.debug.udp.addr",
-	"sys.rpc_udp.dst_addr", "sys.rpc_udp.listen_port",
-	"switch:0.id", "switch:0.input_id", "switch:0.auto_on_delay", "switch:0.autorecover_voltage_errors", "switch:0.power_limit",
-	"switch:0.voltage_limit", "switch:0.undervoltage_limit", "switch:0.current_limit",
-	"input:0.id", "input:0.enable", "input:0.factory_reset",
-}
+// The top-level keys of the Plus 1PM document that nothing is read from, sorted.
+var plus1PMUnread = []string{"ble", "modbus", "script:1", "ws"}
 
 func TestConvertToTypedConfig_ByGeneration(t *testing.T) {
 	h := &Handler{}
@@ -102,32 +89,24 @@ func TestConvertToTypedConfig_ByGeneration(t *testing.T) {
 				assert.JSONEq(t, want, string(sections[section]), "section %s", section)
 			}
 
-			want := append([]string(nil), plus1PMUnread...)
-			sort.Strings(want)
-			assert.Equal(t, want, rawKeyWarning(t, info))
+			assert.Equal(t, plus1PMUnread, rawKeyWarning(t, info))
+			assert.JSONEq(t, string(doc), string(typed.Raw), "the raw part is the whole document")
 			assert.Equal(t, "raw", info.ConvertedFrom)
 			assert.True(t, info.HasTypedConfig)
 		})
 	}
 }
 
-// A setting the typed model reads, at its zero value, is typed and is not also kept in the raw part:
-// the two would disagree after the typed value is edited.
-func TestConvertToTypedConfig_Gen2ZeroValueIsNotKeptTwice(t *testing.T) {
-	h := &Handler{}
-	typed, info, err := h.convertToTypedConfig(gen2Fixture(t), &database.Device{})
+// The warning names top-level keys only: a key that is read is not named, however many of its
+// sub-keys the typed form has no home for (sys.cfg_rev, mqtt.ssl_ca). They are in the raw part.
+func TestConvertToTypedConfig_Gen2WarnsOnTopLevelKeysOnly(t *testing.T) {
+	typed, info, err := (&Handler{}).convertToTypedConfig(gen2Fixture(t), &database.Device{})
 	require.NoError(t, err)
-
-	// sys.device.eco_mode, mqtt.status_ntf, input:0.invert and switch:0.auto_on are all false in the
-	// fixture, and each is read.
-	for _, key := range []string{"eco_mode", "status_ntf", "invert", "auto_on"} {
-		assert.NotContains(t, string(typed.Raw), `"`+key+`":`)
+	for _, key := range rawKeyWarning(t, info) {
+		assert.NotContains(t, key, ".")
 	}
-	warned := rawKeyWarning(t, info)
-	for _, path := range []string{"sys.device.eco_mode", "mqtt.status_ntf", "input:0.invert", "switch:0.auto_on"} {
-		assert.NotContains(t, warned, path)
-	}
-	assert.Contains(t, string(typed.Raw), `"ws"`, "a component nothing reads stays")
+	assert.Contains(t, string(typed.Raw), `"cfg_rev"`)
+	assert.Contains(t, string(typed.Raw), `"ssl_ca"`)
 }
 
 func TestConvertToTypedConfig_Gen2TwoChannelsAndNulls(t *testing.T) {
@@ -228,88 +207,64 @@ func TestTypedConfigRoutes_Gen2SecretsAreMaskedAndSurviveASave(t *testing.T) {
 			assert.NotContains(t, w, secret, "a warning names paths and never values")
 		}
 	}
-	assert.Contains(t, strings.Join(read.ConversionInfo.Warnings, " "), "wifi.sta.pass")
+	assert.Contains(t, strings.Join(read.ConversionInfo.Warnings, " "), "modbus")
 
-	// Read, then save the read back unchanged.
+	// Read, then save the read back, twice: the first save replaces the imported document with the typed
+	// one, the second reads that typed document as the stored one.
+	for round := 1; round <= 2; round++ {
+		putBody, err := json.Marshal(map[string]any{"configuration": read.Configuration})
+		require.NoError(t, err)
+		put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, string(putBody))
+		require.Equal(t, http.StatusOK, put.Code, "save %d: %s", round, put.Body.String())
+
+		stored := storedConfig(t, h, id)
+		for _, secret := range []string{gen2STA, gen2STA1, gen2Modbus} {
+			assert.Contains(t, stored, secret, "save %d must keep the stored secret %s", round, secret)
+		}
+		assert.NotContains(t, stored, secretMask, "save %d must never store the mask", round)
+		for _, key := range []string{"power_limit", "cfg_rev", "ssl_ca", "script:1", `"ws"`, `"ble"`} {
+			assert.Contains(t, stored, key, "save %d loses the setting %s", round, key)
+		}
+
+		// The read after the save still masks the raw part.
+		again := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+		require.Equal(t, http.StatusOK, again.Code, again.Body.String())
+		for _, secret := range []string{gen2STA, gen2STA1, gen2Modbus} {
+			assert.NotContains(t, again.Body.String(), secret, "the read after save %d returns %s", round, secret)
+		}
+		require.NoError(t, json.Unmarshal(dataOf(t, again.Body.Bytes()), &read))
+		require.NoError(t, json.Unmarshal(read.Configuration["raw"], &raw))
+		assert.Equal(t, secretMask, raw.WiFi.STA.Pass, "round %d", round)
+	}
+}
+
+// A typed field the form clears stays cleared: the raw part is a copy of the import and never wins over
+// the typed value, and the secrets in it still survive the save.
+func TestTypedConfigRoutes_Gen2ClearedTypedFieldStaysCleared(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	device := testutil.TestDevice()
+	device.Type, device.Firmware = "SNSW-001P16EU", "1.4.4"
+	device.Settings = `{"model":"SNSW-001P16EU","gen":2,"auth_enabled":false}`
+	require.NoError(t, h.DB.AddDevice(device))
+	require.NoError(t, h.Service.ConfigSvc.UpdateDeviceConfigFromJSON(device.ID, json.RawMessage(gen2Fixture(t))))
+	id := idString(device)
+
+	get := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+	require.Equal(t, http.StatusOK, get.Code, get.Body.String())
+	var read struct {
+		Configuration map[string]json.RawMessage `json:"configuration"`
+	}
+	require.NoError(t, json.Unmarshal(dataOf(t, get.Body.Bytes()), &read))
+	read.Configuration["cloud"] = json.RawMessage(`{"enable":false}`)
 	putBody, err := json.Marshal(map[string]any{"configuration": read.Configuration})
 	require.NoError(t, err)
 	put := serve(h.UpdateTypedDeviceConfig, "PUT", "/api/v1/devices/1/config/typed", id, string(putBody))
 	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
 
-	stored := storedConfig(t, h, id)
-	for _, secret := range []string{gen2STA, gen2STA1, gen2Modbus} {
-		assert.Contains(t, stored, secret, "a saved read must keep the stored secret %s", secret)
-	}
-	assert.NotContains(t, stored, secretMask, "the mask must never be stored")
-	for _, key := range []string{"power_limit", "voltage_limit", "current_limit", "script:1", `"ws"`} {
-		assert.Contains(t, stored, key, "a typed save loses the unread setting %s", key)
-	}
-}
-
-// leafPaths lists the dotted path of every leaf of a decoded document. An empty object is no leaf.
-func leafPaths(prefix string, v any, out *[]string) {
-	if m, ok := v.(map[string]any); ok {
-		for k, child := range m {
-			p := k
-			if prefix != "" {
-				p = prefix + "." + k
-			}
-			leafPaths(p, child, out)
-		}
-		return
-	}
-	*out = append(*out, prefix)
-}
-
-// Every setting of the document is either read into a typed field or kept in the raw part. The read ones
-// are listed, and the converter's own raw part is compared with the document leaf by leaf, so a setting
-// that the reader starts or stops reading, or that falls between the two, changes this test.
-func TestConvertToTypedConfig_Gen2EverySettingIsReadOrKept(t *testing.T) {
-	var doc map[string]any
-	require.NoError(t, json.Unmarshal(gen2Fixture(t), &doc))
-	var all []string
-	leafPaths("", doc, &all)
-
-	typed, _, err := (&Handler{}).convertToTypedConfig(gen2Fixture(t), &database.Device{})
-	require.NoError(t, err)
-	var rawDoc map[string]any
-	require.NoError(t, json.Unmarshal(typed.Raw, &rawDoc))
-	var rawLeaves []string
-	leafPaths("", rawDoc, &rawLeaves)
-	inRaw := map[string]bool{}
-	for _, p := range rawLeaves {
-		inRaw[p] = true
-	}
-
-	kept := map[string]bool{}
-	for _, p := range plus1PMUnread {
-		kept[p] = true
-	}
-	var read []string
-	for _, p := range all {
-		covered := false
-		for k := range kept {
-			if p == k || strings.HasPrefix(p, k+".") {
-				covered = true
-			}
-		}
-		assert.Equal(t, covered, inRaw[p], "%s: the raw part and the unread list disagree", p)
-		if !inRaw[p] {
-			read = append(read, p)
-		}
-	}
-	sort.Strings(read)
-	want := []string{
-		"cloud.enable", "cloud.server",
-		"input:0.invert", "input:0.name", "input:0.type",
-		"mqtt.client_id", "mqtt.enable", "mqtt.server", "mqtt.status_ntf", "mqtt.rpc_ntf", "mqtt.topic_prefix", "mqtt.user",
-		"switch:0.auto_off", "switch:0.auto_off_delay", "switch:0.auto_on", "switch:0.in_mode", "switch:0.initial_state", "switch:0.name",
-		"sys.device.discoverable", "sys.device.eco_mode", "sys.device.name",
-		"sys.location.lat", "sys.location.lon", "sys.location.tz", "sys.sntp.server",
-		"wifi.ap.enable", "wifi.ap.ssid", "wifi.roam.rssi_thr", "wifi.sta.enable", "wifi.sta.ip", "wifi.sta.ipv4mode",
-		"wifi.sta.gw", "wifi.sta.netmask", "wifi.sta.nameserver", "wifi.sta.ssid",
-	}
-	sort.Strings(want)
-	assert.Equal(t, want, read)
-	assert.Len(t, rawLeaves, len(all)-len(want), "the raw part holds a leaf the document does not")
+	after := serve(h.GetTypedDeviceConfig, "GET", "/api/v1/devices/1/config/typed", id, "")
+	require.Equal(t, http.StatusOK, after.Code, after.Body.String())
+	require.NoError(t, json.Unmarshal(dataOf(t, after.Body.Bytes()), &read))
+	assert.JSONEq(t, `{"enable":false}`, string(read.Configuration["cloud"]))
+	assert.Contains(t, storedConfig(t, h, id), gen2Modbus)
 }
