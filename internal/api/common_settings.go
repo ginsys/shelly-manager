@@ -37,6 +37,9 @@ var perDevicePaths = []string{
 	"location.lng",
 	"system.location.lat",
 	"system.location.lng",
+	"system.device.lat_lon",
+	"schedule.latitude",
+	"schedule.longitude",
 }
 
 // maxCommonSettingsDevices is the most devices one request names. It reads the database only, so the
