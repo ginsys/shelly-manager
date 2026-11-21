@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLateResult } from '@/composables/useNotice'
 import { getDesiredHistory, rollbackDesired, RollbackRefused, type DesiredVersion, type RollbackSecrets } from '@/api/desiredRollback'
 import { diffDesired, parseVersion } from '@/utils/desiredDiff'
@@ -116,7 +116,9 @@ const props = defineProps<{
   templates: ConfigTemplate[]
   editing: boolean
 }>()
-const emit = defineEmits<{ refresh: [] }>()
+// `busy` says a rollback request is in flight (it may wait for the admin key, which replays it): the page keeps
+// the overrides editor shut meanwhile, because the answer's refresh would overwrite an edit made in the wait.
+const emit = defineEmits<{ refresh: []; busy: [boolean] }>()
 
 const versions = ref<DesiredVersion[]>([])
 const loaded = ref(false)
@@ -134,6 +136,8 @@ const reportLateResult = useLateResult()
 // Counts the reads of the list: only the newest fills it. `gone` is true once the card was removed.
 let readSeq = 0
 let gone = false
+watch(busy, (value) => emit('busy', value), { flush: 'sync' })
+onBeforeUnmount(() => emit('busy', false))
 onUnmounted(() => {
   gone = true
   entered.value = {}

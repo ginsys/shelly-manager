@@ -93,6 +93,32 @@ describe('DeviceConfigPage rollback card', () => {
     expect(wrapper.get('[data-testid="rollback-5"]').attributes('disabled')).toBeUndefined()
   })
 
+  // The dialog does not trap the keyboard and the admin-key prompt replays the POST, so an edit could be started
+  // while the request is in flight and its answer's refresh would overwrite it.
+  it('keeps the overrides editor shut while a rollback request is in flight, and frees it after, also when the device changes', async () => {
+    let release: (v: unknown) => void = () => {}
+    vi.mocked(rollbackDesired).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    const { wrapper, router } = await mountPage()
+    const edit = () => wrapper.findAll('button').find((b) => b.text() === 'Edit')!
+    expect(edit().attributes('disabled')).toBeUndefined()
+
+    await wrapper.get('[data-testid="rollback-5"]').trigger('click')
+    await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
+    expect(edit().attributes('disabled')).toBeDefined()
+    expect(edit().attributes('title')).toBe('A rollback is running')
+    release({ version_id: 9, no_change: false, detached_template_ids: [], message: 'done' })
+    await flushPromises()
+    expect(edit().attributes('disabled')).toBeUndefined()
+
+    vi.mocked(rollbackDesired).mockReturnValueOnce(new Promise(() => {}) as any)
+    await wrapper.get('[data-testid="rollback-5"]').trigger('click')
+    await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
+    expect(edit().attributes('disabled')).toBeDefined()
+    await router.push('/devices/8/config')
+    await flushPromises()
+    expect(edit().attributes('disabled')).toBeUndefined()
+  })
+
   it('leaves nothing of the old device on the new one: a late answer fills nothing and the typed secrets are gone', async () => {
     let release: (v: unknown) => void = () => {}
     vi.mocked(rollbackDesired)
