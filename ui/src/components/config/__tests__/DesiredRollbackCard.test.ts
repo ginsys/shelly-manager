@@ -158,6 +158,18 @@ describe('DesiredRollbackCard', () => {
       expect(wrapper.get('[data-testid="rollback-no-diff"]').text()).toContain('could not be read as settings')
     })
 
+    // The dialog does not trap the keyboard: the overrides editor can be opened behind it after it opened.
+    it('refuses to start while the overrides editor is open behind the dialog, and says why', async () => {
+      const wrapper = mountCard()
+      await flushPromises()
+      await open(wrapper)
+      await wrapper.setProps({ editing: true })
+      expect(wrapper.get('[data-testid="rollback-confirm"]').attributes('disabled')).toBeDefined()
+      await (wrapper.vm as any).confirm()
+      expect(rollbackDesired).not.toHaveBeenCalled()
+      expect(wrapper.get('[data-testid="rollback-refusal"]').text()).toContain('Save or cancel the overrides edit first')
+    })
+
     it('cancel closes the dialog and posts nothing', async () => {
       const wrapper = mountCard()
       await flushPromises()

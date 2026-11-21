@@ -43,6 +43,24 @@ describe('diffDesired', () => {
     ])
   })
 
+  // The desired read keeps an empty secret_urls list (it holds no secret) and the history masks a populated one.
+  it.each([
+    ['the whole list masked', MASK],
+    ['each URL masked', [MASK]],
+  ])('treats an empty action URL list in the current as no difference from a masked one (%s)', (_label, masked) => {
+    const target = { actions: [{ name: 'out_on_url', index: 0, secret_urls: masked }] }
+    const current = { actions: [{ name: 'out_on_url', index: 0, secret_urls: [] }] }
+    expect(diffDesired(target, current)).toEqual([])
+  })
+
+  it('still shows an empty list that the version lacks, and a mask against a value that is no secret list', () => {
+    expect(diffDesired({ a: { x: 1 } }, { a: { x: 1 }, l: [] })).toEqual([{ path: 'l', kind: 'removed', from: [] }])
+    expect(diffDesired({ other: MASK, a: { x: 1 } }, { a: { x: 1 }, l: [] })).toEqual([{ path: 'l', kind: 'removed', from: [] }])
+    expect(diffDesired({ mqtt: { pass: MASK } }, { mqtt: { pass: 'x' } })).toEqual([
+      { path: 'mqtt.pass', kind: 'changed', from: 'x', to: MASK },
+    ])
+  })
+
   it('does not read two objects that differ only in key order as a difference', () => {
     const target = { actions: [{ name: 'a', index: 0, enabled: true }] }
     const current = { actions: [{ enabled: true, index: 0, name: 'a' }] }
