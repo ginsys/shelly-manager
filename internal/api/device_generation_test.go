@@ -34,6 +34,8 @@ var generationCases = []struct {
 	{"Gen2 firmware 1.4.4, no gen", gen2Firmware, `{}`, 2},
 	{"Gen3 firmware 1.2.0, no gen", "1.2.0", `{}`, 2},
 	{"Gen2 fw_id, no gen", gen2FirmwareID, `{}`, 2},
+	{"Gen2 version with a v1. inside a suffix", "1.4.4-dev1.2", `{}`, 2},
+	{"Gen2 fw_id with a v1. inside a suffix", "20241011-114455/1.4.4-dev1.2", `{}`, 2},
 	{"empty firmware, no gen", "", `{}`, 0},
 	{"build id only, no gen", buildIDOnly, `{}`, 0},
 	{"junk firmware, no gen", "unknown", `{}`, 0},

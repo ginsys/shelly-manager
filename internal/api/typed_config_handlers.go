@@ -909,7 +909,7 @@ func deviceGeneration(device *database.Device) int {
 // dot. A Gen2 or later version is bare ("1.4.4", or "<build>/1.4.4-<hash>" as fw_id). An empty string, or a
 // build id with no version, says nothing.
 func generationFromFirmware(firmware string) int {
-	if strings.Contains(firmware, "v1.") {
+	if strings.HasPrefix(firmware, "v1.") || strings.Contains(firmware, "/v1.") {
 		return 1
 	}
 	if firmware != "" && firmware[0] >= '0' && firmware[0] <= '9' && strings.Contains(firmware, ".") {
