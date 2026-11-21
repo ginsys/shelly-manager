@@ -172,8 +172,9 @@ the merged tree lacks that path. A zero in a field without `omitempty` (the `ena
 `BLEConfig`) is written anyway and passes. The same holds when the merge leaves out a whole section
 because it holds nothing else (ginsys/shelly-manager#843): a key the merged tree lacks is not a loss when
 everything under it is a zero and the typed model holds each of those zeros at the same place, and a zero
-the typed model drops is still reported at its own path. A list, or any non-zero value, under a missing
-key is reported whole. The rollback checks that before it writes: it merges the target as the only layer and compares the two **decoded JSON trees**, never their
+the typed model drops is still reported at its own path, and so is a zero that is not the one the typed
+model writes (a `null` where it writes `false`). A non-zero value under a missing key reports that key
+whole, and a list is reported at the list's own path. The rollback checks that before it writes: it merges the target as the only layer and compares the two **decoded JSON trees**, never their
 text, so a version whose keys are in another order, such as one written by an archive import, passes. A
 path the target holds that the merged tree lacks, or holds with another value, is a loss. A path only the
 merged tree holds counts as equal when its value is a JSON zero (`false`, `0`, `""`, `null`, an empty

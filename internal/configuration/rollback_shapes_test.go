@@ -45,6 +45,9 @@ var rollbackShapes = []struct {
 	{"a null section", `{"system":null}`, "loss system"},
 	{"a null in a section", `{"system":{"sntp":null}}`, "loss system.sntp"},
 	{"an empty list of a real field", `{"relay":{"relays":[]}}`, "loss relay.relays"},
+	// A null where the typed model holds a zero without omitempty: the recompute holds false, the target nil.
+	{"a null in a sleep mode", `{"system":{"sleep_mode":{"enable":null}}}`, "loss system.sleep_mode.enable"},
+	{"a null in a ble", `{"system":{"device":{"ble":{"enable":null}}}}`, "loss system.device.ble.enable"},
 	// The dropped section sits inside a section the merge keeps, so the typed tree is asked below the root.
 	{"an empty section beside a real value in its parent", `{"system":{"sntp":{},"sleep_mode":{"enable":true}}}`, "ok"},
 	{"an empty string beside a real value in its parent", `{"system":{"sntp":{"server":""},"sleep_mode":{"enable":true}}}`, "loss system.sntp.server"},
