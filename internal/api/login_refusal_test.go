@@ -43,8 +43,10 @@ func refusingDevice(t *testing.T, probeHangs bool) (addr string) {
 
 // A device that refuses the saved login is answered 502 with the credentials message on every read,
 // also when the identity read that follows the refusal fails (ginsys/shelly-manager#759). Status and
-// energy reach the builder's second clear site, current config the first; all four said "did not
-// answer" or a bare 500 before.
+// energy reach the builder's second clear site, current config the first. When the identity read
+// times out, all four said "did not answer" or a bare 500 before. When it answers with the stored
+// MAC the login is cleared and retried and neither clear site returns early: those rows are
+// controls, and only status and energy answered 500 there before.
 func TestDeviceReads_ARefusedLoginIsA502WhateverTheIdentityReadDoes(t *testing.T) {
 	routes := []struct {
 		name string
