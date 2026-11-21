@@ -24,6 +24,7 @@ describe('Navigation Routes Configuration', () => {
     // Main navigation routes
     expect(routeNames).toContain('devices')
     expect(routeNames).toContain('device-detail')
+    expect(routeNames).toContain('template-common-settings')
 
     // Export routes
     expect(routeNames).not.toContain('export-schedules')

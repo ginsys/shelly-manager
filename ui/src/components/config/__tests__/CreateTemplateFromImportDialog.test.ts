@@ -249,3 +249,64 @@ describe('CreateTemplateFromImportDialog', () => {
     expect(save()).toBe(true)
   })
 })
+
+// The common-settings wizard hands the dialog the settings the devices share, so the dialog reads no device.
+describe('CreateTemplateFromImportDialog with common settings', () => {
+  const common = {
+    typed: { mqtt: { enable: true, server: 'broker:1883' }, system: { tz: 'Europe/Brussels' } },
+    deviceType: 'SHPLG-S',
+    differing: { mqtt: 2 },
+  }
+
+  async function readyCommon(props: Record<string, unknown> = { common }) {
+    const wrapper = mount(CreateTemplateFromImportDialog, {
+      props: { title: 'Create template from the common settings', ...props },
+      global: { stubs: { RouterLink: LinkStub } },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  beforeEach(() => {
+    ;(getTypedDeviceConfig as any).mockReset()
+    ;(getConfigSchema as any).mockReset().mockResolvedValue(schema)
+    ;(listDeviceTypes as any)
+      .mockReset()
+      .mockResolvedValue([{ device_type: 'SHPLG-S', name: 'Shelly Plug S', generation: 1 }])
+    ;(createTemplate as any).mockReset().mockResolvedValue({ id: 42, name: 'Good' })
+  })
+
+  it('reads no device, takes its sections from the common settings and the schema of their model', async () => {
+    const wrapper = await readyCommon()
+
+    expect(getTypedDeviceConfig).not.toHaveBeenCalled()
+    expect(getConfigSchema).toHaveBeenCalledWith('SHPLG-S', undefined, undefined)
+    expect(wrapper.get('#from-import-title').text()).toBe('Create template from the common settings')
+    expect(wrapper.find('[data-testid="section-mqtt"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="section-system"]').exists()).toBe(true)
+  })
+
+  it('says how many values of a section differ, and saves what was ticked for that model', async () => {
+    const wrapper = await readyCommon()
+
+    expect(wrapper.get('[data-testid="section-differing-mqtt"]').text()).toContain('2 differ')
+    expect(wrapper.find('[data-testid="section-differing-system"]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="section-system"]').setValue(false)
+    await wrapper.get('[data-testid="from-import-name"]').setValue('Shared')
+    await wrapper.get('[data-testid="from-import-save"]').trigger('click')
+    await flushPromises()
+
+    const sent = (createTemplate as any).mock.calls[0][0]
+    expect(sent).toMatchObject({ name: 'Shared', scope: 'device_type', device_type: 'SHPLG-S' })
+    expect(sent.config).toEqual({ mqtt: { enable: true, server: 'broker:1883' } })
+  })
+
+  it('asks for the global schema and offers only all devices when the devices are not one model', async () => {
+    ;(getConfigSchema as any).mockResolvedValue({ ...schema, 'x-device-type': undefined })
+    const wrapper = await readyCommon({ common: { ...common, deviceType: '' } })
+
+    expect(getConfigSchema).toHaveBeenCalledWith(undefined, undefined, 'global')
+    expect(wrapper.find('option[value="device_type"]').exists()).toBe(false)
+  })
+})

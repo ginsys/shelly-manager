@@ -130,6 +130,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, history) | Device details, Configuration history |
 | `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | Device details |
 | `/templates` | Configuration templates | top bar, Template detail |
+| `/templates/common-settings` | Common settings (compare the imports of several devices, save what they share as a template) | Templates |
 | `/templates/:id` | Template detail | Templates |
 | `/drift/schedules` | Drift schedules (create, edit, enable or disable, delete, recent runs; see section 5) | top bar (Drift) |
 | `/drift/reports` | Drift reports | top bar (Drift) |

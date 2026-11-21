@@ -1,7 +1,7 @@
 <template>
   <div class="modal-overlay" data-testid="from-import-dialog" @click.self="close">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="from-import-title">
-      <h2 id="from-import-title">Create template from this import</h2>
+      <h2 id="from-import-title">{{ title ?? 'Create template from this import' }}</h2>
 
       <p v-if="loading" class="hint" role="status" data-testid="from-import-loading">
         Reading the imported configuration...
@@ -26,8 +26,14 @@
           <label v-for="s in sections" :key="s" class="check">
             <input v-model="ticked" type="checkbox" :value="s" :data-testid="`section-${s}`" />
             {{ s }}
+            <span v-if="common?.differing?.[s]" class="differs" :data-testid="`section-differing-${s}`">
+              ({{ common.differing[s] }} differ)
+            </span>
           </label>
         </fieldset>
+        <p v-if="sections.some((s) => common?.differing?.[s])" class="hint" data-testid="from-import-partial">
+          A section marked "differ" is saved without the values the devices disagree on.
+        </p>
 
         <p class="hint" data-testid="from-import-left-out">
           Left out: {{ PER_DEVICE_NOTE }}<template v-if="body.omittedSecrets.length > 0">;
@@ -84,7 +90,14 @@ import {
 } from '@/api/templates'
 import { PER_DEVICE_NOTE, buildTemplateBody, defaultTicked, importSections } from '@/utils/templateFromImport'
 
-const props = defineProps<{ deviceId: number | string }>()
+// A dialog for one device's import reads the device. With `common` (the settings that several devices share,
+// already free of secrets and per-device values) it reads none: the settings, the model that all the devices
+// have (empty for a mix) and the number of values left out per section are given.
+const props = defineProps<{
+  deviceId?: number | string
+  common?: { typed: Record<string, any>; deviceType: string; differing?: Record<string, number> }
+  title?: string
+}>()
 const emit = defineEmits<{ close: [] }>()
 
 const reportLate = useLateFailure()
@@ -138,9 +151,12 @@ async function load() {
   try {
     // The typed read and the schema must both answer. The device types are optional: without them
     // only an all-devices template is offered.
+    const common = props.common
     const [typedConfig, deviceSchema, types] = await Promise.all([
-      getTypedDeviceConfig(props.deviceId),
-      getConfigSchema(undefined, props.deviceId),
+      common ? common.typed : getTypedDeviceConfig(props.deviceId!),
+      common
+        ? getConfigSchema(common.deviceType || undefined, undefined, common.deviceType ? undefined : 'global')
+        : getConfigSchema(undefined, props.deviceId),
       listDeviceTypes().catch(() => []),
     ])
     if (!alive) return
@@ -201,6 +217,7 @@ onMounted(load)
 .modal { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: #fff; border-radius: 12px; border: 1px solid #e5e7eb; padding: 14px; }
 .sections { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .check { display: inline-flex; align-items: center; gap: 6px; }
+.differs { color: #92400e; font-size: 12px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group.full { grid-column: 1 / -1; }

@@ -120,6 +120,23 @@ from this import** on that card opens a dialog that makes a configuration templa
   the server lists it (`GET /config/device-types`); otherwise the template is for all devices. A refusal from the server shows its
   reason, and the field list when the server names fields. After a save, the dialog says **Template saved** and links to the new template; it goes nowhere by itself. If you leave the page while the save runs, a notice says whether it went through.
 
+#### Common settings
+
+**Common settings** on the Templates page (`/templates/common-settings`) compares the last imported configuration of
+several devices and offers what they share as a template.
+
+- Choose the devices: all devices of one model, or a hand pick. **Compare** reads each device's import through the
+  server (`POST /config/common-settings`), which never contacts a device.
+- The page says how many devices were compared and names each device it skipped, with the reason (no import, or the
+  device does not exist). A device with no import is never counted as agreeing. One device is not a comparison.
+- What is shown is only what is equal on every compared device. Secrets are never compared or shown, even a password
+  that is the same on every device, and what is one device's own is left out as in the dialog above. A list, such as
+  the relays, is shared only when all devices have the same number of entries, and then entry by entry.
+- **Create template from these** opens the same dialog as above. A section that is only partly common is marked with
+  how many values differ, and is saved without them. The scope is the model when all compared devices have one, and
+  all devices otherwise.
+- A second-generation import reads as few sections until the server's typed form reads all of its keys.
+
 ### Export/Import Section
 
 #### Navigation Structure

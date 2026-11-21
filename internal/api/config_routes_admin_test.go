@@ -63,6 +63,7 @@ var adminGuardedConfigRoutes = []struct{ method, path string }{
 	{"POST", "/api/v1/config/convert-to-typed"},
 	{"POST", "/api/v1/config/convert-to-raw"},
 	{"POST", "/api/v1/config/bulk-validate"},
+	{"POST", "/api/v1/config/common-settings"},
 	{"POST", "/api/v1/config/bulk-import"},
 	{"POST", "/api/v1/config/bulk-drift-detect"},
 	{"POST", "/api/v1/config/bulk-drift-detect-enhanced"},
