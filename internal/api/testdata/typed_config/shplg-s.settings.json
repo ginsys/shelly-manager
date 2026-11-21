@@ -1,0 +1,43 @@
+{
+  "device": {
+    "type": "SHPLG-S",
+    "mac": "E8DB84DDEEFF",
+    "hostname": "shellyplug-s-DDEEFF",
+    "num_outputs": 1,
+    "num_meters": 1
+  },
+  "wifi_ap": {"enabled": false, "ssid": "shellyplug-s-DDEEFF", "key": ""},
+  "wifi_sta": {
+    "enabled": true, "ssid": "HomeNet", "ipv4_method": "static",
+    "ip": "192.168.1.50", "gw": "192.168.1.1", "mask": "255.255.255.0", "dns": "192.168.1.1"
+  },
+  "wifi_sta1": {"enabled": false, "ssid": null, "ipv4_method": "dhcp", "ip": null, "gw": null, "mask": null, "dns": null},
+  "mqtt": {"enable": false, "server": "192.168.33.3:1883", "user": "", "id": "shellyplug-s-DDEEFF", "keep_alive": 60},
+  "sntp": {"server": "time.google.com"},
+  "login": {"enabled": false, "unprotected": false, "username": "admin"},
+  "coiot": {"enabled": true, "update_period": 15, "peer": ""},
+  "name": null,
+  "fw": "20230913-112234/v1.14.0-gcb84623",
+  "cloud": {"enabled": true, "connected": true},
+  "timezone": "Europe/Brussels",
+  "lat": 50.8503,
+  "lng": 4.3517,
+  "tzautodetect": true,
+  "tz_utc_offset": 3600,
+  "tz_dst": false,
+  "tz_dst_auto": true,
+  "time": "09:15",
+  "hwinfo": {"hw_revision": "prod-1.0", "batch_id": 1},
+  "mode": "relay",
+  "max_power": 2500,
+  "led_status_disable": false,
+  "led_power_disable": true,
+  "eco_mode_enabled": true,
+  "relays": [
+    {
+      "name": null, "ison": true, "has_timer": false, "default_state": "last",
+      "auto_on": 0, "auto_off": 0, "power": 12.3, "schedule": true,
+      "schedule_rules": ["0700-0123456-on", "2200-0123456-off"]
+    }
+  ]
+}
