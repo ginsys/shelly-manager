@@ -15,7 +15,10 @@ import (
 
 // Errors a handler maps to a response. None of them carries a token or a hash.
 var (
-	ErrAgentInUse      = errors.New("agent id in use")
+	ErrAgentInUse = errors.New("agent id in use")
+	// ErrAgentEnrolled is a keyless register of an id whose row is not legacy. Only an enrolled key may
+	// replace such a row, so no actor can, the admin key included.
+	ErrAgentEnrolled   = errors.New("agent id belongs to an enrolled key")
 	ErrUnauthorized    = errors.New("agent token required")
 	ErrForbidden       = errors.New("the agent token does not belong to this agent")
 	ErrAgentNotFound   = errors.New("agent not found")
@@ -139,11 +142,16 @@ func (s *ProvisionerStore) lockAgent(tx *gorm.DB, actor ProvisionerActor, want s
 // RegisterAgent stores agent (its AgentID, TokenHash, LastSeen and RegisteredAt set by the caller), or
 // replaces the token and details of the agent that holds the id. An id that is online belongs to the
 // agent that holds its token: unless the actor is privileged, or holds the current token, or the agent
-// was last seen more than offlineAfter ago, the id is in use. It reports whether the agent is new.
+// was last seen more than offlineAfter ago, the id is in use. A row whose state is not legacy is never
+// replaced by this keyless register, by any actor (ErrAgentEnrolled), whatever its age. It reports
+// whether the agent is new.
 func (s *ProvisionerStore) RegisterAgent(ctx context.Context, actor ProvisionerActor, agent ProvisionerAgent, offlineAfter time.Duration) (ProvisionerAgent, bool, error) {
 	var out ProvisionerAgent
 	created := false
 	err := s.tx(ctx, func(tx *gorm.DB) error {
+		// A keyless register writes a legacy row, whatever the caller put in the state.
+		legacy := EnrolmentLegacy
+		agent.EnrolmentState = &legacy
 		// Insert first: a SELECT ... FOR UPDATE of a missing key takes a gap lock on InnoDB, and two
 		// replicas registering one new id would deadlock on it. Whether the insert took is read from the
 		// locked row and not from the affected-row count, which MySQL reports as 1 for the no-op of an
@@ -162,6 +170,11 @@ func (s *ProvisionerStore) RegisterAgent(ctx context.Context, actor ProvisionerA
 		if cur.TokenHash == agent.TokenHash {
 			out, created = cur, true
 			return nil
+		}
+		// A row with a key, or waiting for one, is replaced by a signed register and by nothing else: no
+		// token, no silence and no admin key lets a keyless register take it.
+		if cur.State() != EnrolmentLegacy {
+			return ErrAgentEnrolled
 		}
 		if !actor.Privileged && agent.LastSeen.Sub(cur.LastSeen) <= offlineAfter && !holdsToken(actor.TokenHash, cur.TokenHash) {
 			return ErrAgentInUse

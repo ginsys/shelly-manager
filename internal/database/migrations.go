@@ -95,6 +95,18 @@ func useBinaryCollationMySQL(db *gorm.DB, logger *logging.Logger) error {
 	return nil
 }
 
+// backfillEnrolmentState gives every provisioner row written before the enrolment columns existed the
+// state "legacy". It runs after AutoMigrate, which adds the columns as nullable, and writes only the
+// rows whose state is still NULL, so it is idempotent and leaves every other state alone. It uses
+// UpdateColumn, so the rows' updated_at does not move: the backfill is not an edit of the agent.
+func backfillEnrolmentState(db *gorm.DB) error {
+	if err := db.Model(&ProvisionerAgent{}).Where("enrolment_state IS NULL").
+		UpdateColumn("enrolment_state", EnrolmentLegacy).Error; err != nil {
+		return fmt.Errorf("failed to give the provisioner rows their enrolment state: %w", err)
+	}
+	return nil
+}
+
 // configTemplateFixupResult records what the fixup actually did. Schema actions
 // and row counts are kept separate so a partially completed run stays legible —
 // and so tests can assert which half of the work happened.

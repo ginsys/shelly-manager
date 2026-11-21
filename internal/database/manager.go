@@ -137,6 +137,14 @@ func openManager(factory *provider.Factory, config provider.DatabaseConfig, logg
 		return nil, fmt.Errorf("failed to prepare the provisioner tables: %w", err)
 	}
 
+	// The enrolment columns were added as nullable; rows from before them become legacy.
+	if err := backfillEnrolmentState(dbProvider.GetDB()); err != nil {
+		if closeErr := dbProvider.Close(); closeErr != nil {
+			logger.WithFields(map[string]any{"closeError": closeErr}).Error("Failed to close database provider after provisioner backfill error")
+		}
+		return nil, err
+	}
+
 	logger.WithFields(map[string]any{
 		"provider": config.Provider,
 		"version":  dbProvider.Version(),

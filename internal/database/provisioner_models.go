@@ -29,6 +29,37 @@ type ProvisionerAgent struct {
 	RegisteredAt time.Time         `json:"registered_at"`
 	CreatedAt    time.Time         `json:"-"`
 	UpdatedAt    time.Time         `json:"-"`
+
+	// The enrolment columns (docs/development/PROVISIONER_REGISTRY_DESIGN.md, "Option F"). Every one is
+	// nullable: the table holds rows from before they existed, and a pointer stores NULL where a plain
+	// string would store "" and make a second legacy row collide on the unique fingerprint index. None
+	// carries a json tag that exposes it, so no response shows any of them. The agent list will add the
+	// state and the fingerprint by hand, and never the key or the challenge.
+	PublicKey          *string    `json:"-" gorm:"size:64"`
+	Fingerprint        *string    `json:"-" gorm:"size:32;uniqueIndex"`
+	EnrolmentState     *string    `json:"-" gorm:"size:16"`
+	Challenge          *string    `json:"-" gorm:"size:64"`
+	ChallengeExpiresAt *time.Time `json:"-"`
+	ApprovedAt         *time.Time `json:"-"`
+}
+
+// The enrolment states of a registry row. A row with no state (NULL) is legacy: it was written
+// before the column existed, or by a keyless register. No code writes "" as a state, and a row that
+// held it would be none of these states.
+const (
+	EnrolmentLegacy      = "legacy"
+	EnrolmentPending     = "pending"
+	EnrolmentPreapproved = "preapproved"
+	EnrolmentApproved    = "approved"
+	EnrolmentRejected    = "rejected"
+)
+
+// State is the row's enrolment state, with NULL read as legacy.
+func (a ProvisionerAgent) State() string {
+	if a.EnrolmentState == nil {
+		return EnrolmentLegacy
+	}
+	return *a.EnrolmentState
 }
 
 // TableName names the table, so the MySQL step and the model cannot drift apart.
