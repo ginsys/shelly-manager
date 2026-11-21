@@ -28,8 +28,8 @@ func EnsureExportRoot(root string) error {
 // The check is lexical first (Abs, Rel, IsLocal). Then it follows symlinks: the deepest part of the path that
 // exists, resolved, must lie inside the resolved root, so a symlinked directory inside the root cannot lead out.
 // The result is the lexical path, as the operator wrote it. The gap between this check and the later write is not
-// closed here; only an os.Root write closes it (OpenOutputRoot). The GitOps, SMA, JSON and YAML exports write that
-// way; the backup file does not yet.
+// closed here; only an os.Root write closes it (OpenOutputRoot). The GitOps, SMA, JSON, YAML and backup exports write
+// that way.
 func ResolveUnderRoot(root, path string) (string, error) {
 	if root == "" {
 		root = DefaultExportRoot

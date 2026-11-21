@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"os"
@@ -284,51 +285,48 @@ func (s *SQLiteProvider) CreateBackup(ctx context.Context, config BackupConfig) 
 	if config.BackupPath == "" {
 		return nil, fmt.Errorf("backup path is required")
 	}
-	// Refuse a ".." component before any directory is created.
+	if config.Output == nil {
+		return nil, fmt.Errorf("backup output is required")
+	}
+	// BackupPath names the file and picks its format; nothing is created from it. A ".." component is
+	// still refused, as before.
 	dst, err := s.validateBackupPath(config.BackupPath)
 	if err != nil {
 		return nil, err
 	}
-	// Ensure destination directory exists
-	if err = os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create backup directory: %w", err)
-	}
 
 	start := time.Now()
 
-	// Copying the file would miss every write still in the -wal file and can tear against a
-	// checkpoint. VACUUM INTO writes one consistent snapshot of every committed write, and needs a
-	// target that does not exist, so it goes in a fresh directory beside dst (on that disk, not
-	// /tmp). The file keeps the live file's name, which is the name a zip entry carries.
-	tmpDir, err := os.MkdirTemp(filepath.Dir(dst), ".backup-*")
+	// VACUUM INTO writes one consistent snapshot of every committed write (a file copy would miss the
+	// -wal) to a path that does not exist yet: a fresh private directory beside the live database file
+	// (the directory prepareDatabasePath creates and, unless it is ".", write-tests). The file keeps the live file's name, which a zip entry carries.
+	// Only the finished file goes to config.Output.
+	livePath := dsnPath(s.config.DSN)
+	tmpDir, err := os.MkdirTemp(filepath.Dir(livePath), ".backup-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create snapshot directory: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
-	livePath, _, _ := strings.Cut(s.config.DSN, "?")
 	src := filepath.Join(tmpDir, filepath.Base(livePath))
 	if err := s.db.WithContext(ctx).Exec("VACUUM INTO ?", src).Error; err != nil {
 		return nil, fmt.Errorf("failed to snapshot sqlite database: %w", err)
 	}
 
 	// Decide strategy based on extension (single-file gzip or raw copy)
+	out := &sumWriter{w: config.Output, h: sha256.New()}
 	if strings.HasSuffix(strings.ToLower(dst), ".gz") {
-		if err := s.gzipFile(src, dst); err != nil {
+		if err := s.gzipFile(src, out); err != nil {
 			return nil, fmt.Errorf("failed to create gzip backup: %w", err)
 		}
 	} else if strings.HasSuffix(strings.ToLower(dst), ".zip") {
-		if err := s.zipFile(src, dst); err != nil {
+		if err := s.zipFile(src, out); err != nil {
 			return nil, fmt.Errorf("failed to create zip backup: %w", err)
 		}
 	} else {
-		if err := s.copyFile(src, dst); err != nil {
+		if err := s.copyFile(src, out); err != nil {
 			return nil, fmt.Errorf("failed to copy sqlite database: %w", err)
 		}
 	}
-
-	// Result metadata
-	info, _ := os.Stat(dst)
-	checksum, _ := fileSHA256(dst)
 
 	// Table count (best effort)
 	tableCount := 0
@@ -347,17 +345,34 @@ func (s *SQLiteProvider) CreateBackup(ctx context.Context, config BackupConfig) 
 		StartTime:  start,
 		EndTime:    time.Now(),
 		Duration:   time.Since(start),
-		Size: func() int64 {
-			if info != nil {
-				return info.Size()
-			}
-			return 0
-		}(),
-		RecordCount: 0,
-		TableCount:  tableCount,
-		Checksum:    checksum,
-		Warnings:    nil,
+		Size:       out.n,
+		// RecordCount stays 0
+		TableCount: tableCount,
+		Checksum:   fmt.Sprintf("%x", out.h.Sum(nil)),
+		Warnings:   nil,
 	}, nil
+}
+
+// sumWriter passes every write on to w and counts and hashes the bytes that went through, so the result
+// describes the finished file without reading it back by path.
+type sumWriter struct {
+	w io.Writer
+	h hash.Hash
+	n int64
+}
+
+func (s *sumWriter) Write(p []byte) (int, error) {
+	n, err := s.w.Write(p)
+	_, _ = s.h.Write(p[:n])
+	s.n += int64(n)
+	return n, err
+}
+
+// dsnPath is the file path part of a DSN: what comes before a "?", so that a "/" in a query value is never
+// part of it.
+func dsnPath(dsn string) string {
+	path, _, _ := strings.Cut(dsn, "?")
+	return path
 }
 
 // ValidateBackup performs basic file validations for a SQLite backup.
@@ -425,85 +440,41 @@ func (s *SQLiteProvider) DeleteBackup(backupID string) error {
 	return nil
 }
 
-// copyFile copies a file from src to dst.
-func (s *SQLiteProvider) copyFile(src, dst string) error {
-	src, err := s.validateBackupPath(src)
-	if err != nil {
-		return err
-	}
-	dst, err = s.validateBackupPath(dst)
-	if err != nil {
-		return err
-	}
+// copyFile copies the file at src to out.
+func (s *SQLiteProvider) copyFile(src string, out io.Writer) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = in.Close() }()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = out.Close() }()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Sync()
+	_, err = io.Copy(out, in)
+	return err
 }
 
-// gzipFile compresses a single file into .gz without tar container.
-func (s *SQLiteProvider) gzipFile(src, dst string) error {
-	src, err := s.validateBackupPath(src)
-	if err != nil {
-		return err
-	}
-	dst, err = s.validateBackupPath(dst)
-	if err != nil {
-		return err
-	}
+// gzipFile writes the file at src to out as one gzip stream. The trailer is written by the gzip writer's
+// Close, so its error is returned.
+func (s *SQLiteProvider) gzipFile(src string, out io.Writer) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = in.Close() }()
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = out.Close() }()
 	gz := gzip.NewWriter(out)
-	defer func() { _ = gz.Close() }()
 	if _, err := io.Copy(gz, in); err != nil {
 		return err
 	}
-	// Ensure writers flush
-	if err := gz.Close(); err != nil {
-		return err
-	}
-	return out.Sync()
+	return gz.Close()
 }
 
-// zipFile compresses a single file into a .zip archive with one entry.
-func (s *SQLiteProvider) zipFile(src, dst string) error {
-	src, err := s.validateBackupPath(src)
+// zipFile writes the file at src to out as a one-entry zip archive named after it. The central directory is
+// written by the zip writer's Close, so its error is returned.
+func (s *SQLiteProvider) zipFile(src string, out io.Writer) error {
+	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	dst, err = s.validateBackupPath(dst)
-	if err != nil {
-		return err
-	}
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = out.Close() }()
-
-	zw := zip.NewWriter(out)
-	defer func() { _ = zw.Close() }()
-
-	// Create header for the source file
-	info, err := os.Stat(src)
+	defer func() { _ = in.Close() }()
+	info, err := in.Stat()
 	if err != nil {
 		return err
 	}
@@ -514,44 +485,15 @@ func (s *SQLiteProvider) zipFile(src, dst string) error {
 	header.Name = filepath.Base(src)
 	header.Method = zip.Deflate
 
+	zw := zip.NewWriter(out)
 	w, err := zw.CreateHeader(header)
 	if err != nil {
 		return err
 	}
-
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-
 	if _, err := io.Copy(w, in); err != nil {
 		return err
 	}
-
-	if err := zw.Close(); err != nil {
-		return err
-	}
-	return out.Sync()
-}
-
-func fileSHA256(path string) (string, error) {
-	for _, part := range strings.Split(path, string(filepath.Separator)) {
-		if part == ".." {
-			return "", fmt.Errorf("path traversal not allowed: %s", path)
-		}
-	}
-	path = filepath.Clean(path)
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	return zw.Close()
 }
 
 // prepareDatabasePath creates the directory structure for the database file
@@ -562,9 +504,8 @@ func (s *SQLiteProvider) prepareDatabasePath(dsn string) error {
 	}
 
 	// The directory is the directory of the path part: a "/" in a query value
-	// must not make a directory.
-	path, _, _ := strings.Cut(dsn, "?")
-	dir := filepath.Dir(path)
+	// must not make a directory. CreateBackup puts its snapshot in the same directory.
+	dir := filepath.Dir(dsnPath(dsn))
 	if dir != "" && dir != "." {
 		// Create directory if it doesn't exist
 		if err := os.MkdirAll(dir, 0755); err != nil {

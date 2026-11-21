@@ -2,9 +2,8 @@ package backup
 
 import (
 	"context"
-	"crypto/sha256"
+	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,6 +44,15 @@ func (b *BackupPlugin) SetExportBaseDir(dir string) {
 	b.exportBaseDir = dir
 }
 
+// backupRoot is the backup root: the configured export root, else DefaultBackupDir. It is always passed
+// explicitly, because an empty root would mean the export root.
+func (b *BackupPlugin) backupRoot() string {
+	if b.exportBaseDir != "" {
+		return b.exportBaseDir
+	}
+	return DefaultBackupDir
+}
+
 // resolveOutputDir returns the absolute directory a backup is written to. An empty output_path is
 // the backup root. A relative one joins under a configured root, and is relative to the working
 // directory otherwise. Anything that is not inside the root is refused by the shared check
@@ -52,12 +60,7 @@ func (b *BackupPlugin) SetExportBaseDir(dir string) {
 // The root is created first (it is configuration, never request text), because that check needs
 // an existing root; that is the only thing this creates, and ValidateConfig reaches it too.
 func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
-	// The root is always passed explicitly: an empty root would mean the export root.
-	root := DefaultBackupDir
-	if b.exportBaseDir != "" {
-		root = b.exportBaseDir
-	}
-	absRoot, err := filepath.Abs(root)
+	absRoot, err := filepath.Abs(b.backupRoot())
 	if err != nil {
 		return "", fmt.Errorf("resolve the backup directory: %w", err)
 	}
@@ -215,13 +218,12 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 		backupType = "full"
 	}
 
-	// Ensure output directory exists
-	if err = os.MkdirAll(outputPath, 0755); err != nil {
-		if b.logger != nil {
-			b.logger.WithFields(map[string]any{"path": outputPath, "error": err}).Error("Failed to create output directory for backup")
-		}
-		return nil, fmt.Errorf("failed to create output directory: %w", err)
+	// The directory, the file, its size and its checksum go through the opened backup root.
+	root, rel, err := sync.OpenOutputRoot(b.backupRoot(), outputPath)
+	if err != nil {
+		return nil, err
 	}
+	defer func() { _ = root.Close() }()
 
 	// Generate unique backup filename
 	backupID := uuid.New().String()[:8]
@@ -257,7 +259,7 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	backupConfig.Options["system_version"] = data.Metadata.SystemVersion
 	backupConfig.Options["timestamp"] = data.Timestamp.Format(time.RFC3339)
 
-	backupResult, err := backupProvider.CreateBackup(ctx, backupConfig)
+	backupResult, err := b.writeBackup(ctx, backupProvider, root, rel, filename, backupConfig)
 	if err != nil {
 		return nil, fmt.Errorf("backup operation failed: %w", err)
 	}
@@ -271,22 +273,15 @@ func (b *BackupPlugin) Export(ctx context.Context, data *sync.ExportData, config
 	}
 
 	// Calculate file size and checksum
-	fileInfo, err := os.Stat(backupPath)
+	file := filepath.Join(rel, filename)
+	fileInfo, err := root.Stat(file)
 	if err != nil {
-		b.logger.Warn("Failed to get backup file info", "error", err)
+		return nil, fmt.Errorf("backup file cannot be read back through the backup directory: %w", err)
 	}
-
-	var fileSize int64
-	var checksum string
-	if fileInfo != nil {
-		fileSize = fileInfo.Size()
-		if sum, sumErr := b.calculateChecksum(backupPath); sumErr != nil {
-			if b.logger != nil {
-				b.logger.Warn("Failed to calculate checksum for backup file", "error", sumErr)
-			}
-		} else {
-			checksum = sum
-		}
+	fileSize := fileInfo.Size()
+	checksum, err := sync.FileSHA256(root, file)
+	if err != nil {
+		return nil, fmt.Errorf("backup file cannot be read back through the backup directory: %w", err)
 	}
 
 	if b != nil && b.logger != nil {
@@ -432,23 +427,32 @@ func (b *BackupPlugin) ValidateBackup(ctx context.Context, backupPath string) (*
 	return backupProvider.ValidateBackup(ctx, backupPath)
 }
 
-// calculateChecksum calculates SHA256 checksum of a file
-func (b *BackupPlugin) calculateChecksum(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+// writeBackup creates the backup file at rel/name below the root and has the provider write it there, so
+// the provider never writes the file by path. A file left by a failed backup is removed through the root.
+func (b *BackupPlugin) writeBackup(ctx context.Context, bp provider.BackupProvider, root *os.Root, rel, name string, cfg provider.BackupConfig) (*provider.BackupResult, error) {
+	if err := root.MkdirAll(rel, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create output directory: %w", err)
+	}
+	file := filepath.Join(rel, name)
+	f, err := root.Create(file)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to create backup file: %w", err)
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			// Log but continue - file is still usable
-			_ = err
+	cfg.Output = f
+	result, err := bp.CreateBackup(ctx, cfg)
+	if err == nil && result == nil {
+		err = errors.New("the database provider returned no backup result")
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil || !result.Success {
+		if rerr := root.Remove(file); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("the failed backup file could not be removed: %w", rerr))
 		}
-	}()
-
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return "", err
 	}
-
-	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
+	return result, err
 }

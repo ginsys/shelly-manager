@@ -110,10 +110,3 @@ func TestDeleteBackupNonexistent(t *testing.T) {
 		t.Errorf("unexpected error for nonexistent file: %v", err)
 	}
 }
-
-func TestFileSHA256PathTraversal(t *testing.T) {
-	_, err := fileSHA256("../../etc/passwd")
-	if err == nil {
-		t.Error("expected error for traversal path, got nil")
-	}
-}
