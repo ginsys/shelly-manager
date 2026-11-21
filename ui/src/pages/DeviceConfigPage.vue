@@ -107,7 +107,12 @@
           <h2>Device Overrides</h2>
           <div class="spacer" />
           <button v-if="store.overrides && Object.keys(store.overrides).length > 0" class="btn" @click="handleClearOverrides">Clear All</button>
-          <button class="btn" @click="toggleEditOverrides">
+          <button
+            class="btn"
+            :disabled="rollingBack"
+            :title="rollingBack ? 'A rollback is running' : ''"
+            @click="toggleEditOverrides"
+          >
             {{ editOverrides ? 'Cancel' : 'Edit' }}
           </button>
           <button
@@ -235,6 +240,7 @@
       :templates="store.templates"
       :editing="editOverrides"
       @refresh="handleRefresh"
+      @busy="rollingBack = $event"
     />
 
     <div class="card" data-testid="history-card">
@@ -326,6 +332,8 @@ const store = useDeviceConfigNewStore()
 // to another, and every save, apply and template change below must target the device on screen.
 const deviceId = computed<number | string>(() => route.params.id as string)
 const editOverrides = ref(false)
+// True while the rollback card has a request in flight: the editor stays shut, or its answer would overwrite the edit.
+const rollingBack = ref(false)
 const overridesEditor = ref<InstanceType<typeof ConfigEditor> | null>(null)
 const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
