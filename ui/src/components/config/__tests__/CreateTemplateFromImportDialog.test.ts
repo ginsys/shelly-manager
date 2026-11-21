@@ -214,11 +214,40 @@ describe('CreateTemplateFromImportDialog', () => {
     await second.get('[data-testid="from-import-name"]').setValue('Made')
     await second.get('[data-testid="from-import-save"]').trigger('click')
     second.unmount()
-    finish({ id: 5 })
+    finish({ id: 5, name: 'Made' })
     await flushPromises()
     expect(notice.value?.message).toContain('Made')
     expect(noticeSeverity.value).toBe('info')
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('keeps the field reasons of a late 400, and names the template the server made rather than the form', async () => {
+    dismissNotice()
+    let fail: (e: unknown) => void = () => {}
+    ;(createTemplate as any).mockReturnValue(new Promise((_, reject) => (fail = reject)))
+    const wrapper = await ready()
+    await wrapper.get('[data-testid="from-import-name"]').setValue('Bad')
+    await wrapper.get('[data-testid="from-import-save"]').trigger('click')
+    wrapper.unmount()
+    fail(new TemplateSaveError('Validation failed', [{ path: 'mqtt.server', message: 'Not a host name' }]))
+    await flushPromises()
+    expect(notice.value?.message).toContain('Validation failed')
+    expect(notice.value?.message).toContain('mqtt.server')
+    expect(notice.value?.message).toContain('Not a host name')
+
+    dismissNotice()
+    let finish: (v: unknown) => void = () => {}
+    ;(createTemplate as any).mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const second = await ready()
+    const input = second.get('[data-testid="from-import-name"]')
+    await input.setValue('Kitchen')
+    await second.get('[data-testid="from-import-save"]').trigger('click')
+    await input.setValue('Bedroom')
+    second.unmount()
+    finish({ id: 42, name: 'Kitchen' })
+    await flushPromises()
+    expect(notice.value?.message).toContain('Kitchen')
+    expect(notice.value?.message).not.toContain('Bedroom')
   })
 
   it('keeps Save off until there is a name and something ticked', async () => {
