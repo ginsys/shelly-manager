@@ -239,8 +239,8 @@
       :current="store.desiredConfig"
       :templates="store.templates"
       :editing="editOverrides"
-      @refresh="handleRefresh"
-      @busy="rollingBack = $event"
+      @refresh="refreshAfterRollback"
+      @busy="rollbackRequest = $event"
     />
 
     <div class="card" data-testid="history-card">
@@ -332,8 +332,19 @@ const store = useDeviceConfigNewStore()
 // to another, and every save, apply and template change below must target the device on screen.
 const deviceId = computed<number | string>(() => route.params.id as string)
 const editOverrides = ref(false)
-// True while the rollback card has a request in flight: the editor stays shut, or its answer would overwrite the edit.
-const rollingBack = ref(false)
+// The editor stays shut from the click on a rollback until the page has read its answer: the refresh rewrites
+// the edit buffer, so an edit made in that span would be overwritten.
+const rollbackRequest = ref(false)
+const rollbackRefreshing = ref(false)
+const rollingBack = computed(() => rollbackRequest.value || rollbackRefreshing.value)
+async function refreshAfterRollback() {
+  rollbackRefreshing.value = true
+  try {
+    await handleRefresh()
+  } finally {
+    rollbackRefreshing.value = false
+  }
+}
 const overridesEditor = ref<InstanceType<typeof ConfigEditor> | null>(null)
 const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
