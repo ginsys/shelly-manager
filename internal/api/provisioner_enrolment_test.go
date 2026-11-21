@@ -81,6 +81,37 @@ func TestProvisionerEnrolment_KeylessRegisterNeverReplacesAnEnrolledRow(t *testi
 	}
 }
 
+// A new id is printable ASCII without a space, unless it starts with "provisioner-": a 400 that leaves no
+// row. A row that exists keeps registering whatever its id holds.
+func TestProvisionerEnrolment_NewIDMustBePrintableASCII(t *testing.T) {
+	srv, db := idServer(t)
+	for _, id := range []string{"a b", " lead", "trail ", "tab\tid", "nul\x00id", "café", "日本", " nbsp", "Provisioner-a b"} {
+		for name, hdr := range map[string]map[string]string{"agent key": idAgentHdr(""), "admin key": idAdminHdr()} {
+			code, token, body := idRegister(t, srv, id, hdr)
+			assert.Equal(t, http.StatusBadRequest, code, "%q with the %s: %s", id, name, body)
+			assert.Empty(t, token, "%q: no token may be issued", id)
+		}
+		assert.EqualValues(t, 0, idRows(t, db, id), "%q must leave no row", id)
+	}
+
+	for _, id := range []string{"provisioner-host with space", "provisioner-café", "provisioner-", "plain-1", "p~!{}"} {
+		code, _, body := idRegister(t, srv, id, idAgentHdr(""))
+		assert.Equal(t, http.StatusCreated, code, "%q: %s", id, body)
+	}
+
+	silent := time.Now().Add(-time.Hour)
+	for _, id := range []string{"old café", "old 日本"} {
+		row := database.ProvisionerAgent{
+			AgentID: id, TokenHash: database.HashAgentToken("tok-" + id), Hostname: id, Status: "online",
+			LastSeen: silent, RegisteredAt: silent,
+		}
+		require.NoError(t, db.GetDB().Create(&row).Error)
+		code, token, body := idRegister(t, srv, id, idAgentHdr(""))
+		assert.Equal(t, http.StatusCreated, code, "%q: an existing row registers as before: %s", id, body)
+		assert.NotEmpty(t, token, id)
+	}
+}
+
 // A row written before the column existed has no state and registers exactly as it always did.
 func TestProvisionerEnrolment_LegacyRowRegistersAsBefore(t *testing.T) {
 	srv, db := idServer(t)

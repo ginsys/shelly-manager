@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -18,7 +19,10 @@ var (
 	ErrAgentInUse = errors.New("agent id in use")
 	// ErrAgentEnrolled is a keyless register of an id whose row is not legacy. Only an enrolled key may
 	// replace such a row, so no actor can, the admin key included.
-	ErrAgentEnrolled   = errors.New("agent id belongs to an enrolled key")
+	ErrAgentEnrolled = errors.New("agent id belongs to an enrolled key")
+	// ErrAgentIDInvalid is a keyless register that would create a row for an id that is not printable ASCII
+	// without a space and does not start with "provisioner-".
+	ErrAgentIDInvalid  = errors.New("agent id must be printable ASCII without a space")
 	ErrUnauthorized    = errors.New("agent token required")
 	ErrForbidden       = errors.New("the agent token does not belong to this agent")
 	ErrAgentNotFound   = errors.New("agent not found")
@@ -32,6 +36,24 @@ var (
 
 // MaxProvisionerValueLen is the longest id, type or status, in characters, that the registry columns hold.
 const MaxProvisionerValueLen = 191
+
+// legacyAgentIDPrefix starts the id the shipped agent derives from its hostname, which may hold any byte.
+const legacyAgentIDPrefix = "provisioner-"
+
+// validNewAgentID is the rule for an id that creates a row: bytes 0x21 to 0x7E only, unless it starts with
+// the exact bytes "provisioner-". On every server measured, a folding collation equates two such bytes only
+// when they are one letter in its two cases, so the folded lookup of a register cannot meet another id.
+func validNewAgentID(id string) bool {
+	if strings.HasPrefix(id, legacyAgentIDPrefix) {
+		return true
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x21 || id[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
 
 // ProvisionerActor is who calls: the admin key (Privileged), or the holder of an agent token. TokenHash
 // is HashAgentToken of the presented token, and is empty when none was presented.
@@ -168,6 +190,10 @@ func (s *ProvisionerStore) RegisterAgent(ctx context.Context, actor ProvisionerA
 		}
 		// The token is new and random, so the row holds its hash only if this insert wrote the row.
 		if cur.TokenHash == agent.TokenHash {
+			// A new row is checked here, inside the transaction, so a refusal rolls the insert back.
+			if !validNewAgentID(agent.AgentID) {
+				return ErrAgentIDInvalid
+			}
 			out, created = cur, true
 			return nil
 		}

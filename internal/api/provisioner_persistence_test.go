@@ -92,7 +92,8 @@ func TestProvisionerRegistry_RefusesValuesTheColumnsCannotHold(t *testing.T) {
 
 	long := strings.Repeat("a", 192)
 	exact := strings.Repeat("a", 191)
-	multibyte := strings.Repeat("é", 191) // 191 characters, 382 bytes
+	// 191 characters and 370 bytes. A new id of non-ASCII characters needs the "provisioner-" prefix.
+	multibyte := "provisioner-" + strings.Repeat("é", 179)
 
 	register := func(id string) (int, string) {
 		code, _, body := idRegister(t, srv, id, idAgentHdr(""))

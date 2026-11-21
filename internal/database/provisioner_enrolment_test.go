@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -139,8 +140,82 @@ func checkProvisionerEnrolment(t *testing.T, manager *Manager) {
 	})
 }
 
+// checkProvisionerIDRule holds the cases of the id rule for a new keyless row, which every provider must
+// pass: a new id is printable ASCII without a space, unless it starts with the exact bytes
+// "provisioner-" (the shipped agent's id, whatever hostname follows); a row that exists keeps registering.
+func checkProvisionerIDRule(t *testing.T, manager *Manager) {
+	t.Helper()
+	s := NewProvisionerStore(manager.GetDB())
+	ctx := provisionerCtx(t)
+	now := time.Now()
+	rows := func(id string) int64 {
+		var n int64
+		require.NoError(t, manager.GetDB().Model(&ProvisionerAgent{}).Where("agent_id = ?", id).Count(&n).Error)
+		return n
+	}
+
+	t.Run("a new id with a space or a byte outside 0x21 to 0x7E is refused and leaves no row", func(t *testing.T) {
+		for _, id := range []string{
+			"a b", " lead", "trail ", "tab\tid", "new\nline", "del\x7fid", "ctl\x1fid",
+			"café", "é", "日本", " nbsp", "kéy-abc", "Provisioner-a b", "provisioner_x é",
+		} {
+			for name, actor := range map[string]ProvisionerActor{"agent key": {}, "admin key": adminActor} {
+				_, created, err := s.RegisterAgent(ctx, actor, agentRow(id, "tok-"+name+id, now), testOfflineAfter)
+				assert.ErrorIs(t, err, ErrAgentIDInvalid, "%q with the %s", id, name)
+				assert.False(t, created)
+			}
+			assert.EqualValues(t, 0, rows(id), "%q must leave no row", id)
+		}
+	})
+
+	t.Run("an id that starts with provisioner- passes whatever follows", func(t *testing.T) {
+		for _, id := range []string{"provisioner", "provisioner-", "provisioner-host-1", "provisioner-host with space-77", "provisioner-é日本", "provisioner-\ttab"} {
+			_, created, err := s.RegisterAgent(ctx, ProvisionerActor{}, agentRow(id, "tok-"+id, now), testOfflineAfter)
+			require.NoError(t, err, "%q", id)
+			assert.True(t, created, "%q", id)
+		}
+	})
+
+	t.Run("every printable ASCII byte is a valid id, and so is a mix of them", func(t *testing.T) {
+		for b := 0x21; b <= 0x7e; b++ {
+			id := "p-" + string(rune(b)) + "-x"
+			_, _, err := s.RegisterAgent(ctx, ProvisionerActor{}, agentRow(id, "tok-ascii"+id, now), testOfflineAfter)
+			assert.NoError(t, err, "%q", id)
+		}
+		_, _, err := s.RegisterAgent(ctx, ProvisionerActor{}, agentRow(`!"#$%&'()*+,-./09:;<=>?@AZ[\]^_`+"`"+`az{|}~`, "tok-mix", now), testOfflineAfter)
+		assert.NoError(t, err)
+	})
+
+	t.Run("a row that exists keeps registering, whatever its id holds", func(t *testing.T) {
+		silent := now.Add(-time.Hour)
+		for _, id := range []string{"café ünï", "with space", "日本語"} {
+			require.NoError(t, manager.GetDB().Create(&ProvisionerAgent{
+				AgentID: id, TokenHash: HashAgentToken("old-" + id), Hostname: "h", Status: "online", LastSeen: silent, RegisteredAt: silent,
+			}).Error)
+			_, created, err := s.RegisterAgent(ctx, ProvisionerActor{}, agentRow(id, "new-"+id, now), testOfflineAfter)
+			require.NoError(t, err, "%q: a silent existing row is taken over as before", id)
+			assert.False(t, created, "%q", id)
+			_, _, err = s.RegisterAgent(ctx, adminActor, agentRow(id, "admin-"+id, now.Add(time.Second)), testOfflineAfter)
+			assert.NoError(t, err, "%q: the admin key still replaces", id)
+		}
+	})
+
+	t.Run("an id that a folding collation would equate with an enrolled key's is refused either way", func(t *testing.T) {
+		// "kéy-…" is the accent-folded spelling of "key-…". Under a binary collation it is a new id and the
+		// id rule refuses it; under a folding collation it finds the keyed row and the state check refuses it.
+		insertEnrolledRow(t, manager, "key-fold-demo", EnrolmentApproved, "tok-key-fold", now.Add(-time.Hour))
+		_, _, err := s.RegisterAgent(ctx, adminActor, agentRow("kéy-fold-demo", "intruder", now), testOfflineAfter)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrAgentIDInvalid) || errors.Is(err, ErrAgentEnrolled), "got %v", err)
+		row, getErr := s.GetAgent(ctx, "key-fold-demo")
+		require.NoError(t, getErr)
+		assert.Equal(t, HashAgentToken("tok-key-fold"), row.TokenHash, "the keyed row is untouched")
+	})
+}
+
 func TestProvisionerEnrolment_SQLite(t *testing.T) {
 	manager, cleanup := setupTestManager(t)
 	defer cleanup()
+	checkProvisionerIDRule(t, manager)
 	checkProvisionerEnrolment(t, manager)
 }
