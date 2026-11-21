@@ -20,7 +20,7 @@ func TestValidateDeviceSettings(t *testing.T) {
 		inputSettings  string
 		expectedValid  bool
 		expectedOutput string
-		fallbackGen    func() any
+		fallbackGen    func() (any, bool)
 	}{
 		{
 			name:           "Empty settings get the defaults and no gen nobody gave",
@@ -33,41 +33,48 @@ func TestValidateDeviceSettings(t *testing.T) {
 			inputSettings:  "",
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"gen":2,"model":"Unknown"}`,
-			fallbackGen:    func() any { return 2 },
+			fallbackGen:    func() (any, bool) { return 2, true },
 		},
 		{
-			name:           "A fallback of nil writes no gen",
+			name:           "A fallback with no value writes no gen",
 			inputSettings:  `{"model":"SHPLG-S"}`,
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"model":"SHPLG-S"}`,
-			fallbackGen:    func() any { return nil },
+			fallbackGen:    func() (any, bool) { return nil, false },
+		},
+		{
+			name:           "A fallback of null with a value is written as null",
+			inputSettings:  `{"model":"SHPLG-S"}`,
+			expectedValid:  true,
+			expectedOutput: `{"auth_enabled":false,"gen":null,"model":"SHPLG-S"}`,
+			fallbackGen:    func() (any, bool) { return nil, true },
 		},
 		{
 			name:           "A fallback that is not a number is written as it is",
 			inputSettings:  `{"model":"SHPLG-S"}`,
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"gen":"2","model":"SHPLG-S"}`,
-			fallbackGen:    func() any { return "2" },
+			fallbackGen:    func() (any, bool) { return "2", true },
 		},
 		{
 			name:           "A given gen is kept and the fallback is not asked",
 			inputSettings:  `{"model":"SHPLG-S","gen":3}`,
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"gen":3,"model":"SHPLG-S"}`,
-			fallbackGen:    func() any { t.Error("the fallback was asked for a given gen"); return 1 },
+			fallbackGen:    func() (any, bool) { t.Error("the fallback was asked for a given gen"); return 1, true },
 		},
 		{
 			name:           "A given gen that is not a positive number is kept and the fallback is not asked",
 			inputSettings:  `{"model":"SHPLG-S","gen":null}`,
 			expectedValid:  true,
 			expectedOutput: `{"auth_enabled":false,"gen":null,"model":"SHPLG-S"}`,
-			fallbackGen:    func() any { t.Error("the fallback was asked for a given gen"); return 1 },
+			fallbackGen:    func() (any, bool) { t.Error("the fallback was asked for a given gen"); return 1, true },
 		},
 		{
 			name:          "Invalid JSON does not ask the fallback",
 			inputSettings: `{"model":`,
 			expectedValid: false,
-			fallbackGen:   func() any { t.Error("the fallback was asked for invalid JSON"); return 1 },
+			fallbackGen:   func() (any, bool) { t.Error("the fallback was asked for invalid JSON"); return 1, true },
 		},
 		{
 			name:           "Valid JSON settings should be normalized",

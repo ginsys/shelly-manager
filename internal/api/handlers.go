@@ -348,7 +348,10 @@ func (h *Handler) AddDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate and normalize device settings
-	if err := h.validateDeviceSettings(&device, func() any { return h.probeGeneration(r.Context(), device.IP) }); err != nil {
+	if err := h.validateDeviceSettings(&device, func() (any, bool) {
+		gen := h.probeGeneration(r.Context(), device.IP)
+		return gen, gen != nil
+	}); err != nil {
 		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
 		return
 	}
@@ -437,7 +440,7 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate and normalize device settings
-	if err := h.validateDeviceSettings(&updatedDevice, func() any { return storedGen(existingDevice) }); err != nil {
+	if err := h.validateDeviceSettings(&updatedDevice, func() (any, bool) { return storedGen(existingDevice) }); err != nil {
 		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Invalid device settings: %v", err))
 		return
 	}
@@ -1692,9 +1695,11 @@ func (h *Handler) EnhancedBulkDetectConfigDrift(w http.ResponseWriter, r *http.R
 var detectGeneration = shelly.DetectGeneration
 
 // validateDeviceSettings ensures device settings are valid JSON or sets defaults. Settings that carry
-// no gen get fallbackGen(), and none where that is nil or returns nil: a generation nobody gave is
-// never guessed here (ginsys/shelly-manager#811). The func runs only for valid JSON with no gen.
-func (h *Handler) validateDeviceSettings(device *database.Device, fallbackGen func() any) error {
+// no gen get the value fallbackGen returns, and none where that is nil or says it has none: a
+// generation nobody gave is never guessed here (ginsys/shelly-manager#811). The func runs only for
+// valid JSON with no gen, and its bool says whether the value is to be written, so that a stored
+// JSON null can be carried like any other value.
+func (h *Handler) validateDeviceSettings(device *database.Device, fallbackGen func() (any, bool)) error {
 	// Empty settings are read as an empty document, so they take the same defaults.
 	text := device.Settings
 	if text == "" {
@@ -1712,7 +1717,7 @@ func (h *Handler) validateDeviceSettings(device *database.Device, fallbackGen fu
 		settings["model"] = "Unknown"
 	}
 	if _, exists := settings["gen"]; !exists && fallbackGen != nil {
-		if gen := fallbackGen(); gen != nil {
+		if gen, ok := fallbackGen(); ok {
 			settings["gen"] = gen
 		}
 	}
@@ -1757,12 +1762,14 @@ func (h *Handler) probeGeneration(ctx context.Context, ip string) any {
 	return gen
 }
 
-// storedGen is the gen of the stored settings of a device exactly as stored, whatever its JSON type,
-// or nil where there is none: an update keeps it as it was and never reads it as a number.
-func storedGen(device *database.Device) any {
+// storedGen is the gen of the stored settings of a device exactly as stored, whatever its JSON type
+// (a stored null included), and false where the settings hold no gen: an update keeps it as it was and
+// never reads it as a number.
+func storedGen(device *database.Device) (any, bool) {
 	var settings map[string]interface{}
 	if json.Unmarshal([]byte(device.Settings), &settings) != nil {
-		return nil
+		return nil, false
 	}
-	return settings["gen"]
+	gen, ok := settings["gen"]
+	return gen, ok
 }
