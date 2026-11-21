@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
 // os.ReadDir sorts by name and File.ReadDir does not. The clean removes entries in the order listed, so
@@ -65,7 +67,7 @@ func TestGitOpsWritesStayInsideTheRootAfterTheCheck(t *testing.T) {
 		if err = os.Symlink(outside, filepath.Join(rootDir, "swapped")); err != nil {
 			t.Skipf("symlink: %v", err)
 		}
-		root, rel, err := openOutputRoot(rootDir, outputPath)
+		root, rel, err := sync.OpenOutputRoot(rootDir, outputPath)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +86,7 @@ func TestGitOpsWritesStayInsideTheRootAfterTheCheck(t *testing.T) {
 		if err := os.Symlink(outside, filepath.Join(inner, "groups")); err != nil {
 			t.Skipf("symlink: %v", err)
 		}
-		root, rel, err := openOutputRoot(rootDir, inner)
+		root, rel, err := sync.OpenOutputRoot(rootDir, inner)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -79,6 +79,26 @@ type jsonEnvelope struct {
 func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.ExportConfig) (*sync.ExportResult, error) {
 	start := time.Now()
 	outputPath, _ := config.Config["output_path"].(string)
+
+	// The output directory lies inside the export root: an empty path is the root itself
+	outputPath, err := sync.ResolveUnderRoot(p.baseDir, outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("path validation failed: %w", err)
+	}
+
+	// From here every write goes through the opened export root, so a link swapped in after the check
+	// above cannot redirect it.
+	root, rel, err := sync.OpenOutputRoot(p.baseDir, outputPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	return p.exportInto(root, rel, outputPath, data, config, start)
+}
+
+// exportInto writes the export below rel in the opened root. outputPath is the resolved absolute output
+// directory, for the result and the log only; no write uses it.
+func (p *Plugin) exportInto(root *os.Root, rel, outputPath string, data *sync.ExportData, config sync.ExportConfig, start time.Time) (*sync.ExportResult, error) {
 	pretty, _ := config.Config["pretty"].(bool)
 	includeDiscovered, _ := config.Config["include_discovered"].(bool)
 	compression, _ := config.Config["compression"].(bool)
@@ -87,13 +107,7 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 		algo = v
 	}
 
-	// The output directory lies inside the export root: an empty path is the root itself
-	outputPath, err := sync.ResolveUnderRoot(p.baseDir, outputPath)
-	if err != nil {
-		return nil, fmt.Errorf("path validation failed: %w", err)
-	}
-
-	if err = os.MkdirAll(outputPath, 0755); err != nil {
+	if err := root.MkdirAll(rel, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -101,7 +115,7 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 	ts := time.Now().Format("20060102-150405")
 	// Sanitize the filename components to prevent injection
 	baseName := fmt.Sprintf("shelly-export-%s-%s.json", security.SanitizeFilename(ts), security.SanitizeFilename(exportID))
-	path := filepath.Join(outputPath, baseName)
+	name := baseName // the file's name in the output directory
 
 	env := jsonEnvelope{
 		Metadata:  data.Metadata,
@@ -116,6 +130,7 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 
 	// Produce JSON bytes
 	var buf []byte
+	var err error
 	if pretty {
 		buf, err = json.MarshalIndent(&env, "", "  ")
 	} else {
@@ -129,26 +144,25 @@ func (p *Plugin) Export(ctx context.Context, data *sync.ExportData, config sync.
 	if compression {
 		switch algo {
 		case "zip":
-			zipPath := filepath.Join(outputPath, fmt.Sprintf("shelly-export-%s-%s.json.zip", ts, exportID))
-			if err := sync.WriteZipSingle(zipPath, baseName, buf); err != nil {
+			name = fmt.Sprintf("shelly-export-%s-%s.json.zip", ts, exportID)
+			if err := sync.WriteZipSingle(root, filepath.Join(rel, name), baseName, buf); err != nil {
 				return nil, err
 			}
-			path = zipPath
 		default: // gzip
-			gzPath := filepath.Join(outputPath, fmt.Sprintf("shelly-export-%s-%s.json.gz", ts, exportID))
-			if err := sync.WriteGzip(gzPath, buf); err != nil {
+			name = fmt.Sprintf("shelly-export-%s-%s.json.gz", ts, exportID)
+			if err := sync.WriteGzip(root, filepath.Join(rel, name), buf); err != nil {
 				return nil, err
 			}
-			path = gzPath
 		}
 	} else {
-		if err := os.WriteFile(path, buf, 0644); err != nil {
+		if err := root.WriteFile(filepath.Join(rel, name), buf, 0644); err != nil {
 			return nil, fmt.Errorf("failed to write file: %w", err)
 		}
 	}
 
-	fi, _ := os.Stat(path)
-	sum, _ := sync.FileSHA256(path)
+	path := filepath.Join(outputPath, name)
+	fi, _ := root.Stat(filepath.Join(rel, name))
+	sum, _ := sync.FileSHA256(root, filepath.Join(rel, name))
 
 	if p.logger != nil {
 		p.logger.Info("JSON export completed", "path", path, "size", func() int64 {

@@ -12,6 +12,18 @@ import (
 	"testing"
 )
 
+// openTestRoot opens a new temporary directory as the export root, as OpenOutputRoot does for a request.
+func openTestRoot(t *testing.T) (*os.Root, string) {
+	t.Helper()
+	dir := t.TempDir()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	return root, dir
+}
+
 func TestFileSHA256(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -37,12 +49,12 @@ func TestFileSHA256(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpFile := filepath.Join(t.TempDir(), "test.txt")
-			if err := os.WriteFile(tmpFile, tt.content, 0644); err != nil {
+			root, dir := openTestRoot(t)
+			if err := os.WriteFile(filepath.Join(dir, "test.txt"), tt.content, 0644); err != nil {
 				t.Fatalf("Failed to create test file: %v", err)
 			}
 
-			got, err := FileSHA256(tmpFile)
+			got, err := FileSHA256(root, "test.txt")
 			if err != nil {
 				t.Fatalf("FileSHA256() error = %v", err)
 			}
@@ -55,7 +67,8 @@ func TestFileSHA256(t *testing.T) {
 }
 
 func TestFileSHA256_InvalidPath(t *testing.T) {
-	_, err := FileSHA256("/nonexistent/path/file.txt")
+	root, _ := openTestRoot(t)
+	_, err := FileSHA256(root, "nonexistent/path/file.txt")
 	if err == nil {
 		t.Error("Expected error for nonexistent file, got nil")
 	}
@@ -91,8 +104,9 @@ func TestWriteGzip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpFile := filepath.Join(t.TempDir(), "test.gz")
-			err := WriteGzip(tmpFile, tt.data)
+			root, dir := openTestRoot(t)
+			tmpFile := filepath.Join(dir, "test.gz")
+			err := WriteGzip(root, "test.gz", tt.data)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("WriteGzip() error = %v, wantErr %v", err, tt.wantErr)
@@ -135,7 +149,8 @@ func TestWriteGzip(t *testing.T) {
 }
 
 func TestWriteGzip_InvalidPath(t *testing.T) {
-	err := WriteGzip("/nonexistent/invalid/path/test.gz", []byte("test"))
+	root, _ := openTestRoot(t)
+	err := WriteGzip(root, "nonexistent/invalid/path/test.gz", []byte("test"))
 	if err == nil {
 		t.Error("Expected error for invalid path, got nil")
 	}
@@ -182,8 +197,9 @@ func TestWriteZipSingle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpFile := filepath.Join(t.TempDir(), "test.zip")
-			err := WriteZipSingle(tmpFile, tt.entryName, tt.data)
+			root, dir := openTestRoot(t)
+			tmpFile := filepath.Join(dir, "test.zip")
+			err := WriteZipSingle(root, "test.zip", tt.entryName, tt.data)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("WriteZipSingle() error = %v, wantErr %v", err, tt.wantErr)
@@ -235,54 +251,39 @@ func TestWriteZipSingle(t *testing.T) {
 }
 
 func TestWriteZipSingle_InvalidPath(t *testing.T) {
-	err := WriteZipSingle("/nonexistent/invalid/path/test.zip", "test.json", []byte("test"))
+	root, _ := openTestRoot(t)
+	err := WriteZipSingle(root, "nonexistent/invalid/path/test.zip", "test.json", []byte("test"))
 	if err == nil {
 		t.Error("Expected error for invalid path, got nil")
 	}
 }
 
-func TestCleanPath(t *testing.T) {
-	tests := []struct {
-		name    string
-		path    string
-		wantErr bool
-	}{
-		{"absolute path", "/tmp/export.json", false},
-		{"relative path", "data/export.json", false},
-		{"dot prefix", "./data/export.json", false},
-		{"traversal", "../../../etc/passwd", true},
-		{"double dot only", "..", true},
-		{"embedded absolute resolves", "/tmp/../../../etc/passwd", false}, // Clean resolves to /etc/passwd
-		{"relative traversal prefix", "../../secret", true},
+// ginsys/shelly-manager#815: the helpers write through the opened export root, so a name that leaves it, by
+// `..` or by a symbolic link swapped in after the path check, is refused and nothing is created outside.
+func TestHelpersRefuseANameThatLeavesTheRoot(t *testing.T) {
+	root, dir := openTestRoot(t)
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "link")); err != nil {
+		t.Skipf("symlink: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := cleanPath(tt.path)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("cleanPath(%q) error = %v, wantErr %v", tt.path, err, tt.wantErr)
+	for _, name := range []string{"../evil", "link/evil"} {
+		t.Run(name, func(t *testing.T) {
+			if err := WriteGzip(root, name+".gz", []byte("test")); err == nil {
+				t.Error("WriteGzip wrote a name that leaves the root")
+			}
+			if err := WriteZipSingle(root, name+".zip", "test.json", []byte("test")); err == nil {
+				t.Error("WriteZipSingle wrote a name that leaves the root")
 			}
 		})
 	}
-}
-
-func TestPathTraversal_FileSHA256(t *testing.T) {
-	_, err := FileSHA256("../../../etc/passwd")
-	if err == nil {
-		t.Error("Expected path traversal error, got nil")
+	if _, err := FileSHA256(root, "link/secret"); err == nil {
+		t.Error("FileSHA256 read a file through a link that leaves the root")
 	}
-}
-
-func TestPathTraversal_WriteGzip(t *testing.T) {
-	err := WriteGzip("../../../tmp/evil.gz", []byte("test"))
-	if err == nil {
-		t.Error("Expected path traversal error, got nil")
-	}
-}
-
-func TestPathTraversal_WriteZipSingle(t *testing.T) {
-	err := WriteZipSingle("../../../tmp/evil.zip", "test.json", []byte("test"))
-	if err == nil {
-		t.Error("Expected path traversal error, got nil")
+	if entries, _ := os.ReadDir(outside); len(entries) != 1 {
+		t.Errorf("%d entries below the directory outside the root, want only the one that was there", len(entries))
 	}
 }
