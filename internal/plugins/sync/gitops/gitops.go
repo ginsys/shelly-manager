@@ -210,7 +210,7 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 
 	// From here every write goes through the opened export root, so a link swapped in after the check
 	// above cannot redirect it.
-	root, rel, openErr := openOutputRoot(g.baseDir, outputPath)
+	root, rel, openErr := sync.OpenOutputRoot(g.baseDir, outputPath)
 	if openErr != nil {
 		return nil, openErr
 	}
@@ -694,27 +694,6 @@ func (g *GitOpsPlugin) prepareOutputDir(root *os.Root, rel string) error {
 		}
 	}
 	return nil
-}
-
-// openOutputRoot opens the export root with os.Root and returns it with the output directory's path
-// below it. The output directory was resolved by resolveOutputDir, so it is a subdirectory of the root.
-func openOutputRoot(baseDir, outputPath string) (*os.Root, string, error) {
-	if baseDir == "" {
-		baseDir = sync.DefaultExportRoot
-	}
-	absRoot, err := filepath.Abs(baseDir)
-	if err != nil {
-		return nil, "", fmt.Errorf("resolve the export directory: %w", err)
-	}
-	rel, err := filepath.Rel(absRoot, outputPath)
-	if err != nil || !filepath.IsLocal(rel) {
-		return nil, "", fmt.Errorf("%w: output_path must be inside the export directory %s", sync.ErrInvalidExportPath, absRoot)
-	}
-	root, err := os.OpenRoot(absRoot)
-	if err != nil {
-		return nil, "", fmt.Errorf("open the export directory %s: %w", absRoot, err)
-	}
-	return root, rel, nil
 }
 
 // readDirIn lists a directory below the root, sorted by name as os.ReadDir does (File.ReadDir does not

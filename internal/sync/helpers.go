@@ -7,23 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
-// cleanPath sanitises a file path by resolving traversal sequences.
-// It returns an error if the cleaned path still contains "..".
-func cleanPath(path string) (string, error) {
-	cleaned := filepath.Clean(path)
-	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
-		if part == ".." {
-			return "", fmt.Errorf("path traversal not allowed: %s", path)
-		}
-	}
-	return cleaned, nil
-}
+// The helpers below take the opened export root (OpenOutputRoot) and a name below it. The root refuses a name
+// that leaves it, by `..` or by a symbolic link swapped in after the path check.
 
-// FileSHA256 calculates the SHA-256 checksum of a file.
+// FileSHA256 calculates the SHA-256 checksum of a file below the root.
 // Returns hex-encoded string of the checksum.
 //
 // Use Case: Verify export integrity, detect file changes
@@ -31,15 +20,11 @@ func cleanPath(path string) (string, error) {
 //
 // Example:
 //
-//	checksum, err := sync.FileSHA256("/path/to/export.json")
+//	checksum, err := sync.FileSHA256(root, "export.json")
 //	if err != nil { return err }
 //	fmt.Printf("Export checksum: %s\n", checksum)
-func FileSHA256(path string) (string, error) {
-	path, err := cleanPath(path)
-	if err != nil {
-		return "", err
-	}
-	f, err := os.Open(path)
+func FileSHA256(root *os.Root, name string) (string, error) {
+	f, err := root.Open(name)
 	if err != nil {
 		return "", err
 	}
@@ -53,7 +38,7 @@ func FileSHA256(path string) (string, error) {
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-// WriteGzip compresses data using gzip and writes to path.
+// WriteGzip compresses data using gzip and writes it to name below the root.
 //
 // Use Case: Reduce file size for JSON/YAML exports (typically 70-80% reduction)
 // Compression level: Best (level 9) - acceptable for hobbyist use
@@ -61,13 +46,9 @@ func FileSHA256(path string) (string, error) {
 // Example:
 //
 //	data := []byte(`{"devices": [...]}`)
-//	err := sync.WriteGzip("/tmp/export.json.gz", data)
-func WriteGzip(path string, data []byte) error {
-	path, err := cleanPath(path)
-	if err != nil {
-		return err
-	}
-	f, err := os.Create(path)
+//	err := sync.WriteGzip(root, "export.json.gz", data)
+func WriteGzip(root *os.Root, name string, data []byte) error {
+	f, err := root.Create(name)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
@@ -84,7 +65,7 @@ func WriteGzip(path string, data []byte) error {
 	return f.Sync()
 }
 
-// WriteZipSingle creates a ZIP archive with a single file entry.
+// WriteZipSingle creates a ZIP archive with a single file entry, at name below the root.
 // entryName is the name of the file inside the ZIP.
 //
 // Use Case: Windows-friendly compression, better for multiple files (future)
@@ -93,13 +74,9 @@ func WriteGzip(path string, data []byte) error {
 // Example:
 //
 //	data := []byte(`{"devices": [...]}`)
-//	err := sync.WriteZipSingle("/tmp/export.zip", "export.json", data)
-func WriteZipSingle(path string, entryName string, data []byte) error {
-	path, err := cleanPath(path)
-	if err != nil {
-		return err
-	}
-	f, err := os.Create(path)
+//	err := sync.WriteZipSingle(root, "export.zip", "export.json", data)
+func WriteZipSingle(root *os.Root, name string, entryName string, data []byte) error {
+	f, err := root.Create(name)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
