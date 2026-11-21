@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
@@ -41,6 +42,38 @@ func readGen2Normalized(t *testing.T, h *Handler, id string) (gen2Normalized, []
 	}
 	sort.Strings(keys)
 	return n, keys
+}
+
+// A typed configuration that holds both a top-level location and system.location: the top-level value
+// wins for each field it sets, and the other source fills the fields it leaves out.
+func TestNormalizeTypedConfig_LocationPrecedence(t *testing.T) {
+	n := NewConfigNormalizer()
+	tz := func(s string) *string { return &s }
+	num := func(f float64) *float64 { return &f }
+	system := &configuration.SystemConfiguration{
+		Device:   &configuration.TypedDeviceConfig{Timezone: tz("Europe/Paris")},
+		Location: &configuration.LocationConfig{Latitude: num(48.85), Longitude: num(2.35)},
+	}
+
+	both := n.NormalizeTypedConfig(&configuration.TypedConfiguration{
+		System:   system,
+		Location: &configuration.LocationConfiguration{Timezone: tz("Europe/Brussels"), Latitude: num(50.85), Longitude: num(4.35)},
+	})
+	assert.Equal(t, "Europe/Brussels", both.Time.Timezone)
+	assert.Equal(t, 50.85, both.Location.Lat)
+	assert.Equal(t, 4.35, both.Location.Lng)
+
+	partial := n.NormalizeTypedConfig(&configuration.TypedConfiguration{
+		System:   system,
+		Location: &configuration.LocationConfiguration{Timezone: tz("Europe/Brussels")},
+	})
+	assert.Equal(t, "Europe/Brussels", partial.Time.Timezone)
+	assert.Equal(t, 48.85, partial.Location.Lat, "a field the top level leaves out comes from system.location")
+	assert.Equal(t, 2.35, partial.Location.Lng)
+
+	none := n.NormalizeTypedConfig(&configuration.TypedConfiguration{System: system})
+	assert.Equal(t, "Europe/Paris", none.Time.Timezone)
+	assert.Equal(t, 48.85, none.Location.Lat)
 }
 
 func TestGetTypedDeviceConfigNormalized_Gen2(t *testing.T) {
