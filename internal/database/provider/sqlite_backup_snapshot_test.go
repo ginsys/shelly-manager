@@ -185,6 +185,30 @@ func TestCreateBackupRefusesDotDotBeforeCreatingAnything(t *testing.T) {
 	}
 }
 
+// BackupResult.BackupPath is the path the caller gave, not its cleaned form: a caller that keeps it
+// and later passes it to DeleteBackup (which acts only on an id with a separator) must get the same
+// string back. "./backup.sqlite" came back unchanged before the path check and must still.
+func TestCreateBackupReturnsThePathAsGiven(t *testing.T) {
+	dir := t.TempDir()
+	p := walProvider(t, filepath.Join(dir, "live.db"))
+	t.Chdir(dir)
+
+	const given = "./backup.sqlite"
+	res, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: given, BackupType: BackupTypeFull})
+	if err != nil || !res.Success {
+		t.Fatalf("CreateBackup: %v %+v", err, res)
+	}
+	if res.BackupPath != given {
+		t.Fatalf("BackupPath = %q, want the path as given, %q", res.BackupPath, given)
+	}
+	if err := p.DeleteBackup(res.BackupPath); err != nil {
+		t.Fatalf("DeleteBackup: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "backup.sqlite")); !os.IsNotExist(err) {
+		t.Fatalf("DeleteBackup(%q) left the backup behind (stat err %v)", res.BackupPath, err)
+	}
+}
+
 func TestCreateBackupPathWithQuote(t *testing.T) {
 	dir := t.TempDir()
 	live := filepath.Join(dir, "live.db")

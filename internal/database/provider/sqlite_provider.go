@@ -342,7 +342,7 @@ func (s *SQLiteProvider) CreateBackup(ctx context.Context, config BackupConfig) 
 	return &BackupResult{
 		Success:    true,
 		BackupID:   fmt.Sprintf("sqlite-%d", time.Now().UnixNano()),
-		BackupPath: dst,
+		BackupPath: config.BackupPath, // as given, not dst: a caller passes it back to DeleteBackup
 		BackupType: BackupTypeFull,
 		StartTime:  start,
 		EndTime:    time.Now(),
