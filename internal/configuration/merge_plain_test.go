@@ -34,9 +34,12 @@ var plainScalarCases = []struct {
 }
 
 // plainScalarsNotCovered are the plain scalar fields the table above leaves out on purpose: a channel
-// id (merged by id, not as a layer field) and the time zone internals of an opaque time value.
+// id (merged by id, not as a layer field), the name and index of an action (a layer that names actions
+// replaces the whole list, so no field of an entry is merged; TestActionConfig_AMergedLayerReplacesTheListWhole
+// holds that) and the time zone internals of an opaque time value.
 func plainScalarsNotCovered(path string) bool {
 	return path == "relay.relays.id" || path == "input.inputs.id" ||
+		path == "actions.name" || path == "actions.index" ||
 		strings.HasPrefix(path, "power_metering.energy_reset")
 }
 
