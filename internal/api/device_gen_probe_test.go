@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,17 +100,23 @@ func TestAddDevice_StoresTheGenerationTheDeviceReports(t *testing.T) {
 	}
 }
 
-// A device that does not answer, or that is not a Shelly, stays Gen1 as before: the create is not refused.
+// A device that does not answer, that is not a Shelly, or that reports a generation below 1 stays Gen1
+// as before: the create is not refused, and no row is stored without a gen (a client builder refuses one).
 func TestAddDevice_ADeviceThatCannotBeAskedStaysGen1(t *testing.T) {
-	for name, probeErr := range map[string]error{
-		"unreachable":  fmt.Errorf("device not reachable at 192.0.2.10: %w", context.DeadlineExceeded),
-		"not a Shelly": shelly.ErrInvalidGeneration,
-		"a bad answer": errors.New("no device is probed in a test"),
+	for name, tc := range map[string]struct {
+		gen int
+		err error
+	}{
+		"unreachable":       {0, fmt.Errorf("device not reachable at 192.0.2.10: %w", context.DeadlineExceeded)},
+		"not a Shelly":      {0, shelly.ErrInvalidGeneration},
+		"a bad answer":      {0, errors.New("no device is probed in a test")},
+		"an answer of zero": {0, nil},
+		"a negative answer": {-1, nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h, cleanup := typedHandler(t)
 			defer cleanup()
-			p := withProbe(t, 0, probeErr)
+			p := withProbe(t, tc.gen, tc.err)
 
 			id, code := createDevice(t, h, "")
 
@@ -117,6 +125,38 @@ func TestAddDevice_ADeviceThatCannotBeAskedStaysGen1(t *testing.T) {
 			assert.EqualValues(t, 1, storedSettings(t, h, id)["gen"])
 		})
 	}
+}
+
+// A client that hangs up does not decide what is stored: the probe runs on its own deadline, so the
+// device that answered Gen2 is stored as Gen2 (ginsys/shelly-manager#820).
+func TestAddDevice_ACancelledRequestStillStoresTheDetectedGeneration(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	previous := detectGeneration
+	detectGeneration = func(ctx context.Context, ip string) (int, error) {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		return 2, nil
+	}
+	t.Cleanup(func() { detectGeneration = previous })
+	body, err := json.Marshal(database.Device{IP: "192.0.2.10", MAC: "AA:BB:CC:DD:EE:01", Type: "Test Device", Name: "Manual"})
+	require.NoError(t, err)
+	gone, hangUp := context.WithCancel(context.Background())
+	hangUp()
+	req := httptest.NewRequest("POST", "/api/v1/devices", bytes.NewReader(body)).WithContext(gone)
+	w := httptest.NewRecorder()
+
+	h.AddDevice(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var wrap struct {
+		Data struct {
+			ID uint `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &wrap), w.Body.String())
+	assert.EqualValues(t, 2, storedSettings(t, h, wrap.Data.ID)["gen"])
 }
 
 func TestAddDevice_AGivenGenerationIsKeptAndNothingIsAsked(t *testing.T) {
@@ -176,6 +216,11 @@ func TestUpdateDevice_KeepsTheStoredGenerationAndNeverWritesOne(t *testing.T) {
 		{"stored gen is 0", `{"model":"M","gen":0}`, `{"model":"M2"}`, float64(0), []string{"model"}},
 		{"stored gen is negative", `{"model":"M","gen":-1}`, `{"model":"M2"}`, float64(-1), []string{"model"}},
 		{"stored gen is fractional", `{"model":"M","gen":2.5}`, `{"model":"M2"}`, 2.5, []string{"model"}},
+		// Stored settings that hold no gen to carry (ginsys/shelly-manager#820): the update succeeds and
+		// writes none.
+		{"stored settings are empty", ``, `{"model":"M2"}`, nil, []string{"model"}},
+		{"stored settings are a JSON array", `[1,2]`, `{"model":"M2"}`, nil, []string{"model"}},
+		{"stored settings are invalid JSON", `{"model":`, `{"model":"M2"}`, nil, []string{"model"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, cleanup := typedHandler(t)
@@ -257,9 +302,10 @@ func TestAddDevice_AGen2DeviceAddedByHandReadsAsGen2(t *testing.T) {
 	}
 }
 
-// The 2 s deadline bounds both of the probe's requests and comes from the request: a caller that goes
-// away ends the probe. A failed probe is logged with the reason, so the log says why the device is Gen 1.
-func TestProbeGeneration_IsBoundedByTheRequestAndSaysWhyItFellBack(t *testing.T) {
+// The probe's own 2 s deadline bounds both of its requests and does not follow the request: a client that
+// hangs up does not decide what is stored (ginsys/shelly-manager#820). A failed probe is logged with the
+// reason, so the log says why the device is Gen 1.
+func TestProbeGeneration_HasItsOwnDeadlineAndSaysWhyItFellBack(t *testing.T) {
 	newHandler := func(t *testing.T) (*Handler, string) {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "probe.log")
@@ -269,7 +315,7 @@ func TestProbeGeneration_IsBoundedByTheRequestAndSaysWhyItFellBack(t *testing.T)
 		return &Handler{logger: logger}, path
 	}
 
-	t.Run("a deadline of 2 s, and a cancelled request ends it", func(t *testing.T) {
+	t.Run("a deadline of 2 s", func(t *testing.T) {
 		h, _ := newHandler(t)
 		var remaining time.Duration
 		var hasDeadline bool
@@ -285,35 +331,46 @@ func TestProbeGeneration_IsBoundedByTheRequestAndSaysWhyItFellBack(t *testing.T)
 		assert.True(t, hasDeadline, "the probe has a deadline")
 		assert.LessOrEqual(t, remaining, 2*time.Second)
 		assert.Greater(t, remaining, time.Second, "the deadline is 2 s, not a shorter one")
-
-		cancelled, cancel := context.WithCancel(context.Background())
-		cancel()
-		var seen error
-		detectGeneration = func(ctx context.Context, ip string) (int, error) {
-			seen = ctx.Err()
-			return 0, ctx.Err()
-		}
-		assert.Equal(t, 1, h.probeGeneration(cancelled, "192.0.2.10"))
-		assert.Error(t, seen, "the probe's context follows the request's")
 	})
 
+	// A name that parses but does not resolve fails at the dial, so it reads as no answer. The malformed
+	// address goes through the real DetectGeneration: a bad host fails at request construction and dials
+	// nothing.
 	for name, tc := range map[string]struct {
+		ip   string
+		gen  int
 		err  error
+		real bool
 		want string
 	}{
-		"no answer":    {fmt.Errorf("device not reachable at 192.0.2.10: %w", context.DeadlineExceeded), "the device did not answer"},
-		"not a Shelly": {shelly.ErrInvalidGeneration, "not a Shelly device"},
+		"no answer":              {"192.0.2.10", 0, fmt.Errorf("device not reachable at 192.0.2.10: %w", context.DeadlineExceeded), false, "the device did not answer"},
+		"not a Shelly":           {"192.0.2.10", 0, shelly.ErrInvalidGeneration, false, "not a Shelly device"},
+		"an answer below 1":      {"192.0.2.10", 0, nil, false, "not a Shelly device"},
+		"a malformed address":    {"192.0.2.10 bad", 0, nil, true, "the address is not a valid URL host"},
+		"a negative answer":      {"192.0.2.10", -1, nil, false, "not a Shelly device"},
+		"an unparseable address": {"[::1", 0, nil, true, "the address is not a valid URL host"},
 	} {
 		t.Run("log: "+name, func(t *testing.T) {
 			h, path := newHandler(t)
-			withProbe(t, 0, tc.err)
+			if tc.real {
+				previous := detectGeneration
+				detectGeneration = shelly.DetectGeneration
+				t.Cleanup(func() { detectGeneration = previous })
+			} else {
+				withProbe(t, tc.gen, tc.err)
+			}
 
-			assert.Equal(t, 1, h.probeGeneration(context.Background(), "192.0.2.10"))
+			assert.Equal(t, 1, h.probeGeneration(context.Background(), tc.ip))
 
 			logged, err := os.ReadFile(path)
 			require.NoError(t, err)
 			assert.Contains(t, string(logged), tc.want)
-			assert.Contains(t, string(logged), "192.0.2.10")
+			assert.Contains(t, string(logged), tc.ip)
+			for _, other := range []string{"the device did not answer", "not a Shelly device", "not a valid URL host"} {
+				if !strings.Contains(tc.want, other) {
+					assert.NotContains(t, string(logged), other, "one reason per cause")
+				}
+			}
 		})
 	}
 }
