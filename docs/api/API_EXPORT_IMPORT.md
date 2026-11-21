@@ -255,7 +255,7 @@ Common error codes include `VALIDATION_FAILED`, `INTERNAL_SERVER_ERROR`, and `NO
 - Exports and downloads are confined to one export directory. It is `sync.export_base_dir` if set, else `export.output_directory`, else `./data/exports`. The server creates it at start-up.
 - A relative `output_path` (or output destination) is joined under the export directory; empty means the directory itself. An absolute path must already be inside it. A path that leaves it, by `..`, an absolute path elsewhere or a symbolic link, is refused with `400` and a message naming the export directory.
 - A download is served only for a file inside the export directory; otherwise the API returns `403 FORBIDDEN`. An export recorded earlier outside it can no longer be downloaded. The one exception is a backup with no export directory configured: it is served from `./data/backups`, where the backup plugin writes it.
-- The check is made before the write. It does not close the gap between the check and the write for GitOps exports (a link swapped in between).
+- The check is made before the write. The SMA and GitOps exports then write through the opened export directory, which refuses any link that leads out of it, and also a link whose target is an absolute path, even one that points inside. The JSON and YAML exports and the backup write by path, so a link swapped in between the check and the write is not caught there.
 ### Backup export (Provider snapshot)
 
 The Backup plugin takes a database snapshot via the active DB provider.

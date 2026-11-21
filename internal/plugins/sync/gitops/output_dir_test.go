@@ -161,11 +161,13 @@ func TestExportOutputPathShapes(t *testing.T) {
 		}
 	})
 	t.Run("symlink to an owned directory", func(t *testing.T) {
-		real := t.TempDir()
+		// The link is relative and stays inside the export root: os.Root refuses an absolute target.
+		base := t.TempDir()
+		real := filepath.Join(base, "real")
 		writeFile(t, filepath.Join(real, markerName), "x\n")
 		writeFile(t, filepath.Join(real, "stale.yaml"), "old")
-		link := filepath.Join(t.TempDir(), "link")
-		if err := os.Symlink(real, link); err != nil {
+		link := filepath.Join(base, "link")
+		if err := os.Symlink("real", link); err != nil {
 			t.Skipf("symlink: %v", err)
 		}
 		if err := exportInto(t, link, oneDevice(), nil); err != nil {
@@ -199,7 +201,7 @@ func TestExportOutputPathShapes(t *testing.T) {
 		if exists(filepath.Join(dir, "export-summary.yaml")) {
 			t.Fatal("the clean did not reach the summary: the test does not model a partial clean")
 		}
-		if !isRegularFile(filepath.Join(dir, markerName)) {
+		if !regularFile(filepath.Join(dir, markerName)) {
 			t.Fatal("the marker must be there after a clean that stopped halfway")
 		}
 		if err := os.Chmod(sub, 0o755); err != nil {
@@ -325,7 +327,7 @@ func TestExportDoesNotWriteThroughAMarkerSymlink(t *testing.T) {
 	if b, _ := os.ReadFile(outside); string(b) != "precious" {
 		t.Errorf("the symlink target was written: %q", b)
 	}
-	if !isRegularFile(filepath.Join(dir, markerName)) {
+	if !regularFile(filepath.Join(dir, markerName)) {
 		t.Error("the marker is not a regular file after the export")
 	}
 }
