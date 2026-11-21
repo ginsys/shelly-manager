@@ -233,11 +233,19 @@ page imports still counts. The Playwright spec is what proves the links are rend
   Roll back is off while the overrides editor is open and until the page has read the current configuration, and
   the card reads its versions again each time the page finishes a read. No device is contacted: the operator
   applies afterwards. The History card below it lists imports, not these versions.
+
+  ![The desired configuration versions card, newest first](images/desired-rollback-versions.png)
+
+  ![The confirm dialog: the difference, the detached templates, the way back](images/desired-rollback-confirm.png)
+
+  ![A version that needs a secret asks for it in the same dialog](images/desired-rollback-secret-prompt.png)
+
 - **An open overrides edit survives a refresh** (ginsys/shelly-manager#855). The page reloads the overrides into
-  the editor only while the editor is closed. Text in the JSON view that does not parse yet is still lost on a
-  refresh, because the page shows "Loading..." in place of the editor while it loads (ginsys/shelly-manager#858). If the saved overrides change under an open edit (a rollback does
+  the editor only while the editor is closed. If the saved overrides change under an open edit (a rollback does
   this), the edit is kept, a notice says so, and Save is off until Cancel loads the saved overrides. It sees a
-  change this page has read: one made from another browser, or one whose refresh failed, is not seen.
+  change this page has read: one made from another browser, or one whose refresh failed, is not seen. Text in
+  the JSON view that does not parse yet is still lost on a refresh, because the page shows "Loading..." in place
+  of the editor while it loads (ginsys/shelly-manager#858).
 - **Drift compares with the desired configuration**, the one apply writes and verify reads, and no
   longer with the stored import record (ginsys/shelly-manager#606). A device with no desired
   configuration cannot be checked: the drift route answers 404 and a bulk run marks it skipped.
