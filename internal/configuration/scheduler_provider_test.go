@@ -143,10 +143,10 @@ func TestDriftScheduleWriteProviders_FilterRoundTripsAndAnUnchangedUpdateIsFound
 			// The same body again, with a clock that stands still: no column changes, not even updated_at.
 			db.NowFunc = func() time.Time { return at(0) }
 			for i := 0; i < 2; i++ { // the first writes the fixed updated_at, the second changes nothing
-				_, err = svc.UpdateDriftSchedule(created.ID, same)
+				_, err = updateCurrent(svc, created.ID, same)
 				require.NoError(t, err)
 			}
-			changed, err := svc.UpdateDriftSchedule(created.ID, ScheduleInput{
+			changed, err := updateCurrent(svc, created.ID, ScheduleInput{
 				Name: "plugs", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Status: "online"},
 			})
 			require.NoError(t, err)
@@ -219,13 +219,15 @@ func TestDriftScheduleWriteProviders_ADeleteBetweenReadAndUpdateLeavesNoDeviceRo
 			require.NoError(t, db.Create(&Device{ID: 1, Name: "Device", Type: "SHSW-1", IP: "192.168.1.100", MAC: "AA:BB:CC:DD:EE:FF", LastSeen: at(0)}).Error)
 			created, err := sa.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *"})
 			require.NoError(t, err)
+			read, err := sa.svc.GetDriftSchedule(created.ID) // before the hook, so the hook fires on the locked read
+			require.NoError(t, err)
 			deleted := make(chan struct{})
 			afterFirstScheduleRead(t, db, func() {
 				defer close(deleted)
 				_ = sb.svc.DeleteDriftSchedule(created.ID)
 			})
 
-			_, err = sa.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
+			_, err = sa.svc.UpdateDriftSchedule(created.ID, read.Revision, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
 			<-deleted
 
 			assert.True(t, err == nil || errors.Is(err, gorm.ErrRecordNotFound), "update: %v", err)
@@ -238,54 +240,63 @@ func TestDriftScheduleWriteProviders_ADeleteBetweenReadAndUpdateLeavesNoDeviceRo
 	}
 }
 
-// Two updates that read the same spec must not leave a spec with the next run of the other: the second
-// one waits for the first, reads its result and recomputes.
-func TestDriftScheduleWriteProviders_ConcurrentUpdatesKeepTheSpecAndItsNextRunTogether(t *testing.T) {
+// Two updates made from one revision: exactly one wins, and the stored spec keeps the next run of the
+// winner. The second one starts while the first holds the row lock, so a compare made before the lock
+// (on the plain read) would let both write; only a compare inside the locked transaction refuses it.
+func TestDriftScheduleWriteProviders_TwoUpdatesFromOneRevisionLetOneWin(t *testing.T) {
 	for _, srv := range lockServers(t) {
 		t.Run(srv.name, func(t *testing.T) {
 			sa, sb, db := openSchedulerReplicas(t, srv)
 			created, err := sa.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "7 * * * *"})
 			require.NoError(t, err)
+			read, err := sa.svc.GetDriftSchedule(created.ID) // both updates are made from this revision
+			require.NoError(t, err)
 			other := make(chan struct{})
+			var otherErr error
 			afterFirstScheduleRead(t, db, func() {
 				defer close(other)
-				_, uerr := sb.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *"})
-				assert.NoError(t, uerr)
+				_, otherErr = sb.svc.UpdateDriftSchedule(created.ID, read.Revision, ScheduleInput{Name: "n", CronSpec: "0 3 * * *"})
 			})
 
-			_, err = sa.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "renamed", CronSpec: "7 * * * *"})
+			_, err = sa.svc.UpdateDriftSchedule(created.ID, read.Revision, ScheduleInput{Name: "renamed", CronSpec: "7 * * * *"})
 			require.NoError(t, err)
 			<-other
 
+			assert.ErrorIs(t, otherErr, ErrStaleDriftSchedule)
 			var sc DriftDetectionSchedule
 			require.NoError(t, db.First(&sc, created.ID).Error)
+			assert.Equal(t, "renamed", sc.Name)
+			assert.Equal(t, read.Revision+1, sc.Revision)
 			require.NotNil(t, sc.NextRun)
-			minute := map[string]int{"7 * * * *": 7, "0 3 * * *": 0}[sc.CronSpec]
-			assert.Equal(t, minute, sc.NextRun.Minute(), "next run %s does not belong to spec %q", sc.NextRun, sc.CronSpec)
+			assert.Equal(t, 7, sc.NextRun.Minute(), "next run %s does not belong to spec %q", sc.NextRun, sc.CronSpec)
 		})
 	}
 }
 
-// A toggle on that read a disabled schedule must not arm it with the next run of a spec an edit
-// replaced meanwhile: the edit waits for the toggle's commit and then recomputes.
-func TestDriftScheduleWriteProviders_AToggleOnAndAnEditKeepTheSpecAndItsNextRunTogether(t *testing.T) {
+// A toggle on that read a disabled schedule must not be overwritten by an edit made from the revision
+// before it: the edit waits for the toggle's commit and is then refused, so the schedule keeps the spec
+// and the next run the toggle armed.
+func TestDriftScheduleWriteProviders_AnEditFromBeforeAToggleOnIsRefusedAndKeepsTheSpecAndItsNextRun(t *testing.T) {
 	for _, srv := range lockServers(t) {
 		t.Run(srv.name, func(t *testing.T) {
 			sa, sb, db := openSchedulerReplicas(t, srv)
 			off := false
 			created, err := sa.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "7 * * * *", Enabled: &off})
 			require.NoError(t, err)
+			read, err := sa.svc.GetDriftSchedule(created.ID) // the edit is made from this revision
+			require.NoError(t, err)
 			edited := make(chan struct{})
+			var editErr error
 			afterFirstScheduleRead(t, db, func() {
 				defer close(edited)
-				_, uerr := sb.svc.UpdateDriftSchedule(created.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *"})
-				assert.NoError(t, uerr)
+				_, editErr = sb.svc.UpdateDriftSchedule(created.ID, read.Revision, ScheduleInput{Name: "n", CronSpec: "0 3 * * *"})
 			})
 
 			_, err = sa.svc.ToggleDriftSchedule(created.ID)
 			require.NoError(t, err)
 			<-edited
 
+			assert.ErrorIs(t, editErr, ErrStaleDriftSchedule)
 			var sc DriftDetectionSchedule
 			require.NoError(t, db.First(&sc, created.ID).Error)
 			require.True(t, sc.Enabled)
@@ -314,7 +325,7 @@ func TestDriftSchedulerProviders_AClaimReadBeforeAnEditOrAToggleIsNotWon(t *test
 			}
 
 			read := due()
-			_, err = sa.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHSW-1"}})
+			_, err = updateCurrent(sa.svc, sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHSW-1"}})
 			require.NoError(t, err)
 			won, err := sa.claim(db, read, at(5*time.Minute))
 			require.NoError(t, err)

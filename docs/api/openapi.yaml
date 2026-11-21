@@ -692,6 +692,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        revision:
+          type: integer
+          description: >-
+            Moves on every write of the schedule by a user (an update or a toggle) and when the scheduler
+            disables it after a failure; a scheduler run does not move it. An update sends the revision it
+            read, and the server refuses it with 409 when the stored one is not that.
 
     DriftRun:
       type: object
@@ -761,6 +767,33 @@ components:
           description: Must exist. Not allowed together with device_filter.
         device_filter:
           $ref: '#/components/schemas/DriftDeviceFilter'
+
+    DriftScheduleUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, cron_spec, revision]
+      description: >-
+        The body of an update. It holds the fields of DriftScheduleInput and the revision the caller read.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        cron_spec:
+          type: string
+          example: '*/5 * * * *'
+        enabled:
+          type: boolean
+          description: Stays as it is when it is left out.
+        device_ids:
+          type: array
+          items:
+            type: integer
+        device_filter:
+          $ref: '#/components/schemas/DriftDeviceFilter'
+        revision:
+          type: integer
+          description: The `revision` of the schedule as the caller read it. A body without it is refused with 400.
 
     DriftScheduleResponse:
       allOf:
@@ -2358,7 +2391,8 @@ paths:
       description: >-
         Replaces the editable fields and the device list or filter. The next run is
         recomputed when the spec changes or the schedule becomes enabled, and stays
-        as it is otherwise. An invalid body changes nothing.
+        as it is otherwise. An invalid body changes nothing. The body carries the `revision` the
+        caller read, and the update is made only if that is still the stored revision.
       operationId: updateDriftSchedule
       security:
         - BearerAuth: []
@@ -2368,18 +2402,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DriftScheduleInput'
+              $ref: '#/components/schemas/DriftScheduleUpdate'
       responses:
         '200':
-          description: Schedule updated
+          description: Schedule updated; its `revision` is one higher.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DriftScheduleResponse'
         '400':
-          description: Invalid id, body, cron spec, device selection or unknown device id
+          description: Invalid id, body, cron spec, device selection or unknown device id, or no `revision` in the body
         '404':
           description: No such schedule
+        '409':
+          description: >-
+            The schedule changed since the caller read it (its stored `revision` is not the one sent).
+            Nothing is written. `error.details` holds the current schedule.
 
     delete:
       tags: [Drift]

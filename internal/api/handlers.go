@@ -1321,21 +1321,20 @@ func (h *Handler) GetDriftSchedules(w http.ResponseWriter, r *http.Request) {
 	h.responseWriter().WriteSuccess(w, r, schedules)
 }
 
-// decodeScheduleInput reads a schedule write body. An unknown field is refused, so a filter key no
-// column has (device_type) fails at write time and not as a failed run later.
-func (h *Handler) decodeScheduleInput(w http.ResponseWriter, r *http.Request) (configuration.ScheduleInput, bool) {
-	var in configuration.ScheduleInput
+// decodeScheduleBody reads a schedule write body into `into`. An unknown field is refused, so a filter key
+// no column has (device_type) fails at write time and not as a failed run later.
+func (h *Handler) decodeScheduleBody(w http.ResponseWriter, r *http.Request, into any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&in); err != nil {
+	if err := decoder.Decode(into); err != nil {
 		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body: "+err.Error())
-		return in, false
+		return false
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) { // one JSON value, nothing after it
 		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body: unexpected text after the JSON value")
-		return in, false
+		return false
 	}
-	return in, true
+	return true
 }
 
 // writeScheduleError answers the failure of a schedule write: a refused input is a 400, a missing
@@ -1364,8 +1363,8 @@ func (h *Handler) scheduleID(w http.ResponseWriter, r *http.Request) (uint, bool
 
 // CreateDriftSchedule handles POST /api/v1/config/drift-schedules.
 func (h *Handler) CreateDriftSchedule(w http.ResponseWriter, r *http.Request) {
-	in, ok := h.decodeScheduleInput(w, r)
-	if !ok {
+	var in configuration.ScheduleInput
+	if !h.decodeScheduleBody(w, r, &in) {
 		return
 	}
 	schedule, err := h.Service.CreateDriftSchedule(in)
@@ -1404,16 +1403,35 @@ func (h *Handler) GetDriftSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateDriftSchedule handles PUT /api/v1/config/drift-schedules/{id}.
+//
+// The body carries the `revision` the caller read. A missing one is 400, so no caller can skip the check,
+// and a revision other than the stored one is 409 with the current schedule in `error.details`.
 func (h *Handler) UpdateDriftSchedule(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.scheduleID(w, r)
 	if !ok {
 		return
 	}
-	in, ok := h.decodeScheduleInput(w, r)
-	if !ok {
+	var in struct {
+		configuration.ScheduleInput
+		Revision *int `json:"revision"`
+	}
+	if !h.decodeScheduleBody(w, r, &in) {
 		return
 	}
-	schedule, err := h.Service.UpdateDriftSchedule(id, in)
+	if in.Revision == nil {
+		h.responseWriter().WriteValidationError(w, r, "revision is required: send the revision you read")
+		return
+	}
+	schedule, err := h.Service.UpdateDriftSchedule(id, *in.Revision, in.ScheduleInput)
+	if errors.Is(err, configuration.ErrStaleDriftSchedule) {
+		current, getErr := h.Service.GetDriftSchedule(id)
+		if getErr != nil {
+			h.writeScheduleError(w, r, "Failed to read the drift schedule", id, getErr)
+			return
+		}
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, err.Error(), current)
+		return
+	}
 	if err != nil {
 		h.writeScheduleError(w, r, "Failed to update drift schedule", id, err)
 		return

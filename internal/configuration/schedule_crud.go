@@ -16,6 +16,10 @@ import (
 // request from a failure of the database.
 var ErrInvalidDriftSchedule = errors.New("invalid drift schedule")
 
+// ErrStaleDriftSchedule is the refusal of an update that carries a revision other than the stored one: the
+// schedule changed since the caller read it, and nothing was written.
+var ErrStaleDriftSchedule = errors.New("drift schedule changed since it was read")
+
 // ScheduleInput is what a caller may set on a schedule. A schedule checks the devices in DeviceIDs,
 // or the devices DeviceFilter selects, or every device; both at once is refused.
 type ScheduleInput struct {
@@ -111,10 +115,11 @@ func (s *Service) CreateDriftSchedule(in ScheduleInput) (*DriftDetectionSchedule
 	return &sc, nil
 }
 
-// UpdateDriftSchedule replaces the editable fields of a schedule. Its next run is recomputed when the
+// UpdateDriftSchedule replaces the editable fields of a schedule, if the caller read its stored revision:
+// any other revision is ErrStaleDriftSchedule and nothing is written. Its next run is recomputed when the
 // spec changes or the schedule becomes enabled, and left alone otherwise, so editing a name never
 // moves the next run.
-func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectionSchedule, error) {
+func (s *Service) UpdateDriftSchedule(id uint, revision int, in ScheduleInput) (*DriftDetectionSchedule, error) {
 	v, err := s.validateSchedule(in, time.Now())
 	if err != nil {
 		return nil, err
@@ -124,6 +129,9 @@ func (s *Service) UpdateDriftSchedule(id uint, in ScheduleInput) (*DriftDetectio
 		// Locked until the commit: a delete or a second update waits, so the reads below stay true.
 		if res := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&sc, id); res.Error != nil {
 			return res.Error
+		}
+		if sc.Revision != revision {
+			return ErrStaleDriftSchedule
 		}
 		enabled := sc.Enabled
 		if in.Enabled != nil {
@@ -262,7 +270,7 @@ func replaceScheduleDevices(tx *gorm.DB, scheduleID uint, ids []uint) error {
 // wrapScheduleError adds what was being done to a database failure and passes a refusal of the input
 // or a missing schedule through unchanged, so errors.Is still finds them.
 func wrapScheduleError(what string, err error) error {
-	if err == nil || errors.Is(err, ErrInvalidDriftSchedule) || errors.Is(err, gorm.ErrRecordNotFound) {
+	if err == nil || errors.Is(err, ErrInvalidDriftSchedule) || errors.Is(err, ErrStaleDriftSchedule) || errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 	return fmt.Errorf("%s: %w", what, err)

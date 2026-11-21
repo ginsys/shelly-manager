@@ -123,23 +123,74 @@ func TestUpdateAndToggleDriftScheduleRoutes(t *testing.T) {
 	id := strconv.Itoa(int(created.ID))
 
 	w := a.do(http.MethodPut, schedulesURL+"/"+id, a.handler.UpdateDriftSchedule,
-		`{"name":"renamed","cron_spec":"0 3 * * *","device_filter":{"status":"online"}}`, id)
+		`{"name":"renamed","cron_spec":"0 3 * * *","device_filter":{"status":"online"},"revision":`+strconv.Itoa(created.Revision)+`}`, id)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	updated := decodeSchedule(t, w).Data
 	assert.Equal(t, "renamed", updated.Name)
 	assert.Equal(t, "0 3 * * *", updated.CronSpec)
 	assert.JSONEq(t, `{"status":"online"}`, string(updated.DeviceFilter))
+	assert.Equal(t, created.Revision+1, updated.Revision, "a write bumps the revision the answer carries")
 
 	w = a.do(http.MethodPost, schedulesURL+"/"+id+"/toggle", a.handler.ToggleDriftSchedule, "", id)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	off := decodeSchedule(t, w).Data
 	assert.False(t, off.Enabled)
 	assert.Nil(t, off.NextRun)
+	assert.Equal(t, updated.Revision+1, off.Revision, "a toggle answers with its own revision")
+}
+
+// An update names the revision it read. The one that is stored writes; any other is a 409 that carries the
+// current schedule and changes nothing; none is a 400, so no caller can skip the check.
+func TestUpdateDriftScheduleRoute_ChecksTheRevisionTheCallerRead(t *testing.T) {
+	a := newScheduleAPI(t)
+	created := decodeSchedule(t, a.do(http.MethodPost, schedulesURL, a.handler.CreateDriftSchedule,
+		`{"name":"nightly","cron_spec":"*/5 * * * *"}`, "")).Data
+	id := strconv.Itoa(int(created.ID))
+	put := func(body string) *httptest.ResponseRecorder {
+		return a.do(http.MethodPut, schedulesURL+"/"+id, a.handler.UpdateDriftSchedule, body, id)
+	}
+	rev := strconv.Itoa(created.Revision)
+
+	// Another writer saved first: the stored revision moved on.
+	require.Equal(t, http.StatusOK, put(`{"name":"first","cron_spec":"*/5 * * * *","revision":`+rev+`}`).Code)
+
+	w := put(`{"name":"second","cron_spec":"*/5 * * * *","revision":` + rev + `}`)
+	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	var conflict struct {
+		Error struct {
+			Code    string                               `json:"code"`
+			Details configuration.DriftDetectionSchedule `json:"details"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&conflict))
+	assert.Equal(t, "CONFLICT", conflict.Error.Code)
+	assert.Equal(t, "first", conflict.Error.Details.Name, "the answer carries the current schedule")
+	assert.Equal(t, created.Revision+1, conflict.Error.Details.Revision)
+	var stored configuration.DriftDetectionSchedule
+	require.NoError(t, a.db.GetDB().First(&stored, created.ID).Error)
+	assert.Equal(t, "first", stored.Name, "a refused write changes nothing")
+	assert.Equal(t, created.Revision+1, stored.Revision, "and does not bump the revision")
+
+	for name, body := range map[string]string{
+		"no revision":     `{"name":"third","cron_spec":"*/5 * * * *"}`,
+		"a null revision": `{"name":"third","cron_spec":"*/5 * * * *","revision":null}`,
+	} {
+		w = put(body)
+		assert.Equal(t, http.StatusBadRequest, w.Code, name+": "+w.Body.String())
+		assert.Contains(t, w.Body.String(), "revision is required", name)
+	}
+	require.NoError(t, a.db.GetDB().First(&stored, created.ID).Error)
+	assert.Equal(t, "first", stored.Name)
+
+	// Create has no revision to send: it is an unknown field there, as before.
+	w = a.do(http.MethodPost, schedulesURL, a.handler.CreateDriftSchedule,
+		`{"name":"n","cron_spec":"* * * * *","revision":0}`, "")
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 }
 
 func TestScheduleWriteRoutes_ABadOrMissingIDIsRefused(t *testing.T) {
 	a := newScheduleAPI(t)
-	body := `{"name":"n","cron_spec":"* * * * *"}`
+	body := `{"name":"n","cron_spec":"* * * * *","revision":0}`
 
 	assert.Equal(t, http.StatusBadRequest,
 		a.do(http.MethodPut, schedulesURL+"/x", a.handler.UpdateDriftSchedule, body, "x").Code)

@@ -17,6 +17,15 @@ import (
 
 func boolPtr(b bool) *bool { return &b }
 
+// updateCurrent updates a schedule as a caller that has just read it does: with the stored revision.
+func updateCurrent(svc *Service, id uint, in ScheduleInput) (*DriftDetectionSchedule, error) {
+	stored, err := svc.GetDriftSchedule(id)
+	if err != nil {
+		return nil, err
+	}
+	return svc.UpdateDriftSchedule(id, stored.Revision, in)
+}
+
 func (fx *schedFixture) count(model any, query string, args ...any) int64 {
 	fx.t.Helper()
 	var n int64
@@ -116,7 +125,7 @@ func TestUpdateDriftSchedule_ASpecChangeRecomputesNextRun(t *testing.T) {
 	require.NoError(t, err)
 	lo := time.Now()
 
-	updated, err := fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "renamed", CronSpec: "0 3 * * *"})
+	updated, err := updateCurrent(fx.svc, sc.ID, ScheduleInput{Name: "renamed", CronSpec: "0 3 * * *"})
 
 	require.NoError(t, err)
 	assert.Equal(t, "renamed", updated.Name)
@@ -129,7 +138,7 @@ func TestUpdateDriftSchedule_KeepsTheEnabledFlagWhenTheInputHasNone(t *testing.T
 	sc, err := fx.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", Enabled: boolPtr(false)})
 	require.NoError(t, err)
 
-	updated, err := fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/10 * * * *"})
+	updated, err := updateCurrent(fx.svc, sc.ID, ScheduleInput{Name: "n", CronSpec: "*/10 * * * *"})
 
 	require.NoError(t, err)
 	assert.False(t, updated.Enabled)
@@ -141,13 +150,13 @@ func TestUpdateDriftSchedule_ReplacesTheListOrTheFilterNeverBoth(t *testing.T) {
 	sc, err := fx.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{1, 2}})
 	require.NoError(t, err)
 
-	updated, err := fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Status: "online"}})
+	updated, err := updateCurrent(fx.svc, sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Status: "online"}})
 	require.NoError(t, err)
 	assert.Empty(t, updated.DeviceIDs)
 	assert.Zero(t, fx.count(&DriftScheduleDevice{}, "schedule_id = ?", sc.ID), "the old list is gone")
 	assert.JSONEq(t, `{"status":"online"}`, string(fx.schedule(sc.ID).DeviceFilter))
 
-	back, err := fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{3}})
+	back, err := updateCurrent(fx.svc, sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{3}})
 	require.NoError(t, err)
 	assert.Equal(t, []uint{3}, back.DeviceIDs)
 	assert.True(t, len(fx.schedule(sc.ID).DeviceFilter) == 0 || string(fx.schedule(sc.ID).DeviceFilter) == "null",
@@ -159,7 +168,7 @@ func TestUpdateDriftSchedule_ABadInputLeavesTheStoredScheduleAsItWas(t *testing.
 	sc, err := fx.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{1, 2}})
 	require.NoError(t, err)
 
-	_, err = fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{3, 99}})
+	_, err = updateCurrent(fx.svc, sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{3, 99}})
 
 	require.ErrorIs(t, err, ErrInvalidDriftSchedule)
 	stored, err := fx.svc.GetDriftSchedule(sc.ID)
@@ -170,7 +179,7 @@ func TestUpdateDriftSchedule_ABadInputLeavesTheStoredScheduleAsItWas(t *testing.
 func TestUpdateDriftSchedule_AMissingScheduleIsNotFound(t *testing.T) {
 	fx := newSchedFixture(t)
 
-	_, err := fx.svc.UpdateDriftSchedule(42, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *"})
+	_, err := fx.svc.UpdateDriftSchedule(42, 0, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *"})
 
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	assert.Zero(t, fx.count(&DriftDetectionSchedule{}, "1 = 1"), "an update never creates")
@@ -262,7 +271,7 @@ func TestSchedulerClaim_AReplacedSpecIsNotClaimedFromAnEarlierRead(t *testing.T)
 	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("next_run", at(0)).Error)
 	read := fx.schedule(sc.ID)
 
-	updated, err := fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
+	updated, err := updateCurrent(fx.svc, sc.ID, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
 	require.NoError(t, err)
 
 	won, err := fx.s.claim(fx.db, read, at(5*time.Minute))
@@ -282,7 +291,7 @@ func TestSchedulerClaim_AnEditOfTheDeviceSelectionIsNotClaimedFromAnEarlierRead(
 	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("next_run", at(0)).Error)
 	read := fx.schedule(sc.ID)
 
-	_, err = fx.svc.UpdateDriftSchedule(sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHSW-1"}})
+	_, err = updateCurrent(fx.svc, sc.ID, ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHSW-1"}})
 	require.NoError(t, err)
 
 	won, err := fx.s.claim(fx.db, read, at(5*time.Minute))
@@ -318,7 +327,7 @@ func TestSchedulerFailSchedule_AReplacedSpecIsNotDisabledFromAnEarlierRead(t *te
 	id := fx.add("0 */5 * * * *", nil, "", 1) // six fields: stored by an older release
 	read := fx.schedule(id)
 
-	updated, err := fx.svc.UpdateDriftSchedule(id, ScheduleInput{Name: "nightly", CronSpec: "*/5 * * * *", DeviceIDs: []uint{1}})
+	updated, err := updateCurrent(fx.svc, id, ScheduleInput{Name: "nightly", CronSpec: "*/5 * * * *", DeviceIDs: []uint{1}})
 	require.NoError(t, err)
 	require.True(t, updated.Enabled)
 
@@ -347,7 +356,7 @@ func TestSchedulerArm_AStaleReadDoesNotArmAReplacedSpec(t *testing.T) {
 	fx := newSchedFixture(t)
 	id := fx.add("*/5 * * * *", nil, "", 1)
 	read := fx.schedule(id)
-	updated, err := fx.svc.UpdateDriftSchedule(id, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
+	updated, err := updateCurrent(fx.svc, id, ScheduleInput{Name: "n", CronSpec: "0 3 * * *", DeviceIDs: []uint{1}})
 	require.NoError(t, err)
 
 	fx.s.handle(context.Background(), read, at(0))
@@ -417,6 +426,74 @@ func TestSchedulerRun_ADeletedSchedulesRunIsNotRecreated(t *testing.T) {
 	fx.s.runClaimed(context.Background(), sc, run, at(time.Minute))
 
 	assert.Zero(t, fx.count(&DriftDetectionRun{}, "schedule_id = ?", id))
+}
+
+// An update is based on the revision the caller read (ginsys/shelly-manager#790): the stored one writes and
+// bumps it, any other is ErrStaleDriftSchedule and leaves the row, its devices and its revision alone.
+func TestUpdateDriftSchedule_RefusesAStaleRevisionAndWritesNothing(t *testing.T) {
+	fx := newSchedFixture(t)
+	sc, err := fx.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *", DeviceIDs: []uint{1}})
+	require.NoError(t, err)
+	read := sc.Revision
+
+	first, err := fx.svc.UpdateDriftSchedule(sc.ID, read, ScheduleInput{Name: "first", CronSpec: "*/5 * * * *", DeviceIDs: []uint{2}})
+	require.NoError(t, err)
+	assert.Equal(t, read+1, first.Revision)
+
+	// A second caller that read the same revision is stale now.
+	second, err := fx.svc.UpdateDriftSchedule(sc.ID, read, ScheduleInput{Name: "second", CronSpec: "0 3 * * *", DeviceIDs: []uint{3}})
+
+	require.ErrorIs(t, err, ErrStaleDriftSchedule)
+	assert.Nil(t, second)
+	stored := fx.schedule(sc.ID)
+	assert.Equal(t, "first", stored.Name)
+	assert.Equal(t, "*/5 * * * *", stored.CronSpec)
+	assert.Equal(t, read+1, stored.Revision, "a refusal does not bump the revision")
+	got, err := fx.svc.GetDriftSchedule(sc.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []uint{2}, got.DeviceIDs, "the device list is not replaced either")
+
+	// A revision from the future is as stale as one from the past.
+	_, err = fx.svc.UpdateDriftSchedule(sc.ID, read+5, ScheduleInput{Name: "x", CronSpec: "*/5 * * * *"})
+	assert.ErrorIs(t, err, ErrStaleDriftSchedule)
+}
+
+// Sequence 1 of the issue: a form opened on revision r, a toggle that lands before the save. The save from
+// the old row is refused instead of putting the old fields back.
+func TestUpdateDriftSchedule_ATogglesBumpMakesTheOpenFormStale(t *testing.T) {
+	fx := newSchedFixture(t)
+	sc, err := fx.svc.CreateDriftSchedule(ScheduleInput{Name: "n", CronSpec: "*/5 * * * *"})
+	require.NoError(t, err)
+	opened := sc.Revision
+
+	toggled, err := fx.svc.ToggleDriftSchedule(sc.ID)
+	require.NoError(t, err)
+	assert.Equal(t, opened+1, toggled.Revision)
+
+	_, err = fx.svc.UpdateDriftSchedule(sc.ID, opened, ScheduleInput{Name: "edited", CronSpec: "*/5 * * * *"})
+
+	assert.ErrorIs(t, err, ErrStaleDriftSchedule)
+	assert.Equal(t, "n", fx.schedule(sc.ID).Name)
+	assert.False(t, fx.schedule(sc.ID).Enabled, "the toggle stands")
+}
+
+// The scheduler's own writes (a claim, a run's counters) do not bump the revision, so a form opened
+// before a tick can still save after it.
+func TestUpdateDriftSchedule_ASchedulerTickDoesNotMakeAFormStale(t *testing.T) {
+	fx := newSchedFixture(t)
+	sc, err := fx.svc.CreateDriftSchedule(ScheduleInput{
+		Name: "plugs", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHPLG-S"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, fx.db.Model(&DriftDetectionSchedule{}).Where("id = ?", sc.ID).Update("next_run", at(0)).Error)
+
+	fx.s.tick(context.Background(), at(time.Minute))
+	require.Len(t, fx.runs(sc.ID), 1, "the schedule ran")
+
+	_, err = fx.svc.UpdateDriftSchedule(sc.ID, sc.Revision, ScheduleInput{
+		Name: "renamed", CronSpec: "*/5 * * * *", DeviceFilter: &DriftDeviceFilter{Type: "SHPLG-S"},
+	})
+	require.NoError(t, err)
 }
 
 func TestDriftSchedule_ANoDeviceListIsAnEmptyArrayInJSON(t *testing.T) {

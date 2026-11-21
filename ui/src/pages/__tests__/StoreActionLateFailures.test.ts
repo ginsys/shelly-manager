@@ -32,7 +32,7 @@ const trend = {
 }
 const schedule = {
   id: 1, name: 'Nightly drift', description: '', enabled: true, cron_spec: '0 0 * * *',
-  device_ids: [1], device_filter: {}, last_run: null, next_run: null, run_count: 0,
+  device_ids: [1], device_filter: {}, last_run: null, next_run: null, run_count: 0, revision: 0,
   created_at: '2026-07-01T00:00:00Z', updated_at: '2026-07-01T00:00:00Z',
 }
 const channel = {

@@ -17,6 +17,9 @@ export interface DriftSchedule {
   last_run?: string | null
   next_run?: string | null
   run_count: number
+  // Moves when a user updates or toggles the schedule. An update sends the revision it read, and the
+  // server refuses it (409) when the stored one is not that.
+  revision: number
   created_at: string
   updated_at: string
 }
@@ -163,11 +166,35 @@ export async function createDriftSchedule(input: DriftScheduleInput): Promise<Dr
   return res.data.data
 }
 
-// Replaces every field of the schedule with the input.
-export async function updateDriftSchedule(id: number | string, input: DriftScheduleInput): Promise<DriftSchedule> {
+// The refusal of an update made from an old copy of the schedule (409): nothing was written, and `current`
+// is the schedule as it is stored now.
+export class StaleScheduleError extends Error {
+  current: DriftSchedule
+  constructor(message: string, current: DriftSchedule) {
+    super(message)
+    this.name = 'StaleScheduleError'
+    this.current = current
+  }
+}
+
+async function throwUpdateRefusal(e: any): Promise<never> {
+  const error = e?.response?.status === 409 ? e.response.data?.error : undefined
+  if (error?.details && typeof error.details === 'object' && typeof error.details.id === 'number') {
+    throw new StaleScheduleError(String(error.message ?? 'The schedule changed since it was read'), error.details)
+  }
+  return throwServerReason(e)
+}
+
+// Replaces every field of the schedule with the input, if `revision` (the one the caller read) is still the
+// stored one; otherwise it throws a StaleScheduleError and changes nothing.
+export async function updateDriftSchedule(
+  id: number | string,
+  input: DriftScheduleInput,
+  revision: number
+): Promise<DriftSchedule> {
   const res = await api
-    .put<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`, input)
-    .catch(throwServerReason)
+    .put<APIResponse<DriftSchedule>>(`/config/drift-schedules/${id}`, { ...input, revision })
+    .catch(throwUpdateRefusal)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to update drift schedule'
     throw new Error(msg)
