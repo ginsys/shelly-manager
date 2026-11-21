@@ -269,9 +269,8 @@ The Backup plugin takes a database snapshot via the active DB provider.
   - While it runs, the backup needs free space for one full, uncompressed copy of the database in
     a temporary `.backup-*` directory beside the live database file (so on the database's disk,
     not in the backup directory), even when compression is on. The directory is removed
-    afterwards. A crash can leave it behind; delete it by hand. The directory is the one in the
-    DSN's path as written: for a `file:` DSN that is the literal `file:./data`, not the real
-    database directory, so use a plain path DSN to keep the snapshot beside the database.
+    afterwards. A crash can leave it behind; delete it by hand. The directory is the one of the
+    file the DSN names: a `file:` prefix and a `?` query are not part of the path.
   - The database has one connection, so every other query waits until the snapshot is written.
     For a small database that is seconds.
 - Backup directory: a backup is written only inside one directory. That is the export directory (`sync.export_base_dir`, else `export.output_directory`) when one of them is set, and `./data/backups` (relative to the working directory) when neither is. `config.output_path` is optional; empty means that directory. A relative `output_path` joins under the export directory when one is set, and is relative to the working directory when it is not. An `output_path` that is not inside the backup directory answers `400` with the directory in the reason, and the requested path is not created. The check follows symbolic links before the write: a path whose deepest existing part leads out of the backup directory through a link is refused. The backup directory itself is created if it is missing, before the path is checked, so a refused request can still leave an empty backup directory. The backup file is written through the opened backup directory, which refuses a link swapped in between the check and the write. The result's `output_path` is an absolute path. A backup is downloaded from that same directory. To keep backups elsewhere, set `sync.export_base_dir`; the restore routes check `export.output_directory`, so set both to the same directory.

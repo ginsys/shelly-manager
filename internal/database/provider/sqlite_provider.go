@@ -368,11 +368,11 @@ func (s *sumWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// dsnPath is the file path part of a DSN: what comes before a "?", so that a "/" in a query value is never
-// part of it.
+// dsnPath is the file path a DSN names: what comes before a "?", so that a "/" in a query value is never
+// part of it, without a leading "file:" (the driver opens "file:x.db" as x.db).
 func dsnPath(dsn string) string {
 	path, _, _ := strings.Cut(dsn, "?")
-	return path
+	return strings.TrimPrefix(path, "file:")
 }
 
 // ValidateBackup performs basic file validations for a SQLite backup.
@@ -655,7 +655,7 @@ func (s *SQLiteProvider) updateStats() {
 
 	// Get database size
 	if s.config.DSN != ":memory:" {
-		if stat, err := os.Stat(s.config.DSN); err == nil {
+		if stat, err := os.Stat(dsnPath(s.config.DSN)); err == nil {
 			s.stats.DatabaseSize = stat.Size()
 		}
 	}
