@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"reflect"
 	"sort"
 	"strconv"
 
@@ -105,142 +104,22 @@ func (c *Gen2Converter) FromAPIConfig(apiJSON json.RawMessage, _ string) (*Devic
 	return config, nil
 }
 
-// UnreadSettings names the settings of a Shelly.GetConfig document that FromAPIConfig does not read, and
-// returns them with their values. A setting is read when removing it, or changing it to another value of
-// its kind, changes what FromAPIConfig returns: a read setting at its zero value (an eco_mode of false)
-// reads the same when it is removed, so removal alone would call it unread. A top-level key that nothing
-// in it is read from is named as the key, any other unread setting by its dotted path. The rest is the
-// document without its read settings and without empty objects. The paths hold no values.
-func (c *Gen2Converter) UnreadSettings(apiJSON json.RawMessage) ([]string, map[string]interface{}, error) {
-	var doc map[string]interface{}
+// UnreadKeys returns, sorted, the top-level keys of a Shelly.GetConfig document that FromAPIConfig reads
+// nothing from. It looks at keys only, so a setting under a key that is read, such as sys.cfg_rev, is
+// not named.
+func (c *Gen2Converter) UnreadKeys(apiJSON json.RawMessage) ([]string, error) {
+	var doc map[string]json.RawMessage
 	if err := json.Unmarshal(apiJSON, &doc); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse Gen2 config: %w", err)
+		return nil, fmt.Errorf("failed to parse Gen2 config: %w", err)
 	}
-	base, err := c.FromAPIConfig(apiJSON, "")
-	if err != nil {
-		return nil, nil, err
-	}
-	probe := &readProbe{converter: c, doc: doc, base: base}
-
-	rest := map[string]interface{}{}
-	var paths []string
-	for _, key := range sortedKeys(doc) {
-		// FromAPIConfig reads only the keys apply writes, so any other key is unread whole, without a probe.
+	var keys []string
+	for key := range doc {
 		if !gen2KeyApplies(key) {
-			rest[key] = doc[key]
-			paths = append(paths, key)
-			continue
-		}
-		r := probe.walk(doc, key, key)
-		if r.unread {
-			rest[key] = r.rest
-		}
-		if r.unread && r.reads == 0 {
-			paths = append(paths, key)
-		} else {
-			paths = append(paths, r.paths...)
+			keys = append(keys, key)
 		}
 	}
-	sort.Strings(paths)
-	return paths, rest, nil
-}
-
-// readProbe tries each setting of doc against the result for the whole document.
-type readProbe struct {
-	converter *Gen2Converter
-	doc       map[string]interface{}
-	base      *DeviceConfiguration
-}
-
-type probeResult struct {
-	rest   interface{} // the unread part of the value
-	unread bool        // whether there is one
-	paths  []string
-	reads  int
-}
-
-func (p *readProbe) walk(parent map[string]interface{}, key, path string) probeResult {
-	child, isObject := parent[key].(map[string]interface{})
-	if !isObject {
-		if p.isRead(parent, key) {
-			return probeResult{reads: 1}
-		}
-		return probeResult{rest: parent[key], unread: true, paths: []string{path}}
-	}
-	var out probeResult
-	kept := map[string]interface{}{}
-	for _, k := range sortedKeys(child) {
-		r := p.walk(child, k, path+"."+k)
-		out.paths = append(out.paths, r.paths...)
-		out.reads += r.reads
-		if r.unread {
-			kept[k] = r.rest
-		}
-	}
-	if len(kept) > 0 {
-		out.rest, out.unread = kept, true
-	}
-	return out
-}
-
-// isRead reports whether the setting changes the result when it is removed or changed. The setting is
-// put back before it returns.
-func (p *readProbe) isRead(parent map[string]interface{}, key string) bool {
-	// input_id only chooses which input receives the in_mode of a switch. It has no typed home, so it
-	// stays in the raw part although changing it changes the result.
-	if key == "input_id" {
-		return false
-	}
-	// An enabled auto timer whose delay is not a whole number above 0 has no typed value, so the flag
-	// is not read: it stays in the raw part beside its delay.
-	// The delay of such a timer is not read either, whatever value it is changed to.
-	for _, flag := range []string{"auto_on", "auto_off"} {
-		if key != flag && key != flag+"_delay" {
-			continue
-		}
-		if enabled, ok := parent[flag].(bool); ok && enabled && gen2AutoTimerFromDoc(parent, flag) == nil {
-			return false
-		}
-	}
-	original := parent[key]
-	defer func() { parent[key] = original }()
-	delete(parent, key)
-	if p.changed() {
-		return true
-	}
-	var variants []interface{}
-	switch v := original.(type) {
-	case bool:
-		variants = []interface{}{!v}
-	case float64:
-		variants = []interface{}{v + 1}
-	case string:
-		// An empty string reads as unset, the same as an absent key, so it is not tried: removal decides,
-		// and an empty setting stays in the raw part with its key.
-		if v != "" {
-			variants = []interface{}{v + "x"}
-		}
-	case nil:
-		variants = []interface{}{"x", true, float64(1)}
-	}
-	for _, v := range variants {
-		parent[key] = v
-		if p.changed() {
-			return true
-		}
-	}
-	return false
-}
-
-// changed reports whether the document now reads differently. A document that cannot be read counts as
-// unchanged, so the setting stays in the raw part and is never dropped.
-func (p *readProbe) changed() bool {
-	data, err := json.Marshal(p.doc)
-	if err != nil {
-		return false
-	}
-	got, err := p.converter.FromAPIConfig(data, "")
-	return err == nil && !reflect.DeepEqual(p.base, got)
+	sort.Strings(keys)
+	return keys, nil
 }
 
 // redactedSecret is the text the API shows in place of a secret that is set.

@@ -841,36 +841,32 @@ func isGen2Document(rawData map[string]interface{}) bool {
 	return ok
 }
 
-// convertGen2ToTypedConfig reads a second-generation document with the reader the Gen2 apply uses. What
-// the reader has no typed home for stays in the raw part and is named in a warning, so a typed save
-// keeps it.
+// convertGen2ToTypedConfig reads a second-generation document with the reader the Gen2 apply uses. The
+// raw part is the whole document as stored, so a typed save loses nothing the form has no home for. It
+// is a copy of the import and is never read back as settings. A warning names each top-level key that
+// the reader reads nothing from.
 func convertGen2ToTypedConfig(rawConfig json.RawMessage, conversionInfo *ConfigurationConversionInfo) (*configuration.TypedConfiguration, *ConfigurationConversionInfo, error) {
 	converter := configuration.NewGen2Converter(nil)
 	config, err := converter.FromAPIConfig(rawConfig, "")
 	if err != nil {
 		return nil, conversionInfo, err
 	}
-	unread, rest, err := converter.UnreadSettings(rawConfig)
+	unread, err := converter.UnreadKeys(rawConfig)
 	if err != nil {
 		return nil, conversionInfo, err
 	}
 
-	typedConfig := &configuration.TypedConfiguration{
-		WiFi: config.WiFi, MQTT: config.MQTT, System: config.System, Cloud: config.Cloud,
-		Location: config.Location, Relay: config.Relay, Input: config.Input,
-	}
 	conversionInfo.ConvertedFrom = "raw"
 	conversionInfo.HasTypedConfig = true
 	if len(unread) > 0 {
-		typedConfig.Raw, err = json.Marshal(rest)
-		if err != nil {
-			return nil, conversionInfo, err
-		}
 		conversionInfo.Warnings = []string{
 			"Unconverted settings stored in raw field: " + strings.Join(unread, ", "),
 		}
 	}
-	return typedConfig, conversionInfo, nil
+	return &configuration.TypedConfiguration{
+		WiFi: config.WiFi, MQTT: config.MQTT, System: config.System, Cloud: config.Cloud,
+		Location: config.Location, Relay: config.Relay, Input: config.Input, Raw: rawConfig,
+	}, conversionInfo, nil
 }
 
 // createValidator creates a configuration validator for the given device
