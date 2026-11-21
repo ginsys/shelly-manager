@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 	secrets "github.com/ginsys/shelly-manager/internal/redact"
@@ -80,10 +81,12 @@ func maskedDesired(deviceID uint, action, text string) *string {
 }
 
 // pruneDesiredHistory deletes the rows of a device older than its newest desiredHistoryKeep. The cutoff
-// is read first, so MySQL needs no subquery on the table it deletes from.
+// is read first, so MySQL needs no subquery on the table it deletes from, and under FOR UPDATE so it sees
+// the latest committed rows: a plain read in the import's REPEATABLE READ transaction keeps its first
+// snapshot, misses a row a concurrent recompute added and pruned, and leaves more than the newest 50.
 func pruneDesiredHistory(tx *gorm.DB, deviceID uint) error {
 	var cutoff []uint
-	err := tx.Model(&DesiredConfigHistory{}).Where("device_id = ?", deviceID).
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Model(&DesiredConfigHistory{}).Where("device_id = ?", deviceID).
 		Order("id DESC").Offset(desiredHistoryKeep).Limit(1).Pluck("id", &cutoff).Error
 	if err != nil {
 		return fmt.Errorf("failed to prune the desired configuration history: %w", err)

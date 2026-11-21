@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
@@ -287,27 +288,35 @@ func (r *GormConfigRepository) SetDeviceDesiredConfigPending(deviceID uint, read
 		// MySQL without clientFoundRows reports changed rows, so an UPDATE that changes no column
 		// reports none. A row that already holds what was wanted (the read inputs, the new text, pending)
 		// is done and is no miss.
-		var held int64
-		err := tx.Model(&DbDevice{}).
-			Where(deviceReadCondition(dialect)+" AND config_applied = ?", deviceID, read.TemplateIDs, read.Overrides, text, false).
-			Count(&held).Error
+		held, err := deviceRowExists(tx, deviceReadCondition(dialect)+" AND config_applied = ?", deviceID, read.TemplateIDs, read.Overrides, text, false)
 		if err != nil {
 			return fmt.Errorf("failed to store device desired config as pending: %w", err)
 		}
-		if held > 0 {
+		if held {
 			return nil
 		}
 
 		// A device deleted since the read has nothing to write, as before, and no row to leave behind.
-		var exists int64
-		if err := tx.Model(&DbDevice{}).Where("id = ?", deviceID).Count(&exists).Error; err != nil {
+		exists, err := deviceRowExists(tx, "id = ?", deviceID)
+		if err != nil {
 			return fmt.Errorf("failed to store device desired config as pending: %w", err)
 		}
-		if exists == 0 {
+		if !exists {
 			return nil
 		}
 		return ErrDesiredChanged
 	})
+}
+
+// deviceRowExists reports whether a device row matches, reading the latest committed state. FOR UPDATE
+// does that: inside a REPEATABLE READ transaction (the MySQL default, and an import runs in one) a plain
+// read keeps the snapshot of the transaction's first read, and the UPDATE above tests the current row, so
+// the two would disagree. It selects the id and never counts, as PostgreSQL refuses FOR UPDATE with an
+// aggregate. SQLite has no row locks and ignores the clause.
+func deviceRowExists(tx *gorm.DB, where string, args ...any) (bool, error) {
+	var ids []uint
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Model(&DbDevice{}).Where(where, args...).Limit(1).Pluck("id", &ids).Error
+	return len(ids) > 0, err
 }
 
 // deviceReadCondition is the WHERE clause of SetDeviceDesiredConfigPending: the device, and the three
