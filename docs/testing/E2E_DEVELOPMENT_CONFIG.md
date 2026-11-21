@@ -48,7 +48,7 @@ make test-e2e-dev
 make test-e2e-dev-ui
 
 # Visible browser testing
-make test-e2e-dev-headed
+cd ui && npm run test:e2e:dev:headed
 ```
 
 ### Script Usage
@@ -131,7 +131,7 @@ The following Phase 1 optimizations are active in both configurations:
 
 ### Debugging
 1. `make test-e2e-dev-ui` for interactive debugging
-2. `make test-e2e-dev-headed` for visual inspection
+2. `cd ui && npm run test:e2e:dev:headed` for visual inspection
 3. Focused single-browser environment for rapid iteration
 
 ## When to Use Each Configuration
