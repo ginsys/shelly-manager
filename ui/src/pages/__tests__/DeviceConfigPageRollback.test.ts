@@ -69,7 +69,13 @@ describe('DeviceConfigPage rollback card', () => {
 
   it('reads the desired configuration, status, overrides, templates and versions again after a rollback, and never applies or verifies', async () => {
     vi.mocked(rollbackDesired).mockResolvedValue({ version_id: 9, no_change: false, detached_template_ids: [], message: 'done' } as any)
-    const { wrapper, refresh, apply, verify } = await mountPage()
+    const { wrapper, refresh, apply, verify, store } = await mountPage()
+    // the real store sets loading around its read: that is the card's cue to read its versions
+    refresh.mockImplementation((async () => {
+      store.loading = true
+      await Promise.resolve()
+      store.loading = false
+    }) as never)
     const loads = { refresh: refresh.mock.calls.length, versions: vi.mocked(getDesiredHistory).mock.calls.length }
 
     await wrapper.get('[data-testid="rollback-5"]').trigger('click')
@@ -110,6 +116,70 @@ describe('DeviceConfigPage rollback card', () => {
     store.status = null
     await flushPromises()
     expect(off()).toBe(true)
+  })
+
+  // The real store sets loading around a refresh, which is what tells the card to read its versions.
+  describe('the versions after a rollback', () => {
+    const answer = { version_id: 9, no_change: false, detached_template_ids: [], message: 'done' } as any
+    const reads = () => vi.mocked(getDesiredHistory).mock.calls.length
+    const succeeds = (store: any) => async () => {
+      store.error = null
+      store.loading = true
+      await Promise.resolve()
+      store.loading = false
+    }
+    const fails = (store: any) => async () => {
+      store.error = 'Failed to load new config state'
+      store.loading = true
+      await Promise.resolve()
+      store.loading = false
+      throw new Error('read failed')
+    }
+
+    it('reads them exactly once, through the page refresh', async () => {
+      vi.mocked(rollbackDesired).mockResolvedValue(answer)
+      const { wrapper, refresh, store } = await mountPage()
+      refresh.mockImplementation(succeeds(store) as never)
+      const before = reads()
+      await wrapper.get('[data-testid="rollback-5"]').trigger('click')
+      await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="rollback-notice"]').text()).toContain('done')
+      expect(reads()).toBe(before + 1)
+    })
+
+    it('reads them exactly once after a 409 without paths too', async () => {
+      vi.mocked(rollbackDesired).mockRejectedValue(new RollbackRefused(409, 'X', 'Changed while the rollback was prepared.', []))
+      const { wrapper, refresh, store } = await mountPage()
+      refresh.mockImplementation(succeeds(store) as never)
+      const before = reads()
+      await wrapper.get('[data-testid="rollback-5"]').trigger('click')
+      await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="rollback-notice"]').text()).toContain('Changed while the rollback was prepared.')
+      expect(reads()).toBe(before + 1)
+    })
+
+    it('keeps the success notice and Roll back off when the page refresh fails, and reads once after the next good Refresh', async () => {
+      vi.mocked(rollbackDesired).mockResolvedValue(answer)
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { wrapper, refresh, store } = await mountPage()
+      refresh.mockImplementationOnce(fails(store) as never)
+      const before = reads()
+      await wrapper.get('[data-testid="rollback-5"]').trigger('click')
+      await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-testid="rollback-notice"]').text()).toContain('done')
+      expect(wrapper.get('[data-testid="rollback-5"]').attributes('disabled')).toBeDefined()
+      expect(reads()).toBe(before)
+
+      refresh.mockImplementation(succeeds(store) as never)
+      await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click')
+      await flushPromises()
+      expect(reads()).toBe(before + 1)
+      expect(wrapper.get('[data-testid="rollback-5"]').attributes('disabled')).toBeUndefined()
+      expect(wrapper.get('[data-testid="rollback-notice"]').text()).toContain('done')
+    })
   })
 
   // A rollback replaces the overrides, so it is not started over an open edit.
