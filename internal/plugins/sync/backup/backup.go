@@ -14,7 +14,6 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
-	"github.com/ginsys/shelly-manager/internal/security"
 	"github.com/ginsys/shelly-manager/internal/sync"
 )
 
@@ -65,16 +64,29 @@ func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
 		if b.exportBaseDir != "" && !filepath.IsAbs(dir) {
 			dir = filepath.Join(absRoot, dir)
 		}
-		// ValidatePath joins a relative path under its base, so it is given an absolute one.
-		if dir, err = filepath.Abs(dir); err != nil {
-			return "", fmt.Errorf("resolve output_path: %w", err)
-		}
 	}
-	// ValidatePath reads no file system state: a symlink inside the root is trusted host configuration.
-	if dir, err = security.ValidatePath(absRoot, dir); err != nil {
+	if dir, err = insideRoot(absRoot, dir); err != nil {
 		return "", fmt.Errorf("output_path must be inside the backup directory %s", absRoot)
 	}
 	return dir, nil
+}
+
+// insideRoot returns path as an absolute path when it is absRoot or lies under it, and an error
+// otherwise. It is the same lexical check as security.ValidatePath, written with filepath.Rel and
+// filepath.IsLocal in the plugin because CodeQL's go/path-injection model does not clear a path
+// that another package's function validated (code-scanning alert 106 on ginsys/shelly-manager#793
+// at the security.ValidatePath version). It reads no file system state: a symlink inside the root
+// is trusted host configuration.
+func insideRoot(absRoot, path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absRoot, abs)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("path is outside %q", absRoot)
+	}
+	return filepath.Join(absRoot, rel), nil
 }
 
 // NewPlugin creates a new backup plugin (for registry)
