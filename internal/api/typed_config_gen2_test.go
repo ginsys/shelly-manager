@@ -74,7 +74,7 @@ var plus1PMUnread = []string{
 	"sys.cfg_rev", "sys.device.fw_id", "sys.device.mac",
 	"sys.debug.level", "sys.debug.file_level", "sys.debug.mqtt.enable", "sys.debug.websocket.enable", "sys.debug.udp.addr",
 	"sys.rpc_udp.dst_addr", "sys.rpc_udp.listen_port",
-	"switch:0.id", "switch:0.auto_on_delay", "switch:0.autorecover_voltage_errors", "switch:0.power_limit",
+	"switch:0.id", "switch:0.input_id", "switch:0.auto_on_delay", "switch:0.autorecover_voltage_errors", "switch:0.power_limit",
 	"switch:0.voltage_limit", "switch:0.undervoltage_limit", "switch:0.current_limit",
 	"input:0.id", "input:0.enable", "input:0.factory_reset",
 }
@@ -244,4 +244,59 @@ func TestTypedConfigRoutes_Gen2SecretsAreMaskedAndSurviveASave(t *testing.T) {
 	for _, key := range []string{"power_limit", "voltage_limit", "current_limit", "script:1", `"ws"`} {
 		assert.Contains(t, stored, key, "a typed save loses the unread setting %s", key)
 	}
+}
+
+// leafPaths lists the dotted path of every leaf of a decoded document. An empty object is no leaf.
+func leafPaths(prefix string, v any, out *[]string) {
+	if m, ok := v.(map[string]any); ok {
+		for k, child := range m {
+			p := k
+			if prefix != "" {
+				p = prefix + "." + k
+			}
+			leafPaths(p, child, out)
+		}
+		return
+	}
+	*out = append(*out, prefix)
+}
+
+// Every setting of the document is either read into a typed field or kept in the raw part. The settings
+// that count as read are listed, so a reader that starts or stops reading one changes this test, and a
+// setting can never fall between the two.
+func TestConvertToTypedConfig_Gen2EverySettingIsReadOrKept(t *testing.T) {
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(gen2Fixture(t), &doc))
+	var all []string
+	leafPaths("", doc, &all)
+
+	kept := map[string]bool{}
+	for _, p := range plus1PMUnread {
+		kept[p] = true
+	}
+	var read []string
+	for _, p := range all {
+		covered := false
+		for k := range kept {
+			if p == k || strings.HasPrefix(p, k+".") {
+				covered = true
+			}
+		}
+		if !covered {
+			read = append(read, p)
+		}
+	}
+	sort.Strings(read)
+	want := []string{
+		"cloud.enable", "cloud.server",
+		"input:0.invert", "input:0.name", "input:0.type",
+		"mqtt.client_id", "mqtt.enable", "mqtt.server", "mqtt.status_ntf", "mqtt.rpc_ntf", "mqtt.topic_prefix", "mqtt.user",
+		"switch:0.auto_off", "switch:0.auto_off_delay", "switch:0.auto_on", "switch:0.in_mode", "switch:0.initial_state", "switch:0.name",
+		"sys.device.discoverable", "sys.device.eco_mode", "sys.device.name",
+		"sys.location.lat", "sys.location.lon", "sys.location.tz", "sys.sntp.server",
+		"wifi.ap.enable", "wifi.ap.ssid", "wifi.roam.rssi_thr", "wifi.sta.enable", "wifi.sta.ip", "wifi.sta.ipv4mode",
+		"wifi.sta.gw", "wifi.sta.netmask", "wifi.sta.nameserver", "wifi.sta.ssid",
+	}
+	sort.Strings(want)
+	assert.Equal(t, want, read)
 }
