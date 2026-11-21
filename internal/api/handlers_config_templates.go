@@ -526,6 +526,21 @@ type secretSlot struct {
 	// put stores v even when it is "", where set("") removes a pointer secret. An empty override
 	// secret is a value: it keeps beating the secret of a template.
 	put func(string)
+	// list and setList are set on a URL list slot only. They hand the list over as it is, where the
+	// string of get cannot tell the list [""] from the empty list.
+	list    func() *[]string
+	setList func(*[]string)
+}
+
+// carryStored gives slot the value of the stored slot old. A URL list is copied as it is, so a
+// stored list that apply refuses (an empty URL) is not turned into a clear on its way.
+func carryStored(slot, old secretSlot) {
+	if slot.setList != nil && old.list != nil && old.list() != nil {
+		kept := slices.Clone(*old.list())
+		slot.setList(&kept)
+		return
+	}
+	slot.put(old.get())
 }
 
 func ptrSlot(p **string) secretSlot {
@@ -593,6 +608,8 @@ func urlListSlot(p **[]string) secretSlot {
 	}
 	return secretSlot{
 		present: func() bool { return *p != nil },
+		list:    func() *[]string { return *p },
+		setList: func(v *[]string) { *p = v },
 		get: func() string {
 			if *p == nil {
 				return ""
@@ -830,7 +847,7 @@ func keepOmittedSecrets(incoming, stored *configuration.DeviceConfiguration, rem
 	}
 	for path, slot := range secretSlots(incoming) {
 		if old, ok := storedSlots[path]; ok && restorableSlot(path) && old.present() && !slot.present() && !removed[path] {
-			slot.put(old.get())
+			carryStored(slot, old)
 		}
 	}
 }
@@ -869,7 +886,7 @@ func keepOmittedActionURLs(incoming, stored *configuration.DeviceConfiguration, 
 			continue
 		}
 		if old, ok := storedSlots[path]; ok && old.present() {
-			slot.put(old.get())
+			carryStored(slot, old)
 		}
 	}
 }

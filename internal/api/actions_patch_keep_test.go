@@ -135,6 +135,46 @@ func TestActionURLs_APatchForAnotherActionTakesNothing(t *testing.T) {
 	assert.Nil(t, storedAction(t, handler, id).SecretURLs)
 }
 
+// A stored list of one empty URL is not the empty list: apply refuses the first and writes the clear
+// for the second. Keeping an omitted list must hand it over as it is.
+func TestActionURLs_AStoredListOfOneEmptyURLIsNotTurnedIntoAClear(t *testing.T) {
+	const seeded = `{"actions":[{"name":"out_on_url","index":0,"enabled":true,"secret_urls":[""]}]}`
+	omitted := `{"actions":[{"name":"out_on_url","index":0,"enabled":false}]}`
+
+	for _, method := range []string{"PUT", "PATCH"} {
+		t.Run(method, func(t *testing.T) {
+			handler, cleanup := setupTestHandler(t)
+			defer cleanup()
+			id := keepOverrideDevice(t, handler, seeded)
+
+			w := sendOverrides(t, handler, method, id, omitted)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+			assert.Equal(t, []string{""}, storedActionURLs(t, handler, id))
+		})
+	}
+	t.Run("bulk apply", func(t *testing.T) {
+		handler, db, fleet := applyFleet(t, 1)
+		id := fleet[0].device.ID
+		setOverrides(t, db, id, seeded)
+
+		w := postApply(handler, applyBody(omitted, false, id))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+		assert.Equal(t, []string{""}, storedActionURLs(t, handler, id))
+	})
+	t.Run("the helper copies the slice", func(t *testing.T) {
+		stored := actionsOf(actionEntryOf("out_on_url", 0, ""))
+		incoming := actionsOf(configuration.ActionConfig{Name: "out_on_url", Index: 0})
+
+		keepOmittedActionURLs(incoming, stored, nil)
+
+		assert.Equal(t, []string{""}, urlsOf((*incoming.Actions)[0]))
+		(*(*incoming.Actions)[0].SecretURLs)[0] = "http://changed"
+		assert.Equal(t, []string{""}, urlsOf((*stored.Actions)[0]), "the stored list shares memory with the incoming one")
+	})
+}
+
 func TestKeepOmittedActionURLs_TouchesNothingButTheActionLists(t *testing.T) {
 	stored := actionsOf(actionEntryOf("out_on_url", 0, secretActionURLs[0]))
 	user := "iot"
