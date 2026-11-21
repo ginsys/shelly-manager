@@ -288,6 +288,11 @@ func TestActionURLs_AWriteWithActionsIsRefusedWhenTheStoredOverridesCannotBeRead
 
 			require.Equal(t, 1, *fired, "the injected failure did not reach the read under test")
 			assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			if method == "PATCH" {
+				// A PATCH merges field by field, so the actions it does not name stay as stored. A PUT
+				// replaces the whole record, so it holds no such claim.
+				assert.Equal(t, []string{"http://admin:hunter2@192.168.1.4/on?token=s3cr3t"}, storedActionURLs(t, handler, id))
+			}
 		})
 	}
 }
