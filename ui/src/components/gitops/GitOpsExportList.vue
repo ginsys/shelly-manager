@@ -31,6 +31,7 @@
       <td>{{ new Date(row.created_at).toLocaleString() }}</td>
       <td>
         <button class="action-btn" @click="emit('details', row)" title="Show the export record">👁️</button>
+        <button v-if="row.success" class="action-btn" @click="emit('download', row)" title="Download the exported files as a zip">⬇️</button>
         <button class="action-btn" @click="emit('delete', row)" title="Delete the record (the files stay)">🗑️</button>
       </td>
     </template>
@@ -49,6 +50,7 @@ defineProps<{
 
 const emit = defineEmits<{
   details: [exportItem: ExportHistoryItem]
+  download: [exportItem: ExportHistoryItem]
   delete: [exportItem: ExportHistoryItem]
 }>()
 

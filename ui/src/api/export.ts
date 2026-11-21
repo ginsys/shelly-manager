@@ -308,6 +308,11 @@ export function downloadExportWithName(id: string): Promise<{ blob: Blob; filena
   return downloadBlobWithName(() => api.get(`/export/${id}/download`, { responseType: 'blob' }))
 }
 
+// A GitOps export is a directory tree: the server sends it as a zip.
+export function downloadGitOpsExportWithName(id: string): Promise<{ blob: Blob; filename?: string }> {
+  return downloadBlobWithName(() => api.get(`/export/gitops/${id}/download`, { responseType: 'blob' }))
+}
+
 export async function listBackups(params: ListBackupsParams = {}): Promise<ListBackupsResult> {
   const { page = 1, pageSize = 20, success, format } = params
   const res = await api.get<APIResponse<{ backups: BackupItem[] }>>('/export/backups', {

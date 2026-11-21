@@ -53,13 +53,60 @@ describe('GitOpsExportPage', () => {
 
     const wrapper = mount(GitOpsExportPage)
     await flushPromises()
-    await wrapper.findAll('.action-btn')[1].trigger('click')
+    await wrapper.get('[title^="Delete the record"]').trigger('click')
     expect(wrapper.text()).toContain('The exported files stay on the server')
 
     await wrapper.get('.danger-button').trigger('click')
     await flushPromises()
 
     expect(api.delete).toHaveBeenCalledWith('/export/gitops/a')
+  })
+
+  it('downloads the export as a zip from the row, under the name the server sends', async () => {
+    vi.mocked(api.get as any).mockImplementation((path: string) =>
+      path === '/export/gitops/a/download'
+        ? Promise.resolve({ data: new Blob(['zip']), headers: { 'content-disposition': 'attachment; filename="gitops.zip"' } })
+        : Promise.resolve(historyAnswer([record('a', 'nightly'), { ...record('b', 'broken'), success: false }])),
+    )
+    const createUrl = vi.fn(() => 'blob:zip')
+    const revokeUrl = vi.fn()
+    Object.assign(URL, { createObjectURL: createUrl, revokeObjectURL: revokeUrl })
+    // The shared setup answers createElement('a') with a plain object; use a real anchor and watch its click.
+    const realCreateElement = Document.prototype.createElement.bind(document)
+    vi.mocked(document.createElement).mockImplementation(((tag: string, opts?: any) => realCreateElement(tag, opts)) as any)
+    let saved = ''
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved = this.download
+    })
+
+    const wrapper = mount(GitOpsExportPage)
+    await flushPromises()
+    // A failed export wrote no tree, so only the successful row offers the download.
+    const buttons = wrapper.findAll('[title^="Download the exported files"]')
+    expect(buttons).toHaveLength(1)
+    await buttons[0].trigger('click')
+    await flushPromises()
+
+    expect(api.get).toHaveBeenCalledWith('/export/gitops/a/download', { responseType: 'blob' })
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(saved).toBe('gitops.zip')
+    expect(revokeUrl).toHaveBeenCalledWith('blob:zip')
+    click.mockRestore()
+  })
+
+  it('says why a download was refused', async () => {
+    vi.mocked(api.get as any).mockImplementation((path: string) =>
+      path === '/export/gitops/a/download'
+        ? Promise.reject(new Error('Download path is not an export directory'))
+        : Promise.resolve(historyAnswer([record('a', 'nightly')])),
+    )
+
+    const wrapper = mount(GitOpsExportPage)
+    await flushPromises()
+    await wrapper.get('[title^="Download the exported files"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Download path is not an export directory')
   })
 
   it('loads every page of devices for the selection', async () => {

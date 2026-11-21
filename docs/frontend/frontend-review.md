@@ -1,7 +1,7 @@
 # Frontend Review: Shelly Manager Web Application
 
 **Measured:** 2026-11-19 at commit 13e3038 (`main`); all of section 3 was re-measured at commit 0648bab; the table and the Status line in section 1 with the change of ginsys/shelly-manager#595 and again with ginsys/shelly-manager#250 and ginsys/shelly-manager#748, and again with the drift schedule form of ginsys/shelly-manager#279, and a unit test keeps them equal to the code (section 1)
-**Status:** 136 of 141 exported API functions are referenced by the UI (96%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
+**Status:** 137 of 142 exported API functions are referenced by the UI (96%). All 26 routed pages can be reached by clicking from the top bar (section 3, re-measured at commit 0648bab).
 **Next review:** when a frontend issue from "Open work" merges, or by re-running the commands in this file
 
 Every number below comes from a command in this file, run at the commit above. Re-run the command
@@ -79,7 +79,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `devices.ts` | 10 | 10 | |
 | `drift.ts` | 13 | 13 | |
 | `errorBody.ts` | 4 | 4 | |
-| `export.ts` | 27 | 25 | `getBackupResult`, `downloadExport` |
+| `export.ts` | 28 | 26 | `getBackupResult`, `downloadExport` |
 | `import.ts` | 4 | 4 | |
 | `metrics.ts` | 14 | 14 | |
 | `metricsContract.ts`, `metricsMessages.ts` | 3 | 2 | `isDashboardMessage` |
@@ -88,7 +88,7 @@ printf 'TOTAL\t%d\t%d\n' "$total" "$used"
 | `provisioning.ts` | 7 | 7 | |
 | `templates.ts` | 8 | 8 | |
 | `typedConfig.ts` | 2 | 2 | |
-| **Total** | **141** | **136** | **5** |
+| **Total** | **142** | **137** | **5** |
 
 This measures what the UI uses, not what the backend offers. It does not count backend routes.
 ginsys/shelly-manager#84 asked for the UI side. The February 2026 audit in that issue (48 of 108
