@@ -843,8 +843,9 @@ func isGen2Document(rawData map[string]interface{}) bool {
 
 // convertGen2ToTypedConfig reads a second-generation document with the reader the Gen2 apply uses. The
 // raw part is the whole document as stored, so a typed save loses nothing the form has no home for. It
-// is a copy of the import and is never read back as settings. A warning names each top-level key that
-// the reader reads nothing from.
+// is a copy of the import: no save or apply reads it as settings, and the normalized read lists its keys
+// as additional settings (ginsys/shelly-manager#801). A warning names each top-level key that the reader
+// reads nothing from.
 func convertGen2ToTypedConfig(rawConfig json.RawMessage, conversionInfo *ConfigurationConversionInfo) (*configuration.TypedConfiguration, *ConfigurationConversionInfo, error) {
 	converter := configuration.NewGen2Converter(nil)
 	config, err := converter.FromAPIConfig(rawConfig, "")
