@@ -160,7 +160,8 @@ func decodeRollbackRequest(raw []byte) (rollbackRequest, bool) {
 	var req rollbackRequest
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
-	if dec.Decode(&req) != nil || dec.More() {
+	var extra json.RawMessage
+	if dec.Decode(&req) != nil || dec.Decode(&extra) != io.EOF {
 		return req, false
 	}
 	return req, req.HistoryID != 0
