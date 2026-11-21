@@ -170,12 +170,14 @@ text, so a version whose keys are in another order, such as one written by an ar
 path the target holds that the merged tree lacks, or holds with another value, is a loss. A path only the
 merged tree holds counts as equal when its value is a JSON zero (`false`, `0`, `""`, `null`, an empty
 object or list), because a plain field without `omitempty` can appear as its zero value; any other extra
-value is a difference. Today only the `enable` field of `SleepConfig` and `BLEConfig` can appear this
-way (`typed_models.go:216`, `:223`), and Apply reads neither: the only other reader is the validator's
-presence check on `BleConfig` (`validator.go:508`). A change that sends either to a device must revisit
-this rule, because an added `false` would then be sent. A loss refuses the rollback, names each path that would be lost, and writes
-nothing. It adds no column to
-`devices` and no second mechanism. The rollback row keeps `previous_template_ids`.
+value is a difference. Two kinds of field are known to appear this way, and the list is not claimed
+complete. The `enable` of `SleepConfig` and `BLEConfig` (`typed_models.go:216`, `:223`): Apply reads
+neither, and the only other reader is the validator's presence check on `BleConfig` (`validator.go:508`).
+The `id` of a channel entry (`configs.go:18`, `:123`): Apply does read it (`gen2_channels.go:219`,
+`:231`), and it reads 0 from a target that has no `id` as well, so the added zero sends nothing new. A
+change that makes Apply send a plain field it does not read today must revisit this rule, because an
+added zero would then be sent. A loss refuses the rollback, names each path that would be lost, and
+writes nothing. It adds no column to `devices` and no second mechanism. The rollback row keeps `previous_template_ids`.
 
 **The way back is two steps: re-attach the templates and clear the overrides**
 (`ClearDeviceOverrides`, `config_service.go:428`). Re-attaching alone is not harmless:
