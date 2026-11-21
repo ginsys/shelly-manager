@@ -2,6 +2,7 @@ package sync
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func resolveActionsArchive(t *testing.T, archive, stored string) (string, int) {
 	var a, s map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(archive), &a))
 	require.NoError(t, json.Unmarshal([]byte(stored), &s))
-	found := resolveRedacted(a, s)
+	found := resolveConfiguration(a, s)
 	raw, err := json.Marshal(a)
 	require.NoError(t, err)
 	return string(raw), found
@@ -156,6 +157,99 @@ func TestResolveRedactedActions_AnObjectThatIsNotAnActionIsLeftAlone(t *testing.
 	assert.Zero(t, found)
 }
 
+// An entry of the actions list is known by where it is, not by what it holds: an archive that leaves
+// out the index (apply reads it as 0) still states an action, so a placeholder with nothing stored
+// must not become the explicit clear there.
+func TestResolveRedactedActions_AnEntryWithoutAnIndexNeverBecomesAClear(t *testing.T) {
+	for name, archive := range map[string]string{
+		"no index":           `{"actions":[{"name":"out_on_url","secret_urls":["[REDACTED]"]}]}`,
+		"no name":            `{"actions":[{"index":0,"secret_urls":["[REDACTED]","[REDACTED]"]}]}`,
+		"neither":            `{"actions":[{"secret_urls":"[REDACTED]"}]}`,
+		"upper case, no idx": `{"ACTIONS":[{"NAME":"out_on_url","SECRET_URLS":["[REDACTED]"]}]}`,
+		"no key but a mark":  `{"actions":[{"secret_urls":["[REDACTED]"],"Secret_Urls":["[REDACTED]"]}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, found := resolveActionsArchive(t, archive, `{}`)
+
+			assert.NotContains(t, got, "[]", "the placeholder became the explicit clear")
+			assert.NotContains(t, strings.ToLower(got), "secret_urls", "a list with nothing stored must lose its key")
+			assert.Positive(t, found)
+		})
+	}
+}
+
+// The action rule is for the list under the top-level actions key of a configuration, and nowhere
+// else. A settings or variables object, and an actions list below the top level of a configuration,
+// are resolved byte for byte as the generic rule resolves them.
+func TestResolveRedactedActions_OnlyTheTopLevelListOfAConfigurationIsAnActionList(t *testing.T) {
+	for name, archive := range map[string]string{
+		"under a section":        `{"config":{"actions":[{"name":"x","secret_urls":["[REDACTED]"]}]}}`,
+		"under a section, upper": `{"config":{"ACTIONS":[{"SECRET_URLS":["[REDACTED]"]}]}}`,
+		"in a list":              `{"x":[{"actions":[{"secret_urls":["[REDACTED]"]}]}]}`,
+		"a bare object":          `{"actions":{"secret_urls":["[REDACTED]"]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var stored, nested, generic map[string]interface{}
+			require.NoError(t, json.Unmarshal([]byte(storedActions), &stored))
+			require.NoError(t, json.Unmarshal([]byte(archive), &nested))
+			require.NoError(t, json.Unmarshal([]byte(archive), &generic))
+
+			found := resolveConfiguration(nested, stored)
+
+			assert.Equal(t, resolveRedacted(generic, stored), found)
+			assert.Equal(t, generic, nested)
+		})
+	}
+}
+
+// The action rule does not reach below an action entry, nor into a list inside the actions list: both
+// are generic.
+func TestResolveRedactedActions_TheRuleStopsAtTheEntry(t *testing.T) {
+	got, _ := resolveActionsArchive(t,
+		`{"actions":[{"name":"a","index":0,"extra":[{"secret_urls":["[REDACTED]"]}]},[{"secret_urls":["[REDACTED]"]}]]}`, `{}`)
+
+	assert.JSONEq(t, `{"actions":[{"name":"a","index":0,"extra":[{"secret_urls":[]}]},[{"secret_urls":[]}]]}`, got)
+}
+
+// Two stored spellings of the actions key are no stored list: a placeholder takes nothing and loses
+// its key, whichever spelling the archive uses.
+func TestResolveRedactedActions_TwoStoredSpellingsOfTheListAreNoList(t *testing.T) {
+	stored := `{"actions":[{"name":"a","index":0,"secret_urls":["http://a"]}],` +
+		`"ACTIONS":[{"name":"a","index":0,"secret_urls":["http://b"]}]}`
+
+	got, _ := resolveActionsArchive(t, `{"actions":[{"name":"a","index":0,"secret_urls":["[REDACTED]"]}]}`, stored)
+
+	assert.JSONEq(t, `{"actions":[{"name":"a","index":0}]}`, got)
+}
+
+// The configuration route of the archive applies the rule end to end: an entry without an index, with
+// nothing stored, ends with no URL key and never with the explicit clear.
+func TestRestoreConfiguration_AnEntryWithoutAnIndexLosesItsKey(t *testing.T) {
+	for _, key := range []string{"actions", "ACTIONS"} {
+		var a map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(`{"`+key+`":[{"secret_urls":["[REDACTED]"]}]}`), &a))
+
+		got, err := restoreConfiguration(a, `{}`, &ImportApplyResult{})
+		require.NoError(t, err)
+
+		assert.JSONEq(t, `{"`+key+`":[{}]}`, got)
+	}
+}
+
+// A settings or a variables object goes through restoreObject, which never runs the action rule: the
+// same actions list that loses its key in a configuration keeps the generic result there, an empty
+// list for a placeholder with nothing stored.
+func TestRestoreObject_NeverRunsTheActionRule(t *testing.T) {
+	const archive = `{"actions":[{"name":"x","secret_urls":["[REDACTED]"]}]}`
+	var a map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(archive), &a))
+
+	got, err := restoreObject(a, `{}`, &ImportApplyResult{})
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"actions":[{"name":"x","secret_urls":[]}]}`, got)
+}
+
 // A stored list under another spelling is the stored list, so a placeholder takes it, and a stored
 // empty list under another spelling is kept as the clear it is. Two spellings in the stored entry are
 // no list: nothing is taken and the key is lost.
@@ -224,7 +318,7 @@ func TestResolveRedactedActions_ExportedConfigRoundTrips(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "hunter2", "the export must hide the URL")
 
-	resolveRedacted(exported, current)
+	resolveConfiguration(exported, current)
 
 	raw, err = json.Marshal(exported)
 	require.NoError(t, err)
