@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func checkDesiredHistory(t *testing.T, manager *Manager) {
 	db := manager.GetDB()
 	repo := configuration.NewGormConfigRepository(db, nil)
 	device := &Device{MAC: "history:provider", IP: "192.0.2.77", Type: "switch", Name: "provider", Settings: "{}",
-		TemplateIDs: "[]", Overrides: "{}", DesiredConfig: `{"a":1}`}
+		LastSeen: time.Now().UTC(), TemplateIDs: "[]", Overrides: "{}", DesiredConfig: `{"a":1}`}
 	require.NoError(t, manager.AddDevice(device))
 	require.NoError(t, db.Model(&Device{}).Where("id = ?", device.ID).Update("config_applied", false).Error)
 	read := configuration.DesiredRead{TemplateIDs: "[]", Overrides: "{}", Desired: `{"a":1}`}
