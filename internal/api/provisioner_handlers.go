@@ -60,6 +60,26 @@ func (h *Handler) provisionerActor(r *http.Request) database.ProvisionerActor {
 	}
 }
 
+// hasKeyPrefix reports whether id starts with the four bytes "key-" in any case. The fold is over ASCII
+// bytes only: strings.EqualFold would also match U+212A (the Kelvin sign) to "k", which a byte
+// comparison of the id never does.
+func hasKeyPrefix(id string) bool {
+	const prefix = "key-"
+	if len(id) < len(prefix) {
+		return false
+	}
+	for i := 0; i < len(prefix); i++ {
+		b := id[i]
+		if b >= 'A' && b <= 'Z' {
+			b += 'a' - 'A'
+		}
+		if b != prefix[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // tooLongForRegistry reports whether any value is over the longest the registry stores, and writes the
 // 400 for it.
 func (h *Handler) tooLongForRegistry(w http.ResponseWriter, r *http.Request, name, value string) bool {
@@ -71,8 +91,8 @@ func (h *Handler) tooLongForRegistry(w http.ResponseWriter, r *http.Request, nam
 }
 
 // writeProvisionerError maps a store error to its response. A refused agent is a 401, which tells a real
-// agent to register again, or a 403 when the token belongs to another agent. An id in use is a 409, an
-// unknown agent or task a 404, a status over the column length a 400, and any other error a 500.
+// agent to register again, or a 403 when the token belongs to another agent. An id in use, or one whose
+// row belongs to an agent enrolled by key, is a 409, an unknown agent or task a 404, a status over the column length a 400, and any other error a 500.
 func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, database.ErrUnauthorized):
@@ -81,6 +101,8 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 		h.responseWriter().WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "The agent token does not belong to this agent", nil)
 	case errors.Is(err, database.ErrAgentInUse):
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id in use", nil)
+	case errors.Is(err, database.ErrAgentEnrolled):
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id belongs to an agent enrolled by key", nil)
 	case errors.Is(err, database.ErrAgentNotFound):
 		h.responseWriter().WriteNotFoundError(w, r, "Agent")
 	case errors.Is(err, database.ErrTaskNotFound):
@@ -113,6 +135,12 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.tooLongForRegistry(w, r, "Agent id", req.ID) {
+		return
+	}
+	// "key-" is the prefix of an id derived from an agent's key, in any case. A keyless agent never
+	// gets such an id, so a key's id is never held by somebody else first.
+	if hasKeyPrefix(req.ID) {
+		h.responseWriter().WriteValidationError(w, r, `Agent id must not start with "key-": that prefix is reserved for agents enrolled by key`)
 		return
 	}
 
