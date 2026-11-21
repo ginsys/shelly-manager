@@ -124,3 +124,61 @@ func TestBackupOutputPathStaysInsideRoot(t *testing.T) {
 		})
 	}
 }
+
+// The shared check follows symbolic links: a directory inside the backup root that leads outside it
+// cannot be written through, and nothing is created outside.
+func TestBackupOutputPathRefusesASymbolicLinkOutOfTheRoot(t *testing.T) {
+	plugin, _, _ := liveBackup(t)
+	work := filepath.Join(t.TempDir(), "work")
+	if err := os.Mkdir(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(work)
+	root := filepath.Join(work, "data", "backups")
+	outside := t.TempDir()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, outputPath := range []string{"data/backups/link", "data/backups/link/new/sub"} {
+		err := plugin.ValidateConfig(map[string]interface{}{"output_path": outputPath})
+		if err == nil || !strings.Contains(err.Error(), "backup directory") {
+			t.Errorf("ValidateConfig(%q) = %v, want a refusal naming the backup directory", outputPath, err)
+		}
+		if res, err := exportTo(t, plugin, outputPath); err == nil {
+			t.Errorf("Export(%q) succeeded: %+v", outputPath, res)
+		}
+	}
+	if entries, _ := os.ReadDir(outside); len(entries) > 0 {
+		t.Errorf("%d entries were created outside the backup directory", len(entries))
+	}
+}
+
+// With no root configured the backup root is ./data/backups, never the export root, and the first
+// request creates it.
+func TestBackupRootWithNoKeyIsTheBackupDirectoryAndIsCreated(t *testing.T) {
+	plugin, _, _ := liveBackup(t)
+	work := filepath.Join(t.TempDir(), "work")
+	if err := os.Mkdir(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(work)
+
+	dir, err := plugin.resolveOutputDir("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(work, "data", "backups")
+	realDir, _ := filepath.EvalSymlinks(dir)
+	realWant, _ := filepath.EvalSymlinks(want)
+	if realDir != realWant {
+		t.Errorf("root = %s, want %s", dir, want)
+	}
+	if fi, err := os.Stat(want); err != nil || !fi.IsDir() {
+		t.Errorf("the backup root was not created: %v", err)
+	}
+	mustNotExist(t, filepath.Join(work, "data", "exports"))
+}

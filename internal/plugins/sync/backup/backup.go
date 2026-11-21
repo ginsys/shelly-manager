@@ -47,9 +47,12 @@ func (b *BackupPlugin) SetExportBaseDir(dir string) {
 
 // resolveOutputDir returns the absolute directory a backup is written to. An empty output_path is
 // the backup root. A relative one joins under a configured root, and is relative to the working
-// directory otherwise (the engine has already made it absolute). Anything that is not inside the
-// root after cleaning is refused.
+// directory otherwise. Anything that is not inside the root is refused by the shared check
+// (sync.ResolveUnderRoot), which also follows symbolic links of the deepest existing ancestor.
+// The root is created first (it is configuration, never request text), because that check needs
+// an existing root; that is the only thing this creates, and ValidateConfig reaches it too.
 func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
+	// The root is always passed explicitly: an empty root would mean the export root.
 	root := DefaultBackupDir
 	if b.exportBaseDir != "" {
 		root = b.exportBaseDir
@@ -58,34 +61,20 @@ func (b *BackupPlugin) resolveOutputDir(outputPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve the backup directory: %w", err)
 	}
-	dir := absRoot
-	if outputPath != "" {
-		dir = filepath.Clean(outputPath)
-		if b.exportBaseDir != "" && !filepath.IsAbs(dir) {
-			dir = filepath.Join(absRoot, dir)
+	if err = sync.EnsureExportRoot(absRoot); err != nil {
+		return "", fmt.Errorf("prepare the backup directory %s: %w", absRoot, err)
+	}
+	if b.exportBaseDir == "" && outputPath != "" && !filepath.IsAbs(outputPath) {
+		// Relative to the working directory, not joined under the root.
+		if outputPath, err = filepath.Abs(outputPath); err != nil {
+			return "", fmt.Errorf("output_path must be inside the backup directory %s", absRoot)
 		}
 	}
-	if dir, err = insideRoot(absRoot, dir); err != nil {
+	dir, err := sync.ResolveUnderRoot(absRoot, outputPath)
+	if err != nil {
 		return "", fmt.Errorf("output_path must be inside the backup directory %s", absRoot)
 	}
 	return dir, nil
-}
-
-// insideRoot returns path as an absolute path when it is absRoot or lies under it, and an error
-// otherwise. It is the same lexical check as security.ValidatePath, written with filepath.Rel and
-// filepath.IsLocal in the plugin: with security.ValidatePath here, CodeQL raised go/path-injection
-// on the MkdirAll call (code-scanning alert 106 on ginsys/shelly-manager#793). It reads no file
-// system state: a symlink inside the root is trusted host configuration.
-func insideRoot(absRoot, path string) (string, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(absRoot, abs)
-	if err != nil || !filepath.IsLocal(rel) {
-		return "", fmt.Errorf("path is outside %q", absRoot)
-	}
-	return filepath.Join(absRoot, rel), nil
 }
 
 // NewPlugin creates a new backup plugin (for registry)
