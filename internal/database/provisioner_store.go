@@ -420,7 +420,7 @@ func removeAgent(tx *gorm.DB, agent ProvisionerAgent, reason string, now time.Ti
 }
 
 // failStranded fails the assigned and in-progress tasks of the agent, with config["_error"] = reason. The
-// agent's row is locked by the caller. Delete, purge and reject share it.
+// agent's row is locked by the caller. Delete and purge share it.
 func failStranded(tx *gorm.DB, agentID, reason string, now time.Time) error {
 	var stranded []ProvisioningTask
 	if err := tx.Clauses(forUpdate()).Where("agent_id = ? AND status IN ?", agentID, []string{"assigned", "in_progress"}).
@@ -506,15 +506,14 @@ func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, 
 			first = err
 		}
 	}
-	// The candidates are the rows silent for the shortest of the two periods; the row's own state and period
-	// are read again under its lock.
+	// The candidates are the rows silent for the shortest of the two periods, whatever their state: the row's
+	// own state and period are read under its lock, and purgeSilence alone says which states the purge acts on.
 	shortest := silentFor
 	if pendingSilentFor < shortest {
 		shortest = pendingSilentFor
 	}
 	var silent []string
-	if err := s.db.WithContext(ctx).Model(&ProvisionerAgent{}).
-		Where("last_seen < ? AND (enrolment_state IS NULL OR enrolment_state NOT IN ?)", now.Add(-shortest), []string{EnrolmentPreapproved, EnrolmentRejected}).
+	if err := s.db.WithContext(ctx).Model(&ProvisionerAgent{}).Where("last_seen < ?", now.Add(-shortest)).
 		Pluck("agent_id", &silent).Error; err != nil {
 		note(err)
 	}
@@ -535,7 +534,8 @@ func (s *ProvisionerStore) Purge(ctx context.Context, now time.Time, silentFor, 
 				return nil
 			}
 			if agent.State() == EnrolmentApproved {
-				// The status offline is what marks a session the purge already ended, so the next pass skips it.
+				// Offline on an approved row means the purge ended its session; nothing else stores it, so no
+				// writer of status may write offline on an approved row that still holds a usable token.
 				if agent.Status == "offline" {
 					return nil
 				}
