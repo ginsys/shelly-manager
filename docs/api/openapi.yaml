@@ -1477,6 +1477,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '502':
+          description: >-
+            The device rejected the stored login (error code EXTERNAL_SERVICE_ERROR).
+            Store the right login with PUT /api/v1/devices/{id}/config/auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
         '409':
           description: >-
             The device refuses the stored login and the device at the stored address is not
@@ -1512,6 +1520,14 @@ paths:
       responses:
         '200':
           description: Energy metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
+        '502':
+          description: >-
+            The device rejected the stored login (error code EXTERNAL_SERVICE_ERROR).
+            Store the right login with PUT /api/v1/devices/{id}/config/auth.
           content:
             application/json:
               schema:

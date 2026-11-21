@@ -580,7 +580,7 @@ All API responses follow this envelope:
 | `DEVICE_UNREACHABLE` | 504 | Device did not answer in time (status, energy and current-config reads) |
 | `CONFIGURATION_ERROR` | 400 | Config operation failed |
 | `TEMPLATE_ERROR` | 400 | Template processing error |
-| `EXTERNAL_SERVICE_ERROR` | 502 | A device rejected its stored login on a live read (`/devices/{id}/config/current` and `/current/normalized`). Store the right login with `PUT /devices/{id}/config/auth`. |
+| `EXTERNAL_SERVICE_ERROR` | 502 | A device rejected its stored login on a route that talks to the device: the four live reads (`/devices/{id}/status`, `/energy`, `/config/current` and `/current/normalized`), apply and verify (`/devices/{id}/config/new/apply` and `/config/new/verify`). Store the right login with `PUT /devices/{id}/config/auth`. |
 
 `PUT /devices/{id}/config/auth` takes `{"username", "password"}`. A username with an empty password returns 400 `VALIDATION_FAILED`. An empty username turns device auth off.
 
