@@ -228,6 +228,8 @@ func TestRollbackRoute_ABadBodyIsRefusedWithoutEchoingIt(t *testing.T) {
 		"an empty value":     fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":""}}`, first),
 		"the mask":           fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":"%s"}}`, first, secretMask),
 		"an empty list":      fmt.Sprintf(`{"history_id":%d,"secrets":{"mqtt.pass":[]}}`, first),
+		"a null secrets":     fmt.Sprintf(`{"history_id":%d,"secrets":null}`, first),
+		"a list for secrets": fmt.Sprintf(`{"history_id":%d,"secrets":["x"]}`, first),
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
@@ -248,4 +250,21 @@ func TestRollbackRoute_AVersionWithNoStoredTextIs422(t *testing.T) {
 
 	w := callRollback(t, handler, id, fmt.Sprintf(`{"history_id":%d}`, row.ID))
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+}
+
+// Retention may leave more rows than it keeps for a while; the list still answers the last 50.
+func TestDesiredHistoryList_AnswersAtMostFiftyVersions(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+	id := rollbackDeviceWith(t, handler)
+	for i := 0; i < 55; i++ {
+		text := fmt.Sprintf(`{"led":{"n":%d}}`, i)
+		row := configuration.DesiredConfigHistory{DeviceID: id, Action: "recompute", NewDesired: &text, ChangedBy: "system"}
+		require.NoError(t, handler.DB.GetDB().Create(&row).Error)
+	}
+
+	var answer historyAnswer
+	require.NoError(t, json.Unmarshal(callHistory(t, handler, fmt.Sprint(id)).Body.Bytes(), &answer))
+	require.Len(t, answer.Data.History, 50)
+	assert.Contains(t, *answer.Data.History[0].NewDesired, `"n":54`, "the newest first")
 }

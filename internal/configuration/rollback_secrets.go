@@ -2,7 +2,7 @@ package configuration
 
 import (
 	"fmt"
-	"slices"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -159,14 +159,15 @@ func setAt(tree any, path []string, v any) {
 	}
 }
 
-// sameBinding reports whether every bound field holds the same value in both trees. A field that is
-// absent from both is equal; absent from one and present in the other is not.
+// sameBinding reports whether every bound field holds the same value in both trees, compared exactly:
+// a number keeps its spelling, and a list or an object compares whole. A field that is absent from both
+// is equal; absent from one and present in the other is not.
 func sameBinding(target, current any, fields []string) bool {
 	for _, field := range fields {
 		path := strings.Split(field, ".")
 		a, aOK := valueAt(target, path)
 		b, bOK := valueAt(current, path)
-		if aOK != bOK || (aOK && !sameScalar(a, b)) {
+		if aOK != bOK || (aOK && !reflect.DeepEqual(a, b)) {
 			return false
 		}
 	}
@@ -215,9 +216,12 @@ func resolveSecrets(target map[string]any, current any, supplied map[string]any)
 		listed = append(listed, ref)
 	}
 
+	// Only a slot can be answered: a mask at any other path is listed and has no way through.
 	onList := map[string]secretRef{}
 	for _, ref := range listed {
-		onList[ref.key] = ref
+		if _, isSlot := secretBindings[ref.key]; isSlot || ref.list {
+			onList[ref.key] = ref
+		}
 	}
 	for key, value := range supplied {
 		ref, ok := onList[key]
@@ -235,10 +239,5 @@ func resolveSecrets(target map[string]any, current any, supplied map[string]any)
 		}
 		setAt(target, ref.path, value)
 	}
-	// Fail closed: a mask the substitution did not reach is refused, whatever its path.
-	for _, ref := range maskedRefs(target) {
-		needed = append(needed, ref.key)
-	}
-	sort.Strings(needed)
-	return slices.Compact(needed), nil
+	return needed, nil
 }

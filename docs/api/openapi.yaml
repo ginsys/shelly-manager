@@ -1904,7 +1904,7 @@ paths:
                     The secrets the 409 listed, keyed by its paths (mqtt.pass). A value is a
                     non-empty string, or for an action URL list (actions."<name>".<index>.secret_urls)
                     a non-empty list of non-empty strings. The mask, an empty value, an empty
-                    list or a key that is not on the list is 400. A value is never logged,
+                    list, a key that is not on the list, or secrets that is null or not an object is 400. A value is never logged,
                     echoed or stored in the history.
                   additionalProperties: true
       responses:
