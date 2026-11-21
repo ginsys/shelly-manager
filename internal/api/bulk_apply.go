@@ -295,6 +295,7 @@ func (h *Handler) bulkApplyDevice(ctx context.Context, entry bulkApplyEntry, raw
 		return bulkApplyStoredEntry(entry, bulkApplyFailed, false, reasonOverridesUnread)
 	}
 	restoreMaskedSecrets(patch, stored)
+	keepOmittedActionURLs(patch, stored, matchSecretNulls(removed))
 
 	if err = h.ConfigService.ConfigurationSvc.PatchDeviceOverrides(id, patch, removed); err != nil {
 		if errors.Is(err, configuration.ErrDeviceNotFound) {

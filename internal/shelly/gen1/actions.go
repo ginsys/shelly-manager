@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 )
 
 // ActionEntry is one action of a Gen1 device as GET /settings/actions reports it.
@@ -12,6 +14,29 @@ type ActionEntry struct {
 	Index   int      `json:"index"`
 	URLs    []string `json:"urls"`
 	Enabled bool     `json:"enabled"`
+}
+
+// encodeForm is url.Values.Encode with one difference: the brackets of a key stay literal, as the
+// device's reference writes urls[]=. Every value is percent-encoded as before, and no other Gen1
+// form key holds a bracket, so no other form changes.
+func encodeForm(values url.Values) string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	brackets := strings.NewReplacer("%5B", "[", "%5D", "]")
+	var body strings.Builder
+	for _, key := range keys {
+		escaped := brackets.Replace(url.QueryEscape(key))
+		for _, value := range values[key] {
+			if body.Len() > 0 {
+				body.WriteByte('&')
+			}
+			body.WriteString(escaped + "=" + url.QueryEscape(value))
+		}
+	}
+	return body.String()
 }
 
 // SetActionForm writes one action with POST /settings/actions. It sends the index and the name

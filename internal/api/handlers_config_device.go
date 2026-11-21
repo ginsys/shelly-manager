@@ -423,6 +423,7 @@ func (h *Handler) PatchDeviceNewOverrides(w http.ResponseWriter, r *http.Request
 	// A secret sent back as the mask leaves the stored one as it is.
 	if stored, err := h.ConfigService.ConfigurationSvc.GetDeviceOverrides(uint(id)); err == nil {
 		restoreMaskedSecrets(&patch, stored)
+		keepOmittedActionURLs(&patch, stored, matchSecretNulls(removed))
 	} else {
 		restoreMaskedSecrets(&patch, nil)
 	}
