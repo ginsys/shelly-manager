@@ -114,7 +114,7 @@ func TestActionConfig_AnOverrideHoldingOnlyActionsIsNotEmpty(t *testing.T) {
 
 func TestActionConfig_AMergedLayerReplacesTheListWhole(t *testing.T) {
 	template := actionsConfig(actionEntry("out_on_url", 0, "http://t/1"), actionEntry("btn_on_url", 0, "http://t/2"))
-	override := actionsConfig(actionEntry("btn_on_url", 0, "http://o/1"))
+	override := actionsConfig(actionEntry("btn_on_url", 1, "http://o/1"))
 
 	result, err := MergeConfigurations([]ConfigLayer{{Name: "template", Config: template}, {Name: "override", Config: override}})
 	require.NoError(t, err)
@@ -123,6 +123,7 @@ func TestActionConfig_AMergedLayerReplacesTheListWhole(t *testing.T) {
 	entries := *result.Config.Actions
 	require.Len(t, entries, 1, "a layer that names actions names all of them")
 	assert.Equal(t, "btn_on_url", entries[0].Name)
+	assert.Equal(t, 1, entries[0].Index, "the layer's own entry is kept as it is, its non-zero index included")
 	assert.Equal(t, []string{"http://o/1"}, *entries[0].SecretURLs)
 }
 

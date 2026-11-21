@@ -123,6 +123,34 @@ func TestRecomputeDesiredConfig_HistoryMasksSecrets(t *testing.T) {
 	}
 }
 
+// A Gen1 action's URLs can hold a password or a token, so no history row holds one, on either side.
+func TestRecomputeDesiredConfig_HistoryMasksActionURLs(t *testing.T) {
+	actionOverride := func(url string) string {
+		return `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["` + url + `"]}]}`
+	}
+	db := historyDB(t)
+	addHistoryDevice(t, db, 1, "{}", actionOverride("http://a:canary-one@h/1"))
+	svc := NewConfigurationService(NewGormConfigRepository(db, nil), Engine{}, nil)
+	require.NoError(t, svc.RecomputeDesiredConfig(1))
+	assert.Contains(t, deviceRow(t, db, 1).DesiredConfig, "canary-one", "the real desired text keeps the URL")
+
+	setOverrides(t, db, 1, actionOverride("http://a:canary-two@h/1"))
+	require.NoError(t, svc.RecomputeDesiredConfig(1))
+	assert.Contains(t, deviceRow(t, db, 1).DesiredConfig, "canary-two")
+
+	rows := historyRows(t, db, 1)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		for _, text := range []*string{row.OldDesired, row.NewDesired} {
+			if text != nil {
+				assert.NotContains(t, *text, "canary", "a history text holds an action URL")
+			}
+		}
+	}
+	require.NotNil(t, rows[1].NewDesired)
+	assert.Contains(t, *rows[1].NewDesired, "btn_on_url", "the action itself is kept, only its URLs are masked")
+}
+
 // A text that cannot be masked is never stored raw, and the write that succeeds today still succeeds.
 func TestRecomputeDesiredConfig_HistoryUnmaskableOldSideIsNull(t *testing.T) {
 	db := historyDB(t)
