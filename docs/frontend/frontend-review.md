@@ -230,7 +230,9 @@ page imports still counts. The Playwright spec is what proves the links are rend
   /devices/{id}/config/new/rollback`. The confirm shows the difference with the current desired configuration
   (`utils/desiredDiff.ts`; secrets are not compared), the templates that are detached and the way back. A 409
   with paths keeps the dialog open with one input per path, and the typed secrets live in that dialog only.
-  Roll back is off while the overrides editor is open. No device is contacted: the operator applies afterwards. The History card below it lists imports, not these versions.
+  Roll back is off while the overrides editor is open and until the page has read the current configuration, and
+  the card reads its versions again each time the page finishes a read. No device is contacted: the operator
+  applies afterwards. The History card below it lists imports, not these versions.
 - **An open overrides edit survives a refresh** (ginsys/shelly-manager#855). The page reloads the overrides into
   the editor only while the editor is closed. Text in the JSON view that does not parse yet is still lost on a
   refresh, because the page shows "Loading..." in place of the editor while it loads (ginsys/shelly-manager#858). If the saved overrides change under an open edit (a rollback does

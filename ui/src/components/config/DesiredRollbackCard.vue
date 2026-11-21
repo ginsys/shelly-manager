@@ -20,8 +20,8 @@
           v-else
           class="btn"
           :data-testid="`rollback-${v.id}`"
-          :disabled="editing"
-          :title="editing ? 'Save or cancel the overrides edit first' : ''"
+          :disabled="editing || !ready"
+          :title="editing ? 'Save or cancel the overrides edit first' : !ready ? 'Wait until the configuration has been read' : ''"
           @click="openDialog(v)"
         >
           Roll back
@@ -94,7 +94,7 @@
 
         <div class="modal-actions">
           <button class="btn" data-testid="rollback-cancel" :disabled="busy" @click="closeDialog">Cancel</button>
-          <button class="btn primary" data-testid="rollback-confirm" :disabled="busy || editing" @click="confirm">
+          <button class="btn primary" data-testid="rollback-confirm" :disabled="busy || editing || !ready" @click="confirm">
             {{ prompt.length > 0 ? 'Retry with these secrets' : 'Roll back' }}
           </button>
         </div>
@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLateResult } from '@/composables/useNotice'
 import { getDesiredHistory, rollbackDesired, RollbackRefused, type DesiredVersion, type RollbackSecrets } from '@/api/desiredRollback'
 import { diffDesired, parseVersion } from '@/utils/desiredDiff'
@@ -115,6 +115,9 @@ const props = defineProps<{
   current: Record<string, any> | null
   templates: ConfigTemplate[]
   editing: boolean
+  // The page has read the current desired configuration and templates. Until then the difference and the
+  // detach list would compare with nothing, and a rollback must not be confirmed on that.
+  ready: boolean
 }>()
 const emit = defineEmits<{ refresh: [] }>()
 
@@ -172,6 +175,11 @@ async function loadVersions() {
   }
 }
 onMounted(loadVersions)
+// Every other action of the page records versions too (a save, a template change), and a failed first read can only
+// be retried by the page's Refresh: the page finishing a read is the card's cue to read again.
+watch(() => props.ready, (now) => {
+  if (now) void loadVersions()
+})
 
 function openDialog(version: DesiredVersion) {
   target.value = version
@@ -207,6 +215,10 @@ async function confirm() {
   // The dialog does not trap the keyboard, so the editor can be opened behind it after the dialog opened.
   if (props.editing) {
     refusal.value = { message: 'Save or cancel the overrides edit first: a rollback replaces the overrides.', paths: [] }
+    return
+  }
+  if (!props.ready) {
+    refusal.value = { message: 'The configuration is being read again: wait for it, then confirm.', paths: [] }
     return
   }
   const { secrets, missing } = collect()
