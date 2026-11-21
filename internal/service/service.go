@@ -501,7 +501,7 @@ func (s *ShellyService) getClientWithAuthRetry(device *database.Device) (shelly.
 	if !known || rejectedUser != "" || rejectedPass != "" || settings.AuthUser != "" || settings.AuthPass != "" {
 		// A device that is not the stored one says nothing about the stored login: leave it.
 		if idErr := s.checkStoredIdentity(device); idErr != nil {
-			return nil, fmt.Errorf("the login was rejected and is left as it is: %w", idErr)
+			return nil, loginRefusedBy(testErr, idErr)
 		}
 
 		s.logger.WithFields(map[string]any{
@@ -817,7 +817,7 @@ func (s *ShellyService) getClientWithRetry(device *database.Device, allowRetry b
 
 			// A device that is not the stored one says nothing about the stored login: leave it.
 			if idErr := s.checkStoredIdentity(device); idErr != nil {
-				return nil, fmt.Errorf("the login was rejected and is left as it is: %w", idErr)
+				return nil, loginRefusedBy(err, idErr)
 			}
 
 			// Clear the saved login the device rejected, unless a newer one replaced it.
