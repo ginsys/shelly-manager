@@ -177,6 +177,47 @@ func TestActionURLs_AStoredListOfOneEmptyURLIsNotTurnedIntoAClear(t *testing.T) 
 	})
 }
 
+// A stored URL that holds a newline is a value apply refuses. Sending the mask back must restore
+// that very list: restoring through the joined string would split it into two URLs that apply accepts.
+func TestActionURLs_AMaskRestoresAStoredURLThatHoldsANewlineAsOneURL(t *testing.T) {
+	const seeded = `{"actions":[{"name":"out_on_url","index":0,"enabled":true,"secret_urls":["http://a/on\nhttp://b/on"]}]}`
+	const masked = `{"actions":[{"name":"out_on_url","index":0,"enabled":true,"secret_urls":["********"]}]}`
+	want := []string{"http://a/on\nhttp://b/on"}
+
+	for _, method := range []string{"PUT", "PATCH"} {
+		t.Run(method, func(t *testing.T) {
+			handler, cleanup := setupTestHandler(t)
+			defer cleanup()
+			id := keepOverrideDevice(t, handler, seeded)
+
+			w := sendOverrides(t, handler, method, id, masked)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+			assert.Equal(t, want, storedActionURLs(t, handler, id))
+		})
+	}
+	t.Run("bulk apply", func(t *testing.T) {
+		handler, db, fleet := applyFleet(t, 1)
+		id := fleet[0].device.ID
+		setOverrides(t, db, id, seeded)
+
+		w := postApply(handler, applyBody(masked, false, id))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+		assert.Equal(t, want, storedActionURLs(t, handler, id))
+	})
+	t.Run("the helper", func(t *testing.T) {
+		stored := actionsOf(actionEntryOf("out_on_url", 0, "http://a/on\nhttp://b/on"))
+		incoming := actionsOf(actionEntryOf("out_on_url", 0, secretMask))
+
+		restoreMaskedSecrets(incoming, stored)
+
+		assert.Equal(t, want, urlsOf((*incoming.Actions)[0]))
+		(*(*incoming.Actions)[0].SecretURLs)[0] = "http://changed"
+		assert.Equal(t, want, urlsOf((*stored.Actions)[0]), "the stored list shares memory with the incoming one")
+	})
+}
+
 func TestKeepOmittedActionURLs_TouchesNothingButTheActionLists(t *testing.T) {
 	stored := actionsOf(actionEntryOf("out_on_url", 0, secretActionURLs[0]))
 	user := "iot"
