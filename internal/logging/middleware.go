@@ -126,6 +126,9 @@ func RecoveryMiddleware(logger *Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if err := recover(); err != nil {
+					if err == http.ErrAbortHandler {
+						panic(err) // a handler cut its own transfer: net/http ends the connection and logs nothing
+					}
 					logger.WithFields(map[string]any{
 						"method":      r.Method,
 						"path":        r.URL.Path,

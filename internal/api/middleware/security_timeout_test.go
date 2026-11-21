@@ -72,8 +72,9 @@ func TestTimeoutMiddleware_WritesAfterTimeoutAreDropped(t *testing.T) {
 	assert.ErrorIs(t, writeErr, http.ErrHandlerTimeout)
 }
 
-// A handler that had already started its response at the deadline keeps that
-// response: no 408 is appended to its body, and later writes are dropped.
+// A handler that had already started its response at the deadline keeps what it sent: no 408 is
+// appended to its body, later writes are dropped, and the transfer is cut (see
+// TestTimeoutMiddleware_DeadlineAfterStartAbortsTheTransfer for the client's view).
 func TestTimeoutMiddleware_StartedResponseIsNotCorrupted(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -89,13 +90,14 @@ func TestTimeoutMiddleware_StartedResponseIsNotCorrupted(t *testing.T) {
 	})
 
 	rr := httptest.NewRecorder()
-	TimeoutMiddleware(timeoutTestConfig(50*time.Millisecond), nil)(handler).
-		ServeHTTP(rr, httptest.NewRequest("GET", "/api/v1/test", nil))
+	aborted := serveRecordingAbort(TimeoutMiddleware(timeoutTestConfig(50*time.Millisecond), nil)(handler),
+		rr, httptest.NewRequest("GET", "/api/v1/test", nil))
 
 	<-started
 	close(release)
 	<-finished
 
+	assert.True(t, aborted)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Equal(t, "partial", rr.Body.String())
 }
@@ -449,12 +451,13 @@ func TestTimeoutMiddleware_ConcurrentWrites(t *testing.T) {
 	})
 
 	rr := httptest.NewRecorder()
-	TimeoutMiddleware(timeoutTestConfig(20*time.Millisecond), nil)(handler).
-		ServeHTTP(rr, httptest.NewRequest("GET", "/api/v1/test", nil))
+	aborted := serveRecordingAbort(TimeoutMiddleware(timeoutTestConfig(20*time.Millisecond), nil)(handler),
+		rr, httptest.NewRequest("GET", "/api/v1/test", nil))
 
 	close(stop)
 	<-finished
 
+	assert.True(t, aborted, "the handler had started its response at the deadline")
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.NotContains(t, rr.Body.String(), "REQUEST_TIMEOUT")
 }
