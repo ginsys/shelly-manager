@@ -329,6 +329,90 @@ func TestCommonSettings_OmitsAListWhoseLengthDiffers(t *testing.T) {
 	assert.True(t, ok && autoOn == float64(5), body)
 }
 
+// A list whose elements share nothing but their id says nothing the schema does not already say, so the
+// answer leaves it out and counts what it left out (ginsys/shelly-manager#810).
+func TestCommonSettings_DropsAListWhoseElementsShareOnlyTheirId(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	a := commonDevice(t, h, 1, "SHSW-25", `{"relay":{"relays":[{"id":0,"auto_on":5}]}}`)
+	b := commonDevice(t, h, 2, "SHSW-25", `{"relay":{"relays":[{"id":0,"auto_on":9}]}}`)
+
+	answer, body := commonFor(t, h, a, b)
+
+	_, hasRelays := commonAt(answer.Common, "relay", "relays")
+	assert.False(t, hasRelays, body)
+	// The two leaves the devices hold under relay.relays.0 (id and auto_on) are both left out.
+	assert.Equal(t, 2, answer.Differing["relay"], body)
+}
+
+// There is no partial list: a template with fewer relays than the devices have would be wrong, so one
+// element that keeps only its id drops the whole list.
+func TestCommonSettings_DropsAListWhenOneElementKeepsOnlyItsId(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	a := commonDevice(t, h, 1, "SHSW-25", `{"relay":{"relays":[{"id":0,"default_state":"off"},{"id":1,"auto_on":5}]}}`)
+	b := commonDevice(t, h, 2, "SHSW-25", `{"relay":{"relays":[{"id":0,"default_state":"off"},{"id":1,"auto_on":9}]}}`)
+
+	answer, body := commonFor(t, h, a, b)
+
+	_, hasRelays := commonAt(answer.Common, "relay", "relays")
+	assert.False(t, hasRelays, body)
+}
+
+// A slice field stored without omitempty is null on every device. That is no setting, so it is left out
+// and counted, and the scalar next to it stays.
+func TestCommonSettings_DropsANullEveryDeviceHolds(t *testing.T) {
+	h, cleanup := typedHandler(t)
+	defer cleanup()
+	a := commonDevice(t, h, 1, "SHSW-25", `{"schedule":{"enabled":true},"relay":{"auto_on":5}}`)
+	b := commonDevice(t, h, 2, "SHSW-25", `{"schedule":{"enabled":true},"relay":{"auto_on":5}}`)
+
+	answer, body := commonFor(t, h, a, b)
+
+	enabled, ok := commonAt(answer.Common, "schedule", "enabled")
+	assert.True(t, ok && enabled == true, body)
+	_, hasSchedules := commonAt(answer.Common, "schedule", "schedules")
+	assert.False(t, hasSchedules, body)
+	assert.Equal(t, 1, answer.Differing["schedule"], body)
+}
+
+// The two rules together, and the cases that must not change, on documents built by hand.
+func TestCommonOf_NullsAndIdOnlyElements(t *testing.T) {
+	doc := func(js string) map[string]any {
+		var m map[string]any
+		require.NoError(t, json.Unmarshal([]byte(js), &m))
+		return m
+	}
+	cases := []struct {
+		name string
+		docs []map[string]any
+		want string
+		diff map[string]int
+	}{
+		{"a shared null inside an element leaves it with its id only, so the list goes",
+			[]map[string]any{doc(`{"l":[{"id":0,"x":null}]}`), doc(`{"l":[{"id":0,"x":null}]}`)},
+			`{}`, map[string]int{"l": 2}},
+		{"an element with a real shared field beside the id is kept",
+			[]map[string]any{doc(`{"l":[{"id":0,"x":"a","y":1}]}`), doc(`{"l":[{"id":0,"x":"a","y":2}]}`)},
+			`{"l":[{"id":0,"x":"a"}]}`, map[string]int{"l": 1}},
+		{"a list of scalars is not an id-only element",
+			[]map[string]any{doc(`{"l":[1,2]}`), doc(`{"l":[1,2]}`)},
+			`{"l":[1,2]}`, map[string]int{}},
+		{"a null against a value is not common",
+			[]map[string]any{doc(`{"a":null,"b":1}`), doc(`{"a":2,"b":1}`)},
+			`{"b":1}`, map[string]int{"a": 1}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, diff := commonOf(c.docs)
+			raw, err := json.Marshal(got)
+			require.NoError(t, err)
+			assert.JSONEq(t, c.want, string(raw))
+			assert.Equal(t, c.diff, diff)
+		})
+	}
+}
+
 func TestCommonSettings_NamesTheModelOnlyWhenAllDevicesShareIt(t *testing.T) {
 	h, cleanup := typedHandler(t)
 	defer cleanup()

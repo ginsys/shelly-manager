@@ -203,8 +203,9 @@ func dropMasks(node any) {
 
 // commonOf returns what every document holds equally, and per top-level section how many leaf values
 // are left out. Objects keep the keys all documents have with a common value, a list is kept when all
-// lists have one length and every element has something in common (elements pair by position), and a
-// scalar is kept when all are equal. With no document nothing is common.
+// lists have one length and every element has something in common beyond its id (elements pair by
+// position), and a scalar is kept when all are equal. A null is never common. With no document nothing
+// is common.
 func commonOf(docs []map[string]any) (map[string]any, map[string]int) {
 	common := map[string]any{}
 	differing := map[string]int{}
@@ -272,12 +273,14 @@ func commonValue(values []any) (any, bool) {
 				column = append(column, list[i])
 			}
 			shared, ok := commonValue(column)
-			if !ok {
+			if !ok || idOnly(shared) {
 				return nil, false
 			}
 			out[i] = shared
 		}
 		return out, len(out) > 0
+	case nil:
+		return nil, false
 	default:
 		for _, v := range values[1:] {
 			if v != first {
@@ -286,6 +289,13 @@ func commonValue(values []any) (any, bool) {
 		}
 		return first, true
 	}
+}
+
+// idOnly reports an element that holds nothing but its id: it says nothing the schema does not already say.
+func idOnly(element any) bool {
+	m, isMap := element.(map[string]any)
+	_, hasID := m["id"]
+	return isMap && len(m) == 1 && hasID
 }
 
 // collectLeaves records the dotted path of every scalar under node; a list index is a path segment.
