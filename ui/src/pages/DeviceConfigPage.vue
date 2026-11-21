@@ -37,9 +37,7 @@
     <!-- The store sets its error only when a load fails; an action failure shows in the error panel above. -->
     <div v-else-if="store.error" class="card state error">{{ store.error }}</div>
 
-    <!-- The page stays mounted while it loads if the overrides editor is open: the editor holds the text of an
-         unfinished JSON edit that nothing else has, and removing it drops that draft (ginsys/shelly-manager#855). -->
-    <template v-if="!store.error && (!store.loading || editOverrides)">
+    <template v-else>
       <div v-if="store.status" class="card status-card">
         <div class="status-row">
           <span class="status-label">Status:</span>
