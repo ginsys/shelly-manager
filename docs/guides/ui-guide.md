@@ -136,7 +136,7 @@ several devices and offers what they share as a template.
 - **Create template from these** opens the same dialog as above. A section that is only partly common is marked with
   how many values differ, and is saved without them. The scope is the model when all compared devices have one, and
   all devices otherwise.
-- A second-generation import reads as few sections until the server's typed form reads all of its keys.
+- A second-generation import offers only the sections that the typed form reads (listed in the section above); its other top-level keys are not compared.
 
 ### Export/Import Section
 
