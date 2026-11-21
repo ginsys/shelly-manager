@@ -33,6 +33,10 @@ var perDevicePaths = []string{
 	"wifi.ap.ssid",
 	"relay.relays.*.name",
 	"input.inputs.*.name",
+	"location.lat",
+	"location.lng",
+	"system.location.lat",
+	"system.location.lng",
 }
 
 // maxCommonSettingsDevices is the most devices one request names. It reads the database only, so the

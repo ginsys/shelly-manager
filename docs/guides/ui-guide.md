@@ -109,7 +109,8 @@ from this import** on that card opens a dialog that makes a configuration templa
   drops a `********` it receives in a new template.
 - What is one device's own is always left out, so one template does not give every device the same identity:
   the name, hostname, MAC, MQTT client id and topic prefix, the login realm, the access-point name, the name of
-  each relay and input channel (the channel ids stay), and every static address (the address mode goes with it).
+  each relay and input channel (the channel ids stay), the latitude and longitude (the time zone stays), and
+  every static address (the address mode goes with it).
   A password slot is left out whatever its value, so an empty password never reaches a template.
 - The dialog reads the import through the server's typed form. For a second-generation device that form holds
   the device name and time settings, the Wi-Fi station and access point, MQTT, cloud, and the switch and input
