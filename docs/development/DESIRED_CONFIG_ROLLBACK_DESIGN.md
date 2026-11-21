@@ -303,6 +303,16 @@ and the pending flag in one UPDATE as `SetDeviceDesiredConfigPending` does, and 
   over 50 until its next change), because a locking read would lock a range of the `device_id` index.
 - **The history row.** A rollback row names its version through `restored_from`, so the card can say
   "restored to version N" without a free-text field.
+- **What the service rollback does (slice 2, first part).** `RollbackDesired` reads the device and the
+  version once, refuses a version holding the mask anywhere (every path named, no value; the secrets rule
+  of section 3.3 follows in the next part), builds the target's desired text through the recompute's own
+  functions (`overrideLayer`, `desiredFromLayers`) and compares the two trees as section 3.2 says. A
+  rollback to what the device already holds (equal desired and overrides, no templates: `""`, `null` and
+  `[]` all mean none) writes nothing and records no row. Equal desired text with templates attached
+  still detaches them and records a row, with both sides equal. Its write recounts the values it WRITES on
+  a zero-row UPDATE, where the recompute recounts the values it read: a rollback changes the read values,
+  so recounting them would call its own committed write a miss. A device deleted since the read answers
+  `ErrDeviceNotFound` and leaves no row.
 
 ### 3.5 No device is written until Apply
 

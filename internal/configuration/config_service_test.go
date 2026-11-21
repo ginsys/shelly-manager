@@ -161,6 +161,14 @@ func (m *mockRepository) UpdateDeviceOverrides(deviceID uint, overrides json.Raw
 	return nil
 }
 
+func (m *mockRepository) GetDesiredHistory(uint, uint) (*DesiredConfigHistory, error) {
+	return nil, ErrHistoryNotFound
+}
+
+func (m *mockRepository) RollbackDeviceDesired(uint, DesiredRead, DesiredWrite, uint) error {
+	return errors.New("the mock repository keeps no history")
+}
+
 func (m *mockRepository) SetDeviceDesiredConfigPending(deviceID uint, read DesiredRead, config json.RawMessage) error {
 	if m.updateErr != nil {
 		return m.updateErr

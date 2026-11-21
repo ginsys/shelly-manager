@@ -32,7 +32,9 @@ func TestDesiredHistoryProviders(t *testing.T) {
 			if spec.found {
 				fixture.config.DSN += "&clientFoundRows=true"
 			}
-			checkDesiredHistory(t, startProviderManager(t, fixture))
+			manager := startProviderManager(t, fixture)
+			checkDesiredHistory(t, manager)
+			checkDesiredRollback(t, manager)
 		})
 	}
 }
@@ -81,5 +83,56 @@ func checkDesiredHistory(t *testing.T, manager *Manager) {
 		require.NoError(t, db.Where("device_id = ?", 4242).Take(&row).Error)
 		require.NotNil(t, row.NewDesired)
 		assert.Equal(t, len(big), len(*row.NewDesired))
+	})
+}
+
+// checkDesiredRollback is the rollback write on each server. A rollback changes the template ids and the
+// overrides as well as the desired text, so its recount must read the values it WRITES: a write that an
+// identical rollback already committed matches no row and is done. A write that changes no column reports
+// no row on MySQL without clientFoundRows and one with it, and succeeds either way.
+func checkDesiredRollback(t *testing.T, manager *Manager) {
+	t.Helper()
+	db := manager.GetDB()
+	repo := configuration.NewGormConfigRepository(db, nil)
+	device := &Device{MAC: "rollback:provider", IP: "192.0.2.78", Type: "switch", Name: "rollback", Settings: "{}",
+		LastSeen: time.Now().UTC(), TemplateIDs: "[7]", Overrides: `{"wifi":{"ssid":"x"}}`, DesiredConfig: `{"wifi":{"ssid":"x"}}`}
+	require.NoError(t, manager.AddDevice(device))
+	rows := func() (n int64) {
+		require.NoError(t, db.Model(&configuration.DesiredConfigHistory{}).Where("device_id = ?", device.ID).Count(&n).Error)
+		return n
+	}
+	read := configuration.DesiredRead{TemplateIDs: "[7]", Overrides: `{"wifi":{"ssid":"x"}}`, Desired: `{"wifi":{"ssid":"x"}}`}
+	write := configuration.DesiredWrite{TemplateIDs: "[]", Overrides: `{"mqtt":{"server":"b"}}`, Desired: `{"mqtt":{"server":"b"}}`}
+
+	t.Run("a rollback writes the three columns and its row", func(t *testing.T) {
+		require.NoError(t, repo.RollbackDeviceDesired(device.ID, read, write, 1))
+		var got Device
+		require.NoError(t, db.First(&got, device.ID).Error)
+		assert.Equal(t, "[]", got.TemplateIDs)
+		assert.Equal(t, write.Overrides, got.Overrides)
+		assert.Equal(t, write.Desired, got.DesiredConfig)
+		assert.False(t, got.ConfigApplied)
+		assert.EqualValues(t, 1, rows())
+	})
+
+	t.Run("a write that is already there is done, not a miss", func(t *testing.T) {
+		require.NoError(t, repo.RollbackDeviceDesired(device.ID, read, write, 1))
+		assert.EqualValues(t, 1, rows(), "no second row")
+	})
+
+	t.Run("a write that changes no column is done", func(t *testing.T) {
+		require.NoError(t, repo.RollbackDeviceDesired(device.ID, configuration.DesiredRead(write), write, 1))
+	})
+
+	t.Run("a stale read is a miss", func(t *testing.T) {
+		stale := read
+		stale.Overrides = `{"x":1}`
+		other := configuration.DesiredWrite{TemplateIDs: "[]", Overrides: `{"c":1}`, Desired: `{"c":1}`}
+		assert.ErrorIs(t, repo.RollbackDeviceDesired(device.ID, stale, other, 1), configuration.ErrDesiredChanged)
+	})
+
+	t.Run("a deleted device is not found", func(t *testing.T) {
+		require.NoError(t, manager.DeleteDevice(device.ID))
+		assert.ErrorIs(t, repo.RollbackDeviceDesired(device.ID, read, write, 1), configuration.ErrDeviceNotFound)
 	})
 }

@@ -308,6 +308,60 @@ func (r *GormConfigRepository) SetDeviceDesiredConfigPending(deviceID uint, read
 	})
 }
 
+// GetDesiredHistory reads one version of a device's desired configuration. An id that is another
+// device's or does not exist is ErrHistoryNotFound.
+func (r *GormConfigRepository) GetDesiredHistory(deviceID, historyID uint) (*DesiredConfigHistory, error) {
+	var row DesiredConfigHistory
+	if err := r.db.Where("id = ? AND device_id = ?", historyID, deviceID).Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrHistoryNotFound
+		}
+		return nil, fmt.Errorf("failed to read the desired configuration version: %w", err)
+	}
+	return &row, nil
+}
+
+// RollbackDeviceDesired is SetDeviceDesiredConfigPending for a rollback, which changes the template ids
+// and the overrides as well as the desired text. It applies only while the device still holds read and
+// writes the history row in the same transaction. On a miss the recount asks whether the device already
+// holds what is being WRITTEN, not what was read: a rollback changes the read values, so recounting them
+// would call its own committed write a miss. An unchanged row reports no rows on MySQL without
+// clientFoundRows, and is done. A device deleted since the read is ErrDeviceNotFound, with no row.
+func (r *GormConfigRepository) RollbackDeviceDesired(deviceID uint, read DesiredRead, write DesiredWrite, restoredFrom uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		dialect := tx.Name()
+		res := tx.Model(&DbDevice{}).
+			Where(deviceReadCondition(dialect), deviceID, read.TemplateIDs, read.Overrides, read.Desired).
+			Updates(map[string]any{
+				"template_ids": write.TemplateIDs, "overrides": write.Overrides,
+				"desired_config": write.Desired, "config_applied": false,
+			})
+		if res.Error != nil {
+			return fmt.Errorf("failed to store the rolled back desired config: %w", res.Error)
+		}
+		if res.RowsAffected > 0 {
+			return recordRollback(tx, deviceID, restoredFrom, read.TemplateIDs, read.Desired, write.Desired)
+		}
+
+		held, err := deviceRowExists(tx, deviceReadCondition(dialect)+" AND config_applied = ?",
+			deviceID, write.TemplateIDs, write.Overrides, write.Desired, false)
+		if err != nil {
+			return fmt.Errorf("failed to store the rolled back desired config: %w", err)
+		}
+		if held {
+			return nil
+		}
+		exists, err := deviceRowExists(tx, "id = ?", deviceID)
+		if err != nil {
+			return fmt.Errorf("failed to store the rolled back desired config: %w", err)
+		}
+		if !exists {
+			return ErrDeviceNotFound
+		}
+		return ErrDesiredChanged
+	})
+}
+
 // deviceRowExists reports whether a device row matches, reading the latest committed state. FOR UPDATE
 // does that: inside a REPEATABLE READ transaction (the MySQL default, and an import runs in one) a plain
 // read keeps the snapshot of the transaction's first read, and the UPDATE above tests the current row, so
