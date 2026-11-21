@@ -1137,6 +1137,18 @@ components:
           type: array
           items:
             type: string
+        enrolment_state:
+          type: string
+          enum: [legacy, pending, preapproved, approved, rejected]
+          description: >-
+            Where the agent is in enrolment by key. A row with no state reads `legacy`. The agent's `status` carries
+            the state name while the row is `pending`, `preapproved`, `approved` or `rejected` and the agent has not
+            registered or polled since; a pending, preapproved or rejected row never counts as an active agent.
+        fingerprint:
+          type: string
+          description: >-
+            The fingerprint of the agent's key as eight groups of four hexadecimal characters joined by hyphens, for
+            an agent enrolled by key. Absent for a `legacy` row. The key itself is never returned.
 
     ProvisioningTask:
       type: object
@@ -4121,6 +4133,128 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '404':
           description: No agent has this id.
+
+  /api/v1/provisioner/agents/{id}/approve:
+    post:
+      tags: [Provisioning]
+      summary: Approve a provisioner agent's key
+      description: >-
+        Takes a `pending` or `rejected` agent to `approved`, or a `rejected` agent that never had a key to
+        `preapproved`. It issues no token: the agent gets one by a signed register. Any other state, a `legacy` row
+        included, answers `409`. Admin key only.
+      operationId: approveProvisionerAgent
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The agent in its new state, under `data`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProvisionerAgent'
+        '404':
+          description: No agent has this id.
+        '409':
+          description: The agent's enrolment state does not allow this.
+
+  /api/v1/provisioner/agents/{id}/reject:
+    post:
+      tags: [Provisioning]
+      summary: Reject a provisioner agent
+      description: >-
+        Takes a `pending`, `preapproved` or `approved` agent to `rejected`. The agent's token stops working at once,
+        its challenge is cleared and its `assigned` and `in_progress` tasks become `failed` with `config._error`;
+        its `pending` tasks stay. The row stays, so the agent does not return as `pending`. Any other state, a
+        `legacy` row included, answers `409`. Admin key only.
+      operationId: rejectProvisionerAgent
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The agent in its new state, under `data`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProvisionerAgent'
+        '404':
+          description: No agent has this id.
+        '409':
+          description: The agent's enrolment state does not allow this.
+
+  /api/v1/provisioner/enrolments:
+    post:
+      tags: [Provisioning]
+      summary: Pre-approve a key by its fingerprint
+      description: >-
+        Names a fingerprint ahead of its agent. It creates a `preapproved` row, or approves the `pending` row that
+        has the fingerprint. A fingerprint whose row is in any other state answers `409`. Admin key only.
+      operationId: preapproveProvisionerAgent
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fingerprint]
+              properties:
+                fingerprint:
+                  type: string
+                  description: >-
+                    32 hexadecimal characters, or eight groups of four joined by hyphens, in either case.
+      responses:
+        '201':
+          description: A `preapproved` row was created, under `data`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProvisionerAgent'
+        '200':
+          description: The `pending` row with this fingerprint was approved, under `data`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/APIResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProvisionerAgent'
+        '400':
+          description: The fingerprint is not 32 hexadecimal characters.
+        '409':
+          description: The fingerprint has a row that is not `pending`.
 
   /api/v1/provisioner/agents/register:
     post:

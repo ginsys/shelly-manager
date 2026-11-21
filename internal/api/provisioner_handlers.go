@@ -103,6 +103,10 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id in use", nil)
 	case errors.Is(err, database.ErrAgentEnrolled):
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id belongs to an agent enrolled by key", nil)
+	case errors.Is(err, database.ErrEnrolmentState):
+		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "The agent's enrolment state does not allow this", nil)
+	case errors.Is(err, database.ErrFingerprintInvalid):
+		h.responseWriter().WriteValidationError(w, r, "A fingerprint is 32 hexadecimal characters, or eight groups of four joined by hyphens")
 	case errors.Is(err, database.ErrAgentIDInvalid):
 		h.responseWriter().WriteValidationError(w, r, `Agent id must use printable ASCII characters without a space, unless it starts with "provisioner-"`)
 	case errors.Is(err, database.ErrAgentNotFound):
@@ -261,17 +265,85 @@ func (h *Handler) GetProvisionerAgents(w http.ResponseWriter, r *http.Request) {
 		h.writeProvisionerError(w, r, err)
 		return
 	}
+	views := make([]provisionerAgentView, len(agents))
 	for i := range agents {
+		views[i] = newProvisionerAgentView(agents[i])
 		// Update status based on last seen time
 		if time.Since(agents[i].LastSeen) > agentOfflineAfter {
-			agents[i].Status = "offline"
+			views[i].Status = "offline"
 		}
 	}
 
 	h.responseWriter().WriteSuccess(w, r, map[string]interface{}{
-		"agents": agents,
-		"count":  len(agents),
+		"agents": views,
+		"count":  len(views),
 	})
+}
+
+// provisionerAgentView is an agent as the admin routes show it: the row, its enrolment state (a row with no
+// state is legacy) and its fingerprint in the readable form. Never the key, the token hash or the challenge.
+type provisionerAgentView struct {
+	database.ProvisionerAgent
+	EnrolmentState string `json:"enrolment_state"`
+	Fingerprint    string `json:"fingerprint,omitempty"`
+}
+
+func newProvisionerAgentView(agent database.ProvisionerAgent) provisionerAgentView {
+	view := provisionerAgentView{ProvisionerAgent: agent, EnrolmentState: agent.State()}
+	if agent.Fingerprint != nil {
+		view.Fingerprint = database.FormatFingerprint(*agent.Fingerprint)
+	}
+	return view
+}
+
+// ApproveProvisionerAgent handles POST /api/v1/provisioner/agents/{id}/approve: a pending or rejected agent
+// becomes approved, or preapproved when it never had a key.
+func (h *Handler) ApproveProvisionerAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := mux.Vars(r)["id"]
+	agent, err := h.provisionerStore().ApproveAgent(r.Context(), agentID, time.Now())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
+	h.logger.WithFields(map[string]any{"agent_id": agentID, "enrolment_state": agent.State()}).Info("Provisioning agent approved")
+	h.responseWriter().WriteSuccess(w, r, newProvisionerAgentView(agent))
+}
+
+// RejectProvisionerAgent handles POST /api/v1/provisioner/agents/{id}/reject: the agent is rejected, its
+// session ends at once and its assigned and in-progress tasks fail. The row stays, so it does not return as
+// pending.
+func (h *Handler) RejectProvisionerAgent(w http.ResponseWriter, r *http.Request) {
+	agentID := mux.Vars(r)["id"]
+	agent, err := h.provisionerStore().RejectAgent(r.Context(), agentID, time.Now())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
+	h.logger.WithFields(map[string]any{"agent_id": agentID}).Info("Provisioning agent rejected")
+	h.responseWriter().WriteSuccess(w, r, newProvisionerAgentView(agent))
+}
+
+// PreapproveProvisionerAgent handles POST /api/v1/provisioner/enrolments with {"fingerprint": ...}: it
+// creates a preapproved row for that fingerprint (201), or approves the pending row that has it (200).
+func (h *Handler) PreapproveProvisionerAgent(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Fingerprint string `json:"fingerprint"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.responseWriter().WriteValidationError(w, r, "Invalid JSON request body")
+		return
+	}
+	agent, created, err := h.provisionerStore().PreapproveFingerprint(r.Context(), req.Fingerprint, time.Now())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
+	h.logger.WithFields(map[string]any{"agent_id": agent.AgentID, "enrolment_state": agent.State(), "created": created}).Info("Provisioning agent preapproved")
+	if created {
+		h.responseWriter().WriteCreated(w, r, newProvisionerAgentView(agent))
+		return
+	}
+	h.responseWriter().WriteSuccess(w, r, newProvisionerAgentView(agent))
 }
 
 // PollTasks handles GET /api/v1/provisioner/agents/{id}/tasks
