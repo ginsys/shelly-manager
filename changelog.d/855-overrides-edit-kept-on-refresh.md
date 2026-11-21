@@ -1,2 +1,2 @@
 Fixed
-- An unsaved edit of the device overrides is no longer lost when the page refreshes (after a rollback, Apply, Verify or Refresh). If the saved overrides change under an open edit, the edit is kept, a notice says so, and Save is off until Cancel loads the saved overrides. Closes ginsys/shelly-manager#855.
+- An unsaved edit of the device overrides is no longer lost when the page refreshes (after a rollback, Apply, Verify or Refresh). If the saved overrides change under an open edit, the edit is kept, a notice says so, and Save is off until Cancel loads the saved overrides. Text in the JSON view that does not parse yet is still lost on a refresh (ginsys/shelly-manager#858). Fixes ginsys/shelly-manager#855.
