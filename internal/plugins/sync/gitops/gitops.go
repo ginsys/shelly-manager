@@ -131,7 +131,24 @@ func (g *GitOpsPlugin) ValidateConfig(config map[string]interface{}) error {
 		}
 	}
 
+	for _, key := range []string{"include_common", "include_templates"} {
+		if v, exists := config[key]; exists {
+			if _, ok := v.(bool); !ok {
+				return fmt.Errorf("%s must be a boolean", key)
+			}
+		}
+	}
+
 	return nil
+}
+
+// boolOption reads a boolean option. The schema is the contract, so a missing key is the schema's
+// default; ValidateConfig has already refused a present value of another type.
+func boolOption(options map[string]interface{}, key string, schemaDefault bool) bool {
+	if v, ok := options[key].(bool); ok {
+		return v
+	}
+	return schemaDefault
 }
 
 // Export performs the GitOps YAML export
@@ -154,8 +171,8 @@ func (g *GitOpsPlugin) Export(ctx context.Context, data *sync.ExportData, config
 		groupBy = "location"
 	}
 
-	includeCommon, _ := config.Config["include_common"].(bool)
-	includeTemplates, _ := config.Config["include_templates"].(bool)
+	includeCommon := boolOption(config.Config, "include_common", true)
+	includeTemplates := boolOption(config.Config, "include_templates", true)
 	excludeFields := g.parseExcludeFields(config.Config["exclude_fields"])
 
 	if err := g.prepareOutputDir(outputPath); err != nil {
@@ -345,8 +362,8 @@ func (g *GitOpsPlugin) Preview(ctx context.Context, data *sync.ExportData, confi
 	deviceGroups := g.groupDevices(data.Devices, groupBy, config.Config["group_mapping"])
 	ungroupedCount := len(g.getUngroupedDevices(data.Devices, deviceGroups))
 
-	includeCommon, _ := config.Config["include_common"].(bool)
-	includeTemplates, _ := config.Config["include_templates"].(bool)
+	includeCommon := boolOption(config.Config, "include_common", true)
+	includeTemplates := boolOption(config.Config, "include_templates", true)
 
 	// Estimate files
 	fileCount := 0
