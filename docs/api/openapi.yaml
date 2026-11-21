@@ -2117,7 +2117,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIResponse'
         '400':
-          description: No devices, an id that is not positive, more than 200 distinct ids, `options.stop_on_error`, or an unknown field
+          description: No devices, an id that is not positive, more than 200 distinct ids, `options.stop_on_error: true`, or an unknown field
 
   # Template Endpoints
   /api/v1/config/templates:
