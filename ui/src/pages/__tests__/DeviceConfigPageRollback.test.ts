@@ -83,7 +83,7 @@ describe('DeviceConfigPage rollback card', () => {
     expect(wrapper.get('[data-testid="rollback-notice"]').text()).toContain('done')
   })
 
-  // The overrides watch rewrites an open edit on every refresh, so a rollback would drop it silently.
+  // A rollback replaces the overrides, so it is not started over an open edit.
   it('keeps Roll back off while the overrides editor is open, and on again once it is closed', async () => {
     const { wrapper } = await mountPage()
     const toggle = wrapper.findAll('button').find((b) => b.text() === 'Edit')!
@@ -93,48 +93,115 @@ describe('DeviceConfigPage rollback card', () => {
     expect(wrapper.get('[data-testid="rollback-5"]').attributes('disabled')).toBeUndefined()
   })
 
-  // The dialog does not trap the keyboard and the admin-key prompt replays the POST, so an edit could be started
-  // while the request is in flight and its answer's refresh would overwrite it.
-  it('keeps the overrides editor shut while a rollback request is in flight, and frees it after, also when the device changes', async () => {
-    let release: (v: unknown) => void = () => {}
-    vi.mocked(rollbackDesired).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
-    const { wrapper, router } = await mountPage()
-    const edit = () => wrapper.findAll('button').find((b) => b.text() === 'Edit')!
-    expect(edit().attributes('disabled')).toBeUndefined()
+  // ginsys/shelly-manager#855: a refresh never rewrites an open overrides edit.
+  describe('the overrides editor', () => {
+    const page = (wrapper: any) => wrapper.findComponent(DeviceConfigPage).vm as any
+    const button = (wrapper: any, label: string) => wrapper.findAll('button').find((b: any) => b.text() === label)
+    const openEditor = async (wrapper: any, typed: Record<string, any>) => {
+      await button(wrapper, 'Edit')!.trigger('click')
+      page(wrapper).overridesData = typed
+      await flushPromises()
+    }
+    const typed = { mqtt: { server: 'typed' } }
 
-    await wrapper.get('[data-testid="rollback-5"]').trigger('click')
-    await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
-    expect(edit().attributes('disabled')).toBeDefined()
-    expect(edit().attributes('title')).toBe('A rollback is running')
-    release({ version_id: 9, no_change: false, detached_template_ids: [], message: 'done' })
-    await flushPromises()
-    expect(edit().attributes('disabled')).toBeUndefined()
+    it('keeps an open edit through Refresh and Apply, and through a change of the store that holds the same overrides', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const { wrapper } = await mountPage()
+      const store = useDeviceConfigNewStore()
+      store.overrides = { mqtt: { server: 'saved' } } as any
+      await flushPromises()
+      await openEditor(wrapper, typed)
 
-    vi.mocked(rollbackDesired).mockReturnValueOnce(new Promise(() => {}) as any)
-    await wrapper.get('[data-testid="rollback-5"]').trigger('click')
-    await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
-    expect(edit().attributes('disabled')).toBeDefined()
-    await router.push('/devices/8/config')
-    await flushPromises()
-    expect(edit().attributes('disabled')).toBeUndefined()
-  })
+      await button(wrapper, 'Refresh')!.trigger('click')
+      await flushPromises()
+      await page(wrapper).handleApply()
+      await flushPromises()
+      store.overrides = { mqtt: { server: 'saved' } } as any
+      await flushPromises()
 
-  // The card's request is done once the answer arrives, but the page's read of the new state is not: its refresh
-  // rewrites the edit buffer. Edit stays off, whatever else clears store.loading meanwhile (a verify in flight).
-  it('keeps the overrides editor shut until the refresh after a rollback has finished', async () => {
-    vi.mocked(rollbackDesired).mockResolvedValue({ version_id: 9, no_change: false, detached_template_ids: [], message: 'done' } as any)
-    const { wrapper, refresh } = await mountPage()
-    const edit = () => wrapper.findAll('button').find((b) => b.text() === 'Edit')
-    let finish: () => void = () => {}
-    refresh.mockReturnValueOnce(new Promise<void>((resolve) => (finish = resolve)) as never)
+      expect(page(wrapper).overridesData).toEqual(typed)
+      expect(page(wrapper).overridesHeld).toEqual({ mqtt: { server: 'saved' } })
+      expect(wrapper.find('[data-testid="overrides-stale"]').exists()).toBe(false)
+    })
 
-    await wrapper.get('[data-testid="rollback-5"]').trigger('click')
-    await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
-    await flushPromises()
-    expect(edit()?.attributes('disabled')).toBeDefined()
-    finish()
-    await flushPromises()
-    expect(edit()?.attributes('disabled')).toBeUndefined()
+    it('shows a rollback that landed under the open editor as a notice, keeps the edit, refuses Save and lets Cancel load it', async () => {
+      const { wrapper } = await mountPage()
+      const store = useDeviceConfigNewStore()
+      const save = vi.spyOn(store, 'saveOverrides').mockResolvedValue(undefined as never)
+      store.overrides = { mqtt: { server: 'saved' } } as any
+      await flushPromises()
+      await openEditor(wrapper, typed)
+
+      store.overrides = { mqtt: { server: 'rolled-back' } } as any
+      await flushPromises()
+      expect(wrapper.get('[data-testid="overrides-stale"]').text()).toContain('saved overrides changed')
+      expect(wrapper.get('[data-testid="save-overrides"]').attributes('disabled')).toBeDefined()
+      expect(page(wrapper).overridesData).toEqual(typed)
+      await page(wrapper).handleSaveOverrides()
+      expect(save).not.toHaveBeenCalled()
+
+      await button(wrapper, 'Cancel')!.trigger('click')
+      expect(page(wrapper).overridesData).toEqual({ mqtt: { server: 'rolled-back' } })
+      expect(wrapper.find('[data-testid="overrides-stale"]').exists()).toBe(false)
+    })
+
+    it('does not call two objects with the same members in another order a change', async () => {
+      const { wrapper } = await mountPage()
+      const store = useDeviceConfigNewStore()
+      store.overrides = { a: 1, b: { c: 2, d: 3 } } as any
+      await flushPromises()
+      await openEditor(wrapper, typed)
+      store.overrides = { b: { d: 3, c: 2 }, a: 1 } as any
+      await flushPromises()
+      expect(wrapper.find('[data-testid="overrides-stale"]').exists()).toBe(false)
+    })
+
+    // With saved overrides a device change reloads through the watch anyway, so only empty ones tell a guard in
+    // loadOverrides (which would keep the old edit) from a guard at the refresh callers.
+    it('drops the typed edit on a device change and on Cancel when no overrides are saved', async () => {
+      const { wrapper, router } = await mountPage()
+      await openEditor(wrapper, typed)
+      await router.push('/devices/8/config')
+      await flushPromises()
+      expect(page(wrapper).overridesData).toEqual({})
+      expect(page(wrapper).editOverrides).toBe(false)
+
+      await openEditor(wrapper, typed)
+      await button(wrapper, 'Cancel')!.trigger('click')
+      expect(page(wrapper).overridesData).toEqual({})
+    })
+
+    it('leaves the buffer equal to the saved overrides after a Save whose refresh fails', async () => {
+      const { wrapper, refresh } = await mountPage()
+      const store = useDeviceConfigNewStore()
+      vi.spyOn(store, 'saveOverrides').mockImplementation(async () => {
+        store.overrides = { mqtt: { server: 'typed', normalised: true } } as any
+      })
+      refresh.mockRejectedValue(new Error('read failed'))
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      await openEditor(wrapper, typed)
+      await wrapper.get('[data-testid="save-overrides"]').trigger('click')
+      await flushPromises()
+      expect(page(wrapper).editOverrides).toBe(false)
+      expect(page(wrapper).overridesData).toEqual({ mqtt: { server: 'typed', normalised: true } })
+      expect(page(wrapper).overridesHeld).toEqual({ mqtt: { server: 'typed', normalised: true } })
+    })
+
+    it('closes the editor and loads the cleared overrides after Clear All, which is a confirmed discard', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const { wrapper } = await mountPage()
+      const store = useDeviceConfigNewStore()
+      store.overrides = { mqtt: { server: 'saved' } } as any
+      vi.spyOn(store, 'clearOverrides').mockImplementation(async () => {
+        store.overrides = null
+      })
+      await flushPromises()
+      await openEditor(wrapper, typed)
+      await button(wrapper, 'Clear All')!.trigger('click')
+      await flushPromises()
+      expect(page(wrapper).editOverrides).toBe(false)
+      expect(page(wrapper).overridesData).toEqual({})
+    })
   })
 
   it('leaves nothing of the old device on the new one: a late answer fills nothing and the typed secrets are gone', async () => {
