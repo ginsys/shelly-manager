@@ -121,7 +121,9 @@ func TestMergeConfigurations_PlainScalarFieldsAreCovered(t *testing.T) {
 				fieldPath = path + "." + name
 			}
 			switch field.Type.Kind() {
-			case reflect.Bool, reflect.Int, reflect.Int64, reflect.Float64, reflect.String:
+			case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+				reflect.Float32, reflect.Float64, reflect.String:
 				if !plainScalarsNotCovered(fieldPath) {
 					assert.True(t, covered[fieldPath], "plain field %s has no case in plainScalarCases", fieldPath)
 				}
