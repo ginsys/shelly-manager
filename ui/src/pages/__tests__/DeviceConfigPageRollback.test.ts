@@ -160,6 +160,25 @@ describe('DeviceConfigPage rollback card', () => {
       expect(reads()).toBe(before + 1)
     })
 
+    // Save clears the store's loading itself and the page then refreshes, so the card is told twice; the second
+    // read may fail, and the list it showed stays.
+    it('keeps the list after a Save whose second read of the versions fails', async () => {
+      const { wrapper, refresh, store } = await mountPage()
+      refresh.mockImplementation(succeeds(store) as never)
+      vi.spyOn(store, 'saveOverrides').mockImplementation((async () => {
+        store.loading = true
+        await Promise.resolve()
+        store.loading = false
+      }) as never)
+      vi.mocked(getDesiredHistory).mockResolvedValueOnce([row(6), row(5)] as any).mockRejectedValueOnce(new Error('second read failed'))
+      await wrapper.findAll('button').find((b) => b.text() === 'Edit')!.trigger('click')
+      await wrapper.get('[data-testid="save-overrides"]').trigger('click')
+      await flushPromises()
+      const card = wrapper.get('[data-testid="versions-card"]')
+      expect(card.findAll('[data-testid="version-entry"]')).toHaveLength(2)
+      expect(card.get('[data-testid="versions-error"]').text()).toContain('second read failed')
+    })
+
     it('keeps the success notice and Roll back off when the page refresh fails, and reads once after the next good Refresh', async () => {
       vi.mocked(rollbackDesired).mockResolvedValue(answer)
       vi.spyOn(console, 'error').mockImplementation(() => {})
