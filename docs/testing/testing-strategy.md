@@ -23,7 +23,7 @@ The project uses a comprehensive testing strategy that **does NOT connect to rea
 - `go test -short` - Skips network tests for fast feedback
 - `go test` - Runs all tests including network tests
 - `make test` - Runs tests in short mode (fast)
-- `make test-full` - Runs all tests including network tests
+- `make test-extra` - Runs all tests including network tests
 
 ### Best Practices
 
@@ -130,7 +130,7 @@ To migrate existing network tests:
 
 # Full tests including network tests (optional)  
 - name: Run Full Test Suite
-  run: make test-full
+  run: CGO_ENABLED=1 go test -race -timeout=10m ./...
   env:
     SHELLY_CI_NETWORK_TESTS: "1"
 ```
@@ -144,7 +144,7 @@ make test                    # Short mode, ~30s
 make test-coverage          # Short mode with coverage (see coverage.html)
 
 # Full test suite (when needed)
-SHELLY_FORCE_NETWORK_TESTS=1 make test-full  # ~45s
+SHELLY_FORCE_NETWORK_TESTS=1 make test-extra  # ~10-15 min
 ```
 
 ### Environment Variables
@@ -161,7 +161,7 @@ SHELLY_FORCE_NETWORK_TESTS=1 make test-full  # ~45s
 | Command | Mode | Typical Duration | Coverage |
 |---------|------|------------------|----------|
 | `make test` | Short | ~30s | Core functionality |
-| `make test-full` | Full | ~45s | All including network |
+| `make test-extra` | Full | ~10-15 min | All including network |
 | `make test-race` | Race detection | ~40s | Concurrency issues |
 | `make test-coverage` | Coverage | ~35s | With coverage report |
 
