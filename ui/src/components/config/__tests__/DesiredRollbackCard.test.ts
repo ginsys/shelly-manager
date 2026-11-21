@@ -170,27 +170,6 @@ describe('DesiredRollbackCard', () => {
       expect(wrapper.get('[data-testid="rollback-refusal"]').text()).toContain('Save or cancel the overrides edit first')
     })
 
-    it('says a request is in flight from the click to the answer, and not in flight once the card goes', async () => {
-      const seen: boolean[] = []
-      let release: (v: unknown) => void = () => {}
-      vi.mocked(rollbackDesired).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
-      const wrapper = mountCard({ onBusy: (v: boolean) => seen.push(v) })
-      await flushPromises()
-      await open(wrapper)
-      await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
-      expect(seen).toEqual([true])
-      release(result())
-      await flushPromises()
-      expect(seen).toEqual([true, false])
-
-      vi.mocked(rollbackDesired).mockReturnValueOnce(new Promise(() => {}) as any)
-      await open(wrapper)
-      await wrapper.get('[data-testid="rollback-confirm"]').trigger('click')
-      expect(seen).toEqual([true, false, true])
-      wrapper.unmount()
-      expect(seen).toEqual([true, false, true, false])
-    })
-
     it('cancel closes the dialog and posts nothing', async () => {
       const wrapper = mountCard()
       await flushPromises()

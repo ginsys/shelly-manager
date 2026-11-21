@@ -107,20 +107,15 @@
           <h2>Device Overrides</h2>
           <div class="spacer" />
           <button v-if="store.overrides && Object.keys(store.overrides).length > 0" class="btn" @click="handleClearOverrides">Clear All</button>
-          <button
-            class="btn"
-            :disabled="rollingBack"
-            :title="rollingBack ? 'A rollback is running' : ''"
-            @click="toggleEditOverrides"
-          >
+          <button class="btn" @click="toggleEditOverrides">
             {{ editOverrides ? 'Cancel' : 'Edit' }}
           </button>
           <button
             v-if="editOverrides"
             class="btn primary"
             data-testid="save-overrides"
-            :disabled="!overridesValid"
-            :title="overridesValid ? '' : 'Fix the invalid fields first'"
+            :disabled="!overridesValid || overridesStale"
+            :title="overridesStale ? 'The saved overrides changed: Cancel to load them' : overridesValid ? '' : 'Fix the invalid fields first'"
             @click="handleSaveOverrides"
           >
             Save
@@ -130,6 +125,10 @@
           No overrides set. Click Edit to add device-specific overrides.
         </div>
         <div v-else-if="editOverrides" class="editor">
+          <p v-if="overridesStale" class="live-error" role="alert" data-testid="overrides-stale">
+            The saved overrides changed while you were editing (a rollback does this). Your edit is kept, but Save is off:
+            Cancel loads the saved overrides, and you can enter the edit again.
+          </p>
           <ConfigEditor
             ref="overridesEditor"
             v-model="overridesData"
@@ -231,16 +230,15 @@
     </div>
 
     <!-- Keyed by device: a device change re-creates the card, so a late answer and the secrets typed for the
-         old device never reach the new one. A rollback replaces the overrides, and the editor's watch below
-         rewrites an open edit on every refresh, so the card keeps Roll back off while the editor is open. -->
+         old device never reach the new one. A rollback replaces the overrides, so the card keeps Roll back off
+         while the editor is open. -->
     <DesiredRollbackCard
       :key="String(deviceId)"
       :device-id="deviceId"
       :current="store.desiredConfig"
       :templates="store.templates"
       :editing="editOverrides"
-      @refresh="refreshAfterRollback"
-      @busy="rollbackRequest = $event"
+      @refresh="handleRefresh"
     />
 
     <div class="card" data-testid="history-card">
@@ -332,19 +330,6 @@ const store = useDeviceConfigNewStore()
 // to another, and every save, apply and template change below must target the device on screen.
 const deviceId = computed<number | string>(() => route.params.id as string)
 const editOverrides = ref(false)
-// The editor stays shut from the click on a rollback until the page has read its answer: the refresh rewrites
-// the edit buffer, so an edit made in that span would be overwritten.
-const rollbackRequest = ref(false)
-const rollbackRefreshing = ref(false)
-const rollingBack = computed(() => rollbackRequest.value || rollbackRefreshing.value)
-async function refreshAfterRollback() {
-  rollbackRefreshing.value = true
-  try {
-    await handleRefresh()
-  } finally {
-    rollbackRefreshing.value = false
-  }
-}
 const overridesEditor = ref<InstanceType<typeof ConfigEditor> | null>(null)
 const overridesValid = ref(true)
 const overridesData = ref<Record<string, any>>({})
@@ -400,9 +385,18 @@ function loadOverrides(body: Record<string, any> | null | undefined) {
   overridesHeld.value = JSON.parse(JSON.stringify(body || {}))
 }
 
+// A refresh never rewrites an open edit (ginsys/shelly-manager#855). With the editor closed the buffer is
+// the saved overrides, and every change of the store lands here. Cancel, Save, Clear All and a device change
+// load for themselves, so none of them depends on this watch.
 watch(() => store.overrides, (newOverrides) => {
-  loadOverrides(newOverrides)
+  if (!editOverrides.value) loadOverrides(newOverrides)
 }, { immediate: true, deep: true })
+
+// The saved overrides differ from the ones this edit started from, so a Save would overwrite them. It sees a
+// change this page has read, not one made elsewhere or one whose refresh failed.
+const canonical = (v: unknown) =>
+  JSON.stringify(v, (_k, x) => (isSettings(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x))
+const overridesStale = computed(() => editOverrides.value && canonical(store.overrides ?? {}) !== canonical(overridesHeld.value))
 
 // Cancel throws the edit away: the body and the memory go back to the saved overrides, so the next
 // Edit starts clean and a key reset in the abandoned edit blocks nothing.
@@ -485,12 +479,9 @@ async function loadStored() {
 
 async function handleRefresh() {
   const id = deviceId.value
-  const generation = routeGeneration
   void loadStored()
   try {
     await store.refresh(id)
-    if (routeGeneration !== generation) return
-    loadOverrides(store.overrides)
   } catch (e: any) {
     console.error('Refresh failed:', e)
   }
@@ -593,7 +584,7 @@ async function handleRemoveTemplate(templateId: number) {
 }
 
 async function handleSaveOverrides() {
-  if (!overridesValid.value) return
+  if (!overridesValid.value || overridesStale.value) return
   const id = deviceId.value
   const generation = routeGeneration
   saveErrors.value = []
@@ -605,6 +596,7 @@ async function handleSaveOverrides() {
     await store.saveOverrides(id, sent)
     if (routeGeneration !== generation) return
     editOverrides.value = false
+    loadOverrides(store.overrides)
     await handleRefresh()
   } catch (e: any) {
     if (e instanceof TemplateSaveError) {
@@ -628,6 +620,11 @@ async function handleClearOverrides() {
   try {
     await store.clearOverrides(id)
     if (routeGeneration !== generation) return
+    // A confirmed discard: an open edit goes with the overrides.
+    saveErrors.value = []
+    refusedKeys.value = {}
+    editOverrides.value = false
+    loadOverrides(store.overrides)
     await handleRefresh()
   } catch (e: any) {
     setActionError(e, { action: 'Clear overrides', resource: 'Device', resourceId: id })

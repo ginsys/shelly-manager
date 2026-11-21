@@ -230,8 +230,11 @@ page imports still counts. The Playwright spec is what proves the links are rend
   /devices/{id}/config/new/rollback`. The confirm shows the difference with the current desired configuration
   (`utils/desiredDiff.ts`; secrets are not compared), the templates that are detached and the way back. A 409
   with paths keeps the dialog open with one input per path, and the typed secrets live in that dialog only.
-  Roll back is off while the overrides editor is open, because a refresh rewrites an unsaved edit. No device is
-  contacted: the operator applies afterwards. The History card below it lists imports, not these versions.
+  Roll back is off while the overrides editor is open. No device is contacted: the operator applies afterwards. The History card below it lists imports, not these versions.
+- **An open overrides edit survives a refresh** (ginsys/shelly-manager#855). The page reloads the overrides into
+  the editor only while the editor is closed. If the saved overrides change under an open edit (a rollback does
+  this), the edit is kept, a notice says so, and Save is off until Cancel loads the saved overrides. It sees a
+  change this page has read: one made from another browser, or one whose refresh failed, is not seen.
 - **Drift compares with the desired configuration**, the one apply writes and verify reads, and no
   longer with the stored import record (ginsys/shelly-manager#606). A device with no desired
   configuration cannot be checked: the drift route answers 404 and a bulk run marks it skipped.
