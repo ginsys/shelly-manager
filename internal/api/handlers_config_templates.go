@@ -723,6 +723,12 @@ func restoreMaskedSecrets(incoming, stored *configuration.DeviceConfiguration) {
 		}
 		kept := ""
 		if old, ok := storedSlots[path]; ok && restorableSlot(path) {
+			if slot.setList != nil && old.list != nil && old.list() != nil {
+				// A stored URL list comes back as the list it is, not through its string form, which
+				// would split a URL that holds a newline into two.
+				carryStored(slot, old)
+				continue
+			}
 			kept = old.get()
 		}
 		slot.set(kept)
