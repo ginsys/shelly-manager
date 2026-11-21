@@ -116,6 +116,49 @@ func TestResolveRedactedActions(t *testing.T) {
 	}
 }
 
+// The configuration decoder matches keys without regard to case, so an archive that spells the list
+// key another way still states a list. It follows the same rule: a placeholder with nothing stored
+// loses the key, and never becomes the explicit clear.
+func TestResolveRedactedActions_AnotherSpellingOfTheKeyFollowsTheSameRule(t *testing.T) {
+	for _, spelling := range []string{"SECRET_URLS", "Secret_Urls"} {
+		t.Run(spelling, func(t *testing.T) {
+			nothingStored, found := resolveActionsArchive(t,
+				`{"actions":[{"name":"btn_on_url","index":0,"`+spelling+`":`+listShape+`}]}`, `{}`)
+			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0}]}`, nothingStored,
+				"the placeholder list became a clear or kept a placeholder")
+			assert.Equal(t, 2, found)
+
+			restored, found := resolveActionsArchive(t,
+				`{"actions":[{"name":"btn_on_url","index":0,"`+spelling+`":`+listShape+`}]}`,
+				`{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["http://a:hunter2@h/1","http://a/2"]}]}`)
+			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["http://a:hunter2@h/1","http://a/2"]}]}`,
+				restored, "the stored list was not restored under the other spelling")
+			assert.Equal(t, 2, found)
+
+			kept, _ := resolveActionsArchive(t,
+				`{"actions":[{"name":"btn_on_url","index":0,"`+spelling+`":["http://new/1"]}]}`, `{}`)
+			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["http://new/1"]}]}`, kept,
+				"a list the author wrote is kept, under the key the decoder reads")
+		})
+	}
+}
+
+// An entry that holds the key in two casings is one the decoder and this reading could not agree on,
+// so it loses all of them and apply leaves the device's list alone.
+func TestResolveRedactedActions_TheKeyInTwoCasingsIsDropped(t *testing.T) {
+	stored := `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":["http://a:hunter2@h/1"]}]}`
+	for name, keys := range map[string]string{
+		"exact and upper": `"secret_urls":["http://new/1"],"SECRET_URLS":` + listShape,
+		"two variants":    `"Secret_urls":["http://new/1"],"SECRET_URLS":["http://new/2"]`,
+		"exact and clear": `"secret_urls":[],"Secret_Urls":` + listShape,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, _ := resolveActionsArchive(t, `{"actions":[{"name":"btn_on_url","index":0,`+keys+`}]}`, stored)
+			assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0}]}`, got)
+		})
+	}
+}
+
 func TestResolveRedactedActions_NothingStoredLosesTheKeyAndNeverClears(t *testing.T) {
 	for _, shape := range []string{listShape, bareShape} {
 		got, found := resolveActionsArchive(t, `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":`+shape+`}]}`, `{}`)

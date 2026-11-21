@@ -612,7 +612,7 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 			continue
 		case map[string]interface{}:
 			child, _ := kept.(map[string]interface{})
-			if _, isAction := v[actionURLsKey]; isAction {
+			if hasActionURLs(v) {
 				found += resolveActionURLs(v, child)
 			} else {
 				found += resolveRedacted(v, child)
@@ -630,6 +630,35 @@ func resolveRedactedList(list, stored []interface{}) ([]interface{}, int) {
 
 // actionURLsKey is the key of a Gen1 action's URL list in a stored configuration.
 const actionURLsKey = "secret_urls"
+
+// hasActionURLs reports whether the object holds the URL list of an action, and spells its key as
+// actionURLsKey. The configuration decoder matches keys without regard to case, so an archive may
+// spell the key another way and still state a list: that spelling is renamed here. An entry that
+// holds the key in more than one casing loses all of them, because the decoder and this reading could
+// not agree which one counts, and apply reads a missing list as "leave alone". An entry is found by
+// its key alone.
+func hasActionURLs(entry map[string]interface{}) bool {
+	var spellings []string
+	for key := range entry {
+		if strings.EqualFold(key, actionURLsKey) {
+			spellings = append(spellings, key)
+		}
+	}
+	switch {
+	case len(spellings) == 0:
+		return false
+	case len(spellings) > 1:
+		for _, key := range spellings {
+			delete(entry, key)
+		}
+		return false
+	}
+	if spellings[0] != actionURLsKey {
+		entry[actionURLsKey] = entry[spellings[0]]
+		delete(entry, spellings[0])
+	}
+	return true
+}
 
 // resolveActionURLs resolves the URL list of one action entry of an archive. The generic rule would
 // restore by position and drop an element it cannot restore, so a list of placeholders with nothing
