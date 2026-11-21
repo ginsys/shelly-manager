@@ -59,8 +59,9 @@ func (s *ShellyService) checkStoredIdentity(device *database.Device) error {
 //
 // A configuration.ErrDeviceIdentity keeps the identity text alone. It has three causes: another
 // MAC answered, the record has no MAC, the device reported none. The text already says the login
-// was rejected and names the fix, setting the MAC. The identity handlers own that answer, and only
-// the first cause means that some other device refused the login.
+// was rejected and names the fix where it has one: setting the MAC, or running discovery. The
+// identity handlers own that answer, and only the first cause means that some other device refused
+// the login.
 func loginRefusedBy(refusal, idErr error) error {
 	if errors.Is(idErr, configuration.ErrDeviceIdentity) {
 		return fmt.Errorf("the login was rejected and is left as it is: %w", idErr)

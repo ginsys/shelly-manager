@@ -54,7 +54,7 @@ func TestGetClient_AFailedIdentityReadKeepsTheRefusedLogin(t *testing.T) {
 
 // ErrDeviceIdentity has three causes: another MAC answered, the record has no MAC, the device
 // reported none. Each keeps today's text and is not a refused login: the identity handlers own that
-// answer, and the text already says the login was rejected and names the MAC as the fix.
+// answer, and the text already says the login was rejected and names the fix where it has one.
 func TestGetClient_AnIdentityRefusalKeepsItsOwnAnswer(t *testing.T) {
 	const saved = `{"gen":1,"auth_enabled":true,"auth_user":"old","auth_pass":"oldpw"}`
 	cases := []struct {
