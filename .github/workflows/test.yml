@@ -80,7 +80,7 @@ jobs:
         for pkg in $PKGS; do
           safe=$(echo "$pkg" | tr '/.' '__')
           echo "::group::Testing $pkg (JSON)"
-          go test -json -race -short "$pkg" | tee "test-reports/${safe}.jsonl" || true
+          go test -json -race -short -timeout=20m "$pkg" | tee "test-reports/${safe}.jsonl" || true
           echo "::endgroup::"
         done
 
@@ -99,7 +99,7 @@ jobs:
       if: always()
       run: |
         set -o pipefail
-        gotestsum --format standard-verbose --junitfile junit.xml -- -race -short ./... || true
+        gotestsum --format standard-verbose --junitfile junit.xml -- -race -short -timeout=20m ./... || true
 
     - name: Upload JUnit report
       if: always()

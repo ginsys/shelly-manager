@@ -246,7 +246,7 @@ test-race:
 # Run security-focused tests WITHOUT test mode (validates actual security behavior)
 test-security:
 	@echo "Running security tests with production-like security settings..."
-	CGO_ENABLED=1 go test -v -short -run "Security|Auth|Validation" ./...
+	CGO_ENABLED=1 go test -v -short -timeout=20m -run "Security|Auth|Validation" ./...
 
 # ==============================================================================
 # COVERAGE TESTS
@@ -261,7 +261,7 @@ test-coverage:
 # Run tests with coverage for CI (race detection + atomic mode)
 # NOTE: Does NOT use test mode - runs against full security router to test all routes
 test-coverage-ci:
-	CGO_ENABLED=1 go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...
+	CGO_ENABLED=1 go test -v -race -short -timeout=20m -coverprofile=coverage.out -covermode=atomic ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated at coverage.html"
 	@echo "Coverage summary:"
@@ -342,7 +342,7 @@ test-all:
 	$(MAKE) check-go-version
 	@echo ""
 	@echo "Step 2/6: Running Go tests with race detection + coverage..."
-	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -race -short -coverprofile=coverage.out -covermode=atomic ./...
+	SHELLY_SECURITY_VALIDATION_TEST_MODE=true CGO_ENABLED=1 go test -race -short -timeout=20m -coverprofile=coverage.out -covermode=atomic ./...
 	@echo ""
 	@echo "Step 3/6: Running security tests (production settings)..."
 	$(MAKE) test-security

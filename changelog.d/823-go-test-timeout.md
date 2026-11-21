@@ -1,0 +1,2 @@
+Fixed
+- The `go test` lines that the cluster verify and the pull request CI run (`make test-coverage-ci`, `make test-security`, `make test-all` and the per-package and JUnit steps of the test workflow) now pass `-timeout=20m` instead of go's 10 minute default, so a slow runner no longer fails a run inside a test the change did not touch. A real hang still fails, after 20 minutes. Fixes ginsys/shelly-manager#823.
