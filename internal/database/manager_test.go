@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
+	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
@@ -639,4 +640,29 @@ func TestMigration_ExistingDevices(t *testing.T) {
 	assert.Equal(t, "{}", retrieved.Overrides)
 	assert.Equal(t, "{}", retrieved.DesiredConfig)
 	assert.False(t, retrieved.ConfigApplied)
+}
+
+// A device's desired-configuration history goes with it, and a missing device removes nobody's rows.
+func TestManager_DeleteDeviceTakesItsHistory(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	keep := &Device{MAC: "history:keep", IP: "192.0.2.1", Type: "switch", Name: "keep", Settings: "{}"}
+	gone := &Device{MAC: "history:gone", IP: "192.0.2.2", Type: "switch", Name: "gone", Settings: "{}"}
+	require.NoError(t, manager.AddDevice(keep))
+	require.NoError(t, manager.AddDevice(gone))
+	for _, id := range []uint{keep.ID, gone.ID, 99999} {
+		require.NoError(t, configuration.RecordDesiredChange(manager.GetDB(), id, "recompute", `{"a":1}`, `{"a":2}`))
+	}
+	count := func(id uint) (n int64) {
+		require.NoError(t, manager.GetDB().Model(&configuration.DesiredConfigHistory{}).Where("device_id = ?", id).Count(&n).Error)
+		return n
+	}
+
+	require.NoError(t, manager.DeleteDevice(gone.ID))
+	assert.Zero(t, count(gone.ID), "the deleted device's rows went with it")
+	assert.EqualValues(t, 1, count(keep.ID), "another device's rows stay")
+
+	assert.ErrorIs(t, manager.DeleteDevice(99999), gorm.ErrRecordNotFound)
+	assert.EqualValues(t, 1, count(99999), "a missing device is not a delete: nothing is removed")
 }

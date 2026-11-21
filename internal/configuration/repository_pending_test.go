@@ -13,11 +13,11 @@ import (
 // against the old configuration cannot mark the new one applied.
 func TestSetDeviceDesiredConfigPending_WritesBothColumnsInOneStatement(t *testing.T) {
 	db := bareDB(t)
-	require.NoError(t, db.AutoMigrate(&DbDevice{}))
+	require.NoError(t, db.AutoMigrate(&DbDevice{}, &DesiredConfigHistory{}))
 	repo := NewGormConfigRepositoryOn(db, nil)
 	require.NoError(t, db.Create(&DbDevice{ID: 1, DesiredConfig: `{"a":1}`, ConfigApplied: true}).Error)
 
-	require.NoError(t, repo.SetDeviceDesiredConfigPending(1, json.RawMessage(`{"a":2}`)))
+	require.NoError(t, repo.SetDeviceDesiredConfigPending(1, DesiredRead{Desired: `{"a":1}`}, json.RawMessage(`{"a":2}`)))
 
 	var row DbDevice
 	require.NoError(t, db.First(&row, 1).Error)

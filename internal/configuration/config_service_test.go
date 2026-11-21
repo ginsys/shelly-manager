@@ -161,7 +161,7 @@ func (m *mockRepository) UpdateDeviceOverrides(deviceID uint, overrides json.Raw
 	return nil
 }
 
-func (m *mockRepository) SetDeviceDesiredConfigPending(deviceID uint, config json.RawMessage) error {
+func (m *mockRepository) SetDeviceDesiredConfigPending(deviceID uint, read DesiredRead, config json.RawMessage) error {
 	if m.updateErr != nil {
 		return m.updateErr
 	}
