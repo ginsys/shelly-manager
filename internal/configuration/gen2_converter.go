@@ -193,8 +193,12 @@ func (p *readProbe) isRead(parent map[string]interface{}, key string) bool {
 	}
 	// An enabled auto timer whose delay is not a whole number above 0 has no typed value, so the flag
 	// is not read: it stays in the raw part beside its delay.
-	if key == "auto_on" || key == "auto_off" {
-		if enabled, ok := parent[key].(bool); ok && enabled && gen2AutoTimerFromDoc(parent, key) == nil {
+	// The delay of such a timer is not read either, whatever value it is changed to.
+	for _, flag := range []string{"auto_on", "auto_off"} {
+		if key != flag && key != flag+"_delay" {
+			continue
+		}
+		if enabled, ok := parent[flag].(bool); ok && enabled && gen2AutoTimerFromDoc(parent, flag) == nil {
 			return false
 		}
 	}
@@ -211,7 +215,11 @@ func (p *readProbe) isRead(parent map[string]interface{}, key string) bool {
 	case float64:
 		variants = []interface{}{v + 1}
 	case string:
-		variants = []interface{}{v + "x"}
+		// An empty string reads as unset, the same as an absent key, so it is not tried: removal decides,
+		// and an empty setting stays in the raw part with its key.
+		if v != "" {
+			variants = []interface{}{v + "x"}
+		}
 	case nil:
 		variants = []interface{}{"x", true, float64(1)}
 	}
