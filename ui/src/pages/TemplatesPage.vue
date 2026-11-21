@@ -3,6 +3,7 @@
     <div class="toolbar">
       <h1 class="title">Configuration Templates</h1>
       <div class="spacer" />
+      <router-link class="btn" to="/templates/common-settings" data-testid="common-settings-link">Common settings</router-link>
       <button class="btn primary" :disabled="busy" @click="openCreate">+ Create Template</button>
     </div>
 

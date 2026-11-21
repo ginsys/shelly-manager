@@ -40,6 +40,13 @@ export const routes: RouteRecordRaw[] = [
   },
 
   {
+    path: '/templates/common-settings',
+    name: 'template-common-settings',
+    component: () => import('../pages/CommonSettingsPage.vue'),
+    meta: { title: 'Common Settings', category: 'templates' }
+  },
+
+  {
     path: '/templates/:id',
     name: 'template-detail',
     component: () => import('../pages/TemplateDetailPage.vue'),

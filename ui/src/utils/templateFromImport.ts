@@ -1,4 +1,5 @@
 import type { ConfigSchema, SchemaProperty } from '@/api/typedConfig'
+import perDevicePaths from './perDevicePaths.json'
 import secretPaths from './secretPaths.json'
 
 // The string the server sends in place of a saved secret (internal/redact Placeholder). It is the
@@ -8,26 +9,10 @@ export const MASK = '********'
 
 // What is one device's own, so a template shared by a model or by every device must not carry it.
 // Always left out, and the dialog says so. An address mode goes with its address: "static" with no
-// address would misconfigure the device.
-const PER_DEVICE_PATHS = [
-  'system.device.name',
-  'system.device.hostname',
-  'system.device.mac',
-  'mqtt.id',
-  'mqtt.topic_prefix',
-  'auth.realm',
-  'wifi.static_ip',
-  'wifi.ipv4mode',
-  'network.eth.ip',
-  'network.eth.ipv4mode',
-  'network.wifi.sta.ip',
-  'network.wifi.sta.ipv4mode',
-  'network.wifi.ap.ssid',
-  'wifi.ap.ssid',
-  // `*` stands for any list index, so a channel keeps its id and loses its name.
-  'relay.relays.*.name',
-  'input.inputs.*.name',
-]
+// address would misconfigure the device. The list is one file that a Go test holds equal to the server's
+// own list (the common-settings route strips the same paths), and `*` stands for any list index, so a
+// channel keeps its id and loses its name.
+const PER_DEVICE_PATHS: string[] = perDevicePaths
 export const PER_DEVICE_NOTE =
   'per-device name, hostname, MAC, MQTT client id and topic prefix, access-point name, channel names and static address'
 
