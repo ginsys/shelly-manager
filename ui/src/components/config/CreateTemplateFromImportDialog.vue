@@ -74,6 +74,9 @@ const emit = defineEmits<{ close: [] }>()
 const router = useRouter()
 const reportLate = useLateFailure()
 const reportLateResult = useLateResult()
+// A save that ends after the user left the page has no form to show it in, and what the form or the answer
+// holds then (a name, field reasons) may be stale, so the app notice says only whether it went through.
+const LATE = { action: 'Create template', resource: 'Template' }
 
 const loading = ref(true)
 const loadError = ref('')
@@ -157,7 +160,7 @@ async function save() {
       config: body.value.config,
     })
     if (!alive) {
-      reportLateResult('info', `Template "${template.name}" was created.`, { action: 'Create template', resource: 'Template' })
+      reportLateResult('info', 'Template saved. Find it on the Templates page.', LATE)
       return
     }
     emit('close')
@@ -165,9 +168,7 @@ async function save() {
   } catch (e: any) {
     if (!alive) {
       // The user left the page while the save ran: the dialog is gone, so the app notice is the only place left.
-      // The notice keeps only the message, so the field reasons go into it.
-      const reasons = e instanceof TemplateSaveError ? e.fields.map((f) => `${f.path}: ${f.message}`).join('; ') : ''
-      reportLate(reasons ? new Error(`${e.message} (${reasons})`) : e, { action: 'Create template', resource: 'Template' })
+      reportLate(new Error('Template save failed. Open the Templates page to check.'), LATE)
       return
     }
     if (e instanceof TemplateSaveError) fieldErrors.value = e.fields
