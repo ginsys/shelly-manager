@@ -576,7 +576,8 @@ func (e *SyncEngine) validateRequest(request *ExportRequest, normalizePaths bool
 	if err := plugin.ValidateConfig(request.Config); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidPluginConfig, err)
 	}
-	if outputPath, ok := request.Config["output_path"].(string); ok && outputPath != "" {
+	// The backup plugin confines its own output_path to its own directory (see its resolveOutputDir).
+	if outputPath, ok := request.Config["output_path"].(string); ok && outputPath != "" && plugin.Info().Category != CategoryBackup {
 		validated, err := e.validateOutputPath(outputPath)
 		if err != nil {
 			return nil, fmt.Errorf("%w: output_path: %v", ErrInvalidExportPath, err)
