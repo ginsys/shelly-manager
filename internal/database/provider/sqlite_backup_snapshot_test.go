@@ -2,9 +2,12 @@ package provider
 
 import (
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -119,6 +122,20 @@ func readLastWrite(t *testing.T, path string) string {
 	return last
 }
 
+// createBackupFile does what the backup plugin does: it creates the file at dst (and its directory) and
+// hands it to CreateBackup as Output. The provider never creates the file itself.
+func createBackupFile(ctx context.Context, p *SQLiteProvider, dst string) (*BackupResult, error) {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.Create(dst)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return p.CreateBackup(ctx, BackupConfig{BackupPath: dst, BackupType: BackupTypeFull, Output: f})
+}
+
 func TestCreateBackupIncludesUncheckpointedWAL(t *testing.T) {
 	for _, ext := range []string{".sqlite", ".gz", ".zip"} {
 		t.Run(ext, func(t *testing.T) {
@@ -127,12 +144,20 @@ func TestCreateBackupIncludesUncheckpointedWAL(t *testing.T) {
 			p := walProvider(t, live)
 
 			dst := filepath.Join(dir, "backups", "backup"+ext)
-			res, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: dst, BackupType: BackupTypeFull})
+			res, err := createBackupFile(context.Background(), p, dst)
 			if err != nil || !res.Success {
 				t.Fatalf("CreateBackup: %v %+v", err, res)
 			}
 			if res.BackupPath != dst || res.Size == 0 || res.Checksum == "" {
 				t.Fatalf("BackupResult = %+v", res)
+			}
+			// The result describes the finished file: its size and its SHA-256.
+			written, err := os.ReadFile(dst)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Size != int64(len(written)) || res.Checksum != fmt.Sprintf("%x", sha256.Sum256(written)) {
+				t.Fatalf("result size %d checksum %s; the file has %d bytes, sha256 %x", res.Size, res.Checksum, len(written), sha256.Sum256(written))
 			}
 			if got := readLastWrite(t, unpack(t, dst, "live.db")); got != lastWriteValue {
 				t.Fatalf("the backup's last note = %q, want %q", got, lastWriteValue)
@@ -149,19 +174,17 @@ func TestCreateBackupSnapshotFailureLeavesNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	dst := filepath.Join(dir, "backups", "backup.sqlite")
-	if _, err := p.CreateBackup(ctx, BackupConfig{BackupPath: dst, BackupType: BackupTypeFull}); !errors.Is(err, context.Canceled) {
+	var out bytes.Buffer
+	if _, err := p.CreateBackup(ctx, BackupConfig{BackupPath: dst, BackupType: BackupTypeFull, Output: &out}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("CreateBackup error = %v, want context.Canceled", err)
 	}
-	if _, err := os.Stat(dst); !os.IsNotExist(err) {
-		t.Fatalf("a failed snapshot left the destination behind (stat err %v)", err)
+	if out.Len() != 0 {
+		t.Fatalf("a failed snapshot wrote %d bytes to the output", out.Len())
 	}
-	entries, err := os.ReadDir(filepath.Dir(dst))
-	if err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Dir(dst)); !os.IsNotExist(err) {
+		t.Fatalf("the provider created the destination directory (stat err %v)", err)
 	}
-	if len(entries) != 0 {
-		t.Fatalf("a failed snapshot left %d entries beside the destination, first %q", len(entries), entries[0].Name())
-	}
+	assertNoSnapshotDir(t, dir)
 	var n int64
 	if err := p.GetDB().Raw("SELECT count(*) FROM notes").Scan(&n).Error; err != nil || n != 2 {
 		t.Fatalf("live database after the failure: %d notes, err %v; want 2", n, err)
@@ -175,9 +198,10 @@ func TestCreateBackupRefusesDotDotBeforeCreatingAnything(t *testing.T) {
 	// filepath.Join would clean the ".." away, so the path is built by hand.
 	dst := dir + string(filepath.Separator) + "outer" + string(filepath.Separator) + ".." +
 		string(filepath.Separator) + "inner" + string(filepath.Separator) + "backup.sqlite"
-	if _, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: dst, BackupType: BackupTypeFull}); err == nil {
+	if _, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: dst, BackupType: BackupTypeFull, Output: io.Discard}); err == nil {
 		t.Fatal("CreateBackup accepted a path with a .. component")
 	}
+	assertNoSnapshotDir(t, dir)
 	for _, name := range []string{"outer", "inner"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
 			t.Fatalf("a refused path still created %q (stat err %v)", name, err)
@@ -194,7 +218,7 @@ func TestCreateBackupReturnsThePathAsGiven(t *testing.T) {
 	t.Chdir(dir)
 
 	const given = "./backup.sqlite"
-	res, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: given, BackupType: BackupTypeFull})
+	res, err := createBackupFile(context.Background(), p, given)
 	if err != nil || !res.Success {
 		t.Fatalf("CreateBackup: %v %+v", err, res)
 	}
@@ -215,7 +239,7 @@ func TestCreateBackupPathWithQuote(t *testing.T) {
 	p := walProvider(t, live)
 
 	dst := filepath.Join(dir, `it's "quoted"`, "backup.sqlite")
-	if res, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: dst, BackupType: BackupTypeFull}); err != nil || !res.Success {
+	if res, err := createBackupFile(context.Background(), p, dst); err != nil || !res.Success {
 		t.Fatalf("CreateBackup: %v %+v", err, res)
 	}
 	if got := readLastWrite(t, dst); got != lastWriteValue {
@@ -227,5 +251,85 @@ func TestCreateBackupPathWithQuote(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("the backup directory holds %d entries, want only the backup", len(entries))
+	}
+}
+
+// writerFunc is an io.Writer made of a function.
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(b []byte) (int, error) { return f(b) }
+
+// assertNoSnapshotDir fails when a ".backup-*" snapshot directory is left in dir.
+func assertNoSnapshotDir(t *testing.T, dir string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".backup-") {
+			t.Fatalf("a snapshot directory %q was left in %s", e.Name(), dir)
+		}
+	}
+}
+
+// ginsys/shelly-manager#815: the finished file reaches the caller's Output, never a path. The snapshot
+// (VACUUM INTO takes a path, so it cannot be rooted) goes in a private directory beside the live database
+// file, not beside BackupPath, where a link in the export directory could redirect it. BackupPath's
+// directory does not exist here: a provider that created or used it would fail or create it.
+func TestCreateBackupWritesOnlyToOutputAndSnapshotsBesideTheLiveFile(t *testing.T) {
+	for _, ext := range []string{".sqlite", ".gz", ".zip"} {
+		t.Run(ext, func(t *testing.T) {
+			dir := t.TempDir()
+			live := filepath.Join(dir, "data", "live.db")
+			p := walProvider(t, live)
+
+			dst := filepath.Join(dir, "export", "backup"+ext)
+			// The first write to Output comes after the snapshot is made and before it is removed: the snapshot
+			// directory must be beside the live file then.
+			var out bytes.Buffer
+			var snapshots []string
+			seen := false
+			output := writerFunc(func(b []byte) (int, error) {
+				if !seen {
+					seen = true
+					snapshots, _ = filepath.Glob(filepath.Join(filepath.Dir(live), ".backup-*"))
+				}
+				return out.Write(b)
+			})
+			res, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: dst, BackupType: BackupTypeFull, Output: output})
+			if err != nil || !res.Success {
+				t.Fatalf("CreateBackup: %v %+v", err, res)
+			}
+			if len(snapshots) != 1 {
+				t.Fatalf("snapshot directories beside the live file while the backup was written: %v, want exactly one", snapshots)
+			}
+			if _, err := os.Stat(filepath.Dir(dst)); !os.IsNotExist(err) {
+				t.Fatalf("the provider created or used the BackupPath directory (stat err %v)", err)
+			}
+			if res.Size != int64(out.Len()) || res.Checksum != fmt.Sprintf("%x", sha256.Sum256(out.Bytes())) {
+				t.Fatalf("result size %d checksum %s; the output has %d bytes, sha256 %x", res.Size, res.Checksum, out.Len(), sha256.Sum256(out.Bytes()))
+			}
+			assertNoSnapshotDir(t, filepath.Dir(live))
+
+			finished := filepath.Join(t.TempDir(), "backup"+ext)
+			if err := os.WriteFile(finished, out.Bytes(), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := readLastWrite(t, unpack(t, finished, "live.db")); got != lastWriteValue {
+				t.Fatalf("the backup's last note = %q, want %q", got, lastWriteValue)
+			}
+		})
+	}
+}
+
+func TestCreateBackupRefusesANilOutput(t *testing.T) {
+	dir := t.TempDir()
+	p := walProvider(t, filepath.Join(dir, "live.db"))
+	if _, err := p.CreateBackup(context.Background(), BackupConfig{BackupPath: filepath.Join(dir, "b.sqlite"), BackupType: BackupTypeFull}); err == nil {
+		t.Fatal("CreateBackup went ahead without an output")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "b.sqlite")); !os.IsNotExist(err) {
+		t.Fatalf("a refused backup created a file (stat err %v)", err)
 	}
 }

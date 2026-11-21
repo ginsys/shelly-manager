@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -158,7 +159,12 @@ type BackupProvider interface {
 
 // BackupConfig defines backup operation configuration
 type BackupConfig struct {
-	BackupPath    string            `json:"backup_path"`
+	// BackupPath names the backup file and picks its format by extension (.gz, .zip, else plain). It is
+	// returned as given. Nothing is created from it: the finished file goes to Output.
+	BackupPath string `json:"backup_path"`
+	// Output receives the finished file. The caller opens it, for example through an os.Root, so that
+	// the provider never writes the file by path. Required.
+	Output        io.Writer         `json:"-"`
 	BackupType    BackupType        `json:"backup_type"`
 	Compression   bool              `json:"compression"`
 	Encryption    bool              `json:"encryption"`

@@ -33,7 +33,14 @@ func liveBackup(t *testing.T) (plugin *BackupPlugin, livePath, backupPath string
 	if err := db.Exec("INSERT INTO notes (v) VALUES ('before the backup')").Error; err != nil {
 		t.Fatal(err)
 	}
-	res, err := p.CreateBackup(context.Background(), provider.BackupConfig{BackupPath: backupPath, BackupType: provider.BackupTypeFull})
+	out, err := os.Create(backupPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := p.CreateBackup(context.Background(), provider.BackupConfig{BackupPath: backupPath, BackupType: provider.BackupTypeFull, Output: out})
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
 	if err != nil || !res.Success {
 		t.Fatalf("CreateBackup: %v %+v", err, res)
 	}
