@@ -94,7 +94,7 @@
 
         <div class="modal-actions">
           <button class="btn" data-testid="rollback-cancel" :disabled="busy" @click="closeDialog">Cancel</button>
-          <button class="btn primary" data-testid="rollback-confirm" :disabled="busy" @click="confirm">
+          <button class="btn primary" data-testid="rollback-confirm" :disabled="busy || editing" @click="confirm">
             {{ prompt.length > 0 ? 'Retry with these secrets' : 'Roll back' }}
           </button>
         </div>
@@ -204,6 +204,11 @@ function collect(): { secrets?: RollbackSecrets; missing: string[] } {
 async function confirm() {
   const version = target.value
   if (busy.value || !version) return
+  // The dialog does not trap the keyboard, so the editor can be opened behind it after the dialog opened.
+  if (props.editing) {
+    refusal.value = { message: 'Save or cancel the overrides edit first: a rollback replaces the overrides.', paths: [] }
+    return
+  }
   const { secrets, missing } = collect()
   if (missing.length > 0) {
     refusal.value = { message: `Enter a value for every listed path: ${missing.join(', ')}.`, paths: [] }
