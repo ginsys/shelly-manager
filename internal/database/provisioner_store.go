@@ -162,6 +162,27 @@ func (s *ProvisionerStore) lockAgent(tx *gorm.DB, actor ProvisionerActor, want s
 	return &agent, nil
 }
 
+// insertThenLock writes row unless a row already has its id, and returns the row that holds the id, locked,
+// and whether this call wrote it. Insert first: a SELECT ... FOR UPDATE of a missing key takes a gap lock on
+// InnoDB, and two replicas registering one new id would deadlock on it. Whether the insert took is read from
+// the locked row and not from the affected-row count, which MySQL reports as 1 for the no-op of an existing
+// id when the DSN sets clientFoundRows: the token hash is new and random, so the row holds row's hash only if
+// this insert wrote it. When the insert did nothing because another unique index holds a value of row, and
+// no row has the id, the read is gorm.ErrRecordNotFound.
+func (s *ProvisionerStore) insertThenLock(tx *gorm.DB, row *ProvisionerAgent) (ProvisionerAgent, bool, error) {
+	var cur ProvisionerAgent
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error; err != nil {
+		return cur, false, err
+	}
+	if err := tx.Clauses(forUpdate()).Where("agent_id = ?", row.AgentID).First(&cur).Error; err != nil {
+		return cur, false, err
+	}
+	if s.afterLock != nil {
+		s.afterLock()
+	}
+	return cur, cur.TokenHash == row.TokenHash, nil
+}
+
 // RegisterAgent stores agent (its AgentID, TokenHash, LastSeen and RegisteredAt set by the caller), or
 // replaces the token and details of the agent that holds the id. An id that is online belongs to the
 // agent that holds its token: unless the actor is privileged, or holds the current token, or the agent
@@ -175,22 +196,11 @@ func (s *ProvisionerStore) RegisterAgent(ctx context.Context, actor ProvisionerA
 		// A keyless register writes a legacy row, whatever the caller put in the state.
 		legacy := EnrolmentLegacy
 		agent.EnrolmentState = &legacy
-		// Insert first: a SELECT ... FOR UPDATE of a missing key takes a gap lock on InnoDB, and two
-		// replicas registering one new id would deadlock on it. Whether the insert took is read from the
-		// locked row and not from the affected-row count, which MySQL reports as 1 for the no-op of an
-		// existing id when the DSN sets clientFoundRows.
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&agent).Error; err != nil {
+		cur, wrote, err := s.insertThenLock(tx, &agent)
+		if err != nil {
 			return err
 		}
-		cur := ProvisionerAgent{}
-		if err := tx.Clauses(forUpdate()).Where("agent_id = ?", agent.AgentID).First(&cur).Error; err != nil {
-			return err
-		}
-		if s.afterLock != nil {
-			s.afterLock()
-		}
-		// The token is new and random, so the row holds its hash only if this insert wrote the row.
-		if cur.TokenHash == agent.TokenHash {
+		if wrote {
 			// A new row is checked here, inside the transaction, so a refusal rolls the insert back.
 			if !validNewAgentID(agent.AgentID) {
 				return ErrAgentIDInvalid

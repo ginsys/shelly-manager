@@ -4273,26 +4273,63 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProvisionerAgent'
+              allOf:
+                - $ref: '#/components/schemas/ProvisionerAgent'
+                - type: object
+                  properties:
+                    public_key:
+                      type: string
+                      pattern: '^[0-9a-f]{64}$'
+                      description: >-
+                        The agent's Ed25519 public key, 32 bytes as lowercase hexadecimal. Makes the request a keyed
+                        register: `id` must then be `key-` and the fingerprint of this key.
+                    signature:
+                      type: string
+                      pattern: '^[0-9a-f]{128}$'
+                      description: >-
+                        Ed25519 signature, as lowercase hexadecimal, over the ASCII text `shelly-manager provisioner
+                        register v1`, a zero byte, the agent id, a zero byte and the 32 decoded bytes of the
+                        challenge the manager last gave this agent. Omit it to ask for a challenge.
       responses:
+        '200':
+          description: >-
+            A keyed register that issued no token. `data.status` is `pending` (the row waits for the operator),
+            `challenge` (the row is approved or preapproved: `data.challenge` is 64 hexadecimal characters, valid
+            60 seconds, to sign and send back) or `rejected`. `data` also has `agent_id`, the readable
+            `fingerprint` and a `message`; it never carries a token or a key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIResponse'
         '201':
           description: >-
             Agent registered. `data.agent_token` is the agent's own token, sent as `X-Agent-Token` on poll, task
-            status and report. A new registration of the same id replaces it.
+            status and report. A new registration of the same id replaces it. A keyed register gets it only with a
+            good signature, and `data` then also has `agent_id`, `registered_at` and `status`.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
         '400':
           description: >-
-            The id is refused. Either it starts with `key-` in any case (that prefix is reserved for agents enrolled
-            by key), or it would create a new agent and holds a space or a byte outside printable ASCII (`0x21` to
-            `0x7E`) without starting with `provisioner-`. No agent is created.
+            The request is refused. Either the id starts with `key-` in any case without a public key (that prefix
+            is reserved for agents enrolled by key), or it would create a new agent and holds a space or a byte
+            outside printable ASCII (`0x21` to `0x7E`) without starting with `provisioner-`, or a keyed register
+            has a `public_key` or `signature` of the wrong length, upper case or not hexadecimal, or an id that the
+            key does not derive. No agent is created.
+        '401':
+          description: >-
+            A signed register with no stored challenge, an expired or already used one, a key that is not the
+            row's, or a signature that does not verify. Nothing is written, and a bad signature does not spend the
+            challenge.
         '409':
           description: >-
             The id is online (seen within 5 minutes) and the request carries neither that agent's token nor the
             admin key, or the id belongs to an agent enrolled by key (any state but legacy), which no keyless
-            register replaces, the admin key included.
+            register replaces, the admin key included. A keyed register that finds a `legacy` row at its id is a
+            `409` too.
+        '429':
+          description: A keyed register of a new key while 20 agents already wait for the operator. No row is created.
 
   /api/v1/provisioner/agents/{id}/tasks:
     get:

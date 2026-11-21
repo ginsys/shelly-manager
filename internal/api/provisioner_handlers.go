@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -105,6 +107,12 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "Agent id belongs to an agent enrolled by key", nil)
 	case errors.Is(err, database.ErrEnrolmentState):
 		h.responseWriter().WriteError(w, r, http.StatusConflict, apiresp.ErrCodeConflict, "The agent's enrolment state does not allow this", nil)
+	case errors.Is(err, database.ErrPendingCapReached):
+		h.responseWriter().WriteError(w, r, http.StatusTooManyRequests, apiresp.ErrCodeRateLimitExceeded, "Too many agents wait for approval: the operator must decide some first", nil)
+	case errors.Is(err, database.ErrChallengeFailed):
+		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "The challenge is missing or expired, or the signature does not verify: register again without a signature", nil)
+	case errors.Is(err, database.ErrKeyFormat):
+		h.responseWriter().WriteValidationError(w, r, "public_key must be 32 bytes and signature 64 bytes")
 	case errors.Is(err, database.ErrFingerprintInvalid):
 		h.responseWriter().WriteValidationError(w, r, "A fingerprint is 32 hexadecimal characters, or eight groups of four joined by hyphens")
 	case errors.Is(err, database.ErrAgentIDInvalid):
@@ -120,6 +128,90 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// registerClientIP is the address a register reports for the agent.
+func registerClientIP(r *http.Request) string {
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.Header.Get("X-Real-IP")
+	}
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+	}
+	return clientIP
+}
+
+// registryPendingCap is the most agents that may wait for the operator at once. A register of a new key at the
+// cap is a 429. The count and the insert are separate statements, so concurrent registers can overshoot it.
+const registryPendingCap = 20
+
+// decodeLowerHex decodes exactly n bytes written as lowercase hexadecimal: any other length, any non-hex
+// character and any upper case is refused, so each value has one spelling.
+func decodeLowerHex(s string, n int) ([]byte, bool) {
+	if len(s) != 2*n || s != strings.ToLower(s) {
+		return nil, false
+	}
+	b, err := hex.DecodeString(s)
+	return b, err == nil
+}
+
+// registerKeyed handles a register that carries a public key, signed or not. It checks the format of both
+// fields and that the id is the one the key derives before it reads any row, so the store never sees a key
+// of the wrong length, then answers as the note says: a 200 with status pending, challenge or rejected, or a
+// 201 with a token after a good signature.
+func (h *Handler) registerKeyed(w http.ResponseWriter, r *http.Request, id, hostname, version string, capabilities []string, metadata map[string]string, publicKey, signature string) {
+	key, ok := decodeLowerHex(publicKey, ed25519.PublicKeySize)
+	if !ok {
+		h.responseWriter().WriteValidationError(w, r, "public_key must be 64 lowercase hexadecimal characters")
+		return
+	}
+	var sig []byte
+	if signature != "" {
+		if sig, ok = decodeLowerHex(signature, ed25519.SignatureSize); !ok {
+			h.responseWriter().WriteValidationError(w, r, "signature must be 128 lowercase hexadecimal characters")
+			return
+		}
+	}
+	fingerprint := database.KeyFingerprint(key)
+	if id != database.KeyedAgentID(fingerprint) {
+		h.responseWriter().WriteValidationError(w, r, "The agent id must be the one derived from the public key")
+		return
+	}
+	token, err := newAgentToken()
+	if err != nil {
+		h.responseWriter().WriteInternalError(w, r, err)
+		return
+	}
+	res, err := h.provisionerStore().RegisterKeyed(r.Context(), database.KeyedRegistration{
+		PublicKey: key, Signature: sig, PendingCap: registryPendingCap,
+		Details: database.ProvisionerAgent{
+			TokenHash: database.HashAgentToken(token), Hostname: hostname, IP: registerClientIP(r), Version: version,
+			Capabilities: capabilities, Metadata: metadata,
+		},
+	}, time.Now())
+	if err != nil {
+		h.writeProvisionerError(w, r, err)
+		return
+	}
+	h.logger.WithFields(map[string]any{"agent_id": id, "outcome": string(res.Outcome), "hostname": hostname}).Info("Keyed provisioning agent registered")
+
+	body := map[string]any{"status": string(res.Outcome), "agent_id": id, "fingerprint": database.FormatFingerprint(fingerprint)}
+	switch res.Outcome {
+	case database.OutcomeRegistered:
+		body["agent_token"], body["registered_at"], body["status"], body["message"] = token, res.Agent.RegisteredAt, "registered", "Agent registered successfully"
+		h.responseWriter().WriteCreated(w, r, body)
+	case database.OutcomeChallenge:
+		body["challenge"], body["message"] = res.Challenge, "Sign the challenge with the agent key and register again within 60 seconds"
+		h.responseWriter().WriteSuccess(w, r, body)
+	case database.OutcomeRejected:
+		body["message"] = "The operator rejected this key"
+		h.responseWriter().WriteSuccess(w, r, body)
+	default:
+		body["message"] = "Waiting for the operator to approve this fingerprint"
+		h.responseWriter().WriteSuccess(w, r, body)
+	}
+	h.purgeRegistryIfDue(r.Context())
+}
+
 // RegisterAgent handles POST /api/v1/provisioner/agents/register
 func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -128,6 +220,8 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		Version      string            `json:"version,omitempty"`
 		Capabilities []string          `json:"capabilities,omitempty"`
 		Metadata     map[string]string `json:"metadata,omitempty"`
+		PublicKey    string            `json:"public_key,omitempty"`
+		Signature    string            `json:"signature,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -143,6 +237,10 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	if h.tooLongForRegistry(w, r, "Agent id", req.ID) {
 		return
 	}
+	if req.PublicKey != "" || req.Signature != "" {
+		h.registerKeyed(w, r, req.ID, req.Hostname, req.Version, req.Capabilities, req.Metadata, req.PublicKey, req.Signature)
+		return
+	}
 	// "key-" is the prefix of an id derived from an agent's key, in any case. A keyless agent never
 	// gets such an id, so a key's id is never held by somebody else first.
 	if hasKeyPrefix(req.ID) {
@@ -150,14 +248,7 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get client IP
-	clientIP := r.Header.Get("X-Forwarded-For")
-	if clientIP == "" {
-		clientIP = r.Header.Get("X-Real-IP")
-	}
-	if clientIP == "" {
-		clientIP = r.RemoteAddr
-	}
+	clientIP := registerClientIP(r)
 
 	token, err := newAgentToken()
 	if err != nil {
