@@ -14,6 +14,25 @@ func TestIsSensitiveField_CoversTheActionURLKey(t *testing.T) {
 	}
 }
 
+// An empty URL list is the explicit clear. It holds no secret, and a placeholder in its place would
+// import as the destination's stored URLs, or as no setting at all.
+func TestRedactSensitive_KeepsAnEmptyActionURLList(t *testing.T) {
+	var tree map[string]interface{}
+	if err := json.Unmarshal([]byte(`{"actions":[{"name":"btn_on_url","index":0,"secret_urls":[]}]}`), &tree); err != nil {
+		t.Fatal(err)
+	}
+
+	redactSensitive(tree, (&SMAPlugin{}).isSensitiveField)
+
+	raw, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"secret_urls":[]`) {
+		t.Errorf("the clear did not survive the export: %s", raw)
+	}
+}
+
 // The export's own tree walk replaces the URL list of every action, whatever the list holds.
 func TestRedactSensitive_HidesActionURLLists(t *testing.T) {
 	const doc = `{"actions":[` +

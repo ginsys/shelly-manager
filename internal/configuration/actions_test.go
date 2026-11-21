@@ -329,6 +329,45 @@ func TestApplyActions_AWriteErrorFailsEveryKeyAndHidesTheURL(t *testing.T) {
 	assert.NotContains(t, string(raw), "s3cr3t")
 }
 
+// A device can echo what it was sent in its own shape (form-encoded, percent-encoded, cut), which
+// no replacement of the exact URL finds. So while a write carries a URL the device's text is not
+// shown at all.
+func TestApplyActions_ADeviceAnswerThatEchoesTheURLInAnotherShapeIsWithheld(t *testing.T) {
+	echoes := map[string]string{
+		"percent-encoded": "bad value http%3A%2F%2Fadmin%3Ahunter2%40192.168.1.4%2Fon%3Ftoken%3Ds3cr3t",
+		"form-encoded":    "urls[]=http%3A//admin:hunter2@192.168.1.4/on%3Ftoken%3Ds3cr3t",
+		"cut":             "url too long: http://admin:hunter2@192.168.1.4/o",
+	}
+	for name, text := range echoes {
+		client := newActionApplyClient()
+		client.setErr = errors.New(text)
+		applier := NewConfigApplier(NewGen1Converter(nil), nil)
+
+		result, err := applier.ApplyConfig(context.Background(), client, actionsConfig(actionEntry("btn_on_url", 0, secretActionURL)), "SHSW-1")
+
+		require.NoError(t, err, name)
+		assert.False(t, result.Success, name)
+		require.NotEmpty(t, result.Failures, name)
+		raw, marshalErr := json.Marshal(result)
+		require.NoError(t, marshalErr)
+		for _, secret := range []string{"hunter2", "s3cr3t"} {
+			assert.NotContains(t, string(raw), secret, "%s: the apply result carries a URL secret", name)
+		}
+	}
+}
+
+func TestHideActionURLs_WithholdsTheTextOnlyWhereAURLWasSent(t *testing.T) {
+	cause := errors.New("device said hunter2")
+	withURL := actionEntry("btn_on_url", 0, secretActionURL)
+
+	hidden := hideActionURLs(cause, withURL)
+
+	assert.NotContains(t, hidden.Error(), "hunter2")
+	assert.ErrorIs(t, hidden, cause, "the cause stays reachable for callers that test its class")
+	assert.Same(t, cause, hideActionURLs(cause, actionEntry("btn_on_url", 0)), "a clear sends no URL, so its error is shown as it is")
+	assert.Same(t, cause, hideActionURLs(cause, ActionConfig{Name: "btn_on_url", Enabled: BoolPtr(true)}), "an entry with no list sends no URL")
+}
+
 func TestApplyActions_AReadBackErrorFailsTheEntry(t *testing.T) {
 	client := newActionApplyClient()
 	client.getErr = errors.New("timeout")

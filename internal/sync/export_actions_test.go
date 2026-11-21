@@ -8,6 +8,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// An empty URL list is the explicit clear: it holds no secret and an export keeps it as it is.
+func TestMaskExportSecrets_KeepsAnEmptyActionURLList(t *testing.T) {
+	data := &ExportData{Configurations: []ConfigurationData{{
+		DeviceID: 1,
+		Config: map[string]interface{}{"actions": []interface{}{
+			map[string]interface{}{"name": "btn_on_url", "index": float64(0), "secret_urls": []interface{}{}},
+		}},
+	}}}
+
+	maskExportSecrets(data, map[string]interface{}{})
+
+	raw, err := json.Marshal(data.Configurations[0].Config)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"actions":[{"name":"btn_on_url","index":0,"secret_urls":[]}]}`, string(raw))
+}
+
 // An export hands the saved device configuration to a plugin. A Gen1 action URL can hold a
 // password or a token, so the export masks every URL of every action (ginsys/shelly-manager#381).
 func TestMaskExportSecrets_MasksActionURLs(t *testing.T) {

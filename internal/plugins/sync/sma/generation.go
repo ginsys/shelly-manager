@@ -514,6 +514,11 @@ func redactSensitive(value interface{}, sensitive func(string) bool) {
 	switch current := value.(type) {
 	case map[string]interface{}:
 		for key, child := range current {
+			if list, isList := child.([]interface{}); isList && len(list) == 0 && sensitive(key) {
+				// An empty list holds no secret. For a Gen1 action's URLs it is the explicit clear,
+				// and a placeholder in its place would import as someone else's stored list.
+				continue
+			}
 			if sensitive(key) {
 				current[key] = sync.RedactedValue
 			} else {
