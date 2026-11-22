@@ -2028,7 +2028,7 @@ paths:
         (read with one Eth.GetStatus call beside the one Shelly.GetConfig) or when the manager
         cannot prove that it does not: it is allowed only where the device has no Ethernet address
         or the address the manager uses is the Wi-Fi station address (WiFi.GetStatus sta_ip). When it is applied together with a change of the Wi-Fi
-        network, when the device runs Ethernet in server mode, and when a static address has no
+        network or a station password, when the device runs Ethernet in server mode, and when a static address has no
         address or no gateway, desired or already set (the Shelly page does not require a gateway:
         that rule is the manager's own). The strand behaviour, the restart time and Bluetooth
         pairing (firmware 2.0.0 and later) are not confirmed on hardware. A Gen1 word of the

@@ -269,7 +269,7 @@ func refuseEthernet(ctx context.Context, client ShellyClient, doc, apiConfig map
 		return changed, nil
 	}
 	if stationMoves {
-		return false, refuse(moves, "an Ethernet change cannot be applied together with a change of the Wi-Fi network; apply them one at a time")
+		return false, refuse(moves, "an Ethernet change cannot be applied together with a change of the Wi-Fi network or a station password; apply them one at a time")
 	}
 	cannotTell := func(why string) error {
 		return refuse(moves, "the manager cannot tell whether it reaches the device over Ethernet ("+why+")")
