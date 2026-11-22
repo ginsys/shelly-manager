@@ -1,0 +1,5 @@
+# Only this Dockerfile reads this file (the Go stage keeps its whole context, .git included).
+# A host ui/node_modules holds native bindings built for the host and would be copied over the
+# image's own `npm ci` result in the ui stage; a host ui/dist is stale output.
+ui/node_modules
+ui/dist

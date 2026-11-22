@@ -1,3 +1,21 @@
+# Build the web UI once, on the build host: the output is plain files, the same for every platform.
+# deploy/docker/Dockerfile.manager.dockerignore keeps a host ui/node_modules out of this stage.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS ui
+
+WORKDIR /ui
+
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+
+COPY ui/ ./
+# The output is staged as /out/ui/dist and made read-only here: COPY keeps a source directory's mode only for
+# the directories it copies inside the source, never for the destination directory itself.
+RUN npm run build \
+    && mkdir -p /out/ui \
+    && mv dist /out/ui/dist \
+    && find /out/ui/dist -type d -exec chmod 555 {} + \
+    && find /out/ui/dist -type f -exec chmod 444 {} +
+
 FROM golang:1.27-alpine AS builder
 
 WORKDIR /app
@@ -41,6 +59,9 @@ COPY --from=builder /app/shelly-manager ./shelly-manager
 
 # Legacy web folder removed in Phase 8 (new SPA under ui/)
 COPY --chown=shellyuser:shellyuser configs/ ./configs/
+
+# The web UI the server serves from ./ui/dist (read-only for the user: the modes come from the ui stage)
+COPY --from=ui --chown=shellyuser:shellyuser /out/ ./
 
 # Switch to non-root user
 USER shellyuser
