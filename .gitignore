@@ -32,6 +32,8 @@ go.work
 # Config files with secrets
 config.local.yml
 .env.local
+# The env files an operator makes from the tracked .env.example files
+.env
 
 # Data directory
 data/
