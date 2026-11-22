@@ -521,6 +521,44 @@ describe('DeviceConfigPage landing at the History card', () => {
     expect(scrolled).toHaveBeenCalledTimes(1)
   })
 
+  it('does not wait for a read of the device that went, for the history or the stored import', async () => {
+    let releaseHistory: (rows: unknown) => void = () => {}
+    let releaseStored: (row: unknown) => void = () => {}
+    vi.mocked(getConfigHistory).mockReturnValueOnce(new Promise((resolve) => (releaseHistory = resolve)) as any)
+    vi.mocked(getStoredDeviceConfig).mockReturnValueOnce(new Promise((resolve) => (releaseStored = resolve)) as any)
+    const { router } = await mountPage('7', '#history-card')
+    expect(scrolled).not.toHaveBeenCalled()
+
+    await router.push('/devices/8/config#history-card')
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1) // device 8 answered at once; device 7 is still pending
+
+    releaseHistory([])
+    releaseStored(null)
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not count the end of a read of the device that went as the end of a read of the next one', async () => {
+    let releaseOld: (rows: unknown) => void = () => {}
+    let releaseNew: (rows: unknown) => void = () => {}
+    vi.mocked(getConfigHistory)
+      .mockReturnValueOnce(new Promise((resolve) => (releaseOld = resolve)) as any)
+      .mockReturnValueOnce(new Promise((resolve) => (releaseNew = resolve)) as any)
+    const { router } = await mountPage('7', '#history-card')
+    await router.push('/devices/8/config#history-card')
+    await flushPromises()
+    expect(scrolled).not.toHaveBeenCalled() // device 8's history is pending
+
+    releaseOld([])
+    await flushPromises()
+    expect(scrolled).not.toHaveBeenCalled()
+
+    releaseNew([])
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
   it('does not move once the hash was dropped while a read was pending', async () => {
     let release: (rows: unknown) => void = () => {}
     vi.mocked(getConfigHistory).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
