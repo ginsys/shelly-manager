@@ -602,3 +602,51 @@ func containsAt(s, substr string) bool {
 	}
 	return false
 }
+
+func TestAgentEnrolment_DefaultsToOpenAndTakesTheEnvironment(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "enrol.yaml")
+	if err := os.WriteFile(configPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Security.AgentEnrolment != EnrolmentOpen {
+		t.Errorf("security.agent_enrolment = %q, want %q by default", cfg.Security.AgentEnrolment, EnrolmentOpen)
+	}
+	if err = cfg.ValidateAgentEnrolment(); err != nil {
+		t.Errorf("the default must start with no admin key: %v", err)
+	}
+
+	t.Setenv("SHELLY_SECURITY_AGENT_ENROLMENT", "strict")
+	cfg, err = Load(configPath)
+	if err != nil {
+		t.Fatalf("Load with env: %v", err)
+	}
+	if cfg.Security.AgentEnrolment != EnrolmentStrict {
+		t.Errorf("SHELLY_SECURITY_AGENT_ENROLMENT=strict gave %q", cfg.Security.AgentEnrolment)
+	}
+}
+
+func TestValidateAgentEnrolment(t *testing.T) {
+	cases := []struct {
+		name, mode, adminKey string
+		wantErr              bool
+	}{
+		{"open, no admin key", EnrolmentOpen, "", false},
+		{"open, admin key", EnrolmentOpen, "k", false},
+		{"strict, admin key", EnrolmentStrict, "k", false},
+		{"strict, no admin key", EnrolmentStrict, "", true},
+		{"empty value", "", "k", true},
+		{"another case", "Strict", "k", true},
+		{"another word", "closed", "k", true},
+	}
+	for _, c := range cases {
+		var cfg Config
+		cfg.Security.AgentEnrolment, cfg.Security.AdminAPIKey = c.mode, c.adminKey
+		if err := cfg.ValidateAgentEnrolment(); (err != nil) != c.wantErr {
+			t.Errorf("%s: error = %v, want error %v", c.name, err, c.wantErr)
+		}
+	}
+}

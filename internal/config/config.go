@@ -141,6 +141,10 @@ type Config struct {
 		// AgentAPIKey is the key the provisioner agents send. It opens the agent routes only, so a
 		// compromised agent does not hold the admin key, and rotating the admin key leaves agents working.
 		AgentAPIKey string `mapstructure:"agent_api_key"`
+		// AgentEnrolment is who may enrol a provisioner agent: EnrolmentOpen (the default) lets the agent key
+		// create a keyless agent as before, EnrolmentStrict lets in only an agent the admin key holder approved
+		// by its key. See ValidateAgentEnrolment.
+		AgentEnrolment string `mapstructure:"agent_enrolment"`
 		// Test mode to bypass security validations (for E2E testing)
 		ValidationTestMode bool `mapstructure:"validation_test_mode"`
 		// Monitoring turns the security monitor on: it counts suspicious requests, rate limit
@@ -238,6 +242,28 @@ func LoadWithName(configFile string, configName string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// The two values of security.agent_enrolment.
+const (
+	EnrolmentOpen   = "open"
+	EnrolmentStrict = "strict"
+)
+
+// ValidateAgentEnrolment stops the start on a security.agent_enrolment that is neither "open" nor "strict",
+// and on "strict" with no admin key: without an admin key every admin route is open, so anybody could approve
+// an agent and the mode would guard nothing. It runs after the secret overrides, which can supply the key.
+func (c *Config) ValidateAgentEnrolment() error {
+	switch c.Security.AgentEnrolment {
+	case EnrolmentOpen:
+		return nil
+	case EnrolmentStrict:
+		if c.Security.AdminAPIKey == "" {
+			return fmt.Errorf("security.agent_enrolment is %q, which needs an admin key (security.admin_api_key): with none, every admin route is open and anybody could approve an agent", EnrolmentStrict)
+		}
+		return nil
+	}
+	return fmt.Errorf("security.agent_enrolment is %q: it must be %q or %q", c.Security.AgentEnrolment, EnrolmentOpen, EnrolmentStrict)
 }
 
 // setDefaults sets default configuration values
@@ -357,6 +383,7 @@ func setDefaults() {
 	// Admin API key disabled by default (empty)
 	viper.SetDefault("security.admin_api_key", "")
 	viper.SetDefault("security.agent_api_key", "")
+	viper.SetDefault("security.agent_enrolment", EnrolmentOpen)
 	// Validation test mode disabled by default (security validations enabled)
 	viper.SetDefault("security.validation_test_mode", false)
 	// Security monitor and IP blocking are off until an operator turns them on. The numbers are

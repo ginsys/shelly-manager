@@ -85,12 +85,23 @@ type ProvisionerActor struct {
 // needs first, and pass a context with a deadline, so that a mistake fails instead of hanging.
 type ProvisionerStore struct {
 	db *gorm.DB
+	// strict is the manager's strict enrolment mode: the token of a row that is not approved authorizes nothing.
+	strict bool
 	// afterLock is a test hook, called once the agent row is locked.
 	afterLock func()
 }
 
 // NewProvisionerStore returns a store over db.
 func NewProvisionerStore(db *gorm.DB) *ProvisionerStore { return &ProvisionerStore{db: db} }
+
+// WithStrictEnrolment returns a store over the same database that, when strict is true, accepts the token of an
+// approved row only (see agentByToken). A legacy row, a NULL state and every other state hold a token that
+// authorizes nothing, whatever its age.
+func (s *ProvisionerStore) WithStrictEnrolment(strict bool) *ProvisionerStore {
+	c := *s
+	c.strict = strict
+	return &c
+}
 
 // HashAgentToken is the form in which a token is stored: lowercase hex SHA-256. An empty token has no hash.
 func HashAgentToken(token string) string {
@@ -112,7 +123,9 @@ func holdsToken(presented, stored string) bool {
 	return presented != "" && subtle.ConstantTimeCompare([]byte(presented), []byte(stored)) == 1
 }
 
-// agentByToken locks the agent that holds the presented token. No agent holds it: ErrUnauthorized.
+// agentByToken locks the agent that holds the presented token. No agent holds it: ErrUnauthorized. In strict
+// mode a row that is not approved is ErrUnauthorized as well, so a keyless agent from before the mode keeps no
+// way to poll, claim or report; poll, task status and report all reach here through lockAgent or directly.
 func (s *ProvisionerStore) agentByToken(tx *gorm.DB, actor ProvisionerActor) (*ProvisionerAgent, error) {
 	if actor.TokenHash == "" {
 		return nil, ErrUnauthorized
@@ -127,6 +140,9 @@ func (s *ProvisionerStore) agentByToken(tx *gorm.DB, actor ProvisionerActor) (*P
 	}
 	if s.afterLock != nil {
 		s.afterLock()
+	}
+	if s.strict && agent.State() != EnrolmentApproved {
+		return nil, ErrUnauthorized
 	}
 	return &agent, nil
 }
