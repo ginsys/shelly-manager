@@ -132,7 +132,7 @@ GET /api/v1/devices?id=1 UNION SELECT password FROM users--
 #### Blind SQL Injection
 ```sql
 -- Stacked statement
-GET /api/v1/devices?search=test'; DROP TABLE devices--
+GET /api/v1/devices?search=test%27%3B%20DROP%20TABLE%20devices--
 
 -- Detection trigger: "drop table" pattern match
 -- Response: Request refused with 400
