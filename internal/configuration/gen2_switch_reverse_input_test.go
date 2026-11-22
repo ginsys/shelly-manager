@@ -189,6 +189,26 @@ func TestApplyDesiredConfig_Gen2WritesAnUnchangedInputIDBesideAnInputMode(t *tes
 	assert.Equal(t, true, section["reverse"])
 }
 
+// A switch the device does not report has no input to compare: splitting the apply cannot help, so the
+// refusal is the missing key's, not the one-at-a-time one.
+func TestApplyDesiredConfig_Gen2AnAbsentSwitchIsRefusedForItsMissingKey(t *testing.T) {
+	svc, _ := newGen2Service(t, &DeviceConfiguration{
+		Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, InputID: IntPtr(0)}}},
+		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("flip")}}},
+	})
+	dev := fakeGen2DeviceReportingReverseAndInputID()
+	delete(dev.doc, "switch:1")
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+	assert.Contains(t, err.Error(), "relay.relays.0.input_id (input_id)")
+	assert.NotContains(t, err.Error(), "one at a time")
+	assert.Empty(t, dev.calls, "nothing is written")
+}
+
 // reverse beside an input mode is unchanged: the mode goes through the live input_id check as before.
 func TestApplyDesiredConfig_Gen2ReverseBesideAnInputModeIsWritten(t *testing.T) {
 	svc, _ := newGen2Service(t, &DeviceConfiguration{
