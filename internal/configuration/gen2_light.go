@@ -199,7 +199,8 @@ func gen2LightBounds(light *SingleLightConfig, prefix string) []string {
 	refuse("night_mode_brightness", outside(light.NightModeBrightness, 0, 100), func() { light.NightModeBrightness = nil })
 	refuse("warmup_brightness", outside(light.WarmupBrightness, 10, 100), func() { light.WarmupBrightness = nil })
 	refuse("warmup_time", outside(light.WarmupTime, 20, 1000), func() { light.WarmupTime = nil })
-	// The page gives the limits no range: only a negative one is refused, and no pair is compared.
+	// The page gives the limits no range: a negative one, or a whole-number one above 2147483647 that
+	// the read-back cannot hold (gen2WholeFromDoc, as for a switch), is refused, and no pair is compared.
 	refuse("max_power", outside(light.MaxPower, 0, math.MaxInt32), func() { light.MaxPower = nil })
 	refuse("voltage_limit", outside(light.VoltageLimit, 0, math.MaxInt32), func() { light.VoltageLimit = nil })
 	refuse("undervoltage_limit", outside(light.UndervoltageLimit, 0, math.MaxInt32), func() { light.UndervoltageLimit = nil })

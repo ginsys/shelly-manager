@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,6 +70,24 @@ func TestApplyDesiredConfig_Gen2LightLimitsRefuseOnlyANegativeValue(t *testing.T
 			assert.Equal(t, 0, dev.reads, "refused before the device was read")
 		})
 	}
+
+	// A whole-number limit above 2147483647 cannot be read back by gen2WholeFromDoc, so it is refused
+	// before any write, as a switch's is, and the one just under it is written.
+	t.Run("the largest whole limit is written, one above is refused", func(t *testing.T) {
+		svc, _ := newGen2Service(t, limitsDesired(SingleLightConfig{MaxPower: IntPtr(math.MaxInt32)}))
+		dev := fakeGen2DeviceWithLightLimits()
+		_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNDM-00100WW")
+		require.NoError(t, err)
+
+		big := math.MaxInt32 + 1
+		svc, _ = newGen2Service(t, limitsDesired(SingleLightConfig{MaxPower: IntPtr(big), VoltageLimit: IntPtr(big)}))
+		dev = fakeGen2DeviceWithLightLimits()
+		_, err = svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNDM-00100WW")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "light.lights.0.max_power")
+		assert.Contains(t, err.Error(), "light.lights.0.voltage_limit")
+		assert.Empty(t, dev.calls)
+	})
 
 	t.Run("undervoltage above voltage is written", func(t *testing.T) {
 		svc, _ := newGen2Service(t, limitsDesired(SingleLightConfig{VoltageLimit: IntPtr(100), UndervoltageLimit: IntPtr(200)}))
