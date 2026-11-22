@@ -12,8 +12,8 @@ import (
 
 // Gen2Converter converts between the stored configuration and the document that a Gen2 or later
 // device returns from Shelly.GetConfig, which is keyed by component (sys, wifi, mqtt, switch:0 and
-// so on). It reads and writes the sys, mqtt, cloud, switch and input sections, the cover:0 roller
-// and the Wi-Fi station so far: a setting of any other section has no mapping, so the round-trip
+// so on). It reads and writes the sys, mqtt, cloud, switch and input sections, the cover:0 roller,
+// the Wi-Fi station and the eth and ble.rpc of a Pro model so far: a setting of any other section has no mapping, so the round-trip
 // check in unsupportedGen2Settings refuses it before the device is touched. Each later section is added
 // together with the code that writes it.
 type Gen2Converter struct {
@@ -102,6 +102,17 @@ func (c *Gen2Converter) FromAPIConfig(apiJSON json.RawMessage, _ string) (*Devic
 	config.Relay, config.Input = gen2ChannelsFromDoc(doc)
 	config.Roller = gen2CoverFromDoc(doc)
 	config.WiFi = gen2WiFiFromDoc(doc["wifi"])
+	if eth := gen2EthFromDoc(doc[gen2EthKey]); eth != nil {
+		config.Network = &NetworkConfiguration{Ethernet: eth}
+	}
+	if ble := gen2BLEFromDoc(doc[gen2BLEKey]); ble != nil {
+		if config.System == nil {
+			config.System = &SystemConfiguration{Device: &TypedDeviceConfig{}}
+		} else if config.System.Device == nil {
+			config.System.Device = &TypedDeviceConfig{}
+		}
+		config.System.Device.BleConfig = ble
+	}
 	return config, nil
 }
 
@@ -273,6 +284,14 @@ func (c *Gen2Converter) ToAPIConfig(config *DeviceConfiguration, _ string) (json
 			doc["cloud"] = cloud
 		}
 	}
+	if config.Network != nil {
+		if eth := gen2EthToDoc(config.Network.Ethernet); len(eth) > 0 {
+			doc[gen2EthKey] = eth
+		}
+	}
+	if ble := gen2BLEToDoc(configBLE(config)); ble != nil {
+		doc[gen2BLEKey] = ble
+	}
 	gen2ChannelsToDoc(config, doc)
 	gen2CoverToDoc(config, doc)
 	if config.WiFi != nil {
@@ -281,6 +300,13 @@ func (c *Gen2Converter) ToAPIConfig(config *DeviceConfiguration, _ string) (json
 		}
 	}
 	return json.Marshal(doc)
+}
+
+func configBLE(config *DeviceConfiguration) *BLEConfig {
+	if d := configDevice(config); d != nil {
+		return d.BleConfig
+	}
+	return nil
 }
 
 func configDevice(config *DeviceConfiguration) *TypedDeviceConfig {

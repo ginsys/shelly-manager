@@ -253,6 +253,10 @@ func TestApplyRefusalsFollowPlainScalars(t *testing.T) {
 					want = []string{refusedSection(t, tc.path)}
 				}
 				assert.Equal(t, want, gen1, "a field Apply cannot write must still be refused on Gen1, naming the same section")
+				if strings.HasPrefix(tc.path, "system.device.ble.") {
+					// Gen2 writes the BLE RPC, so it also names the Gen1 BLE words by their own path.
+					want = append(want, tc.path)
+				}
 				assert.Equal(t, want, gen2, "a field Apply cannot write must still be refused on Gen2, naming the same section")
 			})
 		}

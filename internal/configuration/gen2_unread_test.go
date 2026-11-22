@@ -22,7 +22,7 @@ func TestGen2Converter_UnreadKeys(t *testing.T) {
 	}`
 	keys, err := NewGen2Converter(nil).UnreadKeys(json.RawMessage(doc))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"ble", "input:x", "modbus", "script:1", "switch", "ws"}, keys)
+	assert.Equal(t, []string{"input:x", "modbus", "script:1", "switch", "ws"}, keys, "ble is read since the Pro models' Bluetooth RPC is written")
 }
 
 func TestGen2Converter_UnreadKeysRefusesAnythingButAnObject(t *testing.T) {

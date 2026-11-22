@@ -2,7 +2,6 @@ package configuration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 )
@@ -254,7 +253,7 @@ func refuseOpenAccessPoint(ap, liveAP map[string]interface{}) error {
 // because the device wants a password with every ssid it is given. It reports whether the write
 // changes the station network. A write of the password or the name server alone reads nothing and
 // changes no network.
-func prepareWiFiStation(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}) (bool, error) {
+func prepareWiFiStation(ctx context.Context, readLive liveReader, apiConfig map[string]interface{}) (bool, error) {
 	sta := gen2WiFiStation(apiConfig)
 	ap := gen2WiFiPart(apiConfig, "ap")
 	_, apSwitched := ap["enable"].(bool)
@@ -267,12 +266,8 @@ func prepareWiFiStation(ctx context.Context, client ShellyClient, apiConfig map[
 	if !sets {
 		return false, nil
 	}
-	live, err := client.GetConfig(ctx)
+	doc, err := readLive(ctx)
 	if err != nil {
-		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the Wi-Fi settings: %w", err)}
-	}
-	var doc map[string]interface{}
-	if err = json.Unmarshal(live.Raw, &doc); err != nil {
 		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the Wi-Fi settings: %w", err)}
 	}
 	liveStation := gen2WiFiStation(doc)

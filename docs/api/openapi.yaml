@@ -2019,8 +2019,19 @@ paths:
         refuses is a failed row; the bounds are relayed from the Shelly pages and not confirmed
         on hardware), the roller of a device in cover profile
         (max_open_time, max_close_time, motor_direction, swap_inputs, input_mode, and the
-        obstacle and safety settings) with Cover.SetConfig on cover:0, and last of all the Wi-Fi station (enable,
-        ssid, password, IPv4 mode and static address) with WiFi.SetConfig. A Gen1 word of the
+        obstacle and safety settings) with Cover.SetConfig on cover:0, the Bluetooth RPC
+        (system.device.ble.rpc enable and keep_running) with BLE.SetConfig, the Ethernet of a Pro
+        model (network.eth enable, ipv4mode, ip, netmask, gw and nameserver) with Eth.SetConfig, and last of all the Wi-Fi station (enable,
+        ssid, password, IPv4 mode and static address) with WiFi.SetConfig. A device that reports no
+        eth or ble component, or a key it does not list, is refused with 422 and nothing is written.
+        An Ethernet change is refused when the manager reaches the device on its Ethernet address
+        (read with one Eth.GetStatus call beside the one Shelly.GetConfig) or when the manager
+        cannot prove that it does not: it is allowed only where the device has no Ethernet address
+        or the address the manager uses is the Wi-Fi station address (WiFi.GetStatus sta_ip). When it is applied together with a change of the Wi-Fi
+        network, when the device runs Ethernet in server mode, and when a static address has no
+        address or no gateway, desired or already set (the Shelly page does not require a gateway:
+        that rule is the manager's own). The strand behaviour, the restart time and Bluetooth
+        pairing (firmware 2.0.0 and later) are not confirmed on hardware. A Gen1 word of the
         same meaning is read as the Gen2 word (last, switch, toggle, edge). They are read back
         from Shelly.GetConfig, except the MQTT and Wi-Fi passwords, which are write-only (the
         MQTT password is sent only with a user). A Wi-Fi ssid is written only with a password,
@@ -2028,9 +2039,10 @@ paths:
         wrong static address strands the device. Only the keys the desired
         configuration sets are sent, because the Shelly documentation does not say that
         SetConfig merges. The device decides about a reboot: the apply reboots only when an
-        answer says restart_required, or a cover write changes invert_directions. It records that reboot as owed when it reads the answer,
+        answer says restart_required, a cover write changes invert_directions, or an Ethernet write
+        changes a value the device holds. It records that reboot as owed when it reads the answer,
         and a write whose answer is lost is not recorded beforehand, except a cover write that
-        changes invert_directions, which is recorded before the request. If the restart cannot be
+        changes invert_directions and an Ethernet write that changes a value, which are recorded before the request. If the restart cannot be
         recorded, the apply fails with a warning to reboot by hand. Supported Gen1 settings: name, timezone, location, eco mode,
         discoverable, the relay or roller mode of a Shelly 2.5 (system.device.mode, written first), max power, LED, MQTT (including the update period), SNTP server, cloud (the enabled flag), CoIoT (enabled, update
         period of 15 to 65535 seconds and peer), login (enable, username and password of 1 to 50
@@ -2160,7 +2172,9 @@ paths:
             an SNTP server that is not an IPv4 address or a host name, a negative MQTT update
             period, a section with no Gen1 mapping such as the debug settings, or a stored field the configuration
             model does not know. On a Gen2 or Gen3 device every section except the system, MQTT,
-            cloud, switch, input and roller settings and the Wi-Fi (station, access point, roaming), a roller on a device that reports no cover:0 (a switch profile), the
+            cloud, switch, input and roller settings, the Bluetooth RPC (system.device.ble.rpc.enable
+            and keep_running; the top-level enable, dst_addr and listen_port are refused), the
+            Ethernet (network.eth) and the Wi-Fi (station, access point, roaming), a roller on a device that reports no cover:0 (a switch profile), the
             access point key (wifi.ap.key), switching the access point off while the station is not
             steady, switching an access point on that is off with no password (unless the device
             reports it closed), switching the station off (wifi.enable false), a new

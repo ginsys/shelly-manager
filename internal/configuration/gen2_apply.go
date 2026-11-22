@@ -30,12 +30,15 @@ var gen2Sections = []struct {
 	{"sys", "Sys.SetConfig"},
 	{"mqtt", "MQTT.SetConfig"},
 	{"cloud", "Cloud.SetConfig"},
+	{gen2BLEKey, "BLE.SetConfig"},
+	{gen2EthKey, "Eth.SetConfig"},
 }
 
 // gen2ApplyKeys are the fixed top-level keys of a Gen2 config document that apply writes. The
 // channel sections switch:N and input:N are written too (gen2KeyApplies), and wifi is written last.
-// cover:0 is the one cover the stored roller maps to (gen2_cover.go).
-var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true, "wifi": true, gen2CoverKey: true}
+// cover:0 is the one cover the stored roller maps to (gen2_cover.go); eth and ble are the Pro
+// models' components (gen2_eth_ble.go).
+var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true, "wifi": true, gen2CoverKey: true, gen2EthKey: true, gen2BLEKey: true}
 
 // gen2Write is one SetConfig call of an apply: the section key, the method and its parameters.
 type gen2Write struct {
@@ -118,6 +121,8 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	wifiPaths, wifiRest := unmappedWiFiSettings(desired.WiFi)
 	unsupported = append(unsupported, wifiPaths...)
 	unsupported = append(unsupported, unmappedLoginSettings(desired.Auth, loginSupported)...)
+	unsupported = append(unsupported, unmappedEthSettings(desired.Network)...)
+	unsupported = append(unsupported, unmappedBLESettings(desired.System)...)
 	checked := *checkedChannels
 	checked.MQTT = mapped
 	checked.Roller = rollerRest
@@ -246,7 +251,8 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	if err = json.Unmarshal(apiJSON, &apiConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse API config: %w", err)
 	}
-	result.stationMoves, err = prepareWiFiStation(ctx, client, apiConfig)
+	readLive := liveReaderOf(client)
+	result.stationMoves, err = prepareWiFiStation(ctx, readLive, apiConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +265,7 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 		result.SettingsCount += len(gen2Leaves(write.key, write.body))
 	}
 
-	reversesCover, err := refuseFromLiveDevice(ctx, client, config, apiConfig)
+	owedBefore, err := refuseFromLiveDevice(ctx, client, readLive, config, apiConfig, result.stationMoves)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +279,7 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	if err = a.guardWrite(ctx); err != nil {
 		return nil, err
 	}
-	if err := a.applyGen2Sections(ctx, setter, apiConfig, result, reversesCover); err != nil {
+	if err := a.applyGen2Sections(ctx, setter, apiConfig, result, owedBefore); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
 	}
 	if err := a.applyGen2Login(ctx, client, config.Auth, result); err != nil {
@@ -300,8 +306,11 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 // refuseFromLiveDevice stops an apply, before the first write, on what only the live document can say.
 // The device is read once for every check, and only when the configuration sets an input mode, a
 // switch or input key that a device may lack, or the cover; a device that cannot be read is refused
-// too. The result says whether the cover write changes the direction (refuseUncoverableRoller).
-func refuseFromLiveDevice(ctx context.Context, client ShellyClient, config *DeviceConfiguration, apiConfig map[string]interface{}) (reversesCover bool, err error) {
+// too. The result names the sections whose write owes a restart before the request goes out, with the
+// reason: a cover that changes the direction (refuseUncoverableRoller) and an Ethernet section that
+// changes a value (refuseEthernet). Ethernet adds an Eth.GetStatus read, and a WiFi.GetStatus read when
+// the Ethernet address differs, only for a change that can move the device off the manager's address.
+func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liveReader, config *DeviceConfiguration, apiConfig map[string]interface{}, stationMoves bool) (owed map[string]string, err error) {
 	withMode := false
 	if config.Input != nil {
 		for _, in := range config.Input.Inputs {
@@ -318,8 +327,9 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, config *Devi
 	if body, ok := apiConfig[gen2CoverKey].(map[string]interface{}); ok && len(body) > 0 {
 		withCover = true
 	}
-	if !withMode && !withKeys && !withCover {
-		return false, nil
+	withEth, withBLE := len(gen2Body(apiConfig, gen2EthKey)) > 0, len(gen2Body(apiConfig, gen2BLEKey)) > 0
+	if !withMode && !withKeys && !withCover && !withEth && !withBLE {
+		return nil, nil
 	}
 
 	what := "a switch or input setting"
@@ -328,22 +338,67 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, config *Devi
 		what = "an input mode"
 	case withCover:
 		what = "the cover"
+	case withEth:
+		what = "the Ethernet settings"
+	case withBLE:
+		what = "the Bluetooth settings"
 	}
-	live, err := client.GetConfig(ctx)
+	doc, err := readLive(ctx)
 	if err != nil {
-		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
-	}
-	var doc map[string]interface{}
-	if err = json.Unmarshal(live.Raw, &doc); err != nil {
-		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
+		return nil, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
 	}
 	if err = refuseRemappedInputs(doc, config); err != nil {
-		return false, err
+		return nil, err
 	}
-	if missing := unreportedChannelKeys(doc, config); len(missing) > 0 {
-		return false, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's firmware does not report the key, so nothing was written", ErrUnsupportedSettings, strings.Join(missing, ", "))}
+	missing := unreportedChannelKeys(doc, config)
+	missing = append(missing, unreportedEthBLEKeys(doc, apiConfig)...)
+	if len(missing) > 0 {
+		return nil, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's firmware does not report the key, so nothing was written", ErrUnsupportedSettings, strings.Join(missing, ", "))}
 	}
-	return refuseUncoverableRoller(doc, apiConfig)
+	reversesCover, err := refuseUncoverableRoller(doc, apiConfig)
+	if err != nil {
+		return nil, err
+	}
+	ethChanged, err := refuseEthernet(ctx, client, doc, apiConfig, stationMoves)
+	if err != nil {
+		return nil, err
+	}
+	owed = map[string]string{}
+	if reversesCover {
+		owed[gen2CoverKey] = "a changed motor direction needs a restart"
+	}
+	if ethChanged {
+		owed[gen2EthKey] = "an Ethernet change needs a restart"
+	}
+	return owed, nil
+}
+
+// liveReader returns the device's parsed configuration. liveReaderOf reads it at most once per apply,
+// so the Wi-Fi check and the checks of refuseFromLiveDevice see one snapshot and cost one GetConfig.
+type liveReader func(ctx context.Context) (map[string]interface{}, error)
+
+func liveReaderOf(client ShellyClient) liveReader {
+	var (
+		read bool
+		doc  map[string]interface{}
+		err  error
+	)
+	return func(ctx context.Context) (map[string]interface{}, error) {
+		if !read {
+			read = true
+			var live *shelly.DeviceConfig
+			if live, err = client.GetConfig(ctx); err == nil {
+				err = json.Unmarshal(live.Raw, &doc)
+			}
+		}
+		return doc, err
+	}
+}
+
+// gen2Body returns the keys a converted document holds for one section, or nil.
+func gen2Body(apiConfig map[string]interface{}, key string) map[string]interface{} {
+	body, _ := apiConfig[key].(map[string]interface{})
+	return body
 }
 
 // refuseRemappedInputs refuses an apply that would put the mode of input N on a switch that runs
@@ -382,10 +437,11 @@ func refuseRemappedInputs(doc map[string]interface{}, config *DeviceConfiguratio
 // persisted. Unlike the Gen1 flow, a write whose answer was lost is not recorded beforehand,
 // because the device, not the manager, decides whether it needs a restart.
 //
-// A cover write that changes invert_directions owes a restart whether or not the answer says so:
-// the Cover reference states that changing it requires a reboot (reversesCover, from the live read).
-// That is known before the request, so it is recorded before it: a lost answer must not lose it.
-func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2ConfigClient, apiConfig map[string]interface{}, result *ApplyResult, reversesCover bool) error {
+// A section in owedBefore (section key to reason) owes a restart whether or not the answer says so: a
+// cover write that changes invert_directions, and an Ethernet write that changes a value, because the
+// references say each requires a restart (known from the live read). That is known before the request,
+// so it is recorded before it: a lost answer must not lose it.
+func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2ConfigClient, apiConfig map[string]interface{}, result *ApplyResult, owedBefore map[string]string) error {
 	// The MQTT and Wi-Fi passwords stay out of every error, log line and failure, whichever section fails.
 	var secret string
 	if mqtt, ok := apiConfig["mqtt"].(map[string]interface{}); ok {
@@ -400,8 +456,8 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 	for _, section := range gen2WritesOf(apiConfig) {
 		leaves := gen2Leaves(section.key, section.body)
 
-		if reversesCover && section.key == gen2CoverKey {
-			a.markGen2RestartOwed(section.method, "a changed motor direction needs a restart", result)
+		if reason, owed := owedBefore[section.key]; owed {
+			a.markGen2RestartOwed(section.method, reason, result)
 		}
 		restart, err := setter.CallConfigSetter(ctx, section.method, section.params)
 		if err != nil {

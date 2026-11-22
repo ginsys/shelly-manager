@@ -284,7 +284,8 @@ func schemaProperties(node interface{}) map[string]interface{} {
 }
 
 // getDeviceNetworkSchema describes NetworkConfiguration, the network section DeviceConfiguration
-// stores: Ethernet, and the typed Wi-Fi station and access point. Apply never writes it.
+// stores: Ethernet, and the typed Wi-Fi station and access point. Apply writes the Ethernet of a Gen2
+// Pro model only (gen2_eth_ble.go), and never the typed Wi-Fi.
 // Each call builds fresh maps, because markApplicable writes into every leaf.
 func getDeviceNetworkSchema() map[string]interface{} {
 	str := func(title string) map[string]interface{} {
