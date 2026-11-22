@@ -180,9 +180,39 @@ func TestConfigFileHandling(t *testing.T) {
 	}()
 
 	t.Run("missing config file", func(t *testing.T) {
-		_, err := runCommand(t, binaryPath, "--config", "/nonexistent/config.yaml", "list")
+		out, err := runCommand(t, binaryPath, "--config", "/nonexistent/config.yaml", "list")
 		if err == nil {
 			t.Error("Expected error for missing config file")
+		}
+		// A file that is missing is named, with the OS's own cause, as it always was.
+		if !strings.Contains(out, "Failed to load config: failed to read config file at '/nonexistent/config.yaml'") ||
+			!strings.Contains(out, "no such file or directory") || strings.Contains(out, "details withheld") {
+			t.Errorf("a missing file must be named with its cause, got:\n%s", out)
+		}
+	})
+
+	// The YAML decoder quotes the value it could not decode, so an admin key written in a shape that does not load
+	// (a tag that makes it an integer) would reach the log whole (ginsys/shelly-manager#872). The shapes are in
+	// internal/config; here the binary shows it prints what the loader returns: the path and one fixed sentence.
+	t.Run("a config that does not load never prints a secret that is in it", func(t *testing.T) {
+		const secret = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+		path := filepath.Join(testutil.TempDir(t), "secret.yaml")
+		if err := os.WriteFile(path, []byte("security:\n  admin_api_key: !!int "+secret+"\n"), 0o600); err != nil {
+			t.Fatalf("Failed to write config: %v", err)
+		}
+
+		out, err := runCommand(t, binaryPath, "--config", path, "list")
+		if err == nil {
+			t.Error("Expected error for a config that does not load")
+		}
+		for _, piece := range []string{secret[:16], secret[16:32], secret[32:48], secret[48:]} {
+			if strings.Contains(out, piece) {
+				t.Errorf("the output holds a piece of the secret %q:\n%s", piece, out)
+			}
+		}
+		const sentence = "the configuration is not valid (details withheld, they may quote a secret): check the file's syntax with a YAML linter, compare each setting's type with the sample config (a linter finds a syntax error, never a wrong type), and check that each SHELLY_ environment variable holds a value of the setting's type"
+		if !strings.Contains(out, "Failed to load config: "+path+": "+sentence+"\n") {
+			t.Errorf("want the path and one fixed sentence, got:\n%s", out)
 		}
 	})
 

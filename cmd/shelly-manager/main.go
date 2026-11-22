@@ -581,7 +581,7 @@ func initApp() {
 	// Load configuration
 	cfg, err = config.Load(configFile)
 	if err != nil {
-		log.Fatal("Failed to load config:", err)
+		log.Fatal("Failed to load config: ", err)
 	}
 
 	// Apply secret overrides (env and *_FILE). A *_FILE that cannot be read stops the start: with the

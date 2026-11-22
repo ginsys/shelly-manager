@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -193,6 +195,16 @@ type Config struct {
 	} `mapstructure:"sync"`
 }
 
+// errNotValid is all a config that does not load may show. Nothing in it comes from the file, the environment or the
+// decoders, because they quote the value they refused (ginsys/shelly-manager#872): no line, no setting, no value.
+var errNotValid = errors.New("the configuration is not valid (details withheld, they may quote a secret): check the file's syntax with a YAML linter, compare each setting's type with the sample config (a linter finds a syntax error, never a wrong type), and check that each SHELLY_ environment variable holds a value of the setting's type")
+
+// notValid is errNotValid with the path of the file, which is the operator's own (the argument, or the file the search
+// found), never read from the decoder's text.
+func notValid(path string) error {
+	return fmt.Errorf("%s: %w", path, errNotValid)
+}
+
 // Load loads configuration from file
 func Load(configFile string) (*Config, error) {
 	return LoadWithName(configFile, "shelly-manager")
@@ -231,9 +243,17 @@ func LoadWithName(configFile string, configName string) (*Config, error) {
 	// Set default values
 	setDefaults()
 
-	// Read configuration
+	// Read configuration. A file that is missing or cannot be read, or whose extension is not a config type, is reported
+	// with viper's own text: a path, the extension of the operator's own path, or the OS's cause, never the file's
+	// content. A failure of either decoder is withheld whole (see errNotValid): a file that does not parse, or a value
+	// that does not fit its setting, is quoted by the decoder, and that value can be a secret.
 	if err := viper.ReadInConfig(); err != nil {
-		// Enhanced error reporting with exact file path
+		var notFound viper.ConfigFileNotFoundError
+		var unsupported viper.UnsupportedConfigError
+		var pathErr *fs.PathError
+		if !errors.As(err, &notFound) && !errors.As(err, &unsupported) && !errors.As(err, &pathErr) {
+			return nil, notValid(viper.ConfigFileUsed())
+		}
 		if configFile != "" {
 			return nil, fmt.Errorf("failed to read config file at '%s': %w", configFile, err)
 		}
@@ -241,12 +261,9 @@ func LoadWithName(configFile string, configName string) (*Config, error) {
 			"./configs, ., $HOME/.shelly-manager, /etc/shelly-manager", err)
 	}
 
-	// Report which config file was loaded
-	configFilePath := viper.ConfigFileUsed()
-
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config from '%s': %w", configFilePath, err)
+		return nil, notValid(viper.ConfigFileUsed())
 	}
 
 	return &config, nil
