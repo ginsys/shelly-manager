@@ -1,8 +1,6 @@
 package configuration
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -211,25 +209,18 @@ func unmappedRollerSettings(roller *RollerConfig) ([]string, *RollerConfig) {
 }
 
 // refuseUncoverableRoller stops an apply, before the first write, whose cover write the live device
-// cannot take. It reads the device once, and only when the configuration writes cover:0. A device
+// cannot take. It takes the live document that the apply read once for every pre-write check, and
+// does nothing when the configuration does not write cover:0. A device
 // with no cover:0 is in switch profile, and the apply never changes the profile (that deletes the
 // webhooks and schedules). A key that the page lists as present only with the inputs it needs is
 // refused when the device does not report it, and a safety action of reverse is refused unless the
 // device already reports allowed_move reverse, which the page requires and the stored roller has
 // no word for. The second result says whether the write changes invert_directions, which the page
 // says needs a reboot: a live value that is not read counts as a change.
-func refuseUncoverableRoller(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}) (reverses bool, err error) {
+func refuseUncoverableRoller(doc, apiConfig map[string]interface{}) (reverses bool, err error) {
 	body, ok := apiConfig[gen2CoverKey].(map[string]interface{})
 	if !ok || len(body) == 0 {
 		return false, nil
-	}
-	live, err := client.GetConfig(ctx)
-	if err != nil {
-		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the cover: %w", err)}
-	}
-	var doc map[string]interface{}
-	if err = json.Unmarshal(live.Raw, &doc); err != nil {
-		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing the cover: %w", err)}
 	}
 	cover, ok := doc[gen2CoverKey].(map[string]interface{})
 	if !ok {
@@ -247,8 +238,16 @@ func refuseUncoverableRoller(ctx context.Context, client ShellyClient, apiConfig
 			paths = append(paths, "roller.input_mode")
 		}
 	}
+	// The same rule seen from the other side: a dual mode under a safety switch that the device holds
+	// enabled, when the configuration does not set the switch. A desired enabling mode is refused below.
+	liveSafety, held := cover["safety_switch"].(map[string]interface{})
+	if body["in_mode"] == rollerInputDual && liveSafety["enable"] == true {
+		desiredSafety, _ := body["safety_switch"].(map[string]interface{})
+		if _, setsEnable := desiredSafety["enable"]; !setsEnable {
+			paths = append(paths, "roller.input_mode")
+		}
+	}
 	if safety, set := body["safety_switch"].(map[string]interface{}); set {
-		liveSafety, held := cover["safety_switch"].(map[string]interface{})
 		for key, path := range map[string]string{"enable": "roller.safety_mode", "action": "roller.safety_action"} {
 			if _, wanted := safety[key]; !wanted {
 				continue
@@ -271,7 +270,7 @@ func refuseUncoverableRoller(ctx context.Context, client ShellyClient, apiConfig
 	}
 	if len(paths) > 0 {
 		slices.Sort(paths)
-		return false, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device does not report what these need (inputs for swap_inputs, in_mode and safety_switch, in_mode single for an enabled safety switch, allowed_move reverse for a safety action of reverse)", ErrUnsupportedSettings, strings.Join(paths, ", "))}
+		return false, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device does not report what these need (inputs for swap_inputs, in_mode and safety_switch, in_mode single for an enabled safety switch and no dual mode under one, allowed_move reverse for a safety action of reverse)", ErrUnsupportedSettings, strings.Join(paths, ", "))}
 	}
 
 	if want, set := body["invert_directions"].(bool); set {

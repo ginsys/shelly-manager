@@ -259,10 +259,7 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 		result.SettingsCount += len(gen2Leaves(write.key, write.body))
 	}
 
-	if err = refuseFromLiveDevice(ctx, client, config); err != nil {
-		return nil, err
-	}
-	reversesCover, err := refuseUncoverableRoller(ctx, client, apiConfig)
+	reversesCover, err := refuseFromLiveDevice(ctx, client, config, apiConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -301,9 +298,10 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 }
 
 // refuseFromLiveDevice stops an apply, before the first write, on what only the live document can say.
-// The device is read once, and only when the configuration sets an input mode or a switch or input
-// key that a device may lack; a device that cannot be read is refused too.
-func refuseFromLiveDevice(ctx context.Context, client ShellyClient, config *DeviceConfiguration) error {
+// The device is read once for every check, and only when the configuration sets an input mode, a
+// switch or input key that a device may lack, or the cover; a device that cannot be read is refused
+// too. The result says whether the cover write changes the direction (refuseUncoverableRoller).
+func refuseFromLiveDevice(ctx context.Context, client ShellyClient, config *DeviceConfiguration, apiConfig map[string]interface{}) (reversesCover bool, err error) {
 	withMode := false
 	if config.Input != nil {
 		for _, in := range config.Input.Inputs {
@@ -316,29 +314,36 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, config *Devi
 	}
 	// Against an empty document every desired key is missing, so this learns whether any is desired.
 	withKeys := len(unreportedChannelKeys(nil, config)) > 0
-	if !withMode && !withKeys {
-		return nil
+	withCover := false
+	if body, ok := apiConfig[gen2CoverKey].(map[string]interface{}); ok && len(body) > 0 {
+		withCover = true
+	}
+	if !withMode && !withKeys && !withCover {
+		return false, nil
 	}
 
-	what := "an input mode"
-	if !withMode {
-		what = "a switch or input setting"
+	what := "a switch or input setting"
+	switch {
+	case withMode:
+		what = "an input mode"
+	case withCover:
+		what = "the cover"
 	}
 	live, err := client.GetConfig(ctx)
 	if err != nil {
-		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
+		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
 	}
 	var doc map[string]interface{}
 	if err = json.Unmarshal(live.Raw, &doc); err != nil {
-		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
+		return false, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
 	}
 	if err = refuseRemappedInputs(doc, config); err != nil {
-		return err
+		return false, err
 	}
 	if missing := unreportedChannelKeys(doc, config); len(missing) > 0 {
-		return &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's firmware does not report the key, so nothing was written", ErrUnsupportedSettings, strings.Join(missing, ", "))}
+		return false, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's firmware does not report the key, so nothing was written", ErrUnsupportedSettings, strings.Join(missing, ", "))}
 	}
-	return nil
+	return refuseUncoverableRoller(doc, apiConfig)
 }
 
 // refuseRemappedInputs refuses an apply that would put the mode of input N on a switch that runs
