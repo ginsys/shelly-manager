@@ -231,6 +231,38 @@ func TestConfigFileHandling(t *testing.T) {
 		}
 	})
 
+	// The security monitor and IP blocking are gone (ginsys/shelly-manager#876). A file written for them keeps
+	// starting: its keys are ignored, even the combination the old start-up check refused (blocking on with the
+	// monitor off, a threshold past its ceiling).
+	t.Run("a config that still sets the removed monitor keys starts", func(t *testing.T) {
+		tempDir := testutil.TempDir(t)
+		path := filepath.Join(tempDir, "old-keys.yaml")
+		body := `logging:
+  level: "error"
+  format: "text"
+  output: "stderr"
+database:
+  path: ` + strconv.Quote(filepath.Join(tempDir, "old-keys.db")) + `
+security:
+  monitoring:
+    enabled: false
+  ip_blocking:
+    enabled: true
+    block_seconds: 0
+    suspicious_per_hour_threshold: 5000
+`
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatalf("Failed to write config: %v", err)
+		}
+		out, err := runCommand(t, binaryPath, "--config", path, "list")
+		if err != nil {
+			t.Fatalf("a file with the removed keys must start, got %v:\n%s", err, out)
+		}
+		if strings.Contains(out, "Invalid security configuration") {
+			t.Errorf("no start-up check reads the removed keys:\n%s", out)
+		}
+	})
+
 	t.Run("invalid config file", func(t *testing.T) {
 		tempDir := testutil.TempDir(t)
 		invalidConfigPath := filepath.Join(tempDir, "invalid.yaml")

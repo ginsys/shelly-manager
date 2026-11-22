@@ -66,7 +66,6 @@ func TestBulkApply_ARunPastTheDefaultDeadlineStillAnswersEveryDevice(t *testing.
 	secCfg := middleware.DefaultSecurityConfig()
 	secCfg.RequestTimeout = 150 * time.Millisecond
 	router := SetupRoutesWithSecurity(handler, handler.logger, secCfg, middleware.DefaultValidationConfig())
-	closeMonitor(t, handler)
 
 	req := httptest.NewRequest(http.MethodPost, bulkApplyPath, strings.NewReader(applyBody(applyNamePatch, false, ids...)))
 	req.Header.Set("Content-Type", "application/json")

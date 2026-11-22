@@ -21,7 +21,6 @@ func TestBodylessPostsPassTheValidationChain(t *testing.T) {
 	t.Setenv(testModeEnv, "")
 	h, logger := guardWalkHandler(t, "admin-secret", "")
 	router := SetupRoutesWithSecurity(h, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
-	closeMonitor(t, h)
 
 	send := func(method, path, body string) *httptest.ResponseRecorder {
 		var req *http.Request

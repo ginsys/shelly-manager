@@ -115,7 +115,7 @@ func configRoutesHandlerOn(t *testing.T, db *database.Manager, adminKey, agentKe
 		handler.SetAgentAPIKey(agentKey)
 	}
 	router := mux.NewRouter()
-	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), handler, logging.GetDefault(), nil)
+	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), handler)
 	return router, handler
 }
 

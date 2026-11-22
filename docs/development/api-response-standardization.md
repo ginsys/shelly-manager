@@ -333,20 +333,6 @@ const (
   "timestamp": "2024-01-15T10:30:00Z",
   "request_id": "req_rate_limited"
 }
-
-// IP blocked error (security-aware message)
-{
-  "success": false,
-  "error": {
-    "code": "IP_BLOCKED",
-    "message": "Your IP has been temporarily blocked due to suspicious activity.",
-    "details": {
-      "block_reason": "Multiple security violations detected",
-      "contact": "security@company.com"
-    }
-  },
-  "timestamp": "2024-01-15T10:30:00Z"
-}
 ```
 
 ## Response Builder System

@@ -467,7 +467,7 @@ connects to the host first, and it fails with the connection error when they are
 
 ---
 
-### 14. Metrics & Monitoring (15 endpoints)
+### 14. Metrics & Monitoring (14 endpoints)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -485,7 +485,6 @@ connects to the host first, and it fails with the connection error when they are
 | GET | `/metrics/drift` | Drift summary metrics |
 | GET | `/metrics/notifications` | Notification metrics |
 | GET | `/metrics/resolution` | Resolution metrics |
-| GET | `/metrics/security` | Security metrics; present only while `security.monitoring.enabled` is on (off by default), 404 otherwise |
 
 ---
 
@@ -507,7 +506,7 @@ Every endpoint in this section, and `POST /api/v1/discover` and `POST /api/v1/pr
 
 **Ids that a key will own.** Every registry row has an enrolment state, and a row from before enrolment, or one a keyless agent registered, is `legacy`; the list shows the state as `enrolment_state`. A keyless register of an id whose row is in any other state is refused with `409`, for the agent key, the row's own token and the admin key alike, however long the row was silent. A keyless register of an id that starts with `keyed-` in any case (`KEYED-`, `Keyed-`) is refused with `400`: that prefix is reserved for the ids a key will derive. A keyless register that would create a new row is refused with `400` when its id holds a space or any byte outside `0x21` to `0x7E` (printable ASCII), unless the id starts with the exact bytes `provisioner-`, the prefix of the agents that exist today, after which any bytes are allowed. This keeps a new id from squatting on an id a key will derive through a folding collation: on MySQL 8.0.16, MySQL 5.7.44 and MariaDB 10.11.19 and 11.4.13, with the server default and, where the server has it, `utf8mb4_general_ci`, `utf8mb4_unicode_ci`, `utf8mb4_unicode_520_ci` and `utf8mb4_0900_ai_ci`, two different printable ASCII bytes compare equal only as one letter in its two cases. A collation not listed there is not proven. A row that already exists keeps registering whatever its id holds, so an old row may still match a collation-equivalent spelling. Nothing else changes for an agent that registers without a key.
 
-**Ids that a route can reach.** The id is part of the path of every per-agent route (status, approve, reject, delete and poll), and an id may hold a single `/` (`lab/pi-1`): the five routes accept it, sent as it is or as `%2F`. A keyless register that would create a new row is refused with `400`, with or without the `provisioner-` prefix, when its id holds an empty segment (`//`, or a `/` at either end) or a `.` segment, or holds `..` anywhere. The path clean rewrites an empty, `.` or `..` segment before the request is routed, so no route can reach a row with such an id, except that `DELETE` still reaches a row whose id ends in a single `/`, because the clean keeps a trailing slash. A `..` inside a longer segment (`a..b`) is not rewritten, but the security monitor counts every request whose path holds `..` as suspicious, and where IP blocking is on the agent's own address can be blocked after enough of them. A row from before this rule whose id has an empty, `.` or `..` segment can exist only where an operator chose that id by hand; apart from that `DELETE`, no route reaches it, and only the store removes it. A row with `..` inside a segment stays reachable.
+**Ids that a route can reach.** The id is part of the path of every per-agent route (status, approve, reject, delete and poll), and an id may hold a single `/` (`lab/pi-1`): the five routes accept it, sent as it is or as `%2F`. A keyless register that would create a new row is refused with `400`, with or without the `provisioner-` prefix, when its id holds an empty segment (`//`, or a `/` at either end) or a `.` segment, or holds `..` anywhere. The path clean rewrites an empty, `.` or `..` segment before the request is routed, so no route can reach a row with such an id, except that `DELETE` still reaches a row whose id ends in a single `/`, because the clean keeps a trailing slash. A `..` inside a longer segment (`a..b`) is not rewritten, but the request validator refuses `../` and `..\` in a query value, and `GET /provisioner/discovered-devices` takes the agent id as its `agent_id` query value, so an id such as `a../b` would register and then be refused there. Every `..` is refused, so that no such id is created. A row from before this rule whose id has an empty, `.` or `..` segment can exist only where an operator chose that id by hand; apart from that `DELETE`, no route reaches it, and only the store removes it. A row with `..` inside a segment stays reachable.
 
 **What the operator decides.** The admin key moves a row between enrolment states. Approve takes `pending` or `rejected` to `approved`, except that a `rejected` row that never had a key goes back to `preapproved`. Reject takes `pending`, `preapproved` or `approved` to `rejected`: the row stays, so the agent does not return as `pending`, its token stops working at once, its challenge is cleared and its `assigned` and `in_progress` tasks fail with a stated reason (its `pending` tasks stay until the operator cancels them or approves the key again). Pre-approving a fingerprint creates a `preapproved` row, or approves the `pending` row that has it. Any other act is a `409`, and every act on a `legacy` row is one. A transition stores its state name as the agent's `status`; the list still shows `offline` for any agent not seen for five minutes, as before. The fingerprint is accepted as 32 hexadecimal characters or as eight groups of four joined by hyphens, in either case; the list shows the hyphenated form, which the agent logs and the operator compares. A `pending`, `preapproved` or `rejected` row is never counted as an active agent in the health figures, however recently it was seen.
 
@@ -619,22 +618,20 @@ All API responses follow this envelope:
 
 ## Security & Middleware
 
-### Middleware Stack (15 layers)
+### Middleware Stack (13 layers)
 1. Recovery (panic handling)
-2. IP Blocking
-3. Security Monitoring
-4. Security Logging
-5. Security Headers (CSP, HSTS, etc.)
-6. Request Timeout (30s default)
-7. Rate Limiting (1000 req/hour default)
-8. Request Size Limiting (10MB)
-9. Header Validation
-10. Content-Type Validation
-11. Query Parameter Validation
-12. JSON Validation (depth: 10, array: 1000)
-13. CORS
-14. HTTP Logging
-15. Prometheus Metrics
+2. Security Logging
+3. Security Headers (CSP, HSTS, etc.)
+4. Request Timeout (30s default)
+5. Rate Limiting (1000 req/hour default)
+6. Request Size Limiting (10MB)
+7. Header Validation
+8. Content-Type Validation
+9. Query Parameter Validation
+10. JSON Validation (depth: 10, array: 1000)
+11. CORS
+12. HTTP Logging
+13. Prometheus Metrics
 
 ### Rate Limits by Path
 | Path Pattern | Limit |
@@ -657,10 +654,8 @@ limit's window and the 15-minute block. A request that passes carries no `X-Rate
 several path patterns match, the longest wins.
 
 ### Client Requirements
-- Every request needs a `User-Agent` header. An empty one is treated as an
-  attack signal: the request fails with `400 VALIDATION_FAILED` and the security
-  monitor counts it as suspicious activity from that client IP, which it can
-  block. Browsers, `curl`, `wget`, `python-requests`, `axios`, `node-fetch` and
+- Every request needs a `User-Agent` header. An empty one fails with
+  `400 VALIDATION_FAILED`. Browsers, `curl`, `wget`, `python-requests`, `axios`, `node-fetch` and
   Go's `net/http` send one by default. Node's core `http` module does not, so a
   client built on it must set one. Known scanner names such as `sqlmap` or
   `nmap` are refused too.

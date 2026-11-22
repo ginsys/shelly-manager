@@ -34,7 +34,8 @@ var (
 	// authorized, so a refused caller never learns it from this answer.
 	ErrStatusTooLong = errors.New("task status is too long")
 	// ErrAgentIDUnroutable is a keyless register that would create a row for an id that a per-agent route
-	// cannot reach cleanly, or that the security monitor would count as suspicious on every request.
+	// cannot reach cleanly, or that the request validator refuses in the agent_id query value of the
+	// discovered-devices route.
 	ErrAgentIDUnroutable = errors.New("agent id must not hold an empty segment, a dot segment or two dots in a row")
 )
 
@@ -50,8 +51,9 @@ const legacyAgentIDPrefix = "provisioner-"
 // lookup of a register cannot meet another id. It returns ErrAgentIDUnroutable for every id, that prefix
 // included, that no route can reach cleanly: the id is a segment of every per-agent route, so an empty,
 // "." or ".." segment ("a//b", "/a", "a/./b", "..") is rewritten by the path clean (only a DELETE for an
-// id that ends in a slash still arrives), and ".." anywhere is counted as suspicious by the security
-// monitor on each request, which, where IP blocking is on, can block the agent's own address.
+// id that ends in a slash still arrives), and ".." anywhere is refused because the request validator
+// refuses "../" in the agent_id query value of GET /provisioner/discovered-devices, which would leave
+// an id such as "a../b" unreadable there; refusing every ".." keeps the rule one line.
 func checkNewAgentID(id string) error {
 	if !strings.HasPrefix(id, legacyAgentIDPrefix) {
 		for i := 0; i < len(id); i++ {

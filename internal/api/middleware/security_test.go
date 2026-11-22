@@ -443,28 +443,6 @@ func TestXSSAttackSimulation(t *testing.T) {
 	}
 }
 
-func TestPathTraversalAttackSimulation(t *testing.T) {
-	pathTraversalPayloads := []string{
-		"../../../etc/passwd",
-		"..\\..\\..\\windows\\system32\\drivers\\etc\\hosts",
-		"....//....//....//etc//passwd",
-		"%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
-		"..%252f..%252f..%252fetc%252fpasswd",
-		"..%c0%af..%c0%af..%c0%afetc%c0%afpasswd",
-		"/../../../etc/passwd",
-		"/var/www/../../etc/passwd",
-	}
-
-	for i, payload := range pathTraversalPayloads {
-		t.Run(fmt.Sprintf("PathTraversal_%d", i+1), func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/api/v1/files?path="+payload, nil)
-
-			assert.True(t, detectSuspiciousRequest(req),
-				"Should detect path traversal payload: %s", payload)
-		})
-	}
-}
-
 func TestDoSAttackSimulation(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
 	config := func() *SecurityConfig {

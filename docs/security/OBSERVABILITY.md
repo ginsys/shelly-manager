@@ -60,9 +60,9 @@ The API response layer and security middleware emit structured logs with:
 - `status_code`: Response code for errors
 - `error_code`, `error_msg`: Standardized error classification
 - `request_id`: For correlating logs with responses
-- `component`: Logical component tag (e.g., `api_response`, `security_monitor`, `rate_limiter`)
+- `component`: Logical component tag (e.g., `api_response`, `security_logging`, `rate_limiter`)
 
-Security middleware also adds fields for rate limiting, suspicious patterns, and IP blocking with `security_event` classification.
+Security middleware also adds fields for rate limiting with `security_event` classification.
 
 ## Health Endpoints
 

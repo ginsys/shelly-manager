@@ -4,9 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-
-	"github.com/ginsys/shelly-manager/internal/api/middleware"
-	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
 // adminOnly wraps a handler so it answers only a request that carries the admin key, when one is
@@ -33,10 +30,9 @@ func (h *Handler) agentOrAdmin(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // registerAPIRoutes registers the production /api/v1 table on api.
-// securityMonitor nil omits GET /metrics/security, which closes over it.
 // handler must be non-nil. Optional notification, metrics, export, and import
 // routes follow the handler fields, same as before this was shared.
-func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger, securityMonitor *middleware.SecurityMonitor) {
+func registerAPIRoutes(api *mux.Router, handler *Handler) {
 	// Handle CORS preflight for any API path with a generic OPTIONS responder.
 	// This ensures cross-origin clients receive proper CORS headers instead of 404.
 	api.PathPrefix("/").Methods("OPTIONS").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -206,19 +202,6 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 		metricsAPI.HandleFunc("/drift", handler.MetricsHandler.GetDriftSummary).Methods("GET")
 		metricsAPI.HandleFunc("/notifications", handler.MetricsHandler.GetNotificationSummary).Methods("GET")
 		metricsAPI.HandleFunc("/resolution", handler.MetricsHandler.GetResolutionSummary).Methods("GET")
-
-		// Security metrics endpoint — exposes attacker IPs and activity, so gate it
-		// with the same admin key as the other protected metrics reads.
-		// Absent when securityMonitor is nil (test mode does not construct one).
-		if securityMonitor != nil {
-			securityHandler := createSecurityMetricsHandler(securityMonitor, logger)
-			metricsAPI.HandleFunc("/security", func(w http.ResponseWriter, r *http.Request) {
-				if !handler.requireAdmin(w, r) {
-					return
-				}
-				securityHandler(w, r)
-			}).Methods("GET")
-		}
 
 		// Prometheus endpoint
 		metricsAPI.Handle("/prometheus", handler.MetricsHandler.PrometheusHandler()).Methods("GET")

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,31 +50,16 @@ type SecurityConfig struct {
 	CORSAllowedHeaders []string // allowed headers
 	CORSMaxAge         int      // preflight cache seconds
 
-	// Logging and monitoring
+	// Logging
 	LogSecurityEvents bool // enable security event logging
 	LogAllRequests    bool // enable request/response logging
-	EnableMonitoring  bool // enable security monitoring and alerting
-
-	// Attack detection
-	EnableIPBlocking bool          // enable automatic IP blocking
-	BlockDuration    time.Duration // how long to block suspicious IPs
-	TrustedIPs       []string      // IPs exempt from suspicious activity tracking and blocking
-
-	// Block rules of the security monitor. An IP is blocked when any rule fires; a value of zero or
-	// less switches that one rule off.
-	SuspiciousThreshold    int // blocked at this many suspicious requests
-	RateViolationThreshold int // blocked at this many rate limit violations
-	AttackTypeThreshold    int // blocked at this many distinct attack types
-	HourlyThreshold        int // blocked at more than this many suspicious requests inside one hour
 
 	// Proxy handling
 	UseProxyHeaders bool     // trust proxy headers for client IP extraction
 	TrustedProxies  []string // list of trusted proxy IPs or CIDR ranges
 }
 
-// DefaultSecurityConfig returns a secure default configuration for code that builds a router itself:
-// the monitor and IP blocking are on. The application's own default is off, held by the
-// security.monitoring and security.ip_blocking keys (cmd/shelly-manager securityConfigFrom).
+// DefaultSecurityConfig returns a secure default configuration for code that builds a router itself.
 func DefaultSecurityConfig() *SecurityConfig {
 	return &SecurityConfig{
 		CSP:             "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
@@ -96,16 +80,7 @@ func DefaultSecurityConfig() *SecurityConfig {
 		CORSAllowedHeaders: []string{"Content-Type", "Authorization", "X-Requested-With"},
 		CORSMaxAge:         86400,
 		LogSecurityEvents:  true,
-		LogAllRequests:     false,     // enable for debugging
-		EnableMonitoring:   true,      // enable security monitoring
-		EnableIPBlocking:   true,      // enable automatic IP blocking
-		BlockDuration:      time.Hour, // block for 1 hour
-		TrustedIPs:         []string{"127.0.0.1", "::1", "localhost"},
-
-		SuspiciousThreshold:    10,
-		RateViolationThreshold: 5,
-		AttackTypeThreshold:    3,
-		HourlyThreshold:        5,
+		LogAllRequests:     false, // enable for debugging
 
 		UseProxyHeaders: false,
 		TrustedProxies:  nil,
@@ -522,22 +497,9 @@ func SecurityLoggingMiddleware(config *SecurityConfig, logger *logging.Logger) f
 					"user_agent":   r.UserAgent(),
 					"content_type": r.Header.Get("Content-Type"),
 					"referer":      r.Header.Get("Referer"),
-					"component":    "security_monitor",
+					"component":    "security_logging",
 					"event_type":   "request_received",
 				}).Info("API request received")
-			}
-
-			// Check for suspicious patterns
-			if detectSuspiciousRequest(r) {
-				logger.WithFields(map[string]any{
-					"method":         r.Method,
-					"path":           r.URL.Path,
-					"client_ip":      clientIP,
-					"user_agent":     r.UserAgent(),
-					"component":      "security_monitor",
-					"security_event": "suspicious_request",
-					"query_params":   r.URL.RawQuery,
-				}).Warn("Suspicious request detected")
 			}
 
 			// Create response wrapper for status code capture
@@ -558,7 +520,7 @@ func SecurityLoggingMiddleware(config *SecurityConfig, logger *logging.Logger) f
 					"status_code":   wrapped.statusCode,
 					"duration_ms":   duration,
 					"response_size": wrapped.size,
-					"component":     "security_monitor",
+					"component":     "security_logging",
 					"event_type":    "request_completed",
 				}).Info("API request completed")
 			}
@@ -939,125 +901,4 @@ func generateNonce() string {
 		return fmt.Sprintf("nonce-%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(bytes)
-}
-
-// detectSuspiciousRequest checks for common attack patterns
-func detectSuspiciousRequest(r *http.Request) bool {
-	// Check for common injection patterns in URL
-	path := strings.ToLower(r.URL.Path)
-	query := strings.ToLower(r.URL.RawQuery)
-	// Decode query for better pattern matching (handles %xx encodings)
-	decodedQuery := ""
-	if r.URL.RawQuery != "" {
-		if dq, err := url.QueryUnescape(r.URL.RawQuery); err == nil {
-			decodedQuery = strings.ToLower(dq)
-		}
-	}
-	// Decode path as well in case encoded traversal is present
-	decodedPath := path
-	if dp, err := url.PathUnescape(r.URL.Path); err == nil {
-		decodedPath = strings.ToLower(dp)
-	}
-
-	// SQL injection patterns
-	sqlPatterns := []string{"' or ", " or 1=1", "union select", "drop table", "delete from", "insert into"}
-	for _, pattern := range sqlPatterns {
-		if strings.Contains(path, pattern) || strings.Contains(query, pattern) || strings.Contains(decodedQuery, pattern) || strings.Contains(decodedPath, pattern) {
-			return true
-		}
-	}
-
-	// XSS patterns
-	xssPatterns := []string{"<script>", "javascript:", "onerror=", "onload=", "eval(", "alert("}
-	for _, pattern := range xssPatterns {
-		if strings.Contains(path, pattern) || strings.Contains(query, pattern) || strings.Contains(decodedQuery, pattern) || strings.Contains(decodedPath, pattern) {
-			return true
-		}
-	}
-
-	// Path traversal patterns
-	if strings.Contains(path, "..") || strings.Contains(query, "..") || strings.Contains(decodedQuery, "..") || strings.Contains(decodedPath, "..") {
-		return true
-	}
-
-	// Unusually long parameters (potential buffer overflow attempts)
-	if len(query) > 2000 {
-		return true
-	}
-
-	return false
-}
-
-// IPBlockingMiddleware blocks requests from suspicious IPs
-func IPBlockingMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logger *logging.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			clientIP := getClientIP(r)
-
-			// Check if IP is blocked (skip trusted IPs like localhost)
-			if config.EnableIPBlocking && monitor != nil && !isTrustedIP(clientIP, config.TrustedIPs) && monitor.IsIPBlocked(clientIP) {
-				if logger != nil && config.LogSecurityEvents {
-					logger.WithFields(map[string]any{
-						"client_ip":      clientIP,
-						"path":           r.URL.Path,
-						"method":         r.Method,
-						"user_agent":     r.UserAgent(),
-						"component":      "ip_blocking",
-						"security_event": "blocked_ip_request",
-					}).Warn("Request blocked from blocked IP")
-				}
-
-				response := map[string]interface{}{
-					"success": false,
-					"error": map[string]interface{}{
-						"code":    "IP_BLOCKED",
-						"message": "Your IP has been temporarily blocked due to suspicious activity.",
-					},
-					"timestamp": time.Now().UTC(),
-				}
-
-				body, err := json.Marshal(response)
-				if err != nil {
-					http.Error(w, "Internal server error", http.StatusInternalServerError)
-					return
-				}
-				body = append(body, '\n')
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Content-Length", strconv.Itoa(len(body)))
-				w.WriteHeader(http.StatusForbidden)
-				if _, writeErr := w.Write(body); writeErr != nil && logger != nil {
-					logger.Error("Failed to write IP blocked response", "error", writeErr)
-				}
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// MonitoringMiddleware integrates with security monitor for comprehensive tracking
-func MonitoringMiddleware(config *SecurityConfig, monitor *SecurityMonitor, logger *logging.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !config.EnableMonitoring || monitor == nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			start := time.Now()
-
-			// Create response wrapper for status code capture
-			wrapped := &securityResponseWriter{
-				ResponseWriter: w,
-				statusCode:     http.StatusOK,
-			}
-
-			next.ServeHTTP(wrapped, r)
-
-			// Track request in security monitor
-			duration := time.Since(start)
-			monitor.TrackRequest(r, wrapped.statusCode, duration)
-		})
-	}
 }

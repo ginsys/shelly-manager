@@ -38,9 +38,6 @@ func TestSecurityFrameworkIntegration(t *testing.T) {
 		PermissionsPolicy: "geolocation=(), camera=(), microphone=()",
 		LogSecurityEvents: true,
 		LogAllRequests:    false,
-		EnableMonitoring:  true,
-		EnableIPBlocking:  true,
-		BlockDuration:     time.Hour,
 	}
 
 	validationConfig := &middleware.ValidationConfig{
@@ -391,136 +388,6 @@ func TestSecurityFrameworkIntegration(t *testing.T) {
 	})
 }
 
-func TestSecurityMonitoringIntegration(t *testing.T) {
-	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
-	securityConfig := middleware.DefaultSecurityConfig()
-	securityConfig.EnableMonitoring = true
-	securityConfig.EnableIPBlocking = true
-
-	validationConfig := middleware.DefaultValidationConfig()
-
-	testHandler := &TestHandler{logger: logger}
-	router := setupSecureRouter(testHandler, logger, securityConfig, validationConfig)
-
-	// Get the security monitor from the handler
-	var monitor *middleware.SecurityMonitor
-	if testHandler.securityMonitor != nil {
-		monitor = testHandler.securityMonitor
-	}
-
-	require.NotNil(t, monitor, "Security monitor should be available")
-
-	t.Run("Attack Pattern Detection", func(t *testing.T) {
-		attackPatterns := []struct {
-			url        string
-			userAgent  string
-			attackType string
-		}{
-			{"/api/v1/users?id=" + url.QueryEscape("1' OR 1=1"), "Mozilla/5.0", "sql_injection"},
-			{"/api/v1/search?q=" + url.QueryEscape("<script>alert(1)</script>"), "Mozilla/5.0", "xss_attempt"},
-			{"/api/v1/files?path=" + url.QueryEscape("../../../etc/passwd"), "Mozilla/5.0", "path_traversal"},
-			{"/api/v1/admin", "sqlmap/1.0", "automated_scanner"},
-		}
-
-		for i, pattern := range attackPatterns {
-			req := httptest.NewRequest("GET", pattern.url, nil)
-			req.Header.Set("User-Agent", pattern.userAgent)
-			req.RemoteAddr = fmt.Sprintf("10.7.0.%d:12345", i+1)
-
-			rr := httptest.NewRecorder()
-			router.ServeHTTP(rr, req)
-
-			// Allow some time for monitoring to process
-			time.Sleep(time.Millisecond * 10)
-		}
-
-		// Check metrics
-		metrics := monitor.GetMetrics()
-		assert.Greater(t, metrics.SuspiciousRequests, int64(0), "Should detect suspicious requests")
-		assert.Greater(t, len(metrics.AttacksByType), 0, "Should categorize attack types")
-	})
-
-	t.Run("IP Blocking After Repeated Attacks", func(t *testing.T) {
-		attackerIP := "10.7.1.100"
-
-		// Generate multiple suspicious requests to trigger IP blocking
-		for i := 0; i < 15; i++ {
-			req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/users?id=%s", url.QueryEscape(fmt.Sprintf("%d' OR 1=1", i))), nil)
-			req.Header.Set("User-Agent", "sqlmap/1.0")
-			req.RemoteAddr = fmt.Sprintf("%s:12345", attackerIP)
-
-			rr := httptest.NewRecorder()
-			router.ServeHTTP(rr, req)
-
-			// Allow monitoring to process
-			time.Sleep(time.Millisecond * 2)
-		}
-
-		// Wait for potential IP blocking
-		time.Sleep(time.Millisecond * 100)
-
-		// Next request from this IP should be blocked
-		req := httptest.NewRequest("GET", "/api/v1/test", nil)
-		req.Header.Set("User-Agent", "Mozilla/5.0")
-		req.RemoteAddr = fmt.Sprintf("%s:12345", attackerIP)
-
-		rr := httptest.NewRecorder()
-		router.ServeHTTP(rr, req)
-
-		// Should be blocked
-		assert.Equal(t, http.StatusForbidden, rr.Code, "Repeated attacker should be blocked")
-
-		var errorResponse response.APIResponse
-		err := json.NewDecoder(rr.Body).Decode(&errorResponse)
-		require.NoError(t, err)
-		assert.Equal(t, "IP_BLOCKED", errorResponse.Error.Code)
-	})
-
-	t.Run("Security Metrics Accuracy", func(t *testing.T) {
-		// Get baseline metrics
-		baselineMetrics := monitor.GetMetrics()
-
-		// Generate known test traffic
-		normalRequests := 10
-		suspiciousRequests := 5
-
-		// Generate normal requests
-		for i := 0; i < normalRequests; i++ {
-			req := httptest.NewRequest("GET", "/api/v1/test", nil)
-			req.Header.Set("User-Agent", "TestAgent/1.0")
-			req.RemoteAddr = fmt.Sprintf("192.168.10.%d:12345", i+1)
-
-			rr := httptest.NewRecorder()
-			router.ServeHTTP(rr, req)
-		}
-
-		// Generate suspicious requests
-		for i := 0; i < suspiciousRequests; i++ {
-			req := httptest.NewRequest("GET", fmt.Sprintf("/api/v1/search?q=%s", url.QueryEscape(fmt.Sprintf("<script>alert(%d)</script>", i))), nil)
-			req.Header.Set("User-Agent", "Mozilla/5.0")
-			req.RemoteAddr = fmt.Sprintf("10.8.0.%d:12345", i+1)
-
-			rr := httptest.NewRecorder()
-			router.ServeHTTP(rr, req)
-		}
-
-		// Allow processing time
-		time.Sleep(time.Millisecond * 50)
-
-		// Verify metrics
-		finalMetrics := monitor.GetMetrics()
-
-		expectedTotalIncrease := int64(normalRequests + suspiciousRequests)
-		expectedSuspiciousIncrease := int64(suspiciousRequests)
-
-		actualTotalIncrease := finalMetrics.TotalRequests - baselineMetrics.TotalRequests
-		actualSuspiciousIncrease := finalMetrics.SuspiciousRequests - baselineMetrics.SuspiciousRequests
-
-		assert.GreaterOrEqual(t, actualTotalIncrease, expectedTotalIncrease, "Total requests should increase")
-		assert.GreaterOrEqual(t, actualSuspiciousIncrease, expectedSuspiciousIncrease, "Suspicious requests should increase")
-	})
-}
-
 func TestSecurityHeadersCompliance(t *testing.T) {
 	logger, _ := logging.New(logging.Config{Level: "debug", Format: "text", Output: "stdout"})
 	securityConfig := middleware.DefaultSecurityConfig()
@@ -608,9 +475,6 @@ func TestErrorResponseConsistency(t *testing.T) {
 		PermissionsPolicy: "geolocation=(), camera=(), microphone=()",
 		LogSecurityEvents: true,
 		LogAllRequests:    false,
-		EnableMonitoring:  true,
-		EnableIPBlocking:  true,
-		BlockDuration:     time.Hour,
 	}
 	validationConfig := middleware.DefaultValidationConfig()
 
@@ -788,36 +652,20 @@ type testResult struct {
 
 // TestHandler represents a mock API handler for testing
 type TestHandler struct {
-	logger          *logging.Logger
-	securityMonitor *middleware.SecurityMonitor
+	logger *logging.Logger
 }
 
 // setupSecureRouter creates a router with full security middleware stack
 func setupSecureRouter(handler *TestHandler, logger *logging.Logger, securityConfig *middleware.SecurityConfig, validationConfig *middleware.ValidationConfig) *mux.Router {
 	router := mux.NewRouter()
 
-	// Initialize security monitor
-	var securityMonitor *middleware.SecurityMonitor
-	if securityConfig.EnableMonitoring {
-		securityMonitor = middleware.NewSecurityMonitor(securityConfig, logger)
-		handler.securityMonitor = securityMonitor
-	}
-
 	// Apply security middleware stack (order matters!)
 	router.Use(logging.RecoveryMiddleware(logger))
-
-	if securityConfig.EnableIPBlocking && securityMonitor != nil {
-		router.Use(middleware.IPBlockingMiddleware(securityConfig, securityMonitor, logger))
-	}
 
 	router.Use(middleware.SecurityHeadersMiddleware(securityConfig, logger))
 	router.Use(middleware.RateLimitMiddleware(securityConfig, logger))
 	router.Use(middleware.RequestSizeMiddleware(securityConfig, logger))
 	router.Use(middleware.TimeoutMiddleware(securityConfig, logger))
-
-	if securityConfig.EnableMonitoring && securityMonitor != nil {
-		router.Use(middleware.MonitoringMiddleware(securityConfig, securityMonitor, logger))
-	}
 
 	router.Use(middleware.SecurityLoggingMiddleware(securityConfig, logger))
 	router.Use(middleware.ValidateContentTypeMiddleware(validationConfig, logger))

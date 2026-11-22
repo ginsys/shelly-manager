@@ -395,7 +395,6 @@ components:
             - NOT_IMPLEMENTED
             - UNSUPPORTED_MEDIA_TYPE
             - REQUEST_TIMEOUT
-            - IP_BLOCKED
         message:
           type: string
         details:
@@ -3968,28 +3967,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
-
-  /metrics/security:
-    get:
-      tags: [Metrics]
-      summary: Get security metrics
-      description: >-
-        Present only while the security monitor is on (`security.monitoring.enabled`, off by
-        default). With the monitor off the route does not exist and the answer is 404.
-        A blocked IP stays listed in `top_attacker_ips` while its block lasts, with its counters as reset.
-      operationId: getSecurityMetrics
-      security:
-        - BearerAuth: []
-        - ApiKeyAuth: []
-      responses:
-        '200':
-          description: Security metrics
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIResponse'
-        '404':
-          description: Security monitoring is off
 
   # Provisioning Endpoints
   /api/v1/discover:

@@ -38,33 +38,6 @@ export async function getDriftSummary(): Promise<any> {
 // are the Go structs the WebSocket contract already mirrors (metricsContract.ts),
 // so they are imported, not redeclared.
 
-// Mirrors middleware.IPAttackSummary (internal/api/middleware/security_monitor.go).
-export interface IPAttackSummary {
-  ip: string
-  total_requests: number
-  suspicious_requests: number
-  attack_types: Record<string, number>
-  first_seen: string
-  last_seen: string
-  blocked: boolean
-}
-
-// Mirrors middleware.SecurityMetrics (internal/api/middleware/security_monitor.go).
-// A Go nil slice marshals to null, hence the nullable attacker list.
-export interface SecurityMetrics {
-  total_requests: number
-  blocked_requests: number
-  suspicious_requests: number
-  rate_limit_violations: number
-  validation_failures: number
-  attacks_by_type: Record<string, number>
-  top_attacker_ips: IPAttackSummary[] | null
-  alerts_by_level: Record<string, number>
-  last_updated: string
-  blocked_ips: number
-  active_threats: number
-}
-
 // What SendTestAlert (internal/metrics/handlers.go) sends inside the envelope.
 export interface TestAlertResult {
   status: string
@@ -141,15 +114,6 @@ export async function getResolutionMetrics(): Promise<ResolutionMetrics> {
   const res = await api.get<APIResponse<ResolutionMetrics>>('/metrics/resolution')
   if (!res.data.success || !res.data.data) {
     throw new Error(res.data.error?.message || 'Failed to load resolution metrics')
-  }
-  return res.data.data
-}
-
-// Get security metrics
-export async function getSecurityMetrics(): Promise<SecurityMetrics> {
-  const res = await api.get<APIResponse<SecurityMetrics>>('/metrics/security')
-  if (!res.data.success || !res.data.data) {
-    throw new Error(res.data.error?.message || 'Failed to load security metrics')
   }
   return res.data.data
 }

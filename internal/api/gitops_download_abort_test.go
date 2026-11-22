@@ -31,7 +31,6 @@ func TestGitOpsDownloadThatFailsMidBodyAbortsTheTransfer(t *testing.T) {
 	h.ExportHandlers.SetExportBaseDir(base)
 	h.ExportHandlers.syncEngine.SetExportBaseDir(base)
 	router := SetupRoutesWithSecurity(h, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
-	closeMonitor(t, h)
 
 	dir := filepath.Join(base, "gitops")
 	body, err := json.Marshal(map[string]any{"config": map[string]any{

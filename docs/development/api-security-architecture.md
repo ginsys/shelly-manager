@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-The Shelly Manager API Security Framework provides enterprise-grade security through an 11-layer middleware stack that protects against the OWASP Top 10 vulnerabilities and advanced persistent threats. The framework delivers comprehensive protection with sub-10ms overhead while maintaining real-time threat detection and automated response capabilities.
+The Shelly Manager API Security Framework provides enterprise-grade security through a 9-layer middleware stack that protects against the OWASP Top 10 vulnerabilities. The framework delivers comprehensive protection with sub-10ms overhead.
 
 ### Security Posture Overview
 
-- **Protection Level**: OWASP Top 10 + Advanced Attack Vectors
+- **Protection Level**: OWASP Top 10
 - **Performance Impact**: <10ms middleware overhead  
-- **Threat Response**: Real-time detection with automated IP blocking
-- **Monitoring Coverage**: 100% request visibility with security event correlation
+- **Request Control**: Rate limiting and request validation refuse abusive and malformed requests
+- **Logging Coverage**: Structured logging of security events
 - **Compliance Ready**: Structured logging for security audits and forensic analysis
 
 ### Key Security Features
@@ -19,38 +19,32 @@ The Shelly Manager API Security Framework provides enterprise-grade security thr
 | Rate Limiting | DoS/DDoS Prevention | <2ms |
 | Request Validation | Injection Attacks | <3ms |
 | Security Headers | Browser-Based Attacks | <1ms |
-| Security Monitoring | Threat Intelligence | <2ms |
-| IP Blocking | Automated Response | <1ms |
 
 ## Technical Architecture
 
-### 11-Layer Security Middleware Stack
+### 9-Layer Security Middleware Stack
 
-The security framework implements defense-in-depth through 11 strategically ordered middleware layers:
+The security framework implements defense-in-depth through 9 strategically ordered middleware layers:
 
 ```
 ┌─────────────────────────────────────────┐
 │  1. Recovery Middleware (Panic Handler) │
 ├─────────────────────────────────────────┤
-│  2. IP Blocking (Malicious IP Filter)   │
+│  2. Security Logging (Audit Trail)      │
 ├─────────────────────────────────────────┤
-│  3. Security Monitoring (Threat Track)  │
+│  3. Security Headers (Browser Protect)  │
 ├─────────────────────────────────────────┤
-│  4. Security Logging (Audit Trail)      │
+│  4. Request Timeout (Resource Control)  │
 ├─────────────────────────────────────────┤
-│  5. Security Headers (Browser Protect)  │
+│  5. Rate Limiting (DoS Prevention)      │
 ├─────────────────────────────────────────┤
-│  6. Request Timeout (Resource Control)  │
+│  6. Request Size Limiting (Payload)     │
 ├─────────────────────────────────────────┤
-│  7. Rate Limiting (DoS Prevention)      │
+│  7. Request Validation (Input Security) │
 ├─────────────────────────────────────────┤
-│  8. Request Size Limiting (Payload)     │
+│  8. Enhanced CORS (Cross-Origin)        │
 ├─────────────────────────────────────────┤
-│  9. Request Validation (Input Security) │
-├─────────────────────────────────────────┤
-│  10. Enhanced CORS (Cross-Origin)       │
-├─────────────────────────────────────────┤
-│  11. Standard Logging (Operations)      │
+│  9. Standard Logging (Operations)       │
 └─────────────────────────────────────────┘
 ```
 
@@ -61,7 +55,7 @@ The middleware stack follows a strategic ordering principle that maximizes secur
 1. **Early Termination Strategy**: Malicious requests are blocked as early as possible
 2. **Resource Conservation**: Expensive operations only run on legitimate traffic
 3. **Context Preservation**: Security context flows through the entire stack
-4. **Monitoring Integration**: All security events are captured and correlated
+4. **Logging**: Security events are logged with their context
 
 ### Security Component Architecture
 
@@ -70,10 +64,7 @@ The middleware stack follows a strategic ordering principle that maximizes secur
 ```mermaid
 graph TB
     A[HTTP Request] --> B[Security Middleware Stack]
-    B --> C{IP Blocked?}
-    C -->|Yes| D[Block Response]
-    C -->|No| E[Security Monitor]
-    E --> F[Rate Limiter]
+    B --> F[Rate Limiter]
     F --> G{Rate Exceeded?}
     G -->|Yes| H[Rate Limit Response]
     G -->|No| I[Request Validator]
@@ -81,14 +72,8 @@ graph TB
     J -->|No| K[Validation Error]
     J -->|Yes| L[Application Handler]
     L --> M[Response]
-    
-    E --> N[Attack Detection]
-    N --> O[Alert Generation]
-    O --> P[Security Metrics]
-    
+
     F --> Q[Rate Tracking]
-    I --> R[Content Analysis]
-    R --> S[Threat Classification]
 ```
 
 ### Component Integration Patterns
@@ -114,9 +99,9 @@ type SecurityConfig struct {
     HSTSMaxAge        int
     PermissionsPolicy string
     
-    // Attack detection
-    EnableIPBlocking  bool
-    BlockDuration     time.Duration
+    // Logging
+    LogSecurityEvents bool
+    LogAllRequests    bool
 }
 ```
 
@@ -156,50 +141,13 @@ type ValidationConfig struct {
 - **Implementation**: Panic recovery with secure error handling
 - **Logging**: All panics logged with stack traces for forensic analysis
 
-#### Layer 2: IP Blocking Middleware
-- **Purpose**: Automatic blocking of malicious IP addresses
-- **Protection**: Repeat attackers, known malicious sources
-- **Implementation**: Real-time IP reputation with automatic blocking
-- **Performance**: <1ms lookup with in-memory cache
-
-```go
-// IP blocking logic
-if monitor.IsIPBlocked(clientIP) {
-    return blockResponse(w, "IP_BLOCKED")
-}
-```
-
-#### Layer 3: Security Monitoring Middleware
-- **Purpose**: Real-time threat detection and intelligence gathering
-- **Protection**: Attack pattern recognition, behavioral analysis
-- **Implementation**: Statistical analysis of request patterns
-- **Metrics**: Attack frequency, source identification, threat classification
-
-**When the monitor blocks an IP.** It blocks a client IP (trusted IPs excepted) for one hour, on every
-route, as soon as one of these holds:
-
-| Rule | Threshold |
-|------|-----------|
-| Suspicious requests, in total | 10 |
-| Rate limit violations, in total | 5 |
-| Attack types seen | 3 |
-| Suspicious requests inside one rolling hour | more than 5 (the 6th inside the hour) |
-
-A response with status 400 or above counts as suspicious, except 404, 401, 408 and 429. A 429 counts
-once, as a rate limit violation (the rate limiter's refusals reach the monitor as 429 responses).
-Other signals on the same request, such as a missing User-Agent, still count it as suspicious.
-
-The totals never decay. After a block ends, the next tracked request blocks the IP again while a
-total rule still holds, so such an IP stays blocked until 24 hours pass with no tracked request, not
-one hour. Only the rolling-hour rule ages out during a block.
-
-#### Layer 4: Security Logging Middleware
+#### Layer 2: Security Logging Middleware
 - **Purpose**: Comprehensive audit trail for security events
 - **Protection**: Forensic analysis, compliance reporting
 - **Implementation**: Structured logging with security context
 - **Storage**: JSON-formatted logs with correlation IDs
 
-#### Layer 5: Security Headers Middleware
+#### Layer 3: Security Headers Middleware
 - **Purpose**: Browser-based attack prevention
 - **Protection**: XSS, clickjacking, MIME-sniffing attacks
 - **Implementation**: RFC-compliant security header injection
@@ -214,7 +162,7 @@ Referrer-Policy: strict-origin-when-cross-origin
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 
-#### Layer 6: Request Timeout Middleware
+#### Layer 4: Request Timeout Middleware
 - **Purpose**: Resource exhaustion prevention
 - **Protection**: Slowloris attacks, resource depletion
 - **Implementation**: Configurable timeout with graceful termination. The handler runs in its own
@@ -229,7 +177,7 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
   this layer and the recovery layer to net/http, which closes the connection.
 - **Default**: 30-second timeout with early cancellation
 
-#### Layer 7: Rate Limiting Middleware
+#### Layer 5: Rate Limiting Middleware
 - **Purpose**: Denial-of-service attack prevention
 - **Protection**: DDoS, brute force attacks, API abuse
 - **Implementation**: Token bucket algorithm with path-specific limits
@@ -241,19 +189,19 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 - Provisioning: 50 requests/hour per IP
 - Bulk operations: 20 requests/hour per IP
 
-#### Layer 8: Request Size Middleware
+#### Layer 6: Request Size Middleware
 - **Purpose**: Large payload attack prevention
 - **Protection**: Memory exhaustion, buffer overflow attempts
 - **Implementation**: Configurable size limits with streaming validation
 - **Default**: 10MB maximum request size
 
-#### Layer 9: Request Validation Middleware
+#### Layer 7: Request Validation Middleware
 - **Purpose**: Input validation and injection attack prevention
 - **Protection**: SQL injection, XSS, path traversal, header injection
 - **Implementation**: Multi-stage validation pipeline
 - **Components**: Content-type, headers, JSON structure, query parameters
 
-#### Layer 10: Enhanced CORS Middleware
+#### Layer 8: Enhanced CORS Middleware
 - **Purpose**: Cross-origin request security
 - **Protection**: CSRF, unauthorized cross-origin access
 - **Implementation**: Strict origin validation with preflight handling
@@ -264,7 +212,7 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
   the page read the response; the request is still served and admin authorization is unchanged. A
   request with no `Origin` header gets `*`.
 
-#### Layer 11: Standard Logging Middleware
+#### Layer 9: Standard Logging Middleware
 - **Purpose**: Operational visibility and debugging
 - **Protection**: Request/response correlation, performance monitoring
 - **Implementation**: Structured logging with request context
@@ -276,15 +224,15 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 | OWASP Threat | Protection Layer | Detection Method | Response Action |
 |--------------|------------------|------------------|-----------------|
 | Injection | Request Validation | Content analysis | Block + Alert |
-| Broken Authentication | Rate Limiting | Failed auth tracking | IP blocking |
+| Broken Authentication | Rate Limiting | Request counting per client IP | 429 refusal |
 | Sensitive Data Exposure | Security Headers | Response analysis | Header enforcement |
 | XML External Entities | Content Validation | XML parsing rules | Request rejection |
-| Broken Access Control | Request Monitoring | Access pattern analysis | Session termination |
+| Broken Access Control | Admin key guard | Key check | 401 refusal |
 | Security Misconfiguration | Header Validation | Configuration audit | Alert generation |
 | Cross-Site Scripting | Content Validation + Headers | Script pattern detection | Content sanitization |
 | Insecure Deserialization | JSON Validation | Structure analysis | Request rejection |
-| Known Vulnerabilities | Security Monitoring | Signature matching | Automatic blocking |
-| Logging & Monitoring | Security Logging | Event correlation | Real-time alerting |
+| Known Vulnerabilities | Request Validation | Signature matching | Request rejection |
+| Logging & Monitoring | Security Logging | Event correlation | Structured log lines |
 
 ### Advanced Attack Scenarios
 
@@ -292,7 +240,7 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 Attack Vector: Multiple IPs flooding API endpoints
 Detection: Rate limit violations across multiple sources
-Response: Automatic IP blocking + Alert escalation
+Response: 429 refusals
 Mitigation: Path-specific rate limits + Burst protection
 ```
 
@@ -300,23 +248,23 @@ Mitigation: Path-specific rate limits + Burst protection
 ```
 Attack Vector: Malicious SQL in query parameters
 Detection: Pattern matching in request validation
-Response: Immediate request blocking + IP reputation update
+Response: Immediate request rejection
 Mitigation: Parameterized queries + Content analysis
 ```
 
 #### Scenario 3: Scanner-Based Reconnaissance
 ```
 Attack Vector: Automated vulnerability scanners
-Detection: User-agent analysis + Request patterns
-Response: Scanner identification + IP blocking
-Mitigation: Behavioral analysis + Automated response
+Detection: User-agent analysis
+Response: Known scanner names are refused with 400
+Mitigation: Header validation
 ```
 
 #### Scenario 4: Header Injection Attack
 ```
 Attack Vector: HTTP header smuggling/injection
 Detection: Header validation + Suspicious content analysis
-Response: Request rejection + Security alert
+Response: Request rejection
 Mitigation: Strict header validation + Size limits
 ```
 
@@ -326,12 +274,10 @@ Mitigation: Strict header validation + Size limits
 
 | Middleware Layer | Average Latency | 99th Percentile | Memory Overhead |
 |------------------|----------------|-----------------|-----------------|
-| IP Blocking | 0.8ms | 1.2ms | 2KB |
-| Security Monitor | 1.5ms | 2.8ms | 8KB |
 | Rate Limiting | 1.2ms | 2.1ms | 4KB |
 | Request Validation | 2.8ms | 4.5ms | 6KB |
 | Security Headers | 0.5ms | 0.8ms | 1KB |
-| **Total Stack** | **8.2ms** | **12.4ms** | **25KB** |
+| **Total Stack** | **5.9ms** | **8.4ms** | **15KB** |
 
 ### Scalability Analysis
 
@@ -342,7 +288,7 @@ Mitigation: Strict header validation + Size limits
 
 ### Performance Optimization Strategies
 
-1. **In-Memory Caching**: IP blocking and rate limiting use efficient hash maps
+1. **In-Memory Caching**: Rate limiting uses efficient hash maps
 2. **Lazy Validation**: Expensive validations only run when triggered
 3. **Connection Pooling**: HTTP client reuse for external services
 4. **Garbage Collection**: Automatic cleanup of stale entries
@@ -372,7 +318,7 @@ Every security-relevant action is authorized and logged.
 
 #### In-Memory Storage
 - **Rationale**: Sub-millisecond access times for security decisions
-- **Components**: Rate limiting, IP blocking, attack statistics
+- **Components**: Rate limiting
 - **Trade-offs**: Memory usage vs. performance, restart behavior
 
 #### Gorilla Mux Router
@@ -386,13 +332,10 @@ Every security-relevant action is authorized and logged.
 Sequential processing with context propagation enables comprehensive security coverage.
 
 #### Observer Pattern
-Security monitoring observes all requests without interfering with normal processing.
+Security logging observes all requests without interfering with normal processing.
 
 #### Strategy Pattern
 Configurable security policies allow environment-specific adaptations.
-
-#### Circuit Breaker Pattern
-Automatic IP blocking prevents cascade failures from persistent attacks.
 
 ## Future Architecture Considerations
 

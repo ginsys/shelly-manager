@@ -11,7 +11,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ginsys/shelly-manager/internal/api/middleware"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/metrics"
 	"github.com/ginsys/shelly-manager/internal/sync"
@@ -44,8 +43,7 @@ var guardWalkRequired = []string{
 	"GET /api/v1/config/templates",
 	"POST /api/v1/admin/rotate-admin-key",
 	"POST /api/v1/provisioner/agents/register",
-	"GET /api/v1/version",          // a listed route
-	"GET /api/v1/metrics/security", // present only with a security monitor
+	"GET /api/v1/version", // a listed route
 }
 
 type guardWalkRoute struct {
@@ -121,14 +119,10 @@ func guardWalkHandler(t *testing.T, adminKey, agentKey string) (*Handler, *loggi
 // front of the guards, so a 401 is the guard's own answer.
 func guardWalkRouter(t *testing.T, adminKey, agentKey string) *mux.Router {
 	t.Helper()
-	h, logger := guardWalkHandler(t, adminKey, agentKey)
-
-	// The production router builds a security monitor, and GET /metrics/security exists only with one.
-	monitor := middleware.NewSecurityMonitor(middleware.DefaultSecurityConfig(), logger)
-	t.Cleanup(monitor.Close)
+	h, _ := guardWalkHandler(t, adminKey, agentKey)
 
 	router := mux.NewRouter()
-	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), h, logger, monitor)
+	registerAPIRoutes(router.PathPrefix("/api/v1").Subrouter(), h)
 	return router
 }
 

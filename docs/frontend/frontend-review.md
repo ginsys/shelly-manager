@@ -312,14 +312,9 @@ page imports still counts. The Playwright spec is what proves the links are rend
   (`PUT /devices/{id}/config/auth`).
 - **Metrics** use a WebSocket stream with a REST fallback; the message contract is typed in
   `ui/src/api/metricsContract.ts`. The REST client reuses those types for the dashboard,
-  notification and resolution answers; `ui/src/api/metrics.ts` types the security answer and the
-  test-alert answer from their Go structs. The dashboard page loads its four REST panels with
-  `Promise.allSettled`, so one failing endpoint empties only its own panel. The security call
-  answers 404 while the security monitor is off (`security.monitoring.enabled`, off by default):
-  the page reads that one 404 as "off", says so in the Security Metrics panel and shows no error
-  banner and no late notice; any other failure of that call is still named.
-
-  ![Metrics dashboard with security monitoring off](images/metrics-dashboard-security-monitoring-off.png)
+  notification and resolution answers; `ui/src/api/metrics.ts` types the test-alert answer from its
+  Go struct. The dashboard page loads its three REST panels with `Promise.allSettled`, so one
+  failing endpoint empties only its own panel.
 - **Admin key:** `ui/src/api/client.ts` reads the admin key from `VITE_ADMIN_KEY` (set at build
   time) or `window.__ADMIN_KEY__`. A production build has no supported way to get it today
   (ginsys/shelly-manager#619).

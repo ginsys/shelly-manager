@@ -11,7 +11,6 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/ginsys/shelly-manager/internal/api/middleware"
-	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	imetrics "github.com/ginsys/shelly-manager/internal/metrics"
 )
@@ -72,23 +71,11 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	r := mux.NewRouter()
 
 	// A path with no route skips every middleware, so give its 404 the CORS headers: a page on an
-	// allowed origin reads that answer, and the Metrics page reads a missing security route as
-	// "monitoring is off".
+	// allowed origin reads that answer.
 	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		setCORSHeaders(w, req, securityConfig)
 		http.NotFound(w, req)
 	})
-
-	// Initialize security monitor
-	var securityMonitor *middleware.SecurityMonitor
-	if securityConfig.EnableMonitoring {
-		securityMonitor = middleware.NewSecurityMonitor(securityConfig, logger)
-
-		// Store security monitor in handler for metrics endpoint access
-		if handler != nil {
-			handler.securityMonitor = securityMonitor
-		}
-	}
 
 	// Health endpoints FIRST, with minimal middleware to allow curl health checks
 	// These endpoints need to be accessible without user agent validation for CI/CD
@@ -123,32 +110,22 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	// 1. Recovery middleware (catch panics first)
 	protected.Use(logging.RecoveryMiddleware(logger))
 
-	// 2. IP blocking middleware (block malicious IPs early)
-	if securityConfig.EnableIPBlocking && securityMonitor != nil {
-		protected.Use(middleware.IPBlockingMiddleware(securityConfig, securityMonitor, logger))
-	}
-
-	// 3. Security monitoring middleware (track all requests)
-	if securityMonitor != nil {
-		protected.Use(middleware.MonitoringMiddleware(securityConfig, securityMonitor, logger))
-	}
-
-	// 4. Security logging middleware (log all requests for monitoring)
+	// 2. Security logging middleware (log all requests for monitoring)
 	protected.Use(middleware.SecurityLoggingMiddleware(securityConfig, logger))
 
-	// 5. Security headers middleware (set security headers early)
+	// 3. Security headers middleware (set security headers early)
 	protected.Use(middleware.SecurityHeadersMiddleware(securityConfig, logger))
 
-	// 6. Request timeout middleware (prevent resource exhaustion)
+	// 4. Request timeout middleware (prevent resource exhaustion)
 	protected.Use(middleware.TimeoutMiddlewareFor(securityConfig, logger, routeDeadline))
 
-	// 7. Rate limiting middleware (prevent DoS attacks)
+	// 5. Rate limiting middleware (prevent DoS attacks)
 	protected.Use(middleware.RateLimitMiddleware(securityConfig, logger))
 
-	// 8. Request size limiting middleware (prevent large payload attacks)
+	// 6. Request size limiting middleware (prevent large payload attacks)
 	protected.Use(middleware.RequestSizeMiddleware(securityConfig, logger))
 
-	// 9. Request validation middleware (validate headers, content types, etc.)
+	// 7. Request validation middleware (validate headers, content types, etc.)
 	protected.Use(middleware.ValidateHeadersMiddleware(validationConfig, logger))
 	protected.Use(middleware.ValidateContentTypeMiddleware(validationConfig, logger))
 	protected.Use(middleware.ValidateQueryParamsMiddleware(validationConfig, logger))
@@ -158,22 +135,21 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 	}
 	protected.Use(middleware.ValidateJSONMiddleware(validationConfig, logger))
 
-	// 10. Enhanced CORS middleware (security-aware CORS handling)
+	// 8. Enhanced CORS middleware (security-aware CORS handling)
 	protected.Use(enhancedCORSMiddleware(logger, securityConfig))
 
-	// 11. Standard logging middleware (existing functionality)
+	// 9. Standard logging middleware (existing functionality)
 	protected.Use(logging.HTTPMiddleware(logger))
 
-	// 12. Prometheus HTTP metrics middleware (baseline observability)
+	// 10. Prometheus HTTP metrics middleware (baseline observability)
 	if handler != nil {
 		protected.Use(httpMetricsMiddleware())
 	}
 
-	// API routes. Test mode calls registerAPIRoutes on its own subrouter.
-	// Middleware above is the only difference, except GET /api/v1/metrics/security,
-	// which closes over securityMonitor and is omitted when that is nil.
+	// API routes. Test mode calls registerAPIRoutes on its own subrouter;
+	// the middleware above is the only difference.
 	api := protected.PathPrefix("/api/v1").Subrouter()
-	registerAPIRoutes(api, handler, logger, securityMonitor)
+	registerAPIRoutes(api, handler)
 
 	// Static file serving removed (Phase 8): legacy UI is deleted; SPA will be served by the new UI build.
 
@@ -253,20 +229,6 @@ func enhancedCORSMiddleware(logger *logging.Logger, config *middleware.SecurityC
 	}
 }
 
-// createSecurityMetricsHandler creates a handler for security metrics
-func createSecurityMetricsHandler(monitor *middleware.SecurityMonitor, logger *logging.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rw := apiresp.NewResponseWriter(logger)
-		if monitor == nil {
-			rw.WriteError(w, r, http.StatusServiceUnavailable, apiresp.ErrCodeServiceUnavailable, "Security monitoring is not enabled", nil)
-			return
-		}
-
-		metrics := monitor.GetMetrics()
-		rw.WriteSuccess(w, r, metrics)
-	}
-}
-
 // SetupTestModeRoutes creates an optimized router with minimal middleware stack for testing
 func SetupTestModeRoutes(handler *Handler, logger *logging.Logger) *mux.Router {
 	r := mux.NewRouter()
@@ -285,13 +247,12 @@ func SetupTestModeRoutes(handler *Handler, logger *logging.Logger) *mux.Router {
 	}
 
 	// Same /api/v1 table as production. Middleware stays minimal.
-	// securityMonitor is nil, so GET /api/v1/metrics/security is not registered.
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.Use(logging.RecoveryMiddleware(logger)) // Only recovery for error handling
 	api.Use(testModeCORSMiddleware(logger))     // Minimal CORS for browser tests
 
 	if handler != nil {
-		registerAPIRoutes(api, handler, logger, nil)
+		registerAPIRoutes(api, handler)
 	}
 
 	logger.Warn("TEST MODE ENABLED ("+testModeEnv+"=true): this router serves the full API without the protections listed in disabled_protections. Admin authorization is per handler and still applies. Never use test mode outside tests.",
@@ -305,7 +266,7 @@ const testModeEnv = "SHELLY_SECURITY_VALIDATION_TEST_MODE"
 // testModeDisabledProtections names what the production chain applies and the
 // test-mode router does not (see SetupRoutesWithSecurity).
 var testModeDisabledProtections = []string{
-	"IP blocking", "security monitoring", "security logging", "security headers",
+	"security logging", "security headers",
 	"request timeout", "rate limiting", "request size limit",
 	"request validation (headers, content type, query, JSON)",
 	"configured CORS methods and headers (fixed wildcard CORS instead)", "request logging",

@@ -187,8 +187,8 @@ func checkProvisionerIDRule(t *testing.T, manager *Manager) {
 	})
 
 	// The id is a path segment of every per-agent route, so a new id that the path clean rewrites (an empty
-	// or a "." or ".." segment) or that the security monitor counts as suspicious (".." anywhere) would be
-	// created and then be unreachable or block its own agent's address.
+	// or a "." or ".." segment) or that the request validator refuses in the agent_id query value of the
+	// discovered-devices route (".." anywhere) would be created and then be unreachable.
 	t.Run("a new id with an empty, a . or a .. segment, or .. anywhere, is refused and leaves no row", func(t *testing.T) {
 		for _, id := range []string{
 			"a//b", "/a", "a/", "/", "a/./b", "./a", "a/.", ".", "a/../b", "../a", "a/..", "..",

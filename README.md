@@ -238,17 +238,9 @@ security:
   cors:
     allowed_origins:
       - https://app.example.com
-  # The security monitor and IP blocking are off by default. To turn them on (blocking needs monitoring):
-  # monitoring:
-  #   enabled: true      # SHELLY_SECURITY_MONITORING_ENABLED
-  # ip_blocking:
-  #   enabled: true      # SHELLY_SECURITY_IP_BLOCKING_ENABLED; block_seconds and four thresholds also set here
 ```
 
-The security monitor counts suspicious requests per client IP and serves `GET /api/v1/metrics/security`;
-IP blocking refuses a flagged IP for `security.ip_blocking.block_seconds` and starts its counting over. Both
-were always on before these keys existed, so a deployment that upgrades stops blocking IPs until it turns
-them on. The keys and defaults are listed in `docs/security/API_SECURITY_FRAMEWORK.md`.
+The keys and defaults are listed in `docs/security/API_SECURITY_FRAMEWORK.md`.
 
 **Provisioning Agent** (`/etc/shelly/provisioner.yaml`):
 ```yaml

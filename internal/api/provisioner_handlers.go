@@ -119,7 +119,7 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 	case errors.Is(err, database.ErrAgentIDInvalid):
 		h.responseWriter().WriteValidationError(w, r, `Agent id must use printable ASCII characters without a space, unless it starts with "provisioner-"`)
 	case errors.Is(err, database.ErrAgentIDUnroutable):
-		h.responseWriter().WriteValidationError(w, r, `Agent id must not hold an empty segment ("//", or a "/" at either end) or a "." segment, which the routes cannot reach cleanly, or ".." anywhere, which the security monitor counts as suspicious on every request and, where IP blocking is on, can block the agent's address`)
+		h.responseWriter().WriteValidationError(w, r, `Agent id must not hold an empty segment ("//", or a "/" at either end) or a "." segment, which the routes cannot reach cleanly, or ".." anywhere, because the request validator refuses "../" in the agent_id query value of the discovered-devices route`)
 	case errors.Is(err, database.ErrAgentNotFound):
 		h.responseWriter().WriteNotFoundError(w, r, "Agent")
 	case errors.Is(err, database.ErrTaskNotFound):

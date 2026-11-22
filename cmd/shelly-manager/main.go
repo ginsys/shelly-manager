@@ -593,12 +593,6 @@ func initApp() {
 		log.Fatalf("Invalid configuration: %v", err)
 	}
 
-	// Blocking on with the monitor off, or a zero block length or threshold, would leave an operator
-	// believing a protection is working: stop here, naming the key.
-	if err = cfg.ValidateSecurityMonitoring(); err != nil {
-		log.Fatalf("Invalid security configuration: %v", err)
-	}
-
 	// Initialize logger from config
 	logger, err = logging.New(logging.Config{
 		Level:  cfg.Logging.Level,

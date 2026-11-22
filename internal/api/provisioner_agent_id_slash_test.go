@@ -102,6 +102,10 @@ func TestProvisionerRegister_RefusesAnIdNoRouteCanReach(t *testing.T) {
 		code, _, body := idRegister(t, srv, id, idAgentHdr(""))
 		assert.Equal(t, http.StatusBadRequest, code, "%q: %s", id, body)
 		assert.Contains(t, body, "empty segment", "%q: the refusal names the rule", id)
+		// ".." is refused because the request validator, which stays, refuses it in the agent_id query value of
+		// the discovered-devices route (ginsys/shelly-manager#876). The text names that reason, not a monitor.
+		assert.Contains(t, body, "validator", "%q: the refusal names the validator", id)
+		assert.NotContains(t, body, "monitor", "%q: no monitor is named", id)
 		_, err := database.NewProvisionerStore(db.GetDB()).GetAgent(registryDeadline(t), id)
 		assert.ErrorIs(t, err, database.ErrAgentNotFound, "%q leaves no row", id)
 	}

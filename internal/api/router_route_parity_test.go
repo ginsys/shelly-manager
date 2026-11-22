@@ -16,12 +16,8 @@ import (
 	"github.com/ginsys/shelly-manager/internal/testutil"
 )
 
-// testModeRouteExceptions are method+template pairs the production router
-// registers and test mode does not. Test mode does not build the security
-// monitor, and GET /api/v1/metrics/security closes over that monitor.
-// Any other difference is a bug: both constructors must share one registrar.
-const testModeOnlyProductionRoute = "GET /api/v1/metrics/security"
-
+// Any difference between the production and the test-mode route table is a bug:
+// both constructors must share one registrar.
 func TestTestModeRouterMatchesProductionRouteTable(t *testing.T) {
 	// make test / CI export this, which would make SetupRoutesWithSecurity
 	// return the test-mode router and hide the difference this test exists for.
@@ -45,28 +41,20 @@ func TestTestModeRouterMatchesProductionRouteTable(t *testing.T) {
 	h.ImportHandlers = NewImportHandlers(engine, logger)
 
 	prod := SetupRoutesWithSecurity(h, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
-	// The production router starts the monitor's alert and cleanup goroutines.
-	sm, ok := h.securityMonitor.(*middleware.SecurityMonitor)
-	require.True(t, ok, "production router did not build a security monitor")
-	t.Cleanup(sm.Close)
 	testMode := SetupTestModeRoutes(h, logger)
 
 	prodRoutes := routeTable(t, prod)
 	testRoutes := routeTable(t, testMode)
 
-	if _, ok := prodRoutes[testModeOnlyProductionRoute]; !ok {
-		t.Fatalf("production router missing %s; documented exception is not registered.\nproduction routes:\n%s",
-			testModeOnlyProductionRoute, formatRoutes(prodRoutes))
+	if _, ok := prodRoutes["GET /api/v1/devices"]; !ok {
+		t.Fatalf("production route table lacks GET /api/v1/devices: the comparison read an empty table.\nproduction routes:\n%s",
+			formatRoutes(prodRoutes))
 	}
-	if _, ok := testRoutes[testModeOnlyProductionRoute]; ok {
-		t.Fatalf("test mode registered %s; that route closes over the production security monitor", testModeOnlyProductionRoute)
-	}
-	delete(prodRoutes, testModeOnlyProductionRoute)
 
 	missing, extra := diffRoutes(prodRoutes, testRoutes)
 	if len(missing) > 0 || len(extra) > 0 {
-		t.Fatalf("test-mode route table differs from production beyond %s\nmissing from test mode:\n%s\nextra on test mode:\n%s",
-			testModeOnlyProductionRoute, formatList(missing), formatList(extra))
+		t.Fatalf("test-mode route table differs from production\nmissing from test mode:\n%s\nextra on test mode:\n%s",
+			formatList(missing), formatList(extra))
 	}
 }
 

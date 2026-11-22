@@ -108,7 +108,6 @@ func (r *rbLogRig) log() string {
 func (r *rbLogRig) send(method, path, body string) *httptest.ResponseRecorder {
 	r.t.Helper()
 	router := SetupRoutesWithSecurity(r.handler, r.logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
-	closeMonitor(r.t, r.handler)
 	var req *http.Request
 	if body == "" {
 		req = httptest.NewRequest(method, path, nil)

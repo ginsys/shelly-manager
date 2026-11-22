@@ -17,7 +17,7 @@ import (
 // The warning must name every one of them (spelled here on purpose, so an
 // emptied or renamed list in the router fails the test).
 var testModeProtections = []string{
-	"IP blocking", "security monitoring", "security logging", "security headers",
+	"security logging", "security headers",
 	"request timeout", "rate limiting", "request size limit",
 	"request validation", "CORS", "request logging",
 }
@@ -43,14 +43,6 @@ func warnLines(buf *bytes.Buffer) []string {
 		}
 	}
 	return out
-}
-
-// closeMonitor stops the security monitor the production router starts.
-func closeMonitor(t *testing.T, h *Handler) {
-	t.Helper()
-	if sm, ok := h.securityMonitor.(*middleware.SecurityMonitor); ok {
-		t.Cleanup(sm.Close)
-	}
 }
 
 func TestTestModeRouterWarnsWithProtections(t *testing.T) {
@@ -82,7 +74,6 @@ func TestProductionRouterLogsNoTestModeWarning(t *testing.T) {
 	h, buf := captureHandler(t)
 
 	SetupRoutesWithSecurity(h, h.logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
-	closeMonitor(t, h)
 
 	require.Empty(t, warnLines(buf), "log:\n%s", buf.String())
 }
@@ -99,7 +90,6 @@ func TestValidationOnlyTestModeWarnsWithRelaxedChecks(t *testing.T) {
 			valCfg.TestMode = true
 
 			SetupRoutesWithSecurity(h, h.logger, middleware.DefaultSecurityConfig(), valCfg)
-			closeMonitor(t, h)
 
 			lines := warnLines(buf)
 			require.Len(t, lines, 1, "log:\n%s", buf.String())
