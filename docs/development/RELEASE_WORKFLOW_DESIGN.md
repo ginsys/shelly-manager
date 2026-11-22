@@ -149,7 +149,8 @@ would ship a change the changelog section omits, so the workflow refuses while a
 in `changelog.d/` at that commit. *Order:* release PR, then tag. *What ties the tag to the
 heading:* the workflow derives the tag **from** the heading, so they cannot differ. *Cost to build:*
 one workflow, plus a version variable and a callable image build (slices 1 to 3). *Cost to run:* one
-PR and one button; the dry run is the default.
+PR and one button, plus a full `Test` run on the release commit, started by the workflow; the dry
+run is the default.
 
 **B. Release PR, then the maintainer pushes the tag; a tag-triggered workflow publishes**, as in
 forward-email (`release.yml:3-6`) and wan-dns-sync. *Order:* release PR, then tag. *What ties them:*
@@ -205,7 +206,7 @@ prevents:
 |---|---|
 | Heading exists, is not empty, and no such tag exists | a release with empty notes, or a second use of a tag, which is permanent |
 | No fragment is left in `changelog.d/` at the tagged commit | a release that ships a change its notes omit, because a pull request merged between the release PR and the dispatch |
-| CI passed on this commit (the whole `Test` workflow, database provider job included) | shipping a commit nobody tested |
+| A `Test` run passed on this exact commit (the whole workflow, database provider job included). The push trigger skips a changelog-only commit (`test.yml:10-22` lists no `CHANGELOG.md` or `changelog.d/**`), so after a release PR merges there is none: the workflow starts one with the dispatch trigger (`test.yml:26`) and waits | shipping a commit nobody tested |
 | Dry run by default | making a permanent tag by a mistaken click |
 | `SHA256SUMS` | a truncated or corrupted download of the host binary |
 | One release at a time | two runs racing for the same tag |
@@ -258,7 +259,7 @@ Each slice is one pull request with its own tests; none is a release.
    output, with `dev` when unset.
 2. **Callable image build.** `docker-build.yml` gains a version input; both Dockerfiles declare
    `ARG VERSION` and pass it in `-ldflags`; the UI build receives it. Default behaviour is unchanged.
-3. **The release workflow.** Guard, wait for CI, dry run, tag by API, images through slice 2,
+3. **The release workflow.** Guard, start `Test` on the commit and wait for it, dry run, tag by API, images through slice 2,
    provisioner archives and `SHA256SUMS`, pre-release with the changelog notes.
 4. **Documentation.** The release procedure and the operator's upgrade and rollback page; the stale
    values from section 1 (chart `appVersion`, the bug template placeholder, the OpenAPI `version`).
