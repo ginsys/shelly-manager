@@ -56,7 +56,7 @@ var plus1PMSections = map[string]string{
 		"ap":{"enable":true,"ssid":"ShellyPlus1PM-AABBCC"}}`,
 	"mqtt": `{"enable":true,"server":"broker.example.net","port":1883,"user":"shelly","id":"shellyplus1pm-AABBCC",
 		"topic_prefix":"shellyplus1pm-AABBCC","rpc_ntf":true,"status_ntf":false}`,
-	"system":   `{"device":{"name":"Porch","eco_mode":false,"discoverable":true},"sntp":{"server":"time.cloudflare.com"}}`,
+	"system":   `{"device":{"name":"Porch","eco_mode":false,"discoverable":true,"ble":{"enable":false,"rpc":{"enable":true}}},"sntp":{"server":"time.cloudflare.com"}}`,
 	"location": `{"tz":"Europe/Brussels","lat":50.85,"lng":4.35}`,
 	"cloud":    `{"enable":true,"server":"iot.shelly.cloud:6012/jrpc"}`,
 	"relay": `{"relays":[{"id":0,"name":"Pump","default_state":"restore_last","auto_on":0,"auto_off":300,
@@ -65,7 +65,7 @@ var plus1PMSections = map[string]string{
 }
 
 // The top-level keys of the Plus 1PM document that nothing is read from, sorted.
-var plus1PMUnread = []string{"ble", "modbus", "script:1", "ws"}
+var plus1PMUnread = []string{"modbus", "script:1", "ws"}
 
 func TestConvertToTypedConfig_ByGeneration(t *testing.T) {
 	h := &Handler{}

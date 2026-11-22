@@ -237,8 +237,18 @@ type SleepConfig struct {
 
 // BLEConfig represents Bluetooth LE settings
 type BLEConfig struct {
-	Enable bool       `json:"enable"`
-	RPC    *RPCConfig `json:"rpc,omitempty"`
+	Enable bool          `json:"enable"`
+	RPC    *BLERPCConfig `json:"rpc,omitempty"`
+}
+
+// BLERPCConfig is the rpc object of the BLE settings. DstAddr and ListenPort are the stored Gen1 words
+// that the Gen2 apply refuses; Enable and KeepRunning are the Gen2 BLE.SetConfig keys rpc.enable and
+// rpc.keep_running.
+type BLERPCConfig struct {
+	Enable      *bool  `json:"enable,omitempty"`
+	KeepRunning *bool  `json:"keep_running,omitempty"`
+	DstAddr     string `json:"dst_addr,omitempty" validate:"omitempty,ip"`
+	ListenPort  int    `json:"listen_port,omitempty" validate:"omitempty,min=1,max=65535"`
 }
 
 // Validation methods
