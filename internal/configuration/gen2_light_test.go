@@ -173,6 +173,23 @@ func TestApplyDesiredConfig_Gen2RefusesALightOnADeviceWithoutOne(t *testing.T) {
 	assert.False(t, repo.devices[1].ConfigApplied)
 }
 
+// A desired light that sets nothing is still a desired light: one the device lacks refuses the apply
+// before light:0 is written.
+func TestApplyDesiredConfig_Gen2RefusesAnIdOnlyLightTheDeviceLacks(t *testing.T) {
+	desired := &DeviceConfiguration{Light: &LightConfig{Lights: []SingleLightConfig{{ID: 0, Name: StringPtr("hall")}, {ID: 1}}}}
+	svc, repo := newGen2Service(t, desired)
+	dev := fakeGen2DeviceWithLight()
+
+	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNDM-00100WW")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+	assert.Contains(t, err.Error(), "light:1")
+	assert.Empty(t, dev.calls)
+	assert.False(t, repo.devices[1].ConfigApplied)
+}
+
 // A key that the live light:0 does not report, at any depth, is refused before any write; a key that
 // is present with null is reported.
 func TestApplyDesiredConfig_Gen2RefusesAKeyTheDeviceDoesNotReport(t *testing.T) {
