@@ -27,6 +27,17 @@ func gen2Samples(leaf map[string]interface{}) []interface{} {
 	if leaf["type"] == "boolean" {
 		return []interface{}{true, false}
 	}
+	// A number is probed at both bounds the schema states, so a range wider than apply's fails.
+	if leaf["type"] == "integer" || leaf["type"] == "number" {
+		values := []interface{}{sampleValue(leaf)}
+		for _, bound := range []string{"minimum", "maximum"} {
+			switch v := leaf[bound].(type) {
+			case int, float64:
+				values = append(values, v)
+			}
+		}
+		return values
+	}
 	if leaf["pattern"] == gen2ClockTime.String() {
 		return []interface{}{"12:00"}
 	}
@@ -80,9 +91,6 @@ func TestGen2DeviceSchemaApplicableMatchesApply(t *testing.T) {
 // gen2ProbeConfig is configWithLeaf with the companions a Gen2 write needs next to one setting.
 func gen2ProbeConfig(t *testing.T, path string, value interface{}) *DeviceConfiguration {
 	t.Helper()
-	if path == "auth.user" {
-		value = gen2LoginUser // a Gen2 device has one user
-	}
 	if path == "auth.enable" && value == false {
 		return &DeviceConfiguration{Auth: &AuthConfiguration{Enable: BoolPtr(false)}} // no login to name
 	}
@@ -144,6 +152,26 @@ func TestGen2DeviceSchemaSections(t *testing.T) {
 	}
 	if GetDeviceConfigurationSchemaFor(gen2TestModel, 0)[SchemaKeyApplySupported] != false {
 		t.Error("a model with no generation stays unsupported")
+	}
+}
+
+// A field the form accepts and apply refuses is a mismatch: the Gen2 login has one user, and the cover
+// takes 1 to 300 seconds, a range the shared roller schema leaves open at the top (and at 0 for the delay).
+func TestGen2DeviceSchemaTakesTheGen2LoginAndCoverRanges(t *testing.T) {
+	leaves := gen2SchemaLeaves(t)
+	if enum, _ := leaves["auth.user"]["enum"].([]string); len(enum) != 1 || enum[0] != gen2LoginUser {
+		t.Errorf("auth.user enum = %v, want only %q", enum, gen2LoginUser)
+	}
+	for _, name := range []string{"max_open_time", "max_close_time", "obstacle_delay"} {
+		leaf := leaves["roller."+name]
+		if leaf["minimum"] != gen2CoverSecondsMin || leaf["maximum"] != gen2CoverSecondsMax {
+			t.Errorf("roller.%s range = %v to %v, want %d to %d", name, leaf["minimum"], leaf["maximum"], gen2CoverSecondsMin, gen2CoverSecondsMax)
+		}
+	}
+	gen1 := map[string]map[string]interface{}{}
+	schemaLeaves("", GetDeviceConfigurationSchema("SHSW-25"), gen1)
+	if gen1["roller.obstacle_delay"]["minimum"] != 0 || gen1["roller.max_open_time"]["maximum"] != nil {
+		t.Error("the Gen1 roller schema must keep its own range")
 	}
 }
 

@@ -74,6 +74,15 @@ func gen2DeviceSchema(deviceType string) map[string]interface{} {
 	// A word the Gen2 check refuses leaves the enum: the stored words are the union of both generations.
 	onlyWords(sections["input"], []string{"inputs", "type"}, func(word string) bool { return gen2InputTypes[word] })
 	onlyWords(sections["light"], []string{"lights", "default_state"}, func(word string) bool { _, ok := gen2LightInitialStates[word]; return ok })
+	// A Gen2 device has one user, and the cover takes whole seconds from 1 to 300 (gen2_cover.go).
+	if user := schemaNodeAt(sections["auth"], "user"); user != nil {
+		user["enum"] = []string{gen2LoginUser}
+	}
+	for _, name := range []string{"max_open_time", "max_close_time", "obstacle_delay"} {
+		if seconds := schemaNodeAt(sections["roller"], name); seconds != nil {
+			seconds["minimum"], seconds["maximum"] = gen2CoverSecondsMin, gen2CoverSecondsMax
+		}
+	}
 	schema := map[string]interface{}{
 		"$schema":               "http://json-schema.org/draft-07/schema#",
 		"type":                  "object",
@@ -86,9 +95,9 @@ func gen2DeviceSchema(deviceType string) map[string]interface{} {
 	return schema
 }
 
-// onlyWords keeps the words of the enum at path (a list of property names, "items" entered where a
-// property is an array) that allowed accepts.
-func onlyWords(section interface{}, path []string, allowed func(string) bool) {
+// schemaNodeAt returns the node at a path of property names below a section, entering an array's
+// items where a property is an array, or nil.
+func schemaNodeAt(section interface{}, path ...string) map[string]interface{} {
 	node, _ := section.(map[string]interface{})
 	for _, name := range path {
 		props := schemaProperties(node)
@@ -99,6 +108,15 @@ func onlyWords(section interface{}, path []string, allowed func(string) bool) {
 		}
 		node, _ = props[name].(map[string]interface{})
 	}
+	return node
+}
+
+// onlyWords keeps the words of the enum at path that allowed accepts.
+func onlyWords(section interface{}, path []string, allowed func(string) bool) {
+	node := schemaNodeAt(section, path...)
+	if node == nil {
+		return
+	}
 	words, _ := node["enum"].([]string)
 	var kept []string
 	for _, word := range words {
@@ -106,7 +124,5 @@ func onlyWords(section interface{}, path []string, allowed func(string) bool) {
 			kept = append(kept, word)
 		}
 	}
-	if node != nil {
-		node["enum"] = kept
-	}
+	node["enum"] = kept
 }
