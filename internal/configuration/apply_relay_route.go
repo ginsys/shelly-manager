@@ -139,9 +139,9 @@ func routeGen1MaxPower(apiConfig map[string]interface{}, live json.RawMessage, d
 	if len(desired) > channels {
 		channels = len(desired)
 	}
-	if row, known := gen1ActionTable(deviceType); channels == 0 && known {
-		// A device that reported no relay channels before the switch to relay mode (settings that
-		// hold only the rollers) still has the channels its model has.
+	if row, known := gen1ActionTable(deviceType); known && channels < row.indexes {
+		// The model's channel count is the minimum: settings read before a switch to relay mode may
+		// hold only the rollers, and a desired list may state only some channels.
 		channels = row.indexes
 	}
 	if channels == 0 {

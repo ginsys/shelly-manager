@@ -258,6 +258,20 @@ func TestApplyConfig_MaxPowerFollowsTheModeThatTheApplyWrites(t *testing.T) {
 			assert.Equal(t, map[string]interface{}{"max_power": float64(3000)}, write.form)
 		}
 	})
+	t.Run("roller to relay with no relay channel reported and one channel stated", func(t *testing.T) {
+		d := newModeDevice("roller")
+		d.omitRelays = true
+		config := withMode(power(), "relay")
+		config.Relay = &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, MaxPower: IntPtr(1200)}}}
+
+		result := applyOnModeDevice(t, d, config)
+
+		assert.True(t, result.Success, "failures: %+v", result.Failures)
+		assert.Empty(t, d.configs)
+		require.Len(t, d.relayWrites, 2)
+		assert.Equal(t, float64(1200), d.relayWrites[0].form["max_power"], "channel 0 keeps its own value")
+		assert.Equal(t, float64(3000), d.relayWrites[1].form["max_power"], "channel 1 takes the model-wide value")
+	})
 }
 
 func TestGen1Converter_ModeOfASwitchableModel(t *testing.T) {
